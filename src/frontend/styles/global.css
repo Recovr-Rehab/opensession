@@ -6228,14 +6228,17 @@ a.workspace-info-check-row {
 	flex-direction: column;
 	min-width: 0;
 }
+/* No surface of its own: a fill here stacked a second card under the strip.
+   The rows carry the strip's own divider instead, so primary + series read as
+   one continuous block of status, and each row's colour comes from its chip and
+   its state — the parts that mean something — not from a band behind it. */
 .pr-bar-extra {
 	display: flex;
 	align-items: center;
 	gap: 2px;
 	padding-right: 8px;
-	min-height: 30px;
-	border-bottom: 1px solid var(--border);
-	background: var(--topbar-bg);
+	min-height: 32px;
+	border-bottom: 1px solid var(--top-divider);
 }
 .pr-bar-extra:hover {
 	background: var(--hover);
@@ -6243,7 +6246,7 @@ a.workspace-info-check-row {
 .pr-bar-extra-main {
 	display: flex;
 	align-items: center;
-	gap: 7px;
+	gap: 8px;
 	flex: 1;
 	min-width: 0;
 	padding: 4px 12px;
@@ -6253,21 +6256,25 @@ a.workspace-info-check-row {
 	text-align: left;
 	cursor: pointer;
 }
-.pr-bar-extra-repo {
-	color: var(--text-dim);
-	font-weight: 600;
-	flex-shrink: 0;
-}
-.pr-bar-extra-num {
-	color: var(--text);
-	font-weight: 650;
-	font-variant-numeric: tabular-nums;
-	flex-shrink: 0;
+/* The chip repeats the primary row's, one size down and at the same left edge,
+   so the series reads as the same status treatment continued. It's inert markup
+   inside the row button — the whole row is the target. */
+.pr-bar-extra .pr-num-chip.pr-sib-chip {
+	min-height: 22px;
+	padding: 0 7px;
+	font-size: 12px;
+	box-shadow: none;
+	cursor: inherit;
+	/* The primary chip fills with its tone because it sits on a matching band;
+	   on a plain row the same fill reads as a badge and out-shouts the strip it
+	   belongs to. Keep the toned ink and edge, drop the fill — the state on the
+	   right is where the colour carries. */
+	background: var(--control-surface);
 }
 /* The title takes what's left and gives it up first — the state on the right is
    the part you scan for. */
 .pr-bar-extra-title {
-	color: var(--text-faint);
+	color: var(--text-dim);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -6275,6 +6282,7 @@ a.workspace-info-check-row {
 }
 .pr-bar-extra-state {
 	margin-left: auto;
+	font-size: 12px;
 	font-weight: 650;
 	white-space: nowrap;
 	flex-shrink: 0;

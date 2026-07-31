@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import type { GitStatusInfo, PrDetails, UnifiedSession } from "../lib/types";
+import type { GitStatusInfo, PrDetails } from "../lib/types";
+import {
+	refChipText,
+	refLabel,
+	refTone,
+	summarizePrSeries,
+	type SessionPrRef,
+} from "../lib/pr-refs";
 import {
 	archiveSessionApi,
 	fetchGitStatus,
@@ -19,6 +26,7 @@ import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { PrChecksPopover } from "./PrChecksPopover";
+import { PrSeriesRows } from "./PrSeriesRows";
 import {
 	IconArrowDown,
 	IconArrowUp,
@@ -131,51 +139,9 @@ function deriveHeadline(
 	return { key: "clean", label: "Up to date", tone: "muted" };
 }
 
-/** One of `session.prs` — a PR the session spans, from the server's bulk cache. */
-export type SessionPrRef = NonNullable<UnifiedSession["prs"]>[number];
-
-/**
- * Tone for a PR the strip only knows through the session's refs: no detail
- * fetch, no local git (a sibling PR usually lives in another repo, or on a
- * branch this worktree isn't on). deriveHeadline minus every git case.
- */
-export function refTone(ref: SessionPrRef): PrHeadline["tone"] {
-	if (ref.state === "MERGED") return "purple";
-	if (ref.state === "CLOSED") return "muted";
-	if (
-		(ref.checks?.failed ?? 0) > 0 ||
-		ref.reviewDecision === "CHANGES_REQUESTED"
-	)
-		return "red";
-	if ((ref.checks?.pending ?? 0) > 0) return "yellow";
-	if (ref.isDraft) return "muted";
-	return "green";
-}
-
-/**
- * Chip text. A PR in the session's own repo is just its number; one in another
- * repo carries a short repo hint, because a bare "#72" next to "#5253" gives no
- * clue which repository it belongs to.
- */
-function refChipText(ref: SessionPrRef, primaryRepo?: string): string {
-	if (!primaryRepo || ref.repo === primaryRepo) return `#${ref.number}`;
-	return `${ref.repo} #${ref.number}`;
-}
-
-/** The one-word state a ref-only PR can honestly claim (no detail fetch). */
-function refState(ref: SessionPrRef): string {
-	if (ref.state === "MERGED") return "Merged";
-	if (ref.state === "CLOSED") return "Closed";
-	if ((ref.checks?.failed ?? 0) > 0) return "Checks failed";
-	if (ref.reviewDecision === "CHANGES_REQUESTED") return "Changes requested";
-	if (ref.isDraft) return "Draft";
-	if (ref.reviewDecision === "APPROVED") return "Approved";
-	return "Open";
-}
-
-function refLabel(ref: SessionPrRef): string {
-	return `${ref.repo} #${ref.number} (${refState(ref).toLowerCase()})${ref.title ? ` — ${ref.title}` : ""}`;
-}
+export type { SessionPrRef } from "../lib/pr-refs";
+// Re-exported so the strip stays the one import site for PR-ref presentation.
+export { refTone } from "../lib/pr-refs";
 
 export function summarizeChecks(pr: PrDetails | null): {
 	passed: number;
@@ -459,62 +425,6 @@ function PrRefChips({
 	);
 }
 
-/**
- * One of the session's other PRs, as its own row under the primary strip. A
- * feature shipped as four PRs gets four rows, each legible on its own — four
- * chips crammed into one line was the first attempt and it read as noise.
- *
- * Ref-only, so no per-row Merge: the row opens that PR's Review tab, which has
- * the real detail (checks, mergeability) merging needs.
- */
-function PrExtraRow({
-	prRef,
-	onOpen,
-}: {
-	prRef: SessionPrRef;
-	onOpen?: (r: { repo: string; branch: string }) => void;
-}) {
-	const tone = refTone(prRef);
-	const provider = providerFromUrl(prRef.url || "");
-	return (
-		<div className="pr-bar-extra">
-			<button
-				type="button"
-				className="pr-bar-extra-main"
-				onClick={() => onOpen?.({ repo: prRef.repo, branch: prRef.branch })}
-				title={
-					prRef.title
-						? `${prRef.title} — open in the PR tab`
-						: "Open in the PR tab"
-				}
-			>
-				<span className={`pr-sib-dot pr-sib-dot-${tone}`} />
-				<span className="pr-bar-extra-repo">{prRef.repo}</span>
-				<span className="pr-bar-extra-num">#{prRef.number}</span>
-				{prRef.title && (
-					<span className="pr-bar-extra-title">{prRef.title}</span>
-				)}
-				<span className={`pr-bar-extra-state pr-bar-state-${tone}`}>
-					{refState(prRef)}
-				</span>
-			</button>
-			{prRef.url && (
-				<Tooltip label={`Open on ${provider.name}`}>
-					<a
-						className="pr-bar-extra-out"
-						href={prRef.url}
-						target="_blank"
-						rel="noopener"
-						aria-label={`Open ${prRef.repo} pull request #${prRef.number} on ${provider.name}`}
-					>
-						<IconArrowUpRight size={16} />
-					</a>
-				</Tooltip>
-			)}
-		</div>
-	);
-}
-
 /** Last-known state per session+repo, so a remount (tab switch, panel toggle)
  * paints the previous status instantly and revalidates behind it instead of
  * blanking for a fresh round-trip. Module-level: survives unmounts, dies with
@@ -612,15 +522,19 @@ export function PrStatusBar({
 	// merged headline counts the series, and Archive waits for the last one.
 	const seriesAllMerged =
 		siblings.length > 0 && siblings.every((r) => r.state === "MERGED");
+	// Nothing on this session's own branch, but it owns PRs elsewhere: "No PR
+	// open" would be a lie with three rows sitting under it, and a bare count in
+	// the neutral tone hides a failing PR one row down — so the strip borrows the
+	// series' own worst tone and says how much of it is still open.
+	const series = !pr ? summarizePrSeries(siblings) : null;
+	const headlineTone = series ? series.tone : headline.tone;
 	const headlineLabel =
 		headline.key === "merged" && siblings.length > 0
 			? seriesAllMerged
 				? `All ${siblings.length + 1} merged`
 				: `Merged · ${openSiblings} of ${siblings.length + 1} open`
-			: // Nothing on this session's own branch, but it owns PRs elsewhere:
-				// "No PR open" would be a lie with three chips sitting next to it.
-				!pr && siblings.length > 0
-				? `${siblings.length} PR${siblings.length === 1 ? "" : "s"}`
+			: series
+				? series.label
 				: headline.label;
 
 	async function run(name: string, fn: () => Promise<unknown>) {
@@ -838,12 +752,12 @@ export function PrStatusBar({
 	// The primary row is the session's own branch — the one this worktree can
 	// push, pull and merge. Its other PRs stack underneath, one row each.
 	const primaryRow = (
-		<div className={`pr-bar pr-bar-${headline.tone}`}>
+		<div className={`pr-bar pr-bar-${headlineTone}`}>
 			{leading}
 			{pr && (
 				<PrNumberChip
 					pr={pr}
-					tone={headline.tone}
+					tone={headlineTone}
 					onOpenPrTab={() => onOpenPrTab?.()}
 				/>
 			)}
@@ -853,7 +767,7 @@ export function PrStatusBar({
 					trigger={
 						<button
 							type="button"
-							className={`pr-bar-state pr-bar-state-${headline.tone}`}
+							className={`pr-bar-state pr-bar-state-${headlineTone}`}
 							onClick={onOpenChecksTab}
 						>
 							{headlineLabel}
@@ -863,7 +777,7 @@ export function PrStatusBar({
 			) : (headline.key !== "no-pr" || siblings.length > 0) && (
 				<Tooltip label="Open the PR tab">
 					<button
-						className={`pr-bar-state pr-bar-state-${headline.tone}`}
+						className={`pr-bar-state pr-bar-state-${headlineTone}`}
 						onClick={() => onOpenPrTab?.()}
 					>
 						{headlineLabel}
@@ -879,13 +793,11 @@ export function PrStatusBar({
 	return (
 		<div className="pr-bar-stack">
 			{primaryRow}
-			{siblings.map((ref) => (
-				<PrExtraRow
-					key={`${ref.repo} ${ref.branch}`}
-					prRef={ref}
-					onOpen={onOpenPrTab}
-				/>
-			))}
+			<PrSeriesRows
+				refs={siblings}
+				primaryRepo={primaryRepoId}
+				onOpen={onOpenPrTab}
+			/>
 		</div>
 	);
 }
