@@ -7,6 +7,7 @@ import {
 	summarizePrSeries,
 	type SessionPrRef,
 } from "./pr-refs";
+import { sessionPrPresentation } from "./session-prs";
 
 function ref(over: Partial<SessionPrRef> = {}): SessionPrRef {
 	return {
@@ -165,5 +166,53 @@ describe("summarizePrSeries", () => {
 				ref({ repo: "tella-mac", branch: "b", state: "CLOSED" }),
 			]),
 		).toEqual({ tone: "muted", label: "All 2 closed" });
+	});
+});
+
+/**
+ * The strip feeds `sessionPrPresentation().additional` to `summarizePrSeries`,
+ * so which PRs count as a series is decided upstream. The two are unit-tested
+ * apart; this pins the seam between them — a sole linked PR is promoted to the
+ * normal single-PR surface, and must not come back as a one-item "1 PR" series
+ * headline, which is the surface it was promoted out of.
+ */
+describe("series headline over sessionPrPresentation", () => {
+	test("a promoted sole PR leaves no series behind", () => {
+		const linked = ref({ source: "linked", branch: "linked-branch" });
+		const { primary, additional } = sessionPrPresentation([linked]);
+
+		expect(primary).toBe(linked);
+		expect(summarizePrSeries(additional)).toBeNull();
+	});
+
+	test("PRs beside a primary one are the series, the primary one is not", () => {
+		const primaryRef = ref({ source: "primary", branch: "main-work" });
+		const sibling = ref({
+			source: "discovered",
+			repo: "tella-mac",
+			branch: "mac-work",
+			checks: { total: 2, passed: 1, failed: 1, pending: 0 },
+		});
+		const { primary, additional } = sessionPrPresentation([primaryRef, sibling]);
+
+		expect(primary).toBe(primaryRef);
+		// The primary PR's own red checks are the strip's headline, not the
+		// series' — only the sibling is summarized.
+		expect(summarizePrSeries(additional)).toEqual({
+			tone: "red",
+			label: "1 PR",
+		});
+	});
+
+	test("no primary at all keeps the whole set as the series", () => {
+		const a = ref({ source: "linked", repo: "tella-mac", branch: "a" });
+		const b = ref({ source: "discovered", repo: "tella-windows", branch: "b" });
+		const { primary, additional } = sessionPrPresentation([a, b]);
+
+		expect(primary).toBeUndefined();
+		expect(summarizePrSeries(additional)).toEqual({
+			tone: "green",
+			label: "2 PRs",
+		});
 	});
 });
