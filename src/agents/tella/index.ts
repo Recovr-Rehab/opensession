@@ -1,5 +1,5 @@
 /**
- * Tella module — the reference feed plugin (docs/feeds-design.md W4).
+ * Tella module — the reference feed plugin (the feeds design W4).
  *
  * Contributes the "tella" sidebar feed (recent videos on the viewer's MCP
  * grant) via AgentModule.getFeed(); the descriptor carries the Video panel

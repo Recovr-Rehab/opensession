@@ -17,7 +17,7 @@ export class PlainAgent implements AgentModule {
   name = "plain";
 
   /**
-   * The Support queue as a generic sidebar feed (docs/feeds-design.md W5):
+   * The Support queue as a generic sidebar feed (the feeds design W5):
    * TODO threads with priority lanes; item.meta carries the full
    * SupportThreadSummary so the frontend keeps rendering its bespoke
    * SupportRow (hover card, mark-done, filters) inside the generic band.
@@ -40,7 +40,7 @@ export class PlainAgent implements AgentModule {
         ],
         attentionLane: "0",
         searchMeta: ["customer.name", "customer.email", "previewText"],
-        // Generic band filters (docs/feeds-design.md): the old bespoke
+        // Generic band filters (the feeds design): the old bespoke
         // assignee/label menu, expressed as meta-mode filter specs.
         filters: [
           {

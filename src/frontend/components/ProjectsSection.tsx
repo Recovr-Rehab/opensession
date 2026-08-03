@@ -12,7 +12,7 @@ import type { FeedDescriptor } from "../lib/types";
 
 /**
  * Connections → "Projects — sidebar feeds from your MCPs"
- * (docs/feeds-design.md W3): lists the registered feeds and creates new ones
+ * (the feeds design W3): lists the registered feeds and creates new ones
  * from pure config. The New-project modal walks: pick a connected MCP server
  * → pick its list-tool (live catalog) → fetch a sample call → the field
  * mapping is auto-suggested from the result and stays editable → optional

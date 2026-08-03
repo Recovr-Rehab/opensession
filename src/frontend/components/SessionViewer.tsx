@@ -293,7 +293,7 @@ interface Props {
 	conversationThreadId?: string | null;
 	/** Whether the feed web panel (Video view-tab) is foregrounded (App state). */
 	showVideo?: boolean;
-	/** The web panel spec of the workspace's feed-item ref (docs/feeds-design.md). */
+	/** The web panel spec of the workspace's feed-item ref (the feeds design). */
 	videoPanel?: RefWebPanel | null;
 	/** The feed item's title (pane header). */
 	videoTitle?: string | null;
@@ -4771,7 +4771,7 @@ export function SessionViewer({
 					) : showVideo && videoPanel ? (
 						// The workspace's feed panel — web embed (Tella) or a custom
 						// component (Slack channel Conversation) via the panel
-						// registry (docs/feeds-design.md).
+						// registry (the feeds design).
 						<div className="viewer-review-main">
 							{videoPanel.component === "slack-channel" ? (
 								<SlackChannelPane channelId={videoPanel.refId} />

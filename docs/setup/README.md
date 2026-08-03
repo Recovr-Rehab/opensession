@@ -130,8 +130,6 @@ when adding anything that touches this.
 | [../extending.md](../extending.md) | MCP servers, recipes, integrations, providers, skills |
 
 The remaining files in `docs/` are not setup guides:
-[feeds-design.md](../feeds-design.md), [transcript-v2-design.md](../transcript-v2-design.md),
-and [os1-tui-plan.md](../os1-tui-plan.md) are design-history documents (each is
-banner-labeled as such); [install-papercuts.md](../install-papercuts.md) is the
-running log of install friction; [chat-performance.md](../chat-performance.md)
+[transcript-v2-design.md](../transcript-v2-design.md) is a design-history
+document (banner-labeled as such); [chat-performance.md](../chat-performance.md)
 is the frontend chat-render performance contract.

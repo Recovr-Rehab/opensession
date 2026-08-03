@@ -1,6 +1,6 @@
 /**
  * Tella feed provider: the VIEWER's recent videos as a sidebar band
- * (docs/feeds-design.md). Backed by the Tella MCP server's list_videos tool
+ * (the feeds design). Backed by the Tella MCP server's list_videos tool
  * on the viewer's own OAuth grant (workspace grant fallback) — no REST
  * client, no API key. Items carry the embed + editor URLs in meta so the
  * workspace's Video tab can render in-place (the edit/view pages send

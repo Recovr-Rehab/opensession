@@ -123,7 +123,7 @@ export class SlackAgent implements AgentModule {
   name = "slack";
 
   /**
-   * Slack channels as a sidebar feed (docs/feeds-design.md): the bot's
+   * Slack channels as a sidebar feed (the feeds design): the bot's
    * member channels, most-populated first. Click → repo-less workspace with
    * scratch sessions scoped to the slack MCP; the plugin context hook
    * injects the channel's recent history (fetchChannelHistory — resolved

@@ -104,7 +104,7 @@ export interface SupportThread {
 }
 
 /** Generic feed-item → session/workspace linkage (mirror of server types.ts;
- *  docs/feeds-design.md). */
+ *  the feeds design). */
 export interface ExternalRef {
 	kind: string;
 	id: string;
@@ -374,7 +374,7 @@ export interface UnifiedSession {
 	/** Why this session is archived — powers the "Auto-archived" filter. */
 	archivedReason?: "manual" | "idle" | "auto" | "plain";
 	plainThreadId?: string;
-	/** Generic feed-item linkage (Tella videos, …) — docs/feeds-design.md. */
+	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];
 	goal?: string;
 	loop?: {
@@ -453,7 +453,7 @@ export interface Project {
 	branch?: string;
 	/** For support-ticket workspaces: the Plain thread they're attached to. */
 	plainThreadId?: string;
-	/** Generic feed-item linkage (Tella videos, …) — docs/feeds-design.md. */
+	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];
 }
 

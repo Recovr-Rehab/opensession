@@ -1496,7 +1496,7 @@ function App() {
 		void ensureFeedMeta().then(() => setFeedMetaTick((t) => t + 1));
 	}, []);
 	// The Video view-tab: the web panel of the workspace's (or open chat's)
-	// feed-item ExternalRef — e.g. the Tella video embed (docs/feeds-design.md).
+	// feed-item ExternalRef — e.g. the Tella video embed (the feeds design).
 	// On a chat route routeWorkspace is null, so fall back to the open chat's
 	// workspace record — otherwise the tab vanishes as soon as a chat exists.
 	const videoWorkspace =
@@ -1844,7 +1844,7 @@ function App() {
 		[refreshProjects],
 	);
 	// Sidebar feed row (Tella video, …) → the item's ONE workspace, its web
-	// panel foregrounded (docs/feeds-design.md).
+	// panel foregrounded (the feeds design).
 	const openFeedItemWorkspace = React.useCallback(
 		async (feed: FeedDescriptor, item: FeedItem) => {
 			try {

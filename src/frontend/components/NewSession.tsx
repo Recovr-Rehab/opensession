@@ -613,7 +613,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     // the scroll fold once the worktree list grew, reading as "Ask is gone".
     { value: "__ask__", label: "Ask — read-only on main", menuLabel: "Ask · read-only on main" },
     // Scratch: repo-less scratch dir with write+bash (media/MCP work —
-    // docs/feeds-design.md). No branch, no PR flow.
+    // the feeds design). No branch, no PR flow.
     { value: "__scratch__", label: "Scratch — no repo, writable scratch dir", menuLabel: "Scratch · no repo" },
     ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
   ];

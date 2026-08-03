@@ -1,6 +1,6 @@
 /**
  * Interface for agent modules — OpenSession's plugin seam
- * (docs/feeds-design.md W4). A module ("package") can contribute any subset
+ * (the feeds design W4). A module ("package") can contribute any subset
  * of the five project surfaces:
  *
  *  1. events   — webhook routes via getRoutes() (dispatched by
@@ -40,7 +40,7 @@ export interface AgentModule {
   health(): Record<string, unknown>;
 
   /**
-   * Optional sidebar feed (docs/feeds-design.md). Called once at feed
+   * Optional sidebar feed (the feeds design). Called once at feed
    * registration; return null when the module's backing connection isn't
    * configured (hides the band). Import the FeedProvider type from
    * src/server/feeds.

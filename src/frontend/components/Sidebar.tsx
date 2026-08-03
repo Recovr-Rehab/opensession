@@ -415,7 +415,7 @@ function SupportRow({
 }
 
 // A feed row: one external object (e.g. a Tella video) in the workspace rows'
-// exact shape — the generic sibling of SupportRow (docs/feeds-design.md). The
+// exact shape — the generic sibling of SupportRow (the feeds design). The
 // rail dot wears the linked session's status (the feed lane's color, else
 // faint, when no session exists yet); the hover card carries the preview.
 function FeedRow({
@@ -519,7 +519,7 @@ function FeedRow({
 	);
 }
 
-// ── Generic feed-band filters (docs/feeds-design.md) ──
+// ── Generic feed-band filters (the feeds design) ──
 // Every band's filter menu is driven by the feed descriptor's FeedFilterSpec
 // list: arg-mode specs feed the backing list tool (tella tags/playlists),
 // meta-mode specs filter client-side over item.meta (plain assignee/labels,
@@ -770,7 +770,7 @@ interface Props {
 	onOpenReview: (session: UnifiedSession) => void;
 	/** Open a Support ticket's workspace (resolve-or-create, Conversation tab). */
 	onOpenTicket: (t: SupportThread) => void;
-	/** Open a feed item's workspace (resolve-or-create — docs/feeds-design.md). */
+	/** Open a feed item's workspace (resolve-or-create — the feeds design). */
 	onOpenFeedItem: (feed: FeedDescriptor, item: FeedItem) => void;
 	onNewSession: () => void;
 	/** Start a new session with a repo pre-selected (the repo-band "+" action). */
@@ -1453,7 +1453,7 @@ function readFilter(): FilterState {
 
 function sessionRepo(s: UnifiedSession): string {
 	// Repo-less feed/scratch chats file under their feed's kind ("tella") so
-	// they don't mislabel as the default repo (docs/feeds-design.md).
+	// they don't mislabel as the default repo (the feeds design).
 	return s.repo || s.externalRefs?.[0]?.kind || DEFAULT_PROJECT;
 }
 
@@ -2006,7 +2006,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return () => window.removeEventListener(PR_CLOSED_EVENT, onClosed);
 	}, []);
 
-	// Generic feed bands (Tella videos, … — docs/feeds-design.md): descriptors
+	// Generic feed bands (Tella videos, … — the feeds design): descriptors
 	// once on mount. Hidden feeds remain available to Settings but do not poll.
 	const [feeds, setFeeds] = useState<FeedDescriptor[]>([]);
 	const [feedItems, setFeedItems] = useState<Record<string, FeedItem[]>>({});
@@ -2030,7 +2030,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// The Support queue now arrives through the generic feeds poll: the plain
 	// feed's items carry the full SupportThreadSummary in meta, so all the
 	// bespoke Support UI (SupportRow, filters, Tinder hand-offs) keeps working
-	// off the same derived shape (docs/feeds-design.md W5).
+	// off the same derived shape (the feeds design W5).
 	const supportThreads = useMemo<SupportThread[] | null>(() => {
 		const items = feedItems["plain"];
 		if (!items) return null;
@@ -4747,7 +4747,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// A generic feed band (Tella videos, …) styled like the Plain project band:
 	// brand tile + name + count, newest-first rows nested under
-	// (docs/feeds-design.md). Hidden while a repo filter is active, like Plain.
+	// (the feeds design). Hidden while a repo filter is active, like Plain.
 	function renderFeedBand(feed: FeedDescriptor, withLanes = false) {
 		const isPlain = feed.id === "plain";
 		const sortSel =

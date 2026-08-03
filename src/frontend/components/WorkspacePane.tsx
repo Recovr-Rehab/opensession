@@ -275,7 +275,7 @@ export function WorkspacePane({
 		);
 	}
 
-	// The feed web panel (Tella video embed, … — docs/feeds-design.md) on the
+	// The feed web panel (Tella video embed, … — the feeds design) on the
 	// chat-less workspace route.
 	const webRef = (workspace.externalRefs || []).find((r) => refWebPanel(r));
 	const webPanel = webRef ? refWebPanel(webRef) : null;

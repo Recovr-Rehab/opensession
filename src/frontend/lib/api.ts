@@ -784,7 +784,7 @@ export async function fetchSupportThreads(): Promise<SupportThread[]> {
 	return body?.threads || [];
 }
 
-/** The sidebar's generic feed bands (Tella videos, … — docs/feeds-design.md). */
+/** The sidebar's generic feed bands (Tella videos, … — the feeds design). */
 export async function fetchFeeds(): Promise<FeedDescriptor[]> {
 	const body = await request<{ feeds?: FeedDescriptor[] }>("/feeds", {
 		label: "Failed to fetch feeds",
