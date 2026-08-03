@@ -4296,7 +4296,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const gkey = `${ns}status:snoozed`;
 			const open = isOpen(gkey);
 			const snoozedNode = (
-				<div className="sidebar-status-group" key={gkey}>
+				<div
+					className={`sidebar-status-group${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
+					key={gkey}
+				>
 					<button
 						// Same bare .sidebar-group-header as the lanes above: utilities
 						// here would out-specify its phone/nesting overrides and leave
@@ -5439,7 +5442,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					(() => {
 						const open = isOpen("needsreview");
 						return (
-							<div className="sidebar-group sidebar-group--review">
+							<div
+								className={`sidebar-group sidebar-group--review${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
+							>
 								<button
 									className="sidebar-group-header"
 									onClick={() => toggleGroup("needsreview")}
@@ -5477,7 +5482,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					(() => {
 						const open = isOpen("awaitingreview");
 						return (
-							<div className="sidebar-group sidebar-group--review">
+							<div
+								className={`sidebar-group sidebar-group--review${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
+							>
 								<button
 									className="sidebar-group-header"
 									onClick={() => toggleGroup("awaitingreview")}
@@ -5777,7 +5784,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					};
 					const pinnedCount = entries.length;
 					return (
-						<div className="sidebar-group sidebar-group--pinned">
+						<div
+							className={`sidebar-group sidebar-group--pinned${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
+						>
 							{/* Same header treatment as the status lanes below. */}
 							<button
 								className="sidebar-group-header"
