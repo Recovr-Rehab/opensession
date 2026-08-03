@@ -130,6 +130,7 @@ import {
 	IconArrowUpToLine,
 	IconCrosshair,
 	IconDotsHorizontal,
+	IconInbox,
 	IconPin,
 	IconPullRequest,
 	IconLink,
@@ -151,6 +152,7 @@ import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { MoveToCloudDialog } from "./MoveToCloudDialog";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
+import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
 import { useChatScroll } from "../hooks/useChatScroll";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import {
@@ -234,6 +236,9 @@ interface Props {
 	/** Sibling chats in this chat's workspace (the tab strip's list, oldest
 	    first) — feeds the floating overview panel's cross-chat media. */
 	workspaceChats?: UnifiedSession[];
+	/** Claim this workspace into your own per-user sidebar lanes ("mine"), or
+	    release it (null) — the ⋯ menu's twin of the sidebar row's action. */
+	onSetStatus?: (chats: UnifiedSession[], status: Lane | null) => void;
 	/** Every session — powers the Chat tab's @-session tagging. */
 	allSessions?: UnifiedSession[];
 	/** Workspace names — lets the Chat tab's @-search match workspaces too. */
@@ -564,6 +569,7 @@ export function SessionViewer({
 	workspaceName,
 	onRenameWorkspace,
 	workspaceChats,
+	onSetStatus,
 	allSessions,
 	allProjects,
 	onNewChat,
@@ -1458,6 +1464,21 @@ export function SessionViewer({
 		() => onPinsChanged(() => setPinned(isPinned(session.id))),
 		[session.id],
 	);
+
+	// Claimed into your own sidebar lanes (lib/lanes.ts) — the whole workspace,
+	// since that's the unit the sidebar row claims. Lanes live in a module cache
+	// like pins, so mirror it into state and re-read on every change.
+	const claimChats = workspaceChats?.length ? workspaceChats : [session];
+	const claimIds = claimChats.map((c) => c.id).join(",");
+	const claimedGlobally = claimChats.some((c) => !!c.manualStatus);
+	const [claimedLane, setClaimedLane] = useState(false);
+	useEffect(() => {
+		const read = () =>
+			setClaimedLane(claimIds.split(",").some((id) => !!getLane(id)));
+		read();
+		return onLanesChanged(read);
+	}, [claimIds]);
+	const claimed = claimedLane || claimedGlobally;
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (
@@ -3846,6 +3867,31 @@ export function SessionViewer({
 								{isApple ? "⌘P" : "Ctrl+P"}
 							</span>
 						</Menu.Item>
+						{/* Claim this workspace into your own sidebar lanes — the twin of
+						    the sidebar row's right-click action, for when you're already
+						    reading the chat (an automation run, a teammate's workspace)
+						    and want it in your own list. Per-user: it moves nothing for
+						    anyone else. */}
+						{onSetStatus && (
+							<Menu.Item
+								onClick={() => {
+									setOverflowOpen(false);
+									onSetStatus(claimChats, claimed ? null : "mine");
+								}}
+								title={
+									claimed
+										? "Drop this workspace from your sidebar lanes"
+										: "Keep this workspace in your own sidebar lanes"
+								}
+							>
+								<IconInbox size={20} />
+								<span className="grow">
+									{claimed
+										? "Remove from my workspaces"
+										: "Add to my workspaces"}
+								</span>
+							</Menu.Item>
+						)}
 						<SpinOffMenu
 							session={session}
 							entries={entries}

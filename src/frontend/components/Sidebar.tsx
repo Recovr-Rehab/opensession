@@ -301,6 +301,60 @@ function SupportPriorityIcon({ p, cls }: { p: number; cls: string }) {
 	);
 }
 
+// Right-click wiring for the feed-shaped rows (Support tickets, feed items).
+// They render as Base UI popover triggers rather than as workspace rows, so
+// they never inherited the workspace row's menu — but they stand for the same
+// work, so they get the same one. Touch keeps the native callout: these rows
+// have no long-press sheet to conflict with.
+function useRowCtxMenu(onOpen?: () => void) {
+	const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+	useEffect(() => {
+		if (!ctxMenu) return;
+		const close = () => setCtxMenu(null);
+		window.addEventListener("click", close);
+		window.addEventListener("scroll", close, true);
+		return () => {
+			window.removeEventListener("click", close);
+			window.removeEventListener("scroll", close, true);
+		};
+	}, [ctxMenu]);
+	return {
+		ctxMenu,
+		close: () => setCtxMenu(null),
+		onContextMenu: (e: React.MouseEvent) => {
+			e.preventDefault();
+			onOpen?.();
+			setCtxMenu({ x: e.clientX, y: e.clientY });
+		},
+	};
+}
+
+// The claim + lane pair a feed-shaped row offers once a run exists for its
+// item — the same two entries the workspace rows' menu carries. Without them
+// a ticket whose only session is an automation run (Plain triage) could be
+// claimed from the Automations band but not from the band it actually reads
+// in. Nothing to claim yet (no session) means no entries.
+function laneCtxEntries(
+	session: UnifiedSession | null,
+	onSetStatus?: (status: LaneChoice | null) => void,
+): CtxEntry[] {
+	if (!session || !onSetStatus) return [];
+	const claimed = isClaimed(session);
+	return [
+		{
+			kind: "item",
+			icon: <IconInbox size={20} />,
+			label: claimed ? "Remove from my workspaces" : "Add to my workspaces",
+			onClick: () => onSetStatus(claimed ? null : "mine"),
+		},
+		{
+			kind: "status",
+			current: pinnedLane(session) ?? null,
+			onPick: onSetStatus,
+		},
+	];
+}
+
 // A Support row: one TODO Plain ticket, single-line in the workspace rows'
 // exact shape. The rail dot wears the linked session's status (the ticket's
 // priority when no session exists yet), the right edge shows the last status
@@ -315,6 +369,7 @@ function SupportRow({
 	onTogglePin,
 	onOpen,
 	onMarkDone,
+	onSetStatus,
 }: {
 	thread: SupportThread;
 	session: UnifiedSession | null;
@@ -324,9 +379,13 @@ function SupportRow({
 	onTogglePin: () => void;
 	onOpen: () => void;
 	onMarkDone: () => void;
+	/** Claim the ticket's session into your lanes (null = back to derived) —
+	    only present once a session exists for the thread. */
+	onSetStatus?: (status: LaneChoice | null) => void;
 }) {
 	const isPhone = useIsPhone();
 	const card = useRowHoverCard();
+	const menu = useRowCtxMenu(card.close);
 	const customer = t.customer.name || t.customer.email || "Unknown";
 	const label = t.title || customer;
 	const dot =
@@ -344,6 +403,7 @@ function SupportRow({
 							active ? " sidebar-item-selected" : ""
 						}`}
 						onClick={onOpen}
+						onContextMenu={menu.onContextMenu}
 						aria-label={label}
 					/>
 				}
@@ -410,6 +470,31 @@ function SupportRow({
 			<Popover.Popup side="right" align="start" className={ROW_CARD_CLASS}>
 				<SupportRowCard thread={t} session={session} />
 			</Popover.Popup>
+			{menu.ctxMenu && (
+				<SidebarCtxMenu
+					x={menu.ctxMenu.x}
+					y={menu.ctxMenu.y}
+					onClose={menu.close}
+					entries={[
+						{
+							kind: "item",
+							icon: (
+								<IconPin size={20} fill={pinned ? "currentColor" : "none"} />
+							),
+							label: pinned ? "Unpin" : "Pin",
+							onClick: onTogglePin,
+						},
+						...laneCtxEntries(session, onSetStatus),
+						{ kind: "sep" },
+						{
+							kind: "item",
+							icon: <IconCheck size={20} />,
+							label: "Mark done in Plain",
+							onClick: onMarkDone,
+						},
+					]}
+				/>
+			)}
 		</Popover.Root>
 	);
 }
@@ -426,6 +511,7 @@ function FeedRow({
 	pinned,
 	onTogglePin,
 	onOpen,
+	onSetStatus,
 }: {
 	feed: FeedDescriptor;
 	item: FeedItem;
@@ -435,9 +521,13 @@ function FeedRow({
 	pinned: boolean;
 	onTogglePin: () => void;
 	onOpen: () => void;
+	/** Claim the item's session into your lanes (null = back to derived) —
+	    only present once a session exists for the item. */
+	onSetStatus?: (status: LaneChoice | null) => void;
 }) {
 	const isPhone = useIsPhone();
 	const card = useRowHoverCard();
+	const menu = useRowCtxMenu(card.close);
 	const lane = feed.lanes?.find((l) => l.key === item.lane);
 	// Per-viewer unread (e.g. Slack read cursors) renders Slack-style: bold
 	// title + accent dot.
@@ -459,6 +549,7 @@ function FeedRow({
 							active ? " sidebar-item-selected" : ""
 						}`}
 						onClick={onOpen}
+						onContextMenu={menu.onContextMenu}
 						aria-label={item.title}
 					/>
 				}
@@ -515,6 +606,24 @@ function FeedRow({
 					</div>
 				</div>
 			</Popover.Popup>
+			{menu.ctxMenu && (
+				<SidebarCtxMenu
+					x={menu.ctxMenu.x}
+					y={menu.ctxMenu.y}
+					onClose={menu.close}
+					entries={[
+						{
+							kind: "item",
+							icon: (
+								<IconPin size={20} fill={pinned ? "currentColor" : "none"} />
+							),
+							label: pinned ? "Unpin" : "Pin",
+							onClick: onTogglePin,
+						},
+						...laneCtxEntries(session, onSetStatus),
+					]}
+				/>
+			)}
 		</Popover.Root>
 	);
 }
@@ -4195,16 +4304,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// markup; this binds it to the sidebar's state and handlers.
 	function renderSupportRow(t: SupportThread) {
 		const pinKey = `support:${t.id}`;
+		const linked = supportSessionByThread.get(t.id) || null;
 		return (
 			<SupportRow
 				key={pinKey}
 				thread={t}
-				session={supportSessionByThread.get(t.id) || null}
+				session={linked}
 				active={supportThreadActive(t)}
 				pinned={pins.includes(pinKey)}
 				onTogglePin={() => setPins(togglePin(pinKey))}
 				onOpen={() => onOpenTicket(t)}
 				onMarkDone={() => markSupportRowDone(t.id)}
+				onSetStatus={
+					linked ? (status) => onSetStatus([linked], status) : undefined
+				}
 			/>
 		);
 	}
@@ -4779,16 +4892,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const open = isOpen(gkey);
 		const renderRow = (item: FeedItem) => {
 			const pinKey = `feed:${feed.refKind}:${item.id}`;
+			const linked = feedSessionByRef.get(`${feed.refKind}:${item.id}`) || null;
 			return (
 				<FeedRow
 					key={`${feed.id}:${item.id}`}
 					feed={feed}
 					item={item}
-					session={feedSessionByRef.get(`${feed.refKind}:${item.id}`) || null}
+					session={linked}
 					active={feedItemActive(feed, item)}
 					pinned={pins.includes(pinKey)}
 					onTogglePin={() => setPins(togglePin(pinKey))}
 					onOpen={() => onOpenFeedItem(feed, item)}
+					onSetStatus={
+						linked ? (status) => onSetStatus([linked], status) : undefined
+					}
 				/>
 			);
 		};
@@ -5673,6 +5790,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					}
 					for (const { feed, item } of pinnedFeedItems) {
 						const pinKey = `feed:${feed.refKind}:${item.id}`;
+						const linked =
+							feedSessionByRef.get(`${feed.refKind}:${item.id}`) || null;
 						entries.push({
 							key: pinKey,
 							pinKeys: [pinKey],
@@ -5683,15 +5802,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									key={pinKey}
 									feed={feed}
 									item={item}
-									session={
-										feedSessionByRef.get(
-											`${feed.refKind}:${item.id}`,
-										) || null
-									}
+									session={linked}
 									active={feedItemActive(feed, item)}
 									pinned
 									onTogglePin={() => setPins(togglePin(pinKey))}
 									onOpen={() => onOpenFeedItem(feed, item)}
+									onSetStatus={
+										linked
+											? (status) => onSetStatus([linked], status)
+											: undefined
+									}
 								/>
 							),
 						});

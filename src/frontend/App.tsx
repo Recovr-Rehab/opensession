@@ -111,7 +111,7 @@ import { refWebPanel } from "./components/FeedWebPane";
 import { ensureFeedMeta } from "./lib/feeds-meta";
 import type { ReviewQueueItem } from "./lib/review-queue";
 import { pushRecent } from "./lib/recents";
-import { setLane } from "./lib/lanes";
+import { setLane, type Lane } from "./lib/lanes";
 import { markRead } from "./lib/reads";
 import {
 	chatPath,
@@ -2324,6 +2324,21 @@ function App() {
 	const handleNewChatRef = useRef(handleNewChat);
 	handleNewChatRef.current = handleNewChat;
 
+	// Lanes are per-user (lib/lanes.ts): setting one moves the row in YOUR
+	// sidebar only, so teammates can hold the same workspace in their own
+	// lanes. Clearing also drops any legacy global override, so "Auto" (and
+	// "Remove from my workspaces") releases rows pinned before lanes went
+	// per-user. Shared by the sidebar rows' menus and the viewer's ⋯ menu.
+	const setChatLanes = (chats: UnifiedSession[], status: Lane | null) => {
+		for (const c of chats) {
+			setLane(c.id, status);
+			if (c.manualStatus) {
+				patch(c.id, { manualStatus: undefined });
+				setSessionStatusApi(c.id, null).catch(() => {});
+			}
+		}
+	};
+
 	// ⌘Z (legacy ⌘⇧T) reopens what you just archived. Every archive path
 	// pushes the chats it tucked away as one entry, so a press undoes one
 	// action: closing a tab brings that chat back, archiving a workspace brings
@@ -2924,6 +2939,7 @@ function App() {
 				})
 			}
 			workspaceChats={projectChats}
+			onSetStatus={setChatLanes}
 			showReview={
 				splitMode ? viewTabKind(surfaceId) === "review" : focused && reviewActive
 			}
@@ -3474,20 +3490,7 @@ function App() {
 								}
 								refresh();
 							}}
-							onSetStatus={(chats, status) => {
-								// Lanes are per-user (lib/lanes.ts): setting one moves the
-								// row in YOUR sidebar only, so teammates can hold the same
-								// workspace in their own lanes. Clearing also drops any
-								// legacy global override, so "Auto" releases rows pinned
-								// before lanes went per-user.
-								for (const c of chats) {
-									setLane(c.id, status);
-									if (c.manualStatus) {
-										patch(c.id, { manualStatus: undefined });
-										setSessionStatusApi(c.id, null).catch(() => {});
-									}
-								}
-							}}
+							onSetStatus={setChatLanes}
 						/>
 						{/* Desktop: docked toast at the sidebar bottom. On phones the
 						    update nudge moves to the top bar (next to the brand). */}
