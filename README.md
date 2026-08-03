@@ -40,6 +40,33 @@ The installer accepts `--dir`, `--channel <ref>`, `--no-engine`,
 `--no-tailscale`, `--no-modify-path`, `--yes` and `--uninstall`; `--help`
 lists them all.
 
+### Or paste this into an agent
+
+You're installing agent infrastructure — let an agent install it. Paste this
+into Claude Code (or any coding agent) running on the box you want it on:
+
+```text
+Set up OpenSession (https://github.com/tellahq/opensession) on this machine
+for me. Go step by step and ask me one question at a time before acting.
+
+1. Check the basics: OS, git, whether ~/.opensession already exists.
+2. Install:
+   curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
+   Ask first whether I want Tailscale (--no-tailscale to skip).
+3. Run `opensession onboard` and walk me through it: which git repos I want
+   agent sessions on, my company/product name, what to call the agent, and
+   which integrations to enable (Slack, GitHub, Linear, Plain, Stripe —
+   all optional, all can wait).
+4. Model accounts: help me add a Claude subscription token (`claude
+   setup-token` on a Max login) and/or a ChatGPT-plan Codex login.
+5. Networking: keep it on 127.0.0.1 unless I pick Tailscale or an SSH
+   tunnel. Never expose it publicly — there is no built-in auth.
+6. Finish: `opensession start`, then `opensession doctor` until clean, and
+   give me the URL to open.
+
+Details are in docs/setup/ in the repo — read them when unsure.
+```
+
 Then read the real setup guide — secrets, accounts, integrations, systemd:
 
 - **[docs/setup/](docs/setup/README.md)** — overview, requirements, trust model
