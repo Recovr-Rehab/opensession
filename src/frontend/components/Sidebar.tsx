@@ -101,6 +101,7 @@ import {
 	IconCheck,
 	IconClock,
 	IconFlame,
+	IconHistory,
 	IconInbox,
 	IconMessageQuestion,
 	IconPencil,
@@ -1383,11 +1384,12 @@ function readExpanded(): Set<string> {
 
 // ── Grouping / filtering controls (the filter popover) ─────────────────────
 // The sidebar can be organized several ways ("Group by": Status, Repo as a
-// flat Conductor-style list, Repo and status with lanes nested per repo, or
-// Recently opened), narrowed to a single repo ("Repo") or a single person
+// flat Conductor-style list, Repo and status with lanes nested per repo,
+// Recently opened, or Inbox — an email-style flat list of two-line rows
+// banded by activity), narrowed to a single repo ("Repo") or a single person
 // ("Person"), and ordered by recency of activity or creation ("Sort by"). The
 // choices persist together per browser; the default grouping is repo + status.
-type GroupBy = "status" | "repo" | "repo-status" | "recently";
+type GroupBy = "status" | "repo" | "repo-status" | "recently" | "inbox";
 type SortBy = "updated" | "created";
 // Session-less PR rows folded into the project lanes: the default shows your
 // own PRs + explicit review requests (the retired PR band's default sources),
@@ -1424,6 +1426,7 @@ function readFilter(): FilterState {
 				v.groupBy === "repo" ||
 				v.groupBy === "repo-status" ||
 				v.groupBy === "recently" ||
+				v.groupBy === "inbox" ||
 				(chosen && v.groupBy === "status")
 					? v.groupBy
 					: DEFAULT_GROUP_BY,
@@ -3375,7 +3378,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		key.startsWith("repo:") ||
 		key.startsWith("review:") ||
 		key.startsWith("project:") ||
-		key.startsWith("support:")
+		key.startsWith("support:") ||
+		key.startsWith("inbox:")
 			? `collapsed:${key}`
 			: key;
 
@@ -3397,7 +3401,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			key.startsWith("repo:") ||
 			key.startsWith("review:") ||
 			key.startsWith("support:") ||
-			key.startsWith("project:")
+			key.startsWith("project:") ||
+			key.startsWith("inbox:")
 		)
 			return !expanded.has(`collapsed:${key}`);
 		return expanded.has(key);
@@ -3778,6 +3783,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Right-click opens the workspace menu (pin / color / rename / delete);
 	// double-click renames inline.
 	function renderWsRow(row: WsRow) {
+		return renderWsRowImpl(row, false);
+	}
+
+	// `inbox` renders the Inbox-mode two-line variant of the same row — a
+	// repo + branch meta line under the title, idle timestamp on every row —
+	// with identical behavior (click, swipe, context menu, pin, archive).
+	// Separate impl rather than an optional param because `.map(renderWsRow)`
+	// callers would pass the array index into it.
+	function renderWsRowImpl(row: WsRow, inbox: boolean) {
 		const active = row.chats.some((s) => s.id === selectedId);
 		const editing = rowRenameEditing(row);
 		const waiting = row.status === "needsinput";
@@ -3873,7 +3887,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</button>
 				)}
 				<button
-					className={`sidebar-item sidebar-ws-row ${active ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${row.unread ? "sidebar-item-unread" : ""}`}
+					className={`sidebar-item sidebar-ws-row ${inbox ? "sidebar-item--twoline flex-wrap gap-y-0.5" : ""} ${active ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${row.unread ? "sidebar-item-unread" : ""}`}
 					style={
 						swipeOffset
 							? ({ "--swipe-x": `${swipeOffset}px` } as React.CSSProperties)
@@ -3975,7 +3989,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// Same class as a session row's title, so workspace rows pick up
 						// the shared type scale (incl. the phone bump) and the
 						// selected/waiting/unread emphasis from the row's own classes.
-						className="sidebar-item-title"
+						// Inbox rows flex-wrap, where an intrinsic-width title would push
+						// the trailing ticker/time onto a wrapped line instead of
+						// shrinking — flex-1 keeps the first line a single line.
+						className={`sidebar-item-title${inbox ? " flex-1" : ""}`}
 						onDoubleClick={(e) => {
 							e.stopPropagation();
 							if (row.workspace) {
@@ -4030,7 +4047,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{runStartMs !== null && <RunTicker startMs={runStartMs} />}
 				{snoozeIso && !editing && <SnoozeBadge until={snoozeIso} />}
 				{!isPhone &&
-					!row.workspace &&
+					(inbox || !row.workspace) &&
 					!snoozeIso &&
 					wsTimePref !== "off" &&
 					row.lastActivity && (
@@ -4059,6 +4076,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						aria-label="Needs your attention"
 					>
 						<span className="block size-[7px] rounded-full bg-green" />
+					</span>
+				)}
+				{/* Inbox meta line: repo + branch under the title. basis-full wraps
+				    it onto its own row; the padding lines it up with the title's
+				    left edge (22px rail + 9px gap). */}
+				{inbox && !editing && (
+					<span className="flex min-w-0 basis-full items-center gap-1.5 pl-[31px]">
+						<RepoTile name={wsRowRepo(row)} size={13} />
+						<span className="shrink-0 text-[12px] leading-[1.35] text-dim">
+							{repoLabel(wsRowRepo(row))}
+						</span>
+						{(row.workspace?.branch || row.chats[0]?.branch) && (
+							<span className="min-w-0 overflow-hidden text-[12px] leading-[1.35] text-ellipsis whitespace-nowrap text-faint">
+								{row.workspace?.branch || row.chats[0]?.branch}
+							</span>
+						)}
 					</span>
 				)}
 				{/* Hover actions: pin + archive, side by side. */}
@@ -4297,6 +4330,100 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			);
 		}
 		return lanes;
+	}
+
+	// ── Inbox mode: the workspace rows as one activity-ranked list ─────────
+	// No repo/status grouping — bands mirror an email inbox instead: Needs
+	// action (blocked on you) → Active (running) → Today → Yesterday →
+	// Earlier. Bands are exclusive with priority needs-action > active >
+	// date, and the ranking always follows lastActivity ("Sort by: Created"
+	// deliberately doesn't apply — an inbox orders by what moved last).
+	function renderInboxBands(rows: WsRow[]) {
+		const sorted = [...rows].sort((a, b) =>
+			(b.lastActivity || "").localeCompare(a.lastActivity || ""),
+		);
+		const dayStart = new Date();
+		dayStart.setHours(0, 0, 0, 0);
+		const todayMs = dayStart.getTime();
+		const yesterdayMs = todayMs - 24 * 60 * 60 * 1000;
+		const dateIcon = (
+			<IconHistory
+				className="sidebar-group-icon"
+				style={{ color: "var(--text-dim)" }}
+			/>
+		);
+		const bands: Array<{
+			key: string;
+			label: string;
+			icon: React.ReactNode;
+			rows: WsRow[];
+		}> = [
+			{
+				key: "needsaction",
+				label: "Needs action",
+				icon: (
+					<SidebarGroupIcon
+						status="needsinput"
+						color={STATUS_DOT.needsinput}
+					/>
+				),
+				rows: [],
+			},
+			{
+				key: "active",
+				label: "Active",
+				icon: (
+					<SidebarGroupIcon
+						status="inprogress"
+						color={STATUS_DOT.inprogress}
+					/>
+				),
+				rows: [],
+			},
+			{ key: "today", label: "Today", icon: dateIcon, rows: [] },
+			{ key: "yesterday", label: "Yesterday", icon: dateIcon, rows: [] },
+			{ key: "earlier", label: "Earlier", icon: dateIcon, rows: [] },
+		];
+		const [needsAction, activeBand, today, yesterday, earlier] = bands;
+		for (const r of sorted) {
+			if (r.status === "needsinput") needsAction.rows.push(r);
+			else if (r.running) activeBand.rows.push(r);
+			else {
+				// NaN (no lastActivity) compares false on both → Earlier.
+				const t = Date.parse(r.lastActivity || "");
+				if (t >= todayMs) today.rows.push(r);
+				else if (t >= yesterdayMs) yesterday.rows.push(r);
+				else earlier.rows.push(r);
+			}
+		}
+		return bands
+			.filter((b) => b.rows.length > 0)
+			.map((b) => {
+				const gkey = `inbox:${b.key}`;
+				const open = isOpen(gkey);
+				return (
+					<div className="sidebar-status-group" key={gkey}>
+						<button
+							// Bare .sidebar-group-header like the status lanes — see
+							// renderStatusLanes for why utilities stay off it.
+							className="sidebar-group-header transition-colors"
+							onClick={() => toggleGroup(gkey)}
+						>
+							{b.icon}
+							<span className="sidebar-group-name">{b.label}</span>
+							<span className="sidebar-group-count">{b.rows.length}</span>
+							<IconChevronDown
+								className="sidebar-group-chevron"
+								size={22}
+								style={{ transform: open ? "none" : "rotate(-90deg)" }}
+							/>
+						</button>
+						{b.rows
+							.filter((r) => open || r.chats.some((c) => c.id === selectedId))
+							.map((r) => renderWsRowImpl(r, true))}
+					</div>
+				);
+			});
 	}
 
 	// The repo bands — one collapsible band per repo, shared by two "Group by"
@@ -5744,7 +5871,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					    beside the repos with priority lanes nested under it — or,
 					    in the flat status view, its priority lanes appended after
 					    the status lanes so everything reads as one list. */}
-					{filter.groupBy === "repo" || filter.groupBy === "repo-status"
+					{/* Inbox: one flat activity-ranked list (no repo/status
+					    grouping), then the Snoozed group and the feed bands as
+					    usual. Session-less PR rows sit this mode out — it ranks
+					    sessions by activity, which a bare PR doesn't have. */}
+					{filter.groupBy === "inbox"
+						? [
+								...renderInboxBands(focusWsRows),
+								...renderStatusLanes([], "", snoozedWsRows),
+								...renderSupportLanes(plainThreadsInView),
+								...visibleFeeds
+									.filter((d) => d.id !== "plain")
+									.map((d) => renderFeedBand(d, false)),
+							]
+						: filter.groupBy === "repo" || filter.groupBy === "repo-status"
 						? (
 								<>
 									{renderRepoGroups(filter.groupBy === "repo-status")}
@@ -6194,6 +6334,7 @@ function FilterPopover({
 							{ value: "status", label: "Status" },
 							{ value: "repo", label: "Project" },
 							{ value: "repo-status", label: "Project and status" },
+							{ value: "inbox", label: "Inbox" },
 						]}
 						onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 					/>
