@@ -79,6 +79,20 @@ developed and released together. See its README for local development,
 signing, and release instructions. Run `bun app:dev` from the repository root
 to launch the frontend proxy and desktop app together.
 
+## Make it your own
+
+Everything company-specific is instance configuration, not source — branding,
+the agent's name and persona, your repositories, integrations, automations
+([docs/instance-configuration.md](docs/instance-configuration.md)). Point a
+stock install at your config and it becomes your company's agent server: your
+repos, your Slack, your name on the agent. No fork needed for that.
+
+Forking is welcome — recommended, even — when you want to change what it *is*,
+not just whose it is: strip the integrations you'll never use, rebrand the
+client apps to your own bundle ids, hard-code opinions we left configurable.
+It's Apache-2.0, so you owe nothing but the license notice. And if your change
+would help everyone, propose it upstream — see below.
+
 ## Contributing
 
 We take contributions as human-written text, not code — see

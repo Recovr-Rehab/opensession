@@ -26,9 +26,11 @@ Two things that should *not* go through `adrs/`:
   is an install problem, the full installer output — it prints every step it
   took.
 
-Code pull requests aren't the path for outside contributions. The project is
-Apache-2.0, so forking and hacking on your own instance is encouraged — the
-rest of this document is for that.
+Code pull requests aren't the path for outside contributions — forking is.
+The project is Apache-2.0 and built to be made your own: instance config
+covers branding, persona, repos and integrations without touching source
+(see [Make it your own](README.md#make-it-your-own)), and a fork covers
+everything else. The rest of this document is for people doing exactly that.
 
 ## Getting set up
 
