@@ -587,7 +587,7 @@ if (!g.__backstageBooted) {
 		invalidateSessionsCache();
 	});
 
-	// Transcript v2 (docs/transcript-v2-design.md §8): one-time full backfill of
+	// Transcript v2 (docs/transcripts.md): one-time full backfill of
 	// legacy transcripts into transcripts.db. The helper self-gates (marker
 	// file once it completed — already done since 2026-07-23); the delay keeps
 	// its import chunks out of the restart-resume window below.
