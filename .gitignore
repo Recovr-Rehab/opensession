@@ -34,3 +34,9 @@ output/os1-icons/icon-512-padded.png
 
 # macOS Finder metadata
 .DS_Store
+
+# Vendored third-party agent skills — instance-local, not part of OpenSession
+# (MIT content fetched from emilkowalski/skills and jakubkrehel/skills)
+.agents/skills/
+.claude/skills
+skills-lock.json

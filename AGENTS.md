@@ -190,26 +190,10 @@ opportunistically when touched (strangler pattern — never a big-bang rewrite):
 
 ### UI Design & Motion Skills
 
-For frontend design or motion work, read the smallest relevant set of skills
-before planning or editing:
-
-- Start with `.agents/skills/better-ui/SKILL.md` for general UI polish,
-  component details, hover states, surfaces, and common micro-interactions.
-- Add `.agents/skills/better-colors/SKILL.md` for palettes, OKLCH, contrast,
-  gamut, color tokens, or dark mode.
-- Add `.agents/skills/better-typography/SKILL.md` for font choice, type scales,
-  spacing, wrapping, OpenType features, or text accessibility.
-- Use `.agents/skills/animation-vocabulary/SKILL.md` only to identify or name
-  an unfamiliar motion effect; it is not an implementation guide.
-- Use `.agents/skills/emil-design-eng/SKILL.md` when deciding whether and how
-  UI should animate, or when refining component interaction details.
-- Add `.agents/skills/apple-design/SKILL.md` for gesture-driven or physical
-  motion such as springs, dragging, swiping, sheets, momentum, and
-  interruptible transitions.
-- Use `.agents/skills/improve-animations/SKILL.md` for a read-only,
-  codebase-wide motion audit and prioritized implementation plan.
-- Use `.agents/skills/review-animations/SKILL.md` for a strict review of an
-  existing animation implementation or diff.
+Design/motion skills can be installed instance-locally under `.agents/skills/`
+(gitignored — see docs/extending.md for the skill format). If your instance
+has them, read the smallest relevant set before frontend design or motion
+work.
 
 - Use `bun run opensession.ts` to start the server
 - Server binds 127.0.0.1:3850 — not publicly accessible
