@@ -5872,15 +5872,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					{/* Inbox: one flat activity-ranked list (no repo/status
 					    grouping), then the Snoozed group and the feed bands as
 					    usual. Session-less PR rows sit this mode out — it ranks
-					    sessions by activity, which a bare PR doesn't have. */}
+					    sessions by activity, which a bare PR doesn't have. Plain
+					    and the other feeds keep the banded (repo-mode) shape:
+					    their items aren't the activity-ranked sessions this mode
+					    orders, so they stay grouped apart, lanes nested. */}
 					{filter.groupBy === "inbox"
 						? [
 								...renderInboxBands(focusWsRows),
 								...renderStatusLanes([], "", snoozedWsRows),
-								...renderSupportLanes(plainThreadsInView),
-								...visibleFeeds
-									.filter((d) => d.id !== "plain")
-									.map((d) => renderFeedBand(d, false)),
+								...visibleFeeds.map((d) => renderFeedBand(d, true)),
 							]
 						: filter.groupBy === "repo" || filter.groupBy === "repo-status"
 						? (
