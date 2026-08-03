@@ -1,0 +1,57 @@
+# ============================================================================
+# TEMPLATE — installed and rewritten by `opensession service install`
+# (renderUnit), which stamps in your user, paths, and PATH. Do NOT hand-copy
+# this file into /etc/systemd/system; a raw copy ships someone else's paths.
+# ============================================================================
+[Unit]
+Description=OpenSession - agent session dashboard
+After=network.target
+
+[Service]
+# PATH is passed straight through to engine subprocesses (opencodeEnv()/
+# host-client), so any toolchains your code sessions need must be on it —
+# interactive shells get it from the login profile; the service must carry
+# it explicitly.
+Environment="PATH=/home/ubuntu/.cargo/bin:/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/projects/tella-backstage
+EnvironmentFile=/home/ubuntu/.opensession.env
+Environment="NODE_ENV=production"
+# Do not use `bun --hot` here. A failed reload on Bun 1.3.14 can permanently
+# stop every timer while HTTP keeps serving, leaving all sessions apparently
+# running but unable to progress. Backend changes use a deliberate graceful
+# restart; detached engine turns survive and the run journal reattaches them.
+# The app's own frontend watcher still rebuilds frontend edits live.
+ExecStart=/home/ubuntu/.bun/bin/bun run opensession.ts
+Restart=always
+# 1s, not 5s: this pause is pure downtime on every restart (deliberate or
+# crash), and Caddy's lb_try_duration parks requests meanwhile — a crash loop
+# is still rate-limited by the unit's start-rate limiting.
+RestartSec=1
+# Give graceful shutdown time to drain in-flight runs (SHUTDOWN_DRAIN_MS, 60s)
+# before systemd escalates to SIGKILL. Must stay above SHUTDOWN_DRAIN_MS (60s) +
+# a buffer for the rest of shutdown, or systemd kills the process mid-drain.
+# Drain was cut 120s→60s (2026-07-11) for snappier restarts: the run journal
+# resumes anything still mid-turn on the next boot, and a resumed run now self-
+# heals transient failures via the fallback graph — so a shorter drain trades a
+# little redo work for a much faster restart, not lost work.
+TimeoutStopSec=80
+# SIGTERM the bun parent ONLY — not the whole cgroup. The default
+# (KillMode=control-group) SIGTERMs every child too, so on restart the Claude
+# subprocesses die (exit 143) the instant shutdown begins — before bun's graceful
+# drain can run, and before the run journal can do its job. Worse, a loop that
+# catches that kill (e.g. github auto-fix) marks itself "done" and defeats its own
+# restart recovery. With `mixed`, only bun gets SIGTERM; it drains in-flight runs
+# (children keep working) and exits, then systemd SIGKILLs any leftovers after
+# TimeoutStopSec. This is what makes the graceful-drain + journal-resume design
+# actually take effect.
+KillMode=mixed
+# Agent runs are driven by untrusted text (customer tickets); none of them
+# should be able to mint EC2 instance-role credentials from the metadata
+# endpoint. eBPF egress filter — covers every child the service spawns.
+# Remove if a session ever legitimately needs the role.
+IPAddressDeny=169.254.169.254/32
+
+[Install]
+WantedBy=multi-user.target

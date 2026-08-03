@@ -1,0 +1,131 @@
+# Misc integrations: Stripe, WorkOS, observability, push, voice
+
+## Boot guards
+
+Every integration is declared in the registry
+(`src/server/integrations/registry.ts`); `loadAgents()` in `opensession.ts`
+is a loop over it (`loadIntegrations`, `src/server/integrations/load.ts`).
+Enable resolution per integration:
+
+- Every agent is **OFF by default**. An integration loads only when you enable
+  it, so a fresh install runs nothing you did not ask for.
+- Flags: `ENABLE_SLACK_AGENT`, `ENABLE_LINEAR_AGENT`, `ENABLE_PLAIN_AGENT`,
+  `ENABLE_GITHUB_AGENT`, `ENABLE_GRAFANA_POLLER`, `ENABLE_STRIPE_AGENT`.
+- **Only the literal string `true` enables via env.** `ENABLE_SLACK_AGENT=1`
+  does *not* turn Slack on — any other value disables. The asymmetry is
+  deliberate: anything unrecognised means off.
+- The env flag wins when set; otherwise `integrations.<id>.enabled` in
+  `config.json` decides. Onboarding writes explicit values rather than relying
+  on either default.
+
+Enabling an integration without its credentials is the one state to avoid: it
+loads and degrades with warnings (Slack calls fail, webhook verification
+rejects everything, the Grafana poller no-ops) rather than refusing. That costs
+log noise and health warnings, not crashes. Missing webhook secrets are
+fail-closed (401), so nothing untrusted gets in. The exception is Stripe: its
+registry entry carries a `requires` gate, so without `STRIPE_WEBHOOK_SECRET`
+the agent is skipped entirely (no route worth exposing).
+
+## Stripe
+
+Two separate pieces:
+
+1. **Dispute webhook agent** (`src/agents/stripe/`): route `POST
+   /stripe/webhook` on the [webhook server](install.md#webhook-server),
+   verified with `STRIPE_WEBHOOK_SECRET`. It only acts on
+   `charge.dispute.created`, firing the `stripe:charge.dispute.created`
+   automation event with a minimal payload (the automation re-fetches details
+   via MCP). Everything else is acked and ignored.
+2. **Stripe MCP server** (`mcp-config.json`): an HTTP server pointing at
+   `https://mcp.stripe.com` with a **restricted key** (`rk_live_…`) in the
+   config file, not env. Use a restricted key with write on Refunds +
+   Subscriptions (+ Invoices if you want invoice voiding) only and read on
+   core billing resources — Stripe enforces that ceiling server-side no
+   matter what the agent asks for.
+
+On top of the key ceiling, the money-moving tools are **confirm-listed**
+(`STRIPE_CONFIRM_TOOLS`, `src/server/runner-shared.ts`; override with
+`policy.stripeConfirmTools` in config): `mcp__stripe__create_refund`,
+`mcp__stripe__cancel_subscription`, `mcp__stripe__update_subscription`, and
+the raw-API mutators `mcp__stripe__stripe_api_execute` /
+`mcp__stripe__stripe_api_write` (they can hit any endpoint the key permits).
+The opencode engine has no per-call approval card, so these tools are
+STRIPPED from the model's tool list on every run — the server stays mounted
+and Stripe reads keep working. The instructions tell the agent to propose
+the action instead: unattended runs post it in their internal note for a
+human to approve by opening the session; interactive runs ask the human in
+the session.
+
+## WorkOS
+
+No server code — it's a stdio MCP server in `mcp-config.json` (a wrapper
+script that loads its own credentials; the repo doesn't contain one, so
+bring your own WorkOS MCP). Automation runs
+hard-deny its entire write/impersonation surface
+(`AUTOMATION_DENIED_TOOLS` in `src/server/automations.ts` — see
+[plain.md](plain.md#the-triage-automation-least-privilege-model) for the
+exact list); reads (`get_*`, `list_*`) stay allowed.
+
+## Grafana poller
+
+`src/agents/grafana-poller/` polls Loki for failure signatures and spins up
+investigation automations with a Slack control card per fresh failure.
+
+| Var | Default | Notes |
+| --- | --- | --- |
+| `GRAFANA_URL` | — | required; without it (or the token) startup logs "poller disabled" and the agent is a complete no-op |
+| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | — | bearer token for the datasource proxy |
+| `LOKI_DATASOURCE_UID` | `loki` | queried via `/api/datasources/proxy/uid/<uid>/loki/api/v1/query` |
+
+Each poll is configuration on an automation (`grafanaPoll` in
+`src/server/automations.ts`): the LogQL to run (`lokiQuery`, with `$LOOKBACK`
+substituted with the poll window), the dedup label, and the Slack channel the
+control card posts to (`slackChannel`) — so pointing the poller at your own
+failure signatures is configuration, not a code edit. Dedup state lives in
+`~/.opensession-grafana-poll/<automationId>/` (default window 7 days).
+
+## Sentry and Tinybird
+
+MCP-only — no server code, no env vars. Configure them as HTTP MCP servers
+in `mcp-config.json` (`https://mcp.sentry.dev/mcp`;
+`https://mcp.tinybird.co?token=<token>` with the token in the URL). Omit
+them and nothing breaks; runs just don't get those tools.
+
+## Web push
+
+`src/server/push.ts`. Zero configuration: VAPID keys are generated on first
+use and stored in `~/.opensession-push/vapid.json`; per-user subscriptions in
+`~/.opensession-push/subscriptions.json` (dead ones pruned on send). The VAPID
+contact comes from `integrations.push.vapidSubject` and defaults to
+`mailto:admin@example.com` — push works regardless, but set it to a real
+address so a push service can reach you about your own subscriptions. Push
+requires the UI to be served over HTTPS (e.g. Tailscale
+`ts.net` certs); on iOS it needs the PWA installed.
+
+## Voice / transcription
+
+`src/server/transcribe.ts` tries providers in order, falling through on
+failure:
+
+1. OpenAI (`OPENAI_API_KEY`; `gpt-4o-mini-transcribe`)
+2. Groq (`GROQ_API_KEY`; `whisper-large-v3-turbo`)
+3. Local whisper.cpp — `WHISPER_CLI` (default
+   `~/tools/whisper.cpp/build/bin/whisper-cli`) + `WHISPER_MODEL` (default
+   `~/tools/whisper.cpp/models/ggml-small-q5_1.bin`), with `ffmpeg` for
+   audio conversion. Build whisper.cpp yourself; it's outside the repo.
+
+All optional — with no provider configured, dictation throws and the rest of
+the app is unaffected.
+
+## AWS creds for runs (`AGENT_AWS_REGION`)
+
+`src/server/aws-creds.ts` mints short-lived instance-role credentials for
+agent runs that opt into AWS (`aws: true`), injecting `AWS_REGION` /
+`AWS_DEFAULT_REGION` (resolved `AGENT_AWS_REGION` → `AWS_REGION` →
+`integrations.aws.region` in config → default `us-east-1`) plus
+temporary keys into the child env. It exists because the service cgroup
+blocks the EC2 metadata endpoint (`IPAddressDeny=169.254.169.254/32` in
+`opensession.service`) so untrusted agent code can't mint the role itself; the
+main process escapes via a transient systemd unit (`sudo -n systemd-run`) to
+fetch read-only creds. EC2-specific; off AWS, mint failure returns `{}` and
+runs proceed without AWS.

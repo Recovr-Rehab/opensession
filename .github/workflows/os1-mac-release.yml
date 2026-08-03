@@ -1,0 +1,194 @@
+# Tella's client release pipeline — fork and rebrand (see os1-mac/README).
+name: Release OS¹ for Mac
+
+# Builds, signs, notarizes and publishes the vendored Electron shell.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: os1-mac-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: os1-mac
+
+jobs:
+  release:
+    if: github.repository_owner == 'tellahq'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # SHA-pinned: this job runs with the Developer ID certificate and
+      # notarisation credentials present, so a moved tag on a third-party
+      # action would execute right next to them. (v2.2.0 at time of pinning.)
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Fetch pinned OpenCode binary
+        run: sh scripts/fetch-opencode.sh
+
+      - name: Fetch pinned Bun runtime
+        run: sh scripts/fetch-bun.sh
+
+      # The server sidecar bundles the repository's server for Local Sessions
+      # without a source checkout; the bundler resolves imports from the repo
+      # root's dependencies, and the sidecar's own install runs on this macOS
+      # runner so its native modules match the target platform.
+      - name: Install server dependencies
+        run: bun install --frozen-lockfile
+        working-directory: .
+
+      - name: Build server sidecar
+        run: bun run scripts/build-server-sidecar.ts
+
+      - name: Import Developer ID certificate
+        uses: apple-actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATES_PASSWORD }}
+
+      - name: Install Developer ID provisioning profile
+        env:
+          PROFILE_BASE64: ${{ secrets.OS1_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          test -n "$PROFILE_BASE64"
+          printf '%s' "$PROFILE_BASE64" | base64 -D > build/os1.provisionprofile
+          security cms -D -i build/os1.provisionprofile > /tmp/os1-profile.plist
+          if ! DOMAINS=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.associated-domains' /tmp/os1-profile.plist); then
+            echo '::error::Provisioning profile does not include the Associated Domains entitlement'
+            exit 1
+          fi
+          printf '%s\n' "$DOMAINS"
+          grep -Eq '(^|[[:space:]])(\*|applinks:os\.tella\.dev)($|[[:space:]])' <<< "$DOMAINS" || { echo '::error::Provisioning profile does not authorize applinks:os.tella.dev'; exit 1; }
+
+      # The repository ships a portable default (localhost) so a fresh clone does
+      # not point at someone else's server. Release builds stamp the real one in.
+      # Set the OS1_SERVER_URL repository variable to override.
+      - name: Stamp deployment server
+        env:
+          SERVER: ${{ vars.OS1_SERVER_URL || 'https://os.tella.dev/' }}
+        run: |
+          jq --arg s "$SERVER" '.opensession.defaultServer = $s' package.json > /tmp/pkg.json
+          mv /tmp/pkg.json package.json
+          jq -r '"default server: " + .opensession.defaultServer' package.json
+
+      - name: Build, sign & notarize
+        run: |
+          # Only the top-level app carries the associated-domains entitlement
+          # (it's the one that embeds the provisioning profile). The Electron
+          # helpers inherit entitlements.mac.plist and have NO profile: macOS
+          # SIGKILLs any helper that claims a restricted entitlement it can't
+          # back with a profile, and Electron then aborts with
+          # "GPU process isn't usable. Goodbye." So entitlementsInherit must
+          # stay on the plain plist — see the "Verify universal-link signing"
+          # step, which guards this split.
+          bunx electron-builder --mac --publish never \
+            --config.mac.entitlements=build/entitlements.mac.applinks.plist \
+            --config.mac.entitlementsInherit=build/entitlements.mac.plist \
+            --config.mac.provisioningProfile=build/os1.provisionprofile
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || '6GUXT43C8B' }}
+
+      - name: Verify universal-link signing
+        run: |
+          APP='dist/mac-arm64/OS¹.app'
+          test -f "$APP/Contents/embedded.provisionprofile" || { echo '::error::Signed app has no embedded provisioning profile'; ls -la "$APP/Contents"; exit 1; }
+          codesign -d --entitlements :- "$APP" > /tmp/os1-entitlements.plist
+          /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains' /tmp/os1-entitlements.plist | grep -q 'applinks:os.tella.dev'
+          security cms -D -i "$APP/Contents/embedded.provisionprofile" > /tmp/os1-embedded-profile.plist
+          /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.associated-domains' /tmp/os1-embedded-profile.plist | grep -Eq '(^|[[:space:]])(\*|applinks:os\.tella\.dev)($|[[:space:]])'
+          # The Electron helpers inherit entitlements.mac.plist and have no
+          # provisioning profile, so none of them may claim associated-domains —
+          # macOS SIGKILLs a helper that does ("GPU process isn't usable.
+          # Goodbye."). This guards the entitlements/entitlementsInherit split
+          # in the build step against regressing across releases.
+          while IFS= read -r -d '' helper; do
+            if codesign -d --entitlements :- "$helper" 2>/dev/null | grep -q 'com.apple.developer.associated-domains'; then
+              echo "::error::Electron helper claims associated-domains without a provisioning profile: $helper"
+              exit 1
+            fi
+          done < <(find "$APP/Contents/Frameworks" -name '*.app' -print0)
+
+      - name: Verify vendored binaries
+        run: |
+          APP='dist/mac-arm64/OS¹.app'
+          OPENCODE="$APP/Contents/Resources/opencode"
+          test -x "$OPENCODE" || { echo '::error::Bundled OpenCode is missing or not executable'; exit 1; }
+          "$OPENCODE" --version | grep -q '1\.18\.4'
+          codesign --verify --strict --verbose=2 "$OPENCODE"
+          codesign -d --entitlements :- "$OPENCODE" > /tmp/os1-opencode-entitlements.plist
+          /usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.allow-jit' /tmp/os1-opencode-entitlements.plist | grep -q true
+          codesign -dv --verbose=4 "$OPENCODE" 2>&1 | grep -q 'Authority=Developer ID Application: Tella HQ Inc.'
+          BUN="$APP/Contents/Resources/bun"
+          test -x "$BUN" || { echo '::error::Bundled Bun runtime is missing or not executable'; exit 1; }
+          "$BUN" --version | grep -q '1\.3\.14'
+          codesign --verify --strict --verbose=2 "$BUN"
+          codesign -d --entitlements :- "$BUN" > /tmp/os1-bun-entitlements.plist
+          /usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.allow-jit' /tmp/os1-bun-entitlements.plist | grep -q true
+          SIDECAR="$APP/Contents/Resources/server"
+          test -f "$SIDECAR/opensession.js" || { echo '::error::Server sidecar is missing'; exit 1; }
+          test -f "$SIDECAR/mcp-proxy.js"
+          test -f "$SIDECAR/opencode-plugin-session-tag.js"
+          test -d "$SIDECAR/node_modules/opencode-with-claude"
+          # --deep also fails on any unsigned Mach-O inside the sidecar's
+          # node_modules, guarding the afterPack signing walk.
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # First tagged release: also launch the installed app on Apple Silicon,
+          # enable Local Sessions, and confirm opencode runs without a hardened-
+          # runtime/JIT kill. Static codesign checks cannot exercise that path.
+
+      - name: Verify packaged locales and report size
+        run: |
+          APP='dist/mac-arm64/OS¹.app'
+          NON_ENGLISH_LOCALES=$(find "$APP/Contents" -type d -name '*.lproj' ! -name 'en.lproj' -print)
+          if [[ -n "$NON_ENGLISH_LOCALES" ]]; then
+            echo '::error::Non-English Electron locales were packaged:'
+            printf '%s\n' "$NON_ENGLISH_LOCALES"
+            exit 1
+          fi
+          du -sh "$APP"
+          du -sh "$APP/Contents/Frameworks/Electron Framework.framework"
+          du -sh "$APP/Contents/Resources/opencode"
+          du -sh "$APP/Contents/Resources/bun"
+          du -sh "$APP/Contents/Resources/server"
+
+      - name: Notarize & staple DMG
+        run: |
+          xcrun notarytool submit dist/*.dmg --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple dist/*.dmg
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || '6GUXT43C8B' }}
+
+      - name: Verify Gatekeeper acceptance
+        run: |
+          xcrun stapler validate dist/mac-arm64/*.app
+          spctl --assess --type open --context context:primary-signature -v dist/*.dmg
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        run: gh release create "$GITHUB_REF_NAME" dist/*.dmg dist/*.zip --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload artifacts (manual run)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OS1
+          path: |
+            os1-mac/dist/*.dmg
+            os1-mac/dist/*.zip

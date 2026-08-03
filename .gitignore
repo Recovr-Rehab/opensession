@@ -1,0 +1,36 @@
+*.key
+*.crt
+
+# Local MCP config contains live API tokens — use mcp-config.example.json as a template
+mcp-config.json
+
+# Instance-local operator instructions (appended to every engine run by
+# readLocalInstructions in src/server/opencode-runner.ts) — never tracked
+AGENTS.local.md
+CLAUDE.local.md
+
+# Slack data caches
+.users_cache.json
+.channels_cache.json
+.channels_cache_v2.json
+mcp-config.json.bak
+
+# Codex CLI platform binary (223MB — exceeds GitHub's file limit; restored by `bun install`)
+node_modules/@openai/codex-linux-x64/
+node_modules/.bin/codex
+.frontend-dist/
+.website-dist/
+node_modules
+__pycache__/
+*.pyc
+
+# output/ holds session deliverables (e.g. the OS1 app icon under
+# output/os1-icons). Sources are tracked — only rendered artifacts are
+# ignored (rebuild via generate.ts + build-fallbacks.sh + ictool).
+output/**/previews/
+output/**/*.icns
+output/**/*.iconset/
+output/os1-icons/icon-512-padded.png
+
+# macOS Finder metadata
+.DS_Store

@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["bun"]
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  // os1-tui has its own tsconfig: its JSX resolves to OpenTUI's intrinsic
+  // elements (box/text/scrollbox), not React DOM's, so it can't share this one.
+  // Check it with `cd os1-tui && bun run typecheck`.
+  "exclude": ["node_modules", "dist", "os1-tui"]
+}
