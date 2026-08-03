@@ -1,5 +1,5 @@
 /**
- * Transcript v2 store (docs/transcript-v2-design.md §1, §1a) — the owned
+ * Transcript v2 store (docs/transcripts.md §1, §1a) — the owned
  * per-session sequence-numbered event log in ONE SQLite (WAL) DB:
  * `<OPENSESSION_CHATS_DIR>/transcripts.db`.
  *

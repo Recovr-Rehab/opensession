@@ -1,5 +1,5 @@
 /**
- * Browser-based OAuth for HTTP MCP servers (docs/feeds-design.md — "easy to
+ * Browser-based OAuth for HTTP MCP servers (the feeds design — "easy to
  * connect any MCP, per user as well").
  *
  * Replaces the unusable headless flow (opencode's CLI OAuth listens on the

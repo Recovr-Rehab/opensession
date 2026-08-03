@@ -5,7 +5,7 @@
  * resolve into workspaces via resolveExternalWorkspace (workspace-resolve.ts)
  * keyed `<refKind>-<itemId>`, and the linkage is stamped as a generic
  * `externalRefs` entry — never a new one-off foreign-key field per source.
- * Design doc: docs/feeds-design.md.
+ * Design doc: the feeds design.
  *
  * Registration is lazy (ensureFeedsRegistered from the routes) so this module
  * has no import-time side effects; providers whose backing connection is
@@ -41,7 +41,7 @@ export interface FeedItem {
 }
 
 /**
- * One filter control on a feed band (docs/feeds-design.md — "filters, like
+ * One filter control on a feed band (the feeds design — "filters, like
  * tella has tag/playlist filters on list_videos, configurable per
  * project/plugin"). `key` is the LIST-TOOL ARGUMENT the selected value is
  * passed as; options are static or resolved from another MCP tool on the
@@ -156,7 +156,7 @@ export function registerFeed(provider: FeedProvider): void {
 }
 
 /** Config feed → provider: items via one MCP tool call on the viewer's
- *  grant, fields picked by dot-path mapping (docs/feeds-design.md W3). */
+ *  grant, fields picked by dot-path mapping (the feeds design W3). */
 function configFeedProvider(cf: ConfigFeed): FeedProvider {
   return {
     descriptor: {
@@ -379,7 +379,7 @@ export async function externalRefsOpeningContext(
       console.error(`[feeds] Tella video lookup failed for ${r.id}:`, e);
     }
   }
-  // Generic per-feed context (docs/feeds-design.md — posthog dashboards
+  // Generic per-feed context (the feeds design — posthog dashboards
   // etc.): the descriptor's context tool called with the item id, result
   // injected as a JSON excerpt. Declarative — no per-feed code.
   await ensureFeedsRegistered();

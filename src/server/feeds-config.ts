@@ -1,5 +1,5 @@
 /**
- * Config-declared feeds — docs/feeds-design.md W3, "any MCP is a project".
+ * Config-declared feeds — the feeds design W3, "any MCP is a project".
  *
  * A feed/project defined as data instead of code: which MCP server backs it,
  * which tool lists its items and how fields map onto FeedItem, and (optional)

@@ -129,7 +129,7 @@ when adding anything that touches this.
 | [../../CLIENTS.md](../../CLIENTS.md) | web UI, PWA, Electron shell, Swift app, Chrome extension, terminal client |
 | [../extending.md](../extending.md) | MCP servers, recipes, integrations, providers, skills |
 
-The remaining files in `docs/` are not setup guides:
-[transcript-v2-design.md](../transcript-v2-design.md) is a design-history
-document (banner-labeled as such); [chat-performance.md](../chat-performance.md)
-is the frontend chat-render performance contract.
+The remaining files in `docs/` are contributor docs, not setup guides:
+[transcripts.md](../transcripts.md) covers the transcript store and serve
+protocol; [chat-performance.md](../chat-performance.md) is the frontend
+chat-render performance contract.

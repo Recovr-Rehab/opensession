@@ -1,5 +1,5 @@
 /**
- * Transcript v2 in-process bus (docs/transcript-v2-design.md §2).
+ * Transcript v2 in-process bus (docs/transcripts.md §2).
  *
  * Pub/sub keyed by UNIFIED session id (bks-… / slack-… / …): the transcript store
  * publishes post-commit append/upsert batches here, and v2 WebSocket watchers

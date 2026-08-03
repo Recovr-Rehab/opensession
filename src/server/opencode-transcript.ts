@@ -168,7 +168,7 @@ export function resolveOpencodeDbFor(ocSessionId: string | null | undefined): st
   return OPENCODE_DB_PATH;
 }
 
-// ── Transcript v2 (docs/transcript-v2-design.md §3): oc id → unified id ──────
+// ── Transcript v2 (docs/transcripts.md §3): oc id → unified id ──────
 //
 // The runner records which UNIFIED session (bks-*/slack-*/…) an engine
 // session's transcript entries belong to (recordBksSessionFor — same

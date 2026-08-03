@@ -306,7 +306,7 @@ export async function handleSessionsRoutes(
 			if (!session)
 				return Response.json({ error: "Session not found" }, { status: 404 });
 			const entryId = decodeURIComponent(m[2]);
-			// Transcript v2 (docs/transcript-v2-design.md §8): the store keeps the
+			// Transcript v2 (docs/transcripts.md §8): the store keeps the
 			// full unstripped entry (blob when the stored row was bounded) —
 			// consult it first; unknown ids and store failures fall through to
 			// the legacy merged-transcript scan unchanged.
@@ -370,7 +370,7 @@ export async function handleSessionsRoutes(
 			let img = session.transcriptPath
 				? await resolveTranscriptImage(session.transcriptPath, entryId, idx)
 				: null;
-			// Transcript v2 fallback (docs/transcript-v2-design.md §1): entries
+			// Transcript v2 fallback (docs/transcripts.md §1): entries
 			// >32KB are stored with images[] replaced by "os-blob:<uuid>/<i>"
 			// markers; the real data-URLs live in the store's full entry. When the
 			// mirror can't resolve the image, decode it from there. Guarded on the

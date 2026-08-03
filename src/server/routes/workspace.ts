@@ -276,7 +276,7 @@ export async function handleWorkspaceRoutes(
 		const body = (await req.json().catch(() => ({}))) as {
 			pr?: { repo?: string; number?: number; branch?: string; title?: string };
 			plainThreadId?: string;
-			/** Generic feed-item linkage (docs/feeds-design.md). */
+			/** Generic feed-item linkage (the feeds design). */
 			externalRef?: { kind?: string; id?: string; url?: string; title?: string };
 			name?: string;
 			user?: string;
@@ -504,7 +504,7 @@ export async function handleWorkspaceRoutes(
 			src.plainThreadId ||
 			(workspaceId ? getWorkspace(workspaceId)?.plainThreadId : undefined);
 		// Feed-item linkage follows the workspace the same way (Video tab +
-		// sidebar feed-row → session join — docs/feeds-design.md).
+		// sidebar feed-row → session join — the feeds design).
 		const siblingRefs =
 			src.externalRefs ||
 			(workspaceId ? getWorkspace(workspaceId)?.externalRefs : undefined);

@@ -57,7 +57,7 @@ export function DeskConversation({
 		setStreamText("");
 		setPending(null);
 		followRef.current = true;
-		// supportsSeq: transcript v2 capability (transcript-v2-design.md §5).
+		// supportsSeq: transcript v2 capability (docs/transcripts.md).
 		// This view merges by entry id and never uses offset/rev cursors or
 		// history paging, so seq-mode frames need no extra state here; old
 		// servers ignore the field entirely.

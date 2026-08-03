@@ -3,7 +3,7 @@
  * servers sessions get, authenticated the same way (mcp-oauth grants /
  * static headers via withDynamicCredentials' source of truth). Powers
  * server-side features that should ride the MCP surface instead of a
- * parallel REST client + API key: the sidebar feeds (docs/feeds-design.md
+ * parallel REST client + API key: the sidebar feeds (the feeds design
  * — "the left sidebar gets filled by a tool call to an MCP") and the
  * feed-item context injection.
  *

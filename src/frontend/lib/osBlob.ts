@@ -1,7 +1,7 @@
 import { BASE_PATH } from "./base";
 
 /**
- * Transcript v2 (docs/transcript-v2-design.md §1): entries whose serialized
+ * Transcript v2 (docs/transcripts.md §1): entries whose serialized
  * form exceeds 32KB are stored with each images[] data-URL replaced by an
  * "os-blob:<entryId>/<i>" marker. The real bytes stay readable through the
  * transcript-image route, which falls back to the store's full entry when the

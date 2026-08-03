@@ -190,7 +190,7 @@ export async function listWorktrees(repoId?: string): Promise<WorktreeInfo[]> {
 
 /**
  * Repo-less scratch directory for "scratch" sessions (feed-item workspaces —
- * docs/feeds-design.md): media/MCP work like downloading a Tella video and
+ * the feeds design): media/MCP work like downloading a Tella video and
  * running ffmpeg, with full write access but no repo, branch, or PR flow.
  * Keyed by workspace id so a workspace's sibling chats share downloads
  * (falls back to the session id for workspace-less creates). Never a git

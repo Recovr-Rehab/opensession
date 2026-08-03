@@ -75,7 +75,7 @@ export const INTEGRATIONS: IntegrationSpec[] = [
   {
     id: "tella",
     label: "Tella feeds",
-    doc: "docs/feeds-design.md",
+    doc: "docs/extending.md",
     enableFlag: "ENABLE_TELLA_MODULE",
     env: [],
     // Reference feed module: self-gating. getFeed() stays null until the tella

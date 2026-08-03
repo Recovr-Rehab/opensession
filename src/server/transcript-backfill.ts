@@ -1,5 +1,5 @@
 /**
- * Transcript v2 backfill — WP-C (docs/transcript-v2-design.md §8).
+ * Transcript v2 backfill — WP-C (docs/transcripts.md §8).
  *
  * In-process full migration of existing sessions into the v2 transcript store
  * (transcripts.db). Runs ONLY inside the live server process — invariant 8:

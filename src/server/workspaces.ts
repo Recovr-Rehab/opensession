@@ -64,7 +64,7 @@ export interface Workspace {
   prNumber?: number;
   /** For support-ticket workspaces: the Plain thread this workspace is attached to. */
   plainThreadId?: string;
-  /** Generic feed-item linkage (Tella videos, …) — docs/feeds-design.md. */
+  /** Generic feed-item linkage (Tella videos, …) — the feeds design. */
   externalRefs?: ExternalRef[];
   /**
    * The workspace's default branch. Present when the workspace owns a worktree

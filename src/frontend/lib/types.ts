@@ -666,7 +666,7 @@ export type WSClientMessage =
 			sinceOffset?: number;
 			sinceRev?: string;
 			/** Transcript v2 capability: this bundle understands seq-cursor
-			 *  frames (transcript-v2-design.md §5). Old servers ignore it. */
+			 *  frames (docs/transcripts.md). Old servers ignore it. */
 			supportsSeq?: boolean;
 			/** This bundle resumes every mutation, including old-seq rewrites. */
 			supportsChangeSeq?: boolean;

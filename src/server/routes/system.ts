@@ -374,7 +374,7 @@ export async function handleSystemRoutes(
 		return Response.json({ ok: true, version: frontend.version, force });
 	}
 
-	// Transcript v2 backfill (docs/transcript-v2-design.md §8): migrate legacy
+	// Transcript v2 backfill (docs/transcripts.md §8): migrate legacy
 	// session transcripts into transcripts.db, in-process (invariant 8: the
 	// live server is the DB's only writer — never a standalone script). Team
 	// gated by the global auth layer like every /backstage/api/* route. Body:

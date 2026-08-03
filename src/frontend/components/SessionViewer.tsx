@@ -772,7 +772,7 @@ export function SessionViewer({
 		rev: string;
 		offset: number;
 	} | null>(cachedTranscript?.cursor ?? null);
-	// Transcript v2 seq mode (transcript-v2-design.md §5): when init/append
+	// Transcript v2 seq mode (docs/transcripts.md): when init/append
 	// frames carry seq fields the server is serving from the owned store —
 	// resume watches with sinceSeq, page older history with beforeSeq, and
 	// ignore offset/rev cursors while in this mode. null = legacy mode (old

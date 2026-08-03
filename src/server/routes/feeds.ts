@@ -1,6 +1,6 @@
 /**
  * Feed routes: the sidebar's generic external-object bands (Tella videos;
- * eventually every feed — see docs/feeds-design.md). Read-only surface: the
+ * eventually every feed — see the feeds design). Read-only surface: the
  * descriptors say which bands exist, the items endpoint feeds one band.
  * Mutations stay on each source's own routes (e.g. /api/plain/*).
  */
@@ -22,7 +22,7 @@ export async function handleFeedsRoutes(
 	}
 
 	// Create/update a config-declared feed ("any MCP is a project" —
-	// docs/feeds-design.md W3). Body = a ConfigFeed; id is the upsert key.
+	// the feeds design W3). Body = a ConfigFeed; id is the upsert key.
 	if (path === "/backstage/api/feeds" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });

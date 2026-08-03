@@ -151,7 +151,7 @@ function sendWatchExtras(
 	}
 }
 
-// ── Transcript v2 serve path (docs/transcript-v2-design.md §4) ──────────────
+// ── Transcript v2 serve path (docs/transcripts.md §4) ──────────────
 // Capability-gated: the client sends `supportsSeq: true` on watch. Eligible
 // watches are served from the owned transcript store and fed live by the
 // in-process bus — no mirror file-watcher polling. The legacy offset/rev
@@ -1223,7 +1223,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				const needsForkHandoff = !!forkSource && !canFork;
 
 				// Scratch: repo-less sessions for feed-item workspaces (Tella videos —
-				// docs/feeds-design.md). Full write + bash in a per-workspace scratch
+				// the feeds design). Full write + bash in a per-workspace scratch
 				// dir, MCP tools as usual; no repo, branch, or PR flow.
 				const isScratch = forkSource
 					? forkSource.mode === "scratch"
@@ -1412,7 +1412,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					} else if (isScratch) {
 						// Scratch sessions run in a plain per-workspace scratch dir
 						// (shared by the workspace's chats so downloads persist across
-						// them) — never a repo checkout (docs/feeds-design.md).
+						// them) — never a repo checkout (the feeds design).
 						wtPath = ensureScratchDir(workspace?.id || randomUUIDv7());
 					} else if (isAsk) {
 						// Ask sessions read the repo's pinned ask checkout (default

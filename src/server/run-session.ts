@@ -1760,7 +1760,7 @@ async function runSessionPromptInner(
 			: session.externalRefs?.length
 				? // Feed-workspace chats are scoped to their feed's declared MCP
 					// servers even when the session file predates the stamping
-					// (least privilege — docs/feeds-design.md).
+					// (least privilege — the feeds design).
 					await (await import("./feeds")).feedMcpServersForRefs(session.externalRefs)
 				: undefined;
 	const deniedTools = isAutomationSession ? automationDeniedTools() : undefined;
@@ -1776,7 +1776,7 @@ async function runSessionPromptInner(
 	// (tab-strip "+" siblings): inject the workspace's external-object context
 	// (Tella video metadata + transcript excerpt, scratch-dir note) exactly
 	// like the create_session paths do — a chat must get this context no
-	// matter how it was created (docs/feeds-design.md).
+	// matter how it was created (the feeds design).
 	if (
 		!isAutomationSession &&
 		session.externalRefs?.length &&

@@ -91,7 +91,7 @@ export async function handleStaticAssetsRoutes(
 				},
 			});
 		}
-		// Feed bands (docs/feeds-design.md) ride the same tile pipeline:
+		// Feed bands (the feeds design) ride the same tile pipeline:
 		// any `<id>-icon.png` dropped in src/frontend serves generically.
 		if (/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(id)) {
 			const generic = `${FRONTEND_SRC}/${id}-icon.png`;

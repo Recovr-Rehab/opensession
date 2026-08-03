@@ -143,7 +143,7 @@ type TranscriptSessionRef = Pick<
  * opencode id rides the claude slot (pre-`opencodeSessionId` runs) — those
  * previously rendered as an empty transcript after a reload.
  *
- * Transcript v2 (docs/transcript-v2-design.md §8): when the session's history
+ * Transcript v2 (docs/transcripts.md §8): when the session's history
  * has been imported into the owned transcript store and the legacy files show
  * no unexplained growth beyond the import watermark, this serves the store's
  * entries (bounded wire forms — the /entry/:id route resolves full content).
@@ -253,7 +253,7 @@ function mergeLegacyEntries(
   );
 }
 
-// ── Transcript v2 read path (docs/transcript-v2-design.md §8) ───────────────
+// ── Transcript v2 read path (docs/transcripts.md §8) ───────────────
 // Only reached when the caller passed a session id; transcriptStore() is
 // never touched otherwise (its DB open is lazy).
 

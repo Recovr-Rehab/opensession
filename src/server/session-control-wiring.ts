@@ -226,7 +226,7 @@ registerSessionControl({
 		user,
 		sandbox,
 	}) => {
-		// Scratch: repo-less sessions (feed-item workspaces — docs/feeds-design.md).
+		// Scratch: repo-less sessions (feed-item workspaces — the feeds design).
 		const isScratch = mode === "scratch";
 		const isAsk = !isScratch && mode !== "code";
 		const model =
@@ -287,7 +287,7 @@ registerSessionControl({
 		if (isScratch) {
 			// Scratch children share the parent workspace's scratch dir (so a
 			// child sees the parent's downloads); standalone scratch creates get
-			// a fresh one. Never a repo checkout (docs/feeds-design.md).
+			// a fresh one. Never a repo checkout (the feeds design).
 			wtPath = ensureScratchDir(
 				parentSession?.projectId || randomUUIDv7(),
 			);
@@ -425,7 +425,7 @@ registerSessionControl({
 					// that was explicitly told not to report (e.g. the PR chat).
 					...(parentSessionId && reportBack ? { reportBack: true } : {}),
 					// Feed-item linkage follows the parent workspace (Video tab +
-					// sidebar feed-row join — docs/feeds-design.md).
+					// sidebar feed-row join — the feeds design).
 					...(parentWorkspace?.externalRefs?.length
 						? { externalRefs: parentWorkspace.externalRefs }
 						: {}),

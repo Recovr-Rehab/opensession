@@ -179,7 +179,7 @@ function reconcileSteerReceiptsOnAppend(
 }
 
 setTranscriptAppendListener(reconcileSteerReceiptsOnAppend);
-// Transcript v2 (docs/transcript-v2-design.md §4a): v2 viewers retire the
+// Transcript v2 (docs/transcripts.md §4a): v2 viewers retire the
 // mirror file-watcher, so delivered-steer reconciliation ALSO rides the
 // store's post-commit append hook (same contract, same function; fires only
 // when the flag-gated store path writes). Single globalThis slot — each hot

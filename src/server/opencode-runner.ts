@@ -1387,7 +1387,7 @@ export function readLocalInstructions(dir: string | undefined): string | undefin
  *  wording. */
 export function buildOpencodeInstructions(input: {
   isAsk: boolean;
-  /** Repo-less scratch session (feed-item workspaces — docs/feeds-design.md). */
+  /** Repo-less scratch session (feed-item workspaces — the feeds design). */
   isScratch?: boolean;
   reposNote?: string;
   /** The session's real working directory — set ONLY for shared-pool runs,
@@ -3276,7 +3276,7 @@ async function* runOpencodeAttempt(
 ): AsyncGenerator<StreamEvent> {
   const { prompt, cwd, mode, mcpServers, confirmTools, journal, user, author } = opts;
   const isAsk = mode === "ask";
-  // Scratch: repo-less sessions (feed-item workspaces — docs/feeds-design.md).
+  // Scratch: repo-less sessions (feed-item workspaces — the feeds design).
   // Code-mode permissions (write/edit/bash allowed), but no repo/branch/PR
   // flow, so the PR-attribution instructions are withheld below.
   const isScratch = mode === "scratch";

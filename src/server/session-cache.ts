@@ -194,7 +194,7 @@ export function sessionIdsFor(
 // field-scoped mutator → atomic write, serialized per session id by a
 // promise-chain mutex (parked on globalThis so hot reloads keep in-flight
 // chains). This replaces the blind full-object rebuilds that let concurrent
-// writers clobber each other's fields (docs/transcript-v2-design.md §6).
+// writers clobber each other's fields (docs/transcripts.md §6).
 // Each write bumps a `rev` counter on the file — readers ignore it; it exists
 // so lost updates are observable.
 

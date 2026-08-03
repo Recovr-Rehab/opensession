@@ -1,5 +1,5 @@
 /**
- * Transcript v2 store tests (docs/transcript-v2-design.md §1, §1a, §2, §3).
+ * Transcript v2 store tests (docs/transcripts.md §1, §1a, §2, §3).
  *
  * Runs against a TEMP-DIR DB only — never transcriptStore() (the lazy
  * singleton over the live transcripts.db; invariant 8: one writer). Import
