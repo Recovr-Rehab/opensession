@@ -4,6 +4,32 @@ Thanks for looking. OpenSession is a self-hosted agent-infrastructure server —
 one Bun process serving a web UI, a set of integrations, and the machinery that
 runs agent sessions in git worktrees.
 
+## How contributions work
+
+We take contributions as **human-written text, not code**. Describe the change
+you'd like — a bug, a missing feature, a design objection — informally in a
+`.txt` or `.md` file in [`adrs/`](adrs/), and open a pull request containing
+just that file. If we're aligned, we handle the implementation (this is an
+agent-infrastructure project; implementation is what the infrastructure is
+for). Your name stays on the proposal.
+
+Plain language beats a spec. Say what's wrong or missing, what you'd expect to
+happen instead, and why it matters to you. A paragraph is enough; see
+[`adrs/README.md`](adrs/README.md) for the little structure there is.
+
+Two things that should *not* go through `adrs/`:
+
+- **Vulnerabilities** — report privately, see [SECURITY.md](SECURITY.md).
+  Never a public issue or proposal.
+- **Bug reports** with no opinion about the fix — a regular issue is fine.
+  Include what you ran, what happened, and `opensession doctor` output. If it
+  is an install problem, the full installer output — it prints every step it
+  took.
+
+Code pull requests aren't the path for outside contributions. The project is
+Apache-2.0, so forking and hacking on your own instance is encouraged — the
+rest of this document is for that.
+
 ## Getting set up
 
 ```sh
@@ -23,17 +49,17 @@ The UI comes up at `http://127.0.0.1:3850`. There is no login by default; see
 [the trust model](docs/setup/README.md#trust-model-read-this) before binding it
 anywhere but loopback.
 
-## Before you open a pull request
+## Verifying your changes
 
 ```sh
 bun run typecheck      # must be clean
 bun test               # must be green
 ```
 
-CI runs both on every PR, plus an end-to-end install on Linux and macOS. If you
-touched `install.sh`, the CLI or the service definitions, that installer job is
-the one that matters — it catches the things unit tests cannot, like a `PATH`
-that works interactively and not from a script.
+CI runs both, plus an end-to-end install on Linux and macOS. If you touched
+`install.sh`, the CLI or the service definitions, that installer job is the one
+that matters — it catches the things unit tests cannot, like a `PATH` that
+works interactively and not from a script.
 
 ## Things that will surprise you
 
@@ -66,10 +92,10 @@ Comments should explain *why*, particularly when the code looks odd. A lot of
 the stranger-looking decisions here encode a specific incident — `KillMode=mixed`
 in the systemd unit, the `IPAddressDeny` line, the deny-before-allow ordering in
 permission maps. If you find one of those and it has no comment, adding the
-explanation is a genuinely useful contribution.
+explanation is a genuinely useful contribution (as a proposal, per above).
 
-Prefer deleting to adding. If a change makes something simpler, say so in the
-PR; that is not a small thing.
+Prefer deleting to adding. If a change makes something simpler, say so; that is
+not a small thing.
 
 ## Security
 
@@ -82,17 +108,12 @@ layer, never in a prompt:
 - customer-facing and identity-mutating tools are hard-denied for unattended runs
 - money-moving tools are stripped from the model's tool list entirely
 
-If a change touches any of that, say so explicitly in the PR description. If you
-find a way around it, report it privately — see [SECURITY.md](SECURITY.md), which
-also sets out what counts as a vulnerability here and what is working as
-designed.
-
-## Reporting bugs
-
-Include what you ran, what happened, and `opensession doctor` output. If it is
-an install problem, the full installer output — it prints every step it took.
+If a proposal touches any of that, call it out explicitly. If you find a way
+around it, report it privately — see [SECURITY.md](SECURITY.md), which also
+sets out what counts as a vulnerability here and what is working as designed.
 
 ## License
 
-By contributing, you agree that your contributions are licensed under the
-[Apache License 2.0](LICENSE), the same license as the project.
+By contributing — proposals included — you agree that your contributions are
+licensed under the [Apache License 2.0](LICENSE), the same license as the
+project.
