@@ -4402,7 +4402,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				const gkey = `inbox:${b.key}`;
 				const open = isOpen(gkey);
 				return (
-					<div className="sidebar-status-group" key={gkey}>
+					<div className="sidebar-status-group sidebar-inbox-group" key={gkey}>
 						<button
 							// Bare .sidebar-group-header like the status lanes — see
 							// renderStatusLanes for why utilities stay off it.

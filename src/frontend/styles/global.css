@@ -1619,6 +1619,12 @@ body:is(.resizing-sidebar, .resizing-panel) {
 .sidebar-group--review .sidebar-item {
 	padding-left: 24px;
 }
+/* Inbox mode is a flat activity-ranked list, not a nesting hierarchy — its
+   bands are date/state dividers, so rows keep the base 10px edge and sit
+   flush under their headers, email-style. */
+.sidebar-inbox-group .sidebar-item {
+	padding-left: 10px;
+}
 /* …but flush on phones — horizontal space is scarce there, so the rows share
    one left edge with their header (the desktop indent is a nicety, the band +
    collapse already conveys the grouping). Its own media block, kept beside the
