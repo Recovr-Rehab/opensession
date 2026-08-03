@@ -84,7 +84,7 @@ tour and which to pick.
 | macOS desktop shell (Electron) | [`os1-mac/`](os1-mac/) |
 | Native Swift app (iOS + macOS) | [`os1-ios/`](os1-ios/) |
 | Chrome extension (page context → session) | [`os1-chrome/`](os1-chrome/) |
-| Terminal client (`os`) | [`os1-tui/`](os1-tui/) |
+| Terminal client (`os`) — WIP | [`os1-tui/`](os1-tui/) |
 
 ## Make it your own
 

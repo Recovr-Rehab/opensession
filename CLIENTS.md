@@ -10,7 +10,7 @@ everything else is optional and talks to the same instance.
 | Electron desktop shell | `os1-mac/` | yes |
 | Native Swift app (iOS + macOS) | `os1-ios/` | yes, with Xcode |
 | Chrome extension | `os1-chrome/` | no — load unpacked |
-| Terminal client (`os`) | `os1-tui/` | yes, one `bun build` |
+| Terminal client (`os`) — work in progress | `os1-tui/` | yes, one `bun build` |
 
 **All of them let you set the server address**, and the versions in this
 repository default to `http://127.0.0.1:3850` rather than anyone else's
@@ -88,6 +88,8 @@ Set the server in the side panel's Server field. It authenticates with a Bearer
 token and talks to the same REST surface as everything else.
 
 ## Terminal client
+
+**Work in progress** — usable, but the roughest of the clients; expect gaps.
 
 `os1-tui/` — OpenSession in a terminal. A TUI with a workspace sidebar, live
 transcripts, tabs and tmux keys, for when you are already in a terminal and do

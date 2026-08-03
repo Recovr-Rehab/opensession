@@ -23,20 +23,29 @@ OpenSession is a self-hosted agent-infrastructure server. One Bun process serves
 
 ## Architecture sketch
 
-```
-                 ┌──────────────────────────────────────────────┐
- Slack ─────────►│                                              │
- Linear webhook ►│  opensession.ts (one Bun process)              │
- Plain webhook ─►│                                              │
- GitHub webhook ►│  web UI + WS ──► session store ~/.opensession-chats
-                 │  agents (slack/linear/plain/github/stripe)   │
-                 │  automations + schedulers                    │
-                 │  runner layer ──► the engine:                │
-                 │    opencode-runner (opencode serve)          │
-                 │  each run: git worktree or Docker sandbox    │
-                 └──────────────────────────────────────────────┘
-   MCP servers (mcp-config.json) give runs their external tools
-   (Linear, Plain, Stripe, WorkOS, Sentry, Tinybird, ...)
+```mermaid
+flowchart LR
+  clients["<b>Clients</b><br/>web UI · PWA · desktop shell<br/>iOS app · TUI · Chrome extension"]
+  hooks["<b>Webhooks</b><br/>Slack · Linear · Plain<br/>GitHub · Stripe"]
+
+  subgraph bun["opensession.ts — one Bun process"]
+    direction TB
+    http["main server :3850<br/>web UI · REST API · WebSockets"]
+    wh["webhook server :3848"]
+    agents["integration agents<br/>slack · linear · plain · github · stripe"]
+    autos["automations + schedulers"]
+    runner["runner layer<br/>opencode-runner → opencode serve"]
+    wh --> agents
+    agents --> runner
+    autos --> runner
+    http --> runner
+  end
+
+  clients --> http
+  hooks --> wh
+  http --- store[("session store<br/>~/.opensession-chats")]
+  runner --> exec["each run: git worktree<br/>or Docker sandbox"]
+  runner --> mcp["MCP servers (mcp-config.json)<br/>Linear · Plain · Stripe · WorkOS · Sentry · …"]
 ```
 
 A second small HTTP server (the webhook server, default port 3848) receives
