@@ -48,8 +48,8 @@ Then read the real setup guide — secrets, accounts, integrations, systemd:
 - **[docs/local-profile.md](docs/local-profile.md)** — minimal single-user setup on macOS
 - [docs/setup/networking.md](docs/setup/networking.md) — Tailscale, a custom
   domain, and verifying you are not public
-- [docs/clients.md](docs/clients.md) — web UI, PWA, desktop shell, native app,
-  Chrome extension
+- [CLIENTS.md](CLIENTS.md) — web UI, PWA, desktop shell, native app,
+  Chrome extension, terminal client
 - [docs/nodes.md](docs/nodes.md) — attaching another machine as an
   execution node (`opensession connect`)
 - [docs/worktrees.md](docs/worktrees.md) — how sessions map to git worktrees,
@@ -71,13 +71,20 @@ instance configuration
 ([docs/instance-configuration.md](docs/instance-configuration.md)). The source
 defaults to a local, single-repository OpenSession install.
 
-## macOS app
+## Clients
 
-The native OS¹ Electron shell lives in [`os1-mac/`](os1-mac/). It shares this
-repository with the frontend so window-material and title-bar changes can be
-developed and released together. See its README for local development,
-signing, and release instructions. Run `bun app:dev` from the repository root
-to launch the frontend proxy and desktop app together.
+One server, six front ends — only the web UI is required, and everything else
+talks to the same instance. See **[CLIENTS.md](CLIENTS.md)** for the full
+tour and which to pick.
+
+| Client | Where |
+| --- | --- |
+| Web UI | served by the server itself — start here |
+| PWA | the web UI on your phone's home screen (iOS push notifications) |
+| macOS desktop shell (Electron) | [`os1-mac/`](os1-mac/) |
+| Native Swift app (iOS + macOS) | [`os1-ios/`](os1-ios/) |
+| Chrome extension (page context → session) | [`os1-chrome/`](os1-chrome/) |
+| Terminal client (`os`) | [`os1-tui/`](os1-tui/) |
 
 ## Make it your own
 

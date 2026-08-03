@@ -14,7 +14,7 @@ everything else is optional and talks to the same instance.
 
 **All of them let you set the server address**, and the versions in this
 repository default to `http://127.0.0.1:3850` rather than anyone else's
-instance. See [instance-configuration.md](instance-configuration.md) for how a
+instance. See [docs/instance-configuration.md](docs/instance-configuration.md) for how a
 distributor stamps in their own default.
 
 ## Web UI
