@@ -4337,10 +4337,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// ── Inbox mode: the workspace rows as one activity-ranked list ─────────
 	// No repo/status grouping — bands mirror an email inbox instead: Needs
-	// action (blocked on you) → Active (running) → Today → Yesterday →
-	// Earlier. Bands are exclusive with priority needs-action > active >
-	// date, and the ranking always follows lastActivity ("Sort by: Created"
-	// deliberately doesn't apply — an inbox orders by what moved last).
+	// action (blocked on you) → Recent (running or touched today, one
+	// activity-ranked mix) → Yesterday → Earlier. Bands are exclusive with
+	// priority needs-action > recent > date, and the ranking always follows
+	// lastActivity ("Sort by: Created" deliberately doesn't apply — an inbox
+	// orders by what moved last).
 	function renderInboxBands(rows: WsRow[]) {
 		const sorted = [...rows].sort((a, b) =>
 			(b.lastActivity || "").localeCompare(a.lastActivity || ""),
@@ -4372,32 +4373,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				),
 				rows: [],
 			},
-			{
-				key: "active",
-				label: "Active",
-				icon: (
-					<SidebarGroupIcon
-						status="inprogress"
-						color={STATUS_DOT.inprogress}
-					/>
-				),
-				rows: [],
-			},
-			{ key: "today", label: "Today", icon: dateIcon, rows: [] },
+			{ key: "recent", label: "Recent", icon: dateIcon, rows: [] },
 			{ key: "yesterday", label: "Yesterday", icon: dateIcon, rows: [] },
 			{ key: "earlier", label: "Earlier", icon: dateIcon, rows: [] },
 		];
-		const [needsAction, activeBand, today, yesterday, earlier] = bands;
+		const [needsAction, recent, yesterday, earlier] = bands;
 		for (const r of sorted) {
+			// NaN (no lastActivity) compares false on both → Earlier. A running
+			// row counts as Recent whatever its day — live work is recent by
+			// definition — but ranks by lastActivity like its neighbours.
+			const t = Date.parse(r.lastActivity || "");
 			if (r.status === "needsinput") needsAction.rows.push(r);
-			else if (r.running) activeBand.rows.push(r);
-			else {
-				// NaN (no lastActivity) compares false on both → Earlier.
-				const t = Date.parse(r.lastActivity || "");
-				if (t >= todayMs) today.rows.push(r);
-				else if (t >= yesterdayMs) yesterday.rows.push(r);
-				else earlier.rows.push(r);
-			}
+			else if (r.running || t >= todayMs) recent.rows.push(r);
+			else if (t >= yesterdayMs) yesterday.rows.push(r);
+			else earlier.rows.push(r);
 		}
 		return bands
 			.filter((b) => b.rows.length > 0)
