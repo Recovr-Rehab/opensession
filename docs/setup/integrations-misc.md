@@ -129,3 +129,10 @@ blocks the EC2 metadata endpoint (`IPAddressDeny=169.254.169.254/32` in
 main process escapes via a transient systemd unit (`sudo -n systemd-run`) to
 fetch read-only creds. EC2-specific; off AWS, mint failure returns `{}` and
 runs proceed without AWS.
+
+## Account health (`integrations.accountHealth`)
+
+Hourly credential-health sweep over both model-account pools, DMing whoever
+can fix a rotting credential before a run dies on it. Needs the Slack
+integration. Documented with the pools it watches —
+[engines.md](engines.md#usage-visibility--account-health).

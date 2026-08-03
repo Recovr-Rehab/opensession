@@ -37,6 +37,36 @@ schema from `src/server/opencode-config.ts`:
   (`opencode auth login` → `~/.local/share/opencode/auth.json`; HOME is
   passed through to the engine).
 
+## Account pools — the mental model
+
+OpenSession runs a whole team on **subscription capacity, not API keys**. For
+each provider you enroll one or more accounts — Claude Max subscriptions,
+ChatGPT-plan logins — into a pool, and every agent turn checks one out:
+
+- **Personal first, shared second.** A Claude account with an `owner` is
+  preferred for that teammate's own runs; automations and everyone else draw
+  from the owner-less shared accounts. Adding capacity means adding another
+  account to the pool.
+- **Limits rotate, exhaustion falls back.** An account that hits its usage
+  window is sidelined and the run rotates to the next account in the same
+  pool. Only when the *whole pool* is exhausted does the model-fallback
+  chain fire (see [Model routing](#model-routing)) — and a fallback taken for
+  transient reasons drives only that turn; the session remembers the model
+  you picked and returns to it once its pool recovers.
+- **Cross-provider fallback is a handoff, not a resume.** An engine session's
+  internal history can't move between providers, so falling back from a
+  Claude model to an OpenAI one (or vice versa) starts a fresh engine session
+  seeded with a transcript handoff note; the worktree and UI transcript carry
+  over, and the switch is visible in the chat.
+- **Paid credits are opt-in.** Runs never intentionally spend extra-usage
+  credits past a subscription's included quota unless explicitly allowed.
+
+The two pools differ in mechanics — Claude picks least-utilized with a
+97%-of-window sideline, Codex picks least-recently-used with a rate-limit
+cool-off — details in their sections below, and
+[usage visibility](#usage-visibility--account-health) covers how you see any
+of this happening.
+
 ## Anthropic models (the Claude bridge)
 
 `opencode/anthropic/*` models get Claude subscription capacity through
@@ -114,6 +144,29 @@ the host `codex login` can never be invalidated):
 `CODEX_HOME` directory containing `auth.json` from `CODEX_HOME=<dir> codex
 login` on a ChatGPT plan. Rotation is least-recently-picked with a cool-off
 on rate limits.
+
+## Usage visibility & account health
+
+Pools only work if you can see them. Two mechanisms:
+
+**The Models page** (Settings → Models) shows every account in both pools
+with its live usage: the 5-hour and 7-day windows, plan, and extra-usage
+credit spend where enabled. For Claude accounts this polling needs a full
+login-scoped credential — a bare `claude setup-token` lacks the
+`user:profile` scope, so the account works for runs but shows "no usage
+scope" until you point its `credentialsPath` at a real login's
+credentials file (used for polling only, never for runs).
+
+**The account-health monitor** (config `integrations.accountHealth:
+{ notifyUser, slackChannel }`, needs the Slack integration) sweeps both
+pools hourly and DMs whoever can fix a problem — the `owner` of a personal
+Claude account, `notifyUser` for shared and Codex accounts. It catches the
+failure mode where credentials rot silently on the shelf: unreadable or
+expired Claude credential files, revoked setup-tokens, refresh tokens
+within a week of expiry, and Codex ChatGPT tokens expired or about to be
+(they only refresh when a turn actually runs, so an idle account decays).
+A standing issue re-alerts daily and clears silently once fixed; transient
+poller noise is never alerted.
 
 ## Model routing
 
