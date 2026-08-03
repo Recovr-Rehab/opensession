@@ -168,6 +168,20 @@ export function isClaudeBridgeLaunchError(message: string): boolean {
   return s.includes("failed to launch") || s.includes("not found");
 }
 
+/**
+ * Meridian's idle guard killed an upstream stream that produced zero bytes
+ * ("Upstream stalled: no data for <n>ms") — the SDK daemon behind the proxy
+ * accepted the request and went silent. Unlike an ordinary provider error,
+ * every one of these already represents 90s+ of measured dead air on a FRESH
+ * request, and opencode's retry re-enters the same wedged daemon, so a streak
+ * of them can never recover on its own (2026-08-03 bks-019fc819: three of
+ * these 7 min apart, 25 min of dead air until the human cancelled). The stall
+ * backstop fires on a lower bar when a retry streak is made of only these.
+ */
+export function isUpstreamIdleStallError(message: string): boolean {
+  return /upstream stalled: no data for/i.test(message);
+}
+
 export function isCodexUsageLimitError(message: string): boolean {
   const s = message.toLowerCase();
   return (

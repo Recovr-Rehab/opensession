@@ -171,6 +171,7 @@ import {
   isClaudeUsageLimitError,
   isClaudeSubscriptionError,
   isClaudeBridgeLaunchError,
+  isUpstreamIdleStallError,
   isCodexUsageLimitError,
   isTransientRunError,
   CLAUDE_CODE_BIN,
@@ -3129,6 +3130,15 @@ const SUBAGENT_STALL_MS = (() => {
  * 15-minute Bash call emits nothing either. Any real output resets the streak,
  * so a retry that recovers never accumulates. The stall routes into the wedge
  * lane: sideline the account, drain-respawn the server, retry once.
+ *
+ * The verdict is evaluated on every retry event AND on a 30s timer
+ * (maybeFailProviderStall): opencode's backoff grows past the stall window, so
+ * event-driven checking alone can sit one-retry-short of the threshold forever
+ * (2026-08-03 bks-019fc819: 3rd retry at 13.5 min, 4th still pending when the
+ * human cancelled at 25 min). A streak made entirely of Meridian upstream-idle
+ * kills ("Upstream stalled: no data for …") fires at half the window and one
+ * fewer retry — each of those already measured 90s+ of dead air on a fresh
+ * request into the same wedged daemon.
  * Tuning / kill switch: OPENSESSION_PROVIDER_STALL_MS (0 disables; floor 5 min).
  */
 const PROVIDER_STALL_MS = (() => {
@@ -4445,6 +4455,11 @@ async function* runOpencodeAttempt(
     // Consecutive provider retries with no output between them (PROVIDER_STALL_MS).
     let providerRetryStreak = 0;
     let providerRetryStreakAt = 0;
+    // True while every retry in the current streak is a Meridian upstream-idle
+    // kill — the wedged-daemon signature that fires the stall backstop early.
+    let providerStreakUpstreamIdleOnly = true;
+    // One transcript notice per turn, not per streak — retries are noisy.
+    let providerStallNoticed = false;
     const push = (ev: StreamEvent) => {
       sawFirstOutput = true;
       providerRetryStreak = 0;
@@ -4563,35 +4578,68 @@ async function* runOpencodeAttempt(
       // between them means the turn is going nowhere, so end it in the wedge
       // lane rather than letting it idle out the wall-clock deadline. Checked
       // last so a classified fault keeps its own, more specific message.
-      if (providerRetryStreak === 0) providerRetryStreakAt = Date.now();
-      providerRetryStreak++;
-      const stalledMs = Date.now() - providerRetryStreakAt;
-      if (
-        PROVIDER_STALL_MS &&
-        !runFailure &&
-        !idle &&
-        !abortController.signal.aborted &&
-        providerRetryStreak >= PROVIDER_STALL_MIN_RETRIES &&
-        stalledMs >= PROVIDER_STALL_MS
-      ) {
-        livenessWedged = true;
-        runFailure =
-          `opencode ${parsed.providerID} run made no progress for ${Math.round(stalledMs / 60_000)} min ` +
-          `on account "${bridgeAccountLabel}": ${providerRetryStreak} provider retries with no output ` +
-          `in between (last: ${message.slice(0, 200)}); aborting`;
-        turnEvent({
-          direction: "out",
-          kind: "provider_stall",
-          retry_attempt: providerRetryStreak,
-          quiet_ms: stalledMs,
-          error: message.slice(0, 200),
-        });
-        engineAbortInFlight = client.session
-          .abort({ path: { id: ocSessionId }, ...q })
-          .catch(() => {});
-        signalDone();
+      if (providerRetryStreak === 0) {
+        providerRetryStreakAt = Date.now();
+        providerStreakUpstreamIdleOnly = true;
       }
+      providerRetryStreak++;
+      if (!isUpstreamIdleStallError(message)) providerStreakUpstreamIdleOnly = false;
+      // Make the streak visible in the session transcript once it's clearly
+      // not a one-off blip (attempt-1 retries are ~daily background noise;
+      // second-in-a-row is rare). Without this the session shows nothing at
+      // all while opencode's backoff grows — 25 min of dead air until the
+      // human asked "are you still good?" (2026-08-03 bks-019fc819).
+      if (providerRetryStreak === 2 && !providerStallNoticed && !runFailure) {
+        providerStallNoticed = true;
+        appendOpencodeTranscript(ocSessionId, [
+          transcriptLineRunnerNotice(
+            `Provider stream is stalling on account "${bridgeAccountLabel}" — the engine is retrying ` +
+              `(${message.slice(0, 160)}). If it keeps making no progress the run auto-respawns the ` +
+              `engine and retries.`
+          ),
+        ]);
+      }
+      maybeFailProviderStall(message);
     };
+    // The stall verdict, callable from a retry event AND from the timer below.
+    // Event-driven checking alone is outrunnable: opencode's retry backoff
+    // grows past the stall window, so the streak can sit one-retry-short of
+    // the threshold forever (2026-08-03 bks-019fc819: 3rd retry landed at
+    // 13.5 min — 90s under the window — and the 4th was still pending when
+    // the human gave up at 25 min; the guard never fired).
+    const maybeFailProviderStall = (message: string) => {
+      if (!PROVIDER_STALL_MS || runFailure || idle || abortController.signal.aborted) return;
+      if (providerRetryStreak === 0) return;
+      const stalledMs = Date.now() - providerRetryStreakAt;
+      // Upstream-idle streaks get a lower bar: each such retry is already 90s+
+      // of measured silence on a fresh request into the same wedged daemon
+      // (see isUpstreamIdleStallError) — waiting the full window just delays
+      // the respawn that actually fixes it.
+      const minRetries = providerStreakUpstreamIdleOnly
+        ? Math.max(2, PROVIDER_STALL_MIN_RETRIES - 1)
+        : PROVIDER_STALL_MIN_RETRIES;
+      const windowMs = providerStreakUpstreamIdleOnly ? PROVIDER_STALL_MS / 2 : PROVIDER_STALL_MS;
+      if (providerRetryStreak < minRetries || stalledMs < windowMs) return;
+      livenessWedged = true;
+      runFailure =
+        `opencode ${parsed.providerID} run made no progress for ${Math.round(stalledMs / 60_000)} min ` +
+        `on account "${bridgeAccountLabel}": ${providerRetryStreak} provider retries with no output ` +
+        `in between (last: ${message.slice(0, 200)}); aborting`;
+      turnEvent({
+        direction: "out",
+        kind: "provider_stall",
+        retry_attempt: providerRetryStreak,
+        quiet_ms: stalledMs,
+        error: message.slice(0, 200),
+      });
+      engineAbortInFlight = client.session
+        .abort({ path: { id: ocSessionId }, ...q })
+        .catch(() => {});
+      signalDone();
+    };
+    const providerStallPoll = PROVIDER_STALL_MS
+      ? setInterval(() => maybeFailProviderStall(lastProviderRetryError || ""), 30_000)
+      : undefined;
 
     // ── Permission-ask bridge ────────────────────────────────────────────────
     // An unanswered permission ask blocks its tool call forever while the
@@ -5053,6 +5101,7 @@ async function* runOpencodeAttempt(
       clearInterval(statusPoll);
       clearTimeout(turnDeadline);
       if (livenessTimer) clearTimeout(livenessTimer);
+      if (providerStallPoll) clearInterval(providerStallPoll);
       stallGuard.stop();
       pumpStopped = true;
       void pump.catch(() => {});

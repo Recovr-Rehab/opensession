@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isClaudeBridgeLaunchError } from "./runner-shared";
+import { isClaudeBridgeLaunchError, isUpstreamIdleStallError } from "./runner-shared";
 
 describe("isClaudeBridgeLaunchError", () => {
   test("matches the two shapes the agent SDK emits", () => {
@@ -26,5 +26,22 @@ describe("isClaudeBridgeLaunchError", () => {
     expect(isClaudeBridgeLaunchError("the deploy script failed to launch the server")).toBe(false);
     expect(isClaudeBridgeLaunchError("command not found: claude")).toBe(false);
     expect(isClaudeBridgeLaunchError("")).toBe(false);
+  });
+});
+
+describe("isUpstreamIdleStallError", () => {
+  test("matches Meridian's idle-guard kill", () => {
+    // The exact shape from the 2026-08-03 bks-019fc819 incident.
+    expect(isUpstreamIdleStallError("Upstream stalled: no data for 160090ms")).toBe(true);
+    expect(
+      isUpstreamIdleStallError("AI_APICallError: Upstream stalled: no data for 91150ms"),
+    ).toBe(true);
+  });
+
+  test("does not match other stalls or provider errors", () => {
+    expect(isUpstreamIdleStallError("Claude AI usage limit reached")).toBe(false);
+    expect(isUpstreamIdleStallError("upstream timeout while connecting")).toBe(false);
+    expect(isUpstreamIdleStallError("no data received")).toBe(false);
+    expect(isUpstreamIdleStallError("")).toBe(false);
   });
 });
