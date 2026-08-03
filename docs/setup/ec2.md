@@ -12,8 +12,14 @@ wants memory and disk more than cores.
 | Use | Instance | Disk | IOPS / throughput |
 | --- | --- | --- | --- |
 | Trying it out | `t3.large` (2 vCPU, 8 GB) | 50 GB gp3 | default (3000 / 125) |
-| A small team | `m7i-flex.xlarge` (4 vCPU, 16 GB) | 500 GB gp3 | 6000 / 500 |
-| Heavy use, sandboxes, big repos | `m7i-flex.2xlarge`+ | 1 TB gp3 | 12000 / 1000 |
+| A small team | `m7i-flex.2xlarge` (8 vCPU, 32 GB) | 500 GB gp3 | 6000 / 500 |
+| Heavy use, sandboxes, big repos | `r8i.2xlarge` (8 vCPU, 64 GB)+ | 1 TB gp3 | 12000 / 1000 |
+
+For reference: Tella runs its whole team on one `r8i.4xlarge` (16 vCPU,
+128 GB) with a 2 TB gp3 volume. Concurrent agent sessions are memory-hungry —
+every engine run, dev server and preview adds up, and a swap-less box that
+runs out of memory doesn't degrade, it freezes — so when in doubt, err large
+on RAM (that's why the bigger rows are memory-optimized `r`-family).
 
 Worktrees and engine state grow steadily; disk is the resource that bites first.
 
@@ -36,8 +42,9 @@ point at, so this works as-is. Step 2 is safe to re-run and step 3 refuses to
 launch on missing input, because the two ways this goes wrong are re-running it
 and launching a box you cannot log into.
 
-None of these blocks contain `#` comments. That is deliberate — see
-[the zsh trap](#the-zsh-trap) below.
+None of these blocks contain `#` comments — zsh without `interactivecomments`
+parses a pasted trailing `# comment` as a command and silently leaves the
+variable empty.
 
 **1. Resolve and check.**
 
@@ -91,7 +98,7 @@ if [ -z "$KEY" ] || [ -z "$SG" ] || [ "$SG" = None ] || [ "$SUBNET" = None ]; th
   echo "refusing to launch: one of KEY, SG, SUBNET is unset"
 else
   ID=$(aws ec2 run-instances \
-    --image-id "$AMI" --instance-type m7i-flex.xlarge \
+    --image-id "$AMI" --instance-type m7i-flex.2xlarge \
     --subnet-id "$SUBNET" --security-group-ids "$SG" \
     --associate-public-ip-address \
     --metadata-options "HttpTokens=required" \
@@ -126,58 +133,8 @@ ssh ubuntu@"$IP" true && echo "ssh ok" || echo "ssh still failing"
 
 `instance-running` fires well before cloud-init has installed your key, so the
 first few attempts failing is normal. If it is still failing after the loop,
-the key never landed — see the traps below.
-
-### The zsh trap
-
-Every block above is comment-free because zsh does not enable comments in
-interactive shells by default (`interactivecomments` is off). Paste this:
-
-```bash
-KEY="$(cat ~/.ssh/id_ed25519.pub)"        # the key you will SSH in with
-```
-
-and zsh parses `#` as the command, with `KEY=...` as a one-shot environment
-prefix for it. You get `zsh: command not found: #` — which looks cosmetic and
-scrolls away — and `$KEY` is **empty in your shell**. The launch then succeeds
-with an empty `ssh_authorized_keys` entry, and twenty lines later SSH says
-`Permission denied (publickey)` for no visible reason.
-
-Same shape bites any `VAR=... # comment` line. Either keep comments on their own
-line, or `setopt interactivecomments` first.
-
-### The cloud-init trap
-
-Note the user-data above uses the **top-level `ssh_authorized_keys` module**.
-The obvious-looking alternative is wrong:
-
-```yaml
-# DO NOT DO THIS
-#cloud-config
-users:
-  - name: ubuntu
-    ssh_authorized_keys: ["ssh-ed25519 ..."]
-```
-
-A `users:` list *replaces* cloud-init's default user definition. The default
-carries `sudo: ALL=(ALL) NOPASSWD:ALL` and the standard group memberships, so
-redefining `ubuntu` silently strips both. You get a box you can SSH into and
-then cannot `sudo` on — `/etc/sudoers.d/` will contain only `README`, and `id`
-will show `groups=1000(ubuntu)` and nothing else.
-
-The failure shows up much later, as an unrelated-looking permissions error
-while installing a package. If you hit it, the fix is to relaunch — you cannot
-grant yourself sudo without sudo.
-
-If you do want to declare users explicitly, keep the default:
-
-```yaml
-#cloud-config
-users:
-  - default
-  - name: someone-else
-    sudo: ALL=(ALL) NOPASSWD:ALL
-```
+the key never landed — check that `$KEY` was actually non-empty when you
+launched.
 
 ## Install
 
