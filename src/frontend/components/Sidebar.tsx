@@ -1494,11 +1494,18 @@ function readExpanded(): Set<string> {
 // ── Grouping / filtering controls (the filter popover) ─────────────────────
 // The sidebar can be organized several ways ("Group by": Status, Repo as a
 // flat Conductor-style list, Repo and status with lanes nested per repo,
-// Recently opened, or Inbox — an email-style flat list of two-line rows
-// banded by activity), narrowed to a single repo ("Repo") or a single person
+// Repo and inbox with the activity bands nested per repo instead, Recently
+// opened, or Inbox — an email-style flat list of two-line rows banded by
+// activity), narrowed to a single repo ("Repo") or a single person
 // ("Person"), and ordered by recency of activity or creation ("Sort by"). The
 // choices persist together per browser; the default grouping is repo + status.
-type GroupBy = "status" | "repo" | "repo-status" | "recently" | "inbox";
+type GroupBy =
+	| "status"
+	| "repo"
+	| "repo-status"
+	| "repo-inbox"
+	| "recently"
+	| "inbox";
 type SortBy = "updated" | "created";
 // Session-less PR rows folded into the project lanes: the default shows your
 // own PRs + explicit review requests (the retired PR band's default sources),
@@ -1534,6 +1541,7 @@ function readFilter(): FilterState {
 			groupBy:
 				v.groupBy === "repo" ||
 				v.groupBy === "repo-status" ||
+				v.groupBy === "repo-inbox" ||
 				v.groupBy === "recently" ||
 				v.groupBy === "inbox" ||
 				(chosen && v.groupBy === "status")
@@ -4156,7 +4164,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{runStartMs !== null && <RunTicker startMs={runStartMs} />}
 				{snoozeIso && !editing && <SnoozeBadge until={snoozeIso} />}
 				{!isPhone &&
-					(inbox || !row.workspace) &&
+					// Date-banded modes earn a timestamp on every row: the band says
+					// which day, the stamp says when within it. ("Project and inbox"
+					// renders compact rows, so it asks for the time here.)
+					(inbox || filter.groupBy === "repo-inbox" || !row.workspace) &&
 					!snoozeIso &&
 					wsTimePref !== "off" &&
 					row.lastActivity && (
@@ -4338,6 +4349,43 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	);
 	}
 
+	// The Snoozed group — the quiet zone, shared by the status lanes (slotted
+	// just above Backlog) and the inbox bands (appended last, after Earlier).
+	// `ns` keeps each repo's copy collapsible on its own.
+	function renderSnoozedGroup(rows: WsRow[], ns = "") {
+		const gkey = `${ns}status:snoozed`;
+		const open = isOpen(gkey);
+		return (
+			<div
+				className={`sidebar-status-group${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
+				key={gkey}
+			>
+				<button
+					// Same bare .sidebar-group-header as the lanes: utilities here
+					// would out-specify its phone/nesting overrides and leave this
+					// one header out of line with the rest.
+					className="sidebar-group-header transition-colors"
+					onClick={() => toggleGroup(gkey)}
+				>
+					<IconMoon
+						className="sidebar-group-icon"
+						style={{ color: "var(--text-dim)" }}
+					/>
+					<span className="sidebar-group-name">Snoozed</span>
+					<span className="sidebar-group-count">{rows.length}</span>
+					<IconChevronDown
+						className="sidebar-group-chevron"
+						size={22}
+						style={{ transform: open ? "none" : "rotate(-90deg)" }}
+					/>
+				</button>
+				{rows
+					.filter((r) => open || r.chats.some((c) => c.id === selectedId))
+					.map(renderWsRow)}
+			</div>
+		);
+	}
+
 	// The Conductor-style status lanes (Needs input / In progress / …) over a set
 	// of workspace rows. `ns` keeps each repo's lane collapse state independent.
 	// `snoozedRows` (when given) render as a Snoozed group slotted just above
@@ -4406,43 +4454,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			);
 		});
 		if (snoozedRows && snoozedRows.length > 0) {
-			const gkey = `${ns}status:snoozed`;
-			const open = isOpen(gkey);
-			const snoozedNode = (
-				<div
-					className={`sidebar-status-group${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
-					key={gkey}
-				>
-					<button
-						// Same bare .sidebar-group-header as the lanes above: utilities
-						// here would out-specify its phone/nesting overrides and leave
-						// this one header out of line with the rest.
-						className="sidebar-group-header transition-colors"
-						onClick={() => toggleGroup(gkey)}
-					>
-						<IconMoon
-							className="sidebar-group-icon"
-							style={{ color: "var(--text-dim)" }}
-						/>
-						<span className="sidebar-group-name">Snoozed</span>
-						<span className="sidebar-group-count">{snoozedRows.length}</span>
-						<IconChevronDown
-							className="sidebar-group-chevron"
-							size={22}
-							style={{ transform: open ? "none" : "rotate(-90deg)" }}
-						/>
-					</button>
-					{snoozedRows
-						.filter((r) => open || r.chats.some((c) => c.id === selectedId))
-						.map(renderWsRow)}
-				</div>
-			);
 			// Snoozed slots directly after Backlog ("pending") — the quiet zone
 			// sits with the parked work, ahead of Ready to merge / Done.
 			lanes.splice(
 				MINE_STATUS_META.findIndex((m) => m.key === "pending") + 1,
 				0,
-				snoozedNode,
+				renderSnoozedGroup(snoozedRows, ns),
 			);
 		}
 		return lanes;
@@ -4455,7 +4472,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// priority needs-action > recent > date, and the ranking always follows
 	// lastActivity ("Sort by: Created" deliberately doesn't apply — an inbox
 	// orders by what moved last).
-	function renderInboxBands(rows: WsRow[]) {
+	//
+	// "Project and inbox" reuses these bands nested under each repo band, so
+	// `ns` (the repo's key prefix) keeps every copy collapsible on its own,
+	// and the flat mode's flush row inset is dropped when nested. That mode
+	// also passes the repo's snoozed rows (one Snoozed group per repo, like
+	// the status lanes do) and its session-less PR rows, banded by the PR's
+	// own updatedAt — under a repo band those rows are part of the project's
+	// inventory, so hiding them the way flat Inbox does would lose work.
+	function renderInboxBands(
+		rows: WsRow[],
+		ns = "",
+		snoozedRows: WsRow[] = [],
+		prItems: ReviewQueueItem[] = [],
+	) {
 		const sorted = [...rows].sort((a, b) =>
 			(b.lastActivity || "").localeCompare(a.lastActivity || ""),
 		);
@@ -4474,6 +4504,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			label: string;
 			icon: React.ReactNode;
 			rows: WsRow[];
+			prs: ReviewQueueItem[];
 		}> = [
 			{
 				key: "needsaction",
@@ -4485,10 +4516,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					/>
 				),
 				rows: [],
+				prs: [],
 			},
-			{ key: "recent", label: "Recent", icon: dateIcon, rows: [] },
-			{ key: "yesterday", label: "Yesterday", icon: dateIcon, rows: [] },
-			{ key: "earlier", label: "Earlier", icon: dateIcon, rows: [] },
+			{ key: "recent", label: "Recent", icon: dateIcon, rows: [], prs: [] },
+			{
+				key: "yesterday",
+				label: "Yesterday",
+				icon: dateIcon,
+				rows: [],
+				prs: [],
+			},
+			{ key: "earlier", label: "Earlier", icon: dateIcon, rows: [], prs: [] },
 		];
 		const [needsAction, recent, yesterday, earlier] = bands;
 		for (const r of sorted) {
@@ -4501,13 +4539,28 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			else if (t >= yesterdayMs) yesterday.rows.push(r);
 			else earlier.rows.push(r);
 		}
-		return bands
-			.filter((b) => b.rows.length > 0)
+		// A bare PR is never "blocked on you" here (review requests aimed at you
+		// ride the notification band instead), so it only ever bands by date.
+		for (const item of [...prItems].sort((a, b) =>
+			(b.pr.updatedAt || "").localeCompare(a.pr.updatedAt || ""),
+		)) {
+			const t = Date.parse(item.pr.updatedAt || "");
+			if (t >= todayMs) recent.prs.push(item);
+			else if (t >= yesterdayMs) yesterday.prs.push(item);
+			else earlier.prs.push(item);
+		}
+		const nodes = bands
+			.filter((b) => b.rows.length > 0 || b.prs.length > 0)
 			.map((b) => {
-				const gkey = `inbox:${b.key}`;
+				const gkey = `${ns}inbox:${b.key}`;
 				const open = isOpen(gkey);
 				return (
-					<div className="sidebar-status-group sidebar-inbox-group" key={gkey}>
+					// Nested under a repo band the rows keep the normal lane inset;
+					// the flush email-style edge belongs to the flat mode only.
+					<div
+						className={`sidebar-status-group${ns ? "" : " sidebar-inbox-group"}`}
+						key={gkey}
+					>
 						<button
 							// Bare .sidebar-group-header like the status lanes — see
 							// renderStatusLanes for why utilities stay off it.
@@ -4516,7 +4569,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						>
 							{b.icon}
 							<span className="sidebar-group-name">{b.label}</span>
-							<span className="sidebar-group-count">{b.rows.length}</span>
+							<span className="sidebar-group-count">
+								{b.rows.length + b.prs.length}
+							</span>
 							<IconChevronDown
 								className="sidebar-group-chevron"
 								size={22}
@@ -4525,21 +4580,28 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</button>
 						{b.rows
 							.filter((r) => open || r.chats.some((c) => c.id === selectedId))
-							.map((r) => renderWsRowImpl(r, true))}
+							// Nested, the two-line variant's meta line would repeat the
+							// repo tile + name the band header already carries, so the
+							// rows stay compact like every other repo-nested mode's.
+							.map((r) => (ns ? renderWsRow(r) : renderWsRowImpl(r, true)))}
+						{b.prs.filter((i) => open || prRowSelected(i)).map(renderPrRow)}
 					</div>
 				);
 			});
+		if (snoozedRows.length > 0) nodes.push(renderSnoozedGroup(snoozedRows, ns));
+		return nodes;
 	}
 
-	// The repo bands — one collapsible band per repo, shared by two "Group by"
-	// modes: "Repo" holds a flat Conductor-style row list (status reads from
-	// each row's own glyph, needs-input rows float to the top), while "Repo and
-	// status" (`withLanes`) nests the labeled status lanes under each band. In
+	// The repo bands — one collapsible band per repo, shared by three "Group by"
+	// modes: "flat" holds a Conductor-style row list (status reads from
+	// each row's own glyph, needs-input rows float to the top), while "status"
+	// nests the labeled status lanes under each band and "inbox" nests the
+	// activity bands (Needs action / Recent / Yesterday / Earlier) instead. In
 	// both, a collapsed band wears a count of the urgent rows it hides. Repos
 	// are ordered by the user's shared preference (`repos`), with newly seen
 	// repositories appended in frequency order; a band is force-open while it
 	// holds the selected row so the open session never hides inside a collapsed repo.
-	function renderRepoGroups(withLanes: boolean) {
+	function renderRepoGroups(mode: "flat" | "status" | "inbox") {
 		const byRepo = new Map<string, WsRow[]>();
 		const snoozedByRepo = new Map<string, WsRow[]>();
 		const bucket = (map: Map<string, WsRow[]>, repo: string) => {
@@ -4554,11 +4616,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// don't also mint a pseudo-repo band for them (rowIsFeedOnly above).
 		for (const r of focusWsRows)
 			if (!rowIsFeedOnly(r)) bucket(byRepo, wsRowRepo(r)).push(r);
-		// "Repo and status" keeps each repo's snoozed rows in that repo's own
-		// band, as a Snoozed lane beside the other lanes — a global Snoozed
-		// group would strand them away from their repo. Flat "Repo" mode has no
-		// lanes to slot one into, so there they stay in the single global group.
-		if (withLanes)
+		// The grouped modes keep each repo's snoozed rows in that repo's own
+		// band, as a Snoozed group beside the other lanes/bands — a global
+		// Snoozed group would strand them away from their repo. Flat "Repo" mode
+		// has nothing to slot one into, so there they stay in the single global
+		// group.
+		if (mode !== "flat")
 			for (const r of snoozedWsRows)
 				if (!rowIsFeedOnly(r)) bucket(snoozedByRepo, wsRowRepo(r)).push(r);
 		// Session-less PR rows file into their repo's band alongside the
@@ -4741,7 +4804,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</button>
 						{open ? (
 							<div className="sidebar-repo-lanes">
-								{withLanes
+								{mode === "status"
 									? renderStatusLanes(
 											rows,
 											`repo:${repo}::`,
@@ -4749,6 +4812,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											repo,
 											prs,
 										)
+									: mode === "inbox"
+									? renderInboxBands(rows, `repo:${repo}::`, snoozedRows, prs)
 									: [
 											...ordered.map(renderWsRow),
 											// Flat mode has no lane headings: PR rows keep
@@ -5981,10 +6046,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					    status lanes under each repo band instead. Empty lanes/bands
 					    are hidden — only groups with sessions render. */}
 					{/* Snoozed rows sit out of focusWsRows, so each mode places them
-					    itself: "Repo and status" gives every repo band its own Snoozed
-					    lane (renderRepoGroups), while flat "Repo" — which has no lanes —
-					    renders one global Snoozed group after the bands, and the plain
-					    status mode slots it above Backlog via renderStatusLanes. */}
+					    itself: "Project and status" / "Project and inbox" give every
+					    repo band its own Snoozed group (renderRepoGroups), while flat
+					    "Project" — which has no lanes — renders one global Snoozed
+					    group after the bands, and the plain status mode slots it above
+					    Backlog via renderStatusLanes. */}
 					{/* Plain (support tickets) renders as one more project: a band
 					    beside the repos with priority lanes nested under it — or,
 					    in the flat status view, its priority lanes appended after
@@ -6002,14 +6068,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								...renderStatusLanes([], "", snoozedWsRows),
 								...visibleFeeds.map((d) => renderFeedBand(d, true)),
 							]
-						: filter.groupBy === "repo" || filter.groupBy === "repo-status"
+						: filter.groupBy === "repo" ||
+							filter.groupBy === "repo-status" ||
+							filter.groupBy === "repo-inbox"
 						? (
 								<>
-									{renderRepoGroups(filter.groupBy === "repo-status")}
+									{renderRepoGroups(
+										filter.groupBy === "repo-status"
+											? "status"
+											: filter.groupBy === "repo-inbox"
+												? "inbox"
+												: "flat",
+									)}
 									{filter.groupBy === "repo" &&
 										renderStatusLanes([], "", snoozedWsRows)}
 									{visibleFeeds.map((d) =>
-										renderFeedBand(d, filter.groupBy === "repo-status"),
+										renderFeedBand(d, filter.groupBy !== "repo"),
 									)}
 								</>
 							)
@@ -6452,6 +6526,7 @@ function FilterPopover({
 							{ value: "status", label: "Status" },
 							{ value: "repo", label: "Project" },
 							{ value: "repo-status", label: "Project and status" },
+							{ value: "repo-inbox", label: "Project and inbox" },
 							{ value: "inbox", label: "Inbox" },
 						]}
 						onSelect={(v) => onChange({ groupBy: v as GroupBy })}
