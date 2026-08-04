@@ -79,6 +79,16 @@ final class SessionViewModel {
     /// by the time they were written. The agent never sees them.
     private(set) var notes: [SessionNote] = []
     private var notesTask: Task<Void, Never>?
+    /// Composer mode: the draft posts as a team note instead of prompting.
+    /// Mirrors the web composer's note mode, and like it survives a send —
+    /// writing notes usually comes in twos and threes.
+    var noteMode = false
+
+    // ── Session goal ──
+    /// Goal set from this app (`/goal`), used to label the composer menu's
+    /// row and prefill its editor. The server owns the real value; this is
+    /// only what we've seen set here.
+    private(set) var goal: String?
 
     // ── Per-session run settings ──
     /// Current model id ("" = server default). Changing routes through the
@@ -445,12 +455,18 @@ final class SessionViewModel {
     }
 
     var canSend: Bool {
-        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !attachedImages.isEmpty)
-            && connectionState == .connected
+        let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        // A note is plain text over REST — no socket needed, and no image
+        // path behind it (the composer's picker rows hide in note mode).
+        if noteMode { return hasText }
+        return (hasText || !attachedImages.isEmpty) && connectionState == .connected
     }
 
     func sendDraft(busyModeOverride: String? = nil) {
+        if noteMode {
+            postNote()
+            return
+        }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = attachedImages.map(\.dataURL)
         guard !text.isEmpty || !images.isEmpty, let socket else { return }
@@ -498,6 +514,33 @@ final class SessionViewModel {
             busyMode: busyMode
         )
         sendSeq += 1
+    }
+
+    /// Post the draft as a team note on the session's chat channel. Notes are
+    /// human-to-human — they never reach the engine — and the server
+    /// broadcasts the stored note back as a `chat_message`, which is what puts
+    /// it in the transcript, so there's no local echo to keep in sync.
+    func postNote() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        draft = ""
+        let sessionId = session.id
+        Task { try? await OS1API.postSessionNote(sessionId: sessionId, text: text) }
+        sendSeq += 1
+    }
+
+    /// Pin (or clear) the session goal. Goals have no endpoint of their own —
+    /// `/goal` is a server-side slash command on the ordinary prompt channel,
+    /// exactly as the web composer sets one.
+    func setGoal(_ goal: String?) {
+        guard let socket else { return }
+        let trimmed = goal?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.goal = trimmed.isEmpty ? nil : trimmed
+        socket.prompt(
+            sessionId: session.id,
+            content: trimmed.isEmpty ? "/goal clear" : "/goal \(trimmed)",
+            user: ServerConfig.shared.userName
+        )
     }
 
     /// Switch this session's model via the `/model` slash command — handled

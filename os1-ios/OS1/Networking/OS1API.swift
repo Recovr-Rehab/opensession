@@ -99,6 +99,21 @@ enum OS1API {
         return response.messages ?? []
     }
 
+    /// Write a team note onto the session's chat channel. The server stores it
+    /// and broadcasts it to every watcher as a `chat_message`, so the poster
+    /// gets it back through the same path as everyone else.
+    static func postSessionNote(sessionId: String, text: String) async throws {
+        struct PostedNote: Decodable, Sendable { let message: SessionNote? }
+        let _: PostedNote = try await post(
+            "/api/chat/messages",
+            body: [
+                "channel": SessionNote.channel(for: sessionId),
+                "text": text,
+                "user": ServerConfig.shared.userName,
+            ]
+        )
+    }
+
     /// Bytes of an image attached to a note. Chat images live in their own
     /// permanent per-image storage, keyed by uuid.
     static func chatImage(id: String) async throws -> Data {

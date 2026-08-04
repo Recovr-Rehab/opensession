@@ -29,6 +29,9 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_OS1DefaultServerURL: http://127.0.0.1:3850
+        # "Take a photo" in the composer's + menu. The photo library needs no
+        # string: PhotosPicker runs out of process.
+        INFOPLIST_KEY_NSCameraUsageDescription: Attach a photo you take to a message.
         PRODUCT_BUNDLE_IDENTIFIER: dev.tella.os1
         DEVELOPMENT_TEAM: 6GUXT43C8B
         CODE_SIGN_STYLE: Automatic

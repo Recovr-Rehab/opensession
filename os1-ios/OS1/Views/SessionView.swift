@@ -1021,6 +1021,8 @@ private struct SessionInputBar: View {
     let contentMaxWidth: CGFloat
     let horizontalInset: CGFloat
     @FocusState private var inputFocused: Bool
+    /// The "+" menu's goal row opens this; the menu itself owns no state.
+    @State private var editingGoal = false
 
     /// Air above the topmost element in the bar — and where the composer
     /// scrim's dissolve has to finish, so it ends level with that element.
@@ -1083,6 +1085,17 @@ private struct SessionInputBar: View {
         .padding(.horizontal, horizontalInset)
         .padding(.top, Self.barTopPadding)
         .padding(.bottom, 8)
+        // Presented from the bar, not from the "+" itself: the button moves
+        // between the collapsed pill and the expanded toolbar, and a sheet
+        // anchored to a view that goes away closes with it.
+        .sheet(isPresented: $editingGoal) {
+            GoalSheet(
+                initial: viewModel.goal ?? "",
+                hadGoal: viewModel.goal != nil
+            ) { goal in
+                viewModel.setGoal(goal)
+            }
+        }
         // No background: the composer and chips are individual glass elements
         // floating over the transcript, which stays visible behind and below
         // them and dissolves into the bar through the soft scroll edge effect.
@@ -1188,13 +1201,11 @@ private struct SessionInputBar: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 if isCollapsed {
-                    AttachImagesButton(images: $viewModel.attachedImages)
+                    addMenu
                 }
 
                 TextField(
-                    viewModel.isRunning
-                        ? (busySend == "steer" ? "Message — steers this run" : "Message — queues for after this run")
-                        : "Message",
+                    composerPlaceholder,
                     text: $viewModel.draft,
                     axis: .vertical
                 )
@@ -1237,7 +1248,28 @@ private struct SessionInputBar: View {
 
             if !isCollapsed {
                 HStack(spacing: 6) {
-                    AttachImagesButton(images: $viewModel.attachedImages)
+                    addMenu
+                    // Note mode tints nothing on its own, so it names itself
+                    // here — and the marker is the way back out of it.
+                    if viewModel.noteMode {
+                        Button {
+                            viewModel.noteMode = false
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "note.text")
+                                Text("Team note")
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9, weight: .semibold))
+                            }
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(OS1VisualStyle.hover, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Stop writing a team note")
+                    }
                     Spacer(minLength: 8)
 
                     if viewModel.isRunning {
@@ -1288,6 +1320,33 @@ private struct SessionInputBar: View {
         // focus change that drives the animation above.
         .animation(.snappy(duration: 0.2), value: isCollapsed)
         #endif
+    }
+
+    /// The composer's "+": attachments plus the chat-level actions (goal,
+    /// team note) the web input has always carried behind the same button.
+    private var addMenu: some View {
+        ComposerAddMenu(
+            images: $viewModel.attachedImages,
+            noteMode: viewModel.noteMode,
+            hasGoal: viewModel.goal != nil,
+            // `/goal` is a backstage-native slash command; a Slack- or
+            // Linear-sourced chat would just post the text at the agent.
+            onSetGoal: viewModel.session.source == "backstage"
+                ? { editingGoal = true }
+                : nil,
+            onToggleNoteMode: {
+                viewModel.noteMode.toggle()
+                inputFocused = true
+            }
+        )
+    }
+
+    private var composerPlaceholder: String {
+        if viewModel.noteMode { return "Team note — the agent won't see it" }
+        guard viewModel.isRunning else { return "Message" }
+        return busySend == "steer"
+            ? "Message — steers this run"
+            : "Message — queues for after this run"
     }
 
     private var sendButton: some View {
