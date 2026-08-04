@@ -59,7 +59,7 @@ export function NoteBubble({ note }: { note: ChatMessage }) {
 			// (mx-auto + --chat-col) instead of spanning the whole pane, and the
 			// same mt-2/mb-6 rhythm as the column's other card blocks (AskCard,
 			// WalkthroughCard) so it doesn't crowd whatever follows it.
-			className="note-bubble mx-auto mb-6 mt-2 w-full max-w-[var(--chat-col)] rounded-lg px-3 py-2"
+			className="note-bubble mx-auto mb-6 mt-2 w-full max-w-[var(--chat-col)] rounded-lg px-4 py-3.5"
 			style={{
 				background: "color-mix(in srgb, var(--yellow) 7%, transparent)",
 			}}
