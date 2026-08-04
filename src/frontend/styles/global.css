@@ -1742,12 +1742,16 @@ body:is(.resizing-sidebar, .resizing-panel) {
    project band. They label the rows rather than lead anywhere, so they read as
    captions: a size down from the rows, semibold to hold their own at that size,
    and no leading glyph at all (the rows under them already carry the status
-   marks, and the lane's own name says what it is). Dropping the glyph also
-   lands the label left of the rows' icon rail, which is what makes a band read
-   as a divider instead of another row. */
+   marks, and the lane's own name says what it is). Size and weight carry that
+   distinction on their own, so the label still starts on the list's one text
+   rail — skipping the empty 22px mark slot + 9px gap the rows and repo heads
+   spend before their titles. Left of the rail it read as a third left edge in
+   a list that otherwise has exactly one. Padding (not margin) keeps the
+   header's hover pill running the sidebar's full width. */
 .sidebar-lane-group > .sidebar-group-header {
 	font-size: 12px;
 	font-weight: 600;
+	padding-left: 41px;
 }
 
 .sidebar-group-chevron {
@@ -13350,6 +13354,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		font-size: 13px;
 		padding-top: 9px;
 		padding-bottom: 5px;
+	}
+	/* The caption sits on the phone list's text rail the same way it does on
+	   desktop: the list's own 4px inset plus the 22px mark slot and 9px gap
+	   every row spends before its title. Carries .sidebar-list so it outranks
+	   the shared content-rail rule further down, whatever the source order. */
+	.sidebar-list .sidebar-lane-group > .sidebar-group-header,
+	.sidebar-independent-section .sidebar-lane-group > .sidebar-group-header {
+		padding-left: 35px;
 	}
 	.sidebar-lane-group > .sidebar-group-header .sidebar-group-count {
 		font-size: 12px;
