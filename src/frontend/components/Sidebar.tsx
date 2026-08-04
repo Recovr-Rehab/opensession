@@ -3868,9 +3868,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return renderWsRowImpl(row, false);
 	}
 
-	// `inbox` renders the Inbox-mode two-line variant of the same row — a
-	// repo + branch meta line under the title, idle timestamp on every row —
-	// with identical behavior (click, swipe, context menu, pin, archive).
+	// `inbox` renders the Inbox-mode variant of the same row — a repo tile in
+	// front of the title, idle timestamp on every row — with identical behavior
+	// (click, swipe, context menu, pin, archive).
 	// Separate impl rather than an optional param because `.map(renderWsRow)`
 	// callers would pass the array index into it.
 	//
@@ -3974,7 +3974,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</button>
 				)}
 				<button
-					className={`sidebar-item sidebar-ws-row ${inbox ? "sidebar-item--twoline flex-wrap gap-y-0.5" : ""} ${active ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${row.unread ? "sidebar-item-unread" : ""}`}
+					className={`sidebar-item sidebar-ws-row ${active ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${row.unread ? "sidebar-item-unread" : ""}`}
 					style={
 						swipeOffset
 							? ({ "--swipe-x": `${swipeOffset}px` } as React.CSSProperties)
@@ -4042,6 +4042,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<WsPrStatusMark chats={row.chats} size={18} workspace={row.workspace} />
 					)}
 				</span>
+				{/* Inbox rows name their repo with the tile alone, in front of the
+				    title — the repo/branch meta line it replaces cost a second line
+				    per row for two words most of the list repeats. */}
+				{inbox && !editing && (
+					<RepoTile name={wsRowRepo(row)} size={14} />
+				)}
 				{editing ? (
 					<input
 						className="min-w-0 flex-1 rounded-md border border-[var(--accent,#6b8afd)] bg-bg px-[3px] text-[14px] font-medium text-inherit outline-none"
@@ -4076,10 +4082,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// Same class as a session row's title, so workspace rows pick up
 						// the shared type scale (incl. the phone bump) and the
 						// selected/waiting/unread emphasis from the row's own classes.
-						// Inbox rows flex-wrap, where an intrinsic-width title would push
-						// the trailing ticker/time onto a wrapped line instead of
-						// shrinking — flex-1 keeps the first line a single line.
-						className={`sidebar-item-title${inbox ? " flex-1" : ""}`}
+						className="sidebar-item-title"
 						onDoubleClick={(e) => {
 							e.stopPropagation();
 							if (row.workspace) {
@@ -4166,22 +4169,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						aria-label="Needs your attention"
 					>
 						<span className="block size-[7px] rounded-full bg-green" />
-					</span>
-				)}
-				{/* Inbox meta line: repo + branch under the title. basis-full wraps
-				    it onto its own row; the padding lines it up with the title's
-				    left edge (22px rail + 9px gap). */}
-				{inbox && !editing && (
-					<span className="flex min-w-0 basis-full items-center gap-1.5 pl-[31px]">
-						<RepoTile name={wsRowRepo(row)} size={13} />
-						<span className="shrink-0 text-[12px] leading-[1.35] text-dim">
-							{repoLabel(wsRowRepo(row))}
-						</span>
-						{(row.workspace?.branch || row.chats[0]?.branch) && (
-							<span className="min-w-0 overflow-hidden text-[12px] leading-[1.35] text-ellipsis whitespace-nowrap text-faint">
-								{row.workspace?.branch || row.chats[0]?.branch}
-							</span>
-						)}
 					</span>
 				)}
 				{/* Hover actions: pin + archive, side by side. */}
