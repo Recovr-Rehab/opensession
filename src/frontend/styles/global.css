@@ -9892,6 +9892,10 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	border-radius: calc(64px * var(--rf)); corner-shape: var(--cs);
 	box-shadow: var(--composer-shadow);
 	padding: 14px 14px 10px 16px;
+	/* Distance from the composer's outer left edge to its content box (padding
+	   + border). Popups anchored to a toolbar control read it to line their own
+	   left edge up with the composer's instead of with the control. */
+	--composer-inset-left: 17px;
 	transition:
 		border-color 0.15s,
 		box-shadow 0.15s;
@@ -10292,6 +10296,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	   flush in the corners instead of the old 6px horizontal / 4px vertical
 	   mismatch. */
 	padding: 4px;
+	--composer-inset-left: 5px;
 	/* Inset the resting pill from the screen edges so it clears the iPhone's
 	   rounded bottom corners (Motion animates this away as it expands). */
 	margin: 0 6px;
@@ -13977,7 +13982,11 @@ html[data-theme="light"] .composer-hl .cmp-fence {
    it's clipped off-screen on narrow/mobile composers. Mirrors the goal
    popover's left anchoring (its button is also in the left group). */
 .composer-pop-wrap:has(.composer-add-btn) .composer-menu {
-	left: 0;
+	/* Line the popup up with the composer's outer left edge, not the "+"
+	   button's: the toolbar lives inside the composer's padding, so a plain
+	   left:0 left the menu inset by that padding and hanging off-axis above
+	   the field. */
+	left: calc(-1 * var(--composer-inset-left, 17px));
 	right: auto;
 }
 .composer-menu-item {
@@ -13995,7 +14004,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	cursor: pointer;
 }
 .composer-menu-item:hover {
-	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	background: var(--hover);
 }
 .composer-menu-icon {
 	display: inline-flex;
@@ -16324,6 +16333,7 @@ html.wco .settings-sidenav {
 	.composer {
 		border-radius: calc(18px * var(--rf)); corner-shape: var(--cs);
 		padding: 10px 12px 9px;
+		--composer-inset-left: 13px;
 	}
 	/* No resting floor on phones: the field hugs one line and grows with the
 	   draft (the tall inviting box is a desktop affordance). A 48px floor left
