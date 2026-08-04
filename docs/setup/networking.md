@@ -66,22 +66,21 @@ If you joined the tailnet *before* onboarding, this is already done — the
 wizard offers the tailnet address as the bind default. Otherwise:
 
 ```sh
-opensession onboard --force
+opensession bind
 ```
 
-Or set it directly — `HOST` in `~/.opensession.env`, or `server.host` in
-`~/.opensession/config.json`:
-
-```sh
-opensession stop
-sed -i "s/^HOST=.*/HOST=$(tailscale ip -4)/" ~/.opensession.env
-opensession start
-```
+That is the whole fix: it rewrites the bind address (and the public base URL,
+when it still pointed at the old address) in both `~/.opensession/config.json`
+and `~/.opensession.env`, then restarts the service — the bind address is the
+one setting a live config re-read cannot apply. `opensession bind <ip>` names
+an address explicitly, for boxes that are not on a tailnet.
 
 Then reach it from any device on the tailnet at `http://<tailnet-ip>:3850`.
 
-Set `OPENSESSION_UI_BASE` to the same address, or links posted into Slack,
-Linear and notes will point somewhere unreachable.
+If you manage the files by hand instead, change `HOST` in
+`~/.opensession.env` (it overrides `server.host` in config.json), set
+`OPENSESSION_UI_BASE` to match — or links posted into Slack, Linear and notes
+will point somewhere unreachable — and restart.
 
 ### 5. Install Tailscale on the devices you want to use
 

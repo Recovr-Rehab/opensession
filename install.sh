@@ -381,7 +381,7 @@ else
     else
       muted "not joined to a network yet. To finish:"
       muted "  sudo tailscale up"
-      muted "then re-run 'opensession onboard --force' to bind to the tailnet IP"
+      muted "then 'opensession bind' to move the server onto the tailnet IP"
     fi
   fi
 fi

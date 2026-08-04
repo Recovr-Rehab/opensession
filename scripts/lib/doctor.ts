@@ -12,6 +12,7 @@
  */
 
 import { existsSync, statSync } from "fs";
+import { tailnetIp } from "./config-edit";
 import { CONFIG_PATH, ENV_PATH, REPO_ROOT } from "./paths";
 import { INTEGRATIONS } from "../../src/server/integrations/registry";
 import * as service from "./service";
@@ -80,6 +81,15 @@ async function checkConfig(t: Tally): Promise<Record<string, unknown> | undefine
     } else {
       ok("env file", ENV_PATH);
     }
+  }
+
+  const team = ((config.identity as { team?: unknown[] } | undefined)?.team ?? []) as unknown[];
+  if (!team.length) {
+    info(
+      dim(
+        "  empty team roster — attribution, pickers and sign-in are no-ops (`opensession team add`)",
+      ),
+    );
   }
 
   const repos = (config.repos ?? {}) as Record<string, { repo?: string }>;
@@ -176,7 +186,11 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
     }
   }
 
-  const server = (config?.server ?? {}) as { host?: string; port?: number };
+  const server = (config?.server ?? {}) as {
+    host?: string;
+    port?: number;
+    publicBaseUrl?: string;
+  };
   const host = server.host === "0.0.0.0" ? "127.0.0.1" : server.host || "127.0.0.1";
   const port = server.port || 3850;
 
@@ -191,6 +205,21 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
     }
   } catch {
     info(dim(`nothing responding on ${host}:${port} (not running?)`));
+  }
+
+  // Loopback bind on a box that IS on a tailnet usually means onboarding ran
+  // before `tailscale up` — unless the public URL points elsewhere, in which
+  // case a reverse proxy is fronting the loopback bind on purpose.
+  const ts = tailnetIp();
+  const proxied =
+    server.publicBaseUrl && !/https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(server.publicBaseUrl);
+  if (ts && host === "127.0.0.1" && !proxied) {
+    info(
+      dim(
+        `  on a tailnet (${ts}) but bound to 127.0.0.1, so only this box can reach\n` +
+          `  it — \`opensession bind\` moves it onto the tailnet`,
+      ),
+    );
   }
 }
 

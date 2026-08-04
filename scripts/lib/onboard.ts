@@ -12,42 +12,16 @@
  * leaning on that, so the file says what is running instead of implying it.
  */
 
-import { chmodSync, copyFileSync, existsSync, mkdirSync } from "fs";
+import { chmodSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { INTEGRATIONS } from "../../src/server/integrations/registry";
+import { backup, tailnetIp } from "./config-edit";
 import { CONFIG_PATH, ENV_PATH, HOME, OPENSESSION_HOME, REPO_ROOT, STAGED_UNIT_PATH } from "./paths";
 import { installRecipe, listRecipes } from "./recipes";
 import * as service from "./service";
 import { ask, askYesNo, bold, canPrompt, dim, heading, info, warn, wrote, yellow } from "./ui";
 
 export type OnboardOptions = { force?: boolean };
-
-/** Back up rather than clobber, so a re-run can never lose a working config. */
-function backup(path: string): string | undefined {
-  if (!existsSync(path)) return undefined;
-  let n = 1;
-  while (existsSync(`${path}.bak-${n}`)) n++;
-  const dest = `${path}.bak-${n}`;
-  copyFileSync(path, dest);
-  return dest;
-}
-
-/**
- * This box's tailnet address, if it is on one.
- *
- * Worth asking Tailscale rather than inferring from the interface list: it is
- * the only thing that knows whether the daemon is actually up and logged in,
- * and a stale 100.x address on a logged-out box is a bind that never works.
- */
-function tailnetIp(): string | undefined {
-  try {
-    const proc = Bun.spawnSync(["tailscale", "ip", "-4"]);
-    if (proc.exitCode !== 0) return undefined;
-    return proc.stdout.toString().trim().split("\n")[0]?.trim() || undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /** "OpenSession" -> "OS". Falls back to the first two characters. */
 function deriveMark(name: string): string {
@@ -72,7 +46,8 @@ function collect(): Answers {
   info(
     dim(
       "Every field is optional; precedence is env var -> config.json -> built-in\n" +
-        "  default. config.json is re-read on change, so none of this needs a restart.",
+        "  default. config.json is re-read on change; only the bind address needs a\n" +
+        "  restart, and `opensession bind` handles that one on its own.",
     ),
   );
 
@@ -212,6 +187,12 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   // defaults. Backups make that recoverable, not harmless.
   if (existsSync(CONFIG_PATH) && !opts.force) {
     warn(`${CONFIG_PATH} already exists — this box is already onboarded.`);
+    info(
+      dim(
+        `Smaller changes have their own commands: ${bold("opensession bind")} (move to the\n` +
+          `  tailnet IP), ${bold("opensession team add")}, ${bold("opensession repos add")}.`,
+      ),
+    );
     if (!canPrompt()) {
       info(`Re-run with ${bold("--force")} to overwrite it (the old file is backed up first).`);
       return 1;
@@ -281,8 +262,9 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   info(`2. ${bold("opensession doctor")}     check everything is wired up`);
   info(`   ${dim(`then open ${answers.publicBaseUrl}`)}`);
   info(`3. ${bold("opencode auth login")}    give the engine model capacity`);
+  info(`4. ${bold("opensession team add")}   put yourself on the roster (attribution, sign-in)`);
   if (answers.enabled.length) {
-    info(`4. ${dim(`add credentials for ${answers.enabled.join(", ")} in ${ENV_PATH}`)}`);
+    info(`5. ${dim(`add credentials for ${answers.enabled.join(", ")} in ${ENV_PATH}`)}`);
   }
 
   console.log(

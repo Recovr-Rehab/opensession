@@ -14,8 +14,11 @@
  */
 
 import { existsSync } from "fs";
+import { bind } from "./lib/bind";
 import { doctor } from "./lib/doctor";
 import { onboard } from "./lib/onboard";
+import { repos } from "./lib/repos";
+import { team } from "./lib/team";
 import { ENV_PATH, REPO_ROOT, STAGED_UNIT_PATH } from "./lib/paths";
 import * as service from "./lib/service";
 import { update } from "./lib/update";
@@ -40,6 +43,10 @@ ${bold("opensession")} — self-hosted agent infrastructure
 
 ${bold("Setup")}
   onboard [--force]        configure this box (writes config + env + unit)
+  bind [address]           move the server to a new bind address and restart
+                           (no address: this box's tailnet IP)
+  team [add|remove]        manage the identity roster (attribution, sign-in)
+  repos [add <spec>]       register repositories; owner/name clones via gh
   doctor                   check tooling, config, integrations and the server
   service install          install and enable the systemd unit
 
@@ -242,6 +249,15 @@ async function main(): Promise<number> {
     case "onboard":
     case "setup":
       return await onboard({ force: flags.has("--force") });
+
+    case "bind":
+      return await bind(positional[0]);
+
+    case "team":
+      return await team(positional);
+
+    case "repos":
+      return await repos(positional);
 
     case "doctor":
       return await doctor();
