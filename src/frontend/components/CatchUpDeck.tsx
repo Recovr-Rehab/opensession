@@ -219,10 +219,14 @@ export function CatchUpDeck({
 		<div className="flex min-h-0 flex-1 flex-col items-center bg-surface">
 			{/* Header: back + "N Left" counter + new-workspace (Slack-style). This is
 			    the deck's only top bar — the app's mobile back bar is suppressed for
-			    the catch-up view — so it carries the safe-area top inset itself. */}
+			    the catch-up view — so it carries the safe-area top inset itself.
+			    The chevron is that suppressed bar's stand-in and stays phone-only:
+			    on desktop the sidebar (and its ‹ caret) is always there, no other
+			    view offers a back control, and the pane's left edge belongs to the
+			    collapsed-sidebar controls. Esc still leaves the deck. */}
 			<div className="deck-header flex w-full items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
 				<button
-					className="flex h-10 w-10 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg"
+					className="hidden h-10 w-10 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg max-[720px]:flex"
 					onClick={onExit}
 					title="Back"
 					aria-label="Back"
@@ -240,8 +244,11 @@ export function CatchUpDeck({
 				<div className="deck-header-title text-sm font-semibold text-fg">
 					{done ? "All caught up" : `${remaining} Left`}
 				</div>
+				{/* ml-auto, not just justify-between: with the chevron hidden this is
+				    the row's only in-flow child (the counter is absolutely centered),
+				    and justify-between would pack it against the left edge. */}
 				<button
-					className="flex h-10 w-10 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg"
+					className="ml-auto flex h-10 w-10 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg"
 					onClick={onNewWorkspace}
 					title="New workspace (⌘N)"
 					aria-label="New workspace"

@@ -332,10 +332,11 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col items-center bg-surface">
-			{/* Header: back + "N Left" counter (same chrome as PR Tinder). */}
+			{/* Header: back + "N Left" counter (same chrome as PR Tinder), with the
+			    same phone-only back chevron. */}
 			<div className="deck-header flex w-full items-center justify-between px-4 py-3">
 				<button
-					className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg"
+					className="hidden h-8 w-8 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg max-[720px]:flex"
 					onClick={onExit}
 					title="Back (Esc)"
 					aria-label="Back"
@@ -357,8 +358,10 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 							? "Queue clear"
 							: `${cards.length - index} Left`}
 				</div>
+				{/* ml-auto: with the chevron hidden this is the row's only in-flow
+				    child, and justify-between alone would pack it against the left. */}
 				<button
-					className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
+					className="ml-auto flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
 					onClick={undoLast}
 					disabled={historyLen === 0 || busy}
 					title="Undo last action (z)"
