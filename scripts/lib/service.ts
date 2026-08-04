@@ -215,18 +215,24 @@ export async function install(unitPath?: string): Promise<boolean> {
   switch (supervisor()) {
     case "systemd": {
       const path = unitPath!;
+      // `enable --now` is a no-op on an already-running unit: a re-onboard
+      // (say, to rebind from 127.0.0.1 to the tailnet IP) would leave the old
+      // process serving with the pre-onboard env. Restart in that case so the
+      // new unit and env actually take effect.
+      const wasActive = await isActive();
       info(dim(`installing ${path} -> ${SERVICE_PATH} (needs sudo)`));
       for (const cmd of [
         ["sudo", "cp", path, SERVICE_PATH],
         ["sudo", "systemctl", "daemon-reload"],
         ["sudo", "systemctl", "enable", "--now", SERVICE_NAME],
+        ...(wasActive ? [["sudo", "systemctl", "restart", SERVICE_NAME]] : []),
       ]) {
         if ((await runInherit(cmd)) !== 0) {
           warn(`failed: ${cmd.join(" ")}`);
           return false;
         }
       }
-      ok("service installed and started");
+      ok(wasActive ? "service reinstalled and restarted" : "service installed and started");
       return true;
     }
 
