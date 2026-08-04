@@ -450,7 +450,7 @@ function SupportRow({
 					</Tooltip>
 				</span>
 			</Popover.Trigger>
-			<Popover.Popup side="right" align="start" className={ROW_CARD_CLASS}>
+			<Popover.Popup side="right" align="start" arrow className={ROW_CARD_CLASS}>
 				<SupportRowCard thread={t} session={session} />
 			</Popover.Popup>
 			{menu.ctxMenu && (
@@ -577,7 +577,7 @@ function FeedRow({
 					</span>
 				</span>
 			</Popover.Trigger>
-			<Popover.Popup side="right" align="start" className={ROW_CARD_CLASS}>
+			<Popover.Popup side="right" align="start" arrow className={ROW_CARD_CLASS}>
 				<div className="flex max-w-[280px] flex-col gap-1.5 p-3">
 					<div className="text-[13px] font-medium text-fg">{item.title}</div>
 					{item.preview && (

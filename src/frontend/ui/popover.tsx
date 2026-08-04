@@ -72,6 +72,7 @@ function Popup({
 	side,
 	align,
 	sideOffset = 8,
+	arrow = false,
 	anchor,
 	initialFocus = false,
 	children,
@@ -80,6 +81,10 @@ function Popup({
 	side?: React.ComponentProps<typeof BasePopover.Positioner>["side"];
 	align?: React.ComponentProps<typeof BasePopover.Positioner>["align"];
 	sideOffset?: number;
+	/** Draw a callout diamond pointing back at the anchor, bridging
+	 * `sideOffset`. Matches the sidebar's legacy hover card, so a popup that
+	 * sits beside one of those reads as the same object. */
+	arrow?: boolean;
 	/** Position against something other than the Trigger — pass the wrapper of a
 	 * control cluster whose popup opens from several places (a caret, a
 	 * right-click, a disabled button), so the popup keeps one anchor no matter
@@ -99,6 +104,8 @@ function Popup({
 				sideOffset={sideOffset}
 				anchor={anchor}
 				collisionPadding={8}
+				// Keep the diamond clear of the popup's rounded corners.
+				arrowPadding={14}
 				className="z-[10001] outline-none"
 			>
 				<BasePopover.Popup
@@ -111,6 +118,21 @@ function Popup({
 						className,
 					)}
 				>
+					{arrow && (
+						// A square rotated onto its point, half of it hanging off the
+						// popup edge: the outward two borders continue the popup's own
+						// border, the fill covers the segment behind it. Base UI sets
+						// the cross-axis offset inline; the main-axis one is ours.
+						<BasePopover.Arrow
+							className={cn(
+								"size-[10px] rotate-45 border-line-strong bg-panel",
+								"data-[side=right]:left-[-6px] data-[side=right]:border-b data-[side=right]:border-l",
+								"data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r",
+								"data-[side=top]:bottom-[-6px] data-[side=top]:border-r data-[side=top]:border-b",
+								"data-[side=bottom]:top-[-6px] data-[side=bottom]:border-t data-[side=bottom]:border-l",
+							)}
+						/>
+					)}
 					{children}
 				</BasePopover.Popup>
 			</BasePopover.Positioner>

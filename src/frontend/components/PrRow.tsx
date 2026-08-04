@@ -174,7 +174,7 @@ export function PrRow({
 				</ContextMenu.Item>
 			</ContextMenu.Popup>
 		</ContextMenu.Root>
-			<Popover.Popup side="right" align="start" className={ROW_CARD_CLASS}>
+			<Popover.Popup side="right" align="start" arrow className={ROW_CARD_CLASS}>
 				<PrRowCard item={item} />
 			</Popover.Popup>
 		</Popover.Root>
