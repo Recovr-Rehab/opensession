@@ -130,6 +130,7 @@ import {
 	IconArrowUpToLine,
 	IconCrosshair,
 	IconDotsHorizontal,
+	IconEye,
 	IconInbox,
 	IconPin,
 	IconPullRequest,
@@ -1527,11 +1528,18 @@ export function SessionViewer({
 	// The 5s session poll picks up the mode change and re-renders with the full
 	// code affordances (diff/PR tabs, RepoBar).
 	const [promoting, setPromoting] = useState(false);
+	const [modeMenuOpen, setModeMenuOpen] = useState(false);
 	async function handlePromote() {
 		if (promoting) return;
 		setPromoting(true);
+		setModeMenuOpen(false);
 		try {
-			await promoteChatApi(session.id);
+			const { branch } = await promoteChatApi(session.id);
+			// The session poll flips the header, tabs and RepoBar a beat later;
+			// say what happened now, and name the branch — the chat may have
+			// adopted the tree it was already reading rather than cutting a new
+			// one, and that difference matters before the first edit.
+			toast(branch ? `Code mode on ${branch}` : "Switched to code mode");
 		} catch (e) {
 			toast(e instanceof Error ? e.message : "Could not switch to code mode");
 			setPromoting(false);
@@ -3809,18 +3817,6 @@ export function SessionViewer({
 						<span className="grow">New chat in workspace</span>
 					</Menu.Item>
 				);
-				const promoteAction = isAsk && !hasWorkspace && (
-					<Menu.Item
-						onClick={handlePromote}
-						disabled={promoting}
-						title="Create a worktree for this chat and switch it to code mode"
-					>
-						<IconTerminal size={20} />
-						<span className="grow">
-							{promoting ? "Creating worktree…" : "Switch to code"}
-						</span>
-					</Menu.Item>
-				);
 				// Copy transcript. These normally live on a tab's right-click menu,
 				// but a lone-chat workspace has no tab strip (and phones hide it at
 				// every count), so the only place to grab this chat's full text is the
@@ -4071,21 +4067,17 @@ export function SessionViewer({
 						ref={headerRef}
 					>
 						<div className="viewer-title">
-					{/* Automation runs skip the "ask" chip: the automation chip after
-					    the title already says where the chat came from, and ask/code is
-					    the automation's own setting rather than something about this
-					    run — two origin chips on one row just read as noise. */}
-					{isAsk && !session.automation ? (
-						<span className="source-chip source-ask">ask</span>
-					) : (
-						// "backstage" is the default origin (web UI) — as a chip it's noise,
-						// and for backstage-repo sessions it read as the repo said twice.
-						// Only surface the unusual origins (slack/linear/cli).
-						session.source !== "backstage" && (
-							<span className={`source-chip source-${session.source}`}>
-								{session.source}
-							</span>
-						)
+					{/* This slot says where a chat came FROM. Ask mode isn't an
+					    origin — it's a mode you can change — so it rides the composer
+					    toolbar next to the model pill instead, where the switch is one
+					    click from where you're typing. "backstage" is the default
+					    origin (web UI): as a chip it's noise, and for backstage-repo
+					    sessions it read as the repo said twice. Only the unusual
+					    origins (slack/linear/cli) surface here. */}
+					{session.source !== "backstage" && (
+						<span className={`source-chip source-${session.source}`}>
+							{session.source}
+						</span>
 					)}
 					{session.worktreeDir &&
 						hasWorkspace &&
@@ -4284,7 +4276,6 @@ export function SessionViewer({
 								{isPhone && secondaryActions(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
 								{newChatAction}
-								{promoteAction}
 								<PreviewButton
 									session={session}
 									onAttachImage={(img) => setImages((prev) => [...prev, img])}
@@ -5187,6 +5178,48 @@ export function SessionViewer({
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}
 									sendTitle={isBusy ? busySendLabel : undefined}
+									// Ask mode rides the toolbar beside the model pill: it's
+									// a setting of this chat, like the model, and this is the
+									// only way out of it. Same pill-opens-a-menu shape as its
+									// neighbour, so an accidental click can't cut a branch.
+									// Only backstage chats can promote (the server owns that
+									// rule) — elsewhere the pill would be a dead end.
+									leftExtra={
+										isAsk && session.source === "backstage" ? (
+											<Menu.Root
+												open={modeMenuOpen}
+												onOpenChange={setModeMenuOpen}
+											>
+												<Menu.Trigger
+													className="palette-pill"
+													disabled={promoting}
+													title="Ask mode — this chat can read the code but not change it"
+												>
+													<IconEye size={15} />
+													<span className="palette-pill-label">
+														{promoting ? "Switching…" : "Ask"}
+													</span>
+												</Menu.Trigger>
+												<Menu.Popup
+													align="start"
+													sideOffset={6}
+													className="w-72 p-0"
+												>
+													<Menu.Item
+														onClick={handlePromote}
+														className="flex-col items-start gap-0.5 rounded-none border-b border-line px-3.5 py-2.5 last:border-b-0"
+													>
+														<span className="text-[13px] font-semibold text-fg">
+															Switch to code
+														</span>
+														<span className="text-meta leading-[1.4] text-faint">
+															Let this chat edit files, commit, and open a PR
+														</span>
+													</Menu.Item>
+												</Menu.Popup>
+											</Menu.Root>
+										) : undefined
+									}
 									attached={attachedComposer}
 									prefill={composerPrefill}
 									models={models}

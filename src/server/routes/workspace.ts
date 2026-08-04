@@ -29,7 +29,7 @@ import { suggestBranchName } from "../suggest-branch";
 import { type BackstageSessionFile, type StackedOn } from "../types";
 import { type Workspace, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
-import { REPOS, createWorktree, createWorktreeForExistingBranch, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, worktreeHasWork } from "../worktree";
+import { REPOS, createWorktree, createWorktreeForExistingBranch, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, worktreeHasWork, worktreeHeadBranch } from "../worktree";
 import { randomUUIDv7 } from "bun";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 
@@ -546,10 +546,16 @@ export async function handleWorkspaceRoutes(
 		return Response.json({ id: bksId, session: findSession(bksId) ?? null });
 	}
 
-	// Promote an ask chat to code: create a worktree and attach it. Preserves
-	// engine memory by copying the ask transcript into the new cwd's project
-	// dir so the SDK resume keeps working after the cwd changes (ask chats run
-	// in the main checkout; a code worktree has a different cwd-hash dir).
+	// Promote an ask chat to code. Three shapes, because "ask" says nothing
+	// about where the chat is actually parked:
+	//   - it already owns a real worktree (a review spin-off shares its
+	//     parent's tree so it can read the diff) ⇒ ADOPT that tree. Cutting a
+	//     second worktree would move the chat off the very branch it's about.
+	//   - shared-checkout repo (backstage) ⇒ no worktree exists for either
+	//     mode; code chats edit the live checkout, so only `mode` changes.
+	//   - parked on a repo's pinned ask checkout ⇒ cut a worktree, the
+	//     original behavior. That moves the cwd, so the ask transcript is
+	//     copied into the new cwd's project dir to keep engine resume working.
 	const promoteMatch = path.match(
 		/^\/backstage\/api\/sessions\/(.+)\/promote$/,
 	);
@@ -567,32 +573,49 @@ export async function handleWorkspaceRoutes(
 			branch?: string;
 			repo?: string;
 		};
-		const repo = getRepo(body.repo || session.repo);
-		if (repo.sharedCheckout)
-			return Response.json(
-				{ error: "Shared-checkout repos have no worktree to create" },
-				{ status: 400 },
-			);
-		const branch = (
-			body.branch ||
-			(await suggestBranchName(session.title || "chat")) ||
-			`chat-${sessionId.slice(4, 10)}`
-		).trim();
-		const oldCwd = session.worktreeDir || repo.repo;
-		const worktreeDir = await createWorktree(branch, repo.id);
-		// Best-effort: copy the ask rollout into the new worktree's hash dir so
-		// SDK resume (keyed by cwd) finds the prior conversation.
-		try {
-			if (session.claudeSessionId) {
-				const from = getTranscriptPath(oldCwd, session.claudeSessionId);
-				const to = getTranscriptPath(worktreeDir, session.claudeSessionId);
-				if (existsSync(from) && !existsSync(to)) {
-					mkdirSync(to.slice(0, to.lastIndexOf("/")), { recursive: true });
-					copyFileSync(from, to);
+		// An owned tree is one no other mode shares: not a repo's main
+		// checkout, not its pinned ask checkout (isSharedCheckoutDir covers
+		// both). An explicit `repo`/`branch` in the body is a deliberate
+		// "put it somewhere else", so it opts out of adopting.
+		const current = session.worktreeDir || "";
+		const adopt =
+			!body.repo &&
+			!body.branch &&
+			Boolean(current) &&
+			!isSharedCheckoutDir(current) &&
+			existsSync(current);
+		const repo = adopt ? repoForPath(current) : getRepo(body.repo || session.repo);
+		let branch: string;
+		let worktreeDir: string;
+		if (adopt) {
+			branch = session.branch || worktreeHeadBranch(current) || "";
+			worktreeDir = current;
+		} else if (repo.sharedCheckout) {
+			// Nothing to create: mode is the whole difference here.
+			branch = "";
+			worktreeDir = repo.repo;
+		} else {
+			branch = (
+				body.branch ||
+				(await suggestBranchName(session.title || "chat")) ||
+				`chat-${sessionId.slice(4, 10)}`
+			).trim();
+			const oldCwd = current || repo.repo;
+			worktreeDir = await createWorktree(branch, repo.id);
+			// Best-effort: copy the ask rollout into the new worktree's hash dir
+			// so SDK resume (keyed by cwd) finds the prior conversation.
+			try {
+				if (session.claudeSessionId) {
+					const from = getTranscriptPath(oldCwd, session.claudeSessionId);
+					const to = getTranscriptPath(worktreeDir, session.claudeSessionId);
+					if (existsSync(from) && !existsSync(to)) {
+						mkdirSync(to.slice(0, to.lastIndexOf("/")), { recursive: true });
+						copyFileSync(from, to);
+					}
 				}
+			} catch (e) {
+				console.warn(`[promote] transcript copy failed for ${sessionId}:`, e);
 			}
-		} catch (e) {
-			console.warn(`[promote] transcript copy failed for ${sessionId}:`, e);
 		}
 		touchBackstageSession(sessionId, {
 			mode: "code",
@@ -600,8 +623,11 @@ export async function handleWorkspaceRoutes(
 			worktreeDir,
 			repo: repo.id,
 		});
-		// Materialize the workspace's worktree if it doesn't own one yet.
-		if (session.projectId) {
+		// Materialize the workspace's worktree if it doesn't own one yet. A
+		// shared checkout is owned by nobody, so it never becomes a
+		// workspace's tree (that's what keeps every backstage chat from
+		// collapsing into one workspace — see chat-workspace.ts).
+		if (session.projectId && worktreeDir && !isSharedCheckoutDir(worktreeDir)) {
 			const ws = getWorkspace(session.projectId);
 			if (ws && !ws.worktreeDir)
 				updateWorkspace(ws.id, { worktreeDir, branch });
