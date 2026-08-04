@@ -226,7 +226,7 @@ button:focus-visible {
 	display: flex;
 	height: calc(100vh - 84px);
 	align-items: center;
-	margin-inline-end: calc(-1 * max(24px, (100vw - 1240px) / 2));
+	margin-inline-end: calc(-1 * max(40px, (100vw - 1240px) / 2 + 16px));
 }
 
 .section-kicker {
@@ -239,7 +239,7 @@ button:focus-visible {
 .hero h1 {
 	max-width: 390px;
 	margin: 0;
-	font-size: clamp(54px, 5.2vw, 76px);
+	font-size: clamp(46px, 4.2vw, 62px);
 	font-weight: 600;
 	letter-spacing: -0.03em;
 	line-height: 1.02;
@@ -312,9 +312,9 @@ button:focus-visible {
 }
 
 .preview-wrap {
-	--demo-scale: 0.84;
+	--demo-scale: 1;
 	position: relative;
-	width: 125%;
+	width: 100%;
 	height: min(670px, calc(100vh - 130px));
 	flex: none;
 	margin: 0;
@@ -586,7 +586,7 @@ button:focus-visible {
 	}
 
 	.hero h1 {
-		font-size: clamp(48px, 6vw, 64px);
+		font-size: clamp(44px, 5.4vw, 56px);
 	}
 
 	.preview-wrap {
