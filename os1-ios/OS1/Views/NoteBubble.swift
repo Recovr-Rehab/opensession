@@ -31,13 +31,8 @@ struct NoteBubble: View {
                 .font(.callout)
                 .foregroundStyle(OS1VisualStyle.text)
                 .textSelection(.enabled)
-            // Note attachments aren't rendered natively yet; name them rather
-            // than dropping them silently, so nobody reads a note as complete
-            // when it isn't.
             ForEach(note.images ?? []) { image in
-                Label(image.name, systemImage: "paperclip")
-                    .font(.caption)
-                    .foregroundStyle(OS1VisualStyle.textDim)
+                NoteImageView(image: image)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -102,5 +97,46 @@ private struct NoteText: View {
             }
         }
         return result
+    }
+}
+
+/// An image attached to a note, fetched with the session's credentials and
+/// tappable into the same full-screen viewer transcript images use.
+private struct NoteImageView: View {
+    let image: NoteImage
+
+    @State private var data: Data?
+    @State private var failed = false
+    @State private var retryCount = 0
+
+    var body: some View {
+        Group {
+            if let data {
+                ExpandableDataImage(data: data)
+                    .frame(maxWidth: 260, maxHeight: 200, alignment: .leading)
+            } else {
+                // The filename is the fallback, not a placeholder: a note
+                // whose image can't load should still say what was attached.
+                Button { retryCount += 1 } label: {
+                    Label(
+                        image.name,
+                        systemImage: failed ? "arrow.clockwise" : "photo"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                }
+                .buttonStyle(.plain)
+                .disabled(!failed)
+            }
+        }
+        .task(id: "\(image.id)#\(retryCount)") {
+            guard data == nil else { return }
+            failed = false
+            do {
+                data = try await OS1API.chatImage(id: image.id)
+            } catch {
+                failed = true
+            }
+        }
     }
 }

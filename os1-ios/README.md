@@ -138,7 +138,7 @@ OS1/
     TurnBlockView.swift      Work fold header + turn footer + file chips
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     SubagentView.swift       A Task call's sub-agent transcript, in a sheet
-    NoteBubble.swift         Team note, interleaved into the transcript
+    NoteBubble.swift         Team note (text, @mentions, images) in the transcript
     MarkdownBody.swift       Streaming/durable markdown rendering
     AskQuestionCard.swift    Options + free text answer
     PrPanel.swift            Read-only pull-request panel

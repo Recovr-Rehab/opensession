@@ -99,6 +99,12 @@ enum OS1API {
         return response.messages ?? []
     }
 
+    /// Bytes of an image attached to a note. Chat images live in their own
+    /// permanent per-image storage, keyed by uuid.
+    static func chatImage(id: String) async throws -> Data {
+        try await getData("/api/chat/image/\(id)")
+    }
+
     /// Full content for an entry the WS delivered clamped.
     static func fullEntryContent(sessionId: String, entryId: String) async throws -> String {
         struct EntryResponse: Decodable { let content: String }
