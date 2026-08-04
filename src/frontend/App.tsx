@@ -2002,11 +2002,18 @@ function App() {
 	const focusedTopTabId = activeViewTabShown
 		? viewTabs.find((tab) => tab.active)?.id ?? null
 		: currentSession?.id ?? null;
-	// Every tab in the strip, in bar order: chats first, then the view panes.
-	const stripTabIds = [
+	// Every tab in the strip, in its natural order: chats first, then the view
+	// panes…
+	const naturalStripTabIds = [
 		...projectChats.map((chat) => chat.id),
 		...viewTabs.map((tab) => tab.id),
 	];
+	// …then the arrangement the user dragged them into. Chats and panes share
+	// ONE saved order, so a Review or Assets tab can sit in front of a chat; a
+	// tab the saved order doesn't mention falls to the end in natural order.
+	const stripTabIds = tabOrderKey
+		? applyTabOrder(tabOrderKey, naturalStripTabIds)
+		: naturalStripTabIds;
 	const storedTabSplit = tabOrderKey ? getTabSplit(tabOrderKey) : null;
 	// The split projected onto the tabs that exist right now. Null once either
 	// bar runs out of tabs — that's what collapses the strip back to one bar.
@@ -2098,6 +2105,21 @@ function App() {
 	}
 
 	/**
+	 * A bar only ever reorders its OWN tabs, but the order is saved per
+	 * workspace — so splice the bar's new sequence back into the positions it
+	 * occupies in the full strip, leaving the other column's arrangement (and
+	 * any tab the bar doesn't hold) exactly where it was.
+	 */
+	function mergeBarOrder(barIds: string[]): string[] {
+		const moved = new Set(barIds);
+		const queue = [...barIds];
+		const merged = stripTabIds.map((id) => (moved.has(id) ? (queue.shift() as string) : id));
+		// `barIds` is a subset of the strip, so the queue drains — unless a tab
+		// appeared mid-drag, in which case it lands at the end rather than lost.
+		return [...merged, ...queue];
+	}
+
+	/**
 	 * One tab bar. `side` is null when there is no split (a single bar owning
 	 * every tab); otherwise the bar renders only its own side's tabs, keeps its
 	 * own active tab and its own "+", and only the rightmost bar carries the
@@ -2135,7 +2157,8 @@ function App() {
 					navigate({ view: "session", id: s.id });
 				}}
 				onSetColor={(key, color) => setTabColors(setTabColor(key, color))}
-				onReorderTabs={(ids) => saveTabOrder(tabOrderKey, ids)}
+				tabOrder={stripTabIds}
+				onReorderTabs={(ids) => saveTabOrder(tabOrderKey, mergeBarOrder(ids))}
 				onSplitDrag={(id, point) => {
 					setSplitDropSide(id && point ? splitSideAt(id, point) : null);
 				}}

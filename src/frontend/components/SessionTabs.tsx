@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { motion, Reorder } from "motion/react";
+import { Reorder } from "motion/react";
 import type { UnifiedSession } from "../lib/types";
 import { TAB_COLORS, colorHex } from "../lib/tab-colors";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
@@ -23,8 +23,15 @@ import { useIsPhone } from "../hooks/useIsPhone";
  * tab color / close); double-click the title also renames the chat. The +
  * button starts a new chat in this workspace sharing its worktree;
  * right-clicking + offers the other modes (stacked worktree / ask).
+ *
+ * Chats and view panes (Review, Assets, …) are ONE draggable row: every tab is
+ * a Reorder.Item, so a pane can be dragged among the chats and the whole
+ * arrangement is what the parent persists per workspace.
  */
-/** A non-chat pane (Review, …) surfaced after the chat tabs in the strip. */
+/**
+ * A non-chat pane (Review, …) surfaced in the strip. It starts after the chat
+ * tabs and is draggable from there like any chat tab.
+ */
 export type ViewTab = {
 	/** Stable id, e.g. `review:<sessionId>`. */
 	id: string;
@@ -53,8 +60,15 @@ interface Props {
 	onSelect: (session: UnifiedSession) => void;
 	onSetColor: (key: string, color: string | null) => void;
 	/**
-	 * Commit a new left-to-right order for the chat tabs (desktop drag-drop).
-	 * Receives the reordered session ids; the parent persists it per-workspace.
+	 * The strip's left-to-right arrangement — chat ids and view-tab ids in ONE
+	 * list, so a pane (Review, Assets, …) can sit in front of a chat. Ids the
+	 * list doesn't mention keep their natural place at the end.
+	 */
+	tabOrder: string[];
+	/**
+	 * Commit a new left-to-right order for this bar's tabs (desktop drag-drop).
+	 * Receives the reordered ids — chats and view tabs alike; the parent splices
+	 * them back into the workspace's order and persists it.
 	 */
 	onReorderTabs: (orderedIds: string[]) => void;
 	/**
@@ -78,10 +92,10 @@ interface Props {
 	/** Where `onMoveAcross` lands — it names the menu item. */
 	moveAcrossSide?: "left" | "right";
 	/**
-	 * Non-chat "view" tabs (Review, Preview, …) shown after the chat tabs.
-	 * Each is bound to a session; selecting one foregrounds that
-	 * pane, its × dismisses it. Generalized so more panes (diff, terminal, …)
-	 * can drop in later.
+	 * Non-chat "view" tabs (Review, Preview, …), in their natural order — they
+	 * follow the chat tabs until dragged elsewhere (see `tabOrder`). Each is
+	 * bound to a session; selecting one foregrounds that pane, its × dismisses
+	 * it. Generalized so more panes (diff, terminal, …) can drop in later.
 	 */
 	viewTabs: ViewTab[];
 	/** Foreground a view tab (show its pane). */
@@ -123,6 +137,7 @@ export function SessionTabs({
 	colors,
 	onSelect,
 	onSetColor,
+	tabOrder,
 	onReorderTabs,
 	inSplit,
 	showHistory = true,
@@ -221,37 +236,27 @@ export function SessionTabs({
 		setDropSlot(null);
 	}
 
-	function trackPointer(
-		id: string,
-		event: React.PointerEvent,
-		dropOnPointerUp = false,
-	) {
+	/**
+	 * Follow the pointer for the whole drag so the split preview can track it.
+	 * The drop itself is handled in the item's `onDragEnd`, which reads the last
+	 * point from `dragPoint` — this only keeps that ref (and the preview) fresh.
+	 */
+	function trackPointer(id: string, event: React.PointerEvent) {
 		stopPointerTracking.current?.();
-		const start = { x: event.clientX, y: event.clientY };
-		let moved = false;
-		dragPoint.current = start;
+		dragPoint.current = { x: event.clientX, y: event.clientY };
 		const move = (pointer: PointerEvent) => {
 			dragPoint.current = { x: pointer.clientX, y: pointer.clientY };
-			moved ||= Math.hypot(pointer.clientX - start.x, pointer.clientY - start.y) > 5;
 			onSplitDrag?.(id, dragPoint.current);
 		};
-		const finish = (allowDrop: boolean) => {
+		const finish = () => {
 			window.removeEventListener("pointermove", move);
 			window.removeEventListener("pointerup", up);
 			window.removeEventListener("pointercancel", cancel);
 			stopPointerTracking.current = null;
 			onSplitDrag?.(null);
-			if (dropOnPointerUp) {
-				const point = dragPoint.current;
-				dragPoint.current = null;
-				if (allowDrop && moved && point && onSplitDrop?.(id, point)) {
-					justDragged.current = true;
-					setTimeout(() => (justDragged.current = false), 0);
-				}
-			}
 		};
-		const up = () => finish(true);
-		const cancel = () => finish(false);
+		const up = () => finish();
+		const cancel = () => finish();
 		stopPointerTracking.current = cancel;
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", up);
@@ -260,20 +265,30 @@ export function SessionTabs({
 
 	useEffect(() => () => stopPointerTracking.current?.(), []);
 
-	// Render order: the in-flight drag draft when dragging, else the parent's
-	// (already persisted) order. Any tab absent from the draft is appended so a
-	// mid-drag arrival is never dropped.
-	const orderedTabs: UnifiedSession[] = React.useMemo(() => {
-		if (!orderDraft) return tabs;
-		const byId = new Map(tabs.map((s) => [s.id, s] as const));
-		const out: UnifiedSession[] = [];
-		for (const id of orderDraft) {
-			const s = byId.get(id);
-			if (s) out.push(s);
-		}
-		for (const s of tabs) if (!orderDraft.includes(s.id)) out.push(s);
-		return out;
-	}, [tabs, orderDraft]);
+	// Chats and view panes are one draggable row: the same drag that moves a
+	// chat moves Review or Assets, and a pane can end up anywhere among the
+	// chats. Natural order (chats, then panes in the order the parent built
+	// them) is the fallback; the arrangement is the in-flight drag draft while
+	// dragging, else the parent's saved `tabOrder`. A tab that arrives mid-drag
+	// — or that no order mentions yet — keeps its natural place at the end
+	// rather than being dropped.
+	const members: TabMember[] = [
+		...tabs.map((session): TabMember => ({ kind: "chat", id: session.id, session })),
+		...viewTabs.map((view): TabMember => ({ kind: "view", id: view.id, view })),
+	];
+	const rank = new Map((orderDraft ?? tabOrder).map((id, i) => [id, i] as const));
+	const orderedMembers = members
+		.map((member, natural) => ({ member, natural }))
+		.sort((a, b) => {
+			const ra = rank.get(a.member.id);
+			const rb = rank.get(b.member.id);
+			if (ra === rb) return a.natural - b.natural;
+			if (ra === undefined) return 1;
+			if (rb === undefined) return -1;
+			return ra - rb;
+		})
+		.map((entry) => entry.member);
+	const orderedKeys = orderedMembers.map((member) => member.id);
 	const activeTopId = activeId ?? viewTabs.find((tab) => tab.active)?.id ?? null;
 
 	// With enough tabs the strip overflows and scrolls, so the tab that just
@@ -324,18 +339,6 @@ export function SessionTabs({
 		sync();
 		return () => observer.disconnect();
 	}, [tabs.length, viewTabs.length]);
-	// One unit per chat tab. Units are a holdover from the combined split tab
-	// (a pair used to share one unit); the drag code keys off `unit.key`, so the
-	// shape stays even though every unit now holds exactly one member.
-	const tabUnits = React.useMemo(
-		() => ({
-			units: orderedTabs.map((session) => ({
-				key: session.id,
-				members: [{ kind: "chat", id: session.id, session } as TabMember],
-			})),
-		}),
-		[orderedTabs],
-	);
 
 	// Drop: hand the new order to the parent (which persists it and feeds it back
 	// as the next `tabs`), swallow the trailing click, then release the draft.
@@ -351,31 +354,53 @@ export function SessionTabs({
 		if (order) onReorderTabs(order);
 	}
 
-	function reorderUnits(keys: string[]) {
-		const byKey = new Map(tabUnits.units.map((unit) => [unit.key, unit] as const));
-		const units = keys
-			.map((key) => byKey.get(key))
-			.filter((unit): unit is (typeof tabUnits.units)[number] => !!unit);
-		const order = units.flatMap((unit) =>
-			unit.members.flatMap((member) =>
-				member.kind === "chat" ? [member.session.id] : [],
-			),
-		);
-		orderDraftRef.current = order;
-		setOrderDraft(order);
-		placeDropSlot(units.map((unit) => unit.key));
+	function reorderTabs(keys: string[]) {
+		orderDraftRef.current = keys;
+		setOrderDraft(keys);
+		placeDropSlot(keys);
 	}
 
-	function selectMember(member: TabMember) {
-		if (member.kind === "chat") onSelect(member.session);
-		else onSelectView(member.view.id);
+	/**
+	 * The drag wiring every tab in the strip shares — chats and view panes are
+	 * the same kind of draggable item, differing only in what they render.
+	 * A drag that ends over the pane hands the tab to the other split column
+	 * (`onSplitDrop`) instead of committing a reorder.
+	 */
+	function reorderItemProps(key: string) {
+		const draggable = canDragTabs && editKey !== key;
+		return {
+			as: "div" as const,
+			value: key,
+			"data-tab-key": key,
+			dragListener: draggable,
+			onPointerDown: (event: React.PointerEvent) => {
+				if (draggable) trackPointer(key, event);
+			},
+			onDragStart: () => beginDrag(key),
+			onDragEnd: () => {
+				onSplitDrag?.(null);
+				const point = dragPoint.current;
+				dragPoint.current = null;
+				if (point && onSplitDrop?.(key, point)) {
+					orderDraftRef.current = null;
+					setOrderDraft(null);
+					endDrag();
+					justDragged.current = true;
+					setTimeout(() => (justDragged.current = false), 0);
+					return;
+				}
+				commitReorder();
+			},
+			whileDrag: { scale: 1.02, zIndex: 3 },
+			onClickCapture: (e: React.MouseEvent) => {
+				if (justDragged.current) {
+					e.stopPropagation();
+					e.preventDefault();
+				}
+			},
+			className: `session-tab-reorder ${dropSlot?.key === key ? "is-dragging" : ""}`,
+		};
 	}
-
-	function closeMember(member: TabMember) {
-		if (member.kind === "chat") onClose(member.session);
-		else onCloseView(member.view.id);
-	}
-
 
 	function commitRename() {
 		if (editKey !== null) onRename(editKey, draft.trim());
@@ -460,8 +485,8 @@ export function SessionTabs({
 					axis="x"
 					ref={groupRef}
 					className="session-tabs-chatgroup"
-					values={tabUnits.units.map((unit) => unit.key)}
-					onReorder={reorderUnits}
+					values={orderedKeys}
+					onReorder={reorderTabs}
 				>
 					{/* First child so the tabs sliding over it paint on top. */}
 					{dropSlot && (
@@ -471,47 +496,51 @@ export function SessionTabs({
 							aria-hidden="true"
 						/>
 					)}
-					{tabUnits.units.map((unit) => {
-						const member = unit.members[0];
-						if (member.kind !== "chat") return null;
+					{orderedMembers.map((member) => {
+						const key = member.id;
+						// A view pane (Review, Assets, …): the same draggable item as a
+						// chat, minus the rename/color/transcript menu it has no use for.
+						if (member.kind === "view") {
+							const v = member.view;
+							return (
+								<Reorder.Item key={key} {...reorderItemProps(key)}>
+									<div
+										role="tab"
+										aria-selected={v.active}
+										aria-label={v.icon ? v.label : undefined}
+										className={`session-tab session-tab-view ${v.icon ? "session-tab-view-icon" : ""} ${v.active ? "session-tab-active" : ""}`}
+										onClick={() => onSelectView(v.id)}
+										title={v.label}
+									>
+										{v.dotClass && <span className={`panel-tab-dot ${v.dotClass}`} />}
+										{v.icon ? (
+											<span className="session-tab-vicon" aria-hidden="true">
+												{v.icon}
+											</span>
+										) : (
+											<span className="session-tab-title">{v.label}</span>
+										)}
+										<button
+											type="button"
+											className="session-tab-close"
+											aria-label={`Close ${v.label}`}
+											title={`Close ${v.label}`}
+											onClick={(e) => {
+												e.stopPropagation();
+												onCloseView(v.id);
+											}}
+										>
+											×
+										</button>
+									</div>
+								</Reorder.Item>
+							);
+						}
 						const session = member.session;
-						const key = session.id;
 						const waiting = !!session.waitingForInput;
 						const hex = colorHex(colors[key]);
 						return (
-							<Reorder.Item
-								as="div"
-								key={key}
-								value={key}
-								data-tab-key={key}
-								dragListener={canDragTabs && editKey !== key}
-								onPointerDown={(event) => {
-									if (canDragTabs && editKey !== key) trackPointer(key, event);
-								}}
-								onDragStart={() => beginDrag(key)}
-								onDragEnd={() => {
-									onSplitDrag?.(null);
-									const point = dragPoint.current;
-									dragPoint.current = null;
-									if (point && onSplitDrop?.(key, point)) {
-										orderDraftRef.current = null;
-										setOrderDraft(null);
-										endDrag();
-										justDragged.current = true;
-										setTimeout(() => (justDragged.current = false), 0);
-										return;
-									}
-									commitReorder();
-								}}
-								whileDrag={{ scale: 1.02, zIndex: 3 }}
-								onClickCapture={(e) => {
-									if (justDragged.current) {
-										e.stopPropagation();
-										e.preventDefault();
-									}
-								}}
-								className={`session-tab-reorder ${dropSlot?.key === key ? "is-dragging" : ""}`}
-							>
+							<Reorder.Item key={key} {...reorderItemProps(key)}>
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
 										render={
@@ -646,53 +675,6 @@ export function SessionTabs({
 						);
 					})}
 				</Reorder.Group>
-				{/* Non-chat panes (Review, …) ride at the END of the strip: the main
-				    chat leads, sibling chats follow, panes close the row. */}
-				{viewTabs.map((v) => (
-					<motion.div
-						key={v.id}
-						role="tab"
-						aria-selected={v.active}
-						aria-label={v.icon ? v.label : undefined}
-						className={`session-tab session-tab-view ${v.icon ? "session-tab-view-icon" : ""} ${v.active ? "session-tab-active" : ""}`}
-						drag={!isPhone}
-						dragMomentum={false}
-						dragSnapToOrigin
-						dragElastic={0.08}
-						onPointerDown={(event) => {
-							if (!isPhone) trackPointer(v.id, event, true);
-						}}
-						onClickCapture={(event) => {
-							if (justDragged.current) {
-								event.stopPropagation();
-								event.preventDefault();
-							}
-						}}
-						onClick={() => onSelectView(v.id)}
-						title={v.label}
-					>
-						{v.dotClass && <span className={`panel-tab-dot ${v.dotClass}`} />}
-						{v.icon ? (
-							<span className="session-tab-vicon" aria-hidden="true">
-								{v.icon}
-							</span>
-						) : (
-							<span className="session-tab-title">{v.label}</span>
-						)}
-						<button
-							type="button"
-							className="session-tab-close"
-							aria-label={`Close ${v.label}`}
-							title={`Close ${v.label}`}
-							onClick={(e) => {
-								e.stopPropagation();
-								onCloseView(v.id);
-							}}
-						>
-							×
-						</button>
-					</motion.div>
-				))}
 				{/* Phone: the +/history controls scroll WITH the tabs so the strip
 					    uses the full width — nothing pinned eating horizontal room. */}
 				{isPhone && newTabButton}

@@ -2768,15 +2768,15 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	margin-left: auto;
 }
 
-/* The drag-to-reorder group wraps just the chat tabs (view tabs stay pinned to
-   the left, outside it). It's a transparent flex row that keeps the same 3px
-   inter-tab gap as the scroll, so nesting it changes nothing visually.
-   flex:0 0 auto is load-bearing: the tabs inside never shrink, so if the group
-   itself were allowed to (the flex default, plus min-width:0), its box would
-   collapse below its content and the last chat tab would spill out of it — the
-   view tabs, laid out after the SHRUNKEN box, then painted straight over it
-   ("Review" on top of "Review · PR #…"). Sizing to content instead pushes the
-   overflow out to .session-tabs-scroll, which is what scrolls. */
+/* The drag-to-reorder group wraps EVERY tab in the strip — chats and view panes
+   alike, so a pane can be dragged in among the chats. It's a transparent flex
+   row that keeps the same 3px inter-tab gap as the scroll, so nesting it
+   changes nothing visually. flex:0 0 auto is load-bearing: the tabs inside
+   never shrink, so if the group itself were allowed to (the flex default, plus
+   min-width:0), its box would collapse below its content and the last tab would
+   spill out of it, painting over whatever the scroll laid out after the
+   SHRUNKEN box. Sizing to content instead pushes the overflow out to
+   .session-tabs-scroll, which is what scrolls. */
 .session-tabs-chatgroup {
 	display: inline-flex;
 	align-items: center;
@@ -13169,10 +13169,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	   so mostly invisible on touch anyway. Hide the strip until the workspace
 	   actually has a second chat to switch between. */
 	/* The strip is worth its phone chrome when it offers a real switch: any
-	   view tab (Conversation/Review — chat tabs live nested in the reorder
-	   group, so view tabs are the only direct-child .session-tab elements), or
-	   2+ chats (adjacent .session-tab-reorder wrappers). A lone chat with no
-	   view tabs keeps the strip hidden as before. */
+	   view tab (Conversation/Review), or 2+ chats — which, since every tab is a
+	   .session-tab-reorder wrapper in the reorder group, reads as two adjacent
+	   wrappers. A lone chat with no view tabs keeps the strip hidden as before. */
 	.session-tabs:not(:has(.session-tab-view)):not(
 			:has(.session-tab-reorder ~ .session-tab-reorder)
 		) {
