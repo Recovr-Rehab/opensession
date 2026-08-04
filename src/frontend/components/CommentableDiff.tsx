@@ -71,12 +71,14 @@ interface Props {
    */
   onDiscard?: (path: string, oldPath?: string) => Promise<void>;
   /**
-   * GitHub-style per-file "Viewed" checkboxes, persisted in localStorage under
-   * this key (e.g. `repo#123`). Marking a file viewed collapses it; a viewed
-   * mark survives reloads but drops automatically when the file's content
-   * fingerprint changes (the file was updated since it was reviewed).
+   * GitHub-style per-file "Viewed" checkboxes, backed by GitHub's own
+   * per-viewer viewed state (markFileAsViewed). The parent owns the set —
+   * `undefined` means still loading (checkboxes hidden); marking a file
+   * viewed collapses it. GitHub handles staleness: a file changed after
+   * being viewed comes back DIRTY, which the server treats as not viewed.
    */
-  viewedStateKey?: string;
+  viewedFiles?: ReadonlySet<string>;
+  onToggleViewed?: (path: string, viewed: boolean) => void;
   /**
    * @pierre/diffs edit mode: makes files editable in place. Only wired where
    * the diff maps to a live worktree (the session Changes tab). `load` fetches
@@ -123,42 +125,15 @@ function fileStats(file: FileDiffMetadata): { add: number; del: number } {
 // across re-renders (lets the memoized row bail out instead of re-parsing).
 const NO_ANNOTATIONS: DiffLineAnnotation<Meta>[] = [];
 
-/**
- * Content fingerprint for the "Viewed" state: a viewed mark is only honored
- * while the file still has this fingerprint, so a file that changed after
- * being reviewed comes back unviewed (GitHub semantics). The patch's blob id
- * is exact when present; the hunk-shape fallback covers patches without
- * `index` lines.
- */
-function fileFingerprint(file: FileDiffMetadata): string {
-  if (file.newObjectId) return file.newObjectId;
-  return file.hunks
-    .map((h) => `${h.additionStart}+${h.additionLines}-${h.deletionLines}`)
-    .join(",");
-}
+const NO_VIEWED: ReadonlySet<string> = new Set();
 
-function viewedStorageKey(key: string) {
-  return `os-diff-viewed:${key}`;
-}
-
-/** path → fingerprint map persisted per PR/diff surface. */
-function readViewedStore(key: string): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(viewedStorageKey(key));
-    const parsed = raw ? JSON.parse(raw) : null;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-/** Paths in `files` whose stored viewed fingerprint still matches. */
-function matchViewed(key: string | undefined, files: FileDiffMetadata[]): Set<string> {
-  if (!key) return new Set();
-  const store = readViewedStore(key);
-  return new Set(
-    files.filter((f) => store[f.name] === fileFingerprint(f)).map((f) => f.name),
-  );
+// The viewed set spans the whole PR while a guide section renders a subset,
+// so count intersections rather than trusting `viewed.size`.
+function countViewed(
+  viewed: ReadonlySet<string>,
+  files: FileDiffMetadata[],
+): number {
+  return files.reduce((n, f) => n + (viewed.has(f.name) ? 1 : 0), 0);
 }
 
 /**
@@ -189,7 +164,8 @@ export function CommentableDiff({
   groups,
   groupsLoading,
   diffStyle = "unified",
-  viewedStateKey,
+  viewedFiles,
+  onToggleViewed,
   editFile,
 }: Props) {
   const reviewMode = pendingComments !== undefined;
@@ -202,23 +178,15 @@ export function CommentableDiff({
     }
   }, [patch]);
 
-  // Files a reviewer already marked "Viewed" (stale fingerprints filtered out).
-  const [viewed, setViewed] = useState<ReadonlySet<string>>(() =>
-    matchViewed(viewedStateKey, files),
-  );
+  // GitHub-backed "Viewed" checkboxes: hidden until the parent's fetch lands.
+  const viewedEnabled = !!onToggleViewed && viewedFiles !== undefined;
+  const viewed = viewedFiles ?? NO_VIEWED;
 
   // Files render collapsed by default (just the header row) — mounting a
   // FileDiff parses + highlights on the main thread, so a large change would
   // otherwise block the tab. `expanded` holds the indices the user opened.
-  // Viewed files start collapsed even when the default would expand them.
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(
-    () =>
-      new Set(
-        files
-          .slice(0, defaultExpandedFiles)
-          .map((_, index) => index)
-          .filter((index) => !viewed.has(files[index].name)),
-      ),
+    () => new Set(files.slice(0, defaultExpandedFiles).map((_, index) => index)),
   );
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -296,36 +264,34 @@ export function CommentableDiff({
   );
   useEffect(() => () => clearTimeout(disarmTimer.current), []);
 
+  const viewedCollapseKey = useRef<string | null>(null);
   useEffect(() => {
-    const nextViewed = matchViewed(viewedStateKey, files);
-    setViewed(nextViewed);
     setExpanded(
-      new Set(
-        files
-          .slice(0, defaultExpandedFiles)
-          .map((_, index) => index)
-          .filter((index) => !nextViewed.has(files[index].name)),
-      ),
+      new Set(files.slice(0, defaultExpandedFiles).map((_, index) => index)),
     );
-  }, [patch, defaultExpandedFiles, viewedStateKey, files]);
+    viewedCollapseKey.current = null;
+  }, [patch, defaultExpandedFiles, files]);
+
+  // Collapse already-viewed files once GitHub's viewed state arrives (it
+  // loads async, after the diff renders). Applied once per patch so it never
+  // fights a user who re-expands a viewed file.
+  useEffect(() => {
+    if (viewedFiles === undefined || viewedCollapseKey.current === patch) return;
+    viewedCollapseKey.current = patch;
+    if (viewedFiles.size === 0) return;
+    setExpanded(
+      (prev) =>
+        new Set(
+          [...prev].filter((index) => !viewedFiles.has(files[index]?.name ?? "")),
+        ),
+    );
+  }, [viewedFiles, patch, files]);
 
   const toggleViewed = useCallback(
     (file: FileDiffMetadata, index: number) => {
-      if (!viewedStateKey) return;
-      const store = readViewedStore(viewedStateKey);
+      if (!onToggleViewed) return;
       const wasViewed = viewed.has(file.name);
-      const next = new Set(viewed);
-      if (wasViewed) {
-        next.delete(file.name);
-        delete store[file.name];
-      } else {
-        next.add(file.name);
-        store[file.name] = fileFingerprint(file);
-      }
-      try {
-        localStorage.setItem(viewedStorageKey(viewedStateKey), JSON.stringify(store));
-      } catch {}
-      setViewed(next);
+      onToggleViewed(file.name, !wasViewed);
       // Marking viewed collapses the file (done reading it); unmarking reopens.
       setExpanded((prev) => {
         const n = new Set(prev);
@@ -334,7 +300,7 @@ export function CommentableDiff({
         return n;
       });
     },
-    [viewedStateKey, viewed],
+    [onToggleViewed, viewed],
   );
 
   // ---- Edit mode (@pierre/diffs edit) ------------------------------------
@@ -653,7 +619,7 @@ export function CommentableDiff({
             {s.add > 0 && <span className="diff-add">+{s.add}</span>}
             {s.del > 0 && <span className="diff-del">−{s.del}</span>}
           </span>
-          {viewedStateKey && (
+          {viewedEnabled && (
             <label
               className={`diff-file-viewed ${isViewed ? "diff-file-viewed-on" : ""}`}
               onClick={(e) => e.stopPropagation()}
@@ -703,9 +669,9 @@ export function CommentableDiff({
         {!groupsLoading && groupedFiles && (
           <span className="diff-groups-ready">AI organized</span>
         )}
-        {viewedStateKey && (
+        {viewedEnabled && (
           <span className="diff-viewed-progress">
-            {viewed.size} of {files.length} viewed
+            {countViewed(viewed, files)} of {files.length} viewed
           </span>
         )}
         <button type="button" className="diff-file-toggle-all" onClick={toggleAll}>

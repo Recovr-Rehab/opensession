@@ -19,6 +19,8 @@ import {
   fetchPr,
   fetchPrDiff,
   fetchPrDiffGroups,
+  fetchPrViewedFiles,
+  setPrFileViewed,
   fetchGitStatus,
   fetchReviewGuide,
   gitPushApi,
@@ -423,6 +425,15 @@ export function PrPanel({
   const [guide, setGuide] = useState<ReviewGuideData | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
   const [guideFailed, setGuideFailed] = useState(false);
+  // GitHub's per-viewer "Viewed" file state for the shown PR (review canvas
+  // checkboxes). Keyed so a stale PR's set never leaks onto the next one.
+  const [prViewed, setPrViewed] = useState<{
+    key: string;
+    prId: string;
+    viewed: ReadonlySet<string>;
+  } | null>(null);
+  const prViewedRef = useRef(prViewed);
+  prViewedRef.current = prViewed;
   const [bodyOpen, setBodyOpen] = useState(false);
   const [bodyOverflows, setBodyOverflows] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -530,6 +541,7 @@ export function PrPanel({
     setDiff(null);
     setGit(null);
     setPending([]);
+    setPrViewed(null);
     load();
     const stopPolling = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
     return () => {
@@ -880,6 +892,45 @@ export function PrPanel({
     },
     [prBase, prHead, activeRepoId],
   );
+
+  // GitHub "Viewed" state: fetched per PR (and refetched when the head moves,
+  // since a push flips changed files to DIRTY = unviewed on GitHub's side).
+  const viewedKey = diff ? `${activeRepoId || "pr"}#${diff.number}` : null;
+  useEffect(() => {
+    if (!viewedKey || !diff) return;
+    let live = true;
+    fetchPrViewedFiles(activeRepoId, diff.number, getCurrentUser())
+      .then((res) => {
+        if (!live) return;
+        setPrViewed({ key: viewedKey, prId: res.prId, viewed: new Set(res.viewed) });
+      })
+      .catch(() => {
+        // Leave prViewed unset — checkboxes just stay hidden for this PR.
+      });
+    return () => {
+      live = false;
+    };
+  }, [viewedKey, diff?.headRefOid]);
+
+  const handleToggleViewed = useCallback((path: string, next: boolean) => {
+    const info = prViewedRef.current;
+    if (!info) return;
+    const apply = (set: ReadonlySet<string>, add: boolean) => {
+      const v = new Set(set);
+      if (add) v.add(path);
+      else v.delete(path);
+      return v;
+    };
+    // Optimistic: flip locally, revert if GitHub rejects the mutation.
+    setPrViewed({ ...info, viewed: apply(info.viewed, next) });
+    void setPrFileViewed(info.prId, path, next, getCurrentUser()).catch(() => {
+      setPrViewed((prev) =>
+        prev && prev.key === info.key
+          ? { ...prev, viewed: apply(prev.viewed, !next) }
+          : prev,
+      );
+    });
+  }, []);
 
   function handleLinked(all: LinkedPrEntry[], justLinked: LinkedPrEntry) {
     setLinkedLocal(all);
@@ -1277,7 +1328,8 @@ export function PrPanel({
                       patch={diff.patch}
                       diffStyle={diffStyle}
                       defaultExpandedFiles={Infinity}
-                      viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
+                      viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
+                      onToggleViewed={handleToggleViewed}
                       submitLabel="Add comment"
                       placeholder={`Comment on #${diff.number} — added to your pending review…`}
                       pendingComments={pending}
@@ -1333,7 +1385,8 @@ export function PrPanel({
                             patch={section.patch}
                             diffStyle={diffStyle}
                             defaultExpandedFiles={Infinity}
-                            viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
+                            viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
+                      onToggleViewed={handleToggleViewed}
                             submitLabel="Add comment"
                             placeholder={`Comment on #${diff.number} — added to your pending review…`}
                             pendingComments={pending}
@@ -1351,7 +1404,8 @@ export function PrPanel({
                   patch={diff.patch}
                   diffStyle={diffStyle}
                   defaultExpandedFiles={Infinity}
-                  viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
+                  viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
+                      onToggleViewed={handleToggleViewed}
                   submitLabel="Add comment"
                   placeholder={`Comment on #${diff.number} — added to your pending review…`}
                   pendingComments={pending}
@@ -1819,7 +1873,8 @@ export function PrPanel({
                       <CommentableDiff
                         patch={section.patch}
                         defaultExpandedFiles={Infinity}
-                        viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
+                        viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
+                      onToggleViewed={handleToggleViewed}
                         submitLabel="Add comment"
                         placeholder={`Comment on #${diff.number} — added to your pending review…`}
                         pendingComments={pending}
@@ -1835,7 +1890,8 @@ export function PrPanel({
               <CommentableDiff
                 patch={diff.patch}
                 defaultExpandedFiles={Infinity}
-                viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
+                viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
+                      onToggleViewed={handleToggleViewed}
                 groups={diffGroups?.oid === diff.headRefOid ? diffGroups.groups || undefined : undefined}
                 groupsLoading={diffGroupsLoading}
                 submitLabel="Add comment"

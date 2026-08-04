@@ -88,6 +88,56 @@ export async function handlePrRoutes(
 		return Response.json({ prs: getOpenPrs() });
 	}
 
+	// GitHub's per-viewer "Viewed" file state on a PR (the review canvas
+	// checkboxes). GET lists the viewer's VIEWED paths; POST marks/unmarks one
+	// file. State lives on GitHub (markFileAsViewed), so it round-trips with
+	// github.com's own file list. See src/server/pr-viewed.ts.
+	if (path === "/backstage/api/pr-viewed-files" && req.method === "GET") {
+		const repoId = url.searchParams.get("repo");
+		const number = parseInt(url.searchParams.get("number") || "", 10);
+		if (!Number.isFinite(number))
+			return Response.json({ error: "number required" }, { status: 400 });
+		const { getPrViewedFiles } = await import("../pr-viewed");
+		try {
+			return Response.json(
+				await getPrViewedFiles(
+					ctx,
+					requestUser(ctx, url.searchParams.get("user")),
+					(repoId ? getRepo(repoId) : defaultRepo()).ghRepo,
+					number,
+				),
+			);
+		} catch (e: any) {
+			return Response.json({ error: e?.message || String(e) }, { status: 502 });
+		}
+	}
+	if (path === "/backstage/api/pr-viewed-files" && req.method === "POST") {
+		const body = (await req.json().catch(() => ({}))) as {
+			prId?: string;
+			path?: string;
+			viewed?: boolean;
+			user?: string;
+		};
+		if (!body.prId || !body.path || typeof body.viewed !== "boolean")
+			return Response.json(
+				{ error: "prId, path and viewed required" },
+				{ status: 400 },
+			);
+		const { setPrFileViewed } = await import("../pr-viewed");
+		try {
+			await setPrFileViewed(
+				ctx,
+				requestUser(ctx, body.user),
+				body.prId,
+				body.path,
+				body.viewed,
+			);
+			return Response.json({ ok: true });
+		} catch (e: any) {
+			return Response.json({ error: e?.message || String(e) }, { status: 502 });
+		}
+	}
+
 	// Recent PRs across the covered repos, including merges made without an
 	// OpenSession workspace. Powers the root shipped-worktree index.
 	if (path === "/backstage/api/recent-prs" && req.method === "GET") {

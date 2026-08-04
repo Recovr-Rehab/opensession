@@ -1212,6 +1212,34 @@ export async function discardDiffFile(
 	});
 }
 
+/** The viewer's GitHub "Viewed" file state on a PR (review canvas checkboxes). */
+export async function fetchPrViewedFiles(
+	repo: string | undefined,
+	number: number,
+	user?: string,
+): Promise<{ prId: string; viewed: string[] }> {
+	const qs = new URLSearchParams({ number: String(number) });
+	if (repo) qs.set("repo", repo);
+	if (user) qs.set("user", user);
+	return request(`/pr-viewed-files?${qs}`, {
+		label: "Failed to load viewed files",
+	});
+}
+
+/** Mark/unmark one PR file as viewed on GitHub for the current viewer. */
+export async function setPrFileViewed(
+	prId: string,
+	path: string,
+	viewed: boolean,
+	user?: string,
+): Promise<void> {
+	await request(`/pr-viewed-files`, {
+		method: "POST",
+		body: { prId, path, viewed, user },
+		label: "Failed to update viewed state",
+	});
+}
+
 /** Full text of one worktree file (Changes-tab edit mode). `side: "base"` reads
  *  the pre-change version from the merge base; `null` = file absent on that side. */
 export async function fetchWorktreeFile(

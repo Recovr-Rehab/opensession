@@ -146,6 +146,34 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
     await reload();
   }
 
+  // Files the human edited in place (Changes-tab edit mode). Saves only touch
+  // the worktree — nothing is committed — so we offer a one-click note that
+  // tells the agent about the hand-edits (it reviews them and folds them into
+  // its next commit). Cleared per session and once sent.
+  const [handEdited, setHandEdited] = useState<{ repo: string; path: string }[]>([]);
+  useEffect(() => setHandEdited([]), [sessionId]);
+  const recordHandEdit = (repo: string, path: string) =>
+    setHandEdited((prev) =>
+      prev.some((e) => e.repo === repo && e.path === path)
+        ? prev
+        : [...prev, { repo, path }],
+    );
+  function tellAgentAboutEdits() {
+    if (!canSend || !handEdited.length) return;
+    const list = handEdited
+      .map((e) => `- \`${e.path}\` (${e.repo} repo)`)
+      .join("\n");
+    send({
+      type: "prompt",
+      sessionId,
+      user: getCurrentUser(),
+      content:
+        `${getCurrentUser()} hand-edited these files directly in the worktree via the Changes tab editor:\n\n${list}\n\n` +
+        `Review the edits, keep them (don't revert them unless they're clearly broken), and include them in your next commit on this branch.`,
+    });
+    setHandEdited([]);
+  }
+
   async function handleComment(repo: string, target: CommentTarget, text: string) {
     if (!canSend) throw new Error(`${AGENT_NAME} is busy. Wait for the current run to finish.`);
     const lines =
@@ -203,6 +231,18 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         <span className="diff-add">+{d.totalAdditions}</span>
         <span className="diff-del">−{d.totalDeletions}</span>
         {d.truncated && <span className="diff-truncated">truncated</span>}
+        {handEdited.length > 0 && canSend && (
+          <Button
+            variant="default"
+            size="xs"
+            className="ml-2 min-h-0 px-2 py-0.5 text-meta"
+            onClick={tellAgentAboutEdits}
+            title="Sends a note listing your hand-edits so they get reviewed and committed"
+          >
+            Tell {AGENT_NAME} about {handEdited.length} edit
+            {handEdited.length === 1 ? "" : "s"}
+          </Button>
+        )}
         <Tooltip label="Refresh diff">
           <Button
             variant="ghost"
@@ -250,6 +290,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
                     ),
                   save: async (path, content) => {
                     await saveWorktreeFile(sessionId, path, content, cur.repo);
+                    recordHandEdit(cur.repo, path);
                     await reload();
                   },
                 }
