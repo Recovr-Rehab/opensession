@@ -5164,7 +5164,9 @@ export function SessionViewer({
 												? "New direction…"
 												: isBusy
 													? "Queue for when it finishes…"
-													: `Ask ${AGENT_NAME}…`
+													: isAsk
+														? `Ask ${AGENT_NAME} — read-only…`
+														: `Ask ${AGENT_NAME}…`
 									}
 									disabled={!connected}
 									sendDisabled={(text) =>
@@ -5177,6 +5179,10 @@ export function SessionViewer({
 									}
 									noteMode={noteMode}
 									onNoteModeChange={setNoteMode}
+									// Ask mode lost its chip when the toolbar collapsed into
+									// the "+", so the writing surface carries the state
+									// instead — tinted and hatched like plan mode.
+									askMode={isAsk}
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}
 									sendTitle={isBusy ? busySendLabel : undefined}

@@ -149,12 +149,37 @@ interface Props {
   skillsFetch?: (query: string) => Promise<FileMention[]>;
   /**
    * Note mode (Plain-style internal notes): the send posts a team note the
-   * agent never sees. When `onNoteModeChange` is wired, a Note toggle chip
-   * appears in the toolbar and ⌘/Ctrl+N (while the field is focused) flips
-   * it; the composer tints yellow so the mode is unmistakable.
+   * agent never sees. When `onNoteModeChange` is wired, a Note row appears in
+   * the "+" menu and ⌘/Ctrl+N (while the field is focused) flips it; the
+   * composer tints yellow so the mode is unmistakable.
    */
   noteMode?: boolean;
   onNoteModeChange?: (on: boolean) => void;
+  /**
+   * Ask mode: this chat can read the checkout but not change it. Tints the
+   * writing surface the way plan and note mode do — the state has no chip of
+   * its own, so the surface is what says it. Note mode wins while it's on:
+   * it's the transient choice about where this one message goes.
+   */
+  askMode?: boolean;
+}
+
+/** The writing surface for a composer that isn't in its ordinary state: a flat
+ *  tint plus a 45° hatch that fades out downwards, so the box settles into its
+ *  toolbar instead of hatching all the way to the edge. Shared shape with the
+ *  new-session palette's plan mode; the modes differ only in ink and strength.
+ *  Ask mode is ambient (on for the chat's whole life), so it's painted lighter
+ *  than note mode, which you turn on for one message. */
+function tintedSurface(ink: string, tint: number, hatch: number, edge: number): React.CSSProperties {
+  const flat = `color-mix(in srgb, ${ink} ${tint}%, var(--control-surface))`;
+  const stripe = `color-mix(in srgb, ${ink} ${hatch}%, transparent)`;
+  return {
+    borderColor: `color-mix(in srgb, ${ink} ${edge}%, transparent)`,
+    backgroundColor: flat,
+    backgroundImage:
+      `linear-gradient(to bottom, transparent 15%, ${flat} 72%), ` +
+      `repeating-linear-gradient(45deg, ${stripe} 0, ${stripe} 12px, transparent 12px, transparent 24px)`,
+  };
 }
 
 /** Set / update / clear the session goal — a centered dialog on the shared
@@ -276,6 +301,7 @@ export function Composer({
   skillsFetch,
   noteMode,
   onNoteModeChange,
+  askMode,
 }: Props) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef ?? internalRef;
@@ -674,14 +700,10 @@ export function Composer({
         className={`composer ${disabled ? "composer-disabled" : ""} ${minimized ? "composer-min" : ""} ${noteMode ? "composer-note" : ""}`}
         style={
           noteMode
-            ? {
-                borderColor: "color-mix(in srgb, var(--yellow) 45%, transparent)",
-                backgroundColor:
-                  "color-mix(in srgb, var(--yellow) 10%, var(--control-surface))",
-                backgroundImage:
-                  "linear-gradient(to bottom, transparent 15%, color-mix(in srgb, var(--yellow) 10%, var(--control-surface)) 72%), repeating-linear-gradient(45deg, color-mix(in srgb, var(--yellow) 6%, transparent) 0, color-mix(in srgb, var(--yellow) 6%, transparent) 12px, transparent 12px, transparent 24px)",
-              }
-            : undefined
+            ? tintedSurface("var(--yellow)", 10, 6, 45)
+            : askMode
+              ? tintedSurface("var(--blue)", 7, 4, 30)
+              : undefined
         }
         onDrop={handleDrop}
         onDragOver={(e) => canAttach && e.preventDefault()}
