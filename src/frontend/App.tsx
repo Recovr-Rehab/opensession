@@ -773,6 +773,17 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		else navigate({ view: "home" }, { replace: true });
 	}
 
+	// Leave a full-page deck (catch-up, PR, support) for wherever you came from,
+	// rather than popping to the root the way `goBack` does. The root is the
+	// useful destination on a phone — it's the sidebar you can't otherwise see —
+	// but on desktop the sidebar never went away, so popping there reveals
+	// nothing and costs you the chat you were reading before the detour.
+	function leaveDeck() {
+		const depth = entryDepth();
+		if (depth !== null && depth > 0) history.back();
+		else navigate({ view: "home" }, { replace: true });
+	}
+
 	// Edge-swipe-from-left pops the pushed page back to the sidebar on phones.
 	useBackSwipe({
 		active: mobileDetail,
@@ -3646,10 +3657,10 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								onChanged={refresh}
 							/>
 						) : route.view === "prtinder" ? (
-							<PrTinder onExit={goBack} />
+							<PrTinder onExit={leaveDeck} />
 						) : route.view === "supporttinder" ? (
 							<SupportTinder
-								onExit={goBack}
+								onExit={leaveDeck}
 								onOpenSession={(id) => navigate({ view: "session", id })}
 							/>
 						) : route.view === "catchup" ? (
@@ -3677,7 +3688,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								}}
 								onOpenSession={(id) => navigate({ view: "session", id })}
 								onNewWorkspace={() => openPalette()}
-								onExit={goBack}
+								onExit={leaveDeck}
 							/>
 						) : route.view === "session" ? (
 							currentSession ? (
