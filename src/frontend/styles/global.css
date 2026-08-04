@@ -13352,6 +13352,16 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		font-size: 16px;
 		padding: 11px 8px 11px 6px;
 	}
+	/* A repo band's tile is an org avatar, not an outline glyph, so at its 18px
+	   desktop size it reads noticeably smaller than the 22px lane icons stacked
+	   above it once the header text goes to 16px. Fill the 22px rail instead —
+	   the rail centers it, so its desktop side margins come off here. */
+	.sidebar-repo-head .repo-tile {
+		width: 22px;
+		height: 22px;
+		margin: 0;
+		font-size: 13px;
+	}
 	.sidebar-independent-section > .sidebar-band-label {
 		padding-right: 8px;
 	}
