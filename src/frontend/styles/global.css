@@ -1607,56 +1607,13 @@ body:is(.resizing-sidebar, .resizing-panel) {
 .sidebar-repo-lanes {
 	margin-top: 2px;
 }
-/* The nesting reads through an inset alone — the old 1px rail was one more
-   line of chrome than the grouping needs. And the inset lives in the rows'
-   own left padding (base 10px + a gentle Notion-ish 14px step), not a
-   container margin, so a row's hover/selection pill still runs the sidebar's
-   full width — only the icons and text sit indented under the repo header. */
-.sidebar-repo-lanes .sidebar-group-header {
-	padding-left: 24px;
-}
-.sidebar-repo-lanes .sidebar-item {
-	padding-left: 24px;
-}
-/* A workspace is one level below its status lane, so take one more 14px step.
-   Without this more-specific rule the two selectors above collapse onto the
-   same padding and status headers look like peers of their own rows. */
-.sidebar-repo-lanes .sidebar-status-group .sidebar-item {
-	padding-left: 38px;
-}
-
-/* The same nesting cue for the status-grouping (and Pinned / review) view:
-   workspace rows step in one gentle 14px inset under their band header (the
-   header stays at the list's 6px edge), so a row reads as a child of its lane
-   rather than a sibling of the header. Scoped to the workspace-bearing bands;
-   the inset lives in the row's own left padding so its hover/selection pill
-   still runs the sidebar's full width — only the icons and text indent. */
-.sidebar-status-group .sidebar-item,
-.sidebar-group--pinned .sidebar-item,
-.sidebar-group--review .sidebar-item {
-	padding-left: 24px;
-}
-/* Inbox mode is a flat activity-ranked list, not a nesting hierarchy — its
-   bands are date/state dividers, so rows keep the base 10px edge and sit
-   flush under their headers, email-style. */
-.sidebar-inbox-group .sidebar-item {
-	padding-left: 10px;
-}
-/* …but flush on phones — horizontal space is scarce there, so the rows share
-   one left edge with their header (the desktop indent is a nicety, the band +
-   collapse already conveys the grouping). Its own media block, kept beside the
-   desktop rule so the pair reads together. */
-@media (max-width: 720px) {
-	.sidebar-status-group .sidebar-item,
-	.sidebar-group--pinned .sidebar-item,
-	.sidebar-group--review .sidebar-item,
-	/* Support and automation bands render their rows loose (ungrouped) when
-	   collapsed to a flat list — without this they'd keep the desktop inset and
-	   sit 4px right of every other row on a phone. */
-	.sidebar-independent-scroll > .sidebar-item {
-		padding-left: 10px;
-	}
-}
+/* Rows nested under a repo band, a status lane or an inbox band take no inset
+   of their own: every row in the list keeps the base 10px edge, so all their
+   marks and titles share one rail top to bottom. The nesting is carried by the
+   headers instead — a lane header is a small glyphless caption that starts
+   left of that rail (see .sidebar-lane-group), which reads as a divider over
+   its rows without pushing them right. Stepping the rows in as well cost real
+   title width on every level and fanned the list out across three left edges. */
 
 /* People and Automations render one collapsed row per group, so the 14px
    inter-group margin leaves them floating far apart. Drop it so consecutive
@@ -2208,29 +2165,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	   person filter's feedback is the highlighted People row, not this title. */
 	.sidebar-workspace-title {
 		display: none;
-	}
-	/* Flatten the nesting indent under each status lane — that extra left inset is
-	   a desktop-only affordance. Mobile rows use the same 10px inner inset as their
-	   group headers, so both the leading marks and titles share one rail. */
-	.sidebar-status-group .sidebar-item,
-	.sidebar-group--pinned .sidebar-item {
-		padding-left: 10px;
-	}
-	/* Under the project groupings ("Project", "Project and status", "Project
-	   and inbox"), drop the lane inset entirely on mobile so the repo head, its
-	   nested lanes/bands, and the workspace rows all share one left edge. The
-	   desktop indent is a nice nesting cue but it eats scarce horizontal space
-	   on a phone; the repo band + collapse already conveys the grouping. These
-	   out-specify the phone list's shared content rail further down, so they
-	   have to restate its 4px inset. */
-	.sidebar-repo-lanes .sidebar-group-header {
-		padding-left: 4px;
-	}
-	.sidebar-repo-lanes .sidebar-item {
-		padding-left: 4px;
-	}
-	.sidebar-repo-lanes .sidebar-status-group .sidebar-item {
-		padding-left: 4px;
 	}
 }
 /* On touch, the full action set (Rename / Move / Archive) is still reached by

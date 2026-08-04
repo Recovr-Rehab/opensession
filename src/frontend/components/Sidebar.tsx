@@ -4321,10 +4321,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const gkey = `${ns}status:snoozed`;
 		const open = isOpen(gkey);
 		return (
-			<div
-				className={`sidebar-status-group sidebar-lane-group${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
-				key={gkey}
-			>
+			<div className="sidebar-status-group sidebar-lane-group" key={gkey}>
 				<button
 					// Same bare .sidebar-group-header as the lanes: utilities here
 					// would out-specify its phone/nesting overrides and leave this
@@ -4491,12 +4488,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				const gkey = `${ns}inbox:${b.key}`;
 				const open = isOpen(gkey);
 				return (
-					// Nested under a repo band the rows keep the normal lane inset;
-					// the flush email-style edge belongs to the flat mode only.
-					<div
-						className={`sidebar-status-group sidebar-lane-group${ns ? "" : " sidebar-inbox-group"}`}
-						key={gkey}
-					>
+					<div className="sidebar-status-group sidebar-lane-group" key={gkey}>
 						<button
 							// Bare .sidebar-group-header like the status lanes — see
 							// renderStatusLanes for why utilities stay off it.
@@ -5547,9 +5539,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					(() => {
 						const open = isOpen("needsreview");
 						return (
-							<div
-								className={`sidebar-group sidebar-group--review${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
-							>
+							<div className="sidebar-group sidebar-group--review">
 								<button
 									className="sidebar-group-header"
 									onClick={() => toggleGroup("needsreview")}
@@ -5587,9 +5577,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					(() => {
 						const open = isOpen("awaitingreview");
 						return (
-							<div
-								className={`sidebar-group sidebar-group--review${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
-							>
+							<div className="sidebar-group sidebar-group--review">
 								<button
 									className="sidebar-group-header"
 									onClick={() => toggleGroup("awaitingreview")}
@@ -5892,9 +5880,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					};
 					const pinnedCount = entries.length;
 					return (
-						<div
-							className={`sidebar-group sidebar-group--pinned${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
-						>
+						<div className="sidebar-group sidebar-group--pinned">
 							{/* Same header treatment as the status lanes below. */}
 							<button
 								className="sidebar-group-header"
