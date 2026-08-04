@@ -39,6 +39,18 @@ struct SessionView: View {
     /// from a navigation aid into a notification.
     @State private var newBelow = false
 
+    /// Keep the view welded to the latest for a moment after opening.
+    ///
+    /// A conversation opens at the bottom, but its rows keep settling for a
+    /// second or two afterwards — markdown parses asynchronously and the lazy
+    /// stack realizes rows as it goes — and every one of those height changes
+    /// nudges the bottom further down than the anchor recovers. The hold
+    /// re-pins through that window, and any real scroll gesture ends it
+    /// immediately so it can never fight the reader.
+    @State private var holdingAtLatest = true
+    @State private var holdTask: Task<Void, Never>?
+    private let initialHoldSeconds: Double = 2.5
+
     /// Whether the reader is at (or near) the bottom, from live scroll
     /// geometry. New AI output only auto-scrolls while true; scrolling up to
     /// read releases the pin so streams don't yank the reader back down.
@@ -162,7 +174,8 @@ struct SessionView: View {
                     // scrolled-up transcript is flicking through everything
                     // that arrived meanwhile.
                     .overlay(alignment: .bottom) {
-                        if !pinnedToBottom, !viewModel.displayBlocks.isEmpty {
+                        if !pinnedToBottom, !holdingAtLatest,
+                           !viewModel.displayBlocks.isEmpty {
                             ScrollToLatestPill(hasNewOutput: newBelow) {
                                 newBelow = false
                                 scrollToBottom(proxy, animated: true)
@@ -172,6 +185,21 @@ struct SessionView: View {
                         }
                     }
                     .animation(.snappy(duration: 0.22, extraBounce: 0), value: pinnedToBottom)
+                    // A scroll gesture is the reader taking over: the
+                    // opening hold ends the moment they touch the transcript.
+                    .onScrollPhaseChange { _, phase in
+                        if phase == .interacting { endHold() }
+                    }
+                    // Both entry points into a conversation arm the hold: a
+                    // cached one is already loaded when the view appears, so
+                    // waiting on the loading flag alone would leave the hold
+                    // armed forever and the return pill permanently hidden.
+                    .onAppear { beginHold(proxy) }
+                    // The transcript exists now: hold it at the latest
+                    // while its rows settle.
+                    .onChange(of: viewModel.isLoadingConversation) { _, loading in
+                        if !loading { beginHold(proxy) }
+                    }
                     .onChange(of: viewModel.pendingQuestion) {
                         // A question needs eyes even if they've scrolled away.
                         scrollToBottom(proxy, animated: true)
@@ -193,7 +221,18 @@ struct SessionView: View {
                     // landing inside an existing turn leaves the BLOCK count
                     // unchanged, and following new output would stop.
                     .onChange(of: viewModel.displayItems.count) {
-                        if pinnedToBottom {
+                        if pinnedToBottom || holdingAtLatest {
+                            scrollToBottom(proxy, animated: true)
+                        } else {
+                            newBelow = true
+                        }
+                    }
+                    // Notes interleave into the blocks without touching
+                    // `displayItems`, so they need their own trigger — the
+                    // backfill lands a beat after the transcript and would
+                    // otherwise drop a note silently below the fold.
+                    .onChange(of: viewModel.notes.count) {
+                        if pinnedToBottom || holdingAtLatest {
                             scrollToBottom(proxy, animated: true)
                         } else {
                             newBelow = true
@@ -543,6 +582,29 @@ struct SessionView: View {
                 )
             }
         }
+    }
+
+    /// Re-pin to the latest for a beat while the opening transcript settles.
+    private func beginHold(_ proxy: ScrollViewProxy) {
+        holdTask?.cancel()
+        holdingAtLatest = true
+        holdTask = Task {
+            // Re-assert during the window, not just at its end: a row that
+            // grows at 0.4s pushes the bottom away, and one scroll at 2.5s
+            // would leave the reader looking at the wrong place until then.
+            for _ in 0..<Int(initialHoldSeconds / 0.25) {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled, holdingAtLatest else { return }
+                scrollToBottom(proxy, animated: false)
+            }
+            holdingAtLatest = false
+        }
+    }
+
+    private func endHold() {
+        holdTask?.cancel()
+        holdTask = nil
+        holdingAtLatest = false
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {

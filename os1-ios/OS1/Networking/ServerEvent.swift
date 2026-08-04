@@ -20,9 +20,30 @@ enum ServerEvent: Sendable {
     case askResolved(sessionId: String, questionId: String)
     case notice(String)
     case serverError(String)
+    /// A team note landed on some session's chat channel (broadcast to every
+    /// client, so the receiver filters by channel).
+    case chatNote(channel: String, note: SessionNote)
     case ignored
 
+    /// Enough of a frame to route it — chat frames can't go through
+    /// `RawFrame`.
+    private struct FrameType: Decodable { let type: String }
+
+    /// A chat broadcast. Peeled off before `RawFrame` because it carries an
+    /// OBJECT in `message` where every other frame carries a string: decoding
+    /// it through `RawFrame` throws, and the frame would be silently dropped.
+    private struct ChatFrame: Decodable {
+        let channel: String
+        let message: SessionNote
+    }
+
     static func parse(_ data: Data) -> ServerEvent {
+        if let kind = try? JSONDecoder().decode(FrameType.self, from: data),
+           kind.type == "chat_message" || kind.type == "chat_message_updated" {
+            guard let frame = try? JSONDecoder().decode(ChatFrame.self, from: data)
+            else { return .ignored }
+            return .chatNote(channel: frame.channel, note: frame.message)
+        }
         guard let frame = try? JSONDecoder().decode(RawFrame.self, from: data) else {
             return .ignored
         }

@@ -73,6 +73,13 @@ final class SessionViewModel {
     private(set) var prLoadFailed = false
     private var prTask: Task<Void, Never>?
 
+    // ── Team notes ──
+
+    /// Human-to-human notes on this session, interleaved into the transcript
+    /// by the time they were written. The agent never sees them.
+    private(set) var notes: [SessionNote] = []
+    private var notesTask: Task<Void, Never>?
+
     // ── Per-session run settings ──
     /// Current model id ("" = server default). Changing routes through the
     /// `/model` slash command, which persists + notices like the web picker.
@@ -332,6 +339,7 @@ final class SessionViewModel {
         stopped = false
         connect()
         loadPr()
+        loadNotes()
     }
 
     func stop() {
@@ -351,8 +359,27 @@ final class SessionViewModel {
         creationRetryTask?.cancel()
         deliveringPruneTask?.cancel()
         prTask?.cancel()
+        notesTask?.cancel()
         socket?.disconnect()
         socket = nil
+    }
+
+    /// Backfill the session's notes. Live ones arrive over the WS, so this
+    /// runs once per connect; a failure just leaves the transcript noteless.
+    private func loadNotes() {
+        notesTask?.cancel()
+        notesTask = Task { [weak self] in
+            guard let sessionId = self?.session.id,
+                  let loaded = try? await OS1API.sessionNotes(sessionId: sessionId),
+                  let self, !Task.isCancelled
+            else { return }
+            // Anything that arrived over the WS while this was in flight wins.
+            let known = Set(self.notes.map(\.id))
+            let merged = loaded.filter { !known.contains($0.id) } + self.notes
+            guard merged != self.notes else { return }
+            self.notes = merged.sorted { $0.ts < $1.ts }
+            self.rebuildDisplayItems()
+        }
     }
 
     /// Fire-and-forget PR refresh (open, foreground, run end).
@@ -808,6 +835,19 @@ final class SessionViewModel {
                 self.socket?.watch(sessionId: self.session.id)
             }
 
+        case .chatNote(let channel, let note)
+            where channel == SessionNote.channel(for: session.id):
+            // Chat frames go to every client, so an edit of an existing note
+            // replaces it in place rather than appending a duplicate.
+            if let index = notes.firstIndex(where: { $0.id == note.id }) {
+                guard notes[index] != note else { return }
+                notes[index] = note
+            } else {
+                notes.append(note)
+                notes.sort { $0.ts < $1.ts }
+            }
+            rebuildDisplayItems()
+
         case .notice(let message), .serverError(let message):
             notice = message.isEmpty ? nil : message
 
@@ -883,7 +923,8 @@ final class SessionViewModel {
         displayBlocks = TranscriptGrouping.blocks(
             from: items,
             live: isRunning || isStreaming,
-            worktreeDir: session.worktreeDir
+            worktreeDir: session.worktreeDir,
+            notes: notes
         )
     }
 

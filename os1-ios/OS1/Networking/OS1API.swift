@@ -86,6 +86,19 @@ enum OS1API {
         return try await get("/api/sessions/\(session)/subagent/\(agent)")
     }
 
+    /// Team notes on a session, oldest first — the session's chat channel.
+    /// Live notes arrive over the WS as `chat_message`; this is the backfill.
+    static func sessionNotes(sessionId: String) async throws -> [SessionNote] {
+        struct NotesResponse: Decodable, Sendable { let messages: [SessionNote]? }
+        let channel = SessionNote.channel(for: sessionId)
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+            ?? SessionNote.channel(for: sessionId)
+        let response: NotesResponse = try await get(
+            "/api/chat/messages?channel=\(channel)&limit=200"
+        )
+        return response.messages ?? []
+    }
+
     /// Full content for an entry the WS delivered clamped.
     static func fullEntryContent(sessionId: String, entryId: String) async throws -> String {
         struct EntryResponse: Decodable { let content: String }

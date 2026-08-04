@@ -38,7 +38,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   for an edit, the command for a shell call, file content for a write.
   A `Task` row opens the sub-agent's own transcript in a sheet (polled while
   the worker runs, via `GET /api/sessions/:id/subagent/:agentId`), and a
-  footer's file chip opens that file's diff for the turn.
+  footer's file chip opens that file's diff for the turn. Team notes (the
+  session's chat channel, `session:<id>`) interleave into the transcript by
+  the time they were written — the same human-to-human asides the web viewer
+  shows, which the agent never sees.
   Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
   refetch on demand), system events are toned by severity, and a floating pill
   offers the way back down — reading `New messages` when output arrived while
@@ -110,6 +113,7 @@ OS1/
     ModelCatalog.swift       Model/reasoning options from /api/models
     ToolPresentation.swift   Canonical tool names, families, summaries, ±lines
     SubagentTranscript.swift A Task call's sub-agent conversation payload
+    SessionNote.swift        A team note on the session's chat channel
     PrDetails.swift          PR panel payload
     SettingsModels.swift     Settings payloads (tools/personal/workspace)
   Networking/
@@ -134,6 +138,7 @@ OS1/
     TurnBlockView.swift      Work fold header + turn footer + file chips
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     SubagentView.swift       A Task call's sub-agent transcript, in a sheet
+    NoteBubble.swift         Team note, interleaved into the transcript
     MarkdownBody.swift       Streaming/durable markdown rendering
     AskQuestionCard.swift    Options + free text answer
     PrPanel.swift            Read-only pull-request panel
