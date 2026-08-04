@@ -16,9 +16,11 @@ import {
   IconPaperclip,
   IconAtSign,
   IconCrosshair,
+  IconEye,
   IconNote,
   IconStopSquare,
 } from "./icons";
+import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
@@ -702,7 +704,7 @@ export function Composer({
           noteMode
             ? tintedSurface("var(--yellow)", 10, 6, 45)
             : askMode
-              ? tintedSurface("var(--blue)", 7, 4, 30)
+              ? tintedSurface("var(--green)", 7, 4, 30)
               : undefined
         }
         onDrop={handleDrop}
@@ -921,6 +923,53 @@ export function Composer({
               />
             </motion.div>
           )}
+
+          {/* Active-mode marker. Nothing renders in the ordinary state; when a
+              mode is on it names itself next to the "+", so the tinted surface
+              isn't the only thing saying which one. Each marker does the safe
+              thing on click: note mode is a reversible toggle, so it turns
+              itself off, while ask mode's only exit cuts a worktree — that one
+              opens the menu and lets you pick the labelled row instead. */}
+          <AnimatePresence initial={false}>
+            {!minimized && (noteMode || askMode) && (
+              <motion.div
+                key="mode-marker"
+                layout="position"
+                {...composerChipMotion}
+                // Phones pull the model pill to the front of the toolbar
+                // (order:-1 in global.css), which would otherwise wedge it
+                // between the "+" and this marker. Same order as the "+" wrap
+                // keeps the pair together — equal order falls back to DOM
+                // order, and the "+" is rendered first.
+                className="composer-pop-wrap max-[720px]:order-[-2]"
+              >
+                <Tooltip
+                  label={
+                    noteMode
+                      ? "Note mode — posts to the team; the agent won't see it. ⌘N to go back."
+                      : "Ask mode — this chat can read the code but not change it"
+                  }
+                >
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-meta font-medium transition-colors hover:bg-hover",
+                      noteMode
+                        ? "border-[color-mix(in_srgb,var(--yellow)_38%,transparent)] text-yellow"
+                        : "border-[color-mix(in_srgb,var(--green)_38%,transparent)] text-green",
+                    )}
+                    {...tapProps(() =>
+                      noteMode ? onNoteModeChange?.(false) : setMenu("add"),
+                    )}
+                    disabled={disabled}
+                  >
+                    {noteMode ? <IconNote size={15} /> : <IconEye size={15} />}
+                    {noteMode ? "Note" : "Ask"}
+                  </button>
+                </Tooltip>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="composer-spacer" />
 
           {/* Model + effort live together on the right edge (ChatGPT-style):
