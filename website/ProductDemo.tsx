@@ -9,7 +9,6 @@ export function ProductDemo() {
 				referrerPolicy="no-referrer"
 				sandbox="allow-scripts allow-same-origin"
 			/>
-			<figcaption>Interactive product preview</figcaption>
 		</figure>
 	);
 }

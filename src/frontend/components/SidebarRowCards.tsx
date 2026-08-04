@@ -107,18 +107,50 @@ function CardRows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
 	);
 }
 
-function CardFooter({
-	link,
+/**
+ * The "open this somewhere else" link every card ends on. The app ships no
+ * Tailwind Preflight (see styles/tailwind.css), so a bare `<a>` keeps the UA's
+ * underline and `global.css`'s accent link colour — which is why this has to
+ * say `no-underline` out loud, and why every card must go through it rather
+ * than hand-rolling an anchor and forgetting to.
+ */
+export function CardLink({
+	href,
+	title,
+	children,
+}: {
+	href: string;
+	title?: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<a
+			href={href}
+			target="_blank"
+			rel="noopener noreferrer"
+			title={title}
+			className="shrink-0 text-xs text-dim no-underline hover:text-fg"
+		>
+			{children}
+		</a>
+	);
+}
+
+/** The strip every card ends on: where this row leads on the left, when it
+ *  last changed on the right. */
+export function CardFooter({
+	children,
 	time,
 	timeTitle,
 }: {
-	link?: React.ReactNode;
+	/** Leading content — the CardLink, and for the workspace card its action. */
+	children?: React.ReactNode;
 	time: string;
 	timeTitle?: string;
 }) {
 	return (
 		<div className="mt-2.5 flex min-w-0 items-center gap-2 border-t border-line pt-2">
-			{link}
+			{children}
 			<span className="ml-auto shrink-0 text-[11px] text-faint" title={timeTitle}>
 				{time}
 			</span>
@@ -168,7 +200,11 @@ export function osReviewLabel(review: OsReview): React.ReactNode {
 	);
 }
 
-function checksLabel(checks: OpenPr["checks"]): React.ReactNode {
+/** Shared with the chat card, so one PR's checks read the same wherever the
+ *  sidebar surfaces it. */
+export function checksLabel(
+	checks: OpenPr["checks"] | undefined,
+): React.ReactNode {
 	if (!checks || checks.total === 0) return null;
 	if (checks.failed > 0)
 		return <span className="text-red">{checks.failed} failing</span>;
@@ -268,20 +304,16 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 			<CardRows rows={rows} />
 
 			<CardFooter
-				link={
-					<a
-						href={pr.url}
-						target="_blank"
-						rel="noopener noreferrer"
-						title={`Open on ${providerFromUrl(pr.url).name}`}
-						className="hovercard-mono shrink-0 text-xs text-dim hover:underline"
-					>
-						#{pr.number} ↗
-					</a>
-				}
 				time={`Updated ${relativeTime(pr.updatedAt)}`}
 				timeTitle={new Date(pr.updatedAt).toLocaleString()}
-			/>
+			>
+				<CardLink
+					href={pr.url}
+					title={`Open on ${providerFromUrl(pr.url).name}`}
+				>
+					<span className="hovercard-mono">#{pr.number}</span> ↗
+				</CardLink>
+			</CardFooter>
 		</>
 	);
 }
@@ -360,19 +392,11 @@ export function SupportRowCard({
 			<CardRows rows={rows} />
 
 			<CardFooter
-				link={
-					<a
-						href={plainThreadUrl(t.id)}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="shrink-0 text-xs text-dim hover:underline"
-					>
-						Open in Plain ↗
-					</a>
-				}
-				time={stamp ? relativeTime(stamp) : ""}
+				time={stamp ? `Updated ${relativeTime(stamp)}` : ""}
 				timeTitle={stamp ? new Date(stamp).toLocaleString() : undefined}
-			/>
+			>
+				<CardLink href={plainThreadUrl(t.id)}>Open in Plain ↗</CardLink>
+			</CardFooter>
 		</>
 	);
 }

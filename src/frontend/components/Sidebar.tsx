@@ -125,6 +125,9 @@ import { ContextMenu, Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import {
+	CardFooter,
+	CardLink,
+	checksLabel,
 	osReviewLabel,
 	pointerCanHover,
 	RowCardPopup,
@@ -580,10 +583,14 @@ function FeedRow({
 						{item.preview}
 					</div>
 				)}
-				<div className="mt-2.5 flex items-center gap-2 border-t border-line pt-2 text-[11px] text-faint">
-					{session && <span>Linked session</span>}
-					{ts && <span className="ml-auto">{relativeTime(ts)}</span>}
-				</div>
+				<CardFooter
+					time={ts ? `Updated ${relativeTime(ts)}` : ""}
+					timeTitle={ts ? new Date(ts).toLocaleString() : undefined}
+				>
+					{session && (
+						<span className="shrink-0 text-xs text-dim">Linked session</span>
+					)}
+				</CardFooter>
 			</RowCardPopup>
 			{menu.ctxMenu && (
 				<SidebarCtxMenu
@@ -7483,7 +7490,12 @@ function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 	if (s.loop)
 		rows.push(["Loop", `Every ${s.loop.intervalMinutes} min`]);
 
-	rows.push(["Last active", relativeTime(s.lastActivity)]);
+	// The PR facts go in rows, worded exactly as the PR row's card words them —
+	// the state itself is already the card's status line, so it isn't repeated.
+	if (s.prReviewDecision) rows.push(["Review", prettyReview(s.prReviewDecision)]);
+	const checks = checksLabel(s.prChecks);
+	if (checks) rows.push(["Checks", checks]);
+
 	rows.push(["Created", relativeTime(s.createdAt)]);
 
 	return (
@@ -7538,30 +7550,22 @@ function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 				))}
 			</div>
 
-			{s.prUrl && (
-				<div className="hovercard-pr">
-					<span className="hovercard-mono">
-						{s.prNumber ? `#${s.prNumber}` : "PR"}
-					</span>
-					<span className={`hovercard-pr-state hovercard-pr-${prTone(s)}`}>
-						{prStateLabel(s)}
-					</span>
-					{s.prReviewDecision && (
-						<span className="hovercard-pr-review">
-							{prettyReview(s.prReviewDecision)}
-						</span>
-					)}
-					{s.prChecks && s.prChecks.total > 0 && (
-						<span className="hovercard-checks">
-							{s.prChecks.failed > 0
-								? `${s.prChecks.failed} failing`
-								: s.prChecks.pending > 0
-									? `${s.prChecks.pending} pending`
-									: "checks pass"}
-						</span>
-					)}
-				</div>
-			)}
+			<CardFooter
+				time={`Updated ${relativeTime(s.lastActivity)}`}
+				timeTitle={new Date(s.lastActivity).toLocaleString()}
+			>
+				{s.prUrl && (
+					<CardLink
+						href={s.prUrl}
+						title={`Open on ${providerFromUrl(s.prUrl).name}`}
+					>
+						<span className="hovercard-mono">
+							{s.prNumber ? `#${s.prNumber}` : "PR"}
+						</span>{" "}
+						↗
+					</CardLink>
+				)}
+			</CardFooter>
 		</>
 	);
 }
@@ -7604,11 +7608,6 @@ function hoverState(s: UnifiedSession): {
 	return { label: "Idle", tone: "dim", dotClass: "hovercard-dot-dim" };
 }
 
-function prStateLabel(s: UnifiedSession): string {
-	if (s.prState === "MERGED") return "merged";
-	if (s.prState === "CLOSED") return "closed";
-	return s.prIsDraft ? "draft" : "open";
-}
 function prTone(s: UnifiedSession): string {
 	if (s.prState === "MERGED") return "merged";
 	if (s.prState === "CLOSED") return "closed";
@@ -8045,7 +8044,10 @@ function WsCardBody({
 		<>
 			<WsOverviewInfo row={row} ov={ov} />
 
-			<div className="mt-2.5 flex min-w-0 items-center gap-2 border-t border-line pt-2">
+			<CardFooter
+				time={`Updated ${relativeTime(row.lastActivity)}`}
+				timeTitle={new Date(row.lastActivity).toLocaleString()}
+			>
 				{/* The single main action, colored by what the workspace needs next:
 				    answer the blocked question (accent), merge the ready PR (green),
 				    review the not-ready PR (neutral), or archive merged work (purple). */}
@@ -8096,27 +8098,22 @@ function WsCardBody({
 					</a>
 				) : null}
 				{prChat?.prUrl && (
-					<a
+					<CardLink
 						href={prChat.prUrl}
-						target="_blank"
-						rel="noopener noreferrer"
-						className={`shrink-0 text-xs no-underline hovercard-pr-${prTone(prChat)}`}
+						title={`Open on ${providerFromUrl(prChat.prUrl).name}`}
 					>
-						{prChat.prNumber ? `#${prChat.prNumber}` : "PR"} ↗
-					</a>
+						<span className="hovercard-mono">
+							{prChat.prNumber ? `#${prChat.prNumber}` : "PR"}
+						</span>{" "}
+						↗
+					</CardLink>
 				)}
 				{prStatusBits.length > 0 && (
 					<span className="min-w-0 truncate text-[11px] text-faint">
 						{prStatusBits.join(" · ")}
 					</span>
 				)}
-				<span
-					className="ml-auto shrink-0 text-[11px] text-faint"
-					title={new Date(row.lastActivity).toLocaleString()}
-				>
-					{relativeTime(row.lastActivity)}
-				</span>
-			</div>
+			</CardFooter>
 		</>
 	);
 }
