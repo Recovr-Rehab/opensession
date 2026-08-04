@@ -276,6 +276,31 @@ export function updateWorkspace(
 }
 
 /**
+ * Re-point a workspace at a different worktree — the repo-switch case, where the
+ * workspace was minted around a checkout its only chat has since left. Unlike
+ * updateWorkspace, an omitted branch/worktreeDir CLEARS the field rather than
+ * leaving it: switching into a shared-checkout repo leaves no per-chat worktree
+ * for a sibling chat to inherit, and a stale one would send it to the abandoned
+ * checkout. Identity (key, prNumber, ticket/feed refs) is untouched.
+ */
+export function restampWorkspaceWorktree(
+  id: string,
+  next: { repo: string; branch?: string; worktreeDir?: string },
+): Workspace | null {
+  const cur = getWorkspace(id);
+  if (!cur) return null;
+  const { branch: _b, worktreeDir: _w, ...rest } = cur;
+  const updated: Workspace = {
+    ...rest,
+    repo: next.repo,
+    ...(next.branch ? { branch: next.branch } : {}),
+    ...(next.worktreeDir ? { worktreeDir: next.worktreeDir } : {}),
+  };
+  writeJsonAtomic(fileFor(id), updated);
+  return updated;
+}
+
+/**
  * Delete a workspace. Every chat belongs to exactly one workspace, so the caller
  * is responsible for re-homing member chats first (never orphan them). This only
  * removes the workspace metadata file.

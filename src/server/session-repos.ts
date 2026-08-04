@@ -15,7 +15,12 @@ import {
 	worktreeHasWork,
 } from "./worktree";
 import { hasRemoteWorkspace } from "./sandbox";
-import { findWorkspaceByWorktree, type Workspace } from "./workspaces";
+import {
+	findWorkspaceByWorktree,
+	getWorkspace,
+	restampWorkspaceWorktree,
+	type Workspace,
+} from "./workspaces";
 import { sessionPrBranch } from "./session-pr-target";
 import {
 	renderSessionMemoryNote,
@@ -23,7 +28,11 @@ import {
 } from "./session-memory";
 import { DESK_NOTE } from "./desk";
 import { personalPromptNoteFor } from "./personal-prompts";
-import { findSession, touchBackstageSession } from "./session-cache";
+import {
+	findSession,
+	getCachedSessions,
+	touchBackstageSession,
+} from "./session-cache";
 import type { AttachedRepo, LinkedPr, StackedOn, UnifiedSession } from "./types";
 import { defaultRepo } from "./config";
 
@@ -431,6 +440,34 @@ export async function switchPrimaryRepo(
 		branch,
 		attachedRepos,
 	});
+	// The chat's workspace was minted around the repo we're leaving, and its repo
+	// is what the sidebar bands the row under (wsRowRepo) while its branch +
+	// worktreeDir are the template a sibling chat inherits. Left stamped, the row
+	// files under the abandoned repo — the chat's own header showing the new one —
+	// and a new chat in the workspace starts in a worktree the work has left.
+	// Re-stamp only when this chat is the workspace's sole member and the
+	// workspace still points at the worktree being left: with siblings still
+	// there, or on a PR/ticket workspace that deliberately names another repo,
+	// the stamp isn't ours to move.
+	const workspaceId = session.projectId;
+	if (workspaceId) {
+		const ws = getWorkspace(workspaceId);
+		const soleMember = !getCachedSessions().some(
+			(s) => s.projectId === workspaceId && s.id !== sessionId,
+		);
+		if (
+			ws &&
+			soleMember &&
+			ws.repo === session.repo &&
+			(!ws.worktreeDir || ws.worktreeDir === session.worktreeDir)
+		)
+			restampWorkspaceWorktree(workspaceId, {
+				repo: target.id,
+				// A shared-checkout repo has no per-chat worktree, so the template
+				// clears instead of pointing siblings at the live main checkout.
+				...(target.sharedCheckout ? {} : { branch, worktreeDir: wtPath }),
+			});
+	}
 	return { repo: target.id, branch, worktreeDir: wtPath };
 }
 
