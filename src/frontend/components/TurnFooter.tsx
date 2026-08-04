@@ -296,7 +296,7 @@ function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
       )}
       style={{ background: color }}
     >
-      {Glyph ? <Glyph size={flush ? 10 : 8} /> : extLabel(ext)}
+      {Glyph ? <Glyph size={flush ? 13 : 11} /> : extLabel(ext)}
     </span>
   );
 }
