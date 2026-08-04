@@ -155,11 +155,15 @@ export const TurnBlock = React.memo(function TurnBlock({
           userToggledRef.current = true;
           setExpanded(!expanded);
         }}
-        className="mx-auto flex w-full max-w-[var(--chat-col)] min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+        // Baseline, not centre: this row mixes its 14px title with 13px meta
+        // runs and a mono file list, and centring aligns boxes rather than
+        // text — the mono run landed a pixel off its neighbours. The icons
+        // carry no baseline of their own, so they keep centring individually.
+        className="mx-auto flex w-full max-w-[var(--chat-col)] min-w-0 cursor-pointer items-baseline gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
       >
         <span
           className={cn(
-            "grid size-5 flex-shrink-0 place-items-center leading-none text-faint transition-transform duration-150",
+            "grid size-5 flex-shrink-0 self-center place-items-center leading-none text-faint transition-transform duration-150",
             !expanded && "-rotate-90"
           )}
         >
@@ -169,7 +173,7 @@ export const TurnBlock = React.memo(function TurnBlock({
           {live ? "Working" : "Worked"}
         </span>
         {familyReps.length > 0 && (
-          <span className="flex flex-shrink-0 items-center gap-1.5 text-faint">
+          <span className="flex flex-shrink-0 self-center items-center gap-1.5 text-faint">
             {familyReps.map((it) => (
               <ToolGlyph key={it.id} toolName={it.toolName || "Tool"} size={15} />
             ))}
@@ -192,11 +196,7 @@ export const TurnBlock = React.memo(function TurnBlock({
           </span>
         )}
         {additions + deletions > 0 && (
-          <LineStats
-            additions={additions}
-            deletions={deletions}
-            className="text-label leading-4"
-          />
+          <LineStats additions={additions} deletions={deletions} />
         )}
         {live && !expanded && lastTool && !editedFilesLabel && (
           <span className="min-w-0 truncate font-mono text-label leading-4 text-faint">

@@ -495,13 +495,17 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
         aria-expanded={expanded}
         onClick={() => setExpanded(!expanded)}
         className={cn(
-          "group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors",
+          // Baseline, not centre: the 14px tool name, the 13px mono path and
+          // the 11px trailing meta all ride this row, and centring aligns
+          // their boxes rather than their text. Items with no text baseline
+          // (the glyph, the spinner, the failure mark) opt back into centring.
+          "group flex w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-md border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors",
           "hover:bg-hover/40"
         )}
       >
         <span
           className={cn(
-            "relative z-[1] flex size-[22px] flex-shrink-0 items-center justify-center",
+            "relative z-[1] flex size-[22px] flex-shrink-0 self-center items-center justify-center",
             failed ? "text-red/70" : "text-faint"
           )}
         >
@@ -575,9 +579,9 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
         {pending && <RunningToolDuration entry={entry} />}
 
         {pending ? (
-          <span className="size-[10px] flex-shrink-0 animate-spin rounded-full border-2 border-green-soft border-t-green" />
+          <span className="size-[10px] flex-shrink-0 self-center animate-spin rounded-full border-2 border-green-soft border-t-green" />
         ) : failed ? (
-          <span className="flex-shrink-0 text-red">
+          <span className="flex-shrink-0 self-center text-red">
             <IconX size={20} />
           </span>
         ) : !result ? (
