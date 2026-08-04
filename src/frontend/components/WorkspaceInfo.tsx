@@ -47,6 +47,7 @@ import {
 } from "../lib/workspace-overview";
 import { summarizeChecks } from "./PrStatusBar";
 import { openLightbox } from "./MediaLightbox";
+import { repoLabel } from "./RepoTile";
 import { SandboxBadge } from "./SandboxBadge";
 import {
 	IconBell,
@@ -1620,7 +1621,7 @@ export function WorkspaceInfo({
 			})
 		: null;
 	const meta = [
-		repo,
+		repo ? repoLabel(repo) : null,
 		`${chats.length} chat${chats.length === 1 ? "" : "s"}`,
 		oldest?.startedBy ? `by ${oldest.startedBy}` : null,
 		started,

@@ -8,6 +8,7 @@ import { FeedWebPane, refWebPanel } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { PrPanel } from "./PrPanel";
+import { repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
@@ -169,7 +170,7 @@ export function WorkspacePane({
 					{workspace.repo && (
 						<div className="flex items-center gap-2 min-w-0">
 							<span className="text-faint shrink-0">Repo</span>
-							<span className="truncate">{workspace.repo}</span>
+							<span className="truncate">{repoLabel(workspace.repo)}</span>
 						</div>
 					)}
 					{workspace.branch && (
@@ -304,7 +305,7 @@ export function WorkspacePane({
 						{workspace.name}
 					</div>
 					<div className="text-dim text-supporting mt-1 flex items-center gap-2 flex-wrap">
-						{workspace.repo && <span>{workspace.repo}</span>}
+						{workspace.repo && <span>{repoLabel(workspace.repo)}</span>}
 						{workspace.branch && (
 							<span className="text-label">{workspace.branch}</span>
 						)}
