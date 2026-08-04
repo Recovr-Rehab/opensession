@@ -1462,9 +1462,14 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	border-radius: inherit;
 }
 .repo-tile--app-icon img {
-	/* The app icon fills its source canvas; GitHub's Tella avatar includes
-	   transparent breathing room. Match their optical size inside equal tiles. */
-	transform: scale(0.8);
+	/* The app icon spends 80% of its canvas on artwork where a GitHub avatar
+	   spends 62%, so it needs trimming to sit at the same size — but matching
+	   those areas exactly (scale 0.78) left it reading noticeably smaller than
+	   the saturated avatars beside it. It's a black-and-white plate with a
+	   generous corner radius: on either theme one half sinks into the panel,
+	   and the rounder silhouette costs it more area still. Trim it less so the
+	   two read the same weight rather than measure the same. */
+	transform: scale(0.9);
 }
 
 .sidebar-list {
@@ -1753,6 +1758,14 @@ body:is(.resizing-sidebar, .resizing-panel) {
 .sidebar-lane-group > .sidebar-group-header {
 	font-size: 12px;
 	font-weight: 600;
+}
+/* A glyph's 22px slot carries ~4px of its own padding before the ink starts, so
+   a bare label at the slot's box edge still sat 4px LEFT of every mark around
+   it — the repo tile above read as indented against its own lanes. Pad the
+   label, not the header, so this holds at both breakpoints (the list's base
+   inset differs) and the hover pill keeps running the sidebar's full width. */
+.sidebar-lane-group > .sidebar-group-header > .sidebar-group-name {
+	padding-left: 4px;
 }
 
 .sidebar-group-chevron {
