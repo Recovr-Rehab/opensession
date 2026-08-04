@@ -2850,15 +2850,26 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			run: () => navigate({ view: "settings" }),
 		},
 	];
-	const openSession = (id: string) => {
+	const openSession = (id: string, created?: UnifiedSession | null) => {
 		const known = sessions.some(
 			(session) => session.id === id || session.aliasIds?.includes(id),
 		);
 		if (!known) {
-			setPendingSessionId(id);
-			setPendingNewWorkspace(false);
-			clearTimeout(pendingTimer.current);
-			pendingTimer.current = setTimeout(() => setPendingSessionId(null), 30000);
+			// A caller that just created the chat (Auto-fix) hands us the server's
+			// own copy — its file is written before the response — so drop it
+			// straight into the list and open the real chat as a new tab instead of
+			// flashing "Starting a new chat…" until the next poll. Sticky so an
+			// in-flight poll that predates the create can't take it away again.
+			if (created) inject(created, { sticky: true });
+			else {
+				setPendingSessionId(id);
+				setPendingNewWorkspace(false);
+				clearTimeout(pendingTimer.current);
+				pendingTimer.current = setTimeout(
+					() => setPendingSessionId(null),
+					30000,
+				);
+			}
 			refresh();
 		}
 		navigate({ view: "session", id });
@@ -3539,7 +3550,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 									connected={connected}
 									send={send}
 									addHandler={addHandler}
-									onOpenSession={(id) => navigate({ view: "session", id })}
+									onOpenSession={openSession}
 								/>
 							) : (
 								<div className="panel-placeholder">

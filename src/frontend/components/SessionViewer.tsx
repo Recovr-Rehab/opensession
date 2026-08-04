@@ -256,8 +256,10 @@ interface Props {
 	    header relationship chips. */
 	parentSession?: RelatedSession | null;
 	workerSessions?: RelatedSession[];
-	/** Navigate to another session (used by the relationship chips). */
-	onOpenSession?: (id: string) => void;
+	/** Navigate to another session (used by the relationship chips). `created` is
+	    the server's copy of a chat the panel just made (Auto-fix), so the app can
+	    open it without a loading placeholder. */
+	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
 	onOpenNewSession: (prefill: NewSessionPrefill) => void;
 	/** Mirror live run state into the app-level session list for sidebar rows. */
 	onRunningChange?: (id: string, isRunning: boolean) => void;
@@ -4521,9 +4523,9 @@ export function SessionViewer({
 													text,
 												}));
 											}}
-											onOpenSession={(id) => {
+											onOpenSession={(id, created) => {
 												setInfoPageOpen(false);
-												onOpenSession?.(id);
+												onOpenSession?.(id, created);
 											}}
 											liveMediaCount={liveMediaCount}
 											liveMedia={liveOverviewMedia}
@@ -5465,7 +5467,7 @@ export function SessionViewer({
 												text,
 											}))
 										}
-										onOpenSession={(id) => onOpenSession?.(id)}
+										onOpenSession={(id, created) => onOpenSession?.(id, created)}
 										liveMediaCount={liveMediaCount}
 										liveMedia={liveOverviewMedia}
 									/>

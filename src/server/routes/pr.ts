@@ -918,7 +918,16 @@ export async function handlePrRoutes(
 				reportBack: false,
 				user: requestUser(ctx, body?.user) || "Someone",
 			});
-			return Response.json({ ok: true, bksId: id, openChat: true });
+			// Hand back the session itself, not just its id: createSession awaits
+			// the file write, so the UI can drop the fresh chat straight into its
+			// list and open the real viewer instead of sitting on a "Starting a
+			// new chat…" placeholder until the next sessions poll catches up.
+			return Response.json({
+				ok: true,
+				bksId: id,
+				openChat: true,
+				session: findSession(id) ?? null,
+			});
 		}
 
 		const { triggerPrAction } = await import("../../agents/github/trigger");

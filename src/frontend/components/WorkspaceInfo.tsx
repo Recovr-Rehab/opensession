@@ -34,6 +34,7 @@ import type {
 	GitStatusInfo,
 	PrCheck,
 	PrDetails,
+	UnifiedSession,
 } from "../lib/types";
 import { formatPrCommentPrompt } from "./PrPanel";
 import { renderMarkdown } from "../lib/markdown";
@@ -130,8 +131,9 @@ interface Props {
 	/** Prefill the composer (the per-comment "Add to chat" hover action). */
 	onAddToInput?: (text: string) => void;
 	/** Navigate to a session — used by Auto-fix, which spins up a new chat in this
-	    workspace and jumps into it. */
-	onOpenSession?: (id: string) => void;
+	    workspace and jumps into it. `created` is the server's copy of a chat this
+	    panel just made, so the caller can open it without a loading placeholder. */
+	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
 	/** Prompt the session (the Status section's Commit action) — the WS `prompt`
 	    message. Absent in read-only mounts, where Commit is simply hidden. */
 	send?: (msg: any) => void;
@@ -734,7 +736,7 @@ function MichaelReviewCard({
 	sessionId: string;
 	repo?: string;
 	pr: PrDetails;
-	onOpenSession?: (id: string) => void;
+	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
 }) {
 	const [busy, setBusy] = useState<PrAgentAction | null>(null);
 	const [done, setDone] = useState<{ label: string; bksId?: string } | null>(
@@ -826,9 +828,10 @@ function MichaelReviewCard({
 			if (res.ok) {
 				if (action.kind === "review") setReviewQueued({ at: review?.at });
 				// Auto-fix opens a live chat in this workspace — jump straight into it
-				// instead of leaving a "posted on the PR" note behind.
+				// instead of leaving a "posted on the PR" note behind. The response
+				// carries the persisted chat, so it opens as a real tab right away.
 				if (res.openChat && res.bksId && onOpenSession) {
-					onOpenSession(res.bksId);
+					onOpenSession(res.bksId, res.session ?? null);
 					return;
 				}
 				setDone({ label: action.label, bksId: res.bksId });

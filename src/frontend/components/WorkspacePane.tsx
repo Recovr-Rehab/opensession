@@ -25,7 +25,9 @@ interface Props {
 	connected: boolean;
 	send: (msg: any) => void;
 	addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
-	onOpenSession: (id: string) => void;
+	/** `created` is the server's copy of a chat the info panel just made
+	    (Auto-fix), so the app can open it without a loading placeholder. */
+	onOpenSession: (id: string, created?: UnifiedSession | null) => void;
 	/** Open another PR in the review panel (stack map layer links). */
 	onOpenPr?: (repo: string, branch: string) => void;
 }
