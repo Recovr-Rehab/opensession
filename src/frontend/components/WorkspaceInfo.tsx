@@ -448,7 +448,7 @@ function FileRow({
 			>
 				<span
 					className={cn(
-						"inline-flex size-[18px] shrink-0 items-center justify-center rounded-[4px] text-[11px] font-bold",
+						"inline-flex size-[18px] shrink-0 items-center justify-center rounded-[calc(3px*var(--rf))] text-[11px] font-bold",
 						statusBadgeClass(file.status),
 					)}
 				>

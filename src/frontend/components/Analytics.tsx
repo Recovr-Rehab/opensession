@@ -218,7 +218,7 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 					<div className="mb-1 text-meta font-semibold text-fg">{shortDate(labels[hover])}</div>
 					{tooltipRows.map((r) => (
 						<div key={r.label} className="flex items-center gap-1.5 whitespace-nowrap text-meta leading-4.5">
-							<span className="size-2 shrink-0 rounded-[2px]" style={{ background: r.color }} />
+							<span className="size-2 shrink-0 rounded-[calc(1.5px*var(--rf))]" style={{ background: r.color }} />
 							<span className="text-dim">{r.label}</span>
 							<span className="ml-auto pl-3 font-medium tabular-nums text-fg">{formatValue(r.value)}</span>
 						</div>
@@ -235,7 +235,7 @@ function Legend({ series }: { series: Series[] }) {
 		<div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
 			{series.map((s) => (
 				<span key={s.label} className="flex items-center gap-1.5 text-meta text-dim">
-					<span className="size-2.5 rounded-[3px]" style={{ background: s.color }} />
+					<span className="size-2.5 rounded-xs" style={{ background: s.color }} />
 					{s.label}
 				</span>
 			))}
@@ -426,7 +426,7 @@ export function Analytics() {
 								<button
 									key={p.label}
 									type="button"
-									className={`cursor-pointer rounded-[5px] border-0 px-2.5 py-1 text-control-label font-medium ${
+									className={`cursor-pointer rounded-sm border-0 px-2.5 py-1 text-control-label font-medium ${
 										activePresetDays === p.days ? "bg-active text-fg" : "bg-transparent text-dim hover:text-fg"
 									}`}
 									onClick={() => {
@@ -643,7 +643,7 @@ export function Analytics() {
 											</span>
 											<span className="h-3 min-w-0 flex-1">
 												<span
-													className="block h-3 rounded-[3px]"
+													className="block h-3 rounded-xs"
 													style={{
 														width: `${Math.max(1.5, (100 * m.outputTokens) / derived.maxModelOutput)}%`,
 														background: i < 5 ? slot(i + 1) : OTHER_COLOR,

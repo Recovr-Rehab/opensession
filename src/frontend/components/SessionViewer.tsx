@@ -5135,7 +5135,7 @@ export function SessionViewer({
 								) : (
 									<>
 										{forkFrom && (
-											<div className="mb-2 flex items-center justify-between gap-3 rounded-[14px] border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-3 py-[7px] text-supporting text-fg">
+											<div className="mb-2 flex items-center justify-between gap-3 rounded-control border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-3 py-[7px] text-supporting text-fg">
 												<span>
 													⑂ Forking a new session from the selected message — type
 													the new direction.

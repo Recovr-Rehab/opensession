@@ -42,7 +42,7 @@ export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
   const logo = BRAND_LOGOS[key] || BRAND_LOGOS[key.split("-")[0]];
   return (
     <span
-      className="flex flex-shrink-0 items-center justify-center rounded-[9px] font-semibold"
+      className="flex flex-shrink-0 items-center justify-center rounded-md font-semibold"
       style={{
         width: size,
         height: size,

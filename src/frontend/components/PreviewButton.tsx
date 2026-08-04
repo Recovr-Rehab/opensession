@@ -33,7 +33,7 @@ function isPreviewable(session: UnifiedSession): boolean {
 }
 
 const headerIconBase =
-  "inline-flex cursor-pointer items-center justify-center rounded-[10px] border border-transparent bg-transparent px-[5px] py-[3px] text-faint no-underline";
+  "inline-flex cursor-pointer items-center justify-center rounded-md border border-transparent bg-transparent px-[5px] py-[3px] text-faint no-underline";
 
 const splitSegmentBase =
   "inline-flex items-center justify-center border border-line-strong bg-transparent text-dim";
@@ -42,7 +42,7 @@ const spinnerClass =
   "size-[10px] shrink-0 rounded-full border-[1.5px] border-line-strong border-t-accent animate-[preview-spin_0.7s_linear_infinite]";
 
 const popoverActionClass =
-  "w-full rounded-[5px] border border-[rgba(248,81,73,0.4)] bg-transparent px-2.5 py-[5px] text-xs font-semibold text-red disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent hover:bg-[rgba(248,81,73,0.12)]";
+  "w-full rounded-sm border border-[rgba(248,81,73,0.4)] bg-transparent px-2.5 py-[5px] text-xs font-semibold text-red disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent hover:bg-[rgba(248,81,73,0.12)]";
 
 /**
  * Header control for a session's local dev server ("Preview"). When the
@@ -582,7 +582,7 @@ export function PreviewButton({
           <a
             className={cn(
               splitSegmentBase,
-              "gap-1.5 whitespace-nowrap rounded-l-[7px] px-[11px] py-[5px] text-[13px] font-semibold text-green no-underline",
+              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-green no-underline",
               "hover:relative hover:z-[1] hover:border-[rgba(63,185,80,0.5)] hover:bg-[rgba(63,185,80,0.12)] hover:text-green",
             )}
             href={url}
@@ -604,7 +604,7 @@ export function PreviewButton({
           <button
             className={cn(
               splitSegmentBase,
-              "group gap-1.5 whitespace-nowrap rounded-l-[7px] px-[11px] py-[5px] text-[13px] font-semibold text-dim",
+              "group gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-dim",
               "cursor-pointer hover:relative hover:z-[1] hover:border-[rgba(248,81,73,0.4)] hover:bg-[rgba(248,81,73,0.1)] hover:text-red",
             )}
             onClick={stop}
@@ -621,7 +621,7 @@ export function PreviewButton({
           <button
             className={cn(
               splitSegmentBase,
-              "gap-1.5 whitespace-nowrap rounded-l-[7px] px-[11px] py-[5px] text-[13px] font-semibold text-dim opacity-45",
+              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-dim opacity-45",
               "cursor-not-allowed",
             )}
             onClick={openServices}
@@ -635,7 +635,7 @@ export function PreviewButton({
           <button
             className={cn(
               splitSegmentBase,
-              "gap-1.5 whitespace-nowrap rounded-l-[7px] px-[11px] py-[5px] text-[13px] font-semibold text-dim",
+              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-dim",
               "cursor-pointer hover:relative hover:z-[1] hover:border-accent hover:bg-accent-soft hover:text-fg",
             )}
             onClick={start}
@@ -684,7 +684,7 @@ export function PreviewButton({
             <button
               className={cn(
                 splitSegmentBase,
-                "-ml-px rounded-r-[7px] px-2 py-1",
+                "-ml-px rounded-r-[calc(5px*var(--rf))] px-2 py-1",
                 running
                   ? "text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))]"
                   : "text-dim",
