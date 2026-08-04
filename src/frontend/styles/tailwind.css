@@ -82,7 +82,7 @@
 	/* Type + shape */
 	--font-sans: var(--sans);
 	--font-mono: var(--mono);
-	--radius-panel: var(--radius);
+	--radius-panel: calc(var(--radius) * var(--rf));
 	/* The corner every button and chip in the chrome shares. global.css authors
 	   it as `calc(10px * var(--rf))` on .btn-viewer-pin / .btn-panel-toggle /
 	   .btn-viewer-newchat and friends; naming it here lets the Button primitive
@@ -97,11 +97,26 @@
 	   rem-based utility to 87.5% of its px design value (p-3 → 10.5px). Anchor
 	   the scales this codebase designs in px so utilities mean what they say. */
 	--spacing: 4px;
-	--radius-xs: 2px;
-	--radius-sm: 4px;
-	--radius-md: 6px;
-	--radius-lg: 12px;
-	--radius-xl: 15px;
+	/* Radii are authored the way global.css authors every corner in the app —
+	   `calc(<px> * var(--rf))` — so the one token flip at global.css's
+	   `@supports (corner-shape: squircle)` (0.85 round → 1.35 squircle) moves
+	   the legacy stylesheet and this scale together.
+
+	   These used to be two hand-maintained tiers: the plain values here, plus a
+	   parallel @supports block restating every step already bumped. Nothing kept
+	   them agreeing, and they had drifted — `rounded-panel` implied a 16.5px base
+	   rounded but a 14px base squircled, `rounded-2xl` 18.8px against 21.5px —
+	   so the two rendered different corners for what is meant to be one step, and
+	   any future --rf change had to be applied twice by hand. Deriving both from
+	   --rf is what makes a step here interchangeable with the same step in
+	   global.css. corner-shape itself needs no help: global.css already gives
+	   every `rounded-*` class `corner-shape: squircle`. */
+	--radius-xs: calc(2px * var(--rf));
+	--radius-sm: calc(4px * var(--rf));
+	--radius-md: calc(7px * var(--rf));
+	--radius-lg: calc(14px * var(--rf));
+	--radius-xl: calc(18px * var(--rf));
+	--radius-2xl: calc(22px * var(--rf));
 	--text-xs: 13px;
 	--text-sm: 13px;
 	--text-base: 14px;
@@ -151,44 +166,10 @@
 	}
 }
 
-@supports (corner-shape: squircle) {
-	.rounded {
-		border-radius: 3px;
-		corner-shape: squircle;
-	}
-
-	.rounded-xs {
-		border-radius: 3px;
-		corner-shape: squircle;
-	}
-
-	.rounded-sm {
-		border-radius: 6px;
-		corner-shape: squircle;
-	}
-
-	.rounded-md {
-		border-radius: 9px;
-		corner-shape: squircle;
-	}
-
-	.rounded-lg {
-		border-radius: 19px;
-		corner-shape: squircle;
-	}
-
-	.rounded-xl {
-		border-radius: 24px;
-		corner-shape: squircle;
-	}
-
-	.rounded-2xl {
-		border-radius: 29px;
-		corner-shape: squircle;
-	}
-
-	.rounded-panel {
-		border-radius: 19px;
-		corner-shape: squircle;
-	}
+/* Tailwind's bare `rounded` is a stock 0.25rem that predates this scale, and it
+   is the one radius utility with no theme token behind it. Point it at the
+   smallest step so the few remaining call sites stay on the grid; prefer
+   `rounded-sm` / `rounded-md` / `rounded-lg`. */
+.rounded {
+	border-radius: var(--radius-xs);
 }
