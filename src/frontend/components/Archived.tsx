@@ -1,4 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
+import { sessionSourceLabel } from "../lib/brand";
 import React, { useState, useMemo, useEffect } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
@@ -208,7 +209,8 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
                 <span className="home-row-title">{s.title}</span>
                 <span className="home-row-meta">
                   <span className={`source-chip source-${s.mode === "ask" ? "ask" : s.source}`}>
-                    {s.automation || (s.mode === "ask" ? "ask" : s.source)}
+                    {s.automation ||
+                      (s.mode === "ask" ? "ask" : sessionSourceLabel(s.source))}
                   </span>
                   {s.startedBy && <span>{s.startedBy}</span>}
                   <span>{relativeTime(s.lastActivity)}</span>

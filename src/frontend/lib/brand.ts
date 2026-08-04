@@ -59,6 +59,15 @@ export const DEFAULT_REPO_ID = INSTANCE.defaultRepoId || "opensession";
  *  consumers hide their "open in Plain" affordances. */
 export const PLAIN_WORKSPACE_ID = INSTANCE.plainWorkspaceId || null;
 
+/**
+ * A session's origin as shown in the UI. The `backstage` source id predates
+ * the rename and means "started in this product's own UI", so it displays as
+ * the product name; every other origin (slack/linear/cli) shows as-is. The id
+ * itself stays literal on the wire.
+ */
+export const sessionSourceLabel = (source: string) =>
+	source === "backstage" ? PRODUCT_NAME.toLowerCase() : source;
+
 /** Default document.title when no view-specific title applies. */
 export const DEFAULT_DOC_TITLE = PRODUCT_NAME;
 
