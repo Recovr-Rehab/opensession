@@ -100,7 +100,9 @@ interface Props {
    * on phones it's surfaced in the top-bar chat bar instead (won't fit here).
    */
   usage?: SessionUsage;
-  /** Extra control rendered in the toolbar, left of the send button. */
+  /** Extra control rendered in the toolbar, left of the send button. Hidden
+   *  while the phone composer is collapsed to its pill, like the goal, note
+   *  and model chips. */
   leftExtra?: React.ReactNode;
   /** Content visually attached to the composer above the draft field. */
   attached?: React.ReactNode;
@@ -924,7 +926,21 @@ export function Composer({
             )}
           </AnimatePresence>
 
-          {leftExtra}
+          {/* Follows the same rule as every other toolbar control: gone while
+              the phone composer is collapsed to its pill, where there's only
+              room for the field itself. */}
+          <AnimatePresence initial={false}>
+            {leftExtra && !minimized && (
+              <motion.div
+                key="left-extra"
+                layout="position"
+                {...composerChipMotion}
+                className="composer-pop-wrap"
+              >
+                {leftExtra}
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="composer-spacer" />
 
           {/* Model + effort live together on the right edge (ChatGPT-style):
