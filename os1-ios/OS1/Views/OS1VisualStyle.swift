@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 import Observation
 #if os(macOS)
 import AppKit
@@ -74,7 +75,6 @@ struct RepoTile: View {
     let name: String
     var size: CGFloat = 18
     var round = false
-    var showsFallback = true
 
     static func label(for name: String) -> String {
         name == "backstage" ? "opensession" : name
@@ -113,12 +113,16 @@ struct RepoTile: View {
             // The fallback letter swatch only stands in while the real icon
             // loads: many icons (org avatars) carry transparent margins, so a
             // swatch kept underneath bleeds through as a colored border.
+            // It always stands in — the sessions list wears this tile as its
+            // Settings button, and suppressing the fallback there rendered an
+            // invisible (though still tappable) control until the icon
+            // arrived over the network.
             if let iconURL,
                let image = RepoImageCache.shared.images[iconURL.absoluteString] {
                 image
                     .resizable()
                     .scaledToFill()
-            } else if showsFallback {
+            } else {
                 Text(letter)
                     .font(.system(size: size * 0.6, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
@@ -136,7 +140,7 @@ struct RepoTile: View {
         .accessibilityLabel(Self.label(for: name))
         .task(id: iconURL?.absoluteString) {
             if let iconURL {
-                await RepoImageCache.shared.ensureLoaded(iconURL)
+                RepoImageCache.shared.ensureLoaded(iconURL)
             }
         }
     }
@@ -150,43 +154,99 @@ final class RepoImageCache {
     static let shared = RepoImageCache()
 
     private(set) var images: [String: Image] = [:]
-    private var inflight: Set<String> = []
-    private var lastFailureAt: [String: Date] = [:]
+    private var loads: [String: Task<Void, Never>] = [:]
+    /// URLs the server refused outright. An unregistered repo id 404s by
+    /// design and its tile is meant to keep the letter swatch, so those stop
+    /// asking; everything else is treated as worth another try.
+    private var unavailable: Set<String> = []
 
-    func ensureLoaded(_ url: URL) async {
+    /// Owning the load rather than running it inside the caller's task is the
+    /// point: `.task` is cancelled when a tile is recycled or its view
+    /// rebuilt, and the request died with it. The sessions list wears one of
+    /// these tiles as its Settings button, where the cancellation was
+    /// systematic — its request went out alongside the first (multi-megabyte)
+    /// sessions poll, and once that one attempt was lost nothing asked again,
+    /// so the button had no icon for the rest of the launch.
+    func ensureLoaded(_ url: URL) {
         let key = url.absoluteString
-        guard images[key] == nil, !inflight.contains(key) else { return }
-        if let failed = lastFailureAt[key], Date().timeIntervalSince(failed) < 15 {
-            return
-        }
-        inflight.insert(key)
-        defer { inflight.remove(key) }
+        guard images[key] == nil, loads[key] == nil, !unavailable.contains(key)
+        else { return }
+        loads[key] = Task { [weak self] in await self?.load(url, key: key) }
+    }
+
+    private func load(_ url: URL, key: String) async {
+        defer { loads[key] = nil }
 
         var request = ServerConfig.shared.authorizedRequest(url)
         request.cachePolicy = .returnCacheDataElseLoad
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse,
-               !(200..<300).contains(http.statusCode) {
-                lastFailureAt[key] = Date()
-                return
-            }
-            #if os(macOS)
-            guard let decoded = NSImage(data: data) else {
-                lastFailureAt[key] = Date()
-                return
-            }
-            images[key] = Image(nsImage: decoded)
-            #else
-            guard let decoded = UIImage(data: data) else {
-                lastFailureAt[key] = Date()
-                return
-            }
-            images[key] = Image(uiImage: decoded)
-            #endif
-            lastFailureAt[key] = nil
-        } catch {
-            lastFailureAt[key] = Date()
+
+        // URLCache's store is on disk, so every launch after the first paints
+        // from it. Reading the store directly rather than through URLSession
+        // keeps a relaunch off the network stack entirely — the same bytes
+        // `.returnCacheDataElseLoad` would have handed back.
+        if let cached = await Self.decodeCached(request) {
+            images[key] = cached
+            return
         }
+
+        // Long enough to outlast the sessions poll a cold launch competes
+        // with, short enough that the tile settles while the person is still
+        // looking at it.
+        for delay in [0, 2, 8, 30] {
+            if delay > 0 {
+                try? await Task.sleep(for: .seconds(delay))
+            }
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let http = response as? HTTPURLResponse,
+                   !(200..<300).contains(http.statusCode) {
+                    if (400..<500).contains(http.statusCode),
+                       http.statusCode != 408, http.statusCode != 429 {
+                        unavailable.insert(key)
+                        return
+                    }
+                    continue
+                }
+                guard let decoded = await Self.decode(data) else {
+                    unavailable.insert(key)
+                    return
+                }
+                images[key] = decoded
+                return
+            } catch {
+                continue
+            }
+        }
+    }
+
+    private static func decodeCached(_ request: URLRequest) async -> Image? {
+        await detachedDecode { URLCache.shared.cachedResponse(for: request)?.data }
+    }
+
+    private static func decode(_ data: Data) async -> Image? {
+        await detachedDecode { data }
+    }
+
+    /// Tiles top out at 52 points, so a full-size decode of a configured repo
+    /// icon (the app's own 512×512 PNG) would hold ~1 MB of bitmap for an
+    /// 18-point swatch. ImageIO downsamples while decoding, and — unlike
+    /// `UIImage(data:)`, which defers the pixel work to render time — does it
+    /// here, off the main actor.
+    private static func detachedDecode(
+        _ load: @escaping @Sendable () -> Data?
+    ) async -> Image? {
+        let thumbnail = await Task.detached(priority: .userInitiated) { () -> CGImage? in
+            guard let data = load(),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil)
+            else { return nil }
+            return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: 192,
+            ] as CFDictionary)
+        }.value
+        // Decorative: `RepoTile` carries the repository name as its label.
+        return thumbnail.map { Image(decorative: $0, scale: 1) }
     }
 }

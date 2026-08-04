@@ -263,12 +263,7 @@ struct SessionsListView: View {
                         Button {
                             showSettings = true
                         } label: {
-                            RepoTile(
-                                name: "backstage",
-                                size: 44,
-                                round: true,
-                                showsFallback: false
-                            )
+                            RepoTile(name: "backstage", size: 44, round: true)
                         }
                         .accessibilityLabel("Settings")
                         // Hiding the glass background leaves the padding the

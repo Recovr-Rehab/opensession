@@ -10,6 +10,17 @@ extension Notification.Name {
 
 @main
 struct OS1App: App {
+    init() {
+        // The shared cache is what carries repo icons across launches (see
+        // `RepoImageCache`), and its stock disk budget is small enough that a
+        // few sessions' worth of REST traffic evicts them — which showed up
+        // as tiles, and the Settings button wearing one, drawing their
+        // fallback on every cold start. Raising the ceiling keeps the
+        // existing store and its entries; only lowering it evicts.
+        URLCache.shared.memoryCapacity = 8 * 1024 * 1024
+        URLCache.shared.diskCapacity = 64 * 1024 * 1024
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
