@@ -445,7 +445,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 	return false;
 }
 
-function App() {
+export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) {
 	const { sessions, loading, cloudUnreachable, refresh, inject, unstick, patch, remove } =
 		useSessions();
 	const auth = useAuthStatus();
@@ -530,7 +530,9 @@ function App() {
 	// Register the service worker at boot, not just when enabling push: it also
 	// caches the app shell (sw.js), so a cold start on a flaky tailnet paints
 	// the app instead of white-screening.
-	useEffect(() => registerServiceWorker(), []);
+	useEffect(() => {
+		if (serviceWorker) return registerServiceWorker();
+	}, [serviceWorker]);
 	// On phones the layout is an iOS-style page stack: the sidebar is the root
 	// page and any non-home route is a page pushed over it. `mobileDetail` drives
 	// that (see the `.mobile-detail` CSS and the back button below). It's inert on
@@ -3880,18 +3882,22 @@ function App() {
 	);
 }
 
-// The preview interstitial renders INSTEAD of the app (and outside UserGate —
-// it must work in cold-storage contexts like the iOS PWA's in-app browser).
-// The server's SPA fallback serves the shell for this path; see PreviewWait.
-const previewWaitSessionId = matchPreviewWaitRoute(location.pathname);
-
-const root = createRoot(document.getElementById("root")!);
-root.render(
-	previewWaitSessionId ? (
-		<PreviewWait sessionId={previewWaitSessionId} />
-	) : (
-		<TooltipProvider>
-			<App />
-		</TooltipProvider>
-	),
-);
+// The marketing-site preview imports this component into its own fixture root.
+// Keep the ordinary SPA bootstrap intact for every production build, including
+// servers that still have this file configured as the bundle entry.
+const embeddedDemo = (window as typeof window & { __OPENSESSION_DEMO__?: boolean })
+	.__OPENSESSION_DEMO__;
+if (!embeddedDemo) {
+	// The preview interstitial renders INSTEAD of the app (and outside UserGate —
+	// it must work in cold-storage contexts like the iOS PWA's in-app browser).
+	const previewWaitSessionId = matchPreviewWaitRoute(location.pathname);
+	createRoot(document.getElementById("root")!).render(
+		previewWaitSessionId ? (
+			<PreviewWait sessionId={previewWaitSessionId} />
+		) : (
+			<TooltipProvider>
+				<App />
+			</TooltipProvider>
+		),
+	);
+}
