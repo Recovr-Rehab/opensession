@@ -212,6 +212,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"appearance",
 	"personalPrompt",
 	"myAccounts",
+	"setup",
 	"workspace",
 	"model",
 	"modelProviders",

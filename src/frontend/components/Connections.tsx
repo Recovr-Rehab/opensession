@@ -428,6 +428,8 @@ export function Connections() {
             })}
           </SettingCard>
 
+          <GithubAccounts />
+
           <ProjectsSection />
 
           <PlainRouter />

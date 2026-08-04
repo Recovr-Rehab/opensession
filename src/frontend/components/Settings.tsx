@@ -63,6 +63,7 @@ import {
 	onPinNewWorkspacesChanged,
 } from "../lib/pins";
 import { Connections } from "./Connections";
+import { SetupPanel } from "./Setup";
 import { MyAccountsPanel } from "./MyAccounts";
 import { AccountsPanel } from "./Models";
 import { ModelProvidersPanel } from "./ModelProviders";
@@ -185,6 +186,7 @@ export type SettingsSectionKey =
 	| "appearance"
 	| "personalPrompt"
 	| "myAccounts"
+	| "setup"
 	| "workspace"
 	| "model"
 	| "modelProviders"
@@ -388,6 +390,28 @@ const SECTIONS: {
 			>
 				<circle cx="8" cy="5.2" r="2.7" />
 				<path d="M2.8 13.5a5.2 5.2 0 0 1 10.4 0" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
+		key: "setup",
+		label: "Setup",
+		group: "Workspace",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path d="M2.7 4.1l1 1 1.8-2" strokeLinecap="round" strokeLinejoin="round" />
+				<path d="M7.8 4.4h5.5" strokeLinecap="round" />
+				<path d="M2.7 8.1l1 1 1.8-2" strokeLinecap="round" strokeLinejoin="round" />
+				<path d="M7.8 8.4h5.5" strokeLinecap="round" />
+				<path d="M2.7 12.1l1 1 1.8-2" strokeLinecap="round" strokeLinejoin="round" />
+				<path d="M7.8 12.4h5.5" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -625,6 +649,7 @@ function SectionPanel({
 			{section === "notifications" && <NotificationsPanel />}
 			{section === "composer" && <ComposerPanel />}
 			{section === "appearance" && <AppearancePanel />}
+			{section === "setup" && <SetupPanel />}
 			{section === "workspace" && <WorkspacePanel />}
 			{section === "audit" && <AuditPanel />}
 			{section === "model" && <AccountsPanel />}
