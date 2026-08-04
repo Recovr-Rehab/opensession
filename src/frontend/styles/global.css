@@ -771,7 +771,7 @@ html.wco .app-body.sidebar-collapsed
 }
 
 /* The "Tools" band header sits above the top-level nav as a collapse toggle.
-   Its 6px inset plus the shared toggle's 8px padding matches the band headings
+   Its 6px inset plus the shared toggle's 14px padding matches the band headings
    inside `.sidebar-list`. */
 .sidebar-band-label.sidebar-tools-head {
 	padding: 12px 6px 2px;
@@ -1169,6 +1169,10 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	letter-spacing: -0.01em;
 	color: var(--text-faint);
 	flex-shrink: 0;
+	/* The same 4px optical step the other glyphless labels take, so this
+	   heading starts on the column its repo tiles and lane captions do rather
+	   than 4px left of them (see .sidebar-band-toggle). */
+	padding-left: 4px;
 }
 .sidebar-workspace-spacer {
 	flex: 1;
@@ -1663,7 +1667,12 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: none;
 	border: none;
 	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	padding: 6px 8px;
+	/* 14px on the left, not 8: it lands the label's ink on the one column every
+	   leading mark below it already uses. A 22px glyph carries ~4px of its own
+	   padding before the ink starts, so a text label at the same box edge reads
+	   4px further left than the icons and tiles it heads. See
+	   .sidebar-lane-group, which takes the same step for the same reason. */
+	padding: 6px 8px 6px 14px;
 	/* Reserve the on-hover chevron's height (18px + 12px vertical padding) so
 	   revealing it via display-toggle can't grow the row and nudge the list
 	   below. The label's own line-box is shorter than the chevron. */
@@ -13495,6 +13504,13 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.sidebar-independent-section .sidebar-people-row {
 		padding-right: 4px;
 		padding-left: 4px;
+	}
+	/* …except a band label, which carries no leading mark and so needs the 4px
+	   a 22px glyph spends on its own padding before its ink starts. Same step
+	   the desktop toggle takes (14px against a 6px inset), measured from the
+	   phone's 4px one, so the heading lands on its rows' mark column. */
+	.sidebar-independent-section .sidebar-band-toggle {
+		padding-left: 8px;
 	}
 
 	/* One horizontally-scrollable line of tap cards (Slack-home style) rather
