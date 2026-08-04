@@ -655,6 +655,10 @@ export type WSClientMessage =
 	// Liveness probe — the server echoes `pong`. Detects half-open sockets
 	// (iOS/Safari kills backgrounded connections without firing onclose).
 	| { type: "ping" }
+	// Presence only: this tab went hidden or idle (or came back). The watch is
+	// untouched — the transcript keeps streaming — but an away socket stops
+	// showing this person's face to teammates.
+	| { type: "away"; away: boolean }
 	| {
 			type: "watch";
 			sessionId: string;

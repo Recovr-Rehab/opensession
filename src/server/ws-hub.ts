@@ -65,6 +65,15 @@ export interface WSClientData {
 	authUser?: string | null;
 	/** Verified GitHub login of the signed-in user (createdByLogin stamping). */
 	authLogin?: string | null;
+	/**
+	 * This socket is still WATCHING its session (transcript keeps streaming, so
+	 * unread/notifications work) but nobody is LOOKING at it — the tab is
+	 * hidden, or there's been no input for a while. Presence hides these: a
+	 * face on a row must mean "here now", not "left a tab open on it".
+	 * Undefined for clients that never send the frame (older builds, native) —
+	 * they read as present, exactly as before.
+	 */
+	away?: boolean;
 	/** This viewer understands ordered session_feed envelopes. */
 	supportsFeed?: boolean;
 	sinceFeedSeq?: number;
@@ -132,37 +141,68 @@ export function broadcastToSession(
 	}
 }
 
+/** Watching AND looking: an away socket keeps its stream but shows no face. */
+function isPresent(ws: any): boolean {
+	return ws?.data?.away !== true;
+}
+
+/**
+ * A viewer went hidden/idle (or came back). The socket keeps watching — only
+ * its visibility to other people changes, so both presence frames go out again.
+ */
+export function setClientAway(ws: any, away: boolean) {
+	if (!ws?.data || ws.data.away === away) return;
+	ws.data.away = away;
+	const sessionId = ws.data.watchingSessionId;
+	if (sessionId) broadcastPresence(sessionId);
+	else broadcastGlobalPresence();
+}
+
 export function broadcastPresence(sessionId: string) {
 	const set = sessionWatchers.get(sessionId);
 	const viewers = set
-		? Array.from(set, (ws: any) => ws.data?.user || "Anonymous")
+		? Array.from(set)
+				.filter(isPresent)
+				.map((ws: any) => ws.data?.user || "Anonymous")
 		: [];
 	broadcastToSession(sessionId, { type: "presence", sessionId, viewers });
 	broadcastGlobalPresence();
 }
 
 /**
- * Who's looking at what, app-wide — drives the sidebar People band and follow
- * mode. One entry per USER (a person with two tabs open would otherwise show
- * twice): the session they joined most recently wins. Anonymous viewers are
- * skipped (nothing to follow).
+ * Who's looking at what, app-wide — drives the sidebar People band, the row
+ * faces and follow mode. One entry per USER (a person with two tabs open would
+ * otherwise show twice): the session they joined most recently wins. Anonymous
+ * viewers are skipped (nothing to follow), and so are away sockets — a hidden
+ * or idle tab still streams its session but must not claim its owner is there.
+ * That also breaks the tie correctly for a person with one visible tab and one
+ * hidden one: the away socket can no longer win on recency.
  */
-export function broadcastGlobalPresence() {
+export function computeGlobalPresence(
+	watchers: Map<string, Set<any>>,
+): Array<{ user: string; sessionId: string }> {
 	const latest = new Map<string, { sessionId: string; at: number }>();
-	for (const [sessionId, set] of sessionWatchers) {
+	for (const [sessionId, set] of watchers) {
 		for (const ws of set) {
 			const user = ws.data?.user;
 			if (!user || user === "Anonymous") continue;
+			if (!isPresent(ws)) continue;
 			const at = ws.data?.watchJoinedAt || 0;
 			const prev = latest.get(user);
 			if (!prev || at >= prev.at) latest.set(user, { sessionId, at });
 		}
 	}
-	const viewing = [...latest.entries()].map(([user, v]) => ({
+	return [...latest.entries()].map(([user, v]) => ({
 		user,
 		sessionId: v.sessionId,
 	}));
-	broadcastToAll({ type: "global_presence", viewing });
+}
+
+export function broadcastGlobalPresence() {
+	broadcastToAll({
+		type: "global_presence",
+		viewing: computeGlobalPresence(sessionWatchers),
+	});
 }
 
 // ── Collaborative notes fan-out ───────────────────────────────────────────

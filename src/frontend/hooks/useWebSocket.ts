@@ -12,6 +12,19 @@ const HEARTBEAT_MS = 20_000;
 // Tighter deadline for the visibility-resume probe: coming back to a
 // backgrounded PWA is exactly when the socket is most likely dead.
 const RESUME_PROBE_MS = 4_000;
+// How long a visible-but-untouched tab still counts as "here". Long enough to
+// read a transcript without your face blinking off, short enough that a chat
+// left open behind another window stops claiming you.
+const IDLE_MS = 5 * 60_000;
+// What proves a person is at the keyboard. Passive and cheap: the handler
+// throttles itself to one call a second.
+const ACTIVITY_EVENTS = [
+  "pointerdown",
+  "pointermove",
+  "keydown",
+  "wheel",
+  "touchstart",
+] as const;
 
 export function useWebSocket() {
   const [connected, setConnected] = useState(false);
@@ -26,6 +39,13 @@ export function useWebSocket() {
   // Flipped true by ANY inbound message (pong or otherwise); the heartbeat
   // flips it false after each ping. Still false at the next beat = dead socket.
   const aliveRef = useRef(true);
+  // Presence, tracked separately from the watch: a hidden or idle tab keeps
+  // streaming its session (unread counts, notifications) but must stop telling
+  // teammates its owner is looking at that chat.
+  const awayRef = useRef(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   // Outbound messages issued while the socket wasn't OPEN (wifi switch, server
   // restart, PWA resume): held here and flushed in order on the next onopen, so
   // a transient drop doesn't silently swallow intent like create_session — the
@@ -59,6 +79,13 @@ export function useWebSocket() {
         if (now - item.at > OUTBOX_TTL_MS) continue;
         try {
           ws.send(JSON.stringify(item.msg));
+        } catch {}
+      }
+      // Away state lives on the socket, so a fresh one starts present — a tab
+      // that went away while the connection was down has to say so again.
+      if (awayRef.current) {
+        try {
+          ws.send('{"type":"away","away":true}');
         } catch {}
       }
     };
@@ -192,9 +219,46 @@ export function useWebSocket() {
         }
       }, RESUME_PROBE_MS);
     };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") resync();
+    // Presence: "here" means this tab is visible AND its owner has touched it
+    // recently. The watch deliberately outlives both — a backgrounded tab still
+    // streams — so presence needs its own signal, or a chat left open on a
+    // second monitor keeps claiming someone is reading it.
+    const sendAway = (away: boolean) => {
+      if (awayRef.current === away) return;
+      awayRef.current = away;
+      const ws = wsRef.current;
+      // Never queued: a stale "I'm back" replayed after an outage would lie.
+      // A reconnect starts present, and onopen re-sends away if we still are.
+      if (ws?.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(JSON.stringify({ type: "away", away }));
+      } catch {}
     };
+    let lastActivity = 0;
+    const onActivity = () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      // Pointer moves fire continuously: only the first per second does work.
+      // While away the point is to come back at once, so it skips the throttle.
+      if (!awayRef.current && now - lastActivity < 1000) return;
+      lastActivity = now;
+      sendAway(false);
+      clearTimeout(idleTimer.current);
+      idleTimer.current = setTimeout(() => sendAway(true), IDLE_MS);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        resync();
+        onActivity();
+        return;
+      }
+      clearTimeout(idleTimer.current);
+      sendAway(true);
+    };
+    if (document.visibilityState === "hidden") sendAway(true);
+    else onActivity();
+    for (const type of ACTIVITY_EVENTS)
+      window.addEventListener(type, onActivity, { passive: true });
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("online", resync);
     window.addEventListener("pageshow", resync);
@@ -203,6 +267,9 @@ export function useWebSocket() {
       disposedRef.current = true;
       clearTimeout(reconnectTimer.current);
       clearInterval(heartbeat);
+      clearTimeout(idleTimer.current);
+      for (const type of ACTIVITY_EVENTS)
+        window.removeEventListener(type, onActivity);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("online", resync);
       window.removeEventListener("pageshow", resync);

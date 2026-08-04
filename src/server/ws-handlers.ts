@@ -49,7 +49,7 @@ import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "
 import { ownedWorktree } from "./chat-workspace";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch, worktreeHeadBranch, worktreePathFor } from "./worktree";
-import { BOOT_ID, allClients, b64decode, b64encode, broadcastToNote, broadcastToSession, joinNote, joinSession, leaveNote, leaveSession, preparingWorkspaces, revalidateLocalClients } from "./ws-hub";
+import { BOOT_ID, allClients, b64decode, b64encode, broadcastToNote, broadcastToSession, joinNote, joinSession, leaveNote, leaveSession, preparingWorkspaces, revalidateLocalClients, setClientAway } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import { userMatchesAny } from "./shared/user-mappings";
 import { existsSync, readFileSync, statSync, watch } from "fs";
@@ -476,6 +476,15 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// The client closes + reconnects a socket whose ping goes unanswered
 				// — how a half-open iOS/Safari socket gets detected.
 				ws.send('{"type":"pong"}');
+				break;
+			}
+
+			case "away": {
+				// Presence, not subscription: the tab went hidden or idle (or came
+				// back). The watch stays put — the transcript must keep streaming so
+				// unread counts and notifications still land — but an away socket
+				// stops showing its owner's face to everyone else.
+				setClientAway(ws, msg.away === true);
 				break;
 			}
 

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { allClients, revalidateLocalClients } from "./ws-hub";
+import {
+	allClients,
+	computeGlobalPresence,
+	revalidateLocalClients,
+} from "./ws-hub";
 
 const sockets = new Set<any>();
 
@@ -42,5 +46,47 @@ describe("revalidateLocalClients", () => {
 		expect(revalidateLocalClients(null)).toBe(2);
 		expect(first.closed).toHaveLength(1);
 		expect(second.closed).toHaveLength(1);
+	});
+});
+
+describe("computeGlobalPresence", () => {
+	const viewer = (user: string | null, at: number, away?: boolean) => ({
+		data: { user, watchJoinedAt: at, away },
+	});
+	const watchers = (entries: Record<string, any[]>) =>
+		new Map(Object.entries(entries).map(([id, set]) => [id, new Set(set)]));
+
+	test("one entry per person, at their most recent join", () => {
+		expect(
+			computeGlobalPresence(
+				watchers({ old: [viewer("Ada", 1)], recent: [viewer("Ada", 2)] }),
+			),
+		).toEqual([{ user: "Ada", sessionId: "recent" }]);
+	});
+
+	test("an away socket claims nobody — the whole point of the flag", () => {
+		expect(
+			computeGlobalPresence(watchers({ left: [viewer("Ada", 1, true)] })),
+		).toEqual([]);
+	});
+
+	test("a hidden tab can't outrank the visible one it joined after", () => {
+		expect(
+			computeGlobalPresence(
+				watchers({
+					looking: [viewer("Ada", 1)],
+					// The tab she left open in the background, opened later.
+					background: [viewer("Ada", 9, true)],
+				}),
+			),
+		).toEqual([{ user: "Ada", sessionId: "looking" }]);
+	});
+
+	test("anonymous viewers stay out — there's nobody to follow", () => {
+		expect(
+			computeGlobalPresence(
+				watchers({ s: [viewer("Anonymous", 1), viewer(null, 2)] }),
+			),
+		).toEqual([]);
 	});
 });
