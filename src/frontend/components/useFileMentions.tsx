@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FileMention } from "../lib/api";
@@ -275,7 +276,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
           >
             {isSession && <span className="mention-repo">session</span>}
             {isPerson && <span className="mention-repo">person</span>}
-            {!isSession && !isSkill && !isPerson && item.repo && <span className="mention-repo">{item.repo}</span>}
+            {!isSession && !isSkill && !isPerson && item.repo && <span className="mention-repo">{repoLabel(item.repo)}</span>}
             <span className="mention-base">{isSkill ? `/${base}` : isDir ? `${base}/` : base}</span>
             {isSession || isSkill || isPerson
               ? item.sub && <span className="mention-dir">{item.sub}</span>

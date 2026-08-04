@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
 import React, { useEffect, useState, useCallback } from "react";
 import {
@@ -242,7 +243,7 @@ export function Security({ onOpenSession }: Props) {
                   <StatusPill status={s.status} />
                   <span className="automation-name">
                     {s.interactive ? "Interactive scan" : "Scan"} —{" "}
-                    {s.repos.join(", ")}
+                    {s.repos.map(repoLabel).join(", ")}
                   </span>
                   {s.profileName && (
                     <span className="source-chip" title="Scan profile">
@@ -277,7 +278,7 @@ export function Security({ onOpenSession }: Props) {
                       ) : (
                         <span className="text-red shrink-0" title={ref.error}>✗</span>
                       )}
-                      <span className="text-fg shrink-0">{ref.repo}</span>
+                      <span className="text-fg shrink-0">{repoLabel(ref.repo)}</span>
                       {ref.error && (
                         <span className="text-red truncate" title={ref.error}>
                           {ref.error}
@@ -432,7 +433,7 @@ function NewScanModal({
             <select value={repo} onChange={(e) => setRepo(e.target.value)}>
               {repos.map((r) => (
                 <option key={r} value={r}>
-                  {r}
+                  {repoLabel(r)}
                 </option>
               ))}
             </select>

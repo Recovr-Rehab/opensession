@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import {
@@ -506,7 +507,7 @@ export function SessionSearch({
 										<span className="ss-item-main">
 											<span className="ss-item-title">{pr.title}</span>
 											<span className="ss-item-meta">
-												<span className="ss-item-repo">{pr.repo} #{pr.number}</span>
+												<span className="ss-item-repo">{repoLabel(pr.repo)} #{pr.number}</span>
 												<span className="ss-item-branch">{pr.branch}</span>
 												<span>{pr.author}</span>
 											</span>

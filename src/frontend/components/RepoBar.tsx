@@ -179,7 +179,7 @@ export function RepoBar({
         {attached.length > 0 && (
           <span
             className="text-label text-dim"
-            title={attached.map((r) => r.repo).join(", ")}
+            title={attached.map((r) => repoLabel(r.repo)).join(", ")}
           >
             +{attached.length}
           </span>
@@ -228,7 +228,7 @@ export function RepoBar({
                           className="cursor-pointer rounded border-0 bg-transparent p-0.5 text-faint hover:text-fg"
                           onClick={() => detach(r.repo)}
                           title="Detach (leaves the worktree on disk)"
-                          aria-label={`Detach ${r.repo}`}
+                          aria-label={`Detach ${repoLabel(r.repo)}`}
                         >
                           <IconX size={16} />
                         </button>

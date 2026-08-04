@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import { Tooltip } from "../ui/tooltip";
 import { providerFromUrl } from "../lib/provider";
 import {
@@ -46,7 +47,7 @@ export function PrSeriesRow({
 				className="pr-bar-extra-main"
 				onClick={() => onOpen?.({ repo: prRef.repo, branch: prRef.branch })}
 				title={`${refLabel(prRef)} — open in the PR tab`}
-				aria-label={`Review ${prRef.repo} pull request #${prRef.number}`}
+				aria-label={`Review ${repoLabel(prRef.repo)} pull request #${prRef.number}`}
 			>
 				<span className={`pr-num-chip pr-sib-chip pr-num-chip-${tone}`}>
 					{refChipText(prRef, primaryRepo)}
@@ -65,7 +66,7 @@ export function PrSeriesRow({
 						href={prRef.url}
 						target="_blank"
 						rel="noopener"
-						aria-label={`Open ${prRef.repo} pull request #${prRef.number} on ${provider.name}`}
+						aria-label={`Open ${repoLabel(prRef.repo)} pull request #${prRef.number} on ${provider.name}`}
 					>
 						<IconArrowUpRight size={16} />
 					</a>

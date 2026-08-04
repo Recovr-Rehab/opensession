@@ -677,7 +677,7 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
                           onClick={() =>
                             row.session ? onSelect(row.session) : row.url && window.open(row.url, "_blank", "noopener")
                           }
-                          title={`${row.repo} · ${row.branch}`}
+                          title={`${repoLabel(row.repo)} · ${row.branch}`}
                         >
                           <span className={status.className} title={status.label}>
                             <StateIcon state={row.state} />

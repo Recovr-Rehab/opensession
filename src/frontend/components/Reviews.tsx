@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useMemo, useState } from "react";
 import type { UnifiedSession, WSServerMessage } from "../lib/types";
@@ -380,7 +381,7 @@ export function Reviews({
                     </span>
                     <span className="rv-sub-line">
                       {multiRepo && (
-                        <span className="rv-repo">{s.repo || "repository"}</span>
+                        <span className="rv-repo">{s.repo ? repoLabel(s.repo) : "repository"}</span>
                       )}
                       {s.branch && (
                         <span className="rv-branch">

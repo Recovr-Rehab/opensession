@@ -1,4 +1,5 @@
 import React from "react";
+import { repoLetter } from "../lib/repo-label";
 
 // Deterministic swatch palette shared by the sidebar's person dots and the
 // per-repo tiles. The (lowercased) key hashes to a stable color, so each
@@ -26,19 +27,11 @@ export function repoColor(key: string): string {
 	return swatchColor(key);
 }
 
-// A few repos display under a different name than their internal id — the
-// Backstage → OpenSession rename lives here so id `backstage` reads
-// `opensession` everywhere its name is shown, with an `O` tile glyph. The tile
-// color stays keyed on the raw id (via repoColor) so it's stable across the
-// rename. See docs/rename-opensession-plan.md.
-const REPO_DISPLAY: Record<string, { label: string; letter: string }> = {
-	backstage: { label: "opensession", letter: "O" },
-};
-
-/** The name a repo shows in the UI (its id, except for the renamed ones). */
-export function repoLabel(id: string): string {
-	return REPO_DISPLAY[id]?.label ?? id;
-}
+// The display-name map lives in lib/repo-label so lib-level formatters can
+// use it too; re-exported here because most callers reach it alongside the
+// tile. The tile color stays keyed on the raw id (via repoColor) so it's
+// stable across the rename.
+export { repoLabel } from "../lib/repo-label";
 
 // A repo's icon tile (sidebar Repo dropdown, session-header breadcrumb, repo
 // menus): the server's /repo-icon/<id>.png — the repo's GitHub org avatar,
@@ -83,7 +76,7 @@ export function RepoTile({
 		);
 	}
 	style.background = repoColor(name);
-	const letter = REPO_DISPLAY[name]?.letter ?? (name[0] || "?").toUpperCase();
+	const letter = repoLetter(name);
 	return (
 		<span className="repo-tile" style={style}>
 			{letter}

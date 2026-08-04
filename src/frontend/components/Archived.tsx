@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import React, { useState, useMemo, useEffect } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
@@ -167,7 +168,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
                   className={`seg-control-btn${repo === name ? " active" : ""}`}
                   onClick={() => setRepo(name)}
                 >
-                  {name}
+                  {repoLabel(name)}
                 </button>
               ))}
             </div>

@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
@@ -353,7 +354,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                     <span className="text-dim">
                       {sel.mode === "ask"
                         ? "Ask — read-only research/measure"
-                        : `Code — persistent worktree${sel.repo ? ` in ${sel.repo}` : ""}, can open PRs`}
+                        : `Code — persistent worktree${sel.repo ? ` in ${repoLabel(sel.repo)}` : ""}, can open PRs`}
                     </span>
 
                     {sel.phase && (
@@ -604,7 +605,7 @@ function GoalForm({
           <select value={repo} onChange={(e) => setRepo(e.target.value)}>
             {repos.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.label || item.id}
+                {item.label || repoLabel(item.id)}
               </option>
             ))}
           </select>

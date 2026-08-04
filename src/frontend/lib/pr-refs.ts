@@ -1,3 +1,4 @@
+import { repoLabel } from "./repo-label";
 import type { UnifiedSession } from "./types";
 
 /**
@@ -69,13 +70,15 @@ export function refState(ref: SessionPrRef): string {
  */
 export function refChipText(ref: SessionPrRef, primaryRepo?: string): string {
 	if (!primaryRepo || ref.repo === primaryRepo) return `#${ref.number}`;
-	return `${ref.repo} #${ref.number}`;
+	return `${repoLabel(ref.repo)} #${ref.number}`;
 }
 
 /** Full sentence for the row's tooltip — the detail the compact row drops. */
 export function refLabel(ref: SessionPrRef): string {
 	const checks = ref.checks;
-	const parts = [`${ref.repo} #${ref.number} (${refState(ref).toLowerCase()})`];
+	const parts = [
+		`${repoLabel(ref.repo)} #${ref.number} (${refState(ref).toLowerCase()})`,
+	];
 	if (ref.title) parts.push(`— ${ref.title}`);
 	if (checks && checks.total > 0)
 		parts.push(`· ${checks.passed}/${checks.total} checks passed`);

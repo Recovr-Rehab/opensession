@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchActions,
@@ -145,7 +146,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
                 <span className="automations-row-trigger">
                   {a.kind === "mcp"
                     ? `${a.mcpServer} · ${a.toolName}`
-                    : `${a.repo} · ${a.scriptPath}`}
+                    : `${a.repo ? repoLabel(a.repo) : ""} · ${a.scriptPath}`}
                 </span>
               </span>
               {a.confirm && (
@@ -226,7 +227,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
                   <span className="automation-cron">
                     {sel.kind === "mcp"
                       ? `${sel.mcpServer} · ${sel.toolName}`
-                      : `${sel.repo}:${sel.scriptPath}`}
+                      : `${sel.repo ? repoLabel(sel.repo) : ""}:${sel.scriptPath}`}
                   </span>
                 </span>
 
@@ -495,7 +496,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
             Repo
             <select value={repo} onChange={(e) => setRepo(e.target.value)}>
               {repos.map((item) => (
-                <option key={item.id} value={item.id}>{item.label}</option>
+                <option key={item.id} value={item.id}>{item.label || repoLabel(item.id)}</option>
               ))}
             </select>
           </label>

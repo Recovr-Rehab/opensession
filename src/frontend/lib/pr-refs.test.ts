@@ -85,6 +85,12 @@ describe("refChipText", () => {
 		// A session with no repo of its own (Slack/Linear) keeps every hint.
 		expect(refChipText(ref())).toBe("#72");
 	});
+
+	test("shows a renamed repo under its display name", () => {
+		expect(
+			refChipText(ref({ repo: "backstage", number: 9 }), "tella-fusion"),
+		).toBe("opensession #9");
+	});
 });
 
 describe("refLabel", () => {

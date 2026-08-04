@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { GitStatusInfo, PrDetails } from "../lib/types";
 import {
@@ -414,7 +415,7 @@ function PrRefChips({
 							>
 								<span className={`pr-sib-dot pr-sib-dot-${refTone(ref)}`} />
 								<span className="grow">
-									{ref.repo} #{ref.number}
+									{repoLabel(ref.repo)} #{ref.number}
 								</span>
 							</Menu.Item>
 						))}

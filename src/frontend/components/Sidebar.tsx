@@ -4714,7 +4714,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								role="button"
 								tabIndex={0}
 								className="ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color,background] duration-150 hover:bg-hover hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
-								title={`New session in ${repo}`}
+								title={`New session in ${repoLabel(repo)}`}
 								onClick={(e) => {
 									e.stopPropagation();
 									onNewSessionInRepo(repo);
@@ -7962,7 +7962,7 @@ function WsOverviewInfo({
 		<>
 			<div className="hovercard-head">
 				<span className="hovercard-branch">
-					{branch || row.chats[0]?.repo || DEFAULT_REPO_ID}
+					{branch || repoLabel(row.chats[0]?.repo || DEFAULT_REPO_ID)}
 				</span>
 				{prChat?.prAdditions != null && prChat?.prDeletions != null && (
 					<span className="hovercard-diff">

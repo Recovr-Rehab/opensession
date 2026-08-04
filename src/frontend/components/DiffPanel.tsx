@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useState, useCallback, startTransition } from "react";
 import type { DiffFileGroup, RepoDiff } from "../lib/types";
 import {
@@ -216,7 +217,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
                 onClick={() => setActive(i)}
                 title={r.primary ? "Primary repo" : "Attached repo"}
               >
-                {r.repo}
+                {repoLabel(r.repo)}
                 <span className="diff-repo-tab-count">{r.diff.files.length}</span>
               </button>
             );

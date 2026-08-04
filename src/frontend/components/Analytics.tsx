@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { docTitle } from "../lib/brand";
 import { fetchAnalytics } from "../lib/api";
@@ -668,7 +669,7 @@ export function Analytics() {
 									<tbody>
 										{data.repos.map((r) => (
 											<tr key={r.repo} className="border-t border-line">
-												<td className="py-1.5 text-fg">{r.repo}</td>
+												<td className="py-1.5 text-fg">{repoLabel(r.repo)}</td>
 												<td className="py-1.5 text-right tabular-nums text-dim">
 													{fmtInt(r.prsOpened)} <span className="text-faint">/ {fmtInt(r.allOpened)}</span>
 												</td>
@@ -766,7 +767,7 @@ export function Analytics() {
 														style={{ background: state.color }}
 													/>
 													<span className="shrink-0 tabular-nums text-faint">
-														{pr.repo}#{pr.number}
+														{repoLabel(pr.repo)}#{pr.number}
 													</span>
 													<span className="min-w-0 flex-1 truncate text-fg">{pr.title}</span>
 													<span className="hidden shrink-0 text-faint sm:inline">{state.label}</span>

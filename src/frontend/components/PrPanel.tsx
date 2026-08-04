@@ -1,3 +1,4 @@
+import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import type {
   GitStatusInfo,
@@ -336,7 +337,9 @@ export function PrPanel({
         repo: lp.repo,
         branch: lp.branch,
         linked: true,
-        label: lp.number ? `${lp.repo} #${lp.number}` : `${lp.repo}:${lp.branch}`,
+        label: lp.number
+          ? `${repoLabel(lp.repo)} #${lp.number}`
+          : `${repoLabel(lp.repo)}:${lp.branch}`,
       })),
       // Last, so an explicit link (which owns the unlink affordance) wins the
       // dedupe over the same PR discovered from its body footer.
@@ -345,7 +348,9 @@ export function PrPanel({
         repo: dp.repo,
         branch: dp.branch,
         discovered: true,
-        label: dp.number ? `${dp.repo} #${dp.number}` : `${dp.repo}:${dp.branch}`,
+        label: dp.number
+          ? `${repoLabel(dp.repo)} #${dp.number}`
+          : `${repoLabel(dp.repo)}:${dp.branch}`,
       })),
     ]),
     [repos, linked, discoveredPrs, previewTarget?.repo, previewTarget?.branch],
