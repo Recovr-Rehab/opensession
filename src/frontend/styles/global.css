@@ -132,6 +132,23 @@ html[data-theme="light"] {
 	--tool-skill: #0f766e;
 }
 
+/* Phones: the composer is the bottom-most thing on screen, so its shadow has
+   only the gap under it to fall into — and in mobile Safari (browser toolbar
+   below, so no safe-area inset) that gap is a few px, far less than the ~32px
+   a 14px-offset/36px-blur shadow needs. The tail was clipped into a hard line
+   along the bottom edge. Pull the offset up and shorten the blur so the whole
+   falloff lands inside the gap; the ambient spread still reads as lift. */
+@media (max-width: 720px) {
+	:root {
+		--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.16),
+			0 4px 20px rgba(0, 0, 0, 0.2);
+	}
+	html[data-theme="light"] {
+		--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.04),
+			0 4px 20px rgba(0, 0, 0, 0.08);
+	}
+}
+
 /* Spots that hardcode light-on-dark colors and would break on a light surface. */
 html[data-theme="light"] .diff-line-add {
 	background: rgba(26, 127, 55, 0.12);
@@ -12995,7 +13012,11 @@ html[data-theme="light"] .composer-hl .cmp-fence {
        safe-area inset (≈34px on home-indicator iPhones) rather than jamming
        the composer against the very bottom edge. The hint is hidden on phones,
        so the composer itself is the bottom-most element and needs the gap. */
-		padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+		/* The floor also has to clear the composer's shadow (see the phone
+		   --composer-shadow override): with no safe-area inset — mobile Safari,
+		   where the browser toolbar sits below — this gap is all the room the
+		   falloff gets, and anything shorter clips it into a hard line. */
+		padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
 	}
 	/* Keyboard up: it now covers the home-indicator area, but iOS keeps reporting
      the safe-area inset — which would leave a big gap under the input. Drop back
