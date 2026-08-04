@@ -457,6 +457,9 @@ struct SessionsListView: View {
 
     private var filteredWorkspaces: [SidebarWorkspace] {
         var workspaces = allSidebarWorkspaces
+        #if os(iOS)
+        workspaces = applyingHides(workspaces)
+        #endif
         if peopleFilter == "mine" {
             workspaces = workspaces.filter { $0.sessions.contains(where: isMine) }
         }
@@ -806,11 +809,47 @@ struct SessionsListView: View {
 
         if !workspace.isOptimistic {
             Divider()
+            // Hiding is the personal counterpart to archiving: the row leaves
+            // YOUR sidebar (here and in the web one) while the chat keeps
+            // running for everyone else — so it isn't destructive-styled.
+            if HideStore.shared.isHidden(workspace) {
+                Button {
+                    HideStore.shared.clear([HideStore.rowKey(for: workspace)])
+                } label: {
+                    Label("Restore to my sidebar", systemImage: "eye")
+                }
+            } else {
+                Button {
+                    hide(workspace)
+                } label: {
+                    Label("Hide from my sidebar", systemImage: "eye.slash")
+                }
+            }
             Button(role: .destructive) {
                 archive(workspace)
             } label: {
                 Label("Archive", systemImage: "archivebox")
             }
+        }
+    }
+
+    /// Rows this user has hidden drop out of the sidebar — except while a chat
+    /// of theirs is blocked on a question (the poll consumes the hide when
+    /// that happens), and except while searching, which is how a hidden row is
+    /// found again so its menu can restore it.
+    private func applyingHides(_ workspaces: [SidebarWorkspace]) -> [SidebarWorkspace] {
+        let hides = HideStore.shared.hides
+        guard !hides.isEmpty,
+              searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        else { return workspaces }
+        return workspaces.filter {
+            $0.lane == .needsInput || hides[HideStore.rowKey(for: $0)] == nil
+        }
+    }
+
+    private func hide(_ workspace: SidebarWorkspace) {
+        withAnimation(.snappy(duration: 0.28)) {
+            HideStore.shared.hide(workspace)
         }
     }
 

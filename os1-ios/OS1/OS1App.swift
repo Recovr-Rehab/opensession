@@ -90,6 +90,7 @@ struct RootView: View {
                 guard scenePhase == .active else { return }
                 while !Task.isCancelled {
                     await NativePreferences.hydrate()
+                    await HideStore.shared.hydrate()
                     try? await Task.sleep(for: .seconds(30))
                 }
             }

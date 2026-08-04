@@ -423,6 +423,9 @@ final class SessionViewModel {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = attachedImages.map(\.dataURL)
         guard !text.isEmpty || !images.isEmpty, let socket else { return }
+        // You can't be done with a chat you're actively working in: prompting
+        // clears any sidebar hide covering it (opening it deliberately doesn't).
+        HideStore.shared.unhide(for: session)
         draft = ""
         attachedImages = []
         let busyMode = busyModeOverride

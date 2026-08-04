@@ -16,8 +16,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   ticker, larger mobile type, and the web client's warm dark palette, plus
   grouping with the web sidebar's shared, drag-to-reorder repository order,
   compact toolbar search/filter, iOS long-press worktree actions (details,
-  rename, sharing, pull request, and archive), swipe-to-archive, restore from the
-  archived list, a floating create button, and pull to refresh.
+  rename, sharing, pull request, hide from my sidebar, and archive),
+  swipe-to-archive, restore from the archived list, a floating create button,
+  and pull to refresh. Hiding is the personal counterpart to archiving (which
+  is global): it drops the row from THIS user's sidebar — here and in the web
+  one, sharing `/api/hides` — while the chat keeps running for everyone else.
+  A hidden row comes back while one of its chats is blocked on a question,
+  prompting in a chat clears its hide, and search ignores hides, so a hidden
+  row stays findable and its menu offers "Restore to my sidebar".
 - **Session view** — live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind

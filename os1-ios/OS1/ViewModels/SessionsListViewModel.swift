@@ -379,9 +379,20 @@ final class SessionsListViewModel {
             let hiddenIds = Set(Array(locallyArchived.keys).filter { isLocallyArchived($0) })
             let restoredIds = Set(Array(locallyUnarchived.keys).filter { isLocallyUnarchived($0) })
             let localArchivedRows = hiddenIds.compactMap { locallyArchived[$0]?.session }
+            let hideKeys = Set(HideStore.shared.hides.keys)
             let prepared = await Task.detached(priority: .userInitiated) {
-                Self.prepared(all, hiding: hiddenIds, restoring: restoredIds)
+                Self.prepared(
+                    all,
+                    hiding: hiddenIds,
+                    restoring: restoredIds,
+                    hidden: hideKeys
+                )
             }.value
+            // A hidden row comes back while one of its chats is blocked on a
+            // question, and the entry is consumed when it does — so a hide can
+            // never swallow work that needs you. Consuming it here (not in the
+            // row filter) keeps the mutation out of view body evaluation.
+            HideStore.shared.clear(prepared.resurfacedHideKeys)
             let next = mergeOptimistic(into: prepared.active)
             let serverArchivedIds = Set(prepared.archived.map(\.id))
             for id in serverArchivedIds {
@@ -404,15 +415,17 @@ final class SessionsListViewModel {
         hasLoaded = true
     }
 
-    /// Drop archived/desk/locally-hidden rows and sort by last activity.
+    /// Drop archived/desk/locally-hidden rows and sort by last activity, and
+    /// report which sidebar hides a blocked chat resurfaces.
     /// Decorated sort on purpose: the comparator form re-parsed each row's
     /// ISO date ~2·log n times, which multiplied into hundreds of
     /// milliseconds per poll at this list size — parse once per row instead.
-    nonisolated private static func prepared(
+    nonisolated static func prepared(
         _ all: [Session],
         hiding hiddenIds: Set<String>,
-        restoring restoredIds: Set<String>
-    ) -> (active: [Session], archived: [Session]) {
+        restoring restoredIds: Set<String>,
+        hidden hideKeys: Set<String> = []
+    ) -> (active: [Session], archived: [Session], resurfacedHideKeys: [String]) {
         let visible = all.filter { $0.desk != true }
         let active = visible
             .filter {
@@ -433,7 +446,15 @@ final class SessionsListViewModel {
             .map { (session: $0, key: $0.lastActivityDate ?? .distantPast) }
             .sorted { $0.key > $1.key }
             .map(\.session)
-        return (active, archived)
+        var resurfaced = Set<String>()
+        if !hideKeys.isEmpty {
+            for session in active where session.lane == .needsInput && !session.isAutomation {
+                for key in HideStore.candidateKeys(for: session) where hideKeys.contains(key) {
+                    resurfaced.insert(key)
+                }
+            }
+        }
+        return (active, archived, Array(resurfaced))
     }
 }
 

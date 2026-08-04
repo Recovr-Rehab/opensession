@@ -124,6 +124,22 @@ enum SettingsAPI {
         return response.prefs ?? [:]
     }
 
+    /// Per-user sidebar hides, shared with the web sidebar (row key → ISO
+    /// hidden-at). PUT replaces the whole map, like pins and snoozes.
+    static func hides(user: String) async throws -> [String: String] {
+        struct Response: Decodable, Sendable { var hides: [String: String]? }
+        let response: Response = try await request("/api/hides", query: ["user": user])
+        return response.hides ?? [:]
+    }
+
+    @discardableResult
+    static func saveHides(user: String, hides: [String: String]) async throws -> [String: String] {
+        struct Response: Decodable, Sendable { var hides: [String: String]? }
+        let body: [String: Any] = ["user": user, "hides": hides]
+        let response: Response = try await request("/api/hides", method: "PUT", body: body)
+        return response.hides ?? hides
+    }
+
     static func personalPrompt(user: String) async throws -> String {
         struct Response: Decodable, Sendable { var prompt: String? }
         let response: Response = try await request("/api/personal-prompt", query: ["user": user])
