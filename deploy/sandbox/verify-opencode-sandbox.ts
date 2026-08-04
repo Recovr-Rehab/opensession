@@ -4,7 +4,7 @@
  *
  *   bun run deploy/sandbox/verify-opencode-sandbox.ts
  *
- * What it exercises (all against the REAL DockerProvider + backstage-runner
+ * What it exercises (all against the REAL DockerProvider + opensession-runner
  * image — rebuild the image after changing opencode-runner/host.ts, the
  * container runs the BAKED src, not this checkout):
  *
@@ -21,7 +21,7 @@
  *     the host — and the run-host reaps it at exit (no orphan accumulation).
  *  6. The persisted JSONL transcript is host-visible with both turns.
  *  7. opencode_meridian_run start/end audit events land in the shared
- *     host audit log (the rw ~/.backstage-audit mount).
+ *     host audit log (the rw audit-dir mount, `stateDir("audit")`).
  *  8. destroy() tears everything down.
  *
  * Costs two claude-haiku turns on the meridian bridge (subscription quota);
@@ -32,8 +32,8 @@
 
 const SCRATCH = `${process.env.HOME || homedir()}/.octest-verify-scratch`;
 // Before any src/server import (journal + sandbox config resolve at load).
-process.env.BACKSTAGE_RUN_JOURNAL = `${SCRATCH}/active-runs.json`;
-process.env.BACKSTAGE_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
+process.env.OPENSESSION_RUN_JOURNAL = `${SCRATCH}/active-runs.json`;
+process.env.OPENSESSION_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
 
 import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
@@ -43,7 +43,8 @@ const { OPENCODE_TRANSCRIPTS_DIR, getOpencodeTranscriptPath } = await import(
   "../../src/server/opencode-transcript"
 );
 const { readOpencodeBridgeConfig } = await import("../../src/server/opencode-config");
-const { BACKSTAGE_CHATS_DIR } = await import("../../src/server/paths");
+const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
+const { envAlias, stateDir, statePath } = await import("../../src/server/rename-compat");
 type RunHostSpec = import("../../src/runner-host/protocol").RunHostSpec;
 type StreamEvent = import("../../src/server/run-events").StreamEvent;
 
@@ -56,7 +57,7 @@ const MODEL = "opencode/anthropic/claude-haiku-4-5";
 const CODEWORD = "PLUM-TANGO-42";
 
 mkdirSync(SCRATCH, { recursive: true });
-await Bun.write(process.env.BACKSTAGE_SANDBOX_CONFIG!, JSON.stringify({ provider: "docker" }));
+await Bun.write(process.env.OPENSESSION_SANDBOX_CONFIG!, JSON.stringify({ provider: "docker" }));
 
 let pass = 0;
 let fail = 0;
@@ -106,8 +107,8 @@ async function cleanup(): Promise<void> {
   await sh(["docker", "rm", "-f", CONTAINER]);
   await sh(["docker", "volume", "rm", "-f", `${CONTAINER}-claude`, `${CONTAINER}-codex`, `${CONTAINER}-ws`]);
   try {
-    rmSync(`${BACKSTAGE_CHATS_DIR}/sandboxes/${CONTAINER}.json`, { force: true });
-    rmSync(`${BACKSTAGE_CHATS_DIR}/sandbox-runs/${SESSION_ID}`, { recursive: true, force: true });
+    rmSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${CONTAINER}.json`, { force: true });
+    rmSync(`${OPENSESSION_CHATS_DIR}/sandbox-runs/${SESSION_ID}`, { recursive: true, force: true });
     // The octest transcript lands in the REAL -opencode-engine dir (that's the
     // point — host visibility); remove only our file.
     if (ocSessionId) rmSync(getOpencodeTranscriptPath(ocSessionId), { force: true });
@@ -124,7 +125,7 @@ for (const p of [MAIN, WT]) rmSync(p, { recursive: true, force: true });
 mkdirSync(MAIN, { recursive: true });
 for (const c of [
   ["git", "init", "-q", "-b", "main"],
-  ["git", "config", "user.email", "octest@backstage.local"],
+  ["git", "config", "user.email", "octest@opensession.local"],
   ["git", "config", "user.name", "Opencode Sandbox Verify"],
 ]) await sh(c, MAIN);
 await Bun.write(`${MAIN}/README.md`, "octest scratch repo\n");
@@ -153,7 +154,9 @@ try {
   ok("opencode binary resolves in-container", ver.exitCode === 0, ver.stdout.trim() || ver.stderr.trim());
 
   // ── live two-turn run (gated on accounts + bridge config) ─────────────────
-  const accountsPath = process.env.BACKSTAGE_CLAUDE_ACCOUNTS_PATH || `${HOME}/.backstage-claude-accounts.json`;
+  const accountsPath =
+    envAlias("OPENSESSION_CLAUDE_ACCOUNTS_PATH", "BACKSTAGE_CLAUDE_ACCOUNTS_PATH") ||
+    statePath(".opensession-claude-accounts.json", ".backstage-claude-accounts.json");
   let hasAccounts = false;
   try {
     const store = JSON.parse(readFileSync(accountsPath, "utf-8"));
@@ -195,7 +198,7 @@ try {
               // (a) journal names the sandbox while the run is live
               let journaled: any;
               try {
-                const journal = JSON.parse(readFileSync(process.env.BACKSTAGE_RUN_JOURNAL!, "utf-8"));
+                const journal = JSON.parse(readFileSync(process.env.OPENSESSION_RUN_JOURNAL!, "utf-8"));
                 journaled = Object.values(journal).find((r: any) => r?.bksSessionId === SESSION_ID);
               } catch {}
               ok("journal shows the run in bks-sbx-*",
@@ -255,7 +258,7 @@ try {
       jsonl.includes("What is the codeword"));
 
     // (d) meridian audit events in the shared host audit log
-    const auditPath = `${HOME}/.backstage-audit/audit-${new Date().toISOString().slice(0, 10)}.jsonl`;
+    const auditPath = `${stateDir("audit")}/audit-${new Date().toISOString().slice(0, 10)}.jsonl`;
     const audit = existsSync(auditPath) ? readFileSync(auditPath, "utf-8") : "";
     const lines = audit.split("\n").filter((l) => l.includes("opencode_meridian_run") && l.includes(SESSION_ID));
     ok("audit has opencode_meridian_run start events", lines.some((l) => l.includes('"phase":"start"')),

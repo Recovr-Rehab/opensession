@@ -1,4 +1,4 @@
-# `backstage-runner` image
+# `opensession-runner` image
 
 Prebaked container image for the **Docker sandbox provider** (operator guide:
 `docs/self-hosting-sandboxes.md`). One container per session runs the
@@ -42,7 +42,7 @@ rebuild (see docs/self-hosting-sandboxes.md "Path parity is load-bearing").
 deploy/sandbox/build.sh
 ```
 
-Tags `backstage-runner:latest` and `backstage-runner:<git-sha>` from the repo
+Tags `opensession-runner:latest` and `opensession-runner:<git-sha>` from the repo
 root context. Override the name with `IMAGE=... deploy/sandbox/build.sh`.
 
 Version pins are `ARG`s in the Dockerfile (`BUN_VERSION`, `CLAUDE_VERSION`,
@@ -183,11 +183,11 @@ and never blocks the session on failure. Keep both scripts convention-level:
 no framework, no arguments beyond env. Host previews honor setup.sh too, with
 one asymmetry: there is no workspace-materialization moment on the host, so it
 runs (and settles, success or not) as part of the FIRST repo-script preview
-start, stamped per worktree under `~/.backstage-chats/preview-setup/` (path
-literal in preview.ts).
+start, stamped per worktree under `<chats-dir>/preview-setup/` (SETUP_STAMP_DIR
+in preview.ts).
 
 **`.tunnels.env` contract** (adopted from background-agents): when a preview
-starts, backstage writes `<worktree>/.tunnels.env` — dotenv, consumable by
+starts, OpenSession writes `<worktree>/.tunnels.env` — dotenv, consumable by
 in-container dev processes:
 
 ```
@@ -315,7 +315,7 @@ needed after changing it.
 - `deploy/sandbox/verify-opencode-sandbox.ts` — the opencode-engine sibling of
   verify.ts (`bun run deploy/sandbox/verify-opencode-sandbox.ts`): proves the
   opencode engine runs INSIDE a docker sandbox end-to-end against the real
-  DockerProvider + `backstage-runner` image. Checks the transcript/bridge-config
+  DockerProvider + `opensession-runner` image. Checks the transcript/bridge-config
   mounts, in-container `opencode` binary resolution, then a real two-turn
   opencode/anthropic run (haiku, meridian bridge) via `sandbox.launchRun` —
   session resume across turns, `bks-sbx-*` sandboxId in the run journal,

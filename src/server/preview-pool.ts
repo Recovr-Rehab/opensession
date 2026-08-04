@@ -1134,7 +1134,7 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<void> {
       "-v", `${repo.repo}:/src:ro`,
       "-p", `127.0.0.1::${CONTAINER_PORT}`,
       "--cpus", String(cfg.cpus), "--memory", cfg.memory,
-      "backstage-runner:latest", "sleep", "infinity",
+      "opensession-runner:latest", "sleep", "infinity",
     ]);
     if (!run.ok) return void (await fail(`docker run: ${run.out}`));
 

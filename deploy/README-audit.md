@@ -33,7 +33,7 @@ OpenSession runs as a systemd unit that hard-denies IMDS
 (`opensession.service`), so the app itself can never hold AWS credentials —
 instead the standalone amazon-cloudwatch-agent (its own systemd service,
 IMDS allowed) tails the audit files into a log group. The example config
-`deploy/cloudwatch-agent-backstage.json` ships to `/opensession/prod`; edit
+`deploy/cloudwatch-agent-opensession.json` ships to `/opensession/prod`; edit
 its `file_path` to your audit dir (the default is `~/.opensession-audit/`,
 written as an absolute path) and pick your own log group name.
 
@@ -46,11 +46,11 @@ Then install and start the agent on the host (needs sudo):
 ```bash
 wget https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/$(dpkg --print-architecture)/latest/amazon-cloudwatch-agent.deb
 sudo dpkg -i amazon-cloudwatch-agent.deb
-sudo cp deploy/cloudwatch-agent-backstage.json \
-  /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/backstage.json
+sudo cp deploy/cloudwatch-agent-opensession.json \
+  /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/opensession.json
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
   -a fetch-config -m ec2 -s \
-  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/backstage.json
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/opensession.json
 ```
 
 Verify (the agent ships to the instance's own region, so the log group

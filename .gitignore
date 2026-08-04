@@ -33,6 +33,10 @@ output/**/*.icns
 output/**/*.iconset/
 output/os1-icons/icon-512-padded.png
 
+# Downloaded static busybox for the microvm rootfs (re-fetched by
+# deploy/sandbox/microvm/build-rootfs.sh when absent)
+deploy/sandbox/microvm/.cache-busybox
+
 # macOS Finder metadata
 .DS_Store
 

@@ -92,7 +92,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("docker-only config: docker configured, remotes not", () => {
-    write({ provider: "docker", image: "backstage-runner:latest" });
+    write({ provider: "docker", image: "opensession-runner:latest" });
     const s = sandboxCapabilityStatus();
     expect(s.enabled).toBe(true);
     expect(s.defaultProvider).toBe("docker");

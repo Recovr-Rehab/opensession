@@ -5,7 +5,7 @@
  * exec, file write, wake) and get, in return:
  *
  *  - `bootstrapRemoteSandbox`: remote sandboxes don't run our prebaked
- *    backstage-runner image, so first ensure installs the runner payload
+ *    opensession-runner image, so first ensure installs the runner payload
  *    in-sandbox — bun, the backstage repo bundle (config `runnerBundleUrl`
  *    tarball, or a git clone of `runnerRepoUrl`/this checkout's origin at
  *    `runnerSha`), `bun install`, and the Claude Code CLI — all under

@@ -3,7 +3,7 @@
  * Phase 1, "bind-mount mode").
  *
  * One long-lived container per session (`bks-sbx-<sessionId>`, image
- * `backstage-runner:latest` — see deploy/sandbox/), kept alive across turns so
+ * `opensession-runner:latest` — see deploy/sandbox/), kept alive across turns so
  * engine session state (~/.claude history, codex rollouts) and dev servers
  * survive. A run is the SAME runner-host entry the systemd path uses
  * (src/runner-host/host.ts), `docker exec`'d into the container; backstage
@@ -159,7 +159,7 @@ import type {
 
 const HOME = homeDir();
 const CONTAINER_PREFIX = "bks-sbx-";
-const DEFAULT_IMAGE = "backstage-runner:latest";
+const DEFAULT_IMAGE = "opensession-runner:latest";
 const DEFAULT_CPUS = 4;
 const DEFAULT_MEMORY = "8g";
 const DEFAULT_IDLE_STOP_MINUTES = 30;

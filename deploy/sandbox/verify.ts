@@ -29,7 +29,7 @@
  *
  * WS-TRANSPORT section (Phase 3): a third sbxtest session runs with
  * `transport: "ws"` — the in-container run host DIALS BACK to a scratch WS
- * server in this process (the same run-ws module backstage.ts wires) instead
+ * server in this process (the same run-ws module opensession.ts wires) instead
  * of serving a unix socket, and the rpc socket isn't mounted at all. Checks:
  * upgrade auth (bad token → 403; plain run-rpc tokens refused), a real agent
  * run streaming over WS (only when the socket-mode run above ran — same
@@ -37,8 +37,8 @@
  * rpc-ws bridge via the hostId+wsToken handshake.
  *
  * PREVIEW + LIFECYCLE section (Phase 4A): a fifth sbxtest session exercises
- * the sandboxed Preview flow end-to-end — `.backstage/setup.sh` one-shot,
- * `.backstage/start.sh` bring-up on a port allocated from the pre-published
+ * the sandboxed Preview flow end-to-end — `.opensession/setup.sh` one-shot,
+ * `.opensession/start.sh` bring-up on a port allocated from the pre-published
  * range, the namespaced Caddy https route (live Caddy admin; asserted
  * collision-free against the host webapp+6000 scheme AND a second sandbox on
  * the same webapp port), the `.tunnels.env` contract, stop/route teardown,
@@ -61,14 +61,14 @@ const SCRATCH = `${process.env.HOME || homedir()}/.sandbox-verify-scratch`;
 // PATH at module load. The scratch config (written below) turns on the docker
 // provider + volume workspace mode + a preview port WITHOUT touching the live
 // ~/.opensession-sandbox.json.
-process.env.BACKSTAGE_RUN_JOURNAL = `${SCRATCH}/active-runs.json`;
-process.env.BACKSTAGE_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
+process.env.OPENSESSION_RUN_JOURNAL = `${SCRATCH}/active-runs.json`;
+process.env.OPENSESSION_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
 // The repo registry is config-driven now (REPOS is a read-only Proxy over
 // configuredRepos() — see worktree.ts/config.ts): the scratch sbxtest repo is
-// registered through a scratch ~/.backstage/config.json, written below. The
+// registered through a scratch ~/.opensession/config.json, written below. The
 // live box has no config.json, so this only ADDS the scratch repo over the
 // built-in defaults.
-process.env.BACKSTAGE_CONFIG = `${SCRATCH}/backstage-config.json`;
+process.env.OPENSESSION_CONFIG = `${SCRATCH}/opensession-config.json`;
 
 import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
@@ -81,7 +81,8 @@ const { getSessionDiff } = await import("../../src/server/git-diff");
 const { getGitStatus } = await import("../../src/server/git-status");
 const { worktreePathFor } = await import("../../src/server/worktree");
 const { rpcSocketPath } = await import("../../src/runner-host/protocol");
-const { BACKSTAGE_CHATS_DIR } = await import("../../src/server/paths");
+const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
+const { envAlias, statePath } = await import("../../src/server/rename-compat");
 type RunHostSpec = import("../../src/runner-host/protocol").RunHostSpec;
 
 const SESSION_ID = `sbxtest-${Date.now().toString(36)}`;
@@ -116,7 +117,7 @@ const COLLISION_SBX_ID = "bks-sbx-sbxtest-collision-probe";
 // port. Read fresh per call by sandbox/config.ts via the env override above.
 mkdirSync(SCRATCH, { recursive: true });
 await Bun.write(
-  process.env.BACKSTAGE_SANDBOX_CONFIG!,
+  process.env.OPENSESSION_SANDBOX_CONFIG!,
   JSON.stringify({ provider: "docker", workspace: "volume", previewPorts: [PREVIEW_PORT] }),
 );
 
@@ -172,8 +173,8 @@ async function cleanup(): Promise<void> {
       .out.split("\n").map((s) => s.trim()).filter(Boolean);
     for (const id of new Set(imgIds)) await sh(["docker", "rmi", "-f", id]);
     try {
-      rmSync(`${BACKSTAGE_CHATS_DIR}/sandboxes/${container}.json`, { force: true });
-      rmSync(`${BACKSTAGE_CHATS_DIR}/sandbox-runs/${session}`, { recursive: true, force: true });
+      rmSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${container}.json`, { force: true });
+      rmSync(`${OPENSESSION_CHATS_DIR}/sandbox-runs/${session}`, { recursive: true, force: true });
     } catch {}
   }
   // Transcript dirs the container-create mkdir'd for the scratch cwds.
@@ -195,7 +196,7 @@ for (const p of [MAIN, WT, BARE]) rmSync(p, { recursive: true, force: true });
 mkdirSync(MAIN, { recursive: true });
 for (const c of [
   ["git", "init", "-q", "-b", "main"],
-  ["git", "config", "user.email", "sbxtest@backstage.local"],
+  ["git", "config", "user.email", "sbxtest@opensession.local"],
   ["git", "config", "user.name", "Sandbox Verify"],
 ]) await sh(c, MAIN);
 await Bun.write(`${MAIN}/README.md`, "sandbox verify scratch repo\n");
@@ -210,11 +211,11 @@ ok("scratch worktree created", wtAdd.code === 0 && existsSync(`${WT}/.git`), WT)
 // repoOriginUrl resolves it.
 await sh(["git", "clone", "-q", "--bare", MAIN, BARE]);
 await sh(["git", "remote", "add", "origin", BARE], MAIN);
-// Register the scratch repo through the config-driven registry (BACKSTAGE_CONFIG
+// Register the scratch repo through the config-driven registry (OPENSESSION_CONFIG
 // points at this scratch file) so getRepo/worktreePathFor/repoOriginUrl can
 // resolve clone source + default branch. sbxtest-only, scratch-dir-only.
 await Bun.write(
-  process.env.BACKSTAGE_CONFIG!,
+  process.env.OPENSESSION_CONFIG!,
   JSON.stringify({
     repos: {
       sbxtest: { repo: MAIN, wtPrefix: "sbxtest", defaultBranch: "main", ghRepo: "sbxtest/sbxtest" },
@@ -266,7 +267,7 @@ try {
   await sandbox.exec(["sh", "-c", "echo sandbox-was-here > sandbox-file.txt"]);
   await sandbox.exec(["git", "add", "sandbox-file.txt"]);
   const commit = await sandbox.exec([
-    "git", "-c", "user.email=sbxtest@backstage.local", "-c", "user.name=Sandbox Verify",
+    "git", "-c", "user.email=sbxtest@opensession.local", "-c", "user.name=Sandbox Verify",
     "commit", "-q", "-m", "commit from inside the sandbox",
   ]);
   ok("git commit inside container", commit.exitCode === 0, commit.stderr.trim());
@@ -281,18 +282,19 @@ try {
 
   // ── RPC socket ──────────────────────────────────────────────────────────────
   console.log("\n── rpc socket ──");
-  const sock = rpcSocketPath(BACKSTAGE_CHATS_DIR);
+  const sock = rpcSocketPath(OPENSESSION_CHATS_DIR);
   const sockLs = await sandbox.exec(["ls", sock]);
   ok("rpc socket mounted", sockLs.exitCode === 0, sock);
   const sockProbe = await sandbox.exec(["bun", "-e",
-    `const r = await fetch("http://backstage/mcp/list", {method:"POST", unix:"${sock}", headers:{"content-type":"application/json"}, body:"{}"}); console.log("HTTP", r.status);`]);
+    `const r = await fetch("http://opensession/mcp/list", {method:"POST", unix:"${sock}", headers:{"content-type":"application/json"}, body:"{}"}); console.log("HTTP", r.status);`]);
   ok("rpc socket answers from inside", sockProbe.exitCode === 0 && sockProbe.stdout.includes("HTTP"),
     (sockProbe.stdout || sockProbe.stderr).trim().slice(0, 120));
 
   // ── real agent run through launchRun ───────────────────────────────────────
   console.log("\n── agent run (launchRun) ──");
-  const accountsPath = process.env.BACKSTAGE_CLAUDE_ACCOUNTS_PATH ||
-    `${process.env.HOME}/.backstage-claude-accounts.json`;
+  const accountsPath =
+    envAlias("OPENSESSION_CLAUDE_ACCOUNTS_PATH", "BACKSTAGE_CLAUDE_ACCOUNTS_PATH") ||
+    statePath(".opensession-claude-accounts.json", ".backstage-claude-accounts.json");
   let hasAccounts = false;
   let socketRunOk = false; // gates the WS-section agent runs (same cost rule)
   try {
@@ -391,7 +393,7 @@ try {
   // The workspace lives ONLY in a per-session volume: ensure() clones the
   // scratch bare origin inside the container; nothing appears host-side. The
   // read surfaces are exercised exec-routed (workspaceExecFor), exactly the
-  // way backstage.ts routes them for such a session.
+  // way opensession.ts routes them for such a session.
   console.log("\n══ volume-mode workspace ══");
   const vol = await provider.ensure({
     sessionId: VOL_SESSION_ID,
@@ -418,7 +420,7 @@ try {
   ok("ensure() is idempotent for volume workspaces", idem.id === vol.id && idem.workspace === "volume");
 
   // Exec-routed surfaces against the volume workspace, via the same session
-  // shape backstage.ts derives the exec from.
+  // shape opensession.ts derives the exec from.
   console.log("\n── exec-routed surfaces (volume) ──");
   const volSession = {
     sandbox: { provider: "docker", sandboxId: vol.id, workspace: "volume" },
@@ -485,7 +487,7 @@ try {
 
   // ══ WS TRANSPORT (Phase 3) ═══════════════════════════════════════════════
   // The run host dials back to a scratch WS server in THIS process (same
-  // run-ws module backstage.ts wires), bound on 0.0.0.0 so the container can
+  // run-ws module opensession.ts wires), bound on 0.0.0.0 so the container can
   // reach it via the docker bridge gateway. No rpc-socket mount, no host.sock.
   console.log("\n══ ws transport ══");
   const runWs = await import("../../src/server/run-ws");
@@ -519,7 +521,7 @@ try {
   });
   const wsBase = `ws://${gateway}:${wsSrv.port}`;
   await Bun.write(
-    process.env.BACKSTAGE_SANDBOX_CONFIG!,
+    process.env.OPENSESSION_SANDBOX_CONFIG!,
     JSON.stringify({ provider: "docker", transport: "ws", callbackBaseUrl: wsBase }),
   );
   console.log(`  scratch run-ws server at ${wsBase}`);
@@ -662,7 +664,7 @@ try {
   // is mount-carried, not snapshot-carried.
   console.log("\n══ snapshots ══");
   await Bun.write(
-    process.env.BACKSTAGE_SANDBOX_CONFIG!,
+    process.env.OPENSESSION_SANDBOX_CONFIG!,
     JSON.stringify({ provider: "docker", snapshots: { enabled: true, maxPerSession: 2 } }),
   );
   const snapRepo = snapshotRepoForSandbox(SNAP_CONTAINER);
@@ -673,7 +675,7 @@ try {
 
   // Backdate the state file, then run the REAL sweep scoped to this sandbox:
   // it must snapshot first, then stop.
-  const snapStatePath = `${BACKSTAGE_CHATS_DIR}/sandboxes/${SNAP_CONTAINER}.json`;
+  const snapStatePath = `${OPENSESSION_CHATS_DIR}/sandboxes/${SNAP_CONTAINER}.json`;
   const snapState = JSON.parse(await Bun.file(snapStatePath).text());
   snapState.lastActivityAt = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
   snapState.createdAt = snapState.lastActivityAt;
@@ -714,7 +716,7 @@ try {
   // ══ PREVIEW + LIFECYCLE (Phase 4A) ═══════════════════════════════════════
   // A bind-mode sandbox with the repo-local lifecycle hooks: setup.sh must run
   // exactly once; startSandboxPreview must allocate a webapp port from the
-  // pre-published range, run .backstage/start.sh with the port/URL env, route
+  // pre-published range, run .opensession/start.sh with the port/URL env, route
   // Caddy at a NAMESPACED https port (never the host's webapp+6000 scheme),
   // and write the .tunnels.env contract. Uses the LIVE Caddy admin API — all
   // routes/allocations are cleaned up here and in cleanup().
@@ -722,18 +724,18 @@ try {
   const previewMod = await import("../../src/server/preview");
   const previewPortsMod = await import("../../src/server/sandbox/preview-ports");
   await Bun.write(
-    process.env.BACKSTAGE_SANDBOX_CONFIG!,
+    process.env.OPENSESSION_SANDBOX_CONFIG!,
     JSON.stringify({ provider: "docker", devServerInSandbox: true, previewPorts: PRE_PORTS }),
   );
-  mkdirSync(`${WT}/.backstage`, { recursive: true });
+  mkdirSync(`${WT}/.opensession`, { recursive: true });
   await Bun.write(
-    `${WT}/.backstage/setup.sh`,
-    `#!/usr/bin/env bash\necho "setup boot=$BACKSTAGE_BOOT_MODE" >> .backstage-setup-runs\n`,
+    `${WT}/.opensession/setup.sh`,
+    `#!/usr/bin/env bash\necho "setup boot=$BACKSTAGE_BOOT_MODE" >> .opensession-setup-runs\n`,
   );
   await Bun.write(
-    `${WT}/.backstage/start.sh`,
+    `${WT}/.opensession/start.sh`,
     `#!/usr/bin/env bash
-echo "start boot=$BACKSTAGE_BOOT_MODE port=$WEBAPP_PORT url=$PREVIEW_URL" > .backstage-start-ran
+echo "start boot=$BACKSTAGE_BOOT_MODE port=$WEBAPP_PORT url=$PREVIEW_URL" > .opensession-start-ran
 exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0.0", fetch: () => new Response("lifecycle-preview-ok") })'
 `,
   );
@@ -741,7 +743,7 @@ exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0
   const pre = await provider.ensure({ sessionId: PRE_SESSION_ID, cwd: WT });
   ok("ensure() created the preview-section container", pre.id === PRE_CONTAINER, pre.id);
   await provider.ensure({ sessionId: PRE_SESSION_ID, cwd: WT }); // second ensure — setup must not re-run
-  const setupRuns = await sh(["cat", `${WT}/.backstage-setup-runs`]);
+  const setupRuns = await sh(["cat", `${WT}/.opensession-setup-runs`]);
   ok("setup.sh ran exactly once with boot mode (one-shot per materialization)",
     setupRuns.out.trim() === "setup boot=fresh", JSON.stringify(setupRuns.out.trim()));
   const preMap = await pre.ports();
@@ -756,11 +758,11 @@ exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0
     await new Promise((r) => setTimeout(r, 500));
     pst = await previewMod.getSandboxPreviewStatus(pre, WT);
   }
-  ok("webapp came up in-container via .backstage/start.sh", pst.running,
+  ok("webapp came up in-container via .opensession/start.sh", pst.running,
     pst.services.map((s) => `${s.key}=${s.port}:${s.running}`).join(","));
   ok("allocated webapp port came from the published range",
     pst.webappPort != null && PRE_PORTS.includes(pst.webappPort), String(pst.webappPort));
-  const startMarker = await sh(["cat", `${WT}/.backstage-start-ran`]);
+  const startMarker = await sh(["cat", `${WT}/.opensession-start-ran`]);
   ok("start.sh received WEBAPP_PORT / PREVIEW_URL / boot mode env",
     startMarker.out.includes(`port=${pst.webappPort}`) &&
       startMarker.out.includes("url=https://") &&
@@ -910,7 +912,7 @@ exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0
     (() => {
       try {
         return JSON.parse(
-          readFileSync(`${process.env.HOME}/.backstage-sandbox.json`, "utf-8"),
+          readFileSync(statePath(".opensession-sandbox.json", ".backstage-sandbox.json"), "utf-8"),
         )?.daytona?.apiKey as string | undefined;
       } catch {
         return undefined;

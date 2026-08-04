@@ -17,12 +17,12 @@ effect once a provider is configured.
 # 1. One-time host setup: block containers from the cloud metadata service
 deploy/sandbox/setup-host.sh
 
-# 2. Build the runner image (tags backstage-runner:latest + :<git-sha>)
+# 2. Build the runner image (tags opensession-runner:latest + :<git-sha>)
 deploy/sandbox/build.sh
 
 # 3. Configure the provider
 cat > ~/.opensession-sandbox.json <<'EOF'
-{ "provider": "docker", "image": "backstage-runner:latest" }
+{ "provider": "docker", "image": "opensession-runner:latest" }
 EOF
 
 # 4. Restart OpenSession to load runner-internal changes
@@ -86,11 +86,12 @@ problem — a cold sandbox is slow — at different layers.
 ### The runner image
 
 The base image a sandbox starts from. `deploy/sandbox/build.sh` builds it and
-tags `backstage-runner:latest` plus the git SHA (the tag predates the rename; `IMAGE=` overrides it). It carries the toolchain a
+tags `opensession-runner:latest` plus the git SHA (`IMAGE=` overrides the
+name). It carries the toolchain a
 session needs (bun, git, the engine) so no session pays to install them.
 
 This is the piece you should rebuild deliberately: pinning
-`"image": "backstage-runner:<sha>"` means a rebuild cannot change behaviour
+`"image": "opensession-runner:<sha>"` means a rebuild cannot change behaviour
 underneath running sessions, and rolling back is retagging.
 
 Path parity between the image and the host is load-bearing — see the section
@@ -167,8 +168,8 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   "provider": "docker",
 
   // ── Docker provider ────────────────────────────────────────────────
-  // Container image (default "backstage-runner:latest").
-  "image": "backstage-runner:latest",
+  // Container image (default "opensession-runner:latest").
+  "image": "opensession-runner:latest",
   // docker stop idle containers after N minutes (default 30); restarted
   // automatically on the session's next turn.
   "idleStopMinutes": 30,
@@ -212,7 +213,7 @@ to `provider: "local"` (today's host behavior). Env override for the path:
 
   // Per-repo overrides (keys = repo ids from the repos registry).
   "perRepo": {
-    "my-app": { "provider": "docker", "image": "backstage-runner:latest" }
+    "my-app": { "provider": "docker", "image": "opensession-runner:latest" }
   },
 
   // ── Transport (how the in-sandbox run host talks to backstage) ─────

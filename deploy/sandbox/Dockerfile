@@ -1,8 +1,8 @@
-# backstage-runner — prebaked image for the Docker sandbox provider (the sandbox rollout plan §5 Phase 1)
+# opensession-runner — prebaked image for the Docker sandbox provider (the sandbox rollout plan §5 Phase 1)
 #
-# Contains the exact toolchain a Backstage runner needs to execute an agent run
+# Contains the exact toolchain an OpenSession runner needs to execute an agent run
 # inside a container: bun (pinned to host), node LTS, git, gh, ripgrep, the Claude
-# Code CLI (pinned to host, at the identical host path), and the backstage runner
+# Code CLI (pinned to host, at the identical host path), and the OpenSession runner
 # bundle with node_modules — which vendors the codex binary (@openai/codex-linux-x64)
 # and the Claude Agent SDK (@anthropic-ai/claude-agent-sdk).
 #
@@ -122,7 +122,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_VERSION}" \
          *) echo "claude version mismatch: got '$installed', want ${CLAUDE_VERSION}"; exit 1 ;; \
        esac
 
-# --- backstage runner bundle ---
+# --- OpenSession runner bundle ---
 # Deps first for layer caching: only re-installs when package.json / bun.lock change.
 WORKDIR /home/ubuntu/projects/tella-backstage
 COPY --chown=ubuntu:ubuntu package.json bun.lock ./

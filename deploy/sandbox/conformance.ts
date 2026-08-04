@@ -35,17 +35,17 @@
  */
 
 const SCRATCH = `${process.env.HOME || homedir()}/.sandbox-conformance-scratch`;
-process.env.BACKSTAGE_RUN_JOURNAL = `${SCRATCH}/active-runs.json`;
-process.env.BACKSTAGE_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
-// Provider state files + sandbox-runs dirs land under BACKSTAGE_CHATS_DIR —
+process.env.OPENSESSION_RUN_JOURNAL = `${SCRATCH}/active-runs.json`;
+process.env.OPENSESSION_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
+// Provider state files + sandbox-runs dirs land under OPENSESSION_CHATS_DIR —
 // point it at the scratch dir so sbxtest state never lands in the live store.
-process.env.BACKSTAGE_CHATS_DIR = `${SCRATCH}/chats`;
+process.env.OPENSESSION_CHATS_DIR = `${SCRATCH}/chats`;
 // The repo registry is config-driven (REPOS is a read-only Proxy over
 // configuredRepos() — worktree.ts/config.ts): scratch repos are registered
-// through a scratch ~/.backstage/config.json written below, same pattern as
+// through a scratch ~/.opensession/config.json written below, same pattern as
 // verify.ts. The live box has no config.json, so this only ADDS the scratch
 // repos over the built-in defaults.
-process.env.BACKSTAGE_CONFIG = `${SCRATCH}/backstage-config.json`;
+process.env.OPENSESSION_CONFIG = `${SCRATCH}/opensession-config.json`;
 
 import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
@@ -53,7 +53,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 const { getSandboxProvider } = await import("../../src/server/sandbox/index");
 const runWs = await import("../../src/server/run-ws");
 const { hostRunBusy } = await import("../../src/server/host-registry");
-const { BACKSTAGE_CHATS_DIR } = await import("../../src/server/paths");
+const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
+const { envAlias, statePath } = await import("../../src/server/rename-compat");
 // The orphan-snapshot sweep (docker.ts, piggybacked on the idle sweep) reads
 // session/state files through the — now scratch-redirected — chats dir, so it
 // would see every LIVE session as gone. Arm its once-an-hour throttle up
@@ -133,7 +134,8 @@ let hasAccounts = false;
 try {
   const store = JSON.parse(
     readFileSync(
-      process.env.BACKSTAGE_CLAUDE_ACCOUNTS_PATH || `${HOME}/.backstage-claude-accounts.json`,
+      envAlias("OPENSESSION_CLAUDE_ACCOUNTS_PATH", "BACKSTAGE_CLAUDE_ACCOUNTS_PATH") ||
+        statePath(".opensession-claude-accounts.json", ".backstage-claude-accounts.json"),
       "utf-8",
     ),
   );
@@ -155,7 +157,7 @@ for (const p of [MAIN, WT, BARE]) rmSync(p, { recursive: true, force: true });
 mkdirSync(MAIN, { recursive: true });
 for (const c of [
   ["git", "init", "-q", "-b", "main"],
-  ["git", "config", "user.email", "sbxtest@backstage.local"],
+  ["git", "config", "user.email", "sbxtest@opensession.local"],
   ["git", "config", "user.name", "Sandbox Conformance"],
 ]) await sh(c, MAIN);
 await Bun.write(`${MAIN}/README.md`, "sandbox conformance scratch repo\n");
@@ -165,12 +167,12 @@ await sh(["git", "clone", "-q", "--bare", MAIN, BARE]);
 await sh(["git", "remote", "add", "origin", BARE], MAIN);
 await sh(["git", "worktree", "add", "-q", WT, "-b", "sbxtest-conf-branch"], MAIN);
 // Register the scratch repos through the config-driven registry (REPOS is a
-// read-only Proxy now; BACKSTAGE_CONFIG points at this scratch file — same
+// read-only Proxy now; OPENSESSION_CONFIG points at this scratch file — same
 // pattern as verify.ts). sbxpub is the remote workspace source: tiny public
 // repo whose `repo` path has no git checkout, so remoteCloneUrl falls through
 // to ghRepo's https URL.
 await Bun.write(
-  process.env.BACKSTAGE_CONFIG!,
+  process.env.OPENSESSION_CONFIG!,
   JSON.stringify({
     repos: {
       sbxtest: { repo: MAIN, wtPrefix: "sbxtest", defaultBranch: "main", ghRepo: "sbxtest/sbxtest" },
@@ -397,7 +399,7 @@ async function runEntry(entry: Entry): Promise<void> {
     console.log(`  ${entry.skip}`);
     return;
   }
-  await Bun.write(process.env.BACKSTAGE_SANDBOX_CONFIG!, JSON.stringify(entry.config));
+  await Bun.write(process.env.OPENSESSION_SANDBOX_CONFIG!, JSON.stringify(entry.config));
   const provider = getSandboxProvider(entry.providerId);
   const sessionId = `sbxtest-conf-${entry.name}-${RUN_TS}`;
   const spec = {
@@ -553,7 +555,7 @@ async function runEntry(entry: Entry): Promise<void> {
           "sh", "-c",
           `mkdir -p ${smokeDir} && cat > ${smokeDir}/${HOST_SPEC_NAME} <<'EOF'\n${JSON.stringify(smokeSpec)}\nEOF\n` +
             `env HOME=/home/ubuntu BKS_RUN_WS_URL=ws://127.0.0.1:9/dead BKS_RUN_WS_TOKEN=smoke ` +
-            `BACKSTAGE_RUN_JOURNAL=${smokeDir}/journal.json nohup /home/ubuntu/.bun/bin/bun run ${HOST_ENTRY} ` +
+            `OPENSESSION_RUN_JOURNAL=${smokeDir}/journal.json nohup /home/ubuntu/.bun/bin/bun run ${HOST_ENTRY} ` +
             `${smokeDir}/${HOST_SPEC_NAME} > ${smokeDir}/host.log 2>&1 & echo started`,
         ]);
         let smokeLog = "";
@@ -703,8 +705,8 @@ async function runEntry(entry: Entry): Promise<void> {
       ok("destroy() removed the sandbox", gone === "gone", String(gone));
       ok(
         "provider state file removed",
-        !existsSync(`${BACKSTAGE_CHATS_DIR}/sandboxes/${entry.providerId}-${sandbox.id}.json`) &&
-          !existsSync(`${BACKSTAGE_CHATS_DIR}/sandboxes/${sandbox.id}.json`),
+        !existsSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${entry.providerId}-${sandbox.id}.json`) &&
+          !existsSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${sandbox.id}.json`),
       );
     }
   }
@@ -931,15 +933,15 @@ try {
     const c = containerNameFor(`sbxtest-conf-${e.name}-${RUN_TS}`);
     await sh(["docker", "rm", "-f", c]);
     await sh(["docker", "volume", "rm", "-f", `${c}-claude`, `${c}-codex`, `${c}-ws`]);
-    rmSync(`${BACKSTAGE_CHATS_DIR}/sandboxes/${c}.json`, { force: true });
+    rmSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${c}.json`, { force: true });
   }
   for (const e of entries) {
-    rmSync(`${BACKSTAGE_CHATS_DIR}/sandbox-runs/sbxtest-conf-${e.name}-${RUN_TS}`, {
+    rmSync(`${OPENSESSION_CHATS_DIR}/sandbox-runs/sbxtest-conf-${e.name}-${RUN_TS}`, {
       recursive: true,
       force: true,
     });
   }
-  // (scratch repo registrations die with the scratch BACKSTAGE_CONFIG below)
+  // (scratch repo registrations die with the scratch OPENSESSION_CONFIG below)
   for (const dir of [WT]) {
     const munged = `-${dir.replaceAll("/", "-").replace(/^-/, "")}`;
     rmSync(`${HOME}/.claude/projects/${munged}`, { recursive: true, force: true });

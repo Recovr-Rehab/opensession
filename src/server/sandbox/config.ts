@@ -3,7 +3,7 @@
  *
  * `~/.opensession-sandbox.json` (dual-read fallback to `~/.backstage-sandbox.json`)
  * picks the provider, e.g.
- *   {"provider": "docker", "image": "backstage-runner:latest",
+ *   {"provider": "docker", "image": "opensession-runner:latest",
  *    "idleStopMinutes": 30, "perRepo": {"app": {"provider": "docker"}}}
  *
  * Read fresh on every call (same pattern as codexTransport() reading
