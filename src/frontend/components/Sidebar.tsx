@@ -171,11 +171,6 @@ const ARCHIVE_SHORTCUT_KEYS = isChromium
 		? ["⌘", "E"]
 		: ["Ctrl", "E"];
 const PIN_SHORTCUT_KEYS = isApple ? ["⌘", "P"] : ["Ctrl", "P"];
-// Bare N when you aren't typing; the chord (Alt-carrying, since the browser
-// keeps ⌘N/⌘⇧N for itself) still works from inside the composer.
-const NOTES_SHORTCUT_HINT = isApple
-	? "N, or ⌘⌥N while typing"
-	: "N, or Ctrl+Alt+N while typing";
 
 /** ⌘E (primary) or ⌘⇧A (legacy) — the archive-this-chat chord. */
 function isArchiveChord(e: KeyboardEvent): boolean {
@@ -3633,7 +3628,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			icon: <IconPencil />,
 			active: notesActive,
 			onClick: onOpenNotes,
-			title: `Shared notes and documentation (${NOTES_SHORTCUT_HINT})`,
+			title: "Shared notes and documentation",
 		},
 		{
 			id: "desk",

@@ -432,19 +432,6 @@ function samePanel(a: Route, b: Route): boolean {
 	return id(a) !== undefined && id(a) === id(b);
 }
 
-// True when the keystroke belongs to whatever the user is typing in — the
-// composer, a rename field, a search box, a CodeMirror note. Bare-letter
-// shortcuts must yield to it, or they eat the letter mid-word.
-function isTypingTarget(target: EventTarget | null): boolean {
-	for (const el of [target as HTMLElement | null, document.activeElement]) {
-		const editable = (el as HTMLElement | null)?.closest?.(
-			"input, textarea, select, [contenteditable='true'], [contenteditable='']",
-		);
-		if (editable) return true;
-	}
-	return false;
-}
-
 export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) {
 	const { sessions, loading, cloudUnreachable, refresh, inject, unstick, patch, remove } =
 		useSessions();
@@ -946,8 +933,6 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// The Desk overlay (⌘J / the floating desk button): a standing concierge
 	// session on top of whatever view is open.
 	const [deskOpen, setDeskOpen] = useState(false);
-	const deskOpenRef = useRef(deskOpen);
-	deskOpenRef.current = deskOpen;
 	// Open-task count for the Tasks toolbar entry — refreshed on every
 	// todos_changed broadcast (the Tasks page, agent tools, or another tab).
 	const [taskCount, setTaskCount] = useState(0);
@@ -1014,31 +999,16 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// the current view has nothing linkable.
 	const copyLinkPathRef = useRef<string | null>(null);
 
-	// ⌘K toggles the command palette; ⌘N the new-session palette; ⌘⌥N
-	// opens Notes; ⌘⇧C copies a link to the open chat/PR. Esc closes whichever
-	// palette is open (search's own input also handles Esc, but this covers the
-	// case where focus has left it).
+	// ⌘K toggles the command palette; ⌘N the new-session palette; ⌘⇧C copies a
+	// link to the open chat/PR. Esc closes whichever palette is open (search's
+	// own input also handles Esc, but this covers the case where focus has left
+	// it).
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			const k = e.key.toLowerCase();
 			if ((e.metaKey || e.ctrlKey) && k === "k") {
 				e.preventDefault();
 				setSearchOpen((o) => !o);
-				return;
-			}
-			// ⌘⌥N opens the shared Notes tool. Both plain ⌘N and ⌘⇧N are reserved
-			// by the browser (new window / incognito) and never reach the page, so
-			// Notes takes the Alt-carrying chord. e.code, not e.key: on macOS ⌥N is
-			// a dead key ("˜"). Must stay above the ⌘N branch — on Windows
-			// Ctrl+Alt+N still reports e.key "n" and would open that palette.
-			if (
-				(e.metaKey || e.ctrlKey) &&
-				e.altKey &&
-				!e.shiftKey &&
-				e.code === "KeyN"
-			) {
-				e.preventDefault();
-				navigate({ view: "notes", sel: null });
 				return;
 			}
 			if ((e.metaKey || e.ctrlKey) && k === "n") {
@@ -1068,26 +1038,6 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				if (!path) return;
 				e.preventDefault();
 				copyToClipboard(absoluteLink(path), () => showToast("Link copied"));
-				return;
-			}
-			// Bare "n" opens Notes when you aren't typing — the modifier-free
-			// sibling of ⌘⌥N, in the spirit of the PR/support decks' single-key
-			// verbs. e.key (not e.code) so non-QWERTY layouts get their own N.
-			// Shift is tolerated: ⇧N types nothing here either way.
-			if (
-				!e.metaKey &&
-				!e.ctrlKey &&
-				!e.altKey &&
-				!e.defaultPrevented &&
-				e.key.toLowerCase() === "n" &&
-				!isTypingTarget(e.target) &&
-				!searchOpenRef.current &&
-				!paletteOpenRef.current &&
-				!deskOpenRef.current &&
-				!document.querySelector("[role='dialog']")
-			) {
-				e.preventDefault();
-				navigate({ view: "notes", sel: null });
 				return;
 			}
 			if (e.key === "Escape") {
@@ -2836,7 +2786,6 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			description: "Open shared notes and documentation",
 			category: "Navigate",
 			keywords: ["docs", "documentation"],
-			shortcut: ["N"],
 			icon: <IconPencil size={18} />,
 			run: () => navigate({ view: "notes", sel: null }),
 		},
