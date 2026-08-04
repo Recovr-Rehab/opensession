@@ -102,9 +102,13 @@ export function ClampedBody({
 			{asMarkdown ? (
 				<MarkdownBody className={className} html={html || ""} />
 			) : (
+				// A <pre> only for the preserved whitespace: this branch renders a
+				// message too long for the markdown pass, which is prose, not code.
+				// `font-sans` is load-bearing — the app ships no Tailwind Preflight,
+				// so the UA's `pre { font-family: monospace }` applies otherwise.
 				<pre
 					className={
-						"my-1 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface p-3 text-label leading-relaxed text-fg"
+						"my-1 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface p-3 font-sans text-label leading-relaxed text-fg"
 					}
 				>
 					{shown}
