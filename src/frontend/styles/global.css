@@ -5481,14 +5481,19 @@ a.workspace-info-check-row {
 }
 /* Copy-path affordance, inline right after the filename. Revealed on row hover
    but always occupying its space (opacity, not display) so the name can't shift
-   under the pointer; it stays lit while showing the copied checkmark. */
+   under the pointer; it stays lit while showing the copied checkmark.
+   Sized to the 20px icon with no padding: anything taller is the tallest thing
+   in the row and pushes every file header down by the difference. */
 .diff-file-copy {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	align-self: center;
 	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
 	margin-left: 5px;
-	padding: 2px;
+	padding: 0;
 	border: none;
 	border-radius: calc(5px * var(--rf)); corner-shape: var(--cs);
 	background: transparent;

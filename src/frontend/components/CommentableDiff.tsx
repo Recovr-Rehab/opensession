@@ -589,7 +589,7 @@ export function CommentableDiff({
                   copyPath(file.name);
                 }}
               >
-                {copied === file.name ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                {copied === file.name ? <IconCheck size={20} /> : <IconCopy size={20} />}
               </button>
             </Tooltip>
           </span>
