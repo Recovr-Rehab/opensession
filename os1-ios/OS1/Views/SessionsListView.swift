@@ -564,7 +564,6 @@ struct SessionsListView: View {
         let id: String
         let title: String
         let workspaces: [SidebarWorkspace]
-        let lane: Session.Lane?
         let repo: String?
     }
 
@@ -588,7 +587,6 @@ struct SessionsListView: View {
                     id: "recent",
                     title: "",
                     workspaces: workspaces,
-                    lane: nil,
                     repo: nil
                 )]
         case .repo:
@@ -598,7 +596,6 @@ struct SessionsListView: View {
                     id: "repo-\($0)",
                     title: $0,
                     workspaces: byRepo[$0]!,
-                    lane: nil,
                     repo: $0
                 )
             }
@@ -611,7 +608,6 @@ struct SessionsListView: View {
                         id: "lane-\(lane.rawValue)",
                         title: lane.label,
                         workspaces: inLane,
-                        lane: lane,
                         repo: nil
                     )
             }
@@ -634,7 +630,6 @@ struct SessionsListView: View {
                         id: "repo-\(repo)-lane-\(lane.rawValue)",
                         title: lane.label,
                         workspaces: inLane,
-                        lane: lane,
                         repo: nil
                     )
             }
@@ -643,8 +638,7 @@ struct SessionsListView: View {
     }
 
     /// "Repo and inbox": the same repo bands, with each repo's rows split into
-    /// the Inbox activity bands instead of status lanes. Only the first band
-    /// ("Needs action") carries a lane color — the rest are date dividers.
+    /// the Inbox activity bands instead of status lanes.
     private var repoInboxGroups: [RepoSessionGroup] {
         let byRepo = Dictionary(grouping: filteredWorkspaces, by: \.effectiveRepo)
         return availableRepos.compactMap { repo in
@@ -654,7 +648,6 @@ struct SessionsListView: View {
                     id: "repo-\(repo)-band-\(band.band.rawValue)",
                     title: band.band.label,
                     workspaces: band.workspaces,
-                    lane: band.band == .needsAction ? .needsInput : nil,
                     repo: nil
                 )
             }
@@ -986,7 +979,6 @@ struct SessionsListView: View {
                             groupHeader(
                                 title: group.title,
                                 count: group.workspaces.count,
-                                lane: group.lane,
                                 repo: group.repo
                             )
                         }
@@ -1062,18 +1054,15 @@ struct SessionsListView: View {
         }
     }
 
+    // Section and lane headings carry no glyph of their own — like the web
+    // sidebar, they're dividers, and the rows under them already wear the
+    // status marks.
     private func groupHeader(
         title: String,
         count: Int,
-        lane: Session.Lane? = nil,
         repo: String? = nil
     ) -> some View {
         HStack(spacing: 6) {
-            if let lane {
-                Circle()
-                    .fill(lane.color)
-                    .frame(width: 7, height: 7)
-            }
             if let repo {
                 #if os(iOS)
                 RepoTile(name: repo, size: 24)
@@ -1121,9 +1110,6 @@ struct SessionsListView: View {
 
     private func statusLaneHeader(_ group: SessionGroup) -> some View {
         HStack(spacing: 5) {
-            Circle()
-                .fill(group.lane?.color ?? OS1VisualStyle.textFaint)
-                .frame(width: 6, height: 6)
             Text(group.title)
                 .font(.caption.weight(.semibold))
             Text("\(group.workspaces.count)")
