@@ -822,16 +822,17 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 <IconSliders size={20} />
               </button>
             )}
-            <button
-              type="button"
-              className="palette-icon-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={creating}
-              title="Attach a file"
-              aria-label="Attach a file"
-            >
-              <IconPaperclip size={20} />
-            </button>
+            <Tooltip label="Attach a file">
+              <button
+                type="button"
+                className="palette-icon-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={creating}
+                aria-label="Attach a file"
+              >
+                <IconPaperclip size={20} />
+              </button>
+            </Tooltip>
             <input
               ref={fileInputRef}
               type="file"
@@ -846,18 +847,21 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 on phones (a positioned popup is too cramped there). */}
             {!isPhone ? (
               <Menu.Root>
-                <Menu.Trigger
-                  type="button"
-                  className={`palette-icon-btn palette-mcp-picker-btn ${selectedMcpServers.length ? "is-on" : ""}`}
-                  disabled={creating}
-                  title={`Connected services${selectedMcpServers.length ? ` (${selectedMcpServers.length})` : ""}`}
-                  aria-label="Choose connected services"
+                <Tooltip
+                  label={`Connected services${selectedMcpServers.length ? ` (${selectedMcpServers.length})` : ""}`}
                 >
-                  <IconConnections size={20} />
-                  {selectedMcpServers.length > 0 && (
-                    <span className="palette-mcp-picker-badge">{selectedMcpServers.length}</span>
-                  )}
-                </Menu.Trigger>
+                  <Menu.Trigger
+                    type="button"
+                    className={`palette-icon-btn palette-mcp-picker-btn ${selectedMcpServers.length ? "is-on" : ""}`}
+                    disabled={creating}
+                    aria-label="Choose connected services"
+                  >
+                    <IconConnections size={20} />
+                    {selectedMcpServers.length > 0 && (
+                      <span className="palette-mcp-picker-badge">{selectedMcpServers.length}</span>
+                    )}
+                  </Menu.Trigger>
+                </Tooltip>
                 <Menu.Popup align="start" sideOffset={6} className="max-w-[min(360px,calc(100vw-1rem))]">
                   <Menu.Group>
                     <Menu.GroupLabel className="pt-1.5">Connected services</Menu.GroupLabel>
@@ -939,17 +943,20 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 toggle with the other advanced controls. */}
             {showSandboxPicker && optionsVisible && (
               <Menu.Root>
-                <Menu.Trigger
-                  type="button"
-                  className={`palette-icon-btn ${sandboxProvider ? "is-on" : ""}`}
-                  disabled={creating}
-                  title={`Run environment — ${sandboxLabel(sandboxProvider)}${
+                <Tooltip
+                  label={`Run environment — ${sandboxLabel(sandboxProvider)}${
                     sandboxWarmed && shouldPrewarm ? " (warmed)" : ""
                   }`}
-                  aria-label="Run environment"
                 >
-                  <IconBox size={20} />
-                </Menu.Trigger>
+                  <Menu.Trigger
+                    type="button"
+                    className={`palette-icon-btn ${sandboxProvider ? "is-on" : ""}`}
+                    disabled={creating}
+                    aria-label="Run environment"
+                  >
+                    <IconBox size={20} />
+                  </Menu.Trigger>
+                </Tooltip>
                 <Menu.Popup align="start" sideOffset={6} className="max-w-[min(340px,calc(100vw-1rem))]">
                   <Menu.Group>
                     <Menu.GroupLabel className="pt-1.5">Run environment</Menu.GroupLabel>
