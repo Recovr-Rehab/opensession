@@ -15,6 +15,7 @@ import {
 import { fullTime } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { canonicalToolName } from "./ToolCallBlock";
+import { LANG_MARKS } from "./lang-marks";
 
 /** One change a tool made to a file: old text removed, new text added.
  * Writes have old: "" (the whole content is an addition). */
@@ -286,7 +287,7 @@ function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toLowerCase() : "";
   const color = EXT_COLORS[ext] || "#6e7681";
-  const Glyph = EXT_GLYPHS[ext];
+  const Glyph = LANG_MARKS[ext];
   return (
     <span
       className={cn(
@@ -302,78 +303,15 @@ function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
 
 /**
  * An extension keeps its real name up to four characters and is cut to three
- * beyond that. A blind three-letter cut spelled "JSO", "YAM", "TOM", "SCS" and
- * "JAV" — word-shaped enough to read as a typo rather than an abbreviation,
- * and the badge is elastic, so the fourth character costs a few pixels.
+ * beyond that. A blind three-letter cut spelled "JSO", "YAM", "SCS" and "JAV"
+ * — word-shaped enough to read as a typo rather than an abbreviation, and the
+ * badge is elastic, so the fourth character costs a few pixels.
  */
 function extLabel(ext: string): string {
   if (!ext) return "?";
   return (ext.length <= 4 ? ext : ext.slice(0, 3)).toUpperCase();
 }
 
-/**
- * ReScript's brandmark — the bar-and-dot "R" from rescript-lang.org, cropped to
- * its own bounds so it optically centres in the badge rather than sitting in the
- * logo's own square (the badge already draws that part). Filled with
- * `currentColor` so it picks up the badge's white.
- *
- * Sized against the letters it sits beside rather than the badge box: they set
- * about 40% of the badge's height in ink (an 8px cap in the 20px popup badge),
- * and a bar-and-dot carries less mass than a letter pair, so it's drawn a touch
- * over that — 10px in the chip's 24px block, 8px in the 20px popup one.
- */
-function ReScriptMark({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="64.9 60.6 134.6 134.6" fill="currentColor" aria-hidden="true">
-      <path d="M65.318 87.582c0-9.422 0-14.135 1.84-17.74a16.802 16.802 0 0 1 7.355-7.364c3.6-1.831 8.313-1.831 17.74-1.831h23.564v109.398c0 7.842 0 11.765-1.282 14.854a16.823 16.823 0 0 1-9.11 9.108c-3.091 1.282-7.014 1.282-14.853 1.282-7.842 0-11.765 0-14.854-1.282a16.817 16.817 0 0 1-9.11-9.108c-1.282-3.091-1.282-7.014-1.282-14.854l-.008-82.463Z" />
-      <circle cx="169.41" cy="91.333" r="29.683" />
-    </svg>
-  );
-}
-
-/**
- * Swift's bird, taken out of the rounded tile the logo ships in — the badge is
- * already that tile, and white-on-orange is Apple's own inverse treatment.
- * Cropped to the bird's bounds (measured with getBBox), so `size` sets its
- * width and the shorter height follows.
- */
-function SwiftMark({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="2.41 3.41 18.12 16.21" fill="currentColor" aria-hidden="true">
-      <path d="M13.543 3.41c4.114 2.47 6.545 7.162 5.549 11.131-.024.093-.05.181-.076.272l.002.001c2.062 2.538 1.5 5.258 1.236 4.745-1.072-2.086-3.066-1.568-4.088-1.043a6.803 6.803 0 0 1-.281.158l-.02.012-.002.002c-2.115 1.123-4.957 1.205-7.812-.022a12.568 12.568 0 0 1-5.64-4.838c.649.48 1.35.902 2.097 1.252 3.019 1.414 6.051 1.311 8.197-.002C9.651 12.73 7.101 9.67 5.146 7.191a10.628 10.628 0 0 1-1.005-1.384c2.34 2.142 6.038 4.83 7.365 5.576C8.69 8.408 6.208 4.743 6.324 4.86c4.436 4.47 8.528 6.996 8.528 6.996.154.085.27.154.36.213.085-.215.16-.437.224-.668.708-2.588-.09-5.548-1.893-7.992z" />
-    </svg>
-  );
-}
-
-/** HTML5's shield, cropped to the shield itself (the logo has no outer box). */
-function Html5Mark({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="1.5 0 21 24" fill="currentColor" aria-hidden="true">
-      <path d="M1.5 0h21l-1.91 21.563L11.977 24l-8.564-2.438L1.5 0zm7.031 9.75l-.232-2.718 10.059.003.23-2.622L5.412 4.41l.698 8.01h9.126l-.326 3.426-2.91.804-2.955-.81-.188-2.11H6.248l.33 4.171L12 19.351l5.379-1.443.744-8.157H8.531z" />
-    </svg>
-  );
-}
-
-/**
- * Languages whose logo is a single silhouette that still reads at 10px. Most
- * aren't: rendered at badge size, Rust's gear, Python's snakes, Java's cup,
- * Go's wordmark, the Sass swirl and the Markdown box all collapse into a
- * smudge, and TypeScript, JavaScript and CSS are already their own logo as
- * letters — so those keep the letters. Paths from simple-icons (CC0).
- */
-const EXT_GLYPHS: Record<string, (p: { size: number }) => React.ReactNode> = {
-  res: ReScriptMark,
-  resi: ReScriptMark,
-  swift: SwiftMark,
-  html: Html5Mark,
-};
-
-/**
- * Linguist's language hues, darkened where they had to be: the label is white,
- * so every colour here clears 3.5:1 against it. Linguist picks its colours for
- * a thin bar on a light page, and five of them (Go's cyan at 2.6:1, MySQL
- * orange, the amber pair, Bash green) left the letters washed out at this size.
- */
 const EXT_COLORS: Record<string, string> = {
   ts: "#3178c6",
   tsx: "#3178c6",
