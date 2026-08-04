@@ -4015,18 +4015,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						y: e.clientY,
 					});
 					}}
-					aria-label={row.name}
+					// The button's label replaces its content for assistive tech, so
+					// the blocked state — now carried visually by the row's wash —
+					// rides here rather than on a marker element.
+					aria-label={waiting ? `${row.name}, needs your attention` : row.name}
 				>
 				{/* Flat repo grouping has no lane heading, so its leading mark must carry
 				    the workspace status. Grouped lanes already provide that context and
-				    keep the richer PR lifecycle mark here instead. */}
+				    keep the richer PR lifecycle mark here instead. Blocked-on-you never
+				    adds a second leading mark: the row's accent wash and bold title
+				    already say it, and a green dot hanging off the rail collides with
+				    the glyph it precedes (green means "PR healthy" everywhere else). */}
 				<span className="sidebar-rail">
-					{!flatRepoGrouping && !banded && !isPhone && waiting && (
-						<span
-							className="absolute left-[-9px] top-[7px] block size-[7px] rounded-full bg-green"
-							aria-label="Needs your attention"
-						/>
-					)}
 					{flatRepoGrouping ? (
 						<WsStatusMark row={row} size={18} />
 					) : row.running ? (
@@ -7038,15 +7038,12 @@ function SidebarItem({
 			}
 		>
 			<div className="sidebar-item-top">
-				{/* Match workspace rows: attention sits before the fixed PR glyph, and
-				    merged PRs keep the glyph itself purple instead of adding metadata. */}
+				{/* Match workspace rows: the rail holds the PR glyph alone — a blocked
+				    chat reads from its accent wash and bold title, not from a second
+				    dot wedged in beside it — and merged PRs keep the glyph itself
+				    purple instead of adding metadata. */}
 				<span className="sidebar-rail">
-					{waiting && (
-						<span
-							className="sidebar-workspace-attention"
-							aria-label="Needs your attention"
-						/>
-					)}
+					{waiting && <span className="sr-only">Needs your attention</span>}
 					{session.isRunning ? (
 						<PixelSpinner className="text-yellow sidebar-spinner" />
 					) : (
