@@ -295,13 +295,20 @@ function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
       )}
       style={{ background: color }}
     >
-      {Glyph ? (
-        <Glyph size={flush ? 10 : 8} />
-      ) : (
-        (ext || "?").slice(0, 3).toUpperCase()
-      )}
+      {Glyph ? <Glyph size={flush ? 10 : 8} /> : extLabel(ext)}
     </span>
   );
+}
+
+/**
+ * An extension keeps its real name up to four characters and is cut to three
+ * beyond that. A blind three-letter cut spelled "JSO", "YAM", "TOM", "SCS" and
+ * "JAV" — word-shaped enough to read as a typo rather than an abbreviation,
+ * and the badge is elastic, so the fourth character costs a few pixels.
+ */
+function extLabel(ext: string): string {
+  if (!ext) return "?";
+  return (ext.length <= 4 ? ext : ext.slice(0, 3)).toUpperCase();
 }
 
 /**
@@ -325,24 +332,55 @@ function ReScriptMark({ size }: { size: number }) {
 }
 
 /**
- * Extensions whose language has a mark worth drawing instead of letters. The
- * default "first three letters" rule serves ReScript badly — ".res"/".resi"
- * both truncate to a wide "RES" slab, and it's the dominant extension in our
- * ReScript codebases, so a turn footer full of edits read as a row of red
- * word-blocks.
+ * Swift's bird, taken out of the rounded tile the logo ships in — the badge is
+ * already that tile, and white-on-orange is Apple's own inverse treatment.
+ * Cropped to the bird's bounds (measured with getBBox), so `size` sets its
+ * width and the shorter height follows.
+ */
+function SwiftMark({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="2.41 3.41 18.12 16.21" fill="currentColor" aria-hidden="true">
+      <path d="M13.543 3.41c4.114 2.47 6.545 7.162 5.549 11.131-.024.093-.05.181-.076.272l.002.001c2.062 2.538 1.5 5.258 1.236 4.745-1.072-2.086-3.066-1.568-4.088-1.043a6.803 6.803 0 0 1-.281.158l-.02.012-.002.002c-2.115 1.123-4.957 1.205-7.812-.022a12.568 12.568 0 0 1-5.64-4.838c.649.48 1.35.902 2.097 1.252 3.019 1.414 6.051 1.311 8.197-.002C9.651 12.73 7.101 9.67 5.146 7.191a10.628 10.628 0 0 1-1.005-1.384c2.34 2.142 6.038 4.83 7.365 5.576C8.69 8.408 6.208 4.743 6.324 4.86c4.436 4.47 8.528 6.996 8.528 6.996.154.085.27.154.36.213.085-.215.16-.437.224-.668.708-2.588-.09-5.548-1.893-7.992z" />
+    </svg>
+  );
+}
+
+/** HTML5's shield, cropped to the shield itself (the logo has no outer box). */
+function Html5Mark({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="1.5 0 21 24" fill="currentColor" aria-hidden="true">
+      <path d="M1.5 0h21l-1.91 21.563L11.977 24l-8.564-2.438L1.5 0zm7.031 9.75l-.232-2.718 10.059.003.23-2.622L5.412 4.41l.698 8.01h9.126l-.326 3.426-2.91.804-2.955-.81-.188-2.11H6.248l.33 4.171L12 19.351l5.379-1.443.744-8.157H8.531z" />
+    </svg>
+  );
+}
+
+/**
+ * Languages whose logo is a single silhouette that still reads at 10px. Most
+ * aren't: rendered at badge size, Rust's gear, Python's snakes, Java's cup,
+ * Go's wordmark, the Sass swirl and the Markdown box all collapse into a
+ * smudge, and TypeScript, JavaScript and CSS are already their own logo as
+ * letters — so those keep the letters. Paths from simple-icons (CC0).
  */
 const EXT_GLYPHS: Record<string, (p: { size: number }) => React.ReactNode> = {
   res: ReScriptMark,
   resi: ReScriptMark,
+  swift: SwiftMark,
+  html: Html5Mark,
 };
 
+/**
+ * Linguist's language hues, darkened where they had to be: the label is white,
+ * so every colour here clears 3.5:1 against it. Linguist picks its colours for
+ * a thin bar on a light page, and five of them (Go's cyan at 2.6:1, MySQL
+ * orange, the amber pair, Bash green) left the letters washed out at this size.
+ */
 const EXT_COLORS: Record<string, string> = {
   ts: "#3178c6",
   tsx: "#3178c6",
-  js: "#a8871a",
-  jsx: "#a8871a",
-  mjs: "#a8871a",
-  cjs: "#a8871a",
+  js: "#a38319",
+  jsx: "#a38319",
+  mjs: "#a38319",
+  cjs: "#a38319",
   css: "#663399",
   scss: "#c6538c",
   html: "#e34c26",
@@ -352,16 +390,16 @@ const EXT_COLORS: Record<string, string> = {
   yaml: "#cb171e",
   yml: "#cb171e",
   toml: "#9c4221",
-  sh: "#4eaa25",
-  bash: "#4eaa25",
+  sh: "#459721",
+  bash: "#459721",
   py: "#3572a5",
   rs: "#b7410e",
-  go: "#00add8",
+  go: "#0091b5",
   rb: "#701516",
   swift: "#f05138",
   java: "#b07219",
-  sql: "#e38c00",
-  svg: "#d97706",
+  sql: "#bf7600",
+  svg: "#ca6f06",
   // Linguist's ReScript red (#ed5051) is the loudest hue in this map and only
   // clears 3.6:1 against the white label — darkened to sit with its neighbours.
   res: "#c93a3c",
