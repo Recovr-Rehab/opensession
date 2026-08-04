@@ -54,34 +54,26 @@ export const TurnBlock = React.memo(function TurnBlock({
   const tools = items.filter((it) => it.type === "tool_use");
   const messages = items.filter((it) => it.type === "assistant");
 
-  // If any tool in the block returned media (image or video), keep the block
-  // open so the screenshot/recording stays visible after the run finishes.
-  const hasMedia = tools.some((it) => {
-    const r = it.toolUseId ? toolResults.get(it.toolUseId) : undefined;
-    return (r?.images?.length ?? 0) > 0 || (r?.videos?.length ?? 0) > 0;
-  });
-  const hasFailure = tools.some((it) => {
-    const result = it.toolUseId ? toolResults.get(it.toolUseId) : undefined;
-    return Boolean(result?.isError);
-  });
-  // Default fold state follows the per-browser preference (Settings →
-  // Appearance). The default stays folded, even during a live turn. "auto"
-  // is the opt-in mode that opens only the turn fold while it is working;
-  // ToolCallBlock owns its own disclosure, so this never expands a Bash input
-  // (including generated comment metadata). Media pins the turn open so a
-  // screenshot/recording stays visible.
+  // Default fold state follows the preference (Settings → Appearance) and
+  // nothing else. The default stays folded, even during a live turn. "auto"
+  // is the opt-in mode that opens only the turn fold while it is working, and
+  // folds it again the moment the turn settles — a failed step or a screenshot
+  // inside the turn used to pin it open forever, which is the one thing both
+  // "Always folded" and "Expand while running" promise never happens. The fold
+  // line already reports failures ("· 2 failed", in red); media is one click
+  // away. ToolCallBlock owns its own disclosure, so this never expands a Bash
+  // input (including generated comment metadata).
   const [pref, setPref] = useState(getTurnActivityPref);
   useEffect(
     () => onTurnActivityChanged(() => setPref(getTurnActivityPref())),
     []
   );
-  const defaultExpanded =
-    hasMedia || hasFailure || (pref === "auto" ? live : pref === "expanded");
+  const defaultExpanded = pref === "auto" ? live : pref === "expanded";
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   // Once the user has toggled the fold by hand, their choice wins — the
-  // auto-sync below must not reopen/collapse it on later default changes
-  // (settle, failure/media arriving).
+  // auto-sync below must not reopen/collapse it on a later default change
+  // (the turn settling, or the preference itself changing).
   const userToggledRef = useRef(false);
   useEffect(() => {
     if (userToggledRef.current) return;
