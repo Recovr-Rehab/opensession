@@ -455,28 +455,52 @@ struct SessionsListView: View {
         }
     }
 
-    private var filteredWorkspaces: [SidebarWorkspace] {
-        var workspaces = allSidebarWorkspaces
-        #if os(iOS)
-        workspaces = applyingHides(workspaces)
-        #endif
-        if peopleFilter == "mine" {
-            workspaces = workspaces.filter { $0.sessions.contains(where: isMine) }
-        }
-        if repoFilter != "all" {
-            workspaces = workspaces.filter { $0.effectiveRepo == repoFilter }
-        }
+    /// The current lens as one predicate, with its inputs read once.
+    ///
+    /// Hides stay here rather than in the view model's grouping: the hide map
+    /// changes independently of the session list, so a hidden row has to
+    /// disappear on the tap, not on the next poll.
+    private func visibilityFilter() -> (SidebarWorkspace) -> Bool {
+        let people = peopleFilter
+        let repo = repoFilter
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        if !query.isEmpty {
-            workspaces = workspaces.filter { workspace in
-                if workspace.title.lowercased().contains(query) { return true }
-                return workspace.sessions.contains { session in
-                    [session.title, session.effectiveRepo, session.branch, session.id]
-                        .compactMap { $0 }
-                        .contains { $0.lowercased().contains(query) }
-                }
+        // Rows this person has hidden drop out of the sidebar — except while
+        // a chat of theirs is blocked on a question (the poll consumes the
+        // hide when that happens), and except while searching, which is how a
+        // hidden row is found again so its menu can restore it.
+        #if os(iOS)
+        let hides = query.isEmpty ? HideStore.shared.hides : [:]
+        #endif
+        return { workspace in
+            #if os(iOS)
+            if !hides.isEmpty, workspace.lane != .needsInput,
+               hides[HideStore.rowKey(for: workspace)] != nil {
+                return false
+            }
+            #endif
+            if people == "mine", !workspace.sessions.contains(where: isMine) {
+                return false
+            }
+            if repo != "all", workspace.effectiveRepo != repo { return false }
+            guard !query.isEmpty else { return true }
+            if workspace.title.lowercased().contains(query) { return true }
+            return workspace.sessions.contains { session in
+                [session.title, session.effectiveRepo, session.branch, session.id]
+                    .compactMap { $0 }
+                    .contains { $0.lowercased().contains(query) }
             }
         }
+    }
+
+    /// Whether anything survives the lens — the empty-state overlay's
+    /// question. Stops at the first match instead of filtering and sorting
+    /// the whole list a second time per body evaluation.
+    private var hasVisibleWorkspaces: Bool {
+        allSidebarWorkspaces.contains(where: visibilityFilter())
+    }
+
+    private var filteredWorkspaces: [SidebarWorkspace] {
+        let workspaces = allSidebarWorkspaces.filter(visibilityFilter())
         // Decorated sort: parse each row's date once, not once per
         // comparison — this runs on the main thread on every body
         // evaluation, and the list can be thousands of rows with the
@@ -498,24 +522,12 @@ struct SessionsListView: View {
             .map(\.workspace)
     }
 
+    /// Grouped once by the view model, not per read: several properties below
+    /// (`filteredWorkspaces`, the empty-state overlay, the tab-strip lookup)
+    /// each want the rows, and regrouping thousands of sessions inside a body
+    /// evaluation is what used to pin the main thread on launch.
     private var allSidebarWorkspaces: [SidebarWorkspace] {
-        #if os(macOS)
-        // The Mac detail currently has no sibling-tab strip. Preserve its
-        // existing one-chat rows until those tabs have a native Mac surface.
-        viewModel.sessions.filter { $0.sideChatOf == nil }.map {
-            SidebarWorkspace(
-                id: "session:\($0.id)",
-                title: $0.displayTitle,
-                sessions: [$0],
-                mainSession: $0
-            )
-        }
-        #else
-        SessionsListViewModel.sidebarWorkspaces(
-            in: viewModel.sessions,
-            workspaceNames: viewModel.workspaceNames
-        )
-        #endif
+        viewModel.sidebarWorkspaces
     }
 
     private struct SessionGroup: Identifiable {
@@ -833,20 +845,6 @@ struct SessionsListView: View {
         }
     }
 
-    /// Rows this user has hidden drop out of the sidebar — except while a chat
-    /// of theirs is blocked on a question (the poll consumes the hide when
-    /// that happens), and except while searching, which is how a hidden row is
-    /// found again so its menu can restore it.
-    private func applyingHides(_ workspaces: [SidebarWorkspace]) -> [SidebarWorkspace] {
-        let hides = HideStore.shared.hides
-        guard !hides.isEmpty,
-              searchText.trimmingCharacters(in: .whitespaces).isEmpty
-        else { return workspaces }
-        return workspaces.filter {
-            $0.lane == .needsInput || hides[HideStore.rowKey(for: $0)] == nil
-        }
-    }
-
     private func hide(_ workspace: SidebarWorkspace) {
         withAnimation(.snappy(duration: 0.28)) {
             HideStore.shared.hide(workspace)
@@ -1015,7 +1013,7 @@ struct SessionsListView: View {
 
     @ViewBuilder
     private var emptyFilterOverlay: some View {
-        if filteredWorkspaces.isEmpty && visibleArchivedSessions.isEmpty {
+        if !hasVisibleWorkspaces && visibleArchivedSessions.isEmpty {
             if !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else if peopleFilter == "mine" {

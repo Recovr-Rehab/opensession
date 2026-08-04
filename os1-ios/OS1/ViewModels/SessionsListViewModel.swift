@@ -14,6 +14,65 @@ final class SessionsListViewModel {
 
     private var pollTask: Task<Void, Never>?
 
+    /// Memoized sidebar rows for the current list — see `sidebarRows`.
+    ///
+    /// Observation-ignored on purpose: `sidebarWorkspaces` fills it from its
+    /// own getter, and an observed write during a view body evaluation would
+    /// invalidate the view that is being evaluated.
+    @ObservationIgnored private var sidebarRowsCache: [SidebarWorkspace]?
+
+    /// Bumped by every mutation of the grouping's inputs, so a detached prime
+    /// can tell whether the list moved under it without an O(n) comparison.
+    @ObservationIgnored private var sessionsRevision = 0
+
+    /// The sidebar's rows: workspace groups, memoized.
+    ///
+    /// The grouping walks every session — dictionary builds, worktree path
+    /// parsing, a sort per row — and the list view reads it several times per
+    /// body evaluation. A `sample` of a cold launch (5.5k rows) had the main
+    /// thread inside this call for ~70% of the trace, which is why the app
+    /// took minutes to become usable. `refresh` primes the cache off the main
+    /// actor, so in the steady state a read here costs nothing.
+    var sidebarWorkspaces: [SidebarWorkspace] {
+        // Read the inputs even on a cache hit: that is what registers the
+        // reading view's observation dependency. Without it, a cached read
+        // would silently stop re-rendering when the list changes.
+        let sessions = self.sessions
+        let names = workspaceNames
+        if let cached = sidebarRowsCache { return cached }
+        let rows = Self.sidebarRows(in: sessions, workspaceNames: names)
+        sidebarRowsCache = rows
+        return rows
+    }
+
+    /// The one way to replace the list — keeps the grouping cache honest.
+    ///
+    /// `rows` is the grouping for `next` when the caller already has it;
+    /// passing nil leaves the next read to group lazily. Publishing both in
+    /// one step matters: assigning `sessions` alone wakes every observing
+    /// view immediately, and a body that runs before the grouping lands is
+    /// exactly the main-thread pass this cache exists to avoid.
+    private func setSessions(_ next: [Session], rows: [SidebarWorkspace]? = nil) {
+        sessions = next
+        sidebarRowsCache = rows
+        sessionsRevision += 1
+    }
+
+    private func setWorkspaceNames(_ next: [String: String]) {
+        workspaceNames = next
+        sidebarRowsCache = nil
+        sessionsRevision += 1
+    }
+
+    /// Group a list off the main actor, ready to publish with it.
+    private static func groupedOffMain(
+        _ sessions: [Session], workspaceNames names: [String: String]
+    ) async -> [SidebarWorkspace] {
+        await Task.detached(priority: .userInitiated) {
+            sidebarRows(in: sessions, workspaceNames: names)
+        }.value
+    }
+
     /// Honor the web sidebar's shared order, then append newly seen repositories
     /// by frequency with a stable alphabetical tie-breaker.
     nonisolated static func repositoryOrder(
@@ -89,6 +148,26 @@ final class SessionsListViewModel {
         guard !remaining.isEmpty else { return nil }
         let index = tabs.firstIndex { $0.id == closed.id } ?? 0
         return index < remaining.count ? remaining[index] : remaining.last
+    }
+
+    /// The sidebar's rows on this platform: workspace groups on iOS, and one
+    /// row per chat on the Mac, whose detail has no sibling-tab strip yet.
+    nonisolated static func sidebarRows(
+        in sessions: [Session],
+        workspaceNames: [String: String]
+    ) -> [SidebarWorkspace] {
+        #if os(macOS)
+        return sessions.filter { $0.sideChatOf == nil }.map {
+            SidebarWorkspace(
+                id: "session:\($0.id)",
+                title: $0.displayTitle,
+                sessions: [$0],
+                mainSession: $0
+            )
+        }
+        #else
+        return sidebarWorkspaces(in: sessions, workspaceNames: workspaceNames)
+        #endif
     }
 
     /// One sidebar row per workspace, with isolated worktrees as the fallback
@@ -211,7 +290,7 @@ final class SessionsListViewModel {
     /// Show a locally-built row for a just-created session immediately.
     func addOptimistic(_ session: Session) {
         optimistic[session.id] = (session, Date())
-        sessions = mergeOptimistic(into: sessions)
+        setSessions(mergeOptimistic(into: sessions))
     }
 
     /// The background create resolved: move a pending row onto the server's
@@ -231,13 +310,13 @@ final class SessionsListViewModel {
             startedBy: old.startedBy ?? ""
         )
         optimistic[realId] = (real, entry.added)
-        sessions = sessions.map { $0.id == tempId ? real : $0 }
+        setSessions(sessions.map { $0.id == tempId ? real : $0 })
     }
 
     /// Roll back a pending row whose create failed.
     func removeOptimistic(_ id: String) {
         optimistic.removeValue(forKey: id)
-        sessions.removeAll { $0.id == id }
+        setSessions(sessions.filter { $0.id != id })
     }
 
     /// Sessions archived locally that the server's (2s-cached) list may still
@@ -248,7 +327,7 @@ final class SessionsListViewModel {
     /// Swipe-to-archive: drop the row immediately, tell the server in the
     /// background, and roll back (surfacing the error) if that fails.
     func archive(_ session: Session) {
-        sessions.removeAll { $0.id == session.id }
+        setSessions(sessions.filter { $0.id != session.id })
         var archived = session
         archived.archived = true
         locallyArchived[session.id] = (archived, Date())
@@ -274,13 +353,13 @@ final class SessionsListViewModel {
         locallyUnarchived[session.id] = Date()
         var restored = session
         restored.archived = false
-        sessions.insert(restored, at: 0)
+        setSessions([restored] + sessions)
         Task {
             do {
                 try await OS1API.setArchived(sessionId: session.id, archived: false)
             } catch {
                 locallyUnarchived.removeValue(forKey: session.id)
-                sessions.removeAll { $0.id == session.id }
+                setSessions(sessions.filter { $0.id != session.id })
                 self.error = "Couldn't restore: \(error.localizedDescription)"
                 await refresh()
             }
@@ -371,7 +450,7 @@ final class SessionsListViewModel {
             let all = try await OS1API.sessions()
             if let workspaces = await workspaceRequest {
                 let nextNames = Dictionary(uniqueKeysWithValues: workspaces.map { ($0.id, $0.name) })
-                if nextNames != workspaceNames { workspaceNames = nextNames }
+                if nextNames != workspaceNames { setWorkspaceNames(nextNames) }
             }
             // Snapshot the main-actor state the filter needs, then do the
             // heavy pass (thousands of rows) off the main thread — inline it
@@ -403,7 +482,15 @@ final class SessionsListViewModel {
             // Most 5s polls change nothing — skip the assignment so the whole
             // list doesn't re-diff (grouping, sorting, row rebuilds) for a
             // byte-identical result.
-            if next != sessions { sessions = next }
+            if next != sessions {
+                // Group before publishing, not after: the assignment wakes
+                // every observing view, so a grouping that starts afterwards
+                // always loses the race to the body that needs it.
+                let rows = await Self.groupedOffMain(
+                    next, workspaceNames: workspaceNames
+                )
+                setSessions(next, rows: rows)
+            }
             if archivedNext != archivedSessions {
                 archivedSessions = archivedNext
             }
@@ -473,7 +560,7 @@ enum InboxBand: String, CaseIterable {
     }
 }
 
-struct SidebarWorkspace: Identifiable, Equatable {
+struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let sessions: [Session]
