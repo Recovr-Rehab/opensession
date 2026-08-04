@@ -848,45 +848,58 @@ function MichaelReviewCard({
 		<div data-michael-score className={INFO_SECTION_CLASS}>
 			<div className="flex items-center gap-2 px-1">
 				<div className={INFO_LABEL_CLASS}>{AGENT_NAME} score</div>
-				{active ? (
-					<span className="ml-auto inline-flex items-center gap-1 text-meta font-semibold text-accent">
-						<span className="size-1.5 animate-pulse rounded-full bg-accent" />
-						Reviewing
-					</span>
-				) : stale ? (
-					<span className="ml-auto text-meta font-semibold text-faint">Stale</span>
-				) : null}
-				{actionable && (
-					<Menu.Root>
-						<Menu.Trigger
-							className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
-							disabled={busy !== null}
-							aria-label={`More ${AGENT_NAME} actions`}
+				<div className="ml-auto flex items-center gap-2">
+					{active ? (
+						<span className="inline-flex items-center gap-1 text-meta font-semibold text-accent">
+							<span className="size-1.5 animate-pulse rounded-full bg-accent" />
+							Reviewing
+						</span>
+					) : stale ? (
+						<span className="text-meta font-semibold text-faint">Stale</span>
+					) : null}
+					{actionable && (
+						<button
+							type="button"
+							className="text-meta font-semibold text-faint underline-offset-2 outline-none transition-colors hover:text-fg hover:underline focus-visible:text-fg focus-visible:underline disabled:cursor-default disabled:no-underline disabled:opacity-50 disabled:hover:text-faint"
+							disabled={busy !== null || active}
+							onClick={() => run(reviewAction)}
+							title={reviewAction.hint}
 						>
-							<IconChevronDown size={14} />
-						</Menu.Trigger>
-						<Menu.Popup align="end" sideOffset={6} className="min-w-[280px]">
-							<Menu.Group>
-								<Menu.GroupLabel>More {AGENT_NAME} actions</Menu.GroupLabel>
-								{moreActions.map((action) => (
-									<Menu.Item
-										key={action.kind}
-										disabled={busy !== null}
-										onClick={() => run(action)}
-										className="items-start py-2"
-									>
-										<div className="min-w-0">
-											<div className="font-semibold text-fg">{action.label}</div>
-											<div className="mt-0.5 text-meta leading-[1.35] text-faint">
-												{action.hint}
+							{busy === "review" ? "Starting..." : review ? "Review again" : "Run review"}
+						</button>
+					)}
+					{actionable && (
+						<Menu.Root>
+							<Menu.Trigger
+								className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+								disabled={busy !== null}
+								aria-label={`More ${AGENT_NAME} actions`}
+							>
+								<IconChevronDown size={14} />
+							</Menu.Trigger>
+							<Menu.Popup align="end" sideOffset={6} className="min-w-[280px]">
+								<Menu.Group>
+									<Menu.GroupLabel>More {AGENT_NAME} actions</Menu.GroupLabel>
+									{moreActions.map((action) => (
+										<Menu.Item
+											key={action.kind}
+											disabled={busy !== null}
+											onClick={() => run(action)}
+											className="items-start py-2"
+										>
+											<div className="min-w-0">
+												<div className="font-semibold text-fg">{action.label}</div>
+												<div className="mt-0.5 text-meta leading-[1.35] text-faint">
+													{action.hint}
+												</div>
 											</div>
-										</div>
-									</Menu.Item>
-								))}
-							</Menu.Group>
-						</Menu.Popup>
-					</Menu.Root>
-				)}
+										</Menu.Item>
+									))}
+								</Menu.Group>
+							</Menu.Popup>
+						</Menu.Root>
+					)}
+				</div>
 			</div>
 			<div className="grid gap-px rounded-lg bg-panel p-1">
 				<Popover.Root>
@@ -958,39 +971,21 @@ function MichaelReviewCard({
 						</Popover.Popup>
 					)}
 				</Popover.Root>
-				{actionable && (
-					<div className="grid grid-cols-2 gap-px">
-						{canFix && (
-							<button
-								type="button"
-								className={ACTION_BUTTON_CLASS}
-								disabled={busy !== null}
-								onClick={() => run(fixAction)}
-								title={fixAction.hint}
-							>
-								<span className={ACTION_ICON_CLASS}>
-									<IconSparkle size={16} />
-								</span>
-								<span className="truncate">
-									{busy === "autofix" ? "Starting..." : "Fix findings"}
-								</span>
-							</button>
-						)}
-						<button
-							type="button"
-							className={cn(ACTION_BUTTON_CLASS, !canFix && "col-span-2")}
-							disabled={busy !== null || active}
-							onClick={() => run(reviewAction)}
-							title={reviewAction.hint}
-						>
-							<span className={ACTION_ICON_CLASS}>
-								<IconPullRequest size={16} />
-							</span>
-							<span className="truncate">
-								{active ? "Reviewing..." : review ? "Review again" : "Run review"}
-							</span>
-						</button>
-					</div>
+				{canFix && (
+					<button
+						type="button"
+						className={ACTION_BUTTON_CLASS}
+						disabled={busy !== null}
+						onClick={() => run(fixAction)}
+						title={fixAction.hint}
+					>
+						<span className={ACTION_ICON_CLASS}>
+							<IconSparkle size={16} />
+						</span>
+						<span className="truncate">
+							{busy === "autofix" ? "Starting..." : "Fix findings"}
+						</span>
+					</button>
 				)}
 			</div>
 			{done && (
