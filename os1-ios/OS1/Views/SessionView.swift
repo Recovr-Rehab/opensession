@@ -1126,7 +1126,12 @@ private struct SessionInputBar: View {
         }
         // No background: the composer and chips are individual glass elements
         // floating over the transcript, which stays visible behind and below
-        // them and dissolves into the bar through the soft scroll edge effect.
+        // them and dissolves into the bar through the soft scroll edge effect
+        // — plus a wash under the pill, where that effect alone left rows
+        // legible right down to the home indicator.
+        #if os(iOS)
+        .composerBottomWash()
+        #endif
         #if os(macOS)
         .onAppear { installShiftReturnMonitor() }
         .onDisappear { removeShiftReturnMonitor() }
