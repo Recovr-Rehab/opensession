@@ -1016,6 +1016,10 @@ private struct SessionInputBar: View {
     let horizontalInset: CGFloat
     @FocusState private var inputFocused: Bool
 
+    /// Air above the topmost element in the bar — and where the composer
+    /// scrim's dissolve has to finish, so it ends level with that element.
+    private static let barTopPadding: CGFloat = 6
+
     #if os(macOS)
     /// Local key monitor that turns Shift+Return into a newline insert.
     @State private var shiftReturnMonitor: Any?
@@ -1071,13 +1075,14 @@ private struct SessionInputBar: View {
         .frame(maxWidth: contentMaxWidth)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, horizontalInset)
-        .padding(.top, 6)
+        .padding(.top, Self.barTopPadding)
         .padding(.bottom, 8)
         // The bar's only background is the scrim that dissolves the transcript
         // travelling underneath it; the composer and chips stay individual
-        // glass elements floating on top of it.
+        // glass elements floating on top of it. The scrim needs the bar's top
+        // padding to finish its ramp level with the composer card.
         #if os(iOS)
-        .composerScrim()
+        .composerScrim(topInset: Self.barTopPadding)
         #endif
         #if os(macOS)
         .onAppear { installShiftReturnMonitor() }

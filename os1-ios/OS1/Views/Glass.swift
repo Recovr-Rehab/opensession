@@ -43,7 +43,13 @@ extension View {
     /// queue flap, with no height plumbed back into the transcript's body and
     /// no safe-area arithmetic. The transcript itself stays unmasked, so the
     /// newest message is never dimmed at rest.
-    func composerScrim() -> some View {
+    ///
+    /// `topInset` is the bar's own top padding, so the ramp finishes level
+    /// with the composer card rather than with the bar: a row stays readable
+    /// right up to the input's edge and disappears as it goes behind it. End
+    /// the ramp higher and the last line dissolves in open space above the
+    /// composer, which reads as ghosting rather than as sliding underneath.
+    func composerScrim(topInset: CGFloat = 0) -> some View {
         background {
             VStack(spacing: 0) {
                 LinearGradient(
@@ -58,11 +64,11 @@ extension View {
                 OS1VisualStyle.background
             }
             // Negative padding runs the scrim up past the bar, so the whole
-            // dissolve happens in the run-up and everything level with the
-            // composer is already page colour — the web's `--chat-under`
+            // dissolve happens above the composer card and everything level
+            // with it is already page colour — the web's `--chat-under`
             // overlap. Sizing the ramp itself keeps it independent of how
             // tall the bar grows.
-            .padding(.top, -OS1VisualStyle.composerScrimRunUp)
+            .padding(.top, -(OS1VisualStyle.composerScrimRunUp - topInset))
             .ignoresSafeArea(edges: .bottom)
             .allowsHitTesting(false)
         }

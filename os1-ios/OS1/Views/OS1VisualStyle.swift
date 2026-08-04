@@ -49,11 +49,16 @@ enum OS1VisualStyle {
     static let purple = Color(red: 0.639, green: 0.443, blue: 0.969)
     #if os(iOS)
     static let chatMaxWidth: CGFloat = 780
-    /// How far the composer's scrim runs up past the bar, so a row starts
-    /// dissolving before it reaches the input (see `composerScrim`). The
+    /// How far the composer's scrim runs up past its card, so a row starts
+    /// dissolving just before it reaches the input (see `composerScrim`). The
     /// transcript pads its content by the same amount, so the newest message
     /// comes to rest right where the dissolve begins and stays crisp.
-    static let composerScrimRunUp: CGFloat = 40
+    ///
+    /// Short on purpose — the web viewer's `--chat-under` overlap is the same
+    /// 16pt. A longer ramp finished the dissolve in the empty space ABOVE the
+    /// input, so a half-transparent line hung in mid-air instead of reading as
+    /// the transcript sliding under the composer.
+    static let composerScrimRunUp: CGFloat = 16
     #else
     /// Keep 13pt desktop body copy near the comfortable 65-75 character range.
     static let chatMaxWidth: CGFloat = 720
