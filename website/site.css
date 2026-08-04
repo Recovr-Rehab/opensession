@@ -226,6 +226,7 @@ button:focus-visible {
 	display: flex;
 	height: calc(100vh - 84px);
 	align-items: center;
+	margin-inline-end: calc(-1 * max(24px, (100vw - 1240px) / 2));
 }
 
 .section-kicker {
@@ -313,15 +314,15 @@ button:focus-visible {
 .preview-wrap {
 	--demo-scale: 0.84;
 	position: relative;
-	width: min(1100px, 75vw);
+	width: 125%;
 	height: min(670px, calc(100vh - 130px));
 	flex: none;
 	margin: 0;
 	overflow: hidden;
 	border: 1px solid rgba(20, 22, 26, 0.12);
-	border-radius: 18px;
+	border-radius: 14px;
 	background: #f6f6f4;
-	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 28px 72px rgba(36, 51, 46, 0.22);
+	box-shadow: 0 28px 72px rgba(36, 51, 46, 0.22);
 }
 
 .product-demo-frame {
@@ -589,7 +590,6 @@ button:focus-visible {
 	}
 
 	.preview-wrap {
-		width: 78vw;
 		height: min(610px, calc(100vh - 130px));
 	}
 }
@@ -635,6 +635,7 @@ button:focus-visible {
 		display: block;
 		width: 100%;
 		height: auto;
+		margin-inline-end: 0;
 	}
 
 	.hero h1 {
