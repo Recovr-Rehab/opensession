@@ -128,6 +128,44 @@ final class SessionsListViewModel {
         }
     }
 
+    /// Workspace rows split into the web sidebar's Inbox bands. The bands are
+    /// exclusive, with priority needs-action > live-or-today > yesterday >
+    /// earlier, and every band ranks by last activity — deliberately ignoring
+    /// the "Created" sort, since an inbox orders by what moved last. Empty
+    /// bands are dropped.
+    nonisolated static func inboxBands(
+        _ workspaces: [SidebarWorkspace],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [(band: InboxBand, workspaces: [SidebarWorkspace])] {
+        let dayStart = calendar.startOfDay(for: now)
+        let yesterdayStart = dayStart.addingTimeInterval(-24 * 60 * 60)
+        // Decorated: each row's activity date is derived once (it walks the
+        // row's chats), not once per comparison — this runs on every body
+        // evaluation over a list that can be thousands of rows.
+        var bucketed: [InboxBand: [(workspace: SidebarWorkspace, date: Date)]] = [:]
+        for workspace in workspaces {
+            let date = workspace.lastActivityDate
+            let band: InboxBand
+            if workspace.lane == .needsInput {
+                band = .needsAction
+            } else if workspace.isRunning || date >= dayStart {
+                // A live row is recent whatever its day — work in flight is
+                // recent by definition — but ranks by activity like the rest.
+                band = .recent
+            } else if date >= yesterdayStart {
+                band = .yesterday
+            } else {
+                band = .earlier
+            }
+            bucketed[band, default: []].append((workspace, date))
+        }
+        return InboxBand.allCases.compactMap { band in
+            guard let rows = bucketed[band] else { return nil }
+            return (band, rows.sorted { $0.date > $1.date }.map(\.workspace))
+        }
+    }
+
     nonisolated private static func workspaceKey(for session: Session) -> String {
         if let projectId = session.projectId, !projectId.isEmpty {
             return "workspace:\(projectId)"
@@ -387,6 +425,21 @@ final class SessionsListViewModel {
     }
 }
 
+/// The web sidebar's Inbox bands: an email-style split of the rows by when
+/// they last moved, with "blocked on you" lifted out in front.
+enum InboxBand: String, CaseIterable {
+    case needsAction, recent, yesterday, earlier
+
+    var label: String {
+        switch self {
+        case .needsAction: "Needs action"
+        case .recent: "Recent"
+        case .yesterday: "Yesterday"
+        case .earlier: "Earlier"
+        }
+    }
+}
+
 struct SidebarWorkspace: Identifiable, Equatable {
     let id: String
     let title: String
@@ -409,6 +462,9 @@ struct SidebarWorkspace: Identifiable, Equatable {
         }
     }
     var effectiveRepo: String { mainSession.effectiveRepo }
+    /// Any chat of the row is mid-turn — the row counts as live even when a
+    /// blocked sibling owns its lane.
+    var isRunning: Bool { sessions.contains { $0.isRunning == true } }
     var lastActivityDate: Date {
         sessions.compactMap(\.lastActivityDate).max() ?? .distantPast
     }

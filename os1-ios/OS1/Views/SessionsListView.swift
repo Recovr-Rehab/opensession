@@ -3,12 +3,15 @@ import SwiftUI
 
 /// Sessions list, mirroring the web sidebar's organization: group by Status
 /// (In progress / Needs input / In review / Done / Backlog), by Repo, by Repo
-/// and Status, or a flat Recent list — plus a repo filter, sort, and search.
+/// and Status, by Repo and Inbox (each repo's rows banded by activity, the
+/// web's Inbox mode nested per repo), or a flat Recent list — plus a repo
+/// filter, sort, and search.
 /// The grouping/filter choices persist like the web's filter popover does.
 struct SessionsListView: View {
     enum GroupBy: String, CaseIterable {
         case status, repo
         case repoStatus = "repo-status"
+        case repoInbox = "repo-inbox"
         case recent
 
         var label: String {
@@ -16,6 +19,7 @@ struct SessionsListView: View {
             case .status: "Status"
             case .repo: "Repo"
             case .repoStatus: "Repo and status"
+            case .repoInbox: "Repo and inbox"
             case .recent: "Recently active"
             }
         }
@@ -522,6 +526,8 @@ struct SessionsListView: View {
     private struct RepoSessionGroup: Identifiable {
         let repo: String
         let workspaces: [SidebarWorkspace]
+        /// The sections nested under the repo band: status lanes in "Repo and
+        /// status", activity bands in "Repo and inbox".
         let lanes: [SessionGroup]
 
         var id: String { repo }
@@ -564,7 +570,9 @@ struct SessionsListView: View {
                         repo: nil
                     )
             }
-        case .repoStatus:
+        case .repoStatus, .repoInbox:
+            // Both nest their sections under repo bands — see
+            // repoSessionGroups / repoInboxGroups.
             return []
         }
     }
@@ -586,6 +594,26 @@ struct SessionsListView: View {
                     )
             }
             return RepoSessionGroup(repo: repo, workspaces: workspaces, lanes: lanes)
+        }
+    }
+
+    /// "Repo and inbox": the same repo bands, with each repo's rows split into
+    /// the Inbox activity bands instead of status lanes. Only the first band
+    /// ("Needs action") carries a lane color — the rest are date dividers.
+    private var repoInboxGroups: [RepoSessionGroup] {
+        let byRepo = Dictionary(grouping: filteredWorkspaces, by: \.effectiveRepo)
+        return availableRepos.compactMap { repo in
+            guard let workspaces = byRepo[repo] else { return nil }
+            let bands = SessionsListViewModel.inboxBands(workspaces).map { band in
+                SessionGroup(
+                    id: "repo-\(repo)-band-\(band.band.rawValue)",
+                    title: band.band.label,
+                    workspaces: band.workspaces,
+                    lane: band.band == .needsAction ? .needsInput : nil,
+                    repo: nil
+                )
+            }
+            return RepoSessionGroup(repo: repo, workspaces: workspaces, lanes: bands)
         }
     }
 
@@ -859,8 +887,8 @@ struct SessionsListView: View {
 
     private var listSections: some View {
         Group {
-            if groupBy == .repoStatus {
-                ForEach(repoSessionGroups) { repoGroup in
+            if groupBy == .repoStatus || groupBy == .repoInbox {
+                ForEach(groupBy == .repoInbox ? repoInboxGroups : repoSessionGroups) { repoGroup in
                     Section {
                         ForEach(repoGroup.lanes) { laneGroup in
                             statusLaneHeader(laneGroup)

@@ -151,6 +151,32 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(workspaces[0].sessions.map(\.id), ["filed", "legacy"])
     }
 
+    func testInboxBandsRankByActivityWithNeedsActionAndLiveRowsLifted() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(
+                #"[{"id":"blocked","waitingForInput":true,"lastActivity":"2026-07-01T09:00:00Z"},{"id":"today-early","lastActivity":"2026-08-04T02:00:00Z"},{"id":"today-late","lastActivity":"2026-08-04T08:00:00Z"},{"id":"running-old","isRunning":true,"lastActivity":"2026-07-20T09:00:00Z"},{"id":"yesterday","lastActivity":"2026-08-03T23:00:00Z"},{"id":"earlier","lastActivity":"2026-08-01T10:00:00Z"}]"#.utf8
+            )
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+
+        let bands = SessionsListViewModel.inboxBands(
+            SessionsListViewModel.sidebarWorkspaces(in: sessions),
+            now: try XCTUnwrap(Session.parseISO("2026-08-04T12:00:00Z")),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(bands.map(\.band), [.needsAction, .recent, .yesterday, .earlier])
+        XCTAssertEqual(bands.map { $0.workspaces.map(\.mainSession.id) }, [
+            ["blocked"],
+            // A live row is recent whatever its day, but ranks by activity.
+            ["today-late", "today-early", "running-old"],
+            ["yesterday"],
+            ["earlier"],
+        ])
+    }
+
     func testSidebarManualRenameWinsOverFallbackBranch() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,
