@@ -10,7 +10,8 @@ import type {
 } from "@pierre/diffs";
 import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import type { DiffFileGroup } from "../lib/types";
-import { IconChevronRight, IconPencil, IconUndo } from "./icons";
+import { IconCheck, IconChevronRight, IconCopy, IconPencil, IconUndo } from "./icons";
+import { copyToClipboard } from "../lib/share-link";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { useResolvedTheme } from "./CodeHighlight";
@@ -275,6 +276,19 @@ export function CommentableDiff({
     [onDiscard, armed],
   );
   useEffect(() => () => clearTimeout(disarmTimer.current), []);
+
+  // Copying the path is the reliable way to get it out of the diff — text
+  // selection breaks wherever the surrounding surface sets user-select: none.
+  const [copied, setCopied] = useState<string | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const copyPath = useCallback((path: string) => {
+    copyToClipboard(path, () => {
+      setCopied(path);
+      clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(null), 1400);
+    });
+  }, []);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
 
   const viewedCollapseKey = useRef<string | null>(null);
   useEffect(() => {
@@ -565,6 +579,19 @@ export function CommentableDiff({
           <span className="diff-file-name" onClick={(e) => e.stopPropagation()}>
             {dir && <span className="diff-file-dir">{dir}</span>}
             <span className="diff-file-base">{base}</span>
+            <Tooltip label={copied === file.name ? "Copied" : "Copy path"}>
+              <button
+                type="button"
+                className={`diff-file-copy ${copied === file.name ? "diff-file-copy-done" : ""}`}
+                aria-label={`Copy path ${file.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyPath(file.name);
+                }}
+              >
+                {copied === file.name ? <IconCheck size={13} /> : <IconCopy size={13} />}
+              </button>
+            </Tooltip>
           </span>
           {pend.length > 0 && <span className="diff-file-comments">{pend.length}</span>}
           {isEditing && (

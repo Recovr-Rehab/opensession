@@ -5479,6 +5479,49 @@ a.workspace-info-check-row {
 	white-space: nowrap;
 	flex-shrink: 0;
 }
+/* Copy-path affordance, inline right after the filename. Revealed on row hover
+   but always occupying its space (opacity, not display) so the name can't shift
+   under the pointer; it stays lit while showing the copied checkmark. */
+.diff-file-copy {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	margin-left: 5px;
+	padding: 2px;
+	border: none;
+	border-radius: calc(5px * var(--rf)); corner-shape: var(--cs);
+	background: transparent;
+	color: var(--text-faint);
+	cursor: pointer;
+	user-select: none;
+	opacity: 0;
+	pointer-events: none;
+	transition: color 0.1s ease, background 0.1s ease, opacity 0.1s ease;
+}
+.diff-file-header:hover .diff-file-copy,
+.diff-file-copy:focus-visible,
+.diff-file-copy-done {
+	opacity: 1;
+	pointer-events: auto;
+}
+.diff-file-copy:hover {
+	color: var(--text);
+	background: var(--hover);
+}
+/* Beats `.diff-file-copy:hover` on specificity — the pointer is still on the
+   button when the checkmark shows. */
+.diff-file-copy-done,
+.diff-file-copy-done:hover {
+	color: var(--green);
+}
+/* Touch has no hover to reveal it — and no easy text selection either. */
+@media (hover: none) {
+	.diff-file-copy {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
 .diff-file-comments {
 	display: inline-flex;
 	align-items: center;
