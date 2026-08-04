@@ -4182,7 +4182,7 @@ export function SessionViewer({
 							>
 								<button
 									type="button"
-									className="flex-none inline-flex size-[30px] items-center justify-center rounded-[calc(10px*var(--rf))] text-dim transition-colors hover:bg-hover hover:text-fg"
+									className="flex-none inline-flex size-[30px] items-center justify-center rounded-control text-dim transition-colors hover:bg-hover hover:text-fg"
 									onClick={() => onNewChat("share")}
 									aria-label="New tab"
 								>
@@ -4342,7 +4342,7 @@ export function SessionViewer({
 								// from when both were narrow padded controls, and now that all
 								// three are equal squares it just made this gap 4px where the
 								// share → ⋯ one is the row's 8px.
-								className="rounded-[calc(10px*var(--rf))] text-dim hover:bg-hover hover:text-fg max-[720px]:order-2 max-[720px]:h-[38px] max-[720px]:min-h-[38px] max-[720px]:w-[38px] max-[720px]:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] max-[720px]:text-accent"
+								className="rounded-control text-dim hover:bg-hover hover:text-fg max-[720px]:order-2 max-[720px]:h-[38px] max-[720px]:min-h-[38px] max-[720px]:w-[38px] max-[720px]:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] max-[720px]:text-accent"
 								onClick={() => setPanelOpen(!panelOpen)}
 								aria-label="Toggle side panel"
 								// Iconic sidebar-right glyph — reads as "right side panel".
