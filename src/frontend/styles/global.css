@@ -1550,11 +1550,15 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 .sidebar-repo-head .repo-tile {
 	flex-shrink: 0;
-	/* The 18px tile rides in a 22px slot so it shares the leading-icon rail with
-	   the nav icons and the status/Pinned group icons (both 22px, box-left 16px).
-	   Without this the smaller solid tile sits flush-left of that rail and reads
-	   as misaligned against the icons above it. */
-	margin: 0 2px;
+	/* Fill the 22px leading slot rather than riding centred inside it at 18px.
+	   Centred, the tile's ink started 2px right of every other mark in the
+	   sidebar (the nav icons and the Pinned/Needs-review glyphs are 22px and
+	   start at the slot's own edge), which read as the repo band being indented
+	   under headers that aren't. At full size its left AND right edges land on
+	   theirs. The letter scales with it. */
+	width: 22px;
+	height: 22px;
+	font-size: 13px;
 }
 .sidebar-repo-head .sidebar-group-name {
 	font-weight: 600;
@@ -1742,16 +1746,14 @@ body:is(.resizing-sidebar, .resizing-panel) {
    project band. They label the rows rather than lead anywhere, so they read as
    captions: a size down from the rows, semibold to hold their own at that size,
    and no leading glyph at all (the rows under them already carry the status
-   marks, and the lane's own name says what it is). Size and weight carry that
-   distinction on their own, so the label still starts on the list's one text
-   rail — skipping the empty 22px mark slot + 9px gap the rows and repo heads
-   spend before their titles. Left of the rail it read as a third left edge in
-   a list that otherwise has exactly one. Padding (not margin) keeps the
-   header's hover pill running the sidebar's full width. */
+   marks, and the lane's own name says what it is). With no glyph the label
+   starts at the leading-mark edge instead of the text rail — the same column
+   the repo tile above it and the nav icons start on — so a caption reads as
+   the divider over its rows rather than another row. Size and weight are what
+   separate it from the titles, not a third left edge. */
 .sidebar-lane-group > .sidebar-group-header {
 	font-size: 12px;
 	font-weight: 600;
-	padding-left: 41px;
 }
 
 .sidebar-group-chevron {
@@ -13372,26 +13374,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		padding-top: 9px;
 		padding-bottom: 5px;
 	}
-	/* The caption sits on the phone list's text rail the same way it does on
-	   desktop: the list's own 4px inset plus the 22px mark slot and 9px gap
-	   every row spends before its title. Carries .sidebar-list so it outranks
-	   the shared content-rail rule further down, whatever the source order. */
-	.sidebar-list .sidebar-lane-group > .sidebar-group-header,
-	.sidebar-independent-section .sidebar-lane-group > .sidebar-group-header {
-		padding-left: 35px;
-	}
 	.sidebar-lane-group > .sidebar-group-header .sidebar-group-count {
 		font-size: 12px;
-	}
-	/* A repo band's tile is an org avatar, not an outline glyph, so at its 18px
-	   desktop size it reads noticeably smaller than the 22px lane icons stacked
-	   above it once the header text goes to 16px. Fill the 22px rail instead —
-	   the rail centers it, so its desktop side margins come off here. */
-	.sidebar-repo-head .repo-tile {
-		width: 22px;
-		height: 22px;
-		margin: 0;
-		font-size: 13px;
 	}
 	.sidebar-independent-section > .sidebar-band-label {
 		padding-right: 8px;
