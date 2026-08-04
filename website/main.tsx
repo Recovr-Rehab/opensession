@@ -74,9 +74,9 @@ function LandingPage() {
 				<div className="hero-wash" aria-hidden="true" />
 
 				<header className="site-header page-width">
-					<a className="brand" href="#top" aria-label="OpenSession home">
+					<a className="brand" href="#top" aria-label="Open Session home">
 						<Mark />
-						<span>OpenSession</span>
+						<span>Open Session</span>
 					</a>
 					<nav aria-label="Main navigation">
 						<a href="#why">How it works</a>
@@ -89,14 +89,10 @@ function LandingPage() {
 
 				<div className="hero-content page-width" id="top">
 					<div className="hero-copy">
-						<p className="eyebrow">
-							<span /> Open source. Built for agent teams.
-						</p>
 						<h1>Run your coding agents. Together.</h1>
 						<p className="hero-description">
-							Use Claude, Codex, and other models side by side. Start parallel
-							sessions, bring in teammates, and keep every prompt, diff, review,
-							and PR moving from desktop or phone.
+							Run Claude, Codex, and other coding agents side by side. Work in
+							parallel and bring your team into every session.
 						</p>
 						<div className="hero-actions">
 							<a className="button button-primary" href="#install">
@@ -148,7 +144,7 @@ function LandingPage() {
 							<p className="section-kicker section-kicker-dark">
 								Start on your own machine
 							</p>
-							<h2>Running in under a minute.</h2>
+							<h2>Start with one command.</h2>
 							<p>
 								The installer adds Bun and OpenCode when needed, then connects
 								the model subscriptions and integrations you already use.
@@ -178,7 +174,7 @@ function LandingPage() {
 			<footer className="site-footer page-width">
 				<a className="brand brand-footer" href="#top">
 					<Mark small />
-					<span>OpenSession</span>
+					<span>Open Session</span>
 				</a>
 				<p>The open-source workspace for teams building with agents.</p>
 				<nav aria-label="Footer navigation">
