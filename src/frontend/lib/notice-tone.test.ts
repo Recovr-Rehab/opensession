@@ -33,6 +33,11 @@ describe("noticeTone", () => {
 			),
 		).toBe("error");
 		expect(noticeTone("Frontend rebuild failed — see logs. (Error: oops)")).toBe("error");
+		expect(
+			noticeTone(
+				'Frontend rebuild failed — still serving the last good bundle. PrPanel.tsx: Expected closing JSX tag to match opening tag "<main>"',
+			),
+		).toBe("error");
 	});
 
 	test("recovered-from trouble reads as a warning", () => {

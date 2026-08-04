@@ -340,6 +340,62 @@ export function sharedCheckoutEditors(writeCapableOnly = false): string | undefi
 // the bundle is served from the mutated `frontend` object with no restart.
 let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
 let rebuildInFlight = false;
+// The shared checkout means agents save half-finished edits constantly; every
+// save while the tree is broken re-fails the build. Broadcasting each failure
+// storms every connected client with identical toasts, so failures are keyed
+// by their error text and only a NEW error is announced; success clears the key.
+let lastBuildErrorKey: string | null = null;
+let lastAutoInstallAt = 0;
+const AUTO_INSTALL_COOLDOWN_MS = 5 * 60_000;
+
+/** Pull the human-readable cause out of Bun.build's AggregateError. */
+function buildFailureSummary(e: unknown): {
+	key: string;
+	summary: string;
+	needsInstall: boolean;
+} {
+	const msgs: string[] = [];
+	let file: string | undefined;
+	if (e instanceof AggregateError) {
+		for (const err of e.errors ?? []) {
+			const m = String((err as { message?: string })?.message ?? err).trim();
+			if (m) msgs.push(m);
+			const pos = (err as { position?: { file?: string } })?.position;
+			if (!file && pos?.file) file = String(pos.file);
+		}
+	}
+	if (!msgs.length) msgs.push(String(e).split("\n")[0] ?? "unknown error");
+	const needsInstall = msgs.some((m) => m.includes('"bun install"'));
+	const shortFile = file?.split("/").pop();
+	const summary = `${shortFile ? `${shortFile}: ` : ""}${msgs[0]}${msgs.length > 1 ? ` (+${msgs.length - 1} more)` : ""}`;
+	return { key: msgs.join("\n"), summary, needsInstall };
+}
+
+/** Missing-package failures (a session touched package.json without installing,
+ *  or a dep gained a new subpath) are self-healable: install once, rebuild. */
+async function autoInstallAndRetry(): Promise<void> {
+	console.log(
+		"[frontend] Build failed on unresolved imports — running bun install, then retrying",
+	);
+	try {
+		const proc = Bun.spawn(["bun", "install"], {
+			cwd: REPO_ROOT,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		if ((await proc.exited) === 0) {
+			scheduleFrontendRebuild("post-bun-install", 100);
+		} else {
+			console.error(
+				"[frontend] bun install failed:",
+				await new Response(proc.stderr).text(),
+			);
+		}
+	} catch (e) {
+		console.error("[frontend] bun install failed:", e);
+	}
+}
+
 export function scheduleFrontendRebuild(reason: string, debounceMs = 300): void {
 	if (IS_DEV || !frontend) return;
 	if (rebuildTimer) clearTimeout(rebuildTimer);
@@ -350,6 +406,7 @@ export function scheduleFrontendRebuild(reason: string, debounceMs = 300): void 
 		const before = frontend.version;
 		try {
 			const version = await buildFrontend();
+			lastBuildErrorKey = null;
 			if (version !== before) {
 				const by = sharedCheckoutEditors(true);
 				console.log(
@@ -359,10 +416,19 @@ export function scheduleFrontendRebuild(reason: string, debounceMs = 300): void 
 			}
 		} catch (e) {
 			console.error(`[frontend] Rebuild failed (${reason}):`, e);
-			broadcastToAll({
-				type: "notice",
-				message: `Frontend rebuild failed — see logs. (${e})`,
-			});
+			const fail = buildFailureSummary(e);
+			if (fail.key !== lastBuildErrorKey) {
+				lastBuildErrorKey = fail.key;
+				const by = sharedCheckoutEditors(true);
+				broadcastToAll({
+					type: "notice",
+					message: `Frontend rebuild failed — still serving the last good bundle. ${fail.summary}${by ? ` (likely mid-edit: ${by})` : ""}`,
+				});
+			}
+			if (fail.needsInstall && Date.now() - lastAutoInstallAt > AUTO_INSTALL_COOLDOWN_MS) {
+				lastAutoInstallAt = Date.now();
+				void autoInstallAndRetry();
+			}
 		} finally {
 			rebuildInFlight = false;
 		}
