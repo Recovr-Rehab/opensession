@@ -100,12 +100,16 @@ export function isReachTool(toolName: string | undefined): boolean {
  * itself IS the effect and the human is right there; `goal` and `workflow`
  * runs are excluded because silence is their normal resting state (a goal
  * tick with nothing to do, a workflow worker returning data to its parent).
+ * github-* kinds are excluded because their deliverable is posted by server
+ * code (review.ts postReview → REST) after the run's ledger closes — the
+ * ledger only ever sees agent tool calls, so every github run would verdict
+ * as a silent drop no matter what it shipped.
  */
 const CHECKED_KINDS = new Set(["automation", "plain", "action", "security-scan"]);
 
 export function isCheckedKind(journalKind: string | undefined): boolean {
   const base = (journalKind || "").replace(/(-(resume|rerun|fallback))+$/, "");
-  return CHECKED_KINDS.has(base) || base.startsWith("github-");
+  return CHECKED_KINDS.has(base);
 }
 
 export interface TurnLedger {

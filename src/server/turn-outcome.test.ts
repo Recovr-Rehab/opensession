@@ -40,7 +40,6 @@ describe("isCheckedKind", () => {
     expect(isCheckedKind("plain")).toBe(true);
     expect(isCheckedKind("action")).toBe(true);
     expect(isCheckedKind("security-scan")).toBe(true);
-    expect(isCheckedKind("github-review")).toBe(true);
   });
 
   test("strips the resume/rerun/fallback suffixes the journal appends", () => {
@@ -55,6 +54,11 @@ describe("isCheckedKind", () => {
     expect(isCheckedKind("slack")).toBe(false);
     expect(isCheckedKind("goal")).toBe(false);
     expect(isCheckedKind("workflow")).toBe(false);
+    // github-* deliverables are posted by server code after the ledger
+    // closes (review.ts postReview), so checking them only manufactures
+    // false silent-drop papercuts.
+    expect(isCheckedKind("github-review")).toBe(false);
+    expect(isCheckedKind("github-review-resume")).toBe(false);
     expect(isCheckedKind(undefined)).toBe(false);
     expect(isCheckedKind("")).toBe(false);
   });

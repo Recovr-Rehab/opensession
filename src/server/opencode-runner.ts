@@ -301,16 +301,38 @@ function nvmOpencodeScan(): string | undefined {
   return undefined;
 }
 
-/** opencode binary (installed user-level: `npm i -g opencode-ai`). */
-export const OPENCODE_BIN =
-  envAlias("OPENSESSION_OPENCODE_BIN", "BACKSTAGE_OPENCODE_BIN") ||
-  Bun.which("opencode") ||
-  nvmOpencodeScan() ||
-  // Where opencode.ai's own installer puts it. The previous last-resort was a
-  // specific nvm version path from Tella's box, which on any other machine
-  // produced a confusing "no such file" naming a directory the operator had
-  // never heard of.
-  `${HOME}/.opencode/bin/opencode`;
+function resolveOpencodeBin(): string {
+  return (
+    envAlias("OPENSESSION_OPENCODE_BIN", "BACKSTAGE_OPENCODE_BIN") ||
+    Bun.which("opencode") ||
+    nvmOpencodeScan() ||
+    // Where opencode.ai's own installer puts it. The previous last-resort was a
+    // specific nvm version path from Tella's box, which on any other machine
+    // produced a confusing "no such file" naming a directory the operator had
+    // never heard of.
+    `${HOME}/.opencode/bin/opencode`
+  );
+}
+
+/** opencode binary (installed user-level: `npm i -g opencode-ai`).
+ * `let`, not `const`: an `npm i -g` upgrade can replace the bin tree out from
+ * under a module-load-time resolution (2026-08-03: ENOENT on a stale
+ * .nvm/…/bin/opencode path killed in-flight runs while the binary existed at
+ * its new path) — freshOpencodeBin() re-resolves when the cached path dies. */
+export let OPENCODE_BIN = resolveOpencodeBin();
+
+/** The cached path if it still exists, else one re-resolution of the full
+ * chain (PATH, nvm scan, installer default). Updates OPENCODE_BIN on a move
+ * so version asserts and log lines name the binary actually in use. */
+function freshOpencodeBin(): string {
+  if (existsSync(OPENCODE_BIN)) return OPENCODE_BIN;
+  const re = resolveOpencodeBin();
+  if (re !== OPENCODE_BIN && existsSync(re)) {
+    console.warn(`[opencode-runner] opencode binary moved: ${OPENCODE_BIN} -> ${re}`);
+    OPENCODE_BIN = re;
+  }
+  return OPENCODE_BIN;
+}
 
 // Source-verified floor: anomalyco/opencode@fa95a61c4 first classified
 // absolute paths as file plugins, and v1.3.8 is the first release containing it.
@@ -1190,6 +1212,22 @@ const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
   // evaluates each sub-command, so an unlisted rev-parse denied the whole line.
   "git rev-parse*": "allow", "git cat-file*": "allow", "git describe*": "allow",
   "git merge-base*": "allow",
+  // Read-only stdout filters — the usual tails on allowed git/gh reads
+  // (`git show X:f | nl -ba`, `… | cut -d…`); an unlisted filter denies the
+  // whole pipeline (each sub-command is evaluated, see rev-parse note).
+  // Deliberately NOT sort/uniq (`sort -o FILE` and `uniq in out` both write
+  // files) and not awk/perl (arbitrary code; sed's exclusion is noted below).
+  "nl": "allow", "nl *": "allow", "cut *": "allow", "tr *": "allow",
+  "comm *": "allow", "column": "allow", "column *": "allow",
+  "diff *": "allow", "sha256sum*": "allow", "md5sum*": "allow",
+  // Exact spelling, no trailing glob: `git hash-object --stdin*` would also
+  // match `--stdin -w`, which writes the object into .git.
+  "git hash-object --stdin": "allow",
+  // The PR-checks helper every run's instructions point at (see the
+  // "GitHub checks authentication" block in buildOpencodeInstructions).
+  // Read-only by construction: it wraps `gh pr checks` with a short-lived
+  // read-only App installation token.
+  [`bun ${GH_CHECKS_CLI_PATH} *`]: "allow",
   // NOTE: sed stays denied even as `sed -n` — "sed -n *" also matches
   // `sed -n -i …` (in-place edit) and scripts with the `w /path` write
   // command, so no sed glob is actually read-only. Use head/tail/cat/rg
@@ -2126,9 +2164,10 @@ async function spawnOpencodeServer(
   extraEnv?: Record<string, string>,
   shared?: boolean
 ): Promise<OpencodeServerEntry> {
-  if (!existsSync(OPENCODE_BIN)) {
+  const bin = freshOpencodeBin();
+  if (!existsSync(bin)) {
     throw new Error(
-      `opencode binary not found at ${OPENCODE_BIN} — install it with \`npm i -g opencode-ai\` ` +
+      `opencode binary not found at ${bin} — install it with \`npm i -g opencode-ai\` ` +
         "(or set BACKSTAGE_OPENCODE_BIN)."
     );
   }
@@ -2143,7 +2182,7 @@ async function spawnOpencodeServer(
   if (opencodeDetachActive()) {
     try {
       const det = await spawnDetachedOpencodeServer({
-        bin: OPENCODE_BIN,
+        bin,
         cwd,
         env: {
           ...opencodeEnv(author),
@@ -2186,7 +2225,7 @@ async function spawnOpencodeServer(
   }
 
   const proc = Bun.spawn({
-    cmd: [OPENCODE_BIN, "serve", "--hostname=127.0.0.1", "--port=0"],
+    cmd: [bin, "serve", "--hostname=127.0.0.1", "--port=0"],
     cwd,
     env: {
       ...opencodeEnv(author),
