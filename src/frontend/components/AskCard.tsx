@@ -172,10 +172,6 @@ export function AskCard({ questions, onAnswer }: Props) {
         <Button
           variant="primary"
           size="lg"
-          /* The chat surface is built from pills (the composer is a pill, its
-             send button a circle), so this CTA goes fully round rather than
-             taking the primitive's standard corner. */
-          className="rounded-full px-5 [corner-shape:round]"
           onClick={submit}
           disabled={!complete || submitted}
         >
