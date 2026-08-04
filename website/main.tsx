@@ -87,7 +87,8 @@ function LandingPage() {
 					</nav>
 				</header>
 
-				<div className="hero-content page-width" id="top">
+			<div className="hero-content page-width" id="top">
+				<div className="hero-story">
 					<div className="hero-copy">
 						<h1>Run your coding agents. Together.</h1>
 						<p className="hero-description">
@@ -113,32 +114,25 @@ function LandingPage() {
 							<span>Worktrees and sandboxes</span>
 						</div>
 					</div>
+
+					<div className="hero-scroll-notes" id="why">
+						{features.map((feature) => (
+							<article className="hero-scroll-note" key={feature.number}>
+								<span>{feature.number}</span>
+								<h2>{feature.title}</h2>
+								<p>{feature.body}</p>
+							</article>
+						))}
+					</div>
+				</div>
+				<div className="hero-stage">
 					<ProductDemo />
 				</div>
-			</section>
+			</div>
+		</section>
 
-			<main>
-				<section className="why-section page-width" id="why">
-					<div className="why-shell">
-						<div className="section-intro">
-							<p className="section-kicker">
-								One place for the whole agent loop
-							</p>
-							<h2>Agents move faster when the whole team can see the work.</h2>
-						</div>
-						<div className="feature-grid">
-							{features.map((feature) => (
-								<article key={feature.number}>
-									<span>{feature.number}</span>
-									<h3>{feature.title}</h3>
-									<p>{feature.body}</p>
-								</article>
-							))}
-						</div>
-					</div>
-				</section>
-
-				<section className="install-section page-width" id="install">
+		<main>
+			<section className="install-section page-width" id="install">
 					<div className="install-card">
 						<div className="install-copy">
 							<p className="section-kicker section-kicker-dark">

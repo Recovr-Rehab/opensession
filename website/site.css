@@ -49,7 +49,7 @@ button:focus-visible {
 .hero {
 	position: relative;
 	min-height: 1080px;
-	overflow: hidden;
+	overflow: clip;
 	padding-bottom: 112px;
 	background: #e9f18a;
 }
@@ -163,15 +163,69 @@ button:focus-visible {
 .hero-content {
 	position: relative;
 	z-index: 2;
+	display: grid;
+	grid-template-columns: minmax(0, 390px) minmax(0, 1fr);
+	align-items: start;
+	gap: 64px;
+}
+
+.hero-story {
+	min-width: 0;
 }
 
 .hero-copy {
 	display: flex;
-	max-width: 900px;
-	margin: 82px auto 66px;
+	min-height: calc(100vh - 84px);
+	max-width: 390px;
+	margin: 0;
 	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	text-align: start;
+}
+
+.hero-scroll-note {
+	display: flex;
+	min-height: 58vh;
+	max-width: 340px;
+	flex-direction: column;
+	justify-content: center;
+	border-top: 1px solid rgba(20, 22, 26, 0.14);
+}
+
+.hero-scroll-note > span {
+	margin-bottom: 30px;
+	color: rgba(20, 22, 26, 0.46);
+	font-size: 12px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.hero-scroll-note h2 {
+	max-width: 320px;
+	margin: 0;
+	font-size: clamp(32px, 3vw, 44px);
+	font-weight: 600;
+	letter-spacing: -0.025em;
+	line-height: 1.05;
+	text-wrap: balance;
+}
+
+.hero-scroll-note p {
+	max-width: 330px;
+	margin: 22px 0 0;
+	color: rgba(20, 22, 26, 0.66);
+	font-size: 17px;
+	line-height: 1.55;
+	text-wrap: pretty;
+}
+
+.hero-stage {
+	position: sticky;
+	top: 84px;
+	display: flex;
+	height: calc(100vh - 84px);
 	align-items: center;
-	text-align: center;
 }
 
 .section-kicker {
@@ -182,9 +236,9 @@ button:focus-visible {
 }
 
 .hero h1 {
-	max-width: 860px;
+	max-width: 390px;
 	margin: 0;
-	font-size: clamp(52px, 6.2vw, 82px);
+	font-size: clamp(54px, 5.2vw, 76px);
 	font-weight: 600;
 	letter-spacing: -0.03em;
 	line-height: 1.02;
@@ -192,7 +246,7 @@ button:focus-visible {
 }
 
 .hero-description {
-	max-width: 690px;
+	max-width: 360px;
 	margin: 28px 0 0;
 	color: rgba(20, 22, 26, 0.68);
 	font-size: 20px;
@@ -259,11 +313,13 @@ button:focus-visible {
 .preview-wrap {
 	--demo-scale: 0.84;
 	position: relative;
-	height: 670px;
-	margin: 0 auto;
+	width: min(1100px, 75vw);
+	height: min(670px, calc(100vh - 130px));
+	flex: none;
+	margin: 0;
 	overflow: hidden;
 	border: 1px solid rgba(20, 22, 26, 0.12);
-	border-radius: 24px;
+	border-radius: 18px;
 	background: #f6f6f4;
 	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 28px 72px rgba(36, 51, 46, 0.22);
 }
@@ -522,6 +578,22 @@ button:focus-visible {
 	font-size: 13px;
 }
 
+@media (max-width: 980px) {
+	.hero-content {
+		grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+		gap: 40px;
+	}
+
+	.hero h1 {
+		font-size: clamp(48px, 6vw, 64px);
+	}
+
+	.preview-wrap {
+		width: 78vw;
+		height: min(610px, calc(100vh - 130px));
+	}
+}
+
 @media (max-width: 760px) {
 	.page-width {
 		width: min(100% - 32px, 1240px);
@@ -541,22 +613,46 @@ button:focus-visible {
 	}
 
 	.hero-copy {
-		margin-top: 66px;
-		margin-bottom: 54px;
+		min-height: 0;
+		max-width: 900px;
+		margin: 66px auto 54px;
+		align-items: center;
+		text-align: center;
+	}
+
+	.hero-content {
+		display: flex;
+		min-height: 0;
+		flex-direction: column;
+	}
+
+	.hero-scroll-notes {
+		display: none;
+	}
+
+	.hero-stage {
+		position: static;
+		display: block;
+		width: 100%;
+		height: auto;
 	}
 
 	.hero h1 {
+		max-width: 860px;
 		font-size: clamp(44px, 12vw, 68px);
 		line-height: 1.01;
 	}
 
 	.hero-description {
+		max-width: 690px;
 		font-size: 17px;
 	}
 
 	.preview-wrap {
+		width: 100%;
 		height: 520px;
-		border-radius: 18px;
+		margin: 0 auto;
+		border-radius: 14px;
 	}
 
 	.preview-wrap figcaption {
