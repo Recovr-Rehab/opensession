@@ -25,8 +25,19 @@ struct SessionView: View {
     }
 
     /// Anchor for restoring the scroll position after a requested history
-    /// prepend: the entry that was topmost stays where the reader left it.
-    @State private var prependAnchorId: String?
+    /// prepend: the ENTRY that was topmost stays where the reader left it.
+    /// An entry id, not a block id — a prepended page can merge older entries
+    /// into the topmost turn, which changes that block's id and would leave a
+    /// block-keyed anchor pointing at nothing.
+    @State private var prependAnchorEntryId: String?
+
+    /// How work folds start out: collapsed / expanded / auto (open while the
+    /// turn is live). Shared with the rest of the app's appearance settings.
+    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "collapsed"
+
+    /// Output arrived while the reader was scrolled up. Turns the return pill
+    /// from a navigation aid into a notification.
+    @State private var newBelow = false
 
     /// Whether the reader is at (or near) the bottom, from live scroll
     /// geometry. New AI output only auto-scrolls while true; scrolling up to
@@ -92,12 +103,19 @@ struct SessionView: View {
                             if viewModel.canLoadEarlier || viewModel.loadingEarlier {
                                 historyLoader
                             }
-                            ForEach(viewModel.displayItems) { item in
+                            ForEach(viewModel.displayBlocks) { block in
                                 TranscriptRow(
-                                    item: item,
-                                    sessionId: viewModel.session.id
+                                    block: block,
+                                    sessionId: viewModel.session.id,
+                                    foldState: {
+                                        viewModel.foldState(
+                                            for: $0,
+                                            preference: turnActivity
+                                        )
+                                    },
+                                    expansionState: { viewModel.expansionState(id: $0) }
                                 )
-                                .id(item.id)
+                                .id(block.id)
                             }
                             if !viewModel.liveText.isEmpty {
                                 StreamingBubble(text: viewModel.liveText)
@@ -134,7 +152,22 @@ struct SessionView: View {
                                 + geometry.contentInsets.bottom - pinTolerance
                     } action: { _, isNearBottom in
                         pinnedToBottom = isNearBottom
+                        if isNearBottom { newBelow = false }
                     }
+                    // A way back down. Without it the only route out of a
+                    // scrolled-up transcript is flicking through everything
+                    // that arrived meanwhile.
+                    .overlay(alignment: .bottom) {
+                        if !pinnedToBottom, !viewModel.displayBlocks.isEmpty {
+                            ScrollToLatestPill(hasNewOutput: newBelow) {
+                                newBelow = false
+                                scrollToBottom(proxy, animated: true)
+                            }
+                            .padding(.bottom, 10)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                    }
+                    .animation(.snappy(duration: 0.22, extraBounce: 0), value: pinnedToBottom)
                     .onChange(of: viewModel.pendingQuestion) {
                         // A question needs eyes even if they've scrolled away.
                         scrollToBottom(proxy, animated: true)
@@ -151,19 +184,34 @@ struct SessionView: View {
                     // row settling knock it loose), so follow explicitly while
                     // pinned: new items animated, per-chunk stream growth not
                     // (an animation every ~120ms flush reads as rubber-banding).
+                    // `displayItems` stays flat behind the folded blocks
+                    // precisely so this trigger keeps working: a tool call
+                    // landing inside an existing turn leaves the BLOCK count
+                    // unchanged, and following new output would stop.
                     .onChange(of: viewModel.displayItems.count) {
-                        if pinnedToBottom { scrollToBottom(proxy, animated: true) }
+                        if pinnedToBottom {
+                            scrollToBottom(proxy, animated: true)
+                        } else {
+                            newBelow = true
+                        }
                     }
                     .onChange(of: viewModel.liveText) {
-                        if pinnedToBottom { scrollToBottom(proxy, animated: false) }
+                        if pinnedToBottom {
+                            scrollToBottom(proxy, animated: false)
+                        } else if !viewModel.liveText.isEmpty {
+                            newBelow = true
+                        }
                     }
                     .onChange(of: viewModel.historyPrependSeq) {
-                        // Keep the reader where they were: the entry that was at
-                        // the top of the viewport stays there.
-                        if let anchor = prependAnchorId {
-                            proxy.scrollTo(anchor, anchor: .top)
+                        // Keep the reader where they were: the entry that was
+                        // at the top of the viewport stays there. Resolved
+                        // through the entry, since the block that now renders
+                        // it may be a different (merged) turn.
+                        if let entryId = prependAnchorEntryId,
+                           let blockId = viewModel.blockId(containing: entryId) {
+                            proxy.scrollTo(blockId, anchor: .top)
                         }
-                        prependAnchorId = nil
+                        prependAnchorEntryId = nil
                     }
                 }
             }
@@ -322,7 +370,7 @@ struct SessionView: View {
 
     private func requestEarlier() {
         guard viewModel.canLoadEarlier, !viewModel.loadingEarlier else { return }
-        prependAnchorId = viewModel.displayItems.first?.id
+        prependAnchorEntryId = viewModel.topmostEntryId
         viewModel.loadEarlier()
     }
 
@@ -490,7 +538,7 @@ struct SessionView: View {
             target = "ask-\(viewModel.pendingQuestion!.id)"
         } else if !viewModel.liveText.isEmpty {
             target = "live-stream"
-        } else if let last = viewModel.displayItems.last {
+        } else if let last = viewModel.displayBlocks.last {
             target = last.id
         } else {
             return
@@ -500,6 +548,46 @@ struct SessionView: View {
         } else {
             proxy.scrollTo(target, anchor: .bottom)
         }
+    }
+}
+
+/// The way back to the bottom of a transcript the reader scrolled away from.
+///
+/// It doubles as the "there is output you haven't seen" signal: when new
+/// content landed below the fold it says so in the accent colour instead of
+/// quietly offering navigation, which is the difference between a control and
+/// a notification.
+private struct ScrollToLatestPill: View {
+    let hasNewOutput: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(hasNewOutput ? "New messages" : "Scroll to bottom")
+                    .font(.footnote.weight(.medium))
+            }
+            .foregroundStyle(
+                hasNewOutput ? OS1VisualStyle.accent : OS1VisualStyle.textDim
+            )
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            // Opaque, not just glass: the pill floats over the transcript, and
+            // clear glass over body text left the label barely readable.
+            .background(OS1VisualStyle.background.opacity(0.75), in: Capsule())
+            .background(.thickMaterial, in: Capsule())
+            .glassSurface(in: Capsule(), interactive: true)
+            .overlay {
+                Capsule().stroke(OS1VisualStyle.border, lineWidth: 0.5)
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            hasNewOutput ? "New messages below. Scroll to latest" : "Scroll to latest"
+        )
     }
 }
 

@@ -8,14 +8,22 @@ import AppKit
 /// renderable-document construction happen asynchronously inside the library.
 struct MarkdownBody: View {
     let text: String
+    /// Narration inside a work fold renders dimmer than a final answer — the
+    /// library owns its own colours, so a `.foregroundStyle` on the outside
+    /// would be ignored.
+    var dimmed = false
 
-    init(_ text: String) {
+    init(_ text: String, dimmed: Bool = false) {
         self.text = text
+        self.dimmed = dimmed
     }
 
     var body: some View {
-        SwiftStreamingMarkdown.MarkdownView(text: text, config: .os1Static)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        SwiftStreamingMarkdown.MarkdownView(
+            text: text,
+            config: dimmed ? .os1Dim : .os1Static
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -98,7 +106,9 @@ private extension TextFonts {
 #endif
 
 private extension MarkdownRenderConfig {
-    static let os1Base: MarkdownRenderConfig = {
+    /// `text` is the body colour: full strength for an answer, dimmed for the
+    /// narration inside a work fold, which is context rather than conclusion.
+    static func os1Config(text: Color) -> MarkdownRenderConfig {
         #if os(iOS)
         let base = MarkdownRenderConfig.default
         return MarkdownRenderConfig(
@@ -113,15 +123,15 @@ private extension MarkdownRenderConfig {
                 h4Font: base.headingStyle.h4Font,
                 h5Font: base.headingStyle.h5Font,
                 h6Font: base.headingStyle.h6Font,
-                textColor: OS1VisualStyle.text
+                textColor: text
             ),
             orderedListStyle: .init(
                 textFonts: base.orderedListStyle.textFonts,
-                textColor: OS1VisualStyle.text
+                textColor: text
             ),
             paragraphStyle: .init(
                 textFonts: base.paragraphStyle.textFonts,
-                textColor: OS1VisualStyle.text
+                textColor: text
             ),
             tableStyle: .init(
                 textFonts: base.tableStyle.textFonts,
@@ -157,10 +167,10 @@ private extension MarkdownRenderConfig {
                 h4Font: .mac(size: 14, weight: .semibold),
                 h5Font: .mac(size: 13, weight: .semibold),
                 h6Font: .mac(size: 13, weight: .semibold),
-                textColor: OS1VisualStyle.text
+                textColor: text
             ),
-            orderedListStyle: .init(textFonts: body, textColor: OS1VisualStyle.text),
-            paragraphStyle: .init(textFonts: body, textColor: OS1VisualStyle.text),
+            orderedListStyle: .init(textFonts: body, textColor: text),
+            paragraphStyle: .init(textFonts: body, textColor: text),
             tableStyle: .init(
                 textFonts: .mac(size: 12),
                 headerTextColor: OS1VisualStyle.text,
@@ -182,9 +192,14 @@ private extension MarkdownRenderConfig {
             thematicBreakColor: OS1VisualStyle.border
         )
         #endif
-    }()
+    }
+
+    static let os1Base = os1Config(text: OS1VisualStyle.text)
 
     static let os1Static = os1Base
+        .withShouldAnimateText(value: false)
+
+    static let os1Dim = os1Config(text: OS1VisualStyle.textDim)
         .withShouldAnimateText(value: false)
 
     static let os1Streaming = os1Base

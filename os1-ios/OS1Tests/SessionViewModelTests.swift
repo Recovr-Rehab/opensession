@@ -398,14 +398,31 @@ final class SessionViewModelTests: XCTestCase {
 final class SendDraftTests: XCTestCase {
     private var viewModel: SessionViewModel!
     private var socket: MockSocket!
+    private var savedBusySend: String?
 
     override func setUp() async throws {
+        // `sendDraft` reads the busy-send mode straight from UserDefaults, and
+        // the test host shares its defaults domain with the real app — on a
+        // machine where someone has set "steer" in Settings, every queue-chip
+        // expectation below silently checked the wrong list. Pin it — and put
+        // the person's own setting back afterwards, since this is their app's
+        // real defaults domain.
+        savedBusySend = UserDefaults.standard.string(forKey: "os1.composer.busySend")
+        UserDefaults.standard.set("queue", forKey: "os1.composer.busySend")
         socket = MockSocket()
         let mock = socket!
         viewModel = SessionViewModel(
             session: Session(id: "bks-1"), socketFactory: { mock }
         )
         viewModel.start()
+    }
+
+    override func tearDown() async throws {
+        if let savedBusySend {
+            UserDefaults.standard.set(savedBusySend, forKey: "os1.composer.busySend")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "os1.composer.busySend")
+        }
     }
 
     private func entry(_ id: String, _ type: String, text: String? = nil) -> TranscriptEntry {

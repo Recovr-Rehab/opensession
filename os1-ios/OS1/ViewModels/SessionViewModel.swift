@@ -23,8 +23,15 @@ final class SessionViewModel {
     /// precedes them in the file, because that text lands ~1s later.)
     private(set) var liveEntries: [TranscriptEntry] = []
     private(set) var liveText = ""
-    private(set) var isStreaming = false
-    private(set) var isRunning: Bool
+    /// A run finishing settles the trailing turn — "Working" becomes
+    /// "Worked", its duration resolves and its footer appears — so the block
+    /// list has to be rebuilt on the flip, not just on entry mutations.
+    private(set) var isStreaming = false {
+        didSet { if oldValue != isStreaming { rebuildDisplayItems() } }
+    }
+    private(set) var isRunning: Bool {
+        didSet { if oldValue != isRunning { rebuildDisplayItems() } }
+    }
     /// Anchor for the elapsed-run clock. Opening a session mid-run uses the
     /// server's journaled run start (from the sessions list row); a run that
     /// starts while watching anchors to the status flip.
@@ -828,6 +835,55 @@ final class SessionViewModel {
     /// body evaluation — including each ~8Hz liveText flush mid-stream.
     private(set) var displayItems: [DisplayItem] = []
 
+    /// What the transcript actually renders: `displayItems` folded into turns
+    /// (see `TranscriptGrouping`). `displayItems` stays flat because the
+    /// scroll pin follows its count — grouping alone would hold that count
+    /// steady while a live turn grows, and new output would stop following.
+    private(set) var displayBlocks: [TranscriptBlock] = []
+
+    /// Fold state per turn, kept off the observation graph: reading this map
+    /// must not subscribe a row to every other row's expansion.
+    @ObservationIgnored private var foldStates: [String: TurnFoldState] = [:]
+
+    /// The open/closed state for one fold, created on first sight with the
+    /// preference-derived default and reused forever after.
+    func foldState(for turn: WorkTurn, preference: String) -> TurnFoldState {
+        let fallback = turn.defaultExpanded(preference: preference)
+        if let existing = foldStates[turn.id] {
+            // Only the live tail may re-derive its default afterwards; a
+            // settled fold above the reader must never change height on its
+            // own (see the transcript's scroll notes in SessionView).
+            if turn.isLive { existing.syncDefault(fallback) }
+            return existing
+        }
+        let state = TurnFoldState(expanded: fallback)
+        foldStates[turn.id] = state
+        return state
+    }
+
+    /// Expansion state for anything else that folds inside a row — a tool
+    /// call's detail, a clamped message's body, a long system notice. Same
+    /// reasoning as `foldState`: `@State` inside a `LazyVStack` row does not
+    /// survive the row leaving the realization window.
+    func expansionState(id: String, defaultExpanded: Bool = false) -> TurnFoldState {
+        if let existing = foldStates[id] { return existing }
+        let state = TurnFoldState(expanded: defaultExpanded)
+        foldStates[id] = state
+        return state
+    }
+
+    /// Which block currently renders `entryId` — how a scroll anchor captured
+    /// before a history prepend survives the regroup that follows it (the
+    /// entry may have been swallowed into a turn with a different id).
+    func blockId(containing entryId: String) -> String? {
+        displayBlocks.first { $0.entryIds.contains(entryId) }?.id
+    }
+
+    /// The transcript entry a scroll restore should re-find after a prepend.
+    var topmostEntryId: String? {
+        displayBlocks.first?.entryIds.first
+    }
+
     private func rebuildDisplayItems() {
         // Durable file-ordered entries first, then the ephemeral live tail.
         var all = entries
@@ -865,6 +921,11 @@ final class SessionViewModel {
             }
         }
         displayItems = items
+        displayBlocks = TranscriptGrouping.blocks(
+            from: items,
+            live: isRunning || isStreaming,
+            worktreeDir: session.worktreeDir
+        )
     }
 
     private func upsert(_ incoming: [TranscriptEntry]) {

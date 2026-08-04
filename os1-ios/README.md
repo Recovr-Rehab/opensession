@@ -18,14 +18,26 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   compact toolbar search/filter, iOS long-press worktree actions (details,
   rename, sharing, pull request, and archive), swipe-to-archive, restore from the
   archived list, a floating create button, and pull to refresh.
-- **Session view** — live transcript over the `/ws` WebSocket: user/assistant
-  messages in the same neutral, repo-aware visual hierarchy as mobile web
-  (streaming CommonMark/GFM with links, tables, and highlighted code blocks),
-  compact tool-call rows, system events, token-level streaming via
-  `stream_text` with a cursor bubble, and a horizontally scrollable chat tab
-  strip when a workspace/worktree contains multiple sessions. A bounded cache
-  keeps recently visited conversations loaded while their off-screen sockets
-  remain disconnected, so returning to a page does not show a loading screen.
+- **Session view** — live transcript over the `/ws` WebSocket, grouped into
+  turns the way the web viewer groups them: **question → folded work → answer →
+  footer**. A turn's tool calls and the narration between them collapse behind
+  one header (`Worked · 4m 42s · 40 steps`, a fingerprint of the tool families
+  used, failure count, edited files and ±lines); the turn's final answer escapes
+  the fold and renders as a normal message; a footer closes it with the
+  duration, the model that wrote it, and chips for every file it touched.
+  Tool rows carry per-tool identity — engine dialects fold onto canonical names,
+  MCP calls split into a server pill plus tool name, and each tool gets its own
+  glyph and bespoke summary (a tidied path, a shell command, `/pattern/ path`,
+  the active todo). Expanding one renders the tool's own shape: a unified diff
+  for an edit, the command for a shell call, file content for a write.
+  Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
+  refetch on demand), system events are toned by severity, and a floating pill
+  offers the way back down — reading `New messages` when output arrived while
+  you were scrolled up. Token-level streaming via `stream_text`, and a
+  horizontally scrollable chat tab strip when a workspace/worktree contains
+  multiple sessions. A bounded cache keeps recently visited conversations
+  loaded while their off-screen sockets remain disconnected, so returning to a
+  page does not show a loading screen.
 - **Workspace details** — tapping the chat title opens a native worktree sheet
   with repository and branch metadata, local git status, changed files, pull
   request status, workspace context, and model/reasoning controls, matching
@@ -87,6 +99,7 @@ OS1/
     AskQuestion.swift        Pending AskUserQuestion
     AttachedImage.swift      Composer image attachments
     ModelCatalog.swift       Model/reasoning options from /api/models
+    ToolPresentation.swift   Canonical tool names, families, summaries, ±lines
     PrDetails.swift          PR panel payload
     SettingsModels.swift     Settings payloads (tools/personal/workspace)
   Networking/
@@ -100,13 +113,16 @@ OS1/
   ViewModels/
     SessionsListViewModel.swift  5s polling
     SessionViewModel.swift       watch/stream/prompt/ask state machine
+    TranscriptBlocks.swift       Turn grouping (fold/answer/footer) + fold state
     SessionViewModelCache.swift  Bounded recently visited conversation cache
   Views/
     OS1VisualStyle.swift      Shared web palette, chat width, and repo tile
     SessionsListView.swift   List + status rows + settings sheet
     SessionView.swift        Transcript, streaming bubble, ask card, input bar
     NewSessionView.swift     Full-height create-session editor
-    TranscriptRow.swift      Per-entry-type rendering + streaming markdown
+    TranscriptRow.swift      Per-block rendering: bubbles, notices, clamping
+    TurnBlockView.swift      Work fold header + turn footer + file chips
+    ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     MarkdownBody.swift       Streaming/durable markdown rendering
     AskQuestionCard.swift    Options + free text answer
     PrPanel.swift            Read-only pull-request panel

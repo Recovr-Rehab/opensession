@@ -1,35 +1,62 @@
 import SwiftUI
 
-/// Renders one display item: user prompts as neutral right-aligned bubbles,
-/// assistant text as left-aligned markdown, tool calls as compact collapsible
-/// rows (summary line; tap to expand input + result), system events as
-/// centered captions.
+/// Renders one transcript block: prompts as right-aligned bubbles, answers as
+/// plain left-aligned markdown, a turn's work as a collapsible fold, and
+/// system events as centered pills toned by severity.
 struct TranscriptRow: View {
-    let item: SessionViewModel.DisplayItem
+    let block: TranscriptBlock
     let sessionId: String
+    /// Resolves fold/expansion state that has to outlive the row scrolling
+    /// out of the lazy stack.
+    let foldState: (WorkTurn) -> TurnFoldState
+    let expansionState: (String) -> TurnFoldState
+
     var body: some View {
-        switch item {
-        case .toolCall(let use, let result, let isLive):
-            ToolCallRow(use: use, result: result, isLive: isLive)
-        case .entry(let entry):
+        switch block {
+        case .message(let entry):
             if entry.isUser {
-                userBubble(entry)
+                UserBubble(entry: entry, sessionId: sessionId)
             } else if entry.isAssistant {
-                assistantBubble(entry)
-            } else if entry.isTool {
-                // Orphan tool_result — same compact treatment.
-                ToolCallRow(use: nil, result: entry, isLive: false)
+                AssistantMessage(
+                    entry: entry,
+                    sessionId: sessionId,
+                    state: expansionState("body-\(entry.id)")
+                )
             } else {
-                systemRow(entry)
+                SystemNoticeRow(entry: entry, state: expansionState("notice-\(entry.id)"))
             }
+        case .tool(let item):
+            ToolCallRow(
+                item: item,
+                sessionId: sessionId,
+                state: expansionState(item.id)
+            )
+        case .work(let turn):
+            TurnBlockView(
+                turn: turn,
+                sessionId: sessionId,
+                state: foldState(turn),
+                detailState: { expansionState($0.id) }
+            )
+        case .footer(let footer):
+            TurnFooterView(footer: footer)
         }
     }
+}
 
-    private func userBubble(_ entry: TranscriptEntry) -> some View {
+// MARK: - Messages
+
+/// The person's own message. No name label — the right alignment already
+/// says who wrote it.
+struct UserBubble: View {
+    let entry: TranscriptEntry
+    let sessionId: String
+
+    var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             Spacer(minLength: 40)
             VStack(alignment: .trailing, spacing: 6) {
-                conversationImages(entry)
+                ConversationImageRow(sources: entry.images ?? [], sessionId: sessionId)
                 if !entry.text.isEmpty {
                     Text(entry.text)
                         .font(.body)
@@ -44,6 +71,14 @@ struct TranscriptRow: View {
                                 .stroke(OS1VisualStyle.border, lineWidth: 0.5)
                         }
                         .textSelection(.enabled)
+                        .contextMenu {
+                            Button {
+                                copyToPasteboard(entry.text)
+                            } label: {
+                                Label("Copy message", systemImage: "doc.on.doc")
+                            }
+                            TimestampLabel(date: entry.timestampDate)
+                        }
                 }
             }
             .frame(maxWidth: userMessageMaxWidth, alignment: .trailing)
@@ -58,24 +93,154 @@ struct TranscriptRow: View {
         .infinity
         #endif
     }
+}
 
-    /// Assistant text renders plain (no bubble), the shape modern AI chat
-    /// apps converge on — only the person's own messages get bubbles.
-    private func assistantBubble(_ entry: TranscriptEntry) -> some View {
+/// The agent's answer renders plain — no bubble, the shape modern AI chat
+/// apps converge on, since only the person's own messages need containing.
+struct AssistantMessage: View {
+    let entry: TranscriptEntry
+    let sessionId: String
+    let state: TurnFoldState
+
+    /// Markdown parsing is superlinear, so only this much is parsed up front;
+    /// the rest waits behind an explicit tap. Phones are the constrained end
+    /// of this — a 200 KB answer would otherwise block the main thread on
+    /// every re-render.
+    private static let eagerCharacters = 6_000
+    /// Past this the expanded body renders as preformatted text: markdown at
+    /// that size costs more than it adds.
+    private static let markdownCeiling = 32 * 1024
+
+    @State private var fullText: String?
+    @State private var loadingFull = false
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            conversationImages(entry)
-            if !entry.text.isEmpty {
-                MarkdownBody(entry.text)
+            ConversationImageRow(sources: entry.images ?? [], sessionId: sessionId)
+            if !entry.text.isEmpty || state.expanded {
+                bodyContent
+            }
+            if let label = expanderLabel {
+                Button {
+                    expand()
+                } label: {
+                    HStack(spacing: 5) {
+                        if loadingFull {
+                            ProgressView().controlSize(.mini)
+                        }
+                        Text(loadingFull ? "Loading…" : label)
+                    }
+                    .font(.footnote.weight(.medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(OS1VisualStyle.accent)
+                .padding(.top, 2)
             }
         }
         .padding(.vertical, 2)
         .padding(.trailing, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contextMenu {
+            Button {
+                copyToPasteboard(fullText ?? entry.text)
+            } label: {
+                Label("Copy message", systemImage: "doc.on.doc")
+            }
+            TimestampLabel(date: entry.timestampDate)
+            if let model = entry.model, !model.isEmpty {
+                Label(
+                    "Written by \(TranscriptFormat.modelLabel(model))",
+                    systemImage: "sparkles"
+                )
+            }
+        }
     }
 
     @ViewBuilder
-    private func conversationImages(_ entry: TranscriptEntry) -> some View {
-        let sources = entry.images ?? []
+    private var bodyContent: some View {
+        let text = visibleText
+        if state.expanded, text.count > Self.markdownCeiling {
+            // Preformatted, and scrollable in its own right: an enormous
+            // answer should not stretch the transcript to its full height.
+            ScrollView {
+                Text(text)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 520)
+        } else {
+            MarkdownBody(text)
+        }
+    }
+
+    /// What's on screen right now: the whole message when it fits or has been
+    /// expanded, otherwise a head cut at a line boundary so the preview never
+    /// ends mid-word.
+    private var visibleText: String {
+        let text = fullText ?? entry.text
+        guard !state.expanded, text.count > Self.eagerCharacters else { return text }
+        let head = text.prefix(Self.eagerCharacters)
+        if let lastBreak = head.lastIndex(of: "\n"), lastBreak > head.startIndex {
+            return String(head[head.startIndex..<lastBreak])
+        }
+        return String(head)
+    }
+
+    private var isClamped: Bool {
+        entry.contentClamped == true && fullText == nil
+    }
+
+    private var expanderLabel: String? {
+        if state.expanded, !isClamped { return "Collapse" }
+        let known = entry.contentLength ?? (fullText ?? entry.text).count
+        guard isClamped || known > Self.eagerCharacters else { return nil }
+        return "Show full message · \(TranscriptFormat.size(known))"
+    }
+
+    private func expand() {
+        if state.expanded {
+            state.toggle()
+            return
+        }
+        // A wire-clamped entry only carries a head; the rest lives on the
+        // server and is fetched the first time someone asks for it.
+        guard isClamped else {
+            state.toggle()
+            return
+        }
+        guard !loadingFull else { return }
+        loadingFull = true
+        Task {
+            fullText = try? await OS1API.fullEntryContent(
+                sessionId: sessionId,
+                entryId: entry.id
+            )
+            loadingFull = false
+            state.expanded = true
+        }
+    }
+}
+
+/// Timestamps have no hover home on a phone, so they live in the menu.
+private struct TimestampLabel: View {
+    let date: Date?
+
+    var body: some View {
+        if let date {
+            Label(
+                date.formatted(date: .abbreviated, time: .shortened),
+                systemImage: "clock"
+            )
+        }
+    }
+}
+
+private struct ConversationImageRow: View {
+    let sources: [String]
+    let sessionId: String
+
+    var body: some View {
         if !sources.isEmpty {
             HStack(spacing: 6) {
                 ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
@@ -86,186 +251,122 @@ struct TranscriptRow: View {
             }
         }
     }
-
-    private func systemRow(_ entry: TranscriptEntry) -> some View {
-        Text(entry.text)
-            #if os(iOS)
-            .font(.footnote)
-            #else
-            .font(.caption)
-            #endif
-            .foregroundStyle(OS1VisualStyle.textDim)
-            .lineLimit(3)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 24)
-    }
 }
 
-// MARK: - Tool calls
+// MARK: - System notices
 
-/// One tool call: a caption summary row that expands to the pretty-printed
-/// input and the (clamped) result output. Raw JSON never shows collapsed.
-struct ToolCallRow: View {
-    let use: TranscriptEntry?
-    let result: TranscriptEntry?
-    /// Only a stream entry is eligible for the "Expand while running" mode.
-    /// A transcript reload can contain old tool uses with no persisted result.
-    let isLive: Bool
+/// System events as a centered pill. Severity is carried by tone rather than
+/// by more text: a failure that reads identically to "model changed" is a
+/// failure nobody notices.
+struct SystemNoticeRow: View {
+    let entry: TranscriptEntry
+    let state: TurnFoldState
 
-    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "collapsed"
-    @State private var expanded = false
+    /// Longer than this and the pill folds — a multi-paragraph restart
+    /// explanation should not push the conversation off the screen.
+    private static let foldThreshold = 220
 
-    private var isError: Bool {
-        use?.isError == true || result?.isError == true
-    }
+    private var tone: NoticeTone { NoticeTone.of(entry) }
+    private var isFoldable: Bool { entry.text.count > Self.foldThreshold }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.snappy(duration: 0.2)) { expanded.toggle() }
-            } label: {
-                summaryRow
+        VStack(spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                if let symbol = tone.symbol {
+                    Image(systemName: symbol)
+                        .font(.caption2)
+                }
+                Text(headline)
+                    .lineLimit(isFoldable && !state.expanded ? 2 : nil)
+                if isFoldable {
+                    Text(state.expanded ? "hide" : "show")
+                        .foregroundStyle(OS1VisualStyle.accent)
+                }
             }
-            .buttonStyle(.plain)
+            .font(.footnote)
+            .foregroundStyle(tone.color)
+            .multilineTextAlignment(isFoldable ? .leading : .center)
 
-            if expanded {
-                detail
-                    .transition(.opacity)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear { applyExpansionPreference() }
-        .onChange(of: result?.id) { _, _ in applyExpansionPreference() }
-        .onChange(of: isLive) { _, _ in applyExpansionPreference() }
-        .onChange(of: turnActivity) { _, _ in applyExpansionPreference() }
-    }
-
-    private func applyExpansionPreference() {
-        if turnActivity == "expanded" { expanded = true }
-        else if turnActivity == "collapsed" { expanded = false }
-        else { expanded = isLive && result == nil && use != nil }
-    }
-
-    private var summaryRow: some View {
-        HStack(spacing: 6) {
-            Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(OS1VisualStyle.textFaint)
-            Image(systemName: "wrench.and.screwdriver")
-                .font(.caption2)
-            Text(title)
-                .lineLimit(1)
-            if result == nil, use != nil {
-                ProgressView()
-                    .controlSize(.mini)
-            }
-            if isError {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
-            }
-        }
-        #if os(iOS)
-        .font(.subheadline)
-        #else
-        .font(.callout)
-        #endif
-        .foregroundStyle(OS1VisualStyle.textDim)
-        .contentShape(Rectangle())
-    }
-
-    /// A friendly one-liner: the server's summary ("Read path", "$ cmd") when
-    /// it says more than "Using X", else a cleaned tool name plus its most
-    /// interesting input value.
-    private var title: String {
-        guard let use else {
-            let text = firstLine(result?.text ?? "")
-            return text.isEmpty ? "Tool result" : text
-        }
-        let summary = firstLine(use.text)
-        let name = cleanedToolName(use.toolName ?? "tool")
-        if !summary.isEmpty && summary != "Using \(use.toolName ?? "")" {
-            return summary
-        }
-        if let hint = inputHint(use.toolInput) {
-            return "\(name): \(hint)"
-        }
-        return name
-    }
-
-    /// "mcp__oc__linear_list_issues" → "linear list_issues"; "Bash" stays.
-    private func cleanedToolName(_ raw: String) -> String {
-        var name = raw
-        for prefix in ["mcp__oc__", "mcp__"] where name.hasPrefix(prefix) {
-            name = String(name.dropFirst(prefix.count))
-        }
-        return name.replacingOccurrences(of: "__", with: " ")
-    }
-
-    /// The single most informative input value, for tools the server has no
-    /// summary for (MCP tools mostly).
-    private func inputHint(_ input: JSONValue?) -> String? {
-        guard case .object(let dict)? = input else { return nil }
-        for key in ["command", "filePath", "file_path", "path", "query", "pattern", "url", "prompt", "question", "title", "name"] {
-            if let value = dict[key]?.stringValue, !value.isEmpty {
-                return String(firstLine(value).prefix(60))
-            }
-        }
-        return nil
-    }
-
-    private func firstLine(_ text: String) -> String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
-            .components(separatedBy: "\n").first ?? ""
-    }
-
-    @ViewBuilder
-    private var detail: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let input = use?.toolInput, case .object(let dict) = input, !dict.isEmpty {
-                codeBox(label: "Input", text: input.pretty.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-            if let result {
-                let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                codeBox(
-                    label: result.contentClamped == true ? "Result (truncated)" : "Result",
-                    text: text.isEmpty ? "(empty)" : String(text.prefix(4000))
-                )
-            }
-        }
-        .padding(.leading, 14)
-    }
-
-    private func codeBox(label: String, text: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                #if os(iOS)
-                .font(.footnote.weight(.semibold))
-                #else
-                .font(.caption2.weight(.semibold))
-                #endif
-                .foregroundStyle(OS1VisualStyle.textDim)
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(text)
-                    #if os(iOS)
-                    .font(.system(.footnote, design: .monospaced))
-                    #else
-                    .font(.system(.caption, design: .monospaced))
-                    #endif
+            if isFoldable, state.expanded {
+                Text(entry.text)
+                    .font(.footnote)
                     .foregroundStyle(OS1VisualStyle.textDim)
                     .textSelection(.enabled)
-                    .lineLimit(24)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(8)
-            .transcriptPanelCompat(
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .frame(maxWidth: 520)
+        .background(
+            tone.background,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isFoldable else { return }
+            withAnimation(.snappy(duration: 0.2, extraBounce: 0)) { state.toggle() }
+        }
+        .accessibilityAddTraits(tone == .error ? .isStaticText : [])
+    }
+
+    /// Folded notices show their first line — server notices lead with the
+    /// headline and explain underneath.
+    private var headline: String {
+        guard isFoldable, !state.expanded else { return entry.text }
+        return entry.text
+            .components(separatedBy: "\n")
+            .first?
+            .trimmingCharacters(in: .whitespaces) ?? entry.text
+    }
+}
+
+enum NoticeTone: Equatable {
+    case info, warn, error
+
+    static func of(_ entry: TranscriptEntry) -> NoticeTone {
+        if entry.isError == true { return .error }
+        let text = entry.text.lowercased()
+        for marker in ["failed", "failure", "error", "denied", "crashed", "could not"]
+        where text.contains(marker) {
+            return .error
+        }
+        for marker in [
+            "warning", "interrupted", "timed out", "timeout", "stopped",
+            "cancelled", "canceled", "restart", "compacted", "retry",
+        ] where text.contains(marker) {
+            return .warn
+        }
+        return .info
+    }
+
+    var color: Color {
+        switch self {
+        case .info: OS1VisualStyle.textDim
+        case .warn: OS1VisualStyle.yellow
+        case .error: OS1VisualStyle.red
+        }
+    }
+
+    var symbol: String? {
+        switch self {
+        case .info: nil
+        case .warn: "exclamationmark.triangle"
+        case .error: "exclamationmark.octagon"
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .info: OS1VisualStyle.panel.opacity(0.6)
+        case .warn: OS1VisualStyle.yellow.opacity(0.12)
+        case .error: OS1VisualStyle.red.opacity(0.12)
         }
     }
 }
 
-// MARK: - Streaming bubble
+// MARK: - Streaming
 
 /// Assistant text streaming in over `stream_text` frames, before the durable
 /// transcript entry exists. Only rendered once text is available.
