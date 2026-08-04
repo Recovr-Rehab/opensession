@@ -1091,151 +1091,117 @@ export function PrPanel({
       >
         {switcher}
 
-        <header className="flex min-h-[96px] shrink-0 items-center gap-5 px-6 py-4 max-[720px]:min-h-[78px] max-[720px]:px-3">
-          <div className="min-w-0 flex-1">
-            <a
-              className="block truncate text-page-title font-semibold tracking-[-0.025em] text-fg no-underline hover:text-accent max-[720px]:text-section-title"
-              href={pr.url}
-              target="_blank"
-              rel="noopener"
-            >
-              {pr.title} <span className="font-normal text-faint">#{pr.number}</span>
-            </a>
-            <div className="mt-2 flex items-center gap-2 overflow-hidden whitespace-nowrap text-xs text-dim">
-              <span className="truncate">
-                <strong>{pr.author}</strong> wants to merge {pr.commits?.length || 0} commit{pr.commits?.length === 1 ? "" : "s"} into
-                {" "}<span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.baseRefName}</span>
-                {" "}from <span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.headRefName}</span>
-              </span>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 max-[760px]:hidden">
-            {sessions && (
-              <button
-                className="border-0 bg-transparent px-1 py-2 text-xs font-medium text-dim hover:text-fg"
-                onClick={() => setSessionsOpen(true)}
-                title="Sessions linked to this PR"
-              >
-                Sessions{relatedSessions.length > 0 ? ` · ${relatedSessions.length}` : ""}
-              </button>
-            )}
-            {pr.staging?.url && (
+        {/* The whole PR — title, branch line, git status, stack, tabs — lives
+            inside the one scroll container so the identity scrolls away with
+            the diff. Only the tab row sticks, so the reviewer keeps a way back
+            to Conversation/Commits/Checks once they're deep in a file. */}
+        <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24">
+          <header className="flex min-h-[96px] shrink-0 items-center gap-5 px-6 py-4 max-[720px]:min-h-[78px] max-[720px]:px-3">
+            <div className="min-w-0 flex-1">
               <a
-                className="px-1 py-2 text-xs font-medium text-dim no-underline hover:text-fg"
-                href={pr.staging.url}
+                className="block truncate text-page-title font-semibold tracking-[-0.025em] text-fg no-underline hover:text-accent max-[720px]:text-section-title"
+                href={pr.url}
                 target="_blank"
                 rel="noopener"
               >
-                Preview
+                {pr.title} <span className="font-normal text-faint">#{pr.number}</span>
               </a>
-            )}
-            {onOpenSession && (
-              <button
-                className="border-0 bg-transparent px-1 py-2 text-xs font-medium text-dim hover:text-fg"
-                onClick={onOpenSession}
-              >
-                Open workspace
-              </button>
-            )}
-          </div>
-        </header>
-
-        {/* Only the branch work that is still outstanding — the PR verdict and
-            its Merge button belong to the session header's status bar, which is
-            on screen whether or not the workspace panel is open. */}
-        <GitDivergenceStrip
-          git={git}
-          pr={pr}
-          sessionId={sessionId}
-          repo={active?.repo}
-          send={send}
-          onRefresh={load}
-          onMerge={handleMerge}
-          merging={merging}
-          confirmMerge={confirmMerge}
-        />
-
-        {/* Where this PR sits in its chain of layers — directly under Git
-            status, because it reframes what that status means. */}
-        <StackSection pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
-
-        {sessionsOpen && (
-          <>
-            <button
-              className="absolute inset-0 z-20 cursor-default border-0 bg-black/25"
-              aria-label="Close sessions"
-              onClick={() => setSessionsOpen(false)}
-            />
-            <div className="absolute right-5 top-[92px] z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
-              <div className="mb-2 flex items-center">
-                <span className="text-sm font-semibold text-fg">
-                  Sessions on this PR
+              <div className="mt-2 flex items-center gap-2 overflow-hidden whitespace-nowrap text-xs text-dim">
+                <span className="truncate">
+                  <strong>{pr.author}</strong> wants to merge {pr.commits?.length || 0} commit{pr.commits?.length === 1 ? "" : "s"} into
+                  {" "}<span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.baseRefName}</span>
+                  {" "}from <span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.headRefName}</span>
                 </span>
-                <button
-                  className="ml-auto border-0 bg-transparent text-item-title text-faint hover:text-fg"
-                  onClick={() => setSessionsOpen(false)}
-                  aria-label="Close"
-                >
-                  ×
-                </button>
               </div>
-              <PrSessionsList
-                sessions={relatedSessions}
-                repo={active?.repo || ""}
-                branch={active?.branch}
-                pr={pr}
-                currentSessionId={sessionId || undefined}
-                onOpenSession={(id) => {
-                  setSessionsOpen(false);
-                  onOpenSessionById?.(id);
-                }}
-                send={send}
-                addHandler={addHandler}
-                compose
-              />
             </div>
-          </>
-        )}
+            <div className="flex shrink-0 items-center gap-2 max-[760px]:hidden">
+              {sessions && (
+                <button
+                  className="border-0 bg-transparent px-1 py-2 text-xs font-medium text-dim hover:text-fg"
+                  onClick={() => setSessionsOpen(true)}
+                  title="Sessions linked to this PR"
+                >
+                  Sessions{relatedSessions.length > 0 ? ` · ${relatedSessions.length}` : ""}
+                </button>
+              )}
+              {pr.staging?.url && (
+                <a
+                  className="px-1 py-2 text-xs font-medium text-dim no-underline hover:text-fg"
+                  href={pr.staging.url}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Preview
+                </a>
+              )}
+              {onOpenSession && (
+                <button
+                  className="border-0 bg-transparent px-1 py-2 text-xs font-medium text-dim hover:text-fg"
+                  onClick={onOpenSession}
+                >
+                  Open workspace
+                </button>
+              )}
+            </div>
+          </header>
 
-        {/* The row's bottom line is an inset shadow, not a border: the active tab
-            covers it with its own surface-coloured bottom border while sitting
-            flush inside the box, so nothing overflows vertically (a 1px overflow
-            here parks a scrollbar, since global.css opts Chrome out of overlay
-            scrollbars). Horizontal scrollbars are hidden for the same reason. */}
-        <div
-          className="flex h-[52px] shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] max-[720px]:px-2 [&::-webkit-scrollbar]:hidden"
-          role="tablist"
-        >
-          {([
-            ["conversation", "Conversation", comments.length, <IconMessage size={17} />],
-            ["commits", "Commits", pr.commits?.length || 0, <CommitIcon />],
-            ["checks", "Checks", checkSummary.total, <IconCheck size={17} />],
-            ["diff", "Files changed", files.length, <IconFile size={17} />],
-          ] as const).map(([key, label, count, icon]) => {
-            const activeTab = key === "diff" ? diffView === "diff" || diffView === "guide" : diffView === key;
-            return (
-              <button
-                key={key}
-                role="tab"
-                aria-selected={activeTab}
-                className={`flex h-[44px] shrink-0 items-center gap-2 rounded-t-md border px-4 text-control-label font-medium ${activeTab ? "border-line border-b-surface bg-surface text-fg" : "border-transparent bg-transparent text-dim hover:border-line hover:bg-hover hover:text-fg"}`}
-                onClick={() => setDiffView(key)}
-              >
-                {icon}
-                {label}
-                <span className="rounded-full bg-active px-2 py-0.5 text-meta font-semibold text-dim">{count}</span>
-              </button>
-            );
-          })}
-          <span className="ml-auto mb-3 shrink-0 text-meta max-[720px]:hidden">
-            <span className="text-green">+{pr.additions}</span>{" "}
-            <span className="text-red">−{pr.deletions}</span>
-          </span>
-        </div>
+          {/* Only the branch work that is still outstanding — the PR verdict and
+              its Merge button belong to the session header's status bar, which is
+              on screen whether or not the workspace panel is open. */}
+          <GitDivergenceStrip
+            git={git}
+            pr={pr}
+            sessionId={sessionId}
+            repo={active?.repo}
+            send={send}
+            onRefresh={load}
+            onMerge={handleMerge}
+            merging={merging}
+            confirmMerge={confirmMerge}
+          />
 
-        <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24">
+          {/* Where this PR sits in its chain of layers — directly under Git
+              status, because it reframes what that status means. */}
+          <StackSection pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
+
+          {/* The row's bottom line is an inset shadow, not a border: the active tab
+              covers it with its own surface-coloured bottom border while sitting
+              flush inside the box, so nothing overflows vertically (a 1px overflow
+              here parks a scrollbar, since global.css opts Chrome out of overlay
+              scrollbars). Horizontal scrollbars are hidden for the same reason. */}
+          <div
+            className="sticky top-0 z-[8] flex h-[52px] shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] max-[720px]:px-2 [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+          >
+            {([
+              ["conversation", "Conversation", comments.length, <IconMessage size={17} />],
+              ["commits", "Commits", pr.commits?.length || 0, <CommitIcon />],
+              ["checks", "Checks", checkSummary.total, <IconCheck size={17} />],
+              ["diff", "Files changed", files.length, <IconFile size={17} />],
+            ] as const).map(([key, label, count, icon]) => {
+              const activeTab = key === "diff" ? diffView === "diff" || diffView === "guide" : diffView === key;
+              return (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={activeTab}
+                  className={`flex h-[44px] shrink-0 items-center gap-2 rounded-t-md border px-4 text-control-label font-medium ${activeTab ? "border-line border-b-surface bg-surface text-fg" : "border-transparent bg-transparent text-dim hover:border-line hover:bg-hover hover:text-fg"}`}
+                  onClick={() => setDiffView(key)}
+                >
+                  {icon}
+                  {label}
+                  <span className="rounded-full bg-active px-2 py-0.5 text-meta font-semibold text-dim">{count}</span>
+                </button>
+              );
+            })}
+            <span className="ml-auto mb-3 shrink-0 text-meta max-[720px]:hidden">
+              <span className="text-green">+{pr.additions}</span>{" "}
+              <span className="text-red">−{pr.deletions}</span>
+            </span>
+          </div>
+
           {(diffView === "diff" || diffView === "guide") && (
-            <div className="sticky top-0 z-[7] flex h-[54px] items-center border-b border-line bg-surface/95 px-6 backdrop-blur max-[720px]:px-2">
+            <div className="sticky top-[52px] z-[7] flex h-[54px] items-center border-b border-line bg-surface/95 px-6 backdrop-blur max-[720px]:px-2">
               <div className="inline-flex rounded-md border border-line bg-panel p-0.5">
                 <Button
                   variant="ghost"
@@ -1366,7 +1332,7 @@ export function PrPanel({
                     {guideSections.map((section, index, all) => (
                       <section
                         id={`review-guide-${index}`}
-                        className="mb-8 scroll-mt-[64px]"
+                        className="mb-8 scroll-mt-[118px]"
                         key={`${section.title}-${index}`}
                       >
                         <div className="mb-3 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
@@ -1416,6 +1382,44 @@ export function PrPanel({
               )}
           </div>
         </main>
+
+        {sessionsOpen && (
+          <>
+            <button
+              className="absolute inset-0 z-20 cursor-default border-0 bg-black/25"
+              aria-label="Close sessions"
+              onClick={() => setSessionsOpen(false)}
+            />
+            <div className="absolute right-5 top-[92px] z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
+              <div className="mb-2 flex items-center">
+                <span className="text-sm font-semibold text-fg">
+                  Sessions on this PR
+                </span>
+                <button
+                  className="ml-auto border-0 bg-transparent text-item-title text-faint hover:text-fg"
+                  onClick={() => setSessionsOpen(false)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <PrSessionsList
+                sessions={relatedSessions}
+                repo={active?.repo || ""}
+                branch={active?.branch}
+                pr={pr}
+                currentSessionId={sessionId || undefined}
+                onOpenSession={(id) => {
+                  setSessionsOpen(false);
+                  onOpenSessionById?.(id);
+                }}
+                send={send}
+                addHandler={addHandler}
+                compose
+              />
+            </div>
+          </>
+        )}
 
         <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex min-h-[54px] items-center rounded-md border border-line-strong bg-panel/95 px-3 py-2 shadow-[0_12px_35px_rgba(0,0,0,0.3)] backdrop-blur">
           <div className="min-w-0 flex-1">
