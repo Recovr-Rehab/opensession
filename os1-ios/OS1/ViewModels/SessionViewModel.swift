@@ -844,35 +844,17 @@ final class SessionViewModel {
     /// steady while a live turn grows, and new output would stop following.
     private(set) var displayBlocks: [TranscriptBlock] = []
 
-    /// Fold state per turn, kept off the observation graph: reading this map
-    /// must not subscribe a row to every other row's expansion.
-    @ObservationIgnored private var foldStates: [String: TurnFoldState] = [:]
+    /// Fold state, kept off the observation graph — see `FoldStateStore`.
+    /// It outlives the view tree because `@State` inside a `LazyVStack` row is
+    /// destroyed the moment the row leaves the realization window.
+    @ObservationIgnored private let folds = FoldStateStore()
 
-    /// The open/closed state for one fold, created on first sight with the
-    /// preference-derived default and reused forever after.
     func foldState(for turn: WorkTurn, preference: String) -> TurnFoldState {
-        let fallback = turn.defaultExpanded(preference: preference)
-        if let existing = foldStates[turn.id] {
-            // Only the live tail may re-derive its default afterwards; a
-            // settled fold above the reader must never change height on its
-            // own (see the transcript's scroll notes in SessionView).
-            if turn.isLive { existing.syncDefault(fallback) }
-            return existing
-        }
-        let state = TurnFoldState(expanded: fallback)
-        foldStates[turn.id] = state
-        return state
+        folds.fold(for: turn, preference: preference)
     }
 
-    /// Expansion state for anything else that folds inside a row — a tool
-    /// call's detail, a clamped message's body, a long system notice. Same
-    /// reasoning as `foldState`: `@State` inside a `LazyVStack` row does not
-    /// survive the row leaving the realization window.
     func expansionState(id: String, defaultExpanded: Bool = false) -> TurnFoldState {
-        if let existing = foldStates[id] { return existing }
-        let state = TurnFoldState(expanded: defaultExpanded)
-        foldStates[id] = state
-        return state
+        folds.expansion(id: id, defaultExpanded: defaultExpanded)
     }
 
     /// Which block currently renders `entryId` — how a scroll anchor captured
@@ -893,36 +875,10 @@ final class SessionViewModel {
         let knownIds = Set(entries.map(\.id))
         all.append(contentsOf: liveEntries.filter { !knownIds.contains($0.id) })
 
-        var resultByUseId: [String: TranscriptEntry] = [:]
-        for entry in all where entry.type == "tool_result" {
-            let key = entry.toolUseId ?? String(entry.id.dropFirst("tr-".count))
-            if resultByUseId[key] == nil { resultByUseId[key] = entry }
-        }
-        let useIds = Set(
-            all.filter { $0.type == "tool_use" }.map { $0.toolUseId ?? $0.id }
+        let items = TranscriptGrouping.displayItems(
+            from: all,
+            liveIds: Set(liveEntries.map(\.id))
         )
-        let liveEntryIds = Set(liveEntries.map(\.id))
-        var items: [DisplayItem] = []
-        for entry in all {
-            switch entry.type {
-            case "tool_use":
-                let key = entry.toolUseId ?? entry.id
-                items.append(.toolCall(
-                    use: entry,
-                    result: resultByUseId[key],
-                    isLive: liveEntryIds.contains(entry.id)
-                ))
-            case "tool_result":
-                // Only orphans render standalone — a result whose use exists
-                // anywhere in the transcript is folded into that item.
-                let key = entry.toolUseId ?? String(entry.id.dropFirst("tr-".count))
-                if !useIds.contains(key) {
-                    items.append(.entry(entry))
-                }
-            default:
-                items.append(.entry(entry))
-            }
-        }
         displayItems = items
         displayBlocks = TranscriptGrouping.blocks(
             from: items,

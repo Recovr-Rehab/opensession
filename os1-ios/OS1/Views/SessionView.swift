@@ -107,6 +107,7 @@ struct SessionView: View {
                                 TranscriptRow(
                                     block: block,
                                     sessionId: viewModel.session.id,
+                                    worktreeDir: viewModel.session.worktreeDir,
                                     foldState: {
                                         viewModel.foldState(
                                             for: $0,

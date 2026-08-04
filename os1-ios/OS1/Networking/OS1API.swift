@@ -71,6 +71,21 @@ enum OS1API {
         try await get("/api/sessions/\(sessionId)/transcript")
     }
 
+    /// One sub-agent's transcript. `agentId` comes off the spawning Task
+    /// call — its result's `agentId`, or the `ses_…` the result announces.
+    static func subagent(
+        sessionId: String,
+        agentId: String
+    ) async throws -> SubagentTranscript {
+        let session = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        let agent = agentId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? agentId
+        return try await get("/api/sessions/\(session)/subagent/\(agent)")
+    }
+
     /// Full content for an entry the WS delivered clamped.
     static func fullEntryContent(sessionId: String, entryId: String) async throws -> String {
         struct EntryResponse: Decodable { let content: String }

@@ -6,11 +6,14 @@ import SwiftUI
 struct ToolCallRow: View {
     let item: ToolCallItem
     let sessionId: String
+    var worktreeDir: String?
     let state: TurnFoldState
 
     /// Built once per expansion and cached: parsing tool input to synthesize
     /// a diff must never happen inside `body`.
     @State private var detail: ToolDetail?
+    /// The worker sheet opened from a Task row.
+    @State private var openWorker: WorkerLink?
 
     private var presentation: ToolPresentation { item.presentation }
 
@@ -37,7 +40,17 @@ struct ToolCallRow: View {
             detail = ToolDetail.make(item: item)
         }
         .onChange(of: item.result?.id) { _, _ in detail = nil }
+        .sheet(item: $openWorker) { link in
+            SubagentView(
+                sessionId: sessionId,
+                agentId: link.id,
+                worktreeDir: worktreeDir
+            )
+        }
     }
+
+    /// Identifies the sheet's subject; `sheet(item:)` needs Identifiable.
+    private struct WorkerLink: Identifiable { let id: String }
 
     private var detailKey: String {
         "\(item.id)|\(state.expanded)|\(item.result?.id ?? "")"
@@ -79,6 +92,29 @@ struct ToolCallRow: View {
             }
 
             Spacer(minLength: 4)
+
+            // A Task call is otherwise a dead end: the row says a worker was
+            // spawned and nothing says what it did.
+            if let agentId = item.subagentId {
+                Button {
+                    openWorker = WorkerLink(id: agentId)
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(item.isPending ? "Watch" : "Open")
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .stroke(OS1VisualStyle.border, lineWidth: 0.5)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open this sub-agent's transcript")
+            }
 
             if let stats = presentation.lineStats {
                 LineStatsView(stats: stats)

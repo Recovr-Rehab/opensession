@@ -36,6 +36,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   glyph and bespoke summary (a tidied path, a shell command, `/pattern/ path`,
   the active todo). Expanding one renders the tool's own shape: a unified diff
   for an edit, the command for a shell call, file content for a write.
+  A `Task` row opens the sub-agent's own transcript in a sheet (polled while
+  the worker runs, via `GET /api/sessions/:id/subagent/:agentId`), and a
+  footer's file chip opens that file's diff for the turn.
   Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
   refetch on demand), system events are toned by severity, and a floating pill
   offers the way back down — reading `New messages` when output arrived while
@@ -106,6 +109,7 @@ OS1/
     AttachedImage.swift      Composer image attachments
     ModelCatalog.swift       Model/reasoning options from /api/models
     ToolPresentation.swift   Canonical tool names, families, summaries, ±lines
+    SubagentTranscript.swift A Task call's sub-agent conversation payload
     PrDetails.swift          PR panel payload
     SettingsModels.swift     Settings payloads (tools/personal/workspace)
   Networking/
@@ -117,7 +121,7 @@ OS1/
     ServerEvent.swift        WS frame parsing (unknown types -> .ignored)
     OS1Socket.swift          WebSocket: bearer auth, ping loop, typed events
   ViewModels/
-    SessionsListViewModel.swift  5s polling
+    SessionsListViewModel.swift  5s polling + memoized sidebar grouping
     SessionViewModel.swift       watch/stream/prompt/ask state machine
     TranscriptBlocks.swift       Turn grouping (fold/answer/footer) + fold state
     SessionViewModelCache.swift  Bounded recently visited conversation cache
@@ -129,6 +133,7 @@ OS1/
     TranscriptRow.swift      Per-block rendering: bubbles, notices, clamping
     TurnBlockView.swift      Work fold header + turn footer + file chips
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
+    SubagentView.swift       A Task call's sub-agent transcript, in a sheet
     MarkdownBody.swift       Streaming/durable markdown rendering
     AskQuestionCard.swift    Options + free text answer
     PrPanel.swift            Read-only pull-request panel

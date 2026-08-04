@@ -142,6 +142,52 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertEqual(TranscriptFormat.modelLabel(footers[0].model ?? ""), "Sonnet 5")
     }
 
+    /// A Task row without a way into the worker is a dead end, so the id has
+    /// to be found however the engine happened to report it.
+    func testSubagentIdIsFoundFromTheResultField() {
+        var result = toolResult("t1", text: "done")
+        result.agentId = "ses_abc123"
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "go"),
+            toolUse("t1", name: "Task", input: ["description": .string("look")]),
+            result,
+        ])
+        XCTAssertEqual(firstToolCall()?.subagentId, "ses_abc123")
+    }
+
+    func testSubagentIdIsFoundInTheResultBody() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "go"),
+            toolUse("t1", name: "Task", input: ["description": .string("look")]),
+            toolResult("t1", text: "<task id=\"ses_xyz789\" state=\"completed\">…</task>"),
+        ])
+        XCTAssertEqual(firstToolCall()?.subagentId, "ses_xyz789")
+    }
+
+    func testNonAgentToolsNeverOfferASubagentDrillIn() {
+        var result = toolResult("t1", text: "ok")
+        result.agentId = "ses_abc123"
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "go"),
+            toolUse("t1", name: "Bash", input: ["command": .string("ls")]),
+            result,
+        ])
+        XCTAssertNil(firstToolCall()?.subagentId)
+    }
+
+    /// The first tool call in the transcript, wherever it ended up rendering.
+    private func firstToolCall() -> ToolCallItem? {
+        for block in viewModel.displayBlocks {
+            switch block {
+            case .tool(let item): return item
+            case .work(let turn):
+                for case .tool(let item) in turn.items { return item }
+            default: continue
+            }
+        }
+        return nil
+    }
+
     func testAnchorSurvivesRegrouping() {
         append([
             TranscriptEntry(id: "u1", type: "user", content: "hi"),
@@ -241,6 +287,29 @@ final class ToolPresentationTests: XCTestCase {
             ])])
         )
         XCTAssertEqual(presentation.summary, "two  ·  1/3 done")
+    }
+
+    func testEditsCarryTheirDiffForTheFileChipPreview() {
+        let presentation = ToolPresentation.make(
+            toolName: "Edit",
+            input: .object([
+                "file_path": .string("/wt/a.ts"),
+                "old_string": .string("one"),
+                "new_string": .string("two"),
+            ]),
+            worktreeDir: "/wt"
+        )
+        XCTAssertEqual(presentation.touchedFiles.first?.hunks, ["-one\n+two"])
+    }
+
+    func testToolsThatOnlyNamePathsCarryNoDiff() {
+        // Bash touches files without reporting content; inventing a diff for
+        // it would be worse than showing none.
+        let presentation = ToolPresentation.make(
+            toolName: "Bash",
+            input: .object(["command": .string("rm a.ts")])
+        )
+        XCTAssertTrue(presentation.touchedFiles.isEmpty)
     }
 
     func testDurationsUnderASecondAreNotShown() {

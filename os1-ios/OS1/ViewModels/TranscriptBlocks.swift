@@ -63,6 +63,25 @@ struct ToolCallItem: Identifiable, Equatable {
     var isPending: Bool { result == nil && use != nil }
     var mediaSources: [String] { result?.images ?? [] }
     var hasMedia: Bool { !mediaSources.isEmpty }
+
+    /// The worker this Task call spawned, when it announced one — the key
+    /// that opens its transcript. The engine reports it either as the
+    /// result's `agentId` or inside the result body as `<task id="ses_…">`.
+    var subagentId: String? {
+        guard presentation.family == .agent else { return nil }
+        if let id = result?.agentId ?? use?.agentId, !id.isEmpty { return id }
+        guard let text = result?.text,
+              let range = text.range(
+                  of: "<task id=\"ses_[A-Za-z0-9]+\"",
+                  options: .regularExpression
+              ),
+              let idRange = text[range].range(
+                  of: "ses_[A-Za-z0-9]+",
+                  options: .regularExpression
+              )
+        else { return nil }
+        return String(text[range][idRange])
+    }
 }
 
 enum TurnItem: Identifiable, Equatable {
@@ -147,6 +166,49 @@ struct TurnFooter: Identifiable, Equatable {
 
 @MainActor
 enum TranscriptGrouping {
+    /// Merge each `tool_use` with its `tool_result` (matched on `toolUseId`,
+    /// or the server's `tr-<id>` convention) into one item; orphan results
+    /// stay standalone. The transcript FILE is the order authority, so this
+    /// preserves the order it was given.
+    ///
+    /// Shared with the sub-agent viewer, which renders a worker's transcript
+    /// through exactly the same pipeline as the main chat.
+    static func displayItems(
+        from all: [TranscriptEntry],
+        liveIds: Set<String> = []
+    ) -> [SessionViewModel.DisplayItem] {
+        var resultByUseId: [String: TranscriptEntry] = [:]
+        for entry in all where entry.type == "tool_result" {
+            let key = entry.toolUseId ?? String(entry.id.dropFirst("tr-".count))
+            if resultByUseId[key] == nil { resultByUseId[key] = entry }
+        }
+        let useIds = Set(
+            all.filter { $0.type == "tool_use" }.map { $0.toolUseId ?? $0.id }
+        )
+        var items: [SessionViewModel.DisplayItem] = []
+        for entry in all {
+            switch entry.type {
+            case "tool_use":
+                let key = entry.toolUseId ?? entry.id
+                items.append(.toolCall(
+                    use: entry,
+                    result: resultByUseId[key],
+                    isLive: liveIds.contains(entry.id)
+                ))
+            case "tool_result":
+                // Only orphans render standalone — a result whose use exists
+                // anywhere in the transcript is folded into that item.
+                let key = entry.toolUseId ?? String(entry.id.dropFirst("tr-".count))
+                if !useIds.contains(key) {
+                    items.append(.entry(entry))
+                }
+            default:
+                items.append(.entry(entry))
+            }
+        }
+        return items
+    }
+
     /// Fold the flat display list into blocks. Pure and O(n) — it runs in the
     /// view model's rebuild pass, never in a view body.
     ///
@@ -300,6 +362,7 @@ enum TranscriptGrouping {
             if var existing = merged[file.path] {
                 existing.additions += file.additions
                 existing.deletions += file.deletions
+                existing.hunks += file.hunks
                 merged[file.path] = existing
             } else {
                 order.append(file.path)
@@ -359,5 +422,40 @@ final class TurnFoldState {
     func syncDefault(_ value: Bool) {
         guard !userToggled, expanded != value else { return }
         expanded = value
+    }
+}
+
+/// Every fold's state for one transcript, keyed by block id.
+///
+/// Deliberately NOT observable: reading the map must not subscribe a row to
+/// every other row's expansion. The individual `TurnFoldState` objects it
+/// hands out are observable, so a toggle invalidates exactly one fold.
+@MainActor
+final class FoldStateStore {
+    private var states: [String: TurnFoldState] = [:]
+
+    /// The open/closed state for one work fold, created on first sight with
+    /// the preference-derived default and reused forever after.
+    func fold(for turn: WorkTurn, preference: String) -> TurnFoldState {
+        let fallback = turn.defaultExpanded(preference: preference)
+        if let existing = states[turn.id] {
+            // Only the live tail may re-derive its default afterwards; a
+            // settled fold above the reader must never change height on its
+            // own (see the transcript's scroll notes in SessionView).
+            if turn.isLive { existing.syncDefault(fallback) }
+            return existing
+        }
+        let state = TurnFoldState(expanded: fallback)
+        states[turn.id] = state
+        return state
+    }
+
+    /// Expansion for anything else that folds inside a row — a tool call's
+    /// detail, a clamped message's body, a long system notice.
+    func expansion(id: String, defaultExpanded: Bool = false) -> TurnFoldState {
+        if let existing = states[id] { return existing }
+        let state = TurnFoldState(expanded: defaultExpanded)
+        states[id] = state
+        return state
     }
 }

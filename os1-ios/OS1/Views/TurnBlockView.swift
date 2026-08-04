@@ -11,6 +11,7 @@ import SwiftUI
 struct TurnBlockView: View {
     let turn: WorkTurn
     let sessionId: String
+    var worktreeDir: String?
     let state: TurnFoldState
     /// Resolves each nested tool row's own detail state, which must survive
     /// the row scrolling out of the lazy stack.
@@ -48,6 +49,7 @@ struct TurnBlockView: View {
                             ToolCallRow(
                                 item: call,
                                 sessionId: sessionId,
+                                worktreeDir: worktreeDir,
                                 state: detailState(call)
                             )
                         }
@@ -229,10 +231,27 @@ struct TurnFooterView: View {
 }
 
 /// One touched file: a colored extension badge, the basename, and its ±.
+/// Tapping opens what actually changed — on a phone the chips are the only
+/// place a turn's edits are named, and a name without a diff is a dead end.
 struct FileChipView: View {
     let file: TouchedFile
+    @State private var showingDiff = false
 
     var body: some View {
+        Button {
+            guard !file.hunks.isEmpty else { return }
+            showingDiff = true
+        } label: {
+            chip
+        }
+        .buttonStyle(.plain)
+        .disabled(file.hunks.isEmpty)
+        .sheet(isPresented: $showingDiff) {
+            FileDiffSheet(file: file)
+        }
+    }
+
+    private var chip: some View {
         HStack(spacing: 5) {
             Text(file.extensionBadge)
                 .font(.system(size: 8, weight: .bold, design: .rounded))
@@ -268,7 +287,7 @@ struct FileChipView: View {
     }
 
     /// Linguist-ish hues, darkened so the white badge label clears contrast.
-    private static func color(for ext: String) -> Color {
+    static func color(for ext: String) -> Color {
         switch ext {
         case "TS", "TSX": Color(red: 0.13, green: 0.34, blue: 0.66)
         case "JS", "JSX", "MJS": Color(red: 0.62, green: 0.53, blue: 0.05)
@@ -283,6 +302,50 @@ struct FileChipView: View {
         case "GO": Color(red: 0.0, green: 0.42, blue: 0.53)
         case "SH", "BASH": Color(red: 0.24, green: 0.44, blue: 0.24)
         default: Color(red: 0.36, green: 0.38, blue: 0.42)
+        }
+    }
+}
+
+/// What one file's edits did, reusing the tool row's diff rendering so a chip
+/// preview and the Edit call it came from never disagree.
+struct FileDiffSheet: View {
+    let file: TouchedFile
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 6) {
+                        Text(file.path)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .textSelection(.enabled)
+                        Spacer(minLength: 8)
+                        LineStatsView(
+                            stats: ToolLineStats(
+                                additions: file.additions,
+                                deletions: file.deletions
+                            )
+                        )
+                    }
+                    ForEach(Array(file.hunks.enumerated()), id: \.offset) { index, hunk in
+                        ToolCodeBox(label: file.hunks.count > 1 ? "Change \(index + 1)" : "Diff") {
+                            DiffText(patch: hunk)
+                        }
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(OS1VisualStyle.background.ignoresSafeArea())
+            .navigationTitle(file.basename)
+            .inlineTitleBarCompat()
+            .toolbar {
+                ToolbarItem(placement: .topTrailingCompat) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
     }
 }

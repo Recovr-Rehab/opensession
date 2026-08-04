@@ -6,6 +6,8 @@ import SwiftUI
 struct TranscriptRow: View {
     let block: TranscriptBlock
     let sessionId: String
+    /// Repo root for tidying paths inside nested views (the sub-agent sheet).
+    var worktreeDir: String?
     /// Resolves fold/expansion state that has to outlive the row scrolling
     /// out of the lazy stack.
     let foldState: (WorkTurn) -> TurnFoldState
@@ -29,12 +31,14 @@ struct TranscriptRow: View {
             ToolCallRow(
                 item: item,
                 sessionId: sessionId,
+                worktreeDir: worktreeDir,
                 state: expansionState(item.id)
             )
         case .work(let turn):
             TurnBlockView(
                 turn: turn,
                 sessionId: sessionId,
+                worktreeDir: worktreeDir,
                 state: foldState(turn),
                 detailState: { expansionState($0.id) }
             )

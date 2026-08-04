@@ -76,6 +76,10 @@ struct TouchedFile: Equatable, Sendable, Identifiable {
     var path: String
     var additions: Int
     var deletions: Int
+    /// Unified-diff hunks for this file, so a chip can show WHAT changed
+    /// rather than only how much. Empty for tools that report paths without
+    /// content (Bash, FileChange).
+    var hunks: [String] = []
 
     var id: String { path }
 
@@ -386,6 +390,7 @@ extension ToolPresentation {
             if case .array(let edits)? = input?["edits"] {
                 guard let path = filePath(input) else { return [] }
                 var stats = ToolLineStats()
+                var hunks: [String] = []
                 for edit in edits {
                     let old = edit["old_string"]?.stringValue ?? edit["oldString"]?.stringValue
                     let new = edit["new_string"]?.stringValue ?? edit["newString"]?.stringValue
@@ -393,11 +398,13 @@ extension ToolPresentation {
                         additions: lineCount(new),
                         deletions: lineCount(old)
                     )
+                    if let hunk = unifiedHunk(old: old, new: new) { hunks.append(hunk) }
                 }
                 return [TouchedFile(
                     path: tidyPath(path, worktreeDir: worktreeDir),
                     additions: stats.additions,
-                    deletions: stats.deletions
+                    deletions: stats.deletions,
+                    hunks: hunks
                 )]
             }
             let old = string(input, "old_string") ?? string(input, "oldString")
@@ -406,7 +413,8 @@ extension ToolPresentation {
                 return [TouchedFile(
                     path: tidyPath(path, worktreeDir: worktreeDir),
                     additions: lineCount(new),
-                    deletions: lineCount(old)
+                    deletions: lineCount(old),
+                    hunks: [unifiedHunk(old: old, new: new)].compactMap { $0 }
                 )]
             }
             return patchTouchedPaths(input).map {
@@ -422,7 +430,8 @@ extension ToolPresentation {
             return [TouchedFile(
                 path: tidyPath(path, worktreeDir: worktreeDir),
                 additions: lineCount(content),
-                deletions: 0
+                deletions: 0,
+                hunks: [unifiedHunk(old: nil, new: content)].compactMap { $0 }
             )]
         case "NotebookEdit":
             guard let path = filePath(input) else { return [] }
@@ -434,6 +443,22 @@ extension ToolPresentation {
         default:
             return []
         }
+    }
+
+    /// Old lines as removals then new lines as additions — the same shape the
+    /// expanded Edit row renders, reused so a chip preview and the tool call
+    /// never disagree about what changed.
+    private static func unifiedHunk(old: String?, new: String?) -> String? {
+        var lines: [String] = []
+        if let old, !old.isEmpty {
+            lines.append(contentsOf: old.components(separatedBy: .newlines).map { "-\($0)" })
+        }
+        if let new, !new.isEmpty {
+            lines.append(contentsOf: new.components(separatedBy: .newlines).map { "+\($0)" })
+        }
+        guard !lines.isEmpty else { return nil }
+        // A chip preview is for recognising a change, not auditing it.
+        return lines.prefix(200).joined(separator: "\n")
     }
 
     private static func lineCount(_ text: String?) -> Int {
