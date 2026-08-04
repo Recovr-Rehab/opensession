@@ -127,6 +127,12 @@ const NO_ANNOTATIONS: DiffLineAnnotation<Meta>[] = [];
 
 const NO_VIEWED: ReadonlySet<string> = new Set();
 
+// Lock files are machine-written churn nobody reads line by line — they start
+// collapsed even when the surface expands everything. The header row (with its
+// +/- counts) and manual expand / "Expand all" still work.
+const LOCK_FILE =
+  /(^|\/)(bun\.lockb?|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|Gemfile\.lock|composer\.lock|poetry\.lock|uv\.lock|go\.sum|flake\.lock|Podfile\.lock|Package\.resolved)$/;
+
 // The viewed set spans the whole PR while a guide section renders a subset,
 // so count intersections rather than trusting `viewed.size`.
 function countViewed(
@@ -186,7 +192,13 @@ export function CommentableDiff({
   // FileDiff parses + highlights on the main thread, so a large change would
   // otherwise block the tab. `expanded` holds the indices the user opened.
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(
-    () => new Set(files.slice(0, defaultExpandedFiles).map((_, index) => index)),
+    () =>
+      new Set(
+        files
+          .slice(0, defaultExpandedFiles)
+          .map((_, index) => index)
+          .filter((index) => !LOCK_FILE.test(files[index].name)),
+      ),
   );
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -267,7 +279,12 @@ export function CommentableDiff({
   const viewedCollapseKey = useRef<string | null>(null);
   useEffect(() => {
     setExpanded(
-      new Set(files.slice(0, defaultExpandedFiles).map((_, index) => index)),
+      new Set(
+        files
+          .slice(0, defaultExpandedFiles)
+          .map((_, index) => index)
+          .filter((index) => !LOCK_FILE.test(files[index].name)),
+      ),
     );
     viewedCollapseKey.current = null;
   }, [patch, defaultExpandedFiles, files]);
