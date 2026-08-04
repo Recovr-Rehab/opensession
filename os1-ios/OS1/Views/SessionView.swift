@@ -59,12 +59,11 @@ struct SessionView: View {
     /// How close to the bottom (pt) still counts as pinned.
     ///
     /// `scrollToBottom` aligns the LAST BLOCK's bottom edge with the visible
-    /// bottom, which deliberately leaves the transcript's trailing padding
-    /// (the composer's scrim run-up) below the fold — so "as far down as this
-    /// view ever scrolls itself" is already that far from the content's end.
-    /// The tolerance has to clear it, plus slack for keyboard/inset
-    /// transitions and lazy rows settling.
-    private var pinTolerance: CGFloat { OS1VisualStyle.composerScrimRunUp + 60 }
+    /// bottom, so "as far down as this view ever scrolls itself" already sits
+    /// the transcript's trailing padding short of the content's end. The
+    /// tolerance has to clear that, plus slack for keyboard/inset transitions
+    /// and lazy rows settling.
+    private let pinTolerance: CGFloat = 76
 
     /// Model/effort catalog for the toolbar picker; fetched on first open.
     @State private var catalog: ModelCatalog?
@@ -149,9 +148,6 @@ struct SessionView: View {
                         }
                         .padding(.horizontal, contentInset)
                         .padding(.vertical, 8)
-                        // Rest the newest message where the composer's scrim
-                        // begins, so only rows scrolled past it dissolve.
-                        .padding(.bottom, OS1VisualStyle.composerScrimRunUp)
                         .frame(maxWidth: contentMaxWidth)
                         .frame(maxWidth: .infinity)
                     }
@@ -294,18 +290,16 @@ struct SessionView: View {
         // while the content inset tracks the composer's real height and the
         // keyboard — a fixed overlay padding hid the newest messages behind
         // both.
-        .safeAreaInset(edge: .bottom) {
-            // A separate view struct on purpose: typing mutates
-            // `viewModel.draft` on every keystroke, and any read of it (or
-            // `canSend`) inside SessionView.body would re-evaluate this whole
-            // body — transcript included — per key. Keep per-keystroke reads
-            // out of SessionView.body.
-            SessionInputBar(
-                viewModel: viewModel,
-                contentMaxWidth: contentMaxWidth,
-                horizontalInset: contentInset
-            )
-        }
+        // A BAR, not a plain inset: `safeAreaBar` is what tells the scroll view
+        // that its content travels behind the composer, which is what draws the
+        // soft scroll edge effect there (see `softScrollEdges`). With a plain
+        // `safeAreaInset` the transcript simply stopped above the composer and
+        // nothing ever passed under it, so nothing faded.
+        #if os(iOS)
+        .safeAreaBar(edge: .bottom) { inputBar }
+        #else
+        .safeAreaInset(edge: .bottom) { inputBar }
+        #endif
         #if os(macOS)
         .navigationTitle("")
         .macWindowTitle(viewModel.session.displayTitle)
@@ -393,6 +387,18 @@ struct SessionView: View {
             // resync (and reconnect if dead) the moment we're visible again.
             if phase == .active { viewModel.appDidBecomeActive() }
         }
+    }
+
+    /// A separate view struct on purpose: typing mutates `viewModel.draft` on
+    /// every keystroke, and any read of it (or `canSend`) inside
+    /// SessionView.body would re-evaluate this whole body — transcript
+    /// included — per key. Keep per-keystroke reads out of SessionView.body.
+    private var inputBar: some View {
+        SessionInputBar(
+            viewModel: viewModel,
+            contentMaxWidth: contentMaxWidth,
+            horizontalInset: contentInset
+        )
     }
 
     private var conversationLoader: some View {
@@ -1077,13 +1083,9 @@ private struct SessionInputBar: View {
         .padding(.horizontal, horizontalInset)
         .padding(.top, Self.barTopPadding)
         .padding(.bottom, 8)
-        // The bar's only background is the scrim that dissolves the transcript
-        // travelling underneath it; the composer and chips stay individual
-        // glass elements floating on top of it. The scrim needs the bar's top
-        // padding to finish its ramp level with the composer card.
-        #if os(iOS)
-        .composerScrim(topInset: Self.barTopPadding)
-        #endif
+        // No background: the composer and chips are individual glass elements
+        // floating over the transcript, which stays visible behind and below
+        // them and dissolves into the bar through the soft scroll edge effect.
         #if os(macOS)
         .onAppear { installShiftReturnMonitor() }
         .onDisappear { removeShiftReturnMonitor() }
@@ -1169,72 +1171,91 @@ private struct SessionInputBar: View {
 
     /// The message composer mirrors the web input: draft above, controls on a
     /// bottom row, including stop while a turn is active.
+    /// Phone resting state: the web's minimized pill — one capsule row of
+    /// [+] [field] [send] — which opens into the full two-row layout on focus
+    /// or as soon as there is something to send. The field itself keeps its
+    /// place in the row across both states, so focus and the keyboard survive
+    /// the morph.
+    private var isCollapsed: Bool {
+        #if os(iOS)
+        !inputFocused && viewModel.draft.isEmpty && viewModel.attachedImages.isEmpty
+        #else
+        false
+        #endif
+    }
+
     private var composer: some View {
         VStack(alignment: .leading, spacing: 2) {
-            TextField(
-                viewModel.isRunning
-                    ? (busySend == "steer" ? "Message — steers this run" : "Message — queues for after this run")
-                    : "Message",
-                text: $viewModel.draft,
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .lineLimit(1...10)
-            .padding(.horizontal, 10)
-            .padding(.top, 9)
-            .padding(.bottom, 5)
-            .focused($inputFocused)
-            // Mac: Return sends; Shift/Option-Return insert a newline. On
-            // iOS the software keyboard's return key just wraps, as before.
-            .onSubmit {
-                #if os(iOS)
-                viewModel.sendDraft()
-                #else
-                if sendKey == "enter" { viewModel.sendDraft() }
-                #endif
-            }
-            // A copied screenshot pastes straight into the attachments
-            // (Cmd+V on Mac, long-press Paste on iOS); text pastes flow
-            // through to the field untouched.
-            .pastesImages(into: $viewModel.attachedImages)
-
-            HStack(spacing: 6) {
-                AttachImagesButton(images: $viewModel.attachedImages)
-                Spacer(minLength: 8)
-
-                if viewModel.isRunning {
-                    stopButton
+            HStack(spacing: 4) {
+                if isCollapsed {
+                    AttachImagesButton(images: $viewModel.attachedImages)
                 }
 
-                Button {
+                TextField(
+                    viewModel.isRunning
+                        ? (busySend == "steer" ? "Message — steers this run" : "Message — queues for after this run")
+                        : "Message",
+                    text: $viewModel.draft,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .lineLimit(1...10)
+                // A vertical-axis TextField is greedy: without an explicit
+                // fill it claims the row's whole width in the collapsed pill
+                // and pushes the send button off the right edge.
+                .frame(maxWidth: .infinity)
+                // Collapsed, the round buttons set the pill's height and the
+                // field just sits between them; expanded, it carries its own
+                // air above the toolbar row.
+                .padding(.horizontal, isCollapsed ? 4 : 10)
+                .padding(.top, isCollapsed ? 0 : 9)
+                .padding(.bottom, isCollapsed ? 0 : 5)
+                .focused($inputFocused)
+                // Mac: Return sends; Shift/Option-Return insert a newline. On
+                // iOS the software keyboard's return key just wraps, as before.
+                .onSubmit {
+                    #if os(iOS)
                     viewModel.sendDraft()
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(viewModel.canSend ? Color.white : Color.secondary)
-                        .frame(width: 32, height: 32)
-                        .background(
-                            viewModel.canSend
-                                ? AnyShapeStyle(.tint)
-                                : AnyShapeStyle(.fill.secondary),
-                            in: Circle()
-                        )
+                    #else
+                    if sendKey == "enter" { viewModel.sendDraft() }
+                    #endif
                 }
-                .buttonStyle(.plain)
-                .disabled(!viewModel.canSend)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
-                .animation(.easeOut(duration: 0.15), value: viewModel.canSend)
+                // A copied screenshot pastes straight into the attachments
+                // (Cmd+V on Mac, long-press Paste on iOS); text pastes flow
+                // through to the field untouched.
+                .pastesImages(into: $viewModel.attachedImages)
+
+                if isCollapsed {
+                    if viewModel.isRunning {
+                        stopButton
+                    } else {
+                        sendButton
+                    }
+                }
             }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 3)
+            .padding(isCollapsed ? 4 : 0)
+
+            if !isCollapsed {
+                HStack(spacing: 6) {
+                    AttachImagesButton(images: $viewModel.attachedImages)
+                    Spacer(minLength: 8)
+
+                    if viewModel.isRunning {
+                        stopButton
+                    }
+
+                    sendButton
+                }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 3)
+            }
         }
         #if os(iOS)
-        // Near-solid surface, not a see-through pane: the transcript now
-        // fades out before it reaches the composer, so there is nothing worth
-        // showing through it — and a washed-out bar over busy content made
-        // the draft harder to read. The page color on top of a thick material
-        // lands on white in light mode and stays dark in dark mode.
+        // Near-solid surface, not a see-through pane: the transcript passes
+        // BEHIND the composer, and a washed-out bar over live text made the
+        // draft hard to read. The page color on top of a thick material lands
+        // on white in light mode and stays dark in dark mode — the chat still
+        // shows around and below the pill, just not through it.
         .background(
             OS1VisualStyle.background.opacity(0.7),
             in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
@@ -1263,7 +1284,32 @@ private struct SessionInputBar: View {
             TapGesture().onEnded { inputFocused = true }
         )
         .animation(.easeOut(duration: 0.15), value: inputFocused)
+        // Sending empties the draft, which collapses the pill without the
+        // focus change that drives the animation above.
+        .animation(.snappy(duration: 0.2), value: isCollapsed)
         #endif
+    }
+
+    private var sendButton: some View {
+        Button {
+            viewModel.sendDraft()
+        } label: {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(viewModel.canSend ? Color.white : Color.secondary)
+                .frame(width: 32, height: 32)
+                .background(
+                    viewModel.canSend
+                        ? AnyShapeStyle(.tint)
+                        : AnyShapeStyle(.fill.secondary),
+                    in: Circle()
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!viewModel.canSend)
+        .frame(width: 44, height: 44)
+        .contentShape(Circle())
+        .animation(.easeOut(duration: 0.15), value: viewModel.canSend)
     }
 
     @ViewBuilder
