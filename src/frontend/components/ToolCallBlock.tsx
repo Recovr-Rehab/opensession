@@ -528,7 +528,9 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
           <span className="flex-shrink-0 text-[14px] leading-5 font-medium text-dim transition-colors group-hover:text-fg">{toolName}</span>
         )}
 
-        <span className="flex min-w-0 flex-1 items-center gap-2">
+        {/* Baseline, not centre: the path is mono and the ± counts are sans, so
+            at one size their line boxes still centre to different baselines. */}
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span
             className={cn(
               "min-w-0 truncate font-mono text-label leading-4",

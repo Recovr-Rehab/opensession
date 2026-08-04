@@ -72,7 +72,7 @@ export const TurnFooter = React.memo(function TurnFooter({
   return (
     <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--chat-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
       {duration && (
-        <span className="mr-1.5 text-xs font-medium text-faint">{duration}</span>
+        <span className={cn("mr-1.5 text-faint", FOOTER_TEXT)}>{duration}</span>
       )}
       <Tooltip label={copied ? "Copied" : "Copy message"}>
         <button type="button" onClick={doCopy} className={BTN}>
@@ -122,7 +122,7 @@ export const TurnFooter = React.memo(function TurnFooter({
           rather than mounted on hover (see .turn-footer-time), so its space is
           always reserved and revealing it never shifts the buttons out from
           under the cursor. */}
-      <span className="turn-footer-time ml-auto pl-3 text-xs font-medium text-faint">
+      <span className={cn("turn-footer-time ml-auto pl-3 text-faint", FOOTER_TEXT)}>
         {fullTime(entry.timestamp)}
       </span>
     </div>
@@ -159,6 +159,17 @@ function messageModelLabel(id: string): string {
 
 const MAX_CHIPS = 4;
 
+/**
+ * One size and one line box for every text run in the footer — the duration,
+ * the file names, the ± counts, the timestamp. Flex centring aligns *boxes*,
+ * not text, so a run set a size apart lands its baseline a fraction off its
+ * neighbours': the ± counts at 11px sat 0.67px below the 13px file name they
+ * ride beside. With identical line boxes, centring and baseline alignment are
+ * the same thing — inside a chip and bare in the row alike, since the chip is
+ * itself centred in that row. Same 13px/16px pair the fold line above uses.
+ */
+const FOOTER_TEXT = "text-label font-medium leading-4";
+
 function FileChip({ file }: { file: TouchedFile }) {
   const name = file.path.split("/").pop() || file.path;
   return (
@@ -170,7 +181,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         className="ml-1 flex h-6 min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md bg-panel pr-1.5"
       >
         <ExtBadge name={name} flush />
-        <span className="max-w-[180px] truncate text-xs font-medium text-dim">
+        <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
           {name}
         </span>
         <LineStats additions={file.additions} deletions={file.deletions} />
@@ -180,12 +191,19 @@ function FileChip({ file }: { file: TouchedFile }) {
         align="start"
         className="w-[min(520px,calc(100vw-24px))] overflow-hidden"
       >
-        <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
+        {/* Baseline rather than centre: the path is mono and the counts are
+            sans, and two fonts at one size still centre to different baselines
+            (1px apart here) because their ascents differ. */}
+        <div className="flex items-baseline gap-2 border-b border-line px-2.5 py-2">
           <ExtBadge name={name} />
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-dim">
+          <span className="min-w-0 flex-1 truncate font-mono text-meta text-dim">
             {tidyPath(file.path)}
           </span>
-          <LineStats additions={file.additions} deletions={file.deletions} />
+          <LineStats
+            additions={file.additions}
+            deletions={file.deletions}
+            className="text-meta"
+          />
         </div>
         <div className="max-h-[min(360px,55vh)] overflow-y-auto p-1.5">
           {file.edits.length === 0 ? (
@@ -246,7 +264,7 @@ function MoreChip({ files }: { files: TouchedFile[] }) {
         .join(", ") + (files.length > 12 ? ", …" : "")}
     >
       <span className="ml-1 flex h-6 items-center gap-1.5 rounded-md bg-panel px-1.5">
-        <span className="text-xs font-medium text-faint">
+        <span className={cn("text-faint", FOOTER_TEXT)}>
           +{files.length} more
         </span>
         <LineStats additions={additions} deletions={deletions} />
@@ -267,7 +285,7 @@ export function LineStats({
   return (
     <span
       className={cn(
-        "flex flex-shrink-0 items-center gap-1 text-[11px] font-medium",
+        "flex flex-shrink-0 items-center gap-1 text-label font-medium leading-4",
         className
       )}
     >
@@ -292,7 +310,9 @@ function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
     <span
       className={cn(
         "flex flex-shrink-0 items-center justify-center text-meta font-bold leading-none text-white",
-        flush ? "min-w-6 self-stretch px-1" : "h-5 min-w-5 rounded-[4px] px-0.5"
+        flush
+          ? "min-w-6 self-stretch px-1"
+          : "h-5 min-w-5 self-center rounded-[4px] px-0.5"
       )}
       style={{ background: color }}
     >
