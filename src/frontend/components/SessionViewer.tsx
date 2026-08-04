@@ -1528,11 +1528,12 @@ export function SessionViewer({
 	// The 5s session poll picks up the mode change and re-renders with the full
 	// code affordances (diff/PR tabs, RepoBar).
 	const [promoting, setPromoting] = useState(false);
-	const [modeMenuOpen, setModeMenuOpen] = useState(false);
-	async function handlePromote() {
+	// `onDone` closes the composer menu the action was picked from — called on
+	// both paths, so a failure returns you to a usable menu instead of a row
+	// stuck on "Switching to code…".
+	async function handlePromote(onDone?: () => void) {
 		if (promoting) return;
 		setPromoting(true);
-		setModeMenuOpen(false);
 		try {
 			const { branch } = await promoteChatApi(session.id);
 			// The session poll flips the header, tabs and RepoBar a beat later;
@@ -1544,6 +1545,7 @@ export function SessionViewer({
 			toast(e instanceof Error ? e.message : "Could not switch to code mode");
 			setPromoting(false);
 		}
+		onDone?.();
 	}
 	// A linked Plain thread gets a read-only conversation sidebar (+ jump-to-Plain),
 	// available even for ask-mode sessions that have no code workspace.
@@ -5178,47 +5180,31 @@ export function SessionViewer({
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}
 									sendTitle={isBusy ? busySendLabel : undefined}
-									// Ask mode rides the toolbar beside the model pill: it's
-									// a setting of this chat, like the model, and this is the
-									// only way out of it. Same pill-opens-a-menu shape as its
-									// neighbour, so an accidental click can't cut a branch.
-									// Only backstage chats can promote (the server owns that
-									// rule) — elsewhere the pill would be a dead end.
-									leftExtra={
-										isAsk && session.source === "backstage" ? (
-											<Menu.Root
-												open={modeMenuOpen}
-												onOpenChange={setModeMenuOpen}
-											>
-												<Menu.Trigger
-													className="palette-pill"
-													disabled={promoting}
-													title="Ask mode — this chat can read the code but not change it"
-												>
-													<IconEye size={15} />
-													<span className="palette-pill-label">
-														{promoting ? "Switching…" : "Ask"}
-													</span>
-												</Menu.Trigger>
-												<Menu.Popup
-													align="start"
-													sideOffset={6}
-													className="w-72 p-0"
-												>
-													<Menu.Item
-														onClick={handlePromote}
-														className="flex-col items-start gap-0.5 rounded-none border-b border-line px-3.5 py-2.5 last:border-b-0"
+									// Leaving ask mode is a setting of this chat, so it sits in
+									// the composer's "+" with the rest of them rather than as its
+									// own chip. The row stays open reading "Switching to code…"
+									// until the server answers — cutting a worktree isn't always
+									// instant. Only backstage chats can promote (the server owns
+									// that rule); elsewhere the row would be a dead end.
+									menuExtra={
+										isAsk && session.source === "backstage"
+											? ({ close }) => (
+													<button
+														type="button"
+														className="composer-menu-item"
+														disabled={promoting}
+														title="Ask mode — this chat can read the code but not change it"
+														onClick={() => void handlePromote(close)}
 													>
-														<span className="text-[13px] font-semibold text-fg">
-															Switch to code
+														<span className="composer-menu-icon">
+															<IconEye size={22} />
 														</span>
-														<span className="text-meta leading-[1.4] text-faint">
-															Let this chat edit files, commit, and open a PR
-														</span>
-													</Menu.Item>
-												</Menu.Popup>
-											</Menu.Root>
-										) : undefined
+														{promoting
+															? "Switching to code…"
+															: "Switch to code"}
+													</button>
+												)
+											: undefined
 									}
 									attached={attachedComposer}
 									prefill={composerPrefill}

@@ -100,10 +100,10 @@ interface Props {
    * on phones it's surfaced in the top-bar chat bar instead (won't fit here).
    */
   usage?: SessionUsage;
-  /** Extra control rendered in the toolbar, left of the send button. Hidden
-   *  while the phone composer is collapsed to its pill, like the goal, note
-   *  and model chips. */
-  leftExtra?: React.ReactNode;
+  /** Extra row for the "+" menu, below the built-in ones. Same shape as
+   *  `sendMenu`: render a `.composer-menu-item` button and call `close()`
+   *  when it's picked. */
+  menuExtra?: (ctx: { close: () => void }) => React.ReactNode;
   /** Content visually attached to the composer above the draft field. */
   attached?: React.ReactNode;
   /**
@@ -261,7 +261,7 @@ export function Composer({
   goal,
   onSetGoal,
   usage,
-  leftExtra,
+  menuExtra,
   attached,
   prefill,
   sendMenu,
@@ -358,6 +358,12 @@ export function Composer({
   // parent wired up either channel. Notes are text-only — attachments stay
   // staged for the next prompt instead of riding a note.
   const canAttach = !noteMode && (!!onImagesChange || !!onFilesChange);
+  // Whether the "+" has anything to show. Deliberately NOT `canAttach`: note
+  // mode turns attachments off, so gating the button on them would hide the
+  // menu — and with it the row that leaves note mode — exactly when it's
+  // needed, stranding anyone who doesn't know ⌘N.
+  const hasAddMenu =
+    canAttach || !!onSetGoal || !!onNoteModeChange || !!menuExtra || !!sendMenu;
 
   // Phones get a ChatGPT-style resting state: while the field is empty and
   // unfocused, the composer collapses to a single-row pill ("+ · placeholder ·
@@ -765,24 +771,26 @@ export function Composer({
             if (isPhone) e.preventDefault();
           }}
         >
-          {canAttach && (
+          {/* One "+" carries everything you can add to or change about this
+              chat: attachments, the goal, note mode, and whatever the surface
+              contributes (mode switch, scheduled send). As a row of icon chips
+              these crowded the field, truncated on phones, and gave each action
+              a glyph instead of a name; in a menu they each get a real label
+              and stay one tap away. State stays visible where it already was —
+              a set goal shows above the composer, note mode tints it. */}
+          {hasAddMenu && (
             <motion.div
               layout="position"
               transition={composerMorph}
               className="composer-pop-wrap"
-              style={
-                !minimized && (onSetGoal || onNoteModeChange)
-                  ? { marginRight: -8 }
-                  : undefined
-              }
             >
-              <Tooltip label="Add files or a file reference">
+              <Tooltip label="Attach files and chat options">
                 <button
                   type="button"
                   className="palette-icon-btn composer-add-btn"
                   {...tapProps(() => setMenu(menu === "add" ? null : "add"))}
                   disabled={disabled}
-                  aria-label="Add"
+                  aria-label="Attach files and chat options"
                   aria-expanded={menu === "add"}
                 >
                   <IconPlus size={20} />
@@ -790,20 +798,22 @@ export function Composer({
               </Tooltip>
               {menu === "add" && (
                 <div className="composer-menu">
-                  <button
-                    type="button"
-                    className="composer-menu-item"
-                    {...tapProps(() => {
-                      setMenu(null);
-                      fileInputRef.current?.click();
-                    })}
-                  >
-                    <span className="composer-menu-icon">
-                      <IconPaperclip size={22} />
-                    </span>
-                    {onFilesChange ? "Attach files" : "Attach an image"}
-                  </button>
-                  {mentionFetch && (
+                  {canAttach && (
+                    <button
+                      type="button"
+                      className="composer-menu-item"
+                      {...tapProps(() => {
+                        setMenu(null);
+                        fileInputRef.current?.click();
+                      })}
+                    >
+                      <span className="composer-menu-icon">
+                        <IconPaperclip size={22} />
+                      </span>
+                      {onFilesChange ? "Attach files" : "Attach an image"}
+                    </button>
+                  )}
+                  {canAttach && mentionFetch && (
                     <button
                       type="button"
                       className="composer-menu-item"
@@ -818,6 +828,42 @@ export function Composer({
                       Reference a file
                     </button>
                   )}
+                  {onSetGoal && (
+                    <button
+                      type="button"
+                      className="composer-menu-item"
+                      // Opens the goal editor: `menu` is single-valued, so this
+                      // closes the add menu and opens the modal in one step.
+                      {...tapProps(() => setMenu("goal"))}
+                      title={goal ? `Goal: ${goal}` : undefined}
+                    >
+                      <span className="composer-menu-icon">
+                        <IconCrosshair size={22} />
+                      </span>
+                      {goal ? "Edit goal" : "Set a goal"}
+                    </button>
+                  )}
+                  {onNoteModeChange && (
+                    <button
+                      type="button"
+                      className="composer-menu-item"
+                      {...tapProps(() => {
+                        onNoteModeChange(!noteMode);
+                        setMenu(null);
+                      })}
+                      title={
+                        noteMode
+                          ? "Go back to prompting the agent (⌘N)"
+                          : "Posts to the team; the agent won't see it (⌘N)"
+                      }
+                    >
+                      <span className="composer-menu-icon">
+                        <IconNote size={22} />
+                      </span>
+                      {noteMode ? "Back to prompting" : "Write a team note"}
+                    </button>
+                  )}
+                  {menuExtra?.({ close: () => setMenu(null) })}
                   {sendMenu?.({
                     text,
                     disabled: !!(disabled || isSendDisabled),
@@ -827,6 +873,17 @@ export function Composer({
                     },
                   })}
                 </div>
+              )}
+              {onSetGoal && (
+                <GoalModal
+                  open={menu === "goal"}
+                  initial={goal || ""}
+                  onOpenChange={(o) => setMenu(o ? "goal" : null)}
+                  onSubmit={(g) => {
+                    onSetGoal(g);
+                    setMenu(null);
+                  }}
+                />
               )}
               <input
                 ref={fileInputRef}
@@ -842,105 +899,6 @@ export function Composer({
               />
             </motion.div>
           )}
-
-          {/* The goal chip exists only in the expanded state; it fades + scales
-              in as the composer grows. AnimatePresence(initial=false) skips the
-              enter on first paint so it doesn't animate in on a fresh desktop
-              load; the chips carry no `exit` (see composerChipMotion) so they're
-              removed instantly on collapse rather than reflowing through the
-              reordered pill row. */}
-          <AnimatePresence initial={false}>
-            {!minimized && onSetGoal && (
-              <motion.div
-                key="goal"
-                layout="position"
-                {...composerChipMotion}
-                className="composer-pop-wrap"
-                style={onNoteModeChange ? { marginRight: -8 } : undefined}
-              >
-                <Tooltip label={goal ? `Goal: ${goal}` : "Pin a goal for this session"}>
-                  <button
-                    type="button"
-                    className={`palette-icon-btn composer-goal-btn ${goal ? "is-on" : ""}`}
-                    {...tapProps(() => setMenu(menu === "goal" ? null : "goal"))}
-                    disabled={disabled}
-                    aria-pressed={!!goal}
-                  >
-                    <IconCrosshair size={20} />
-                    {goal && <span className="composer-goal-label">Goal</span>}
-                  </button>
-                </Tooltip>
-                <GoalModal
-                  open={menu === "goal"}
-                  initial={goal || ""}
-                  onOpenChange={(o) => setMenu(o ? "goal" : null)}
-                  onSubmit={(g) => {
-                    onSetGoal(g);
-                    setMenu(null);
-                  }}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Note-mode toggle (Plain-style internal notes) — also on ⌘N. */}
-          <AnimatePresence initial={false}>
-            {!minimized && onNoteModeChange && (
-              <motion.div
-                key="note"
-                layout="position"
-                {...composerChipMotion}
-                className="composer-pop-wrap"
-              >
-                <Tooltip
-                  label={
-                    noteMode
-                      ? "Note mode — posts to the team; the agent won't see it. ⌘N to switch back."
-                      : "Write a team note instead of prompting the agent (⌘N)"
-                  }
-                >
-                  <button
-                    type="button"
-                    className="palette-icon-btn composer-note-btn"
-                    style={
-                      noteMode
-                        ? {
-                            width: "auto",
-                            gap: 6,
-                            padding: "0 9px",
-                            color: "var(--yellow)",
-                          }
-                        : undefined
-                    }
-                    {...tapProps(() => onNoteModeChange(!noteMode))}
-                    disabled={disabled}
-                    aria-pressed={!!noteMode}
-                  >
-                    <IconNote size={20} />
-                    {noteMode && (
-                      <span className="composer-goal-label">Note</span>
-                    )}
-                  </button>
-                </Tooltip>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Follows the same rule as every other toolbar control: gone while
-              the phone composer is collapsed to its pill, where there's only
-              room for the field itself. */}
-          <AnimatePresence initial={false}>
-            {leftExtra && !minimized && (
-              <motion.div
-                key="left-extra"
-                layout="position"
-                {...composerChipMotion}
-                className="composer-pop-wrap"
-              >
-                {leftExtra}
-              </motion.div>
-            )}
-          </AnimatePresence>
           <div className="composer-spacer" />
 
           {/* Model + effort live together on the right edge (ChatGPT-style):
