@@ -1296,12 +1296,17 @@ private struct SessionInputBar: View {
         } label: {
             Image(systemName: "arrow.up")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(viewModel.canSend ? Color.white : Color.secondary)
+                // Explicit colours for the resting state, not the semantic
+                // `.fill.secondary` / `Color.secondary` pair: both are faint
+                // to begin with, and the dimming SwiftUI applies to a disabled
+                // button on top of that left the disc invisible against the
+                // near-white composer (measured: 242 vs a 252 background).
+                .foregroundStyle(viewModel.canSend ? Color.white : OS1VisualStyle.textDim)
                 .frame(width: 32, height: 32)
                 .background(
                     viewModel.canSend
                         ? AnyShapeStyle(.tint)
-                        : AnyShapeStyle(.fill.secondary),
+                        : AnyShapeStyle(OS1VisualStyle.hover),
                     in: Circle()
                 )
         }
