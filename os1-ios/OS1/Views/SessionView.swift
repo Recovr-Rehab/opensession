@@ -278,9 +278,9 @@ struct SessionView: View {
                 }
             }
             // Web links from the transcript open on top of it, not instead of
-            // it. Attached here rather than out with the session's other
-            // sheets: two sheet modifiers on one view leaves only the last one
-            // working, and the worktree sheet was there first.
+            // it. Scoped to the transcript rather than the whole session so
+            // that only agent output is rerouted — a sign-in URL from settings
+            // still belongs to the system browser.
             #if os(iOS)
             .environment(\.openURL, OpenURLAction { url in
                 guard SafariLink.isWeb(url) else {
