@@ -433,8 +433,7 @@ button {
 	.sidebar-item,
 	.sidebar-item-x,
 	.sidebar-swipe-row,
-	.sidebar-item-rename,
-	.sidebar-hovercard {
+	.sidebar-item-rename {
 		corner-shape: squircle;
 	}
 }
@@ -2404,55 +2403,9 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 
 /* ── Sidebar row hover card ──────────────────────────────────
-   A detail popover anchored to a session row after a short dwell. Position is
-   set inline (portaled to <body>, fixed); everything else lives here. */
-.sidebar-hovercard {
-	position: fixed;
-	z-index: 200;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(16px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
-	padding: 11px 13px 12px;
-	color: var(--text);
-	pointer-events: none;
-	animation: hovercard-in 0.09s ease-out;
-}
-/* Interactive workspace cards need a forgiving pointer path from the row. The
-   transparent bridge spans the 8px offset; the diamond edge gives that path a
-   visible callout point without making the whole gap look filled. */
-.sidebar-hovercard--interactive::before {
-	content: "";
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	width: 9px;
-}
-.sidebar-hovercard--interactive::after {
-	content: "";
-	position: absolute;
-	top: var(--hovercard-arrow-y, 18px);
-	width: 10px;
-	height: 10px;
-	background: var(--bg-panel);
-	transform: translateY(-50%) rotate(45deg);
-}
-.sidebar-hovercard--interactive[data-side="right"]::before {
-	left: -9px;
-}
-.sidebar-hovercard--interactive[data-side="right"]::after {
-	left: -6px;
-	border-left: 1px solid var(--border-strong);
-	border-bottom: 1px solid var(--border-strong);
-}
-.sidebar-hovercard--interactive[data-side="left"]::before {
-	right: -9px;
-}
-.sidebar-hovercard--interactive[data-side="left"]::after {
-	right: -6px;
-	border-top: 1px solid var(--border-strong);
-	border-right: 1px solid var(--border-strong);
-}
+   The card's chrome (panel, portal, position, arrow, animation) is
+   RowCardPopup's — see components/SidebarRowCards.tsx. What's left here is the
+   typography every row's card body is written in. */
 @keyframes hovercard-in {
 	from {
 		opacity: 0;
@@ -2597,13 +2550,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 .hovercard-checks {
 	margin-left: auto;
 	color: var(--text-faint);
-}
-
-/* Touch devices can't hover — never surface the card there. */
-@media (hover: none) {
-	.sidebar-hovercard {
-		display: none;
-	}
 }
 
 /* ── Detail pane / empty state ───────────────────────────── */

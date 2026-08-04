@@ -5,22 +5,59 @@ import { relativeTime, type OpenPr } from "../lib/api";
 import { providerFromUrl } from "../lib/provider";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { IconGitMerge } from "./icons";
+import { Popover } from "../ui/popover";
 
 /**
- * Hover cards for the sidebar's non-workspace rows.
+ * Hover cards for the sidebar's rows.
  *
- * Workspace rows have had a dwell card for a while (WsHoverCard in
- * Sidebar.tsx); this gives the Pull requests and Support bands the same
- * affordance, so every sidebar row can answer "what is this, and what does it
- * need?" without a click. The typography reuses the legacy `hovercard-*`
- * classes so all three cards read as one family — but the panel chrome,
- * positioning and lifecycle come from ui/popover.tsx instead of the older
- * card's hand-rolled portal, viewport clamping and dwell timers.
+ * Every row in the sidebar — workspace, chat, pull request, support ticket,
+ * feed item — answers "what is this, and what does it need?" on a dwell, and
+ * they are all the same card: one shell (RowCardPopup) around a body that
+ * differs only in what the row has to say. The bodies for the PR and support
+ * rows live here; the workspace and chat bodies stay in Sidebar.tsx, where
+ * their data lives, but they render into this same shell.
  */
 
-/** Matches .sidebar-hovercard's width, padding, radius and shadow. */
-export const ROW_CARD_CLASS =
+/** The card's own chrome — width, padding, radius, shadow. Everything else
+ *  (portal, positioning, collision flip, arrow, dwell) is ui/popover's. */
+const ROW_CARD_CLASS =
 	"w-[min(300px,calc(100vw-24px))] rounded-[16px] px-[13px] pt-[11px] pb-3 shadow-[0_8px_30px_rgba(0,0,0,0.45)]";
+
+/**
+ * The one popup every sidebar row's hover card is drawn in: to the row's
+ * right, top-aligned with it, pointing back at it. Pass `anchor` for a row
+ * that can't be a Popover.Trigger itself — the workspace list renders its rows
+ * from a plain function, so it drives one shared card off the hovered element.
+ */
+export function RowCardPopup({
+	anchor,
+	children,
+}: {
+	anchor?: React.ComponentProps<typeof Popover.Popup>["anchor"];
+	children: React.ReactNode;
+}) {
+	return (
+		<Popover.Popup
+			side="right"
+			align="start"
+			arrow
+			anchor={anchor}
+			className={ROW_CARD_CLASS}
+		>
+			{children}
+		</Popover.Popup>
+	);
+}
+
+/** Touch devices can't hover, and a tap that raises a card covers the view
+ *  that same tap just opened — so no row's card is ever raised there. (iOS
+ *  synthesizes a mouseenter on first tap, so this can't be left to hover.) */
+export function pointerCanHover() {
+	return (
+		typeof window === "undefined" ||
+		window.matchMedia("(hover: hover)").matches
+	);
+}
 
 /**
  * Hover-only card wiring for a sidebar row.
@@ -31,13 +68,21 @@ export const ROW_CARD_CLASS =
  * touch does, where every tap is a press. Blocking non-hover opens keeps
  * mobile behaving as it did before the card existed.
  */
-export function useRowHoverCard() {
+export function useRowHoverCard(
+	/** Hold the card back entirely — the row is being renamed, and the input
+	 *  it turns into owns the interaction. */
+	disabled?: boolean,
+) {
 	const [open, setOpen] = useState(false);
 	return {
 		rootProps: {
-			open,
+			open: open && !disabled,
 			onOpenChange: (next: boolean, details: { reason?: string }) => {
-				if (next && details.reason !== "trigger-hover") return;
+				if (
+					next &&
+					(disabled || !pointerCanHover() || details.reason !== "trigger-hover")
+				)
+					return;
 				setOpen(next);
 			},
 		},

@@ -14,7 +14,7 @@ import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
 import {
 	PrRowCard,
-	ROW_CARD_CLASS,
+	RowCardPopup,
 	useRowHoverCard,
 } from "./SidebarRowCards";
 import { useIsPhone } from "../hooks/useIsPhone";
@@ -174,9 +174,9 @@ export function PrRow({
 				</ContextMenu.Item>
 			</ContextMenu.Popup>
 		</ContextMenu.Root>
-			<Popover.Popup side="right" align="start" arrow className={ROW_CARD_CLASS}>
+			<RowCardPopup>
 				<PrRowCard item={item} />
-			</Popover.Popup>
+			</RowCardPopup>
 		</Popover.Root>
 	);
 }

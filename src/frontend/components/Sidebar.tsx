@@ -126,7 +126,8 @@ import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import {
 	osReviewLabel,
-	ROW_CARD_CLASS,
+	pointerCanHover,
+	RowCardPopup,
 	SupportRowCard,
 	useRowHoverCard,
 } from "./SidebarRowCards";
@@ -445,9 +446,9 @@ function SupportRow({
 					</Tooltip>
 				</span>
 			</Popover.Trigger>
-			<Popover.Popup side="right" align="start" arrow className={ROW_CARD_CLASS}>
+			<RowCardPopup>
 				<SupportRowCard thread={t} session={session} />
-			</Popover.Popup>
+			</RowCardPopup>
 			{menu.ctxMenu && (
 				<SidebarCtxMenu
 					x={menu.ctxMenu.x}
@@ -572,18 +573,18 @@ function FeedRow({
 					</span>
 				</span>
 			</Popover.Trigger>
-			<Popover.Popup side="right" align="start" arrow className={ROW_CARD_CLASS}>
-				<div className="flex max-w-[280px] flex-col gap-1.5 p-3">
-					<div className="text-[13px] font-medium text-fg">{item.title}</div>
-					{item.preview && (
-						<div className="line-clamp-4 text-xs text-dim">{item.preview}</div>
-					)}
-					<div className="flex items-center gap-2 text-[11px] text-faint">
-						{ts && <span>{relativeTime(ts)}</span>}
-						{session && <span>· linked session</span>}
+			<RowCardPopup>
+				<div className="hovercard-title">{item.title}</div>
+				{item.preview && (
+					<div className="selectable mt-1 line-clamp-4 text-xs leading-snug text-dim">
+						{item.preview}
 					</div>
+				)}
+				<div className="mt-2.5 flex items-center gap-2 border-t border-line pt-2 text-[11px] text-faint">
+					{session && <span>Linked session</span>}
+					{ts && <span className="ml-auto">{relativeTime(ts)}</span>}
 				</div>
-			</Popover.Popup>
+			</RowCardPopup>
 			{menu.ctxMenu && (
 				<SidebarCtxMenu
 					x={menu.ctxMenu.x}
@@ -3208,14 +3209,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	}, []);
 
 	// ── Workspace hover card ────────────────────────────────────────────────
-	// One card for the whole list (only one row can be dwelled on at a time).
-	// Unlike the info-only SessionHoverCard it carries actions (Archive, PR
-	// link, thumbnails), so leaving the row schedules the close with a short
-	// grace period and entering the card cancels it — the pointer can travel
-	// the 8px gap without the card vanishing under it.
+	// The same card every sidebar row raises, driven by hand: workspace rows
+	// come out of a render function rather than a component, so one card serves
+	// the whole list (only one row can be dwelled on at a time) and the hovered
+	// row is its anchor. The card carries actions (Archive, PR link,
+	// thumbnails), so leaving the row schedules the close with a short grace
+	// period and entering the card cancels it — the pointer can travel the 8px
+	// gap without the card vanishing under it.
 	const wsHoverOpenT = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const wsHoverCloseT = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const [wsHover, setWsHover] = useState<{ row: WsRow; anchor: DOMRect } | null>(
+	// The row element itself is the anchor — the popover tracks it, so a
+	// scrolling list repositions the card instead of dropping it.
+	const [wsHover, setWsHover] = useState<{ row: WsRow; el: HTMLElement } | null>(
 		null,
 	);
 	// Mobile long-press sheet (the touch stand-in for the hover card).
@@ -3228,14 +3233,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		wsHoverCloseT.current = null;
 	}
 	function wsRowHoverEnter(row: WsRow, el: HTMLElement) {
-		if (rowRenameEditing(row)) return;
+		if (rowRenameEditing(row) || !pointerCanHover()) return;
 		cancelWsHoverTimers();
 		if (wsHover) {
-			setWsHover({ row, anchor: el.getBoundingClientRect() });
+			setWsHover({ row, el });
 			return;
 		}
 		wsHoverOpenT.current = setTimeout(() => {
-			setWsHover({ row, anchor: el.getBoundingClientRect() });
+			setWsHover({ row, el });
 		}, 380);
 	}
 	function scheduleWsHoverClose() {
@@ -3249,13 +3254,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		setWsHover(null);
 	}
 	useEffect(() => cancelWsHoverTimers, []);
-	// The anchor rect goes stale the moment the list scrolls — just close.
-	useEffect(() => {
-		if (!wsHover) return;
-		const close = () => closeWsHover();
-		window.addEventListener("scroll", close, true);
-		return () => window.removeEventListener("scroll", close, true);
-	}, [wsHover]);
 
 	// Mobile: tap-to-open a workspace row fires from `touchend`, not the
 	// synthesized click — same trick as SessionRow. The row has :hover styles
@@ -6264,22 +6262,36 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</div>
 				);
 			})()}
-			{wsHover && (
-				<WsHoverCard
-					row={wsHover.row}
-					anchor={wsHover.anchor}
-					onEnter={cancelWsHoverTimers}
-					onLeave={scheduleWsHoverClose}
-					onArchive={() => {
-						closeWsHover();
-						archiveWorkspaceWithNext(wsHover.row);
-					}}
-					onOpen={(chat) => {
-						closeWsHover();
-						onSelect(chat);
-					}}
-				/>
-			)}
+			{/* One card for the whole workspace list: the rows come out of a plain
+			    render function, not a component, so they can't each own a popover.
+			    The hovered row is the anchor instead — same shell, same card. */}
+			<Popover.Root
+				open={!!wsHover}
+				onOpenChange={(open) => {
+					if (!open) closeWsHover();
+				}}
+			>
+				{wsHover && (
+					<RowCardPopup anchor={wsHover.el}>
+						<div
+							onMouseEnter={cancelWsHoverTimers}
+							onMouseLeave={scheduleWsHoverClose}
+						>
+							<WsCardBody
+								row={wsHover.row}
+								onArchive={() => {
+									closeWsHover();
+									archiveWorkspaceWithNext(wsHover.row);
+								}}
+								onOpen={(chat) => {
+									closeWsHover();
+									onSelect(chat);
+								}}
+							/>
+						</div>
+					</RowCardPopup>
+				)}
+			</Popover.Root>
 			{wsSheet &&
 				(() => {
 					const row = wsSheet;
@@ -6761,31 +6773,12 @@ function SidebarItem({
 		};
 	}, [ctxMenu]);
 
-	// Hover card: after a short dwell, anchor a detail popover to this row's right
-	// edge. Suppressed while renaming (the input owns the interaction).
+	// Hover card: after a short dwell, the row's detail card — the same one
+	// every other sidebar row raises. Held back while renaming (the input the
+	// row turns into owns the interaction).
 	const btnRef = useRef<HTMLButtonElement>(null);
-	const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const [anchor, setAnchor] = useState<DOMRect | null>(null);
-
-	function openHover() {
-		if (editing) return;
-		if (hoverTimer.current) clearTimeout(hoverTimer.current);
-		hoverTimer.current = setTimeout(() => {
-			const el = btnRef.current;
-			if (el) setAnchor(el.getBoundingClientRect());
-		}, 380);
-	}
-	function closeHover() {
-		if (hoverTimer.current) clearTimeout(hoverTimer.current);
-		hoverTimer.current = null;
-		setAnchor(null);
-	}
-	useEffect(
-		() => () => {
-			if (hoverTimer.current) clearTimeout(hoverTimer.current);
-		},
-		[],
-	);
+	const card = useRowHoverCard(editing);
+	const closeHover = card.close;
 
 	// Mobile long-press → action sheet, and — importantly — the *tap* to open a
 	// session is driven from `touchend`, not the synthesized `click`. `.sidebar-item`
@@ -6950,7 +6943,7 @@ function SidebarItem({
 	const visibleSwipeOffset = isPhone ? swipeOffset : 0;
 
 	return (
-		<>
+		<Popover.Root {...card.rootProps}>
 		<div
 			className={`sidebar-swipe-row${
 				swipeAction === "archive" || visibleSwipeOffset < 0
@@ -6998,49 +6991,51 @@ function SidebarItem({
 					<span>{pinned ? "Unpin" : "Pin"}</span>
 				</button>
 			)}
-		<button
-			ref={btnRef}
-			className={`sidebar-item ${!mine ? "sidebar-item--twoline" : ""} ${selected ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${unread ? "sidebar-item-unread" : ""}`}
-			style={
-				visibleSwipeOffset
-					? ({ "--swipe-x": `${visibleSwipeOffset}px` } as React.CSSProperties)
-					: undefined
+		<Popover.Trigger
+			{...card.triggerProps}
+			render={
+				<button
+					ref={btnRef}
+					className={`sidebar-item ${!mine ? "sidebar-item--twoline" : ""} ${selected ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${unread ? "sidebar-item-unread" : ""}`}
+					style={
+						visibleSwipeOffset
+							? ({ "--swipe-x": `${visibleSwipeOffset}px` } as React.CSSProperties)
+							: undefined
+					}
+					onClick={(e) => {
+						// Touch taps are handled on touchend (and their ghost click is
+						// preventDefault'd), so this path is the mouse/desktop one. Still
+						// swallow a click that ends a long-press, as a belt-and-suspenders.
+						if (longPressed.current) {
+							longPressed.current = false;
+							e.preventDefault();
+							return;
+						}
+						onClick();
+					}}
+					onTouchStart={onTouchStart}
+					onTouchMove={onTouchMove}
+					onTouchEnd={onTouchEnd}
+					onTouchCancel={() => {
+						clearPress();
+						swipeOrigin.current = null;
+						swiping.current = false;
+						setDragging(false);
+					}}
+					onContextMenu={(e) => {
+						// On touch this is the long-press callout: the action sheet
+						// owns that gesture, so suppress the native text-selection
+						// callout rather than stacking both.
+						if (longPressed.current || pressOrigin.current) {
+							e.preventDefault();
+							return;
+						}
+						e.preventDefault();
+						closeHover();
+						setCtxMenu({ x: e.clientX, y: e.clientY });
+					}}
+				/>
 			}
-			onClick={(e) => {
-				// Touch taps are handled on touchend (and their ghost click is
-				// preventDefault'd), so this path is the mouse/desktop one. Still
-				// swallow a click that ends a long-press, as a belt-and-suspenders.
-				if (longPressed.current) {
-					longPressed.current = false;
-					e.preventDefault();
-					return;
-				}
-				onClick();
-			}}
-			onMouseEnter={openHover}
-			onMouseLeave={closeHover}
-			onMouseDown={closeHover}
-			onTouchStart={onTouchStart}
-			onTouchMove={onTouchMove}
-			onTouchEnd={onTouchEnd}
-			onTouchCancel={() => {
-				clearPress();
-				swipeOrigin.current = null;
-				swiping.current = false;
-				setDragging(false);
-			}}
-			onContextMenu={(e) => {
-				// On touch this is the long-press callout: the action sheet
-				// owns that gesture, so suppress the native text-selection
-				// callout rather than stacking both.
-				if (longPressed.current || pressOrigin.current) {
-					e.preventDefault();
-					return;
-				}
-				e.preventDefault();
-				closeHover();
-				setCtxMenu({ x: e.clientX, y: e.clientY });
-			}}
 		>
 			<div className="sidebar-item-top">
 				{/* Match workspace rows: attention sits before the fixed PR glyph, and
@@ -7165,9 +7160,11 @@ function SidebarItem({
 					</svg>
 				</span>
 			</Tooltip>
-		</button>
+		</Popover.Trigger>
 		</div>
-		{anchor && <SessionHoverCard session={session} anchor={anchor} />}
+		<RowCardPopup>
+			<SessionCardBody session={session} />
+		</RowCardPopup>
 			{sheetOpen && (
 				<MobileActionSheet
 					session={session}
@@ -7251,7 +7248,7 @@ function SidebarItem({
 					]}
 				/>
 			)}
-		</>
+		</Popover.Root>
 	);
 }
 
@@ -7454,40 +7451,12 @@ function MobileActionSheet({
 	);
 }
 
-const CARD_W = 300;
-
-// A detail popover shown after dwelling on a sidebar row. Content is
-// state-dependent: the prominent status line and the rows that render depend on
-// whether the session is waiting/running/merged/etc. and which of its optional
-// facets (PR, Linear issue, goal, loop, extra repos) are populated. Everything
-// comes off the already-loaded UnifiedSession — the card fetches nothing.
-function SessionHoverCard({
-	session: s,
-	anchor,
-}: {
-	session: UnifiedSession;
-	anchor: DOMRect;
-}) {
-	const cardRef = useRef<HTMLDivElement>(null);
-	const [pos, setPos] = useState<{ left: number; top: number }>(() => ({
-		left: anchor.right + 8,
-		top: anchor.top,
-	}));
-
-	// Clamp into the viewport once we know the rendered height. Prefer the right
-	// of the row; flip to the left if it would overflow the right edge.
-	useEffect(() => {
-		const el = cardRef.current;
-		const h = el ? el.offsetHeight : 200;
-		const vw = window.innerWidth;
-		const vh = window.innerHeight;
-		let left = anchor.right + 8;
-		if (left + CARD_W > vw - 8) left = anchor.left - CARD_W - 8;
-		left = Math.max(8, left);
-		const top = Math.min(Math.max(8, anchor.top), vh - h - 8);
-		setPos({ left, top });
-	}, [anchor]);
-
+// The chat row's card body. Content is state-dependent: the prominent status
+// line and the rows that render depend on whether the session is
+// waiting/running/merged/etc. and which of its optional facets (PR, Linear
+// issue, goal, loop, extra repos) are populated. Everything comes off the
+// already-loaded UnifiedSession — the card fetches nothing.
+function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 	const state = hoverState(s);
 	const rows: Array<[string, React.ReactNode]> = [];
 
@@ -7520,12 +7489,8 @@ function SessionHoverCard({
 	rows.push(["Last active", relativeTime(s.lastActivity)]);
 	rows.push(["Created", relativeTime(s.createdAt)]);
 
-	const card = (
-		<div
-			ref={cardRef}
-			className="sidebar-hovercard"
-			style={{ left: pos.left, top: pos.top, width: CARD_W }}
-		>
+	return (
+		<>
 			<div className="hovercard-head">
 				<span
 					className={`sidebar-item-status hovercard-dot ${state.dotClass}`}
@@ -7600,10 +7565,8 @@ function SessionHoverCard({
 					)}
 				</div>
 			)}
-		</div>
+		</>
 	);
-
-	return createPortal(card, document.body);
 }
 
 // The single prominent status line + its dot/tone. Ordering mirrors how a person
@@ -8063,83 +8026,26 @@ function WsOverviewInfo({
 	);
 }
 
-// The workspace counterpart of SessionHoverCard: branch + diff stats + status
+// The workspace counterpart of SessionCardBody: branch + diff stats + status
 // at a glance, the latest assistant message as a "where things stand" line,
 // screenshot thumbnails from the workspace's chats, and quick actions
-// (Archive, PR link). Interactive — the parent keeps it open while the
-// pointer is over it (onEnter/onLeave), unlike the info-only session card.
-function WsHoverCard({
+// (Archive, PR link) — the only card body that carries controls, which is why
+// its shell is the one the pointer can travel into.
+function WsCardBody({
 	row,
-	anchor,
-	onEnter,
-	onLeave,
 	onArchive,
 	onOpen,
 }: {
 	row: WsCardRow;
-	anchor: DOMRect;
-	onEnter: () => void;
-	onLeave: () => void;
 	onArchive: () => void;
 	/** Open a chat (the "Answer" action jumps to the blocked one). */
 	onOpen: (chat: UnifiedSession) => void;
 }) {
-	const cardRef = useRef<HTMLDivElement>(null);
-	const [pos, setPos] = useState<{
-		left: number;
-		top: number;
-		side: "left" | "right";
-		arrowY: number;
-	}>(() => ({
-		left: anchor.right + 8,
-		top: anchor.top,
-		side: "right",
-		arrowY: anchor.height / 2,
-	}));
-
 	const ov = useWsOverview(row);
-
-	// Clamp into the viewport once the rendered height is known; re-clamp when
-	// the overview lands (description/thumbnails change the height). Prefer the
-	// right of the row; flip to the left if it would overflow the right edge.
-	useEffect(() => {
-		const el = cardRef.current;
-		const h = el ? el.offsetHeight : 200;
-		const vw = window.innerWidth;
-		const vh = window.innerHeight;
-		let left = anchor.right + 8;
-		let side: "left" | "right" = "right";
-		if (left + CARD_W > vw - 8) {
-			left = anchor.left - CARD_W - 8;
-			side = "left";
-		}
-		left = Math.max(8, left);
-		const top = Math.min(Math.max(8, anchor.top), vh - h - 8);
-		const arrowY = Math.min(
-			Math.max(18, anchor.top + anchor.height / 2 - top),
-			Math.max(18, h - 18),
-		);
-		setPos({ left, top, side, arrowY });
-	}, [anchor, ov]);
-
 	const { prChat, prReady, prStatusBits } = wsPrInfo(row);
 
-	const card = (
-		<div
-			ref={cardRef}
-			className="sidebar-hovercard sidebar-hovercard--interactive pointer-events-auto"
-			data-side={pos.side}
-			style={
-				{
-					left: pos.left,
-					top: pos.top,
-					width: CARD_W,
-					"--hovercard-arrow-y": `${pos.arrowY}px`,
-				} as React.CSSProperties
-			}
-			onMouseEnter={onEnter}
-			onMouseLeave={onLeave}
-		>
+	return (
+		<>
 			<WsOverviewInfo row={row} ov={ov} />
 
 			<div className="mt-2.5 flex min-w-0 items-center gap-2 border-t border-line pt-2">
@@ -8214,13 +8120,11 @@ function WsHoverCard({
 					{relativeTime(row.lastActivity)}
 				</span>
 			</div>
-		</div>
+		</>
 	);
-
-	return createPortal(card, document.body);
 }
 
-// The touch counterpart of WsHoverCard: long-pressing a workspace row raises
+// The touch counterpart of the workspace card: long-pressing a row raises
 // a bottom sheet with the same overview block (branch + diff + status, title,
 // latest message, thumbnails) followed by thumb-sized action rows — the
 // status-colored main action first (answer / merge / review / archive), then
