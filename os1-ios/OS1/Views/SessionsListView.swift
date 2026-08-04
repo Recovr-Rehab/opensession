@@ -76,9 +76,63 @@ struct SessionsListView: View {
     // the server also hosts hundreds of automation runs and teammates' chats.
     @AppStorage("os1.list.people") private var peopleFilter = "mine"
     @AppStorage("os1.sidebar.repoOrder") private var preferredRepoOrder = "[]"
+    /// Section headings the person has folded shut — repo bands, status lanes
+    /// and inbox bands, keyed like the web sidebar's collapse state and stored
+    /// as a JSON array so the choice survives relaunches.
+    @AppStorage("os1.list.collapsed") private var collapsedGroupsRaw = "[]"
 
     private var groupBy: GroupBy { GroupBy(rawValue: groupByRaw) ?? .repoStatus }
     private var sortBy: SortBy { SortBy(rawValue: sortByRaw) ?? .updated }
+
+    private var collapsedGroups: Set<String> {
+        guard let data = collapsedGroupsRaw.data(using: .utf8),
+              let keys = try? JSONDecoder().decode([String].self, from: data)
+        else { return [] }
+        return Set(keys)
+    }
+
+    private func isCollapsed(_ key: String) -> Bool {
+        collapsedGroups.contains(key)
+    }
+
+    /// The same key a plain "Repo" group carries, so folding a repo shut in
+    /// one grouping keeps it shut in the other.
+    private func repoBandKey(_ repo: String) -> String { "repo-\(repo)" }
+
+    private func toggleCollapsed(_ key: String) {
+        var keys = collapsedGroups
+        if keys.contains(key) {
+            keys.remove(key)
+        } else {
+            keys.insert(key)
+        }
+        guard let data = try? JSONEncoder().encode(keys.sorted()),
+              let raw = String(data: data, encoding: .utf8)
+        else { return }
+        withAnimation(.snappy(duration: 0.25)) {
+            collapsedGroupsRaw = raw
+        }
+    }
+
+    /// A folded section still shows the open session, so the row you're
+    /// reading never disappears out from under the selection — the same rule
+    /// the web sidebar applies to its collapsed lanes.
+    private func showsWhileCollapsed(_ workspace: SidebarWorkspace) -> Bool {
+        #if os(macOS)
+        guard let selectedSessionID else { return false }
+        return workspace.sessions.contains { $0.id == selectedSessionID }
+        #else
+        return false
+        #endif
+    }
+
+    private func visibleWorkspaces(
+        _ workspaces: [SidebarWorkspace],
+        collapsedKey: String
+    ) -> [SidebarWorkspace] {
+        guard isCollapsed(collapsedKey) else { return workspaces }
+        return workspaces.filter(showsWhileCollapsed)
+    }
 
     #if os(macOS)
     @State private var selectedSessionID: String?
@@ -948,25 +1002,38 @@ struct SessionsListView: View {
         Group {
             if groupBy == .repoStatus || groupBy == .repoInbox {
                 ForEach(groupBy == .repoInbox ? repoInboxGroups : repoSessionGroups) { repoGroup in
+                    // Folding a repo band takes its lane headings with it —
+                    // the band's own heading is the one thing left standing.
+                    let bandKey = repoBandKey(repoGroup.repo)
                     Section {
-                        ForEach(repoGroup.lanes) { laneGroup in
-                            statusLaneHeader(laneGroup)
-                            ForEach(laneGroup.workspaces) { workspace in
-                                sessionRow(workspace)
+                        if !isCollapsed(bandKey) {
+                            ForEach(repoGroup.lanes) { laneGroup in
+                                statusLaneHeader(laneGroup)
+                                ForEach(
+                                    visibleWorkspaces(
+                                        laneGroup.workspaces,
+                                        collapsedKey: laneGroup.id
+                                    )
+                                ) { workspace in
+                                    sessionRow(workspace)
+                                }
                             }
                         }
                     } header: {
                         groupHeader(
                             title: repoGroup.repo,
                             count: repoGroup.workspaces.count,
-                            repo: repoGroup.repo
+                            repo: repoGroup.repo,
+                            collapseKey: bandKey
                         )
                     }
                 }
             } else {
                 ForEach(groups) { group in
                     Section {
-                        ForEach(group.workspaces) { workspace in
+                        ForEach(
+                            visibleWorkspaces(group.workspaces, collapsedKey: group.id)
+                        ) { workspace in
                             sessionRow(workspace)
                         }
                     } header: {
@@ -974,7 +1041,8 @@ struct SessionsListView: View {
                             groupHeader(
                                 title: group.title,
                                 count: group.workspaces.count,
-                                repo: group.repo
+                                repo: group.repo,
+                                collapseKey: group.id
                             )
                         }
                     }
@@ -1049,36 +1117,55 @@ struct SessionsListView: View {
         }
     }
 
-    // Section and lane headings carry no glyph of their own — like the web
-    // sidebar, they're dividers, and the rows under them already wear the
-    // status marks.
+    // Section and lane headings carry no status glyph of their own — like the
+    // web sidebar, they're dividers, and the rows under them already wear the
+    // status marks. What they do carry is the fold control: the heading is a
+    // button, and its chevron says which way the section sits.
     private func groupHeader(
         title: String,
         count: Int,
-        repo: String? = nil
+        repo: String? = nil,
+        collapseKey: String
     ) -> some View {
         HStack(spacing: 6) {
-            if let repo {
-                #if os(iOS)
-                RepoTile(name: repo, size: 24)
-                #else
-                RepoTile(name: repo)
-                #endif
+            // Only the naming half of the heading toggles the fold — the
+            // repo's "+" stays its own target, and a Button nested inside
+            // another swallows its taps on iOS.
+            Button {
+                toggleCollapsed(collapseKey)
+            } label: {
+                HStack(spacing: 6) {
+                    if let repo {
+                        #if os(iOS)
+                        RepoTile(name: repo, size: 24)
+                        #else
+                        RepoTile(name: repo)
+                        #endif
+                    }
+                    Text(repo.map { RepoTile.label(for: $0) } ?? title)
+                        #if os(iOS)
+                        .font(.subheadline.weight(.semibold))
+                        #else
+                        .font(.caption.weight(.semibold))
+                        #endif
+                    Text("\(count)")
+                        #if os(iOS)
+                        .font(.footnote.weight(.medium))
+                        #else
+                        .font(.caption.monospacedDigit())
+                        #endif
+                    collapseChevron(collapseKey)
+                    // Without a trailing "+" to push against, stretch the
+                    // heading so the whole line takes the tap.
+                    if repo == nil {
+                        Spacer(minLength: 0)
+                    }
+                }
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .contentShape(Rectangle())
             }
-            Text(repo.map { RepoTile.label(for: $0) } ?? title)
-                #if os(iOS)
-                .font(.subheadline.weight(.semibold))
-                #else
-                .font(.caption.weight(.semibold))
-                #endif
-                .foregroundStyle(OS1VisualStyle.textDim)
-            Text("\(count)")
-                #if os(iOS)
-                .font(.footnote.weight(.medium))
-                #else
-                .font(.caption.monospacedDigit())
-                #endif
-                .foregroundStyle(OS1VisualStyle.textDim)
+            .buttonStyle(.plain)
+            .accessibilityLabel(collapseLabel(repo.map { RepoTile.label(for: $0) } ?? title, collapseKey))
             if let repo {
                 Spacer(minLength: 8)
                 Button {
@@ -1104,19 +1191,43 @@ struct SessionsListView: View {
     }
 
     private func statusLaneHeader(_ group: SessionGroup) -> some View {
-        HStack(spacing: 5) {
-            Text(group.title)
-                .font(.caption.weight(.semibold))
-            Text("\(group.workspaces.count)")
-                .font(.caption2.monospacedDigit())
+        Button {
+            toggleCollapsed(group.id)
+        } label: {
+            HStack(spacing: 5) {
+                Text(group.title)
+                    .font(.caption.weight(.semibold))
+                Text("\(group.workspaces.count)")
+                    .font(.caption2.monospacedDigit())
+                collapseChevron(group.id)
+            }
+            .foregroundStyle(OS1VisualStyle.textDim)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
+            .contentShape(Rectangle())
         }
-        .foregroundStyle(OS1VisualStyle.textDim)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 4)
+        .buttonStyle(.plain)
+        .accessibilityLabel(collapseLabel(group.title, group.id))
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
-        .accessibilityElement(children: .combine)
+    }
+
+    /// The fold marker: points down when the section is open, right when it's
+    /// shut — same language as the web sidebar's group chevron.
+    private func collapseChevron(_ key: String) -> some View {
+        Image(systemName: "chevron.down")
+            #if os(iOS)
+            .font(.system(size: 11, weight: .semibold))
+            #else
+            .font(.system(size: 9, weight: .semibold))
+            #endif
+            .foregroundStyle(OS1VisualStyle.textFaint)
+            .rotationEffect(.degrees(isCollapsed(key) ? -90 : 0))
+    }
+
+    private func collapseLabel(_ title: String, _ key: String) -> String {
+        isCollapsed(key) ? "\(title), collapsed" : "\(title), expanded"
     }
 
     private var emptyState: some View {
