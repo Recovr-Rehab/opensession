@@ -2636,6 +2636,24 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.app-body.sidebar-collapsed .viewer-header {
 		padding-left: 148px;
 	}
+	/* The swipe decks own their top bar (the app's is suppressed for them), so
+	   their back chevron starts at the pane's left edge — right under the
+	   floating cluster, which is positioned and therefore wins the click. */
+	.app-body.sidebar-collapsed .deck-header {
+		padding-left: 148px;
+	}
+}
+
+/* Deck top bar: back / counter / action. The counter centers on the pane rather
+   than on the space between the two buttons, so the clearance the collapsed
+   sidebar adds on the left doesn't drag the label off-center with it. */
+.deck-header {
+	position: relative;
+}
+.deck-header-title {
+	position: absolute;
+	left: 50%;
+	transform: translateX(-50%);
 }
 
 /* Top bar above the tab strip. On session routes the SessionViewer portals its

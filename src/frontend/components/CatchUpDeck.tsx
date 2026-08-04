@@ -220,7 +220,7 @@ export function CatchUpDeck({
 			{/* Header: back + "N Left" counter + new-workspace (Slack-style). This is
 			    the deck's only top bar — the app's mobile back bar is suppressed for
 			    the catch-up view — so it carries the safe-area top inset itself. */}
-			<div className="flex w-full items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
+			<div className="deck-header flex w-full items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
 				<button
 					className="flex h-10 w-10 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg"
 					onClick={onExit}
@@ -237,7 +237,7 @@ export function CatchUpDeck({
 						/>
 					</svg>
 				</button>
-				<div className="text-sm font-semibold text-fg">
+				<div className="deck-header-title text-sm font-semibold text-fg">
 					{done ? "All caught up" : `${remaining} Left`}
 				</div>
 				<button

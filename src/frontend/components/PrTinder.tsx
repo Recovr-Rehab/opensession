@@ -438,7 +438,7 @@ export function PrTinder({ onExit }: Props) {
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col items-center bg-surface">
 			{/* Header: back + "N Left" counter (same chrome as the catch-up deck). */}
-			<div className="flex w-full items-center justify-between px-4 py-3">
+			<div className="deck-header flex w-full items-center justify-between px-4 py-3">
 				<button
 					className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg"
 					onClick={onExit}
@@ -455,7 +455,7 @@ export function PrTinder({ onExit }: Props) {
 						/>
 					</svg>
 				</button>
-				<div className="text-sm font-semibold text-fg">
+				<div className="deck-header-title text-sm font-semibold text-fg">
 					{deck === null
 						? "PR Tinder"
 						: done
