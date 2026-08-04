@@ -49,9 +49,17 @@ enum OS1VisualStyle {
     static let purple = Color(red: 0.639, green: 0.443, blue: 0.969)
     #if os(iOS)
     static let chatMaxWidth: CGFloat = 780
+    /// How far the composer's scrim runs up past the bar, so a row starts
+    /// dissolving before it reaches the input (see `composerScrim`). The
+    /// transcript pads its content by the same amount, so the newest message
+    /// comes to rest right where the dissolve begins and stays crisp.
+    static let composerScrimRunUp: CGFloat = 40
     #else
     /// Keep 13pt desktop body copy near the comfortable 65-75 character range.
     static let chatMaxWidth: CGFloat = 720
+    /// The Mac composer has no scrim (see `composerScrim`), so the transcript
+    /// needs no run-up under it.
+    static let composerScrimRunUp: CGFloat = 0
     #endif
 }
 

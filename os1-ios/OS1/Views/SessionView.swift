@@ -130,6 +130,9 @@ struct SessionView: View {
                         }
                         .padding(.horizontal, contentInset)
                         .padding(.vertical, 8)
+                        // Rest the newest message where the composer's scrim
+                        // begins, so only rows scrolled past it dissolve.
+                        .padding(.bottom, OS1VisualStyle.composerScrimRunUp)
                         .frame(maxWidth: contentMaxWidth)
                         .frame(maxWidth: .infinity)
                     }
@@ -983,14 +986,13 @@ private struct SessionInputBar: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, horizontalInset)
         .padding(.top, 6)
+        .padding(.bottom, 8)
+        // The bar's only background is the scrim that dissolves the transcript
+        // travelling underneath it; the composer and chips stay individual
+        // glass elements floating on top of it.
         #if os(iOS)
-        .padding(.bottom, 8)
-        #else
-        .padding(.bottom, 8)
+        .composerScrim()
         #endif
-        // No bar background: the composer and chips are individual glass
-        // elements floating over the transcript, which scrolls beneath them
-        // through the soft scroll edge and progressive material fade.
         #if os(macOS)
         .onAppear { installShiftReturnMonitor() }
         .onDisappear { removeShiftReturnMonitor() }
@@ -1137,8 +1139,17 @@ private struct SessionInputBar: View {
             .padding(.bottom, 3)
         }
         #if os(iOS)
+        // Near-solid surface, not a see-through pane: the transcript now
+        // fades out before it reaches the composer, so there is nothing worth
+        // showing through it — and a washed-out bar over busy content made
+        // the draft harder to read. The page color on top of a thick material
+        // lands on white in light mode and stays dark in dark mode.
         .background(
-            .ultraThinMaterial,
+            OS1VisualStyle.background.opacity(0.7),
+            in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+        )
+        .background(
+            .thickMaterial,
             in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
         )
         #endif
