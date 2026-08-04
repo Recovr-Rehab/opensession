@@ -4617,13 +4617,20 @@ export function SessionViewer({
 							</span>
 						)}
 						{/* The composer's cost/context meter can't fit in the toolbar on
-						    phones, so it rides here after the model. */}
+						    phones, so it rides here after the model. min-h-0 drops the
+						    meter's toolbar-sized 32px touch box: as a subtitle it only
+						    needs its own line, and the extra height was padding the gap
+						    between the title and this line open. */}
 						{usage && usage.turns > 0 && (
 							<>
 								<span className="header-chatbar-sep" aria-hidden="true">
 									·
 								</span>
-								<UsageMeter usage={usage} className="chatbar-usage" showCacheRate />
+								<UsageMeter
+									usage={usage}
+									className="chatbar-usage min-h-0"
+									showCacheRate
+								/>
 							</>
 						)}
 					</span>,

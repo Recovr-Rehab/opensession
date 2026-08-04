@@ -12429,6 +12429,11 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		min-width: 0;
 		max-width: 100%;
 		font-size: 14px;
+		/* Pin the leading instead of leaving it at `normal` (~1.21): the name and
+		   the metadata line below it are a stacked pair, so the space between
+		   them should be the 1px column gap plus a known half-leading, not
+		   whatever the font's default line box happens to be. */
+		line-height: 16px;
 		font-weight: 600;
 	}
 	.app-header-title .working-dot {
@@ -12481,6 +12486,10 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		gap: 6px;
 		max-width: 100%;
 		min-width: 0;
+		/* Hold the line at its full height whether or not the cost meter is on it
+		   yet, so the pill doesn't grow a few px when the first turn's cost
+		   lands. */
+		min-height: 16px;
 		pointer-events: auto;
 		cursor: pointer;
 		-webkit-tap-highlight-color: transparent;
@@ -12687,9 +12696,12 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 	.header-chatbar-sep {
 		flex-shrink: 0;
-		/* Bigger middot between repo · model · cost. */
-		font-size: 20px;
-		line-height: 1;
+		/* Bigger middot between repo · model · cost — but its line box is capped
+		   at the metadata line's own height. At 20px/1 the dot was the tallest
+		   thing on the line and set the row's height by itself, opening a gap
+		   under the title that nothing visible filled. */
+		font-size: 16px;
+		line-height: 16px;
 		color: var(--text-dim);
 	}
 	/* Repo chip: tile + name, sized to the thin subtitle line. */
