@@ -408,6 +408,7 @@ export function SessionTabs({
 		<button
 			type="button"
 			className="session-tab session-tab-new"
+			data-menu-open={newMenu ? "" : undefined}
 			aria-label="New chat in this workspace"
 			title="New chat. Shares this workspace's worktree (right-click for options)"
 			onClick={() => onNewChat("share")}

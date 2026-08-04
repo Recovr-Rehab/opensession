@@ -2985,6 +2985,11 @@ function App() {
 			allSessions={sessions}
 			allProjects={projects}
 			onNewChat={handleNewChat}
+			// Mirrors SessionTabs' own "render nothing" rule so the header's
+			// lone-chat + never doubles up with the strip's.
+			tabStripVisible={
+				!!activeTabSplit || projectChats.length > 1 || viewTabs.length > 0
+			}
 			parentSession={
 				viewerSession.parentSessionId
 					? (() => {

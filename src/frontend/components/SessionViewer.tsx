@@ -246,6 +246,10 @@ interface Props {
 	/** Start a new chat in this workspace — surfaced in the ⋯ menu so it's
 	    reachable on a phone, where the tab strip's + button is hidden. */
 	onNewChat?: (mode: "share" | "stack" | "ask") => void;
+	/** True when the tab strip is on screen (2+ chats, an open view tab, or a
+	    split). The strip carries its own "+", so the header one stands down
+	    rather than showing a second plus a few pixels above it. */
+	tabStripVisible?: boolean;
 	/** Orchestrator this session was delegated from (when it's a worker
 	    sub-session), and the worker sessions it in turn spawned. Powers the
 	    header relationship chips. */
@@ -573,6 +577,7 @@ export function SessionViewer({
 	allSessions,
 	allProjects,
 	onNewChat,
+	tabStripVisible,
 	parentSession,
 	workerSessions,
 	onOpenSession,
@@ -4163,36 +4168,40 @@ export function SessionViewer({
 					    container (docker/daytona/e2b). Renders nothing for host sessions
 					    — purely from session fields, no container polling. */}
 					<SandboxBadge sandbox={session.sandbox} />
-					{/* Lone-chat "+ New tab": when the workspace has a single chat the
-					    tab strip is hidden, so the affordance to spawn a sibling chat
-					    lives here beside the title (⌘T does the same). With 2+ chats the
-					    strip's own + takes over and this disappears. Phone uses the ⋯
+					{/* Lone-chat "+ New tab": with no tab strip on screen the affordance
+					    to spawn a sibling chat lives here beside the title (⌘T does the
+					    same). The moment the strip appears — a second chat, an open view
+					    tab like Review, or a split — its own + takes over and this
+					    disappears, so the two never stack. Phone uses the ⋯
 					    menu's newChatAction instead. Square 30px chip: same height and
 					    corner radius as the ⋯ and side-panel buttons at the other end of
 					    the bar. Sized by padding it came out 37×33 — a wide rectangle
 					    around a 13px cross, so the hover chip read larger than every
 					    control beside it. */}
-					{!isPhone && onNewChat && workspaceChats?.length === 1 && (
-						<Tooltip
-							label="New tab in this workspace"
-							shortcut={isApple ? ["⌘", "T"] : ["Ctrl", "T"]}
-						>
-							<button
-								type="button"
-								className="flex-none inline-flex size-[30px] items-center justify-center rounded-[calc(10px*var(--rf))] text-dim transition-colors hover:bg-hover hover:text-fg"
-								onClick={() => onNewChat("share")}
-								aria-label="New tab"
+					{!isPhone &&
+						onNewChat &&
+						!tabStripVisible &&
+						workspaceChats?.length === 1 && (
+							<Tooltip
+								label="New tab in this workspace"
+								shortcut={isApple ? ["⌘", "T"] : ["Ctrl", "T"]}
 							>
-								{/* 25, not the menu-row 22: the IconPlus path only fills ~52%
-								    of its box (vs ~60% for the play/sidebar glyphs beside it),
-								    so at 22 it read a touch small. 25 nudges it up without the
-								    28 that read too big beside the compact ▶ play / ▐ panel
-								    toggle — the thin full-box cross carries more optical width
-								    than those glyphs at the same size. */}
-								<IconPlus size={25} />
-							</button>
-						</Tooltip>
-					)}
+								<button
+									type="button"
+									className="flex-none inline-flex size-[30px] items-center justify-center rounded-[calc(10px*var(--rf))] text-dim transition-colors hover:bg-hover hover:text-fg"
+									onClick={() => onNewChat("share")}
+									aria-label="New tab"
+								>
+									{/* 25, not the menu-row 22: the IconPlus path only fills ~52%
+									    of its box (vs ~60% for the play/sidebar glyphs beside it),
+									    so at 22 it read a touch small. 25 nudges it up without the
+									    28 that read too big beside the compact ▶ play / ▐ panel
+									    toggle — the thin full-box cross carries more optical width
+									    than those glyphs at the same size. */}
+									<IconPlus size={25} />
+								</button>
+							</Tooltip>
+						)}
 					{onOpenSession && (parentSession || (workerSessions && workerSessions.length > 0)) && (
 						<SessionRelations
 							parent={parentSession}

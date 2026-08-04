@@ -2996,12 +2996,11 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		box-shadow: inset 0 -2px 0 var(--accent);
 	}
 	/* New-tab "+" as a real control on the same footprint/weight as the header
-	   ⋯ menu (btn-viewer-overflow): quiet borderless square, centered in the band,
-	   always visible (no hover-reveal), that just lights up on hover. */
+	   ⋯ menu (btn-viewer-overflow): quiet borderless square, centered in the
+	   band, that lights up on hover. It keeps the strip's hover-reveal (below)
+	   rather than sitting there permanently — the strip should read as tabs. */
 	.session-tabs .session-tab-new {
 		align-self: center;
-		opacity: 1;
-		pointer-events: auto;
 		width: auto;
 		height: auto;
 		padding: 3px 5px;
@@ -3318,8 +3317,13 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		pointer-events: none;
 		transition: opacity 0.12s ease;
 	}
+	/* Keyboard users get the same reveal on focus — hover can't be the only way
+	   to reach the control — and both stay put while their menu is open. */
 	.session-tabs:hover .session-tab-new,
 	.session-tabs:hover .session-tab-history,
+	.session-tab-new:focus-visible,
+	.session-tab-history:focus-visible,
+	.session-tab-new[data-menu-open],
 	.session-tab-history[data-popup-open] {
 		opacity: 1;
 		pointer-events: auto;
