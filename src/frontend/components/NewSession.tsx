@@ -4,6 +4,8 @@ import { getCurrentUser, useAuthStatus } from "./UserPicker";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
+import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
+import { insideOpenFence, isSendCombo, MOD_ENTER_GLYPH } from "../lib/send-key";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
 import { useFileMentions } from "./useFileMentions";
@@ -244,6 +246,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // Phones open on just the prompt — repo/base/model/effort have sensible
   // defaults and hide behind the sliders toggle until you actually need them.
   const isPhone = useIsPhone();
+  // "Send messages with" (Settings → Composer). The chat composer honors it,
+  // so this field has to as well — otherwise Enter silently does nothing here
+  // while the Create button advertises ↩.
+  const [sendKey, setSendKey] = useState(getSendKeyPref);
+  useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
   const [showOptions, setShowOptions] = useState(false);
   const optionsVisible = !isPhone || showOptions;
 
@@ -781,13 +788,24 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               queueMicrotask(mentions.sync);
             }}
             onKeyDown={(e) => {
-              // ⌘/Ctrl+Enter creates (unless the mention popup is capturing keys).
+              // ⌘/Ctrl+Enter creates whatever the send-key preference is.
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                 e.preventDefault();
                 handleCreate();
                 return;
               }
-              mentions.handleKeyDown(e);
+              // The @/slash popup claims plain Enter to accept a suggestion.
+              if (mentions.handleKeyDown(e)) return;
+              // Otherwise the send key creates, exactly as it sends in the chat
+              // composer — including the unclosed-``` fence exception, so a
+              // multi-line code block can still be typed into the first prompt.
+              // Nothing to create yet? Let the newline land rather than eating
+              // the keystroke.
+              if (!isSendCombo(e, sendKey) || !canCreate) return;
+              const caret = promptRef.current?.selectionStart ?? prompt.length;
+              if (insideOpenFence(prompt, caret)) return;
+              e.preventDefault();
+              handleCreate();
             }}
             onKeyUp={mentions.sync}
             onClick={mentions.sync}
@@ -1050,7 +1068,16 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                     : createMore
                       ? "Create more"
                       : "Create"}
-                <IconReturn className="palette-create-kbd" size={20} />
+                {/* The hint has to match the preference — a bare ↩ next to a
+                    field that only creates on ⌘↩ is what made Enter look
+                    broken in the first place. */}
+                {sendKey === "mod-enter" ? (
+                  <span className="palette-create-kbd mx-0 text-xs">
+                    {MOD_ENTER_GLYPH}
+                  </span>
+                ) : (
+                  <IconReturn className="palette-create-kbd" size={20} />
+                )}
               </button>
               <button
                 type="button"

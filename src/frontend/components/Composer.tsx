@@ -22,7 +22,7 @@ import {
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
-import { isSendCombo, sendKeyLabel } from "../lib/send-key";
+import { insideOpenFence, isSendCombo, sendKeyLabel } from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { VoiceInput } from "./VoiceInput";
 import { getBusySendPrefs, onBusySendChanged } from "../lib/busy-send-pref";
@@ -621,8 +621,7 @@ export function Composer({
       !e.ctrlKey
     ) {
       const caret = textareaRef.current?.selectionStart ?? text.length;
-      const fences = text.slice(0, caret).match(/```/g);
-      if (fences && fences.length % 2 === 1) return; // let the newline land
+      if (insideOpenFence(text, caret)) return; // let the newline land
     }
     // While a run is busy, ⌘/Ctrl+Enter does its own configured follow-up
     // action (Settings → Composer, default steer: fold into the running turn
