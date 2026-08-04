@@ -766,6 +766,56 @@ export function latestTurnAssistant<T extends { info?: { role?: string } }>(mess
     .find((message) => message.info?.role === "assistant");
 }
 
+/** Delete trailing assistant messages that carry no text and no tool call
+ *  from the engine session. A reasoning-only tail (Sol empty completion,
+ *  first seen 2026-08-04 in slack-C09BAFFK8F8-1785828070) is rejected
+ *  wholesale by the OpenAI Responses backend on every LATER request
+ *  ("reasoning item without its required following item"), so leaving it in
+ *  place turns the session into a deterministic death loop. Walks from the
+ *  tail: user messages are kept (queued prompts re-deliver fine), the first
+ *  substantive assistant message stops the walk. Uses the raw DELETE
+ *  /session/:id/message/:id endpoint (verified live on 1.17.15; the pinned
+ *  v1 SDK has no deleteMessage). Best-effort — any failure stops the walk. */
+async function pruneOrphanedAssistantTail(
+  server: { url: string; password: string },
+  ocSessionId: string,
+  list: Array<{ info?: { id?: string; role?: string }; parts?: Array<{ type?: string; text?: string }> }>,
+  directory?: string,
+): Promise<number> {
+  let pruned = 0;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const role = list[i].info?.role;
+    if (role === "user") continue;
+    if (role !== "assistant") break;
+    const parts = list[i].parts || [];
+    const substantive = parts.some(
+      (p) => (p.type === "text" && p.text) || p.type === "tool",
+    );
+    if (substantive) break;
+    const id = list[i].info?.id;
+    if (!id) break;
+    try {
+      const dir = directory ? `?directory=${encodeURIComponent(directory)}` : "";
+      const res = await fetch(
+        `${server.url}/session/${ocSessionId}/message/${id}${dir}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Basic ${btoa(`opencode:${server.password}`)}` },
+          signal: AbortSignal.timeout(5000),
+        },
+      );
+      if (!res.ok) break;
+      pruned++;
+      console.warn(
+        `[opencode-runner] pruned orphaned assistant tail message ${id} from ${ocSessionId}`,
+      );
+    } catch {
+      break;
+    }
+  }
+  return pruned;
+}
+
 /** An assistant message that is opencode's autocompact handoff summary — the
  *  reply to the synthetic `compaction`-part user message. Its text must land
  *  in the transcript as a "context compacted" system chip, never as the
@@ -5432,7 +5482,24 @@ async function* runOpencodeAttempt(
     }
 
     if (!lastAssistant) {
+      // A turn that ends with NO assistant message at all is the signature of
+      // a poisoned session tail: an earlier empty completion left a
+      // reasoning-only assistant message that the provider now rejects on
+      // every request. Prune the tail; if anything was removed, the poison is
+      // gone — retry once instead of surfacing the death-loop error.
       const message = missingAssistantTurnError(parsed.providerID);
+      const pruned = entry
+        ? await pruneOrphanedAssistantTail(entry, ocSessionId, list, dirQuery?.directory)
+        : 0;
+      if (pruned > 0 && rotation && attemptIndex < 2) {
+        turnEvent({ direction: "out", kind: "orphaned_tail_pruned", pruned, error: message });
+        bridgeRunEnd("error", message);
+        turn.repairPrompt = emptyCompletionRepairPrompt(prompt);
+        rotation.rotate = true;
+        rotation.note =
+          "The engine session ended on a broken half-finished message — removed it and retrying once.";
+        return;
+      }
       turnEvent({ direction: "out", kind: "error", error: message });
       bridgeRunEnd("error", message);
       yield { type: "error", content: message, provider: PROVIDER, model };
@@ -5448,6 +5515,15 @@ async function* runOpencodeAttempt(
       const emptyMessage =
         `opencode ${parsed.providerID} returned a successful stop with no final text ` +
         `on account "${bridgeAccountLabel}"`;
+      // Strip the empty message when it carries no tool work either: a
+      // reasoning-only assistant tail poisons every later request on the
+      // OpenAI Responses backend, so leave it in place and the continuation —
+      // and every send after it — dies with "turn ended without an assistant
+      // message". Substantive (tool-carrying) empty stops are kept: the tool
+      // results are real work the continuation should see.
+      if (entry) {
+        await pruneOrphanedAssistantTail(entry, ocSessionId, list, dirQuery?.directory);
+      }
       if (
         rotation &&
         shouldRepairEmptyCompletion(textOut, turn.emptyCompletionRepairs)
@@ -6262,6 +6338,20 @@ export async function tryReattachOpencodeRun(
         return;
       }
       if (!lastAssistant) {
+        // Same poisoned-tail cleanup as the primary path (no rotation loop
+        // here, so no retry — but the prune means the user's next send works
+        // instead of death-looping on the orphaned reasoning-only message).
+        const pruned = entry
+          ? await pruneOrphanedAssistantTail(
+              entry,
+              ocSessionId!,
+              list,
+              shared ? run.cwd : undefined,
+            )
+          : 0;
+        if (pruned > 0) {
+          turnEvent({ direction: "out", kind: "orphaned_tail_pruned", pruned });
+        }
         const message = missingAssistantTurnError(parseOpencodeModel(model)?.providerID || "provider");
         turnEvent({ direction: "out", kind: "error", error: message });
         yield { type: "error", content: message, provider: PROVIDER, model };
