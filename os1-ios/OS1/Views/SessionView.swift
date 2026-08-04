@@ -439,7 +439,11 @@ struct SessionView: View {
             showWorktreeInfo = true
         } label: {
             HStack(spacing: 8) {
-                RepoTile(name: viewModel.session.effectiveRepo, size: 32)
+                // 24pt, the same tile the sessions list uses. At 32 it stood
+                // as tall as the whole title/subtitle stack and read as the
+                // loudest thing in the bar — especially on the colored letter
+                // fallback that stands in until the repo icon loads.
+                RepoTile(name: viewModel.session.effectiveRepo, size: 24)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 5) {
                         Text(viewModel.session.displayTitle)
