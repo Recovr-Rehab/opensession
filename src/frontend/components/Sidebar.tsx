@@ -3868,7 +3868,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// with identical behavior (click, swipe, context menu, pin, archive).
 	// Separate impl rather than an optional param because `.map(renderWsRow)`
 	// callers would pass the array index into it.
-	function renderWsRowImpl(row: WsRow, inbox: boolean) {
+	//
+	// `banded` says the row already sits under a header that means "blocked on
+	// you" — the Needs input lane, the Inbox's Needs action band. There the
+	// attention dot is the third copy of the same fact (header, count, and the
+	// row's own accent wash), so it's dropped.
+	function renderWsRowImpl(row: WsRow, inbox: boolean, banded = false) {
 		const active = row.chats.some((s) => s.id === selectedId);
 		const editing = rowRenameEditing(row);
 		const waiting = row.status === "needsinput";
@@ -4018,7 +4023,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    the workspace status. Grouped lanes already provide that context and
 				    keep the richer PR lifecycle mark here instead. */}
 				<span className="sidebar-rail">
-					{!flatRepoGrouping && !isPhone && waiting && (
+					{!flatRepoGrouping && !banded && !isPhone && waiting && (
 						<span
 							className="absolute left-[-9px] top-[7px] block size-[7px] rounded-full bg-green"
 							aria-label="Needs your attention"
@@ -4150,7 +4155,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<IconPencil size={20} />
 					</span>
 				)}
-				{isPhone && waiting && (
+				{isPhone && !banded && waiting && (
 					<span
 						className="ml-auto flex h-[22px] w-7 shrink-0 items-center justify-center"
 						aria-label="Needs your attention"
@@ -4398,7 +4403,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</button>
 					{items
 						.filter((r) => open || r.chats.some((c) => c.id === selectedId))
-						.map(renderWsRow)}
+						.map((r) => renderWsRowImpl(r, false, meta.key === "needsinput"))}
 					{prs
 						.filter((i) => open || prRowSelected(i))
 						.map(renderPrRow)}
@@ -4505,7 +4510,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							// Nested, the two-line variant's meta line would repeat the
 							// repo tile + name the band header already carries, so the
 							// rows stay compact like every other repo-nested mode's.
-							.map((r) => (ns ? renderWsRow(r) : renderWsRowImpl(r, true)))}
+							.map((r) =>
+								renderWsRowImpl(r, !ns, b.key === "needsaction"),
+							)}
 						{b.prs.filter((i) => open || prRowSelected(i)).map(renderPrRow)}
 					</div>
 				);
