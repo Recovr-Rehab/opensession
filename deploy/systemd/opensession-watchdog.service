@@ -1,0 +1,36 @@
+# OpenSession self-deploy watchdog — one conservative health probe per timer
+# tick (see opensession-watchdog.timer). Repo copy only: installed at rollout
+# (like the sibling drop-ins deploy.sh syncs), never auto-installed by the app.
+#
+# CONSERVATIVE BY DESIGN — the probe only ever ACTS when ALL three hold:
+#   1. GET $OPENSESSION_HEALTH_URL fails, AND
+#   2. the last-deploy-marker in the state dir is younger than 15 minutes
+#      (the marker is written only by self-deploy.sh's deploy path, right
+#      before its restart, and consumed on the first automatic rollback), AND
+#   3. the consecutive-failure counter crosses 3 (three failed probes ≈ 3 min).
+# The marker-age condition means the watchdog NEVER acts outside a recent
+# self-deploy window: a generic outage at 3am only increments the counter and
+# is left to the service's Restart=always and to humans — no automatic git
+# surgery. When it does act, it runs self-deploy.sh --rollback-only, which
+# obeys the same clean-tree + OPENSESSION_DEPLOY_ALLOW_RESET=1 rules as a
+# failed deploy (on the shared checkout it will only restart, never reset).
+[Unit]
+Description=OpenSession self-deploy health watchdog (probe)
+# Probing a stopped service is fine (it just counts); no hard dependency on
+# opensession.service so the probe also runs while the service flaps.
+
+[Service]
+Type=oneshot
+# Run as the checkout/service owner: git + state files stay owned by the same
+# user as the self-deploy MCP path; systemctl escalates via `sudo -n` inside
+# the script (passwordless sudo for the service user, the host-client
+# precedent).
+User=ubuntu
+Environment=OPENSESSION_DEPLOY_STATE=/home/ubuntu/.opensession-deploy
+Environment=OPENSESSION_DEPLOY_CHECKOUT=/home/ubuntu/projects/tella-backstage
+# bun must be on PATH for a rollback's best-effort dependency sync (mirrors
+# opensession.service's explicit PATH).
+Environment="PATH=/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/usr/bin/env bash /home/ubuntu/projects/tella-backstage/deploy/self-deploy.sh --watchdog-probe
+# A rollback restart + 60s health gate must fit comfortably.
+TimeoutStartSec=300

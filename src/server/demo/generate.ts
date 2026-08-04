@@ -1,0 +1,249 @@
+/**
+ * Synthetic demo dataset generator — pure disk writes, no server graph, no
+ * network. Everything resolves through the SAME resolvers the server reads
+ * with (paths.ts OPENSESSION_CHATS_DIR live binding, rename-compat stateDir(),
+ * opencode-transcript OPENCODE_TRANSCRIPTS_DIR live binding, statePath() for the
+ * PR snapshot caches), so the dataset lands in whatever scratch state the
+ * instance is pointed at — never a hardcoded home path.
+ *
+ * Idempotent via a marker file in the chats dir (written LAST, so a failed
+ * partial run regenerates on the next attempt). Callers: startDemo() at boot
+ * under OPENSESSION_DEMO=1, and scripts/demo-data.ts standalone.
+ *
+ * Import discipline: only leaf modules (paths/rename-compat/opencode-transcript
+ * line builders). Never import sessions/agent-runner/automations here — the
+ * standalone CLI must not drag in modules with tickers or socket binds.
+ */
+
+import { mkdirSync, existsSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
+import { OPENSESSION_CHATS_DIR } from "../paths";
+import { stateDir, statePath } from "../rename-compat";
+import { OPENCODE_TRANSCRIPTS_DIR, getOpencodeTranscriptPath } from "../opencode-transcript";
+import { defaultRepo } from "../config";
+import {
+  DEMO_BRANCH,
+  DEMO_COMMITTED_CHANGE,
+  DEMO_MARKER_FILE,
+  DEMO_REPO_FILES,
+  DEMO_UNCOMMITTED_CHANGE,
+  DEMO_UNTRACKED_FILE,
+  demoAuditLines,
+  demoAutomations,
+  demoGoal,
+  demoNotes,
+  demoPrDetails,
+  demoPrInfo,
+  demoSessions,
+} from "./fixtures";
+
+export interface DemoGenerateOpts {
+  /**
+   * Also seed the HOME-rooted stores (automations/audit/notes/goals via
+   * stateDir(), plus the two PR snapshot caches). Default true — demo
+   * instances run with their state root (HOME) redirected. The standalone
+   * CLI passes false when only the chats dir was redirected, so nothing ever
+   * lands in the invoking user's real ~/.opensession-* stores.
+   */
+  homeStores?: boolean;
+}
+
+export interface DemoGenerateResult {
+  /** false = the marker was already present; nothing was written. */
+  created: boolean;
+  chatsDir: string;
+  transcriptsDir: string;
+  markerPath: string;
+  worktreeDir: string;
+  sessionIds: string[];
+}
+
+function writeJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function writeText(path: string, text: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+}
+
+/** Run git with author/committer pinned and host git config isolated, so the
+ *  generated repo is reproducible and never inherits signing/hooks settings. */
+function git(cwd: string, ...args: string[]): void {
+  const proc = Bun.spawnSync(
+    [
+      "git",
+      "-c",
+      "user.name=OpenSession Demo",
+      "-c",
+      "user.email=demo@opensession.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      ...args,
+    ],
+    {
+      cwd,
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_SYSTEM: "/dev/null",
+        GIT_TERMINAL_PROMPT: "0",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  if (proc.exitCode !== 0) {
+    throw new Error(
+      `[demo] git ${args.join(" ")} failed in ${cwd}: ${proc.stderr.toString().trim()}`,
+    );
+  }
+}
+
+/** Real git repo (main) + worktree (DEMO_BRANCH) with a committed fix, a
+ *  dirty edit and an untracked file — what the Diff panel needs to render. */
+function buildDemoRepo(repoDir: string, worktreeDir: string): void {
+  mkdirSync(repoDir, { recursive: true });
+  git(repoDir, "init", "-b", "main");
+  for (const [rel, content] of Object.entries(DEMO_REPO_FILES)) {
+    writeText(join(repoDir, rel), content);
+  }
+  git(repoDir, "add", "-A");
+  git(repoDir, "commit", "-m", "acme-todo: initial import");
+  git(repoDir, "worktree", "add", worktreeDir, "-b", DEMO_BRANCH);
+  for (const [rel, content] of Object.entries(DEMO_COMMITTED_CHANGE)) {
+    writeText(join(worktreeDir, rel), content);
+  }
+  git(worktreeDir, "add", "-A");
+  git(
+    worktreeDir,
+    "commit",
+    "-m",
+    "fix: honor the full retry budget in uploadChunk",
+  );
+  for (const [rel, content] of Object.entries(DEMO_UNCOMMITTED_CHANGE)) {
+    writeText(join(worktreeDir, rel), content);
+  }
+  for (const [rel, content] of Object.entries(DEMO_UNTRACKED_FILE)) {
+    writeText(join(worktreeDir, rel), content);
+  }
+}
+
+export function demoMarkerPath(): string {
+  return join(OPENSESSION_CHATS_DIR, DEMO_MARKER_FILE);
+}
+
+export function generateDemoData(
+  opts: DemoGenerateOpts = {},
+): DemoGenerateResult {
+  const homeStores = opts.homeStores !== false;
+  const chatsDir = OPENSESSION_CHATS_DIR;
+  const transcriptsDir = OPENCODE_TRANSCRIPTS_DIR;
+  const markerPath = demoMarkerPath();
+  const demoRoot = join(chatsDir, "demo");
+  const repoDir = join(demoRoot, "repo");
+  const worktreeDir = join(demoRoot, "worktree");
+  const now = Date.now();
+
+  if (existsSync(markerPath)) {
+    return {
+      created: false,
+      chatsDir,
+      transcriptsDir,
+      markerPath,
+      worktreeDir,
+      sessionIds: [],
+    };
+  }
+
+  mkdirSync(chatsDir, { recursive: true });
+  mkdirSync(transcriptsDir, { recursive: true });
+
+  buildDemoRepo(repoDir, worktreeDir);
+
+  // Sessions + their engine transcripts (claude-shape jsonl; the server
+  // lazily imports these into transcripts.db on first watch).
+  const sessions = demoSessions({ now, worktreeDir, repoDir });
+  for (const s of sessions) {
+    writeJson(join(chatsDir, `${s.id}.json`), s.file);
+    if (s.ocSessionId && s.lines.length) {
+      writeText(
+        getOpencodeTranscriptPath(s.ocSessionId),
+        `${s.lines.map((l) => JSON.stringify(l)).join("\n")}\n`,
+      );
+    }
+  }
+
+  if (homeStores) {
+    // PR snapshot caches (v4 bulk + detail; both boot-seeded, served stale —
+    // sessions.ts / pr-info.ts). Keyed under the instance's default repo so
+    // the hero session's branch matches at read time; the built-in registry
+    // always has a default, but a demo instance must survive an empty one.
+    let repoId = "opensession";
+    let ghRepo = "";
+    try {
+      const repo = defaultRepo();
+      repoId = repo.id;
+      ghRepo = repo.ghRepo || "";
+    } catch {}
+    writeJson(statePath(".opensession-pr-cache.json", ".backstage-pr-cache.json"), {
+      version: 4,
+      repos: { [repoId]: { [DEMO_BRANCH]: demoPrInfo(now, ghRepo, "bks-demo-pr") } },
+      recentLimits: { [repoId]: 500 },
+      probeEtags: {},
+      lastFullRefresh: {},
+    });
+    writeJson(statePath(".opensession-pr-details-cache.json", ".backstage-pr-details-cache.json"), {
+      [`${ghRepo}\u0000${DEMO_BRANCH}`]: {
+        data: demoPrDetails(now, ghRepo),
+        ts: now,
+      },
+    });
+
+    // Automations + run history.
+    const automationsDir = stateDir("automations");
+    for (const automation of demoAutomations(now)) {
+      writeJson(join(automationsDir, `${automation.id}.json`), automation);
+    }
+
+    // Audit day file (today, UTC — the viewer's date picker defaults to today).
+    const day = new Date(now).toISOString().slice(0, 10);
+    writeText(
+      join(stateDir("audit"), `audit-${day}.jsonl`),
+      `${demoAuditLines(now)
+        .map((l) => JSON.stringify(l))
+        .join("\n")}\n`,
+    );
+
+    // Notes (plain .md is enough — notes.ts seeds the Y.Doc from it).
+    const notesDir = stateDir("notes");
+    for (const [id, md] of Object.entries(demoNotes())) {
+      writeText(join(notesDir, `${id}.md`), md);
+    }
+
+    // Goal + ledger (paused + far-future wake: never ticker-runnable).
+    const goalsDir = stateDir("goals");
+    const { goal, ledger } = demoGoal(now, goalsDir);
+    writeJson(join(goalsDir, `${goal.id}.json`), goal);
+    writeText(goal.stateFile, ledger);
+  }
+
+  // Marker LAST — a partial failure above leaves no marker, so the next run
+  // regenerates. Has no `id`, so the session scanner skips it.
+  writeJson(markerPath, {
+    demo: true,
+    version: 1,
+    generatedAt: new Date(now).toISOString(),
+    note: "Synthetic OpenSession demo dataset — delete this file to regenerate.",
+  });
+
+  return {
+    created: true,
+    chatsDir,
+    transcriptsDir,
+    markerPath,
+    worktreeDir,
+    sessionIds: sessions.map((s) => s.id),
+  };
+}

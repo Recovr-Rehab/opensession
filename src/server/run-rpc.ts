@@ -28,6 +28,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { BACKSTAGE_CHATS_DIR } from "./paths";
 import { audit } from "./audit";
+import { devInstanceBootError, isDevInstance } from "./dev-mode";
 import { canonicalMcpServerId } from "./rename-compat";
 import { MCP_HTTP_PORT, rpcSocketPath } from "./run-rpc-protocol";
 
@@ -326,6 +327,13 @@ export function startRunRpcServer(): void {
   if (process.env.NODE_ENV === "test" || /\.test\.tsx?$/.test(Bun.main || "")) {
     return;
   }
+  // Fail-closed belt for the dev-instance refuse-to-boot guard in
+  // opensession.ts: module side effects (this call, via interactive-mcp.ts)
+  // run BEFORE the entry file's check, so an unisolated dev instance must be
+  // stopped HERE from unlinking the live socket. With isolation set
+  // (OPENSESSION_STATE_DIR / OPENSESSION_CHATS_DIR), the socket path derives
+  // from the isolated chats dir and binding is safe.
+  if (devInstanceBootError()) return;
   if (g.__runRpcServer) {
     startRunRpcSocketHeal();
     return;
@@ -504,6 +512,11 @@ export function startMcpHttpServer(): void {
   if (process.env.NODE_ENV === "test" || /\.test\.tsx?$/.test(Bun.main || "")) {
     return;
   }
+  // Dev instances must not contend for the fixed default port (3852 is held
+  // by the live instance; the bind failure below is graceful but silent) —
+  // bind only when a port was explicitly chosen for this instance. Config
+  // generation then falls back to stdio proxies, which work everywhere.
+  if (isDevInstance() && !process.env.OPENSESSION_MCP_HTTP_PORT) return;
   if (g.__mcpHttpServer) return;
   try {
     g.__mcpHttpServer = Bun.serve({

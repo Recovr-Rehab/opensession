@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
 import { stopPreview } from "./preview";
-import { configuredPaths, configuredRepos, defaultRepo, type Repo } from "./config";
+import { configuredPaths, configuredRepos, configuredSelfDev, defaultRepo, type Repo } from "./config";
 import { isLocalProfile } from "./profile";
 import { stateDir } from "./rename-compat";
 
@@ -62,6 +62,19 @@ export function isSharedCheckoutDir(dir: string | null | undefined): boolean {
       return true;
   }
   return false;
+}
+
+/** Does `repo.sharedCheckout` apply when choosing a NEW session's working
+ *  dir? Instance config `selfDev: "worktree"` opts out of the shared-checkout
+ *  special case at session-creation time: self-repo sessions then get
+ *  isolated per-branch worktrees exactly like every other repo. ONLY the dir
+ *  choice for new sessions flips — existing sessions keep whatever dir their
+ *  session file records, and `isSharedCheckoutDir` above stays keyed on the
+ *  repo property so shared-mode sessions' dirs (and the live checkout's git
+ *  guards: commit scoping, no-reset rules, workspace ownership) are still
+ *  recognized in either mode. */
+export function sharedCheckoutForNewSessions(repo: Repo): boolean {
+  return !!repo.sharedCheckout && configuredSelfDev() !== "worktree";
 }
 
 /** Actual HEAD branch of a checkout/worktree, or null (detached/missing). Sync
@@ -214,7 +227,9 @@ export function ensureScratchDir(key: string): string {
  * worktree, detached at origin/<defaultBranch>, that all its ask sessions
  * share (they carry no Write/Edit and a read-only bash allowlist, so
  * concurrent readers are safe). Shared-checkout repos (backstage) keep the
- * live main checkout — self-hosting sessions must read the running code.
+ * live main checkout — self-hosting sessions must read the running code —
+ * unless config `selfDev: "worktree"` opts the instance out of self-hosting
+ * semantics, in which case they get the pinned ask checkout like everyone else.
  *
  * The tree is re-pinned to origin/<defaultBranch> in the background at most
  * once per ASK_REFRESH_MS so it tracks the default branch instead of
@@ -227,7 +242,7 @@ const askCheckoutRefreshedAt = new Map<string, number>();
 const ASK_REFRESH_MS = 5 * 60_000;
 export async function ensureAskCheckout(repoId?: string): Promise<string> {
   const repo = getRepo(repoId);
-  if (repo.sharedCheckout) return repo.repo;
+  if (sharedCheckoutForNewSessions(repo)) return repo.repo;
   const dir = `${worktreesDir()}/${repo.wtPrefix}-ask-checkout`;
   if (existsSync(dir)) {
     const last = askCheckoutRefreshedAt.get(repo.id) || 0;
@@ -646,7 +661,7 @@ export function worktreePathFor(
   opts?: { isolated?: boolean },
 ): string {
   const repo = getRepo(repoId);
-  return repo.sharedCheckout && !opts?.isolated
+  return sharedCheckoutForNewSessions(repo) && !opts?.isolated
     ? repo.repo
     : `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
 }
@@ -723,8 +738,9 @@ export async function createWorktree(
   // `isolated` opts out and builds a real per-branch worktree even for a
   // shared-checkout repo — unattended code runs (automations) must never work
   // in the live checkout; they ship a PR instead (matches worktreePathFor /
-  // createWorktreeForExistingBranch).
-  if (repo.sharedCheckout && !opts?.isolated) return repo.repo;
+  // createWorktreeForExistingBranch). Config `selfDev: "worktree"` opts the
+  // whole instance out the same way (sharedCheckoutForNewSessions).
+  if (sharedCheckoutForNewSessions(repo) && !opts?.isolated) return repo.repo;
 
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
   const base = opts?.base;
@@ -790,14 +806,15 @@ export async function createWorktree(
  * reusing an existing worktree for the branch when one is already checked out.
  * Returns the repo id, branch, and worktree dir. Shared-checkout repos
  * (backstage) can't be attached as an isolated worktree — they'd hand back the
- * live main checkout, so reject them.
+ * live main checkout, so reject them. Under config `selfDev: "worktree"`,
+ * createWorktree builds a real isolated tree for them, so the guard lifts.
  */
 export async function prepareAttachedWorktree(
   repoId: string,
   branch: string
 ): Promise<{ repo: string; branch: string; dir: string }> {
   const repo = getRepo(repoId);
-  if (repo.sharedCheckout) {
+  if (sharedCheckoutForNewSessions(repo)) {
     throw new Error(`${repo.id} is a shared-checkout repo and can't be attached as an isolated worktree`);
   }
   const existing = (await listWorktrees(repo.id)).find((w) => w.branch === branch);

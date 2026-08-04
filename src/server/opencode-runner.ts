@@ -191,6 +191,7 @@ import { gitIdentityEnv, githubLoginFor, userMatchesAny, type GitIdentity } from
 import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
 import { envAlias, stateDir } from "./rename-compat";
+import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
 import {
   localClaudeAccount,
@@ -549,6 +550,7 @@ export const SHARED_INPROCESS_SERVERS = [
   "opensession-github",
   "opensession-papercuts",
   "opensession-workflows",
+  "opensession-self-deploy",
   "opensession-assets",
   "opensession-search",
   "opensession-todos",
@@ -2106,8 +2108,10 @@ function dbLastActivityMs(dbPath?: string): number | null {
 // 14GB of swap. This scan is the backstop: kill anything past its idle TTL by
 // the most generous signal available (pool bookkeeping or DB activity).
 // Parked on globalThis so hot reloads don't stack intervals.
+// Dev instances skip the sweep: it only touches this process's OWN pool map
+// (benign), but a dev instance stays fully ticker-free by policy.
 const IDLE_SWEEP_MS = 10 * 60 * 1000;
-if (!g.__opencodeIdleSweep) {
+if (!g.__opencodeIdleSweep && !isDevInstance()) {
   g.__opencodeIdleSweep = setInterval(() => {
     for (const [key, entry] of servers) {
       if (entry.activeRuns > 0 || recoveringRunCount(entry) > 0 || entry.draining) continue;

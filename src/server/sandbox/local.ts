@@ -32,6 +32,7 @@ import {
   listWorktrees,
   createWorktree,
   reviveWorktree,
+  sharedCheckoutForNewSessions,
 } from "../worktree";
 import type { RunHostSpec } from "../../runner-host/protocol";
 import type {
@@ -158,7 +159,7 @@ export class LocalProvider implements SandboxProvider {
     }
 
     const repo = getRepo(spec.repo);
-    if (spec.mode === "ask" || repo.sharedCheckout) {
+    if (spec.mode === "ask" || sharedCheckoutForNewSessions(repo)) {
       return makeLocalSandbox(repo.repo);
     }
     if (!spec.branch) {

@@ -51,6 +51,7 @@ import { join } from "node:path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { configuredRepos, type Repo } from "./config";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
 import { sandboxConfig } from "./sandbox/config";
 
@@ -1950,7 +1951,9 @@ async function reapOrphanGoldenbuilds(): Promise<void> {
 }
 
 export function ensurePreviewPoolScheduler(): void {
-  if (isLocalProfile()) return;
+  // Dev instances: the sweep docker-rm's bks-preview-*/golden containers on
+  // the shared docker daemon — it would reap production's warm pool.
+  if (isLocalProfile() || isDevInstance()) return;
   if (g.__previewPoolTimer) return;
   const t = setInterval(() => {
     sweepPool().catch((e) => console.warn("[preview-pool] sweep failed:", e));

@@ -1,0 +1,17 @@
+# Drives opensession-watchdog.service every 60 seconds. Repo copy only —
+# installed (cp + systemctl daemon-reload + enable --now) at rollout, never by
+# the app itself. The service it triggers is a no-op outside a recent
+# self-deploy window (see opensession-watchdog.service).
+[Unit]
+Description=OpenSession self-deploy watchdog — probe every 60s
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=60
+# Tight accuracy so the 3-consecutive-failures threshold means ~3 minutes,
+# not "whenever systemd got around to it".
+AccuracySec=5
+Unit=opensession-watchdog.service
+
+[Install]
+WantedBy=timers.target

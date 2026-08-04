@@ -17,7 +17,7 @@
  * schema drift after an opencode upgrade, corrupt rows) degrades to [] so a
  * transcript read can never take a prompt path down.
  */
-import { homeDir } from "./paths";
+import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
 import { envAlias } from "./rename-compat";
 import {
   existsSync,
@@ -76,10 +76,10 @@ export function __setOpencodeDbPathForTest(path: string): string {
 /** ocSessionId → absolute DB path, written by the runner, read by resolvers. */
 const OPENCODE_DB_MAP_PATH =
   envAlias("OPENSESSION_OPENCODE_DB_MAP", "BACKSTAGE_OPENCODE_DB_MAP") ||
-  `${HOME}/.opensession-chats/opencode/db-map.json`;
+  `${OPENSESSION_CHATS_DIR}/opencode/db-map.json`;
 
 const OPENAI_DATA_ROOT = `${HOME}/.opensession-opencode/openai-data`;
-const SHARD_DB_DIR = `${HOME}/.opensession-chats/opencode/db`;
+const SHARD_DB_DIR = `${OPENSESSION_CHATS_DIR}/opencode/db`;
 
 function readDbMap(): Record<string, string> {
   try {
@@ -187,7 +187,7 @@ export function resolveOpencodeDbFor(ocSessionId: string | null | undefined): st
 /** ocSessionId → unified session id, written by the runner call sites. */
 let OPENCODE_BKS_MAP_PATH =
   envAlias("OPENSESSION_OPENCODE_BKS_MAP", "BACKSTAGE_OPENCODE_BKS_MAP") ||
-  `${HOME}/.opensession-chats/opencode/bks-map.json`;
+  `${OPENSESSION_CHATS_DIR}/opencode/bks-map.json`;
 
 /**
  * Test seam (bun tests only): same contract as __setOpencodeDbPathForTest —

@@ -162,11 +162,14 @@ it from descending into chaos:
   detached engine turns reattach, but they still churn active sessions, so do
   this once after the backend change rather than after every save. Frontend
   changes never need it: the in-process watcher rebuilds the bundle live.
-- Want isolation for a risky/breaking change? Make a worktree by hand and run a
-  second instance on another `PORT` — but note `OPENSESSION_DEV=1` only swaps the
-  frontend build; it does **not** yet disable the Slack/Linear/Stripe loops,
-  webhook server, or schedulers, so a naive second instance double-sends. (A real
-  isolated dev mode is a future task.)
+- Want isolation for a risky/breaking change? Boot a real dev instance:
+  `OPENSESSION_DEV=1` now gates the FULL dev mode — no agent loops, webhook
+  server, schedulers, automation seeding, detached-server adoption, or prewarm
+  — and it refuses to boot without `OPENSESSION_STATE_DIR` (or a chats-dir
+  override), so it can never touch live state or steal the run-rpc socket. Add
+  `OPENSESSION_DEMO=1` for synthetic demo data. The repo's `.opensession/start.sh`
+  wires all of this for the session Preview button; see
+  docs/self-development.md.
 
 ## Frontend UI system (Base UI + Tailwind + Motion)
 

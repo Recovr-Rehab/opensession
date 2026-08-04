@@ -75,14 +75,25 @@ export function envAlias(newKey: string, oldKey: string): string | undefined {
  * window, so a long-lived process never needs to see the rename happen.
  */
 export function statePath(newRel: string, oldRel: string): string {
-	const home = process.env.HOME || homedir();
-	const cacheKey = `${home}|${newRel}`;
+	// State isolation (dev/demo instances, src/server/dev-mode.ts): a
+	// non-empty OPENSESSION_STATE_DIR is a FRESH namespace — every state name
+	// resolves strictly under it at its new name, with NO dual-read fallback
+	// to the legacy names (an isolated instance must never read, let alone
+	// write, the live instance's home-dir state). Unset ⇒ behavior identical
+	// to before. The cache is keyed on the effective state root, matching the
+	// per-(HOME, name) contract above.
+	const stateRoot = process.env.OPENSESSION_STATE_DIR;
+	const root = stateRoot || process.env.HOME || homedir();
+	const cacheKey = `${root}|${newRel}`;
 	const cached = resolvedPaths.get(cacheKey);
 	if (cached) return cached;
-	const newPath = `${home}/${newRel}`;
-	const oldPath = `${home}/${oldRel}`;
-	const chosen =
-		existsSync(newPath) || !existsSync(oldPath) ? newPath : oldPath;
+	const newPath = `${root}/${newRel}`;
+	const oldPath = `${root}/${oldRel}`;
+	const chosen = stateRoot
+		? newPath
+		: existsSync(newPath) || !existsSync(oldPath)
+			? newPath
+			: oldPath;
 	resolvedPaths.set(cacheKey, chosen);
 	return chosen;
 }

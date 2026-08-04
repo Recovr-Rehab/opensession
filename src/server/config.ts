@@ -61,6 +61,10 @@ export interface CloudSection {
   token?: string;
 }
 
+/** How NEW sessions on a `sharedCheckout` repo get their working dir — see
+ *  configuredSelfDev(). */
+export type SelfDevMode = "shared" | "worktree";
+
 /** A `repos` entry in config.json — partial; merged over the built-in repo
  *  with the same id, or (with at least `repo`) adds a new one. */
 export interface RepoSection {
@@ -171,6 +175,8 @@ export interface BackstageConfig {
   server?: ServerSection;
   paths?: PathsSection;
   cloud?: CloudSection;
+  /** Working-dir policy for `sharedCheckout` repos' new sessions. */
+  selfDev?: SelfDevMode;
   repos?: Record<string, RepoSection>;
   identity?: IdentitySection;
   integrations?: IntegrationsSection;
@@ -379,6 +385,21 @@ function parseConfig(text: string): BackstageConfig {
       });
     }
 
+    // Unknown values fall back to the default ("shared") but warn — a typo'd
+    // "worktree" silently running sessions in the live checkout would defeat
+    // the whole point of setting the flag. Parse results are cached by
+    // file mtime (see getConfig), so this warns once per config change, not
+    // once per read.
+    if (raw.selfDev !== undefined) {
+      if (raw.selfDev === "shared" || raw.selfDev === "worktree") {
+        cfg.selfDev = raw.selfDev;
+      } else {
+        console.warn(
+          `[config] invalid selfDev value ${JSON.stringify(raw.selfDev)} (expected "shared" or "worktree") — using "shared"`,
+        );
+      }
+    }
+
     const repos = obj(raw.repos);
     if (repos) {
       const parsed: Record<string, RepoSection> = {};
@@ -503,6 +524,20 @@ export function configuredPaths(): ResolvedPaths {
       p.mcpConfig ||
       (isLocalProfile() ? `${localRoot}/mcp-config.json` : `${OPENSESSION_ROOT}/mcp-config.json`),
   };
+}
+
+/**
+ * How NEW sessions on a `sharedCheckout` repo get their working dir.
+ * "shared" (the default, and the behavior with no config): sessions work
+ * directly in the repo's live main checkout — the self-hosting workflow.
+ * "worktree": the shared-checkout special case stops applying at
+ * session-creation time and self-repo sessions get isolated per-branch
+ * worktrees exactly like every other repo (see
+ * sharedCheckoutForNewSessions in worktree.ts, the sole decision point).
+ * Existing sessions keep whatever dir their session file records either way.
+ */
+export function configuredSelfDev(): SelfDevMode {
+  return getConfig().selfDev || "shared";
 }
 
 export function configuredCloud(): ResolvedCloud {

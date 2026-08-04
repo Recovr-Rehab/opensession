@@ -14,6 +14,7 @@
  */
 
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
+import { isDevInstance } from "./dev-mode";
 import { createNodesMcpServer } from "../agents/slack/nodes-tools";
 import { createAdminMcpServer } from "../agents/slack/admin-tools";
 import { createHumansMcpServer } from "../agents/slack/humans-tools";
@@ -31,6 +32,7 @@ import { createSearchMcpServer } from "../agents/slack/search-tools";
 import { createAssetsMcpServer } from "../agents/slack/assets-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createNotesMcpServer } from "../agents/slack/notes-tools";
+import { createSelfDeployMcpServer } from "./self-deploy";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
 import { repoForPath, REPOS } from "./worktree";
@@ -107,6 +109,17 @@ export function interactiveMcpServers(
 		// Workspace-wide collaborative notes. Read/write/delete is interactive-only
 		// because notes can contain sensitive material and persistent instructions.
 		"opensession-notes": createNotesMcpServer(),
+		// Self-deploy: ff-only deploy of THIS instance to a sha + restart, with a
+		// last-known-good pin, health gate, and watchdog-covered rollback
+		// (deploy/self-deploy.sh). Interactive-only like every sibling — a deploy
+		// restarts the live server, so the automation fail-closed gate in the
+		// run-rpc builder below must keep withholding it from automation runs.
+		// Withheld from dev instances too: the script targets the PRODUCTION
+		// service/state (opensession.service, ~/.opensession-deploy), so a
+		// throwaway preview must never carry a tool that restarts prod.
+		...(isDevInstance()
+			? {}
+			: { "opensession-self-deploy": createSelfDeployMcpServer({ user: createdBy }) }),
 		// Human-in-the-loop: ask a teammate and fold the answer back into this
 		// session. Needs the session id so the answer routes home. Withheld (like
 		// the others) from automation runs — see the runSessionPrompt call site.

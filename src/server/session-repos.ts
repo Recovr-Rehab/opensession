@@ -12,6 +12,7 @@ import {
 	prepareAttachedWorktree,
 	repoForPath,
 	REPOS,
+	sharedCheckoutForNewSessions,
 	worktreeHasWork,
 } from "./worktree";
 import { hasRemoteWorkspace } from "./sandbox";
@@ -117,7 +118,7 @@ export function buildBranchNote(session: {
 	const repo = repoForPath(session.worktreeDir);
 	// Shared-checkout repos (backstage) and main-checkout cwds have their own
 	// rules; this note is for isolated per-branch worktrees only.
-	if (repo.sharedCheckout || session.worktreeDir === repo.repo)
+	if (sharedCheckoutForNewSessions(repo) || session.worktreeDir === repo.repo)
 		return undefined;
 	return [
 		"## Branch discipline (shared worktree)",
@@ -417,7 +418,7 @@ export async function switchPrimaryRepo(
 	const target = getRepo(repoId);
 	let wtPath: string;
 	let branch: string;
-	if (target.sharedCheckout) {
+	if (sharedCheckoutForNewSessions(target)) {
 		// Backstage: sessions edit the live main checkout on its default branch.
 		wtPath = target.repo;
 		branch = target.defaultBranch;
@@ -465,7 +466,7 @@ export async function switchPrimaryRepo(
 				repo: target.id,
 				// A shared-checkout repo has no per-chat worktree, so the template
 				// clears instead of pointing siblings at the live main checkout.
-				...(target.sharedCheckout ? {} : { branch, worktreeDir: wtPath }),
+				...(sharedCheckoutForNewSessions(target) ? {} : { branch, worktreeDir: wtPath }),
 			});
 	}
 	return { repo: target.id, branch, worktreeDir: wtPath };

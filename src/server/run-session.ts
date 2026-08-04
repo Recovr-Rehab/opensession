@@ -32,6 +32,7 @@ import {
 	selfImproveMcpForSession,
 } from "./automations";
 import { defaultRepo } from "./config";
+import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
 import {
 	buildChatContextNote,
@@ -2315,8 +2316,9 @@ export function sessionMentionsNote(
 }
 
 // Loop ticker: fire due session loops (skips busy/archived sessions).
-// Guarded so a hot reload doesn't stack a second interval.
-if (!g.__backstageBooted && !isLocalProfile()) {
+// Guarded so a hot reload doesn't stack a second interval. Dev instances
+// never fire loops (real engine runs — see src/server/dev-mode.ts).
+if (!g.__backstageBooted && !isLocalProfile() && !isDevInstance()) {
 	setInterval(() => {
 		for (const session of getCachedSessions()) {
 			const loop = session.loop;

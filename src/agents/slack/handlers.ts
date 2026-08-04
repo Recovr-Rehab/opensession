@@ -59,6 +59,7 @@ import {
   ensureAskCheckout,
   reviveWorktree,
   resolveUniqueBranch,
+  sharedCheckoutForNewSessions,
   createWorktree as createRepoWorktree,
 } from "../../server/worktree";
 import { sessionForThread } from "../../server/slack-links";
@@ -1700,7 +1701,7 @@ Please help with this request. Start by exploring the codebase to understand wha
       branch = await generateBranchName(cleanText, context);
       worktreeDir = await createWorktree(branch, user, cleanText);
       where = `I'm now in a worktree (branch: ${branch}) for this task.`;
-    } else if (repo.sharedCheckout) {
+    } else if (sharedCheckoutForNewSessions(repo)) {
       worktreeDir = repo.repo;
       where = `This task is in the ${repo.id} repo — I'm working directly in its live shared checkout on ${repo.defaultBranch} (shared with other sessions: stage only my own files, commit + push directly, never reset or switch branches).`;
     } else {

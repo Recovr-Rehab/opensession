@@ -34,6 +34,7 @@ import {
 	localRequestAllowed,
 	setLocalProfileIdentity,
 } from "./src/server/profile";
+import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
 import { verifiedCloudIdentity } from "./src/server/cloud-proxy";
 import { assertLocalEngineCredentials } from "./src/server/local-engine-auth";
 import { assertLocalEngineRuntime } from "./src/server/opencode-runner";
@@ -88,6 +89,20 @@ const PORT = parseInt(process.env.PORT || "3850");
 const HOST = process.env.HOST || "127.0.0.1";
 const HOME = homeDir();
 const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
+
+// A dev instance (OPENSESSION_DEV=1, src/server/dev-mode.ts) sharing the live
+// state is the fleet-outage class bug: the run-rpc unix socket lives under the
+// chats dir, and a second instance would unlink and steal it from the
+// production process (2026-07-16/17). Refuse to boot without isolation.
+// Module-import side effects above run BEFORE this check, so run-rpc.ts
+// carries the same fail-closed guard around the socket bind itself.
+{
+	const devBootError = devInstanceBootError();
+	if (devBootError) {
+		console.error(devBootError);
+		process.exit(1);
+	}
+}
 
 if (isLocalProfile() && !isLoopbackHostname(HOST)) {
 	throw new Error("OPENSESSION_PROFILE=local only supports a loopback HOST");
@@ -474,8 +489,14 @@ async function loadAgents(): Promise<AgentModule[]> {
 // real restart reloads their code, and that restart is now graceful, below).
 if (!g.__backstageBooted) {
 	const localProfile = isLocalProfile();
+	// Dev instances (src/server/dev-mode.ts) boot like the local profile here:
+	// no agents, no webhook intake, no schedulers/sweeps, no detached-server
+	// adoption — a second instance next to production must never double-send
+	// or steal live runs. State writes are additionally isolated (the
+	// devInstanceBootError guard at the top of this file enforces it).
+	const devInstance = isDevInstance();
 	let detachedAdoption: Promise<number> | undefined;
-	if (!localProfile) {
+	if (!localProfile && !devInstance) {
 	// Detached engine servers (src/server/opencode-detach.ts): opt this — and
 	// only this — process into spawning `opencode serve` in transient systemd
 	// user scopes, so in-flight turns survive a `systemctl restart`. Runner-host
@@ -595,14 +616,21 @@ if (!g.__backstageBooted) {
 	} else {
 		agents = [];
 		g.__agents = agents;
-		console.log("[profile] Local profile active: background agents and schedulers are disabled");
+		console.log(
+			localProfile
+				? "[profile] Local profile active: background agents and schedulers are disabled"
+				: "[dev-mode] Dev instance: background agents, webhooks and schedulers are disabled",
+		);
 	}
 
 	// Resume Claude runs a previous process left in-flight (restart/crash), then
 	// wake any session that finished its turn during the shutdown drain (so the
 	// journal no longer held it). Together these wake every session that was
 	// active before the restart.
-	setTimeout(() => {
+	// Dev instances skip the whole block: their isolated namespace has nothing
+	// to resume, and resumeInterruptedRuns/restorePromptQueues re-prompt and
+	// re-deliver — the classic double-send if any state were shared.
+	if (!devInstance) setTimeout(() => {
 		void (async () => {
 		// Adopt detached `opencode serve` scopes that survived the restart FIRST —
 		// resumeInterruptedRuns reattaches journaled runs to these adopted pool
@@ -691,8 +719,9 @@ if (!g.__backstageBooted) {
 	}, 1500);
 
 	// Ongoing hygiene (every 6h): remove worktrees of sessions that were manually
-	// archived more than 14 days ago and have no WIP.
-	if (!localProfile) setInterval(
+	// archived more than 14 days ago and have no WIP. Destructive on the shared
+	// filesystem/docker daemon, so dev instances skip it too.
+	if (!localProfile && !devInstance) setInterval(
 		async () => {
 			try {
 				const removed = await sweepArchivedWorktrees(getAllSessions(), 14);
@@ -762,8 +791,10 @@ if (!g.__backstageBooted) {
 		);
 		// Snapshot active sessions BEFORE the drain — the drain lets runs finish
 		// their turn and clear themselves from the journal, so this is the only
-		// record of sessions that should be woken on the next boot.
-		snapshotActiveSessions();
+		// record of sessions that should be woken on the next boot. Dev
+		// instances skip it (nothing resumes them, and a snapshot must never
+		// make the production boot try to wake dev sessions).
+		if (!devInstance) snapshotActiveSessions();
 		// Tell connected UIs we're going down so they can show a "restarting" modal
 		// and auto-refresh once the new instance is up (instead of silently queuing
 		// messages that would be lost). Brief pause to let the frames flush.
@@ -773,10 +804,14 @@ if (!g.__backstageBooted) {
 		// post-restart toast; the `by` here feeds the pre-restart overlay.
 		const restartBy = sharedCheckoutEditors();
 		try {
-			writeFileSync(
-				join(homedir(), ".opensession-last-restart.json"),
-				JSON.stringify({ by: restartBy || "", at: new Date().toISOString(), signal }),
-			);
+			// homedir-shared state (does not follow OPENSESSION_STATE_DIR) — a
+			// dev instance must not overwrite the production restart marker.
+			if (!devInstance) {
+				writeFileSync(
+					join(homedir(), ".opensession-last-restart.json"),
+					JSON.stringify({ by: restartBy || "", at: new Date().toISOString(), signal }),
+				);
+			}
 		} catch {}
 		broadcastToAll({ type: "server_restarting", ...(restartBy ? { by: restartBy } : {}) });
 		if (!timersDead) await new Promise((r) => setTimeout(r, 150));
@@ -872,11 +907,22 @@ if (!g.__backstageBooted) {
 	// One-time (marker-guarded): when GitHub web sign-in is active, backfill
 	// createdByLogin on pre-existing sessions so they belong to the same
 	// verified person after the identity switch. No-op while the feature is
-	// off — flipping it on in config takes effect at the next boot.
+	// off — flipping it on in config takes effect at the next boot. Dev
+	// instances skip it: a differently-configured dev boot must never
+	// re-decide the migration over its (or worse, shared) session files.
 	try {
-		migrateSessionsToGithubUser();
+		if (!devInstance) migrateSessionsToGithubUser();
 	} catch (e) {
 		console.error("[web-auth] session migration failed:", e);
+	}
+
+	// Demo dataset hook: seeds synthetic sessions/state in-process (live asks
+	// can't be faked from disk). The module is optional — type-erased dynamic
+	// import so the tree typechecks without it, catch so boot never dies.
+	if (process.env.OPENSESSION_DEMO === "1") {
+		void import("./src/server/demo" as string)
+			.then((m) => (m as { startDemo: () => Promise<void> }).startDemo())
+			.catch((e) => console.error("[demo] startDemo failed:", e));
 	}
 
 	g.__backstageBooted = true;

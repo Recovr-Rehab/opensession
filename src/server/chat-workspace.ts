@@ -88,6 +88,14 @@ function persist(chatId: string, workspaceId: string): void {
  * the link through best-effort — never throws, never blocks the scan.
  */
 export function ensureChatWorkspaces(sessions: UnifiedSession[]): void {
+  // Never file from a test process: bun test runs every suite in ONE process,
+  // so a fixture session listed by any test would get filed through whatever
+  // dirs the module snapshots captured — for years of full-suite runs that
+  // minted fixture workspaces ("Review cache test", demo sessions, …) into
+  // the operator's LIVE ~/.opensession-workspaces (observed 2026-08-04). Same
+  // guard shape as run-rpc.ts's test gate; prod never runs NODE_ENV=test.
+  if (process.env.NODE_ENV === "test" || /\.test\.tsx?$/.test(Bun.main || ""))
+    return;
   // Archived chats don't render, so they don't need one until they come back:
   // the same sweep files them on the scan right after an un-archive.
   const orphans = sessions.filter(

@@ -37,6 +37,7 @@
  */
 
 import { homeDir } from "./paths";
+import { isDevInstance } from "./dev-mode";
 import { chmodSync, readFileSync } from "fs";
 import { audit } from "./audit";
 import { configuredIdentity, getConfig } from "./config";
@@ -500,7 +501,10 @@ function startGithubTokenRefresher(): void {
   }, REFRESH_TICK_MS);
   void refreshExpiringGithubTokens();
 }
-startGithubTokenRefresher();
+// Dev instances must never run the refresher: a refresh ROTATES the shared
+// refresh-token string, so a second instance racing production's ticker
+// invalidates production's grant (dead until the user reconnects).
+if (!isDevInstance()) startGithubTokenRefresher();
 
 // ── Redirect (authorization-code) flow ───────────────────────────────────────
 

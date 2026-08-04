@@ -48,7 +48,8 @@ import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUr
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
 import { ownedWorktree } from "./chat-workspace";
 import { resolvePlainWorkspace } from "./workspace-resolve";
-import { createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch, worktreeHeadBranch, worktreePathFor } from "./worktree";
+import { createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor } from "./worktree";
+import { sanitizeBranchSlug } from "./suggest-branch";
 import { BOOT_ID, allClients, b64decode, b64encode, broadcastToNote, broadcastToSession, joinNote, joinSession, leaveNote, leaveSession, preparingWorkspaces, revalidateLocalClients, setClientAway } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import { userMatchesAny } from "./shared/user-mappings";
@@ -1348,7 +1349,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// lookup below would silently reuse the worktree anyway —
 					// re-submitted prompt slugs and existing branches picked in the
 					// unscoped palette both hit this). Only then mint a fresh one.
-					if (!isAsk && !forkSource && !fromPr && !repo.sharedCheckout && branch) {
+					if (!isAsk && !forkSource && !fromPr && !sharedCheckoutForNewSessions(repo) && branch) {
 						const existingWt = (await listWorktrees(repo.id)).find(
 							(w) => w.branch === branch,
 						)?.path;
@@ -1430,7 +1431,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// checkout exists; only the first-ever create pays a worktree
 						// add (ensureAskCheckout).
 						wtPath = await ensureAskCheckout(repo.id);
-					} else if (repo.sharedCheckout) {
+					} else if (sharedCheckoutForNewSessions(repo)) {
 						// Backstage: code sessions edit the live main checkout on the
 						// default branch (hot-reloads in the running server). No worktree.
 						wtPath = repo.repo;
@@ -1438,6 +1439,14 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// Share the workspace's owned worktree (parallel chats, one branch).
 						wtPath = workspace.worktreeDir;
 					} else {
+						// selfDev:"worktree" only: the client may omit a branch for a
+						// repo it still believes is shared-checkout — derive one so the
+						// worktree path never degenerates to `<wtPrefix>-`. Scoped to
+						// sharedCheckout repos so every other repo's path is untouched.
+						if (!branch && repo.sharedCheckout)
+							branch =
+								sanitizeBranchSlug(prompt.trim().split("\n")[0]) ||
+								`session-${Date.now().toString(36)}`;
 						// New/stacked worktree. Stack branches off the workspace's branch
 						// so stacked PRs line up; otherwise branch off origin/default.
 						const worktrees = await listWorktrees(repo.id);
@@ -1488,7 +1497,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						!workspace.worktreeDir &&
 						!isAsk &&
 						!isScratch &&
-						(!repo.sharedCheckout || fromPr) &&
+						(!sharedCheckoutForNewSessions(repo) || fromPr) &&
 						(chatMode !== "stack" || !workspace.branch)
 					) {
 						updateWorkspace(workspace.id, {
@@ -1504,7 +1513,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							? branch
 							: isAsk || isScratch
 								? ""
-								: repo.sharedCheckout
+								: sharedCheckoutForNewSessions(repo)
 									? repo.defaultBranch
 									: workspace?.worktreeDir === wtPath
 										? workspace.branch || branch

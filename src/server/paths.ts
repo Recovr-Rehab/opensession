@@ -33,6 +33,12 @@ function resolveChatsDir(): string {
   // the live store — set it BEFORE importing any src/server module).
   const fromEnv = envAlias("OPENSESSION_CHATS_DIR", "BACKSTAGE_CHATS_DIR");
   if (fromEnv) return fromEnv;
+  // Isolated state namespace (dev/demo instances — see rename-compat
+  // statePath): everything lives under OPENSESSION_STATE_DIR, fresh, with no
+  // legacy fallbacks. The run-rpc unix socket derives from this dir, so the
+  // isolation also keeps a second instance off the live instance's socket.
+  const stateRoot = process.env.OPENSESSION_STATE_DIR;
+  if (stateRoot) return `${stateRoot}/.opensession-chats`;
   if (isLocalProfile()) return `${localProfileRoot()}/sessions`;
   // `~/.opensession-chats` → `~/.backstage-chats` dual-read, then the
   // pre-workspaces legacy name, then create-new at the primary name.
