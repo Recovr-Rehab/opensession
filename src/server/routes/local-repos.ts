@@ -8,6 +8,7 @@ import {
 } from "fs";
 import { basename } from "path";
 import { configPath, configuredRepos, type RepoSection } from "../config";
+import { rawConfig, withConfigMutationLock } from "../config-mutation";
 import { OPENSESSION_CHATS_DIR } from "../paths";
 import { isLocalProfile, localProfileRoot } from "../profile";
 import { writeJsonAtomic } from "../shared/atomic-write";
@@ -55,26 +56,10 @@ export function localCloneUrlAllowed(url: string): boolean {
   return CLONE_URL.test(url);
 }
 
-const repoMutationState: { chain: Promise<unknown> } = ((globalThis as any)
-  .__localRepoMutationState ??= { chain: Promise.resolve() });
-function withRepoMutationLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = repoMutationState.chain.then(fn, fn);
-  repoMutationState.chain = run.then(
-    () => {},
-    () => {},
-  );
-  return run;
-}
-
-function rawConfig(): Record<string, unknown> {
-  const path = configPath();
-  if (!existsSync(path)) return {};
-  const parsed = JSON.parse(readFileSync(path, "utf-8"));
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Local config must contain a JSON object");
-  }
-  return parsed as Record<string, unknown>;
-}
+// The config mutation lock + raw read moved to ../config-mutation so the
+// /api/setup routes serialize against these repo writes (same globalThis
+// chain — behavior here is unchanged).
+const withRepoMutationLock = withConfigMutationLock;
 
 function persistRepos(repos: Record<string, RepoSection>): void {
   const config = rawConfig();
@@ -103,7 +88,7 @@ export function githubRepoFromRemote(remote: string): string | undefined {
   return match?.[1];
 }
 
-async function inspectRepo(repoPath: string): Promise<{
+export async function inspectRepo(repoPath: string): Promise<{
   path: string;
   defaultBranch: string;
   ghRepo?: string;

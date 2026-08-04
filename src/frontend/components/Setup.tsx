@@ -1,8 +1,8 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
-import { CopyCheck, useCopy } from "../ui/copy";
-import { LoadingState } from "../ui/state";
+import { InlineAlert, LoadingState } from "../ui/state";
 import {
 	SettingCard,
 	SettingRow,
@@ -14,126 +14,32 @@ import {
 	SettingsHint,
 	SettingsPanel,
 	SettingsSection,
+	settingsInputClass,
 } from "../ui/settings";
-import { IconCopy } from "./icons";
+import { Switch } from "../ui/switch";
+import { toast } from "../ui/toast";
 import { DEFAULT_DOC_TITLE, docTitle } from "../lib/brand";
+import { ReposSection } from "./SetupRepos";
+import { TeamSection } from "./SetupTeam";
+import {
+	Code,
+	CopyableCode,
+	StateChip,
+	setupRequest,
+	type ChipTone,
+	type SetupGithub,
+	type SetupIntegration,
+	type SetupStatus,
+} from "./setup-shared";
 
-// Settings → Setup: per-integration onboarding state with concrete connect
-// steps. On a fresh install nothing else in the UI says how to wire up Linear,
+// Settings → Setup: per-integration onboarding state with real configuration
+// forms. On a fresh install nothing else in the UI says how to wire up Linear,
 // Plain, Slack, Stripe, Grafana or GitHub — this page turns the integration
-// registry (surfaced by GET /api/setup/status) into a checklist plus a
-// numbered how-to per integration. Read-only: the actual wiring happens in
-// ~/.opensession.env + the `opensession` CLI, which is what the steps say.
+// registry (GET /api/setup/status) into a checklist plus a form per
+// integration: paste the credentials, flip the enable switch, Save, and
+// restart from the banner. Repos and the team roster are managed here too.
 
-interface SetupEnvVar {
-	name: string;
-	required: boolean;
-	description: string;
-	present: boolean;
-}
-
-interface SetupIntegration {
-	id: string;
-	label: string;
-	doc: string;
-	enabled: boolean;
-	env: SetupEnvVar[];
-	missingRequired: string[];
-}
-
-interface SetupStatus {
-	publicBaseUrl: string;
-	repos: { id: string; label: string; path: string }[];
-	team: { count: number; names: string[] };
-	github: {
-		userPrAuth: boolean;
-		clientIdConfigured: boolean;
-		redirectFlowAvailable: boolean;
-		callbackUrl: string;
-		botTokenPresent: boolean;
-	};
-	integrations: SetupIntegration[];
-}
-
-type ChipTone = "on" | "warn" | "off";
-
-const CHIP_DOTS: Record<ChipTone, string> = {
-	on: "var(--green)",
-	warn: "var(--yellow)",
-	off: "var(--text-faint)",
-};
-
-function StateChip({ tone, label }: { tone: ChipTone; label: string }) {
-	return (
-		<span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-label text-dim">
-			<span
-				className="h-1.5 w-1.5 rounded-full"
-				style={{ background: CHIP_DOTS[tone] }}
-			/>
-			{label}
-		</span>
-	);
-}
-
-/** Inline monospace token — env var names, CLI commands, paths. Sits as a
- * well on the raised card surface so it reads as literal text to type. */
-function Code({
-	className,
-	children,
-}: {
-	className?: string;
-	children: React.ReactNode;
-}) {
-	return (
-		<code
-			className={cn(
-				"whitespace-nowrap rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[0.92em] text-fg",
-				className,
-			)}
-		>
-			{children}
-		</code>
-	);
-}
-
-/** The callback URL and similar values you paste elsewhere: mono well + the
- * house copy affordance (inline check swap + toast). */
-function CopyableCode({ value }: { value: string }) {
-	const { copied, copy } = useCopy();
-	return (
-		<button
-			type="button"
-			className="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-surface py-0.5 pl-1.5 pr-1 text-left font-mono text-[0.92em] text-fg transition-colors hover:bg-active"
-			onClick={() => copy(value, { toast: "Copied" })}
-			title="Copy"
-		>
-			<span className="min-w-0 break-all [overflow-wrap:anywhere] whitespace-normal">
-				{value}
-			</span>
-			<CopyCheck
-				copied={copied}
-				size={14}
-				className="shrink-0 text-faint"
-				idle={<IconCopy size={14} />}
-			/>
-		</button>
-	);
-}
-
-function Steps({ children }: { children: React.ReactNode }) {
-	return <ol className="m-0 flex list-none flex-col gap-2.5 p-0">{children}</ol>;
-}
-
-function Step({ n, children }: { n: number; children: React.ReactNode }) {
-	return (
-		<li className="flex items-start gap-2.5 text-supporting leading-relaxed text-dim">
-			<span className="mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-semibold tabular-nums text-faint">
-				{n}
-			</span>
-			<span className="min-w-0 flex-1">{children}</span>
-		</li>
-	);
-}
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 function integrationState(i: SetupIntegration): { tone: ChipTone; label: string } {
 	if (i.enabled && i.missingRequired.length === 0) return { tone: "on", label: "On" };
@@ -141,7 +47,7 @@ function integrationState(i: SetupIntegration): { tone: ChipTone; label: string 
 	return { tone: "off", label: "Off" };
 }
 
-function githubAuthState(g: SetupStatus["github"]): { tone: ChipTone; label: string } {
+function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string } {
 	if (g.userPrAuth && g.clientIdConfigured)
 		return {
 			tone: "on",
@@ -174,16 +80,133 @@ function ChecklistRow({
 	);
 }
 
-function IntegrationCard({ integration }: { integration: SetupIntegration }) {
+/** One env var of an integration: name + badges + description over a
+ * password input. The input never echoes a stored value — "set" is the badge
+ * and the placeholder; an empty input means "keep what's there", and the
+ * Clear affordance is the only way to unset. */
+function EnvVarField({
+	envVar,
+	value,
+	cleared,
+	onChange,
+	onToggleClear,
+}: {
+	envVar: SetupIntegration["env"][number];
+	value: string;
+	cleared: boolean;
+	onChange: (value: string) => void;
+	onToggleClear: () => void;
+}) {
+	return (
+		<div className="flex min-w-0 flex-col gap-1">
+			<div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+				<Code>{envVar.name}</Code>
+				{envVar.required && (
+					<span className="text-meta font-medium text-yellow">required</span>
+				)}
+				{envVar.present && !cleared && <span className="text-meta text-green">set</span>}
+				{cleared && <span className="text-meta font-medium text-red">cleared on save</span>}
+				<span className="min-w-0 flex-1 text-meta text-faint">{envVar.description}</span>
+				{envVar.present && (
+					<button
+						type="button"
+						className="focus-ring shrink-0 rounded-sm text-meta font-medium text-faint underline underline-offset-2 transition-colors hover:text-fg"
+						onClick={onToggleClear}
+					>
+						{cleared ? "Keep" : "Clear"}
+					</button>
+				)}
+			</div>
+			<input
+				type="password"
+				className={cn(settingsInputClass, "font-mono")}
+				value={value}
+				onChange={(e) => onChange(e.target.value)}
+				placeholder={
+					cleared ? "will be unset" : envVar.present ? "••• set" : "not set"
+				}
+				aria-label={envVar.name}
+				autoComplete="new-password"
+				autoCapitalize="none"
+				spellCheck={false}
+			/>
+		</div>
+	);
+}
+
+function IntegrationCard({
+	integration,
+	onSaved,
+}: {
+	integration: SetupIntegration;
+	onSaved: (updated: SetupIntegration, restartRequired: boolean) => void;
+}) {
 	const state = integrationState(integration);
 	const configured = state.tone === "on";
+	const [enabled, setEnabled] = useState(integration.enabled);
+	const [typed, setTyped] = useState<Record<string, string>>({});
+	const [cleared, setCleared] = useState<Record<string, boolean>>({});
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	// Track the server truth when a refetch lands (post-restart, other tab).
+	useEffect(() => {
+		setEnabled(integration.enabled);
+	}, [integration.enabled]);
+
+	const typedKeys = integration.env
+		.map((e) => e.name)
+		.filter((name) => (typed[name] ?? "").trim() !== "");
+	const clearedKeys = integration.env
+		.filter((e) => e.present && cleared[e.name] && !(typed[e.name] ?? "").trim())
+		.map((e) => e.name);
+	const dirty =
+		enabled !== integration.enabled || typedKeys.length > 0 || clearedKeys.length > 0;
+
+	async function handleSave() {
+		if (!dirty || saving) return;
+		setSaving(true);
+		setError(null);
+		try {
+			const env: Record<string, string> = {};
+			// Only the keys the user touched ride: typed values (whitespace
+			// stripped — pasted keys often carry newlines) and explicit clears.
+			for (const name of typedKeys) env[name] = (typed[name] ?? "").replace(/\s+/g, "");
+			for (const name of clearedKeys) env[name] = "";
+			const body = await setupRequest<{
+				integration: SetupIntegration;
+				restartRequired: boolean;
+			}>(`/api/setup/integrations/${encodeURIComponent(integration.id)}`, {
+				method: "PUT",
+				json: {
+					...(enabled !== integration.enabled ? { enabled } : {}),
+					...(Object.keys(env).length > 0 ? { env } : {}),
+				},
+			});
+			setTyped({});
+			setCleared({});
+			toast(`${integration.label} saved`);
+			onSaved(body.integration, body.restartRequired !== false);
+		} catch (e: any) {
+			setError(e.message);
+		} finally {
+			setSaving(false);
+		}
+	}
+
 	return (
 		<SettingsSection className="mb-3">
-			<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+			<div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
 				<div className="min-w-0 flex-1 text-item-title font-medium text-fg">
 					{integration.label}
 				</div>
 				<StateChip tone={state.tone} label={state.label} />
+				<Switch
+					checked={enabled}
+					onCheckedChange={setEnabled}
+					disabled={saving}
+					aria-label={`Enable ${integration.label}`}
+				/>
 			</div>
 			{integration.missingRequired.length > 0 && (
 				<div className="mt-1 text-supporting text-dim">
@@ -196,139 +219,362 @@ function IntegrationCard({ integration }: { integration: SetupIntegration }) {
 					))}
 				</div>
 			)}
-			{configured ? (
-				<div className="mt-1 text-supporting text-dim">
-					Connected and running. Full guide: <Code>{integration.doc}</Code> in the
-					checkout.
-				</div>
-			) : (
-				<div className="mt-3">
-					<Steps>
-						<Step n={1}>
-							Obtain the {integration.label} credentials — <Code>{integration.doc}</Code>{" "}
-							in the checkout is the full walkthrough.
-						</Step>
-						<Step n={2}>
-							Add {integration.env.length === 1 ? "the key" : "the keys"} to{" "}
-							<Code>~/.opensession.env</Code>:
-							<span className="mt-1.5 flex flex-col gap-1">
-								{integration.env.map((e) => (
-									<span
-										key={e.name}
-										className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
-									>
-										<Code>{e.name}</Code>
-										{e.required && (
-											<span className="text-meta font-medium text-yellow">required</span>
-										)}
-										{e.present && <span className="text-meta text-green">set</span>}
-										<span className="min-w-0 text-meta text-faint">{e.description}</span>
-									</span>
-								))}
-							</span>
-						</Step>
-						<Step n={3}>
-							Turn it on: <Code>opensession integrations enable {integration.id}</Code>
-						</Step>
-						<Step n={4}>
-							Load it: <Code>opensession restart</Code>
-						</Step>
-					</Steps>
-				</div>
-			)}
+			<div className="mt-1 text-supporting leading-relaxed text-dim">
+				{configured ? (
+					<>
+						Connected and running. Full guide: <Code>{integration.doc}</Code> in the
+						checkout.
+					</>
+				) : (
+					<>
+						Get the {integration.label} credentials — <Code>{integration.doc}</Code>{" "}
+						in the checkout is the full walkthrough — paste them below, flip the
+						switch on, and Save.
+					</>
+				)}
+			</div>
+			<div className="mt-3 flex flex-col gap-2.5">
+				{integration.env.map((e) => (
+					<EnvVarField
+						key={e.name}
+						envVar={e}
+						value={typed[e.name] ?? ""}
+						cleared={Boolean(
+							e.present && cleared[e.name] && !(typed[e.name] ?? "").trim(),
+						)}
+						onChange={(v) => {
+							setTyped((prev) => ({ ...prev, [e.name]: v }));
+							if (v.trim() && cleared[e.name])
+								setCleared((prev) => ({ ...prev, [e.name]: false }));
+						}}
+						onToggleClear={() => {
+							setCleared((prev) => ({ ...prev, [e.name]: !prev[e.name] }));
+							setTyped((prev) => ({ ...prev, [e.name]: "" }));
+						}}
+					/>
+				))}
+			</div>
+			{error && <InlineAlert className="mt-3">{error}</InlineAlert>}
+			<div className="mt-3 flex items-center justify-end gap-3">
+				{dirty && !saving && (
+					<span className="text-meta text-faint">Applies after a restart</span>
+				)}
+				<Button variant="primary" size="sm" disabled={!dirty || saving} onClick={handleSave}>
+					{saving ? "Saving…" : "Save"}
+				</Button>
+			</div>
 		</SettingsSection>
 	);
 }
 
-function GithubAuthCard({ github }: { github: SetupStatus["github"] }) {
+function GithubAuthCard({
+	github,
+	onSaved,
+}: {
+	github: SetupGithub;
+	onSaved: (updated: SetupGithub, restartRequired: boolean) => void;
+}) {
 	const state = githubAuthState(github);
 	const active = github.userPrAuth && github.clientIdConfigured;
+	// The secret is never echoed; the status exposes presence only.
+	const secretConfigured = github.clientSecretConfigured;
+	const [userPrAuth, setUserPrAuth] = useState(github.userPrAuth);
+	const [clientId, setClientId] = useState("");
+	const [clientSecret, setClientSecret] = useState("");
+	const [clearId, setClearId] = useState(false);
+	const [clearSecret, setClearSecret] = useState(false);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		setUserPrAuth(github.userPrAuth);
+	}, [github.userPrAuth]);
+
+	const idCleared = github.clientIdConfigured && clearId && !clientId.trim();
+	const secretCleared = secretConfigured && clearSecret && !clientSecret.trim();
+	const dirty =
+		userPrAuth !== github.userPrAuth ||
+		clientId.trim() !== "" ||
+		clientSecret.trim() !== "" ||
+		idCleared ||
+		secretCleared;
+
+	async function handleSave() {
+		if (!dirty || saving) return;
+		setSaving(true);
+		setError(null);
+		try {
+			const body = await setupRequest<{
+				github: SetupGithub;
+				restartRequired: boolean;
+			}>("/api/setup/github", {
+				method: "PUT",
+				json: {
+					...(userPrAuth !== github.userPrAuth ? { userPrAuth } : {}),
+					...(clientId.trim()
+						? { oauthClientId: clientId.trim() }
+						: idCleared
+							? { oauthClientId: "" }
+							: {}),
+					...(clientSecret.trim()
+						? { oauthClientSecret: clientSecret.replace(/\s+/g, "") }
+						: secretCleared
+							? { oauthClientSecret: "" }
+							: {}),
+				},
+			});
+			setClientId("");
+			setClientSecret("");
+			setClearId(false);
+			setClearSecret(false);
+			toast("GitHub sign-in settings saved");
+			onSaved(body.github, body.restartRequired === true);
+		} catch (e: any) {
+			setError(e.message);
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	const fieldLabelClass = "flex min-w-0 flex-col gap-1.5 text-label font-medium text-dim";
+	const clearButtonClass =
+		"focus-ring self-start rounded-sm text-meta font-medium text-faint underline underline-offset-2 transition-colors hover:text-fg";
+
 	return (
 		<SettingsSection>
-			<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+			<div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
 				<div className="min-w-0 flex-1 text-item-title font-medium text-fg">
 					GitHub sign-in &amp; PRs as yourself
 				</div>
 				<StateChip tone={state.tone} label={state.label} />
+				<Switch
+					checked={userPrAuth}
+					onCheckedChange={setUserPrAuth}
+					disabled={saving}
+					aria-label="Enable GitHub sign-in"
+				/>
 			</div>
 			<div className="mt-1 text-supporting leading-relaxed text-dim">
 				Opting in replaces the name picker with a real GitHub sign-in, and
 				interactive sessions of a connected teammate open PRs as their own
 				account instead of the bot.
 			</div>
-			{active ? (
+			{active && (
 				<div className="mt-2 text-supporting leading-relaxed text-dim">
 					{github.redirectFlowAvailable
 						? "Browser redirect sign-in and device codes both work."
-						: "Device-code sign-in only — add oauthClientSecret to the config to enable the browser redirect flow."}{" "}
+						: "Device-code sign-in only — add the client secret below to enable the browser redirect flow."}{" "}
 					Teammates connect their accounts under Workspace → Connections. Full
 					guide: <Code>docs/setup/github.md</Code>.
 				</div>
-			) : (
+			)}
+			{!github.clientIdConfigured && (
 				<div className="mt-3">
-					<Steps>
-						<Step n={1}>
+					<ol className="m-0 flex list-none flex-col gap-2.5 p-0">
+						<RecipeStep n={1}>
 							Create an org-owned GitHub App (org Settings → Developer settings →
 							GitHub Apps). Full guide: <Code>docs/setup/github.md</Code> in the
 							checkout.
-						</Step>
-						<Step n={2}>On the app, check “Enable Device Flow”.</Step>
-						<Step n={3}>
+						</RecipeStep>
+						<RecipeStep n={2}>On the app, check “Enable Device Flow”.</RecipeStep>
+						<RecipeStep n={3}>
 							Set the app&rsquo;s callback URL to exactly:
 							<span className="mt-1.5 block">
 								<CopyableCode value={github.callbackUrl} />
 							</span>
-						</Step>
-						<Step n={4}>
+						</RecipeStep>
+						<RecipeStep n={4}>
 							Install the app on your org → All repositories (and make it
 							installable only on that account).
-						</Step>
-						<Step n={5}>
-							In <Code>~/.opensession/config.json</Code> set{" "}
-							<Code>
-								integrations.github: {"{"} userPrAuth: true, oauthClientId:
-								&quot;…&quot; {"}"}
-							</Code>{" "}
-							— add <Code>oauthClientSecret</Code> too for the browser redirect
-							flow — then <Code>opensession restart</Code>.
-						</Step>
-					</Steps>
+						</RecipeStep>
+						<RecipeStep n={5}>
+							Paste the app&rsquo;s client id below (and its client secret for the
+							browser redirect flow), flip the switch on, and Save.
+						</RecipeStep>
+					</ol>
 				</div>
 			)}
+			<div className="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+				<label className={fieldLabelClass}>
+					<span className="flex items-baseline justify-between gap-2">
+						Client id
+						{github.clientIdConfigured && (
+							<button
+								type="button"
+								className={clearButtonClass}
+								onClick={() => {
+									setClearId((c) => !c);
+									setClientId("");
+								}}
+							>
+								{idCleared ? "Keep" : "Clear"}
+							</button>
+						)}
+					</span>
+					<input
+						className={cn(settingsInputClass, "font-mono")}
+						value={clientId}
+						onChange={(e) => {
+							setClientId(e.target.value);
+							if (e.target.value.trim()) setClearId(false);
+						}}
+						placeholder={
+							idCleared
+								? "will be unset"
+								: github.clientIdConfigured
+									? "set — leave blank to keep"
+									: "Iv23li…"
+						}
+						autoCapitalize="none"
+						spellCheck={false}
+					/>
+				</label>
+				<label className={fieldLabelClass}>
+					<span className="flex items-baseline justify-between gap-2">
+						Client secret
+						{secretConfigured && (
+							<button
+								type="button"
+								className={clearButtonClass}
+								onClick={() => {
+									setClearSecret((c) => !c);
+									setClientSecret("");
+								}}
+							>
+								{secretCleared ? "Keep" : "Clear"}
+							</button>
+						)}
+					</span>
+					<input
+						type="password"
+						className={cn(settingsInputClass, "font-mono")}
+						value={clientSecret}
+						onChange={(e) => {
+							setClientSecret(e.target.value);
+							if (e.target.value.trim()) setClearSecret(false);
+						}}
+						placeholder={
+							secretCleared
+								? "will be unset"
+								: secretConfigured
+									? "••• set"
+									: "optional — enables browser redirect"
+						}
+						autoComplete="new-password"
+						autoCapitalize="none"
+						spellCheck={false}
+					/>
+				</label>
+			</div>
+			{error && <InlineAlert className="mt-3">{error}</InlineAlert>}
+			<div className="mt-3 flex items-center justify-end gap-3">
+				{dirty && !saving && (
+					<span className="text-meta text-faint">Applies after a restart</span>
+				)}
+				<Button variant="primary" size="sm" disabled={!dirty || saving} onClick={handleSave}>
+					{saving ? "Saving…" : "Save"}
+				</Button>
+			</div>
 		</SettingsSection>
 	);
 }
 
+function RecipeStep({ n, children }: { n: number; children: React.ReactNode }) {
+	return (
+		<li className="flex items-start gap-2.5 text-supporting leading-relaxed text-dim">
+			<span className="mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-semibold tabular-nums text-faint">
+				{n}
+			</span>
+			<span className="min-w-0 flex-1">{children}</span>
+		</li>
+	);
+}
+
+type RestartState = "idle" | "working" | "failed";
+
 export function SetupPanel() {
 	const [status, setStatus] = useState<SetupStatus | null>(null);
 	const [failed, setFailed] = useState(false);
+	const [restartNeeded, setRestartNeeded] = useState(false);
+	const [restartState, setRestartState] = useState<RestartState>("idle");
+	const statusRef = useRef<SetupStatus | null>(null);
+	statusRef.current = status;
+
+	const refetch = useCallback(async () => {
+		try {
+			const body = await setupRequest<SetupStatus>("/api/setup/status");
+			setStatus(body);
+			setFailed(false);
+		} catch {
+			if (!statusRef.current) setFailed(true);
+		}
+	}, []);
 
 	useEffect(() => {
 		document.title = docTitle("Setup");
-		let cancelled = false;
-		(async () => {
-			try {
-				const res = await fetch(`${BASE_PATH}/api/setup/status`);
-				if (!res.ok) throw new Error(String(res.status));
-				const body = (await res.json()) as SetupStatus;
-				if (!cancelled) setStatus(body);
-			} catch {
-				if (!cancelled) setFailed(true);
-			}
-		})();
+		refetch();
 		return () => {
-			cancelled = true;
 			document.title = DEFAULT_DOC_TITLE;
 		};
-	}, []);
+	}, [refetch]);
+
+	function handleIntegrationSaved(updated: SetupIntegration, restartRequired: boolean) {
+		setStatus((s) =>
+			s
+				? {
+						...s,
+						integrations: s.integrations.map((i) =>
+							i.id === updated.id ? updated : i,
+						),
+					}
+				: s,
+		);
+		if (restartRequired) setRestartNeeded(true);
+	}
+
+	function handleGithubSaved(updated: SetupGithub, restartRequired: boolean) {
+		setStatus((s) => (s ? { ...s, github: updated } : s));
+		if (restartRequired) setRestartNeeded(true);
+	}
+
+	/** POST the restart, then poll /api/health (1s cadence, 30s budget) until
+	 * the server is back; on success refetch status and drop the banner. Pass
+	 * `post: false` to only poll — the "Check again" path after a timeout. */
+	async function restartServer(post = true) {
+		setRestartState("working");
+		if (post) {
+			try {
+				await fetch(`${BASE_PATH}/api/setup/restart`, { method: "POST" });
+			} catch {
+				// The connection can drop as the server goes down — that's fine,
+				// the health poll below is the real signal.
+			}
+		}
+		const deadline = Date.now() + 30_000;
+		await sleep(1000);
+		while (Date.now() < deadline) {
+			try {
+				const res = await fetch(`${BASE_PATH}/api/health`, { cache: "no-store" });
+				if (res.ok) {
+					await refetch();
+					setRestartNeeded(false);
+					setRestartState("idle");
+					toast("Server restarted — changes applied");
+					return;
+				}
+			} catch {}
+			await sleep(1000);
+		}
+		setRestartState("failed");
+	}
 
 	const githubState = status ? githubAuthState(status.github) : null;
 
 	return (
-		<SettingsPanel>
+		<SettingsPanel className="relative">
 			<SettingsHeader
 				title="Setup"
-				description="What's wired up on this instance, and exactly how to connect the rest."
+				description="What's wired up on this instance — connect and configure the rest right here."
 			/>
 			{!status ? (
 				<LoadingState>{failed ? "Couldn't load setup status." : "Loading…"}</LoadingState>
@@ -341,7 +587,7 @@ export function SetupPanel() {
 							description={
 								status.repos.length > 0
 									? status.repos.map((r) => r.label).join(", ")
-									: "Register the repos sessions work in under repos in ~/.opensession/config.json."
+									: "Register the repos sessions work in — add one under Repositories below."
 							}
 							tone={status.repos.length > 0 ? "on" : "warn"}
 							label={
@@ -353,14 +599,9 @@ export function SetupPanel() {
 						<ChecklistRow
 							title="Team roster"
 							description={
-								status.team.count > 0 ? (
-									status.team.names.join(", ")
-								) : (
-									<>
-										Add teammates with <Code>opensession team add</Code> so commits
-										and sessions attribute to real people.
-									</>
-								)
+								status.team.count > 0
+									? status.team.names.join(", ")
+									: "Add teammates under Team below so commits and sessions attribute to real people."
 							}
 							tone={status.team.count > 0 ? "on" : "warn"}
 							label={
@@ -401,20 +642,60 @@ export function SetupPanel() {
 						})}
 					</SettingCard>
 
+					<ReposSection repos={status.repos} onChanged={refetch} />
+
+					<TeamSection onChanged={refetch} />
+
 					<SettingsGroupLabel>Integrations</SettingsGroupLabel>
 					{status.integrations.map((i) => (
-						<IntegrationCard key={i.id} integration={i} />
+						<IntegrationCard
+							key={i.id}
+							integration={i}
+							onSaved={handleIntegrationSaved}
+						/>
 					))}
 					<SettingsHint>
-						Env vars live in <Code>~/.opensession.env</Code>; the server reads them
-						on restart. Enable flags can also be set per integration in{" "}
-						<Code>~/.opensession/config.json</Code> — an{" "}
-						<Code>ENABLE_*</Code> env var wins when set.
+						Values save into the server&rsquo;s env (<Code>~/.opensession.env</Code>)
+						and are never shown back — a <Code>set</Code> badge is all the UI keeps.
+						Saved changes apply on the next restart; the banner below handles it.
 					</SettingsHint>
 
 					<SettingsGroupLabel>GitHub sign-in</SettingsGroupLabel>
-					<GithubAuthCard github={status.github} />
+					<GithubAuthCard github={status.github} onSaved={handleGithubSaved} />
+
+					{restartNeeded && restartState !== "working" && (
+						<div className="sticky bottom-3 z-20 mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line bg-panel px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.18),0_1px_3px_rgba(0,0,0,0.08)]">
+							<div className="min-w-0 flex-1">
+								<div className="text-control-label font-medium text-fg">
+									Changes saved — restart to apply
+								</div>
+								<div className="mt-0.5 text-supporting text-dim">
+									{restartState === "failed" ? (
+										<>
+											Still not back — check <Code>opensession logs</Code>.
+										</>
+									) : (
+										"The server reads credentials and enable flags on boot. Restarts take a few seconds; running engine turns keep going."
+									)}
+								</div>
+							</div>
+							{restartState === "failed" ? (
+								<Button onClick={() => restartServer(false)}>Check again</Button>
+							) : (
+								<Button variant="primary" onClick={() => restartServer()}>
+									Restart server
+								</Button>
+							)}
+						</div>
+					)}
 				</>
+			)}
+			{restartState === "working" && (
+				<div className="absolute inset-0 z-30 rounded-lg bg-bg/75 backdrop-blur-[2px]">
+					<div className="sticky top-[30vh] pb-8">
+						<LoadingState>Restarting…</LoadingState>
+					</div>
+				</div>
 			)}
 		</SettingsPanel>
 	);

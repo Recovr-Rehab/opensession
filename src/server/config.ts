@@ -322,7 +322,9 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
   });
 }
 
-function parseTeamMember(v: unknown): TeamMember | undefined {
+/** Exported for the setup routes: web team-CRUD validates candidate members
+ *  through the exact rules the config loader accepts. */
+export function parseTeamMember(v: unknown): TeamMember | undefined {
   const o = obj(v);
   const name = str(o?.name);
   if (!o || !name) return undefined;

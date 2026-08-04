@@ -1,70 +1,322 @@
 /**
- * Onboarding status endpoint — what the Settings → Setup page renders.
+ * Setup routes — what the Settings → Setup page renders and writes.
  *
- * Aggregates the instance's configuration state (repos, team roster, GitHub
- * auth, per-integration enablement + credential presence) into one read-only
- * snapshot. SECURITY: this returns presence booleans only — never an env var
- * value, and never the OAuth client secret in any form.
+ * GET /api/setup/status stays the read-only snapshot. The write endpoints
+ * (integrations env/enable, GitHub auth settings, team CRUD, repo clone +
+ * register, self-restart) implement web-based instance configuration:
+ * secrets go to the env file (~/.opensession.env — the systemd
+ * EnvironmentFile, shared with the CLI; env-file-edit.ts), everything else
+ * to config.json, all serialized under the shared config mutation lock
+ * (config-mutation.ts).
+ *
+ * AUTHZ: the global web-auth gate in opensession.ts is the authorization —
+ * when GitHub web sign-in is active every /backstage/api/* request already
+ * 401s without a signed-in team member, and these paths are NOT in the
+ * gate's exempt list. No route here does its own auth.
+ *
+ * SECURITY: responses carry presence booleans only — never an env value or
+ * the OAuth client secret in any form; audit events name keys, never values.
+ * Env writes are restricted to the keys an integration declares in its
+ * registry spec (plus its enable flag) — arbitrary names (PATH, LD_PRELOAD…)
+ * are rejected before anything touches the file.
  */
 
+import { audit } from "../audit";
+import type { IntegrationSpec } from "../integrations/registry";
 import type { RouteContext } from "./context";
+import { handleSetupRepoRoutes } from "./setup-repos";
+import { handleSetupTeamRoutes } from "./setup-team";
+
+/** One integration's status snapshot. `envValues` (the env FILE's active
+ *  definitions) overrides process.env presence so a response issued right
+ *  after a write shows the truth — process.env lags the file until restart. */
+async function integrationSnapshot(
+  spec: IntegrationSpec,
+  envValues?: Record<string, string>,
+) {
+  const { isEnabled } = await import("../integrations/load");
+  const { configuredIntegration } = await import("../config");
+  const present = (name: string): boolean =>
+    envValues && name in envValues
+      ? envValues[name] !== ""
+      : !!process.env[name];
+  const env = spec.env.map((e) => ({
+    name: e.name,
+    required: !!e.required,
+    description: e.description,
+    present: present(e.name),
+  }));
+  // Post-write truth for `enabled`, mirroring isEnabled()'s env-wins rule
+  // against the file's flag value instead of the stale process.env one.
+  const enabled = envValues
+    ? spec.enableFlag in envValues
+      ? envValues[spec.enableFlag] === "true"
+      : configuredIntegration(spec.id).enabled === true
+    : isEnabled(spec);
+  return {
+    id: spec.id,
+    label: spec.label,
+    doc: spec.doc,
+    enabled,
+    env,
+    missingRequired: env
+      .filter((e) => e.required && !e.present)
+      .map((e) => e.name),
+  };
+}
+
+async function githubSnapshot(publicBaseUrl: string) {
+  const { githubUserAuthSettings, githubRedirectFlowAvailable } =
+    await import("../github-auth");
+  const github = githubUserAuthSettings();
+  return {
+    userPrAuth: github.enabled,
+    clientIdConfigured: !!github.clientId,
+    clientSecretConfigured: !!github.clientSecret,
+    redirectFlowAvailable: githubRedirectFlowAvailable(),
+    callbackUrl: `${publicBaseUrl}/api/auth/callback`,
+    botTokenPresent: !!process.env.GITHUB_API_TOKEN,
+  };
+}
+
+/** Single-line string ≤4096 chars (shared with env values). */
+async function validateSetting(value: unknown): Promise<string | null> {
+  const { validateEnvValue } = await import("../env-file-edit");
+  return validateEnvValue(value);
+}
+
+// Restart-pending flag on globalThis so a duplicate POST (or a hot reload
+// between POST and SIGTERM) stays idempotent.
+const restartState: { pending: boolean } = ((globalThis as any)
+  .__osSetupRestartState ??= { pending: false });
 
 export async function handleSetupRoutes(
-	ctx: RouteContext,
+  ctx: RouteContext,
 ): Promise<Response | undefined> {
-	const { req, path } = ctx;
+  const { req, path } = ctx;
+  if (!path.startsWith("/backstage/api/setup/")) return undefined;
 
-	if (path === "/backstage/api/setup/status" && req.method === "GET") {
-		const { configuredServer, configuredRepos, configuredIdentity } =
-			await import("../config");
-		const { INTEGRATIONS } = await import("../integrations/registry");
-		const { isEnabled } = await import("../integrations/load");
-		const { githubUserAuthSettings, githubRedirectFlowAvailable } =
-			await import("../github-auth");
+  if (path === "/backstage/api/setup/status" && req.method === "GET") {
+    const { configuredServer, configuredRepos, configuredIdentity } =
+      await import("../config");
+    const { INTEGRATIONS } = await import("../integrations/registry");
+    // The env FILE, not process.env: a credential saved via PUT must keep
+    // reading as present on every later status refetch, not flap back to
+    // missing until the restart happens.
+    const { readEnvFileValues } = await import("../env-file-edit");
+    const envValues = readEnvFileValues();
 
-		const publicBaseUrl = configuredServer().publicBaseUrl.replace(/\/$/, "");
-		const github = githubUserAuthSettings();
+    const publicBaseUrl = configuredServer().publicBaseUrl.replace(/\/$/, "");
 
-		return Response.json({
-			publicBaseUrl,
-			repos: Object.values(configuredRepos()).map((r) => ({
-				id: r.id,
-				label: r.label,
-				path: r.repo,
-			})),
-			team: (() => {
-				const team = configuredIdentity().team;
-				return { count: team.length, names: team.map((m) => m.name) };
-			})(),
-			github: {
-				userPrAuth: github.enabled,
-				clientIdConfigured: !!github.clientId,
-				redirectFlowAvailable: githubRedirectFlowAvailable(),
-				callbackUrl: `${publicBaseUrl}/api/auth/callback`,
-				botTokenPresent: !!process.env.GITHUB_API_TOKEN,
-			},
-			// `always` entries self-gate and need no setup, so they are not
-			// presented as onboarding steps.
-			integrations: INTEGRATIONS.filter((spec) => !spec.always).map((spec) => {
-				const env = spec.env.map((e) => ({
-					name: e.name,
-					required: !!e.required,
-					description: e.description,
-					present: !!process.env[e.name],
-				}));
-				return {
-					id: spec.id,
-					label: spec.label,
-					doc: spec.doc,
-					enabled: isEnabled(spec),
-					env,
-					missingRequired: env
-						.filter((e) => e.required && !e.present)
-						.map((e) => e.name),
-				};
-			}),
-		});
-	}
+    return Response.json({
+      publicBaseUrl,
+      repos: Object.values(configuredRepos()).map((r) => ({
+        id: r.id,
+        label: r.label,
+        path: r.repo,
+      })),
+      team: (() => {
+        const team = configuredIdentity().team;
+        return { count: team.length, names: team.map((m) => m.name) };
+      })(),
+      github: await githubSnapshot(publicBaseUrl),
+      // `always` entries self-gate and need no setup, so they are not
+      // presented as onboarding steps.
+      integrations: await Promise.all(
+        INTEGRATIONS.filter((spec) => !spec.always).map((spec) =>
+          integrationSnapshot(spec, envValues),
+        ),
+      ),
+    });
+  }
 
-	return undefined;
+  // ── PUT /api/setup/integrations/:id — credentials + enable flag ──────────
+  const integrationMatch = path.match(
+    /^\/backstage\/api\/setup\/integrations\/([^/]+)$/,
+  );
+  if (integrationMatch && req.method === "PUT") {
+    const { findIntegration } = await import("../integrations/registry");
+    const spec = findIntegration(decodeURIComponent(integrationMatch[1]));
+    if (!spec || spec.always) {
+      return Response.json({ error: "Unknown integration" }, { status: 404 });
+    }
+    const body = (await req.json().catch(() => null)) as {
+      enabled?: unknown;
+      env?: unknown;
+    } | null;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    if (body.enabled !== undefined && typeof body.enabled !== "boolean") {
+      return Response.json({ error: "enabled must be a boolean" }, { status: 400 });
+    }
+    const enabled = typeof body.enabled === "boolean" ? body.enabled : undefined;
+    const envBody =
+      body.env === undefined
+        ? {}
+        : body.env && typeof body.env === "object" && !Array.isArray(body.env)
+          ? (body.env as Record<string, unknown>)
+          : null;
+    if (!envBody) {
+      return Response.json({ error: "env must be an object" }, { status: 400 });
+    }
+    // Injection guard: only the keys this integration DECLARES may be
+    // written. Anything else — PATH, HOME, another integration's key — 400s.
+    const allowedKeys = new Set(spec.env.map((e) => e.name));
+    const edits: Record<string, string> = {};
+    for (const [key, value] of Object.entries(envBody)) {
+      if (!allowedKeys.has(key)) {
+        return Response.json(
+          { error: `Unknown env key for ${spec.id}: ${key}` },
+          { status: 400 },
+        );
+      }
+      const invalid = await validateSetting(value);
+      if (invalid) {
+        return Response.json({ error: `${key}: ${invalid}` }, { status: 400 });
+      }
+      edits[key] = value as string;
+    }
+    if (enabled !== undefined) {
+      // Onboarding writes explicit ENABLE_X=false lines and the env flag WINS
+      // over config.integrations — so write the flag line AND mirror config
+      // so both agree.
+      edits[spec.enableFlag] = enabled ? "true" : "false";
+    }
+    if (Object.keys(edits).length === 0) {
+      return Response.json({ error: "Nothing to change" }, { status: 400 });
+    }
+
+    const { applyEnvFileEdits, readEnvFileValues } = await import("../env-file-edit");
+    const { rawConfig, persistRawConfig, withConfigMutationLock } =
+      await import("../config-mutation");
+
+    return withConfigMutationLock(async () => {
+      applyEnvFileEdits(edits);
+      if (enabled !== undefined) {
+        const config = rawConfig();
+        const integrations =
+          config.integrations &&
+          typeof config.integrations === "object" &&
+          !Array.isArray(config.integrations)
+            ? (config.integrations as Record<string, unknown>)
+            : {};
+        config.integrations = integrations;
+        const section =
+          integrations[spec.id] &&
+          typeof integrations[spec.id] === "object" &&
+          !Array.isArray(integrations[spec.id])
+            ? (integrations[spec.id] as Record<string, unknown>)
+            : {};
+        integrations[spec.id] = section;
+        section.enabled = enabled;
+        persistRawConfig(config);
+      }
+      audit({
+        kind: "setup_integration_update",
+        integration: spec.id,
+        keys: Object.keys(edits),
+        ...(enabled !== undefined ? { enabled } : {}),
+      });
+      return Response.json({
+        integration: await integrationSnapshot(spec, readEnvFileValues()),
+        restartRequired: true,
+      });
+    });
+  }
+
+  // ── PUT /api/setup/github — user PR auth + OAuth app settings ────────────
+  if (path === "/backstage/api/setup/github" && req.method === "PUT") {
+    const body = (await req.json().catch(() => null)) as {
+      userPrAuth?: unknown;
+      oauthClientId?: unknown;
+      oauthClientSecret?: unknown;
+    } | null;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    if (body.userPrAuth !== undefined && typeof body.userPrAuth !== "boolean") {
+      return Response.json({ error: "userPrAuth must be a boolean" }, { status: 400 });
+    }
+    for (const field of ["oauthClientId", "oauthClientSecret"] as const) {
+      if (body[field] === undefined) continue;
+      const invalid = await validateSetting(body[field]);
+      if (invalid) {
+        return Response.json({ error: `${field}: ${invalid}` }, { status: 400 });
+      }
+    }
+    if (
+      body.userPrAuth === undefined &&
+      body.oauthClientId === undefined &&
+      body.oauthClientSecret === undefined
+    ) {
+      return Response.json({ error: "Nothing to change" }, { status: 400 });
+    }
+
+    const { rawConfig, persistRawConfig, withConfigMutationLock } =
+      await import("../config-mutation");
+    const { configuredServer } = await import("../config");
+
+    return withConfigMutationLock(async () => {
+      const config = rawConfig();
+      const integrations =
+        config.integrations &&
+        typeof config.integrations === "object" &&
+        !Array.isArray(config.integrations)
+          ? (config.integrations as Record<string, unknown>)
+          : {};
+      config.integrations = integrations;
+      const github =
+        integrations.github &&
+        typeof integrations.github === "object" &&
+        !Array.isArray(integrations.github)
+          ? (integrations.github as Record<string, unknown>)
+          : {};
+      integrations.github = github;
+      if (body.userPrAuth !== undefined) github.userPrAuth = body.userPrAuth;
+      for (const field of ["oauthClientId", "oauthClientSecret"] as const) {
+        const value = body[field];
+        if (value === undefined) continue;
+        if (value === "") delete github[field]; // empty string clears
+        else github[field] = value;
+      }
+      persistRawConfig(config);
+      audit({
+        kind: "setup_github_update",
+        fields: (["userPrAuth", "oauthClientId", "oauthClientSecret"] as const).filter(
+          (f) => body[f] !== undefined,
+        ),
+      });
+      // githubUserAuthSettings() reads getConfig() per call (mtime-guarded
+      // re-read), and the web-auth gate calls webAuthRequired() →
+      // githubUserAuthActive() on every request — so the sign-in gate and
+      // both OAuth flows pick this up live. No restart needed. (Only the
+      // one-time createdByLogin boot migration waits for the next restart.)
+      const publicBaseUrl = configuredServer().publicBaseUrl.replace(/\/$/, "");
+      return Response.json({
+        github: await githubSnapshot(publicBaseUrl),
+        restartRequired: false,
+      });
+    });
+  }
+
+  // ── POST /api/setup/restart — apply boot-path changes ────────────────────
+  if (path === "/backstage/api/setup/restart" && req.method === "POST") {
+    if (!restartState.pending) {
+      restartState.pending = true;
+      audit({ kind: "setup_restart", by: ctx.authUser?.login || null });
+      console.log("[setup] restart requested via web setup — SIGTERM in 300ms");
+      // Answer first, then trigger the existing graceful shutdown (drain +
+      // journal in opensession.ts); systemd Restart=always revives us.
+      setTimeout(() => {
+        process.kill(process.pid, "SIGTERM");
+      }, 300);
+    }
+    return Response.json({ restarting: true });
+  }
+
+  // ── Sibling modules: /api/setup/team*, /api/setup/{github/repos,repos} ───
+  return (
+    (await handleSetupTeamRoutes(ctx)) ?? (await handleSetupRepoRoutes(ctx))
+  );
 }
