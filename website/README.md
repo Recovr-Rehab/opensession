@@ -14,6 +14,10 @@ Deploy the contents of `.website-dist/` as a static site. The build always
 emits stable `index.html` and `opensession-social.png` paths; scripts, styles,
 and the in-page icon remain content-hashed.
 
-The hero uses animated background artwork from Tella. The product image
-is a sanitized capture of the real OpenSession web interface rather than a
-separate marketing mock.
+The hero uses animated background artwork from Tella. The product preview is
+a self-contained interactive React demo, so visitors can switch sessions,
+collapse navigation, and try the composer without connecting to a real
+OpenSession instance.
+
+Agentation is available on localhost and tailnet staging hosts for visual
+feedback. It is not rendered on the public website.

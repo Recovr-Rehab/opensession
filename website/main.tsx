@@ -1,32 +1,28 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { createRoot } from "react-dom/client";
 import markUrl from "../os1-mac/build/icon-512.png";
-import { IconCheck, IconCopy, IconRepo, IconTerminal } from "../src/frontend/components/icons";
-import productUiUrl from "./product-ui.webp";
+import {
+	IconCheck,
+	IconCopy,
+	IconRepo,
+	IconTerminal,
+} from "../src/frontend/components/icons";
 import "./site.css";
+import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
 
 const installCommand =
 	"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash";
+
+const Agentation = lazy(() =>
+	import("agentation").then((module) => ({ default: module.Agentation })),
+);
 
 function Mark({ small = false }: { small?: boolean }) {
 	return (
 		<span className={small ? "mark mark-small" : "mark"}>
 			<img src={markUrl} alt="" />
 		</span>
-	);
-}
-
-function ProductPreview() {
-	return (
-		<figure className="preview-wrap">
-			<img
-				className="product-preview"
-				src={productUiUrl}
-				alt="OpenSession workspace showing parallel agent work in a shared coding session"
-			/>
-			<figcaption>Actual OpenSession web interface</figcaption>
-		</figure>
 	);
 }
 
@@ -58,7 +54,9 @@ function CopyCommand() {
 
 	return (
 		<div className="command-line">
-		<code><span>$</span> {installCommand}</code>
+			<code>
+				<span>$</span> {installCommand}
+			</code>
 			<button type="button" onClick={copy} aria-label="Copy install command">
 				{copied ? <IconCheck size={20} /> : <IconCopy size={20} />}
 				<span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
@@ -83,24 +81,35 @@ function LandingPage() {
 					<nav aria-label="Main navigation">
 						<a href="#why">How it works</a>
 						<a href="https://github.com/tellahq/opensession">GitHub</a>
-						<a className="nav-cta" href="#install">Get started</a>
+						<a className="nav-cta" href="#install">
+							Get started
+						</a>
 					</nav>
 				</header>
 
 				<div className="hero-content page-width" id="top">
 					<div className="hero-copy">
-						<p className="eyebrow"><span /> Open source. Built for agent teams.</p>
+						<p className="eyebrow">
+							<span /> Open source. Built for agent teams.
+						</p>
 						<h1>Run your coding agents. Together.</h1>
 						<p className="hero-description">
-							Use Claude, Codex, and other models side by side. Start parallel sessions, bring in teammates, and keep every prompt, diff, review, and PR moving from desktop or phone.
+							Use Claude, Codex, and other models side by side. Start parallel
+							sessions, bring in teammates, and keep every prompt, diff, review,
+							and PR moving from desktop or phone.
 						</p>
 						<div className="hero-actions">
-							<a className="button button-primary" href="#install">Get started</a>
-							<a className="button button-secondary" href="https://github.com/tellahq/opensession">
+							<a className="button button-primary" href="#install">
+								Get started
+							</a>
+							<a
+								className="button button-secondary"
+								href="https://github.com/tellahq/opensession"
+							>
 								View on GitHub <span aria-hidden="true">↗</span>
 							</a>
 						</div>
-						<div className="proof-line" aria-label="OpenSession highlights">
+						<div className="proof-line">
 							<span>Apache-2.0</span>
 							<i />
 							<span>Use your existing subscriptions</span>
@@ -108,58 +117,98 @@ function LandingPage() {
 							<span>Worktrees and sandboxes</span>
 						</div>
 					</div>
-					<ProductPreview />
+					<ProductDemo />
 				</div>
 			</section>
 
 			<main>
 				<section className="why-section page-width" id="why">
-					<div className="section-intro">
-						<p className="section-kicker">One place for the whole agent loop</p>
-						<h2>Agents move faster when the whole team can see the work.</h2>
-					</div>
-					<div className="feature-grid">
-						{features.map((feature) => (
-							<article key={feature.number}>
-								<span>{feature.number}</span>
-								<h3>{feature.title}</h3>
-								<p>{feature.body}</p>
-							</article>
-						))}
+					<div className="why-shell">
+						<div className="section-intro">
+							<p className="section-kicker">
+								One place for the whole agent loop
+							</p>
+							<h2>Agents move faster when the whole team can see the work.</h2>
+						</div>
+						<div className="feature-grid">
+							{features.map((feature) => (
+								<article key={feature.number}>
+									<span>{feature.number}</span>
+									<h3>{feature.title}</h3>
+									<p>{feature.body}</p>
+								</article>
+							))}
+						</div>
 					</div>
 				</section>
 
 				<section className="install-section page-width" id="install">
 					<div className="install-card">
 						<div className="install-copy">
-							<p className="section-kicker section-kicker-dark">Start on your own machine</p>
+							<p className="section-kicker section-kicker-dark">
+								Start on your own machine
+							</p>
 							<h2>Running in under a minute.</h2>
-							<p>The installer adds Bun and OpenCode when needed, then connects the model subscriptions and integrations you already use.</p>
+							<p>
+								The installer adds Bun and OpenCode when needed, then connects
+								the model subscriptions and integrations you already use.
+							</p>
 						</div>
 						<CopyCommand />
 						<div className="install-meta">
-							<span><IconTerminal size={20} /> Linux and macOS</span>
-							<span><IconCheck size={20} /> Setup in under a minute</span>
+							<span>
+								<IconTerminal size={20} /> Linux and macOS
+							</span>
+							<span>
+								<IconCheck size={20} /> Setup in under a minute
+							</span>
 						</div>
 						<div className="trust-note">
 							<IconRepo size={20} />
-							<p><strong>Private by design.</strong> OpenSession trusts everyone who can reach it. Keep your instance on Tailscale, behind a VPN, or behind an SSH tunnel.</p>
+							<p>
+								<strong>Private by design.</strong> OpenSession trusts everyone
+								who can reach it. Keep your instance on Tailscale, behind a VPN,
+								or behind an SSH tunnel.
+							</p>
 						</div>
 					</div>
 				</section>
 			</main>
 
 			<footer className="site-footer page-width">
-				<a className="brand brand-footer" href="#top"><Mark small /><span>OpenSession</span></a>
+				<a className="brand brand-footer" href="#top">
+					<Mark small />
+					<span>OpenSession</span>
+				</a>
 				<p>The open-source workspace for teams building with agents.</p>
 				<nav aria-label="Footer navigation">
 					<a href="https://github.com/tellahq/opensession">GitHub</a>
-					<a href="https://github.com/tellahq/opensession/tree/main/docs/setup">Docs</a>
-					<a href="https://github.com/tellahq/opensession/blob/main/SECURITY.md">Security</a>
+					<a href="https://github.com/tellahq/opensession/tree/main/docs/setup">
+						Docs
+					</a>
+					<a href="https://github.com/tellahq/opensession/blob/main/SECURITY.md">
+						Security
+					</a>
 				</nav>
 			</footer>
 		</>
 	);
 }
 
-createRoot(document.getElementById("root")!).render(<LandingPage />);
+const feedbackHost =
+	["localhost", "127.0.0.1"].includes(window.location.hostname) ||
+	window.location.hostname.endsWith(".ts.net");
+
+const root = document.getElementById("root");
+if (!root) throw new Error("Missing landing page root");
+
+createRoot(root).render(
+	<>
+		<LandingPage />
+		{feedbackHost && (
+			<Suspense fallback={null}>
+				<Agentation />
+			</Suspense>
+		)}
+	</>,
+);
