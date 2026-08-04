@@ -901,7 +901,7 @@ function MichaelReviewCard({
 					)}
 				</div>
 			</div>
-			<div className="grid gap-px rounded-lg bg-panel p-1">
+			<div className="flex items-center gap-1 rounded-lg bg-panel p-1">
 				<Popover.Root>
 					<Popover.Trigger
 						render={<div />}
@@ -910,36 +910,41 @@ function MichaelReviewCard({
 						delay={200}
 						closeDelay={120}
 						className={cn(
-							"flex items-center gap-2.5 rounded-md px-2 py-2",
+							"flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2",
 							reviewMessage && "cursor-help",
 						)}
 						tabIndex={reviewMessage ? 0 : undefined}
 					>
-						<div className={cn("shrink-0 leading-none", scoreTone)}>
-							<span className="text-section-title font-[750] tracking-[-0.06em]">{score ?? "–"}</span>
-							<span className="ml-0.5 text-meta font-semibold tracking-normal text-faint">/5</span>
+						{/* The meter sits under the score itself, so the reading and its
+						    scale stay one glance and the row's right edge is free for the
+						    action. */}
+						<div className="grid shrink-0 gap-1.5">
+							<div className={cn("leading-none", scoreTone)}>
+								<span className="text-section-title font-[750] tracking-[-0.06em]">{score ?? "–"}</span>
+								<span className="ml-0.5 text-meta font-semibold tracking-normal text-faint">/5</span>
+							</div>
+							<div
+								className="flex gap-0.5"
+								role={score ? "meter" : "status"}
+								aria-label={`${AGENT_NAME} merge-safety score`}
+								aria-valuemin={score ? 1 : undefined}
+								aria-valuemax={score ? 5 : undefined}
+								aria-valuenow={score}
+							>
+								{[1, 2, 3, 4, 5].map((step) => (
+									<span
+										key={step}
+										className={cn(
+											"h-1 flex-1 rounded-full",
+											score && step <= score ? meterTone : "bg-active",
+										)}
+									/>
+								))}
+							</div>
 						</div>
 						<div className="min-w-0 flex-1">
 							<div className="truncate text-label font-semibold text-fg">{verdict}</div>
 							<div className="mt-0.5 truncate text-meta text-faint">{detail}</div>
-						</div>
-						<div
-							className="flex w-12 shrink-0 gap-0.5"
-							role={score ? "meter" : "status"}
-							aria-label={`${AGENT_NAME} merge-safety score`}
-							aria-valuemin={score ? 1 : undefined}
-							aria-valuemax={score ? 5 : undefined}
-							aria-valuenow={score}
-						>
-							{[1, 2, 3, 4, 5].map((step) => (
-								<span
-									key={step}
-									className={cn(
-										"h-1 flex-1 rounded-full",
-										score && step <= score ? meterTone : "bg-active",
-									)}
-								/>
-							))}
 						</div>
 					</Popover.Trigger>
 					{reviewMessage && (
@@ -974,17 +979,13 @@ function MichaelReviewCard({
 				{canFix && (
 					<button
 						type="button"
-						className={ACTION_BUTTON_CLASS}
+						className={cn(ACTION_BUTTON_CLASS, "shrink-0 gap-1.5 px-2 text-meta")}
 						disabled={busy !== null}
 						onClick={() => run(fixAction)}
 						title={fixAction.hint}
 					>
-						<span className={ACTION_ICON_CLASS}>
-							<IconSparkle size={16} />
-						</span>
-						<span className="truncate">
-							{busy === "autofix" ? "Starting..." : "Fix findings"}
-						</span>
+						<IconSparkle size={14} className="shrink-0 text-faint" />
+						{busy === "autofix" ? "Starting..." : "Fix findings"}
 					</button>
 				)}
 			</div>
