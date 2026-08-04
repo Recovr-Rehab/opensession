@@ -947,6 +947,10 @@ struct SessionsListView: View {
                             Text("\(visibleArchivedSessions.count)")
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(OS1VisualStyle.textFaint)
+                                #if os(iOS)
+                                // Same trailing column as a row's run clock.
+                                .padding(.trailing, 7)
+                                #endif
                         }
                         #if os(iOS)
                         .padding(.vertical, 9)
@@ -1199,6 +1203,14 @@ struct SessionRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if session.lane == .inProgress && showsElapsedTime {
                 WorkspaceRunElapsedLabel(since: session.runStartedDate)
+                    #if os(iOS)
+                    // The repo header's "+" is an 18pt glyph centred in a 30pt
+                    // tap target, so its ink stops ~8pt inside the shared 16pt
+                    // row margin (minus the digits' own side bearing). Without
+                    // this pad the running clock juts past the plus above it
+                    // instead of sharing its column.
+                    .padding(.trailing, 7)
+                    #endif
             }
         }
         #if os(iOS)
