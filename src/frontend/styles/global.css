@@ -1781,6 +1781,18 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--hover);
 }
 
+/* Status lanes, Inbox bands and Snoozed — the groups nested inside a list or a
+   project band. They label the rows rather than lead anywhere, so they read as
+   captions: a size down from the rows, semibold to hold their own at that size,
+   and no leading glyph at all (the rows under them already carry the status
+   marks, and the lane's own name says what it is). Dropping the glyph also
+   lands the label left of the rows' icon rail, which is what makes a band read
+   as a divider instead of another row. */
+.sidebar-lane-group > .sidebar-group-header {
+	font-size: 12px;
+	font-weight: 600;
+}
+
 .sidebar-group-chevron {
 	color: var(--text-faint);
 	flex-shrink: 0;
@@ -13393,25 +13405,15 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		font-size: 16px;
 		padding: 11px 8px 11px 6px;
 	}
-	/* …except the lanes/date bands nested inside a project band, which are
-	   dividers rather than destinations: at the full 16px they read as loud as
-	   the rows they label. Take them down to a quiet caption the way the native
-	   app's lanes sit under their project band. The icon keeps its 22px box (it
-	   only scales its ink) so the text stays on the shared rail. Top-level bands
-	   — Pinned, Needs review, the flat Status / Inbox lists — keep the big
-	   header; there the band IS the structure. */
-	.sidebar-repo-lanes .sidebar-status-group > .sidebar-group-header {
+	/* …except the lane / band headers, which stay captions — see
+	   .sidebar-lane-group. Their phone size is one step up from the desktop
+	   caption so it survives arm's-length reading. */
+	.sidebar-lane-group > .sidebar-group-header {
 		font-size: 13px;
-		font-weight: 600;
 		padding-top: 9px;
 		padding-bottom: 5px;
 	}
-	.sidebar-repo-lanes .sidebar-status-group > .sidebar-group-header
-		> .sidebar-group-icon {
-		transform: scale(0.8);
-	}
-	.sidebar-repo-lanes .sidebar-status-group > .sidebar-group-header
-		> .sidebar-group-count {
+	.sidebar-lane-group > .sidebar-group-header .sidebar-group-count {
 		font-size: 12px;
 	}
 	/* A repo band's tile is an org avatar, not an outline glyph, so at its 18px

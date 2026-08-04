@@ -93,15 +93,11 @@ import {
 	IconBell,
 	IconFilter,
 	IconX,
-	IconArrowDown,
-	IconArrowUp,
-	IconMinus,
 	IconGear,
 	IconGitMerge,
 	IconCheck,
 	IconClock,
 	IconFlame,
-	IconHistory,
 	IconInbox,
 	IconMessageQuestion,
 	IconPencil,
@@ -287,19 +283,6 @@ const SUPPORT_PRIORITY_GROUPS = [
 const SUPPORT_PRIORITY_DOT: Record<number, string> = Object.fromEntries(
 	SUPPORT_PRIORITY_GROUPS.map((g) => [g.p, g.dot]),
 );
-
-/** The priority glyph on a Support group header (flame/arrows/dash). */
-function SupportPriorityIcon({ p, cls }: { p: number; cls: string }) {
-	const Glyph =
-		p === 0 ? IconFlame : p === 1 ? IconArrowUp : p === 3 ? IconArrowDown : IconMinus;
-	// The rail keeps these narrower glyphs on the same column — and the same
-	// text rail — as the 22px icons the other group headers wear.
-	return (
-		<span className="sidebar-rail">
-			<Glyph size={20} className={cls} />
-		</span>
-	);
-}
 
 // Right-click wiring for the feed-shaped rows (Support tickets, feed items).
 // They render as Base UI popover triggers rather than as workspace rows, so
@@ -1331,28 +1314,10 @@ function SidebarCtxMenu({
 	);
 }
 
-function SidebarGroupIcon({
-	status,
-	color,
-}: {
-	status: MineStatus;
-	color: string;
-}) {
-	const className = "sidebar-group-icon";
-	const style = { color };
-	if (status === "needsinput")
-		return <IconMessageQuestion className={className} style={style} />;
-	if (status === "inprogress")
-		return <IconClock className={className} style={style} />;
-	if (status === "review")
-		return <IconGitMerge className={className} style={style} />;
-	if (status === "merged")
-		return <IconCheck className={className} style={style} />;
-	return <IconInbox className={className} style={style} />;
-}
-
-// The same status glyphs, sized + colored for a menu row (no group className,
-// so the menu controls sizing) — used by the "Set status" flyout.
+// The status glyphs, sized + colored for a menu row (no group className, so
+// the menu controls sizing) — used by the "Set status" flyout. The lane and
+// band headers carry no glyph of their own: they're dividers, and the rows
+// under them already wear the status marks.
 function statusMenuIcon(status: MineStatus, color: string) {
 	const style = { color };
 	if (status === "needsinput")
@@ -4357,7 +4322,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const open = isOpen(gkey);
 		return (
 			<div
-				className={`sidebar-status-group${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
+				className={`sidebar-status-group sidebar-lane-group${filter.groupBy === "inbox" ? " sidebar-inbox-group" : ""}`}
 				key={gkey}
 			>
 				<button
@@ -4367,10 +4332,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					className="sidebar-group-header transition-colors"
 					onClick={() => toggleGroup(gkey)}
 				>
-					<IconMoon
-						className="sidebar-group-icon"
-						style={{ color: "var(--text-dim)" }}
-					/>
 					<span className="sidebar-group-name">Snoozed</span>
 					<span className="sidebar-group-count">{rows.length}</span>
 					<IconChevronDown
@@ -4415,7 +4376,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const dropHover = dropEligible && laneDropHover?.gkey === gkey;
 			return (
 				<div
-					className={`sidebar-status-group${
+					className={`sidebar-status-group sidebar-lane-group${
 						dropEligible && items.length === 0 && prs.length === 0
 							? " is-lane-empty"
 							: ""
@@ -4432,7 +4393,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						className="sidebar-group-header transition-colors"
 						onClick={() => toggleGroup(gkey)}
 					>
-						<SidebarGroupIcon status={meta.key} color={meta.dotColor} />
 						<span className="sidebar-group-name">{meta.label}</span>
 						{/* Count rides directly behind the lane name, not pinned right. */}
 						<span className="sidebar-group-count">
@@ -4493,40 +4453,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		dayStart.setHours(0, 0, 0, 0);
 		const todayMs = dayStart.getTime();
 		const yesterdayMs = todayMs - 24 * 60 * 60 * 1000;
-		const dateIcon = (
-			<IconHistory
-				className="sidebar-group-icon"
-				style={{ color: "var(--text-dim)" }}
-			/>
-		);
 		const bands: Array<{
 			key: string;
 			label: string;
-			icon: React.ReactNode;
 			rows: WsRow[];
 			prs: ReviewQueueItem[];
 		}> = [
-			{
-				key: "needsaction",
-				label: "Needs action",
-				icon: (
-					<SidebarGroupIcon
-						status="needsinput"
-						color={STATUS_DOT.needsinput}
-					/>
-				),
-				rows: [],
-				prs: [],
-			},
-			{ key: "recent", label: "Recent", icon: dateIcon, rows: [], prs: [] },
-			{
-				key: "yesterday",
-				label: "Yesterday",
-				icon: dateIcon,
-				rows: [],
-				prs: [],
-			},
-			{ key: "earlier", label: "Earlier", icon: dateIcon, rows: [], prs: [] },
+			{ key: "needsaction", label: "Needs action", rows: [], prs: [] },
+			{ key: "recent", label: "Recent", rows: [], prs: [] },
+			{ key: "yesterday", label: "Yesterday", rows: [], prs: [] },
+			{ key: "earlier", label: "Earlier", rows: [], prs: [] },
 		];
 		const [needsAction, recent, yesterday, earlier] = bands;
 		for (const r of sorted) {
@@ -4558,7 +4494,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// Nested under a repo band the rows keep the normal lane inset;
 					// the flush email-style edge belongs to the flat mode only.
 					<div
-						className={`sidebar-status-group${ns ? "" : " sidebar-inbox-group"}`}
+						className={`sidebar-status-group sidebar-lane-group${ns ? "" : " sidebar-inbox-group"}`}
 						key={gkey}
 					>
 						<button
@@ -4567,7 +4503,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							className="sidebar-group-header transition-colors"
 							onClick={() => toggleGroup(gkey)}
 						>
-							{b.icon}
 							<span className="sidebar-group-name">{b.label}</span>
 							<span className="sidebar-group-count">
 								{b.rows.length + b.prs.length}
@@ -4864,14 +4799,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const groupIsOpen = isOpen(gkey);
 			return (
 				<div
-					className="sidebar-status-group"
+					className="sidebar-status-group sidebar-lane-group"
 					key={`support-prio-${group.p}`}
 				>
 					<button
 						className="sidebar-group-header"
 						onClick={() => toggleGroup(gkey)}
 					>
-						<SupportPriorityIcon p={group.p} cls={group.cls} />
 						<span
 							className={`sidebar-group-name ${group.p <= 1 ? group.cls : ""}`}
 						>
