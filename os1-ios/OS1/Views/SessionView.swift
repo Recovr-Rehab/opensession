@@ -778,10 +778,13 @@ private struct SessionTabBar: View {
                 .padding(.vertical, 6)
             }
             .scrollIndicators(.hidden)
-            // Translucent material, not an opaque .bar and not nothing: the
-            // transcript ghosts through, but the tab labels stay legible
-            // over busy content.
-            .background(.ultraThinMaterial)
+            // Frosted over the page colour, not bare ultra-thin glass: on its
+            // own the strip took on the luminance of whatever scrolled beneath
+            // it, so a dark code block passing under dragged the whole band
+            // dark. The wash holds it at a stable brightness; the material
+            // keeps a hint of what's behind.
+            .background(OS1VisualStyle.background.opacity(0.55))
+            .background(.regularMaterial)
             .onAppear {
                 proxy.scrollTo(activeId, anchor: .center)
             }
