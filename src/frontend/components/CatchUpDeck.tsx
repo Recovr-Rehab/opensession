@@ -294,7 +294,7 @@ export function CatchUpDeck({
 				<div className="flex w-full max-w-[860px] items-stretch gap-2.5 px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
 					<Button
 						size="lg"
-						className="flex-1 rounded-lg bg-panel px-4 py-3 text-sm font-semibold shadow-none hover:bg-surface"
+						className="flex-1 py-3 text-sm"
 						onClick={() => act("keep")}
 						title="Keep unread (↑)"
 					>
@@ -303,7 +303,10 @@ export function CatchUpDeck({
 					<Button
 						variant="danger"
 						size="lg"
-						className="rounded-lg border-red/40 bg-red-soft px-4 py-3 text-sm font-semibold hover:border-red/70 hover:bg-red-soft"
+						/* The soft fill is always on here rather than only on hover:
+						   this is a standing choice in a triage deck, not a
+						   warning you hover into. */
+						className="bg-red-soft py-3 text-sm"
 						onClick={() => act("archive")}
 						title="Archive (←)"
 						aria-label="Archive"
@@ -315,9 +318,13 @@ export function CatchUpDeck({
 						</svg>
 					</Button>
 					<Button
-						variant="primary"
+						/* `success` (not `primary`) — this is the affirmative half of
+						   the pair, not the app's accent CTA. It takes the family's
+						   solid fill rather than its outline because it's the deck's
+						   dominant action; everything else comes from the variant. */
+						variant="success"
 						size="lg"
-						className="flex-1 rounded-lg border-0 bg-green px-4 py-3 text-sm font-semibold shadow-none hover:brightness-100 hover:opacity-90"
+						className="flex-1 bg-green py-3 text-sm text-white hover:bg-green hover:brightness-110"
 						onClick={() => act("read")}
 						title="Mark as read (→)"
 					>
@@ -724,7 +731,7 @@ function CaughtUp({ total, onExit }: { total: number; onExit: () => void }) {
 			</div>
 			<Button
 				size="lg"
-				className="mt-2 rounded-lg border-0 bg-panel px-4 py-2.5 text-sm font-semibold text-fg shadow-none hover:bg-surface"
+				className="mt-2 text-sm"
 				onClick={onExit}
 			>
 				Done

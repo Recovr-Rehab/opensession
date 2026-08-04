@@ -1451,8 +1451,10 @@ export function PrPanel({
                 went to GitHub for it. Two-click confirm, same as merge. */}
             {pr.state === "OPEN" && (
               <Button
-                variant="danger"
-                className={`text-xs ${confirmClose ? "bg-red text-surface hover:bg-red" : ""}`}
+                /* Outline while it's still a proposal, solid once the next
+                   click commits — same pair the confirm modals use. */
+                variant={confirmClose ? "destructive" : "danger"}
+                className="text-xs"
                 onClick={handleClose}
                 disabled={closing}
                 title="Close this pull request without merging — the branch and its commits stay available"

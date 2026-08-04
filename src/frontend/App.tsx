@@ -3090,20 +3090,10 @@ function App() {
 							: `These ${runningCloseConfirmation?.runningCount ?? 0} chats are currently running. Closing them will cancel their current runs.`}
 					</Modal.Description>
 					<Modal.Footer className="mt-3 justify-end gap-3">
-						<Modal.Close
-							render={
-								<Button
-									size="lg"
-									className="rounded-md border-line-strong bg-transparent px-5 py-2.5 font-medium text-fg shadow-none hover:bg-hover"
-								>
-									Cancel
-								</Button>
-							}
-						/>
+						<Modal.Close render={<Button size="lg">Cancel</Button>} />
 						<Button
-							variant="primary"
+							variant="destructive"
 							size="lg"
-							className="rounded-md border-0 bg-red px-5 py-2.5 font-semibold shadow-none"
 							onClick={() => {
 								const confirmation = runningCloseConfirmation;
 								setRunningCloseConfirmation(null);

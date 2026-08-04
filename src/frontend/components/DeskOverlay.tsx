@@ -114,25 +114,24 @@ function DeskBody({
 					<Button
 						variant="ghost"
 						size="xs"
-						className="min-h-0 shrink-0 rounded-md border-0 p-1 font-medium text-faint hover:bg-surface hover:text-fg"
+						className="shrink-0 text-faint"
+						icon={<IconExpand size={20} />}
 						onClick={() => {
 							onClose();
 							onOpenSession(sessionId);
 						}}
 						title="Open as a full session"
-					>
-						<IconExpand size={20} />
-					</Button>
+						aria-label="Open as a full session"
+					/>
 				)}
 				<Button
 					variant="ghost"
 					size="xs"
-					className="min-h-0 shrink-0 rounded-md border-0 p-1 font-medium text-faint hover:bg-surface hover:text-fg"
+					className="shrink-0 text-faint"
+					icon={<IconX size={20} />}
 					onClick={onClose}
 					aria-label="Close"
-				>
-					<IconX size={20} />
-				</Button>
+				/>
 			</div>
 
 			{/* Concierge chat */}

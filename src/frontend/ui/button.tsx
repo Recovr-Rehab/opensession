@@ -31,6 +31,7 @@ type Variant =
 	| "ghost"
 	| "success"
 	| "danger"
+	| "destructive"
 	| "warning";
 type Size = "xs" | "sm" | "md" | "lg";
 
@@ -93,6 +94,12 @@ const variants: Record<Variant, string> = {
 	success: "border-green text-green hover:bg-green-soft",
 	// Outline red, like the delete-worktree confirm buttons.
 	danger: "border-red text-red hover:bg-red-soft",
+	// Solid red plate — the *committed* half of the destructive pair, for the
+	// button that actually does the irreversible thing (a modal's confirm, the
+	// second click of a two-click close). `danger` proposes, `destructive`
+	// commits, so a surface can show both without them reading as the same
+	// weight. Shares `primary`'s shape so the two swap cleanly in a footer.
+	destructive: "bg-red border-transparent text-white shadow-control hover:brightness-110",
 	warning: "border-yellow text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)]",
 };
 
@@ -104,6 +111,7 @@ const iconDim: Record<Variant, string> = {
 	ghost: "opacity-60",
 	success: "opacity-80",
 	danger: "opacity-80",
+	destructive: "opacity-80",
 	warning: "opacity-80",
 };
 

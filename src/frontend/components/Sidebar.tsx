@@ -7378,7 +7378,7 @@ function MobileActionSheet({
 										size="xs"
 										key={m.key}
 										type="button"
-										className="min-h-0 gap-1.5 whitespace-normal rounded-md px-2 py-1 text-control-label font-medium"
+										className="gap-1.5 whitespace-normal px-2 text-control-label"
 										style={{
 											borderColor: on ? m.dotColor : "var(--border)",
 											color: on ? "var(--text)" : "var(--text-dim)",
@@ -7405,7 +7405,7 @@ function MobileActionSheet({
 										variant="ghost"
 										size="xs"
 								type="button"
-								className="min-h-0 whitespace-normal rounded-md px-2 py-1 text-control-label font-medium"
+								className="whitespace-normal px-2 text-control-label"
 								style={{
 									borderColor: !pinnedLane(session)
 										? "var(--text-dim)"
@@ -8452,7 +8452,7 @@ function WsMobileSheet({
 										size="xs"
 												key={m.key}
 												type="button"
-												className="min-h-0 gap-1.5 whitespace-normal rounded-md px-2 py-1 text-control-label font-medium"
+												className="gap-1.5 whitespace-normal px-2 text-control-label"
 												style={{
 													borderColor: on ? m.dotColor : "var(--border)",
 													color: on ? "var(--text)" : "var(--text-dim)",
@@ -8481,7 +8481,7 @@ function WsMobileSheet({
 										variant="ghost"
 										size="xs"
 										type="button"
-										className="min-h-0 whitespace-normal rounded-md px-2 py-1 text-control-label font-medium"
+										className="whitespace-normal px-2 text-control-label"
 										style={{
 											borderColor: !anyManual
 												? "var(--text-dim)"
@@ -8513,7 +8513,7 @@ function WsMobileSheet({
 										size="xs"
 									key={p.label}
 									type="button"
-									className="min-h-0 whitespace-normal rounded-md px-2 py-1 text-control-label font-medium"
+									className="whitespace-normal px-2 text-control-label"
 									style={{
 										borderColor: "var(--border)",
 										color: "var(--text-dim)",
@@ -8531,7 +8531,7 @@ function WsMobileSheet({
 										variant="ghost"
 										size="xs"
 									type="button"
-									className="min-h-0 whitespace-normal rounded-md px-2 py-1 text-control-label font-medium"
+									className="whitespace-normal px-2 text-control-label"
 									style={{
 										borderColor: "var(--text-dim)",
 										color: "var(--text)",
