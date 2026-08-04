@@ -1276,7 +1276,8 @@ export function PrPanel({
                     <CommentableDiff
                       patch={diff.patch}
                       diffStyle={diffStyle}
-                      defaultExpandedFiles={10}
+                      defaultExpandedFiles={Infinity}
+                      viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
                       submitLabel="Add comment"
                       placeholder={`Comment on #${diff.number} — added to your pending review…`}
                       pendingComments={pending}
@@ -1331,17 +1332,8 @@ export function PrPanel({
                           <CommentableDiff
                             patch={section.patch}
                             diffStyle={diffStyle}
-                            defaultExpandedFiles={Math.max(
-                              0,
-                              10 -
-                                all
-                                  .slice(0, index)
-                                  .reduce(
-                                    (count, previous) =>
-                                      count + previous.files.length,
-                                    0,
-                                  ),
-                            )}
+                            defaultExpandedFiles={Infinity}
+                            viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
                             submitLabel="Add comment"
                             placeholder={`Comment on #${diff.number} — added to your pending review…`}
                             pendingComments={pending}
@@ -1358,7 +1350,8 @@ export function PrPanel({
                 <CommentableDiff
                   patch={diff.patch}
                   diffStyle={diffStyle}
-                  defaultExpandedFiles={10}
+                  defaultExpandedFiles={Infinity}
+                  viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
                   submitLabel="Add comment"
                   placeholder={`Comment on #${diff.number} — added to your pending review…`}
                   pendingComments={pending}
@@ -1825,6 +1818,8 @@ export function PrPanel({
                     {section.patch && (
                       <CommentableDiff
                         patch={section.patch}
+                        defaultExpandedFiles={Infinity}
+                        viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
                         submitLabel="Add comment"
                         placeholder={`Comment on #${diff.number} — added to your pending review…`}
                         pendingComments={pending}
@@ -1839,6 +1834,8 @@ export function PrPanel({
             ) : (
               <CommentableDiff
                 patch={diff.patch}
+                defaultExpandedFiles={Infinity}
+                viewedStateKey={`${activeRepoId || "pr"}#${diff.number}`}
                 groups={diffGroups?.oid === diff.headRefOid ? diffGroups.groups || undefined : undefined}
                 groupsLoading={diffGroupsLoading}
                 submitLabel="Add comment"

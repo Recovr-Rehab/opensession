@@ -1,6 +1,13 @@
 import React, { useEffect, useState, useCallback, startTransition } from "react";
 import type { DiffFileGroup, RepoDiff } from "../lib/types";
-import { API_BASE, fetchDiff, fetchDiffGroups, discardDiffFile } from "../lib/api";
+import {
+  API_BASE,
+  fetchDiff,
+  fetchDiffGroups,
+  discardDiffFile,
+  fetchWorktreeFile,
+  saveWorktreeFile,
+} from "../lib/api";
 import { CommentableDiff, type CommentTarget } from "./CommentableDiff";
 import { getCurrentUser } from "./UserPicker";
 import { Tooltip } from "../ui/tooltip";
@@ -228,6 +235,26 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
           // Discarding edits the worktree — withhold it while the agent is running
           // to avoid racing its writes.
           onDiscard={canSend ? (path, oldPath) => handleDiscard(cur.repo, path, oldPath) : undefined}
+          // In-place edit mode (@pierre/diffs edit): same live-worktree gate as
+          // discard. Load pulls full file contents (the editor can't work from
+          // hunks alone); save writes back and refreshes the diff.
+          editFile={
+            canSend
+              ? {
+                  load: (file, side) =>
+                    fetchWorktreeFile(
+                      sessionId,
+                      side === "base" ? file.prevName || file.name : file.name,
+                      cur.repo,
+                      side,
+                    ),
+                  save: async (path, content) => {
+                    await saveWorktreeFile(sessionId, path, content, cur.repo);
+                    await reload();
+                  },
+                }
+              : undefined
+          }
           // Changed images render as pictures: new side straight from the
           // worktree, old side from the diff's merge base.
           imageSrcs={(file) => {

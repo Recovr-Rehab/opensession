@@ -1,9 +1,16 @@
 import React, { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { parsePatchFiles } from "@pierre/diffs";
-import { FileDiff } from "@pierre/diffs/react";
-import type { SelectedLineRange, FileDiffMetadata, DiffLineAnnotation } from "@pierre/diffs";
+import { EditProvider, FileDiff } from "@pierre/diffs/react";
+import type {
+  SelectedLineRange,
+  FileDiffMetadata,
+  DiffLineAnnotation,
+  DiffsEditor,
+  FileDiffLoadedFiles,
+} from "@pierre/diffs";
+import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import type { DiffFileGroup } from "../lib/types";
-import { IconChevronRight, IconUndo } from "./icons";
+import { IconChevronRight, IconPencil, IconUndo } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { useResolvedTheme } from "./CodeHighlight";
@@ -63,6 +70,23 @@ interface Props {
    * never in read-only PR previews. `oldPath` is set for renames.
    */
   onDiscard?: (path: string, oldPath?: string) => Promise<void>;
+  /**
+   * GitHub-style per-file "Viewed" checkboxes, persisted in localStorage under
+   * this key (e.g. `repo#123`). Marking a file viewed collapses it; a viewed
+   * mark survives reloads but drops automatically when the file's content
+   * fingerprint changes (the file was updated since it was reviewed).
+   */
+  viewedStateKey?: string;
+  /**
+   * @pierre/diffs edit mode: makes files editable in place. Only wired where
+   * the diff maps to a live worktree (the session Changes tab). `load` fetches
+   * one side's full contents (the editor needs whole files, not hunks); `save`
+   * writes the edited text back.
+   */
+  editFile?: {
+    load: (file: FileDiffMetadata, side: "new" | "base") => Promise<string | null>;
+    save: (path: string, content: string) => Promise<void>;
+  };
 }
 
 interface Draft {
@@ -100,6 +124,44 @@ function fileStats(file: FileDiffMetadata): { add: number; del: number } {
 const NO_ANNOTATIONS: DiffLineAnnotation<Meta>[] = [];
 
 /**
+ * Content fingerprint for the "Viewed" state: a viewed mark is only honored
+ * while the file still has this fingerprint, so a file that changed after
+ * being reviewed comes back unviewed (GitHub semantics). The patch's blob id
+ * is exact when present; the hunk-shape fallback covers patches without
+ * `index` lines.
+ */
+function fileFingerprint(file: FileDiffMetadata): string {
+  if (file.newObjectId) return file.newObjectId;
+  return file.hunks
+    .map((h) => `${h.additionStart}+${h.additionLines}-${h.deletionLines}`)
+    .join(",");
+}
+
+function viewedStorageKey(key: string) {
+  return `os-diff-viewed:${key}`;
+}
+
+/** path → fingerprint map persisted per PR/diff surface. */
+function readViewedStore(key: string): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(viewedStorageKey(key));
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Paths in `files` whose stored viewed fingerprint still matches. */
+function matchViewed(key: string | undefined, files: FileDiffMetadata[]): Set<string> {
+  if (!key) return new Set();
+  const store = readViewedStore(key);
+  return new Set(
+    files.filter((f) => store[f.name] === fileFingerprint(f)).map((f) => f.name),
+  );
+}
+
+/**
  * Renders a multi-file patch with @pierre/diffs, one FileDiff per file so
  * line selections carry their file context. Selecting lines opens an inline
  * comment form (the diffs annotation framework); submit is delegated to the
@@ -127,6 +189,8 @@ export function CommentableDiff({
   groups,
   groupsLoading,
   diffStyle = "unified",
+  viewedStateKey,
+  editFile,
 }: Props) {
   const reviewMode = pendingComments !== undefined;
   const theme = useResolvedTheme();
@@ -138,11 +202,23 @@ export function CommentableDiff({
     }
   }, [patch]);
 
+  // Files a reviewer already marked "Viewed" (stale fingerprints filtered out).
+  const [viewed, setViewed] = useState<ReadonlySet<string>>(() =>
+    matchViewed(viewedStateKey, files),
+  );
+
   // Files render collapsed by default (just the header row) — mounting a
   // FileDiff parses + highlights on the main thread, so a large change would
   // otherwise block the tab. `expanded` holds the indices the user opened.
+  // Viewed files start collapsed even when the default would expand them.
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(
-    () => new Set(files.slice(0, defaultExpandedFiles).map((_, index) => index)),
+    () =>
+      new Set(
+        files
+          .slice(0, defaultExpandedFiles)
+          .map((_, index) => index)
+          .filter((index) => !viewed.has(files[index].name)),
+      ),
   );
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -221,10 +297,114 @@ export function CommentableDiff({
   useEffect(() => () => clearTimeout(disarmTimer.current), []);
 
   useEffect(() => {
+    const nextViewed = matchViewed(viewedStateKey, files);
+    setViewed(nextViewed);
     setExpanded(
-      new Set(files.slice(0, defaultExpandedFiles).map((_, index) => index)),
+      new Set(
+        files
+          .slice(0, defaultExpandedFiles)
+          .map((_, index) => index)
+          .filter((index) => !nextViewed.has(files[index].name)),
+      ),
     );
-  }, [patch, defaultExpandedFiles]);
+  }, [patch, defaultExpandedFiles, viewedStateKey, files]);
+
+  const toggleViewed = useCallback(
+    (file: FileDiffMetadata, index: number) => {
+      if (!viewedStateKey) return;
+      const store = readViewedStore(viewedStateKey);
+      const wasViewed = viewed.has(file.name);
+      const next = new Set(viewed);
+      if (wasViewed) {
+        next.delete(file.name);
+        delete store[file.name];
+      } else {
+        next.add(file.name);
+        store[file.name] = fileFingerprint(file);
+      }
+      try {
+        localStorage.setItem(viewedStorageKey(viewedStateKey), JSON.stringify(store));
+      } catch {}
+      setViewed(next);
+      // Marking viewed collapses the file (done reading it); unmarking reopens.
+      setExpanded((prev) => {
+        const n = new Set(prev);
+        if (wasViewed) n.add(index);
+        else n.delete(index);
+        return n;
+      });
+    },
+    [viewedStateKey, viewed],
+  );
+
+  // ---- Edit mode (@pierre/diffs edit) ------------------------------------
+  // One file edits at a time. The editor engine is lazy-loaded on first use
+  // (it's a full code editor; review-only surfaces never pay for it). The
+  // active Editor instance is captured by the EditProvider factory so Save can
+  // read the full edited text.
+  const [editingPath, setEditingPath] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const editModuleRef = useRef<typeof import("@pierre/diffs/edit") | null>(null);
+  const editorRef = useRef<Editor<Meta> | null>(null);
+
+  const startEdit = useCallback(async (file: FileDiffMetadata, index: number) => {
+    if (!editModuleRef.current) {
+      editModuleRef.current = await import("@pierre/diffs/edit");
+    }
+    setEditError(null);
+    setEditingPath(file.name);
+    setExpanded((prev) => new Set(prev).add(index));
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    editorRef.current = null;
+    setEditingPath(null);
+    setEditError(null);
+  }, []);
+
+  const saveEdit = useCallback(async () => {
+    const editor = editorRef.current;
+    if (!editor || !editingPath || !editFile || savingEdit) return;
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      await editFile.save(editingPath, editor.getText());
+      editorRef.current = null;
+      setEditingPath(null);
+    } catch (e: any) {
+      setEditError(e?.message || "Failed to save");
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [editingPath, editFile, savingEdit]);
+
+  const createEditor = useCallback((options: EditorOptions<Meta>) => {
+    const editor = new editModuleRef.current!.Editor<Meta>(options);
+    editorRef.current = editor;
+    return editor;
+  }, []);
+
+  // Full-contents loader for the file being edited: the editor needs whole
+  // files, while a patch only carries hunks (saving hunk-only text would
+  // truncate the file on disk).
+  const loadDiffFiles = useCallback(
+    async (fd: FileDiffMetadata): Promise<FileDiffLoadedFiles> => {
+      if (!editFile) throw new Error("Not editable");
+      const [oldText, newText] = await Promise.all([
+        editFile.load(fd, "base"),
+        editFile.load(fd, "new"),
+      ]);
+      return {
+        oldFile:
+          oldText == null
+            ? null
+            : { name: fd.prevName || fd.name, contents: oldText },
+        newFile: { name: fd.name, contents: newText ?? "" },
+      } as FileDiffLoadedFiles;
+    },
+    [editFile],
+  );
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
@@ -353,9 +533,14 @@ export function CommentableDiff({
   const renderFile = (file: FileDiffMetadata, i: number) => {
     const pend = pendingByFile.get(file.name) || NO_ANNOTATIONS;
     const isDraftFile = draft?.fileIndex === i;
+    const isEditing = editingPath === file.name;
     // Keep a file open while it holds a draft (the comment form lives inside
-    // the diff) or already-added pending comments (so they stay visible).
-    const isOpen = expanded.has(i) || isDraftFile || pend.length > 0;
+    // the diff), already-added pending comments (so they stay visible), or an
+    // active edit session (collapsing would unmount the editor mid-edit).
+    const isOpen = expanded.has(i) || isDraftFile || pend.length > 0 || isEditing;
+    const isViewed = viewed.has(file.name);
+    const editable =
+      !!editFile && file.type !== "deleted" && !IMAGE_EXT.test(file.name);
     const s = stats[i];
     const slash = file.name.lastIndexOf("/");
     const dir = slash >= 0 ? file.name.slice(0, slash + 1) : "";
@@ -399,6 +584,47 @@ export function CommentableDiff({
             <span className="diff-file-base">{base}</span>
           </span>
           {pend.length > 0 && <span className="diff-file-comments">{pend.length}</span>}
+          {isEditing && (
+            <span
+              className="diff-file-edit-actions"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {editError && <span className="diff-edit-error">{editError}</span>}
+              <Button
+                variant="default"
+                size="sm"
+                className="min-h-0 border-line-strong bg-transparent px-2.5 py-[3px] text-xs font-normal shadow-none"
+                onClick={cancelEdit}
+                disabled={savingEdit}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className="min-h-0 px-2.5 py-[3px] text-xs font-medium shadow-none"
+                onClick={saveEdit}
+                disabled={savingEdit}
+              >
+                {savingEdit ? "Saving…" : "Save"}
+              </Button>
+            </span>
+          )}
+          {editable && !isEditing && (
+            <Tooltip label="Edit file in place">
+              <button
+                type="button"
+                className="diff-file-edit"
+                aria-label="Edit this file in place"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void startEdit(file, i);
+                }}
+              >
+                <IconPencil size={16} />
+              </button>
+            </Tooltip>
+          )}
           {onDiscard && (
             <Tooltip
               label={
@@ -427,6 +653,19 @@ export function CommentableDiff({
             {s.add > 0 && <span className="diff-add">+{s.add}</span>}
             {s.del > 0 && <span className="diff-del">−{s.del}</span>}
           </span>
+          {viewedStateKey && (
+            <label
+              className={`diff-file-viewed ${isViewed ? "diff-file-viewed-on" : ""}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={isViewed}
+                onChange={() => toggleViewed(file, i)}
+              />
+              Viewed
+            </label>
+          )}
         </div>
         {isOpen &&
           (imageSrcs && IMAGE_EXT.test(file.name) ? (
@@ -442,6 +681,9 @@ export function CommentableDiff({
               selectedLines={isDraftFile ? draft!.range : null}
               onSelect={handleSelect}
               renderAnnotation={renderAnnotation}
+              editing={isEditing}
+              createEditor={isEditing ? createEditor : undefined}
+              loadDiffFiles={isEditing ? loadDiffFiles : undefined}
             />
           ))}
       </div>
@@ -460,6 +702,11 @@ export function CommentableDiff({
         )}
         {!groupsLoading && groupedFiles && (
           <span className="diff-groups-ready">AI organized</span>
+        )}
+        {viewedStateKey && (
+          <span className="diff-viewed-progress">
+            {viewed.size} of {files.length} viewed
+          </span>
         )}
         <button type="button" className="diff-file-toggle-all" onClick={toggleAll}>
           {allOpen ? "Collapse all" : "Expand all"}
@@ -665,6 +912,9 @@ const FileDiffRow = React.memo(function FileDiffRow({
   selectedLines,
   onSelect,
   renderAnnotation,
+  editing,
+  createEditor,
+  loadDiffFiles,
 }: {
   file: FileDiffMetadata;
   fileIndex: number;
@@ -674,6 +924,9 @@ const FileDiffRow = React.memo(function FileDiffRow({
   selectedLines: SelectedLineRange | null;
   onSelect: (fileIndex: number, path: string, range: SelectedLineRange | null) => void;
   renderAnnotation: (annotation: DiffLineAnnotation<Meta>) => React.ReactNode;
+  editing?: boolean;
+  createEditor?: (options: EditorOptions<Meta>) => DiffsEditor<Meta>;
+  loadDiffFiles?: (fd: FileDiffMetadata) => Promise<FileDiffLoadedFiles>;
 }) {
   const options = useMemo(
     () => ({
@@ -681,19 +934,32 @@ const FileDiffRow = React.memo(function FileDiffRow({
       diffStyle,
       theme: theme === "light" ? "pierre-light" : "pierre-dark",
       themeType: theme,
+      // Line selection drives commenting; while editing, clicks place the
+      // caret instead.
+      enableLineSelection: !editing,
+      ...(loadDiffFiles ? { loadDiffFiles } : {}),
       onLineSelected: (range: SelectedLineRange | null) => onSelect(fileIndex, file.name, range),
     }),
-    [diffStyle, fileIndex, file.name, onSelect, theme],
+    [diffStyle, fileIndex, file.name, onSelect, theme, editing, loadDiffFiles],
   );
 
-  return (
+  const fileDiff = (
     <FileDiff<Meta>
       fileDiff={file}
       options={options}
+      edit={editing}
       lineAnnotations={annotations}
       selectedLines={selectedLines}
       renderAnnotation={renderAnnotation}
       disableWorkerPool
     />
+  );
+
+  // The provider only matters while editing; keeping the read-only tree
+  // identical to before avoids any behavior drift on non-editable surfaces.
+  return editing && createEditor ? (
+    <EditProvider<Meta> createEditor={createEditor}>{fileDiff}</EditProvider>
+  ) : (
+    fileDiff
   );
 });

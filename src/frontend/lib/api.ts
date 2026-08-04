@@ -1212,6 +1212,37 @@ export async function discardDiffFile(
 	});
 }
 
+/** Full text of one worktree file (Changes-tab edit mode). `side: "base"` reads
+ *  the pre-change version from the merge base; `null` = file absent on that side. */
+export async function fetchWorktreeFile(
+	sessionId: string,
+	path: string,
+	repo?: string,
+	side: "new" | "base" = "new",
+): Promise<string | null> {
+	const qs = new URLSearchParams({ path, side });
+	if (repo) qs.set("repo", repo);
+	const data = await request<{ content: string | null }>(
+		`/sessions/${encodeURIComponent(sessionId)}/worktree-file?${qs}`,
+		{ label: "Failed to load file" },
+	);
+	return data.content;
+}
+
+/** Write one worktree file's full contents (Changes-tab edit-mode save). */
+export async function saveWorktreeFile(
+	sessionId: string,
+	path: string,
+	content: string,
+	repo?: string,
+): Promise<void> {
+	await request(`/sessions/${encodeURIComponent(sessionId)}/worktree-file`, {
+		method: "POST",
+		body: { path, content, ...(repo ? { repo } : {}) },
+		label: "Failed to save file",
+	});
+}
+
 /** Query string targeting one of a session's PRs: `repo` (a repo id) targets an
  *  attached repo's PR, `repo`+`branch` a linked PR; both omitted = primary. */
 function prTargetQs(repo?: string, branch?: string) {

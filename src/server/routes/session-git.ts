@@ -298,6 +298,89 @@ export async function handleSessionGitRoutes(
 		}
 	}
 
+	// A text file from a session's worktree, for the Changes tab's in-place
+	// editor (@pierre/diffs edit mode needs full file contents, not just hunks).
+	// `?side=new` (default) reads the working tree; `?side=base` reads the
+	// pre-change version via `git show <merge-base>:<path>`. POST with
+	// `{ repo?, path, content }` writes the working-tree file (edit-mode save).
+	const worktreeFileMatch = path.match(
+		/^\/backstage\/api\/sessions\/(.+)\/worktree-file$/,
+	);
+	if (worktreeFileMatch && (req.method === "GET" || req.method === "POST")) {
+		const sessionId = decodeURIComponent(worktreeFileMatch[1]);
+		const session = findSession(sessionId);
+		if (!session)
+			return Response.json({ error: "Session not found" }, { status: 404 });
+		const body =
+			req.method === "POST"
+				? ((await req.json().catch(() => ({}))) as {
+						repo?: string;
+						path?: string;
+						content?: string;
+					})
+				: null;
+		const filePath = body ? body.path || "" : url.searchParams.get("path") || "";
+		if (!filePath)
+			return Response.json({ error: "Missing path" }, { status: 400 });
+		const repoId = body ? body.repo || null : url.searchParams.get("repo");
+		const primaryRepo =
+			session.repo ||
+			(session.worktreeDir && session.mode !== "scratch"
+				? repoForPath(session.worktreeDir).id
+				: defaultRepo().id);
+		const isPrimary = !repoId || repoId === primaryRepo;
+		const dir = isPrimary
+			? session.worktreeDir
+			: (session.attachedRepos || []).find((r) => r.repo === repoId)?.dir;
+		if (!dir || !existsSync(dir))
+			return Response.json({ error: "No worktree" }, { status: 404 });
+		// Keep reads/writes inside the worktree — the path comes from the client.
+		const abs = resolve(dir, filePath);
+		if (abs !== dir && !abs.startsWith(`${dir}/`))
+			return Response.json({ error: "Bad path" }, { status: 400 });
+
+		if (req.method === "POST") {
+			if (typeof body?.content !== "string")
+				return Response.json({ error: "Missing content" }, { status: 400 });
+			if (body.content.length > 4_000_000)
+				return Response.json({ error: "File too large" }, { status: 413 });
+			try {
+				await Bun.write(abs, body.content);
+			} catch (e: any) {
+				return Response.json(
+					{ error: e?.message || "Failed to write file" },
+					{ status: 500 },
+				);
+			}
+			return Response.json({ ok: true });
+		}
+
+		try {
+			if (url.searchParams.get("side") === "base") {
+				const repoConf = getRepo(repoId || primaryRepo);
+				const base = (
+					await $`git -C ${dir} merge-base HEAD origin/${repoConf.defaultBranch}`
+						.quiet()
+						.text()
+				).trim();
+				const proc = Bun.spawn(
+					["git", "-C", dir, "show", `${base}:${filePath}`],
+					{ stdout: "pipe", stderr: "ignore" },
+				);
+				const text = await new Response(proc.stdout).text();
+				if ((await proc.exited) !== 0) return Response.json({ content: null });
+				return Response.json({ content: text });
+			}
+			const f = Bun.file(abs);
+			if (!(await f.exists())) return Response.json({ content: null });
+			if (f.size > 4_000_000)
+				return Response.json({ error: "File too large" }, { status: 413 });
+			return Response.json({ content: await f.text() });
+		} catch {
+			return Response.json({ error: "Failed to read file" }, { status: 500 });
+		}
+	}
+
 	// Push the session's branch (sets upstream on first push). Human-triggered
 	// from the status header — audited in git-status.ts.
 	if (
