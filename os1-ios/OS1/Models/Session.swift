@@ -46,6 +46,13 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
         automation?.isAutomation ?? (startedBy?.hasSuffix("(automation)") ?? false)
     }
 
+    /// A just-created row the server hasn't published yet. Archiving one would
+    /// PATCH a session `/api/sessions` doesn't know about, so the affordances
+    /// that archive (list swipe, tab close) stay hidden until it resolves.
+    var isOptimistic: Bool {
+        id.hasPrefix("pending-") || isOptimisticPlaceholder == true
+    }
+
     var displayTitle: String {
         if let title, !title.isEmpty { return title }
         return id

@@ -730,6 +730,10 @@ struct SessionsListView: View {
                 },
                 onNewSession: {
                     newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
+                },
+                onCloseTab: { closed in
+                    sessionPageCache.remove(sessionId: closed.id)
+                    viewModel.archive(closed)
                 }
             )
             .id(session.id)

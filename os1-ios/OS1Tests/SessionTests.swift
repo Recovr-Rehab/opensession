@@ -66,6 +66,37 @@ final class SessionTests: XCTestCase {
         )
     }
 
+    func testClosingATabLandsOnItsNeighbour() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(#"[{"id":"one"},{"id":"two"},{"id":"three"}]"#.utf8)
+        )
+
+        // Closing a tab hands the strip to the one on its right …
+        XCTAssertEqual(
+            SessionsListViewModel.tabAfterClosing(sessions[0], in: sessions)?.id,
+            "two"
+        )
+        XCTAssertEqual(
+            SessionsListViewModel.tabAfterClosing(sessions[1], in: sessions)?.id,
+            "three"
+        )
+        // … except the rightmost, which falls back to its left neighbour.
+        XCTAssertEqual(
+            SessionsListViewModel.tabAfterClosing(sessions[2], in: sessions)?.id,
+            "two"
+        )
+        // The workspace's last chat leaves nothing to show.
+        XCTAssertNil(
+            SessionsListViewModel.tabAfterClosing(sessions[0], in: [sessions[0]])
+        )
+        // A tab that already left the strip doesn't hand it to a phantom.
+        XCTAssertEqual(
+            SessionsListViewModel.tabAfterClosing(sessions[2], in: Array(sessions.prefix(2)))?.id,
+            "one"
+        )
+    }
+
     func testTabSessionsFallBackToIsolatedWorktree() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,

@@ -601,28 +601,45 @@ struct SessionTabsView: View {
     let viewModelForSession: (Session) -> SessionViewModel
     let onSaveComposerDraft: (Session, SessionViewModel.ComposerDraft) -> Void
     let onNewSession: () -> Void
+    /// Close (archive) a chat closed from the tab strip.
+    let onCloseTab: (Session) -> Void
 
     @State private var activeId: String
     @State private var transitionEdge = Edge.trailing
+    /// Chats closed from the strip during this visit. Archiving alone doesn't
+    /// retire the pushed chat's tab: `tabSessions` deliberately keeps the
+    /// session the stack was pushed with even once it's archived (so a chat
+    /// opened from the archive sheet still renders), which would leave the tab
+    /// you just closed sitting in the strip.
+    @State private var closedIds: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
 
     init(
         session: Session,
         tabs: [Session],
         viewModelForSession: @escaping (Session) -> SessionViewModel,
         onSaveComposerDraft: @escaping (Session, SessionViewModel.ComposerDraft) -> Void,
-        onNewSession: @escaping () -> Void
+        onNewSession: @escaping () -> Void,
+        onCloseTab: @escaping (Session) -> Void
     ) {
         initialSession = session
         self.tabs = tabs
         self.viewModelForSession = viewModelForSession
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
+        self.onCloseTab = onCloseTab
         _activeId = State(initialValue: session.id)
     }
 
+    private var visibleTabs: [Session] {
+        tabs.filter { !closedIds.contains($0.id) }
+    }
+
     private var activeSession: Session {
-        tabs.first(where: { $0.id == activeId }) ?? tabs.first ?? initialSession
+        visibleTabs.first(where: { $0.id == activeId })
+            ?? visibleTabs.first
+            ?? initialSession
     }
 
     private var conversationTransition: AnyTransition {
@@ -639,7 +656,7 @@ struct SessionTabsView: View {
             ForEach([activeSession]) { session in
                 SessionView(
                     viewModel: viewModelForSession(session),
-                    tabs: tabs,
+                    tabs: visibleTabs,
                     onSaveComposerDraft: { draft in
                         onSaveComposerDraft(session, draft)
                     },
@@ -655,15 +672,16 @@ struct SessionTabsView: View {
         // indicator. Tab-switch slides may draw offscreen; that's invisible
         // on a full-screen push.
         .safeAreaInset(edge: .top, spacing: 0) {
-            if tabs.count > 1 {
+            if visibleTabs.count > 1 {
                 SessionTabBar(
-                    tabs: tabs,
+                    tabs: visibleTabs,
                     activeId: activeId,
-                    onSelect: select
+                    onSelect: select,
+                    onClose: close
                 )
             }
         }
-        .onChange(of: tabs) { _, updatedTabs in
+        .onChange(of: visibleTabs) { _, updatedTabs in
             guard !updatedTabs.contains(where: { $0.id == activeId }),
                   let fallback = updatedTabs.first
             else { return }
@@ -676,12 +694,42 @@ struct SessionTabsView: View {
         }
     }
 
+    /// Close a chat from the strip: archive it, then land on a neighbour —
+    /// the tab to its right, or the one to its left when it was last. Closing
+    /// the only remaining chat leaves nothing to show, so the stack pops back
+    /// to the sessions list.
+    private func close(_ session: Session) {
+        let strip = visibleTabs
+        let next = SessionsListViewModel.tabAfterClosing(session, in: strip)
+        onCloseTab(session)
+
+        guard let next else {
+            dismiss()
+            return
+        }
+        withAnimation(closeAnimation) {
+            if session.id == activeId {
+                let closedIndex = strip.firstIndex { $0.id == session.id } ?? 0
+                let nextIndex = strip.firstIndex { $0.id == next.id } ?? 0
+                transitionEdge = nextIndex > closedIndex ? .trailing : .leading
+                activeId = next.id
+            }
+            _ = closedIds.insert(session.id)
+        }
+    }
+
+    private var closeAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.16)
+            : .snappy(duration: 0.26, extraBounce: 0)
+    }
+
     private func select(_ session: Session) {
         guard session.id != activeId,
-              let targetIndex = tabs.firstIndex(where: { $0.id == session.id })
+              let targetIndex = visibleTabs.firstIndex(where: { $0.id == session.id })
         else { return }
 
-        let currentIndex = tabs.firstIndex(where: { $0.id == activeId }) ?? 0
+        let currentIndex = visibleTabs.firstIndex(where: { $0.id == activeId }) ?? 0
         withAnimation(
             reduceMotion
                 ? .easeOut(duration: 0.16)
@@ -700,6 +748,8 @@ private struct SessionTabBar: View {
     let tabs: [Session]
     let activeId: String
     let onSelect: (Session) -> Void
+    /// Close (archive) a chat from the strip. Nil leaves the tabs read-only.
+    var onClose: ((Session) -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Namespace private var activeTabIndicator
@@ -709,62 +759,7 @@ private struct SessionTabBar: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 4) {
                     ForEach(tabs) { session in
-                        let isActive = session.id == activeId
-                        Button {
-                            if !isActive { onSelect(session) }
-                        } label: {
-                            HStack(spacing: 7) {
-                                if session.waitingForInput == true {
-                                    PulsingDot(
-                                        color: OS1VisualStyle.blue,
-                                        size: 6
-                                    )
-                                } else if session.isRunning == true {
-                                    PulsingDot(
-                                        color: OS1VisualStyle.yellow,
-                                        size: 6
-                                    )
-                                }
-                                Text(session.displayTitle)
-                                    .font(.footnote.weight(
-                                        isActive ? .semibold : .medium
-                                    ))
-                                    .lineLimit(1)
-                            }
-                            .foregroundStyle(
-                                isActive
-                                    ? OS1VisualStyle.text
-                                    : OS1VisualStyle.textDim
-                            )
-                            .padding(.horizontal, 12)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? 260 : 180)
-                            .background {
-                                if isActive {
-                                    let indicator = RoundedRectangle(
-                                        cornerRadius: 9,
-                                        style: .continuous
-                                    )
-                                    .fill(OS1VisualStyle.hover)
-
-                                    if reduceMotion {
-                                        indicator
-                                    } else {
-                                        indicator.matchedGeometryEffect(
-                                            id: "active-session-tab",
-                                            in: activeTabIndicator
-                                        )
-                                    }
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .id(session.id)
-                        .accessibilityAddTraits(
-                            isActive ? .isSelected : []
-                        )
-                        .accessibilityValue(tabAccessibilityValue(session))
+                        tab(session)
                     }
                 }
                 .padding(.horizontal, 8)
@@ -786,6 +781,116 @@ private struct SessionTabBar: View {
                 }
             }
         }
+    }
+
+    /// One tab pill. The close affordance is attached here rather than in the
+    /// strip so an optimistic chat — which the server can't archive yet — is
+    /// simply left without one, instead of long-pressing into an empty menu.
+    @ViewBuilder
+    private func tab(_ session: Session) -> some View {
+        let pill = tabPill(session, close: closeAction(for: session))
+        if let close = closeAction(for: session) {
+            pill.contextMenu {
+                Button(role: .destructive) {
+                    close(session)
+                } label: {
+                    Label("Close chat", systemImage: "xmark")
+                }
+            }
+        } else {
+            pill
+        }
+    }
+
+    private func closeAction(for session: Session) -> ((Session) -> Void)? {
+        session.isOptimistic ? nil : onClose
+    }
+
+    private func tabPill(
+        _ session: Session,
+        close: ((Session) -> Void)?
+    ) -> some View {
+        let isActive = session.id == activeId
+        // The × rides on the OPEN tab only, matching the web strip's "close the
+        // chat you're in" gesture without spending an extra 32pt of a phone's
+        // strip on every sibling — those close through the long-press menu.
+        let showsClose = isActive && close != nil
+        return HStack(spacing: 0) {
+            Button {
+                if !isActive { onSelect(session) }
+            } label: {
+                HStack(spacing: 7) {
+                    if session.waitingForInput == true {
+                        PulsingDot(
+                            color: OS1VisualStyle.blue,
+                            size: 6
+                        )
+                    } else if session.isRunning == true {
+                        PulsingDot(
+                            color: OS1VisualStyle.yellow,
+                            size: 6
+                        )
+                    }
+                    Text(session.displayTitle)
+                        .font(.footnote.weight(
+                            isActive ? .semibold : .medium
+                        ))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(
+                    isActive
+                        ? OS1VisualStyle.text
+                        : OS1VisualStyle.textDim
+                )
+                .padding(.leading, 12)
+                // The × supplies the trailing inset when it's there.
+                .padding(.trailing, showsClose ? 2 : 12)
+                .frame(minWidth: 44, minHeight: 44)
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? 260 : 180)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(
+                isActive ? .isSelected : []
+            )
+            .accessibilityValue(tabAccessibilityValue(session))
+
+            if showsClose, let close {
+                Button {
+                    close(session)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        // A full-height 32pt box: the glyph stays small, the
+                        // tappable area clears Apple's 44pt guidance vertically
+                        // and sits comfortably wide of the title.
+                        .frame(width: 32, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close chat")
+            }
+        }
+        .background {
+            if isActive {
+                let indicator = RoundedRectangle(
+                    cornerRadius: 9,
+                    style: .continuous
+                )
+                .fill(OS1VisualStyle.hover)
+
+                if reduceMotion {
+                    indicator
+                } else {
+                    indicator.matchedGeometryEffect(
+                        id: "active-session-tab",
+                        in: activeTabIndicator
+                    )
+                }
+            }
+        }
+        .id(session.id)
     }
 
     private func tabAccessibilityValue(_ session: Session) -> String {

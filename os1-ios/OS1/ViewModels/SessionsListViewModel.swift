@@ -79,6 +79,18 @@ final class SessionsListViewModel {
         return [main] + tabs.filter { $0.id != main.id }
     }
 
+    /// The chat that takes over the strip when `closed` is closed from it: the
+    /// tab to its right, or the one to its left when it was the rightmost. Nil
+    /// when it was the workspace's last chat and there is nothing left to show.
+    nonisolated static func tabAfterClosing(
+        _ closed: Session, in tabs: [Session]
+    ) -> Session? {
+        let remaining = tabs.filter { $0.id != closed.id }
+        guard !remaining.isEmpty else { return nil }
+        let index = tabs.firstIndex { $0.id == closed.id } ?? 0
+        return index < remaining.count ? remaining[index] : remaining.last
+    }
+
     /// One sidebar row per workspace, with isolated worktrees as the fallback
     /// for legacy projectless rows. A projectless row adopts the one workspace
     /// already using its worktree, but separate workspaces are never merged
@@ -457,9 +469,7 @@ struct SidebarWorkspace: Identifiable, Equatable {
         sessions.compactMap(\.projectId).first { !$0.isEmpty }
     }
     var isOptimistic: Bool {
-        sessions.contains {
-            $0.id.hasPrefix("pending-") || $0.isOptimisticPlaceholder == true
-        }
+        sessions.contains(where: \.isOptimistic)
     }
     var effectiveRepo: String { mainSession.effectiveRepo }
     /// Any chat of the row is mid-turn — the row counts as live even when a
