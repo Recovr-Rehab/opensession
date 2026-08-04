@@ -14973,9 +14973,24 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .palette-icon-btn:hover::before {
 	background: var(--hover);
 }
+/* On reads as one filled accent chip: the glyph lights up with its wash. The
+   old state left the glyph at --text-dim and drew a full-strength 1px accent
+   ring around it, which read as a validation outline around a disabled icon —
+   and on the plan-mode surface, which carries its own accent tint, the pale
+   fill disappeared and only that hard ring was left doing the work. Keeping the
+   state in the wash (no border) also matches how the rest of the app paints
+   state, and gives it somewhere to go on hover. */
+.palette-icon-btn.is-on {
+	color: var(--accent);
+}
 .palette-icon-btn.is-on::before {
-	background: var(--accent-soft);
-	box-shadow: inset 0 0 0 1px var(--accent);
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	box-shadow: none;
+}
+/* Without this an already-on toggle is inert under the cursor: the shared
+   :hover rules lose to .is-on on both color and fill. */
+.palette-icon-btn.is-on:hover::before {
+	background: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 .palette-icon-btn:disabled {
 	opacity: 0.5;
