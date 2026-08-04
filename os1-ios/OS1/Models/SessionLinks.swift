@@ -56,25 +56,10 @@ enum SessionLinks {
     /// unchanged when there is nothing to do, which is the common case.
     static func linkify(_ markdown: String) -> String {
         guard markdown.contains("bks-") else { return markdown }
-        var out: [String] = []
-        var inFence = false
-        for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
-            let text = String(line)
-            let trimmed = text.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
-                inFence.toggle()
-                out.append(text)
-                continue
-            }
-            // Indented code is code too, and a line with no id is most lines.
-            if inFence || text.hasPrefix("    ") || text.hasPrefix("\t")
-                || !text.contains("bks-") {
-                out.append(text)
-                continue
-            }
-            out.append(linkifyLine(text))
+        return MarkdownProse.rewrite(markdown) { line in
+            // A line with no id is most lines.
+            line.contains("bks-") ? linkifyLine(line) : line
         }
-        return out.joined(separator: "\n")
     }
 
     private static func linkifyLine(_ line: String) -> String {

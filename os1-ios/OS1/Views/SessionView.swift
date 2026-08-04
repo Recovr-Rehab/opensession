@@ -76,6 +76,14 @@ struct SessionView: View {
     /// Native counterpart of mobile web's title-opened workspace info page.
     @State private var showWorktreeInfo = false
 
+    #if os(iOS)
+    /// Web link tapped in the transcript, shown over the session. The
+    /// enclosing action — the one `SessionsListView` installs to turn
+    /// `bks-…` links into a push — stays in charge of everything else.
+    @State private var safariLink: SafariLink?
+    @Environment(\.openURL) private var enclosingOpenURL
+    #endif
+
     init(
         session: Session,
         seed: SessionViewModel.OptimisticSeed? = nil,
@@ -269,6 +277,26 @@ struct SessionView: View {
                     }
                 }
             }
+            // Web links from the transcript open on top of it, not instead of
+            // it. Attached here rather than out with the session's other
+            // sheets: two sheet modifiers on one view leaves only the last one
+            // working, and the worktree sheet was there first.
+            #if os(iOS)
+            .environment(\.openURL, OpenURLAction { url in
+                guard SafariLink.isWeb(url) else {
+                    // Session links and custom schemes stay with the action
+                    // the sessions list installed above us.
+                    enclosingOpenURL(url)
+                    return .handled
+                }
+                safariLink = SafariLink(url: url)
+                return .handled
+            })
+            .sheet(item: $safariLink) { link in
+                SafariSheet(url: link.url)
+                    .ignoresSafeArea()
+            }
+            #endif
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {

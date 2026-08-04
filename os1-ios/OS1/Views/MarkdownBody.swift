@@ -20,10 +20,12 @@ struct MarkdownBody: View {
 
     var body: some View {
         SwiftStreamingMarkdown.MarkdownView(
-            // Session ids become links here rather than in the display pass:
-            // the entry's own text stays the raw markdown, so copying a
-            // message still yields what the agent actually wrote.
-            text: SessionLinks.linkify(text),
+            // Session ids and bare URLs become links here rather than in the
+            // display pass: the entry's own text stays the raw markdown, so
+            // copying a message still yields what the agent actually wrote.
+            // Autolinking runs first so a session URL is already a link
+            // target by the time `SessionLinks` looks for loose ids.
+            text: SessionLinks.linkify(MarkdownAutolink.linkify(text)),
             config: dimmed ? .os1Dim : .os1Static
         )
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -59,6 +61,11 @@ final class MarkdownStreamSource: ObservableObject, StreamedMarkdownSource {
 /// Persistent streamed renderer for the in-flight assistant bubble. The source
 /// survives SwiftUI body updates, so snapshots flow through one parser and one
 /// rendered document instead of recreating the renderer on every 8 Hz flush.
+///
+/// The link rewrites `MarkdownBody` applies are deliberately not run here: a
+/// URL arrives a few characters at a time, so linkifying each snapshot would
+/// mean repeatedly building a link to a truncated address. Links appear when
+/// the message settles into its durable row.
 struct StreamingMarkdownBody: View {
     let text: String
     @StateObject private var source: MarkdownStreamSource
