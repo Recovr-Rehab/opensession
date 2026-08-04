@@ -24,6 +24,7 @@ import { TeamSection } from "./SetupTeam";
 import {
 	Code,
 	CopyableCode,
+	LinkChips,
 	StateChip,
 	setupRequest,
 	type ChipTone,
@@ -233,6 +234,7 @@ function IntegrationCard({
 					</>
 				)}
 			</div>
+			{!configured && <LinkChips links={integration.links ?? []} />}
 			<div className="mt-3 flex flex-col gap-2.5">
 				{integration.env.map((e) => (
 					<EnvVarField
@@ -372,9 +374,16 @@ function GithubAuthCard({
 				<div className="mt-3">
 					<ol className="m-0 flex list-none flex-col gap-2.5 p-0">
 						<RecipeStep n={1}>
-							Create an org-owned GitHub App (org Settings → Developer settings →
-							GitHub Apps). Full guide: <Code>docs/setup/github.md</Code> in the
-							checkout.
+							Create an org-owned GitHub App —{" "}
+							<a
+								href={github.appCreateUrl}
+								target="_blank"
+								rel="noreferrer"
+								className="text-fg underline decoration-line underline-offset-2 transition-colors hover:decoration-fg"
+							>
+								open the New GitHub App form ↗
+							</a>
+							. Full guide: <Code>docs/setup/github.md</Code> in the checkout.
 						</RecipeStep>
 						<RecipeStep n={2}>On the app, check “Enable Device Flow”.</RecipeStep>
 						<RecipeStep n={3}>

@@ -16,12 +16,18 @@ export interface SetupEnvVar {
 	present: boolean;
 }
 
+export interface SetupLink {
+	label: string;
+	url: string;
+}
+
 export interface SetupIntegration {
 	id: string;
 	label: string;
 	doc: string;
 	enabled: boolean;
 	env: SetupEnvVar[];
+	links: SetupLink[];
 	missingRequired: string[];
 }
 
@@ -32,6 +38,7 @@ export interface SetupGithub {
 	redirectFlowAvailable: boolean;
 	callbackUrl: string;
 	botTokenPresent: boolean;
+	appCreateUrl: string;
 }
 
 export interface SetupStatus {
@@ -124,6 +131,30 @@ export function Code({
 		>
 			{children}
 		</code>
+	);
+}
+
+/** Deep links into the third-party tool where a credential is created —
+ * rendered as a chip row under an integration card's description. */
+export function LinkChips({ links }: { links: SetupLink[] }) {
+	if (!links.length) return null;
+	return (
+		<div className="mt-2 flex flex-wrap gap-1.5">
+			{links.map((link) => (
+				<a
+					key={link.url}
+					href={link.url}
+					target="_blank"
+					rel="noreferrer"
+					className="inline-flex items-center gap-1 rounded-sm bg-surface px-2 py-1 text-label text-dim transition-colors hover:bg-active hover:text-fg"
+				>
+					{link.label}
+					<span aria-hidden className="text-faint">
+						↗
+					</span>
+				</a>
+			))}
+		</div>
 	);
 }
 

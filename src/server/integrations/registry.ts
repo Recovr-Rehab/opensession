@@ -42,6 +42,11 @@ export type IntegrationEnv = {
   description: string;
 };
 
+export type IntegrationLink = {
+  label: string;
+  url: string;
+};
+
 export type IntegrationSpec = {
   /** Config key under `integrations.` and the id used by the CLI. */
   id: string;
@@ -50,6 +55,10 @@ export type IntegrationSpec = {
   doc: string;
   enableFlag: string;
   env: IntegrationEnv[];
+  /** Where in the third-party tool the credentials are created — surfaced as
+   *  deep links by Settings → Setup. Static only; instance-dependent links
+   *  (Grafana's own URL, the GitHub org) are computed in the setup route. */
+  links?: IntegrationLink[];
   /** Load regardless of configuration; the module gates itself. */
   always?: boolean;
   /** Extra gate beyond the enable flag — checked at load time. */
@@ -66,6 +75,12 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     env: [
       { name: "PLAIN_API_KEY", required: true, description: "API key for thread reads/writes" },
       { name: "PLAIN_WEBHOOK_SECRET", description: "verifies inbound webhook signatures" },
+    ],
+    links: [
+      // Plain's settings URLs are workspace-scoped after login; this lands on
+      // the right page or the login that leads there.
+      { label: "Plain → Settings → Machine users", url: "https://app.plain.com/settings/machine-users" },
+      { label: "API key guide", url: "https://www.plain.com/docs/graphql/authentication" },
     ],
     load: async () => {
       const { PlainAgent } = await import("../../agents/plain/index");
@@ -98,6 +113,13 @@ export const INTEGRATIONS: IntegrationSpec[] = [
       { name: "LINEAR_CLIENT_ID", description: "OAuth app client id" },
       { name: "LINEAR_CLIENT_SECRET", description: "OAuth app client secret" },
     ],
+    links: [
+      {
+        label: "Create API key (Security & access)",
+        url: "https://linear.app/settings/account/security",
+      },
+      { label: "OAuth applications", url: "https://linear.app/settings/api" },
+    ],
     load: async () => {
       const { LinearAgent } = await import("../../agents/linear/index");
       return new LinearAgent();
@@ -118,6 +140,7 @@ export const INTEGRATIONS: IntegrationSpec[] = [
       { name: "ALLOWED_SLACK_USER_ID", description: "restricts admin tools to one user" },
       { name: "WORKTREE_HOOK_SECRET", description: "shared secret for worktree hooks" },
     ],
+    links: [{ label: "Create Slack app", url: "https://api.slack.com/apps" }],
     load: async () => {
       const { SlackAgent } = await import("../../agents/slack/index");
       return new SlackAgent();
@@ -134,6 +157,10 @@ export const INTEGRATIONS: IntegrationSpec[] = [
         required: true,
         description: "verifies inbound webhook signatures",
       },
+    ],
+    links: [
+      { label: "Webhook endpoints", url: "https://dashboard.stripe.com/webhooks" },
+      { label: "API keys (restricted)", url: "https://dashboard.stripe.com/apikeys" },
     ],
     // Without the signing secret every webhook fails verification, so there is
     // no point exposing the route at all.
@@ -176,6 +203,12 @@ export const INTEGRATIONS: IntegrationSpec[] = [
       { name: "GITHUB_WEBHOOK_SECRET", description: "verifies inbound webhook signatures" },
       { name: "GITHUB_BOT_LOGIN", description: "login PRs are attributed to" },
       { name: "GITHUB_MENTION_HANDLES", description: "handles that trigger the PR agent" },
+    ],
+    links: [
+      {
+        label: "Create fine-grained token",
+        url: "https://github.com/settings/personal-access-tokens/new",
+      },
     ],
     load: async (ctx) => {
       const { GithubAgent } = await import("../../agents/github/index");

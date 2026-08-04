@@ -46,6 +46,28 @@ async function integrationSnapshot(
     description: e.description,
     present: present(e.name),
   }));
+  // Registry links are static; instance-dependent ones are computed here.
+  const links = [...(spec.links ?? [])];
+  if (spec.id === "grafana") {
+    const grafanaUrl = (envValues?.GRAFANA_URL || process.env.GRAFANA_URL || "")
+      .trim()
+      .replace(/\/$/, "");
+    if (grafanaUrl) {
+      links.unshift({
+        label: "Service accounts on your Grafana",
+        url: `${grafanaUrl}/org/serviceaccounts`,
+      });
+    }
+  }
+  if (spec.id === "github") {
+    const org = await primaryGithubOrg();
+    if (org) {
+      links.push({
+        label: `Org webhooks (${org})`,
+        url: `https://github.com/organizations/${org}/settings/hooks`,
+      });
+    }
+  }
   // Post-write truth for `enabled`, mirroring isEnabled()'s env-wins rule
   // against the file's flag value instead of the stale process.env one.
   const enabled = envValues
@@ -59,16 +81,31 @@ async function integrationSnapshot(
     doc: spec.doc,
     enabled,
     env,
+    links,
     missingRequired: env
       .filter((e) => e.required && !e.present)
       .map((e) => e.name),
   };
 }
 
+/** The GitHub org this instance mostly lives in — the modal owner across the
+ *  registered repos' ghRepo values. Drives org-scoped deep links (App
+ *  creation, org webhooks); absent when no repo names a GitHub owner. */
+async function primaryGithubOrg(): Promise<string | undefined> {
+  const { configuredRepos } = await import("../config");
+  const counts = new Map<string, number>();
+  for (const repo of Object.values(configuredRepos())) {
+    const owner = repo.ghRepo?.split("/")[0];
+    if (owner) counts.set(owner, (counts.get(owner) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
 async function githubSnapshot(publicBaseUrl: string) {
   const { githubUserAuthSettings, githubRedirectFlowAvailable } =
     await import("../github-auth");
   const github = githubUserAuthSettings();
+  const org = await primaryGithubOrg();
   return {
     userPrAuth: github.enabled,
     clientIdConfigured: !!github.clientId,
@@ -76,6 +113,9 @@ async function githubSnapshot(publicBaseUrl: string) {
     redirectFlowAvailable: githubRedirectFlowAvailable(),
     callbackUrl: `${publicBaseUrl}/api/auth/callback`,
     botTokenPresent: !!process.env.GITHUB_API_TOKEN,
+    appCreateUrl: org
+      ? `https://github.com/organizations/${org}/settings/apps/new`
+      : "https://github.com/settings/apps/new",
   };
 }
 
