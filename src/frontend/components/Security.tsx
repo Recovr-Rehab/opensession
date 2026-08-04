@@ -213,7 +213,7 @@ export function Security({ onOpenSession }: Props) {
                   <div key={r.id} className="flex items-baseline gap-2 text-supporting text-dim min-w-0">
                     <span className={r.enabled ? "text-green" : "text-faint"}>●</span>
                     <span className="text-fg truncate">{r.name}</span>
-                    <span className="font-mono text-faint shrink-0">{r.schedule}</span>
+                    <span className="text-faint shrink-0">{r.schedule}</span>
                     {r.lastRunAt && (
                       <span className="shrink-0">
                         last {relativeTime(r.lastRunAt)}

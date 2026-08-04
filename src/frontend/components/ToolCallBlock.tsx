@@ -537,7 +537,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
           <span
             className={cn(
-              "min-w-0 truncate font-mono text-label leading-4",
+              "min-w-0 truncate text-label leading-4",
               failed ? "text-red/80" : "text-dim"
             )}
           >

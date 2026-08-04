@@ -187,7 +187,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
               Branch
               <input
                 ref={branchRef}
-                className={`${fieldCls} h-10 font-mono`}
+                className={`${fieldCls} h-10`}
                 value={branch}
                 onChange={(e) => setBranch(e.target.value)}
                 disabled={starting}

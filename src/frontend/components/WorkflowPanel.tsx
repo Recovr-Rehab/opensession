@@ -377,7 +377,7 @@ function WorkflowsEmptyState() {
 					].map((s) => (
 						<div
 							key={s}
-							className="rounded-sm border border-line bg-surface px-2.5 py-2 font-mono text-meta leading-relaxed text-dim"
+							className="rounded-sm border border-line bg-surface px-2.5 py-2 text-meta leading-relaxed text-dim"
 						>
 							{s}
 						</div>

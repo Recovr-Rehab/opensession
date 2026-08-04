@@ -139,24 +139,15 @@ export function ModelProvidersPanel() {
 							<SettingRowText>
 								<SettingRowTitle>{p.id}</SettingRowTitle>
 								<SettingRowDescription className="truncate">
-									{p.apiKeyMasked ? (
-										<span className="font-mono">{p.apiKeyMasked}</span>
-									) : (
-										"no API key stored"
-									)}
-									{p.baseURL && (
-										<>
-											{" · "}
-											<span className="font-mono">{p.baseURL}</span>
-										</>
-									)}
+									{p.apiKeyMasked || "no API key stored"}
+									{p.baseURL && ` · ${p.baseURL}`}
 								</SettingRowDescription>
 								{p.models.length > 0 ? (
 									<div className="mt-1.5 flex flex-wrap gap-1">
 										{p.models.map((m) => (
 											<span
 												key={m}
-												className="rounded-sm bg-active px-1.5 py-px font-mono text-meta text-dim"
+												className="rounded-sm bg-active px-1.5 py-px text-meta text-dim"
 												title={m}
 											>
 												{m.split("/").slice(2).join("/")}
@@ -281,7 +272,7 @@ function AddProviderForm({
 				<SettingsField>
 					API key
 					<input
-						className={`${settingsInputClass} font-mono`}
+						className={settingsInputClass}
 						type="password"
 						value={apiKey}
 						onChange={(e) => setApiKey(e.target.value)}
@@ -293,7 +284,7 @@ function AddProviderForm({
 				<SettingsField>
 					Base URL (optional)
 					<input
-						className={`${settingsInputClass} font-mono`}
+						className={settingsInputClass}
 						value={baseURL}
 						onChange={(e) => setBaseURL(e.target.value)}
 						placeholder="https://api.x.ai/v1"
@@ -302,7 +293,7 @@ function AddProviderForm({
 				<SettingsField>
 					Model ids (optional, comma or space separated)
 					<input
-						className={`${settingsInputClass} font-mono`}
+						className={settingsInputClass}
 						value={models}
 						onChange={(e) => setModels(e.target.value)}
 						placeholder={

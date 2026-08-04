@@ -2453,7 +2453,7 @@ function AuditPanel() {
 								<span className="text-dim truncate">{auditSummary(e)}</span>
 								{sid && (
 									<a
-										className="ml-auto shrink-0 font-mono text-meta text-faint underline"
+										className="ml-auto shrink-0 text-meta text-faint underline"
 										href={`${BASE_PATH}/session/${sid}`}
 										onClick={(ev) => ev.stopPropagation()}
 									>

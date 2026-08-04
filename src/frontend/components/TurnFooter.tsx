@@ -196,7 +196,7 @@ function FileChip({ file }: { file: TouchedFile }) {
             (1px apart here) because their ascents differ. */}
         <div className="flex items-baseline gap-2 border-b border-line px-2.5 py-2">
           <ExtBadge name={name} />
-          <span className="min-w-0 flex-1 truncate font-mono text-meta text-dim">
+          <span className="min-w-0 flex-1 truncate text-meta text-dim">
             {tidyPath(file.path)}
           </span>
           <LineStats

@@ -360,11 +360,11 @@ export function Connections() {
                       {MCP_BLURBS[s.name] || "MCP server"}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-meta text-faint">
-                      <span className="rounded bg-active px-1.5 py-px font-mono">{s.transport}</span>
-                      <span className="truncate font-mono" title={s.target}>{s.target}</span>
+                      <span className="rounded bg-active px-1.5 py-px">{s.transport}</span>
+                      <span className="truncate" title={s.target}>{s.target}</span>
                     </div>
                     {meta.bad && s.detail && (
-                      <div className="mt-1 truncate font-mono text-meta text-red" title={s.detail}>
+                      <div className="mt-1 truncate text-meta text-red" title={s.detail}>
                         {s.detail}
                       </div>
                     )}
@@ -758,7 +758,7 @@ function PlainRouter() {
           rows={12}
           spellCheck={false}
           aria-label="Routing prompt"
-          className={cn(settingsInputClass, "mt-2 resize-y font-mono text-body")}
+          className={cn(settingsInputClass, "mt-2 resize-y text-body")}
         />
         <div className="mt-1.5 flex min-w-0 items-center gap-2.5 text-meta text-faint">
           <Button
@@ -862,7 +862,7 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
         <SettingsField>
           URL
           <input
-            className={cn(settingsInputClass, "font-mono")}
+            className={settingsInputClass}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://api.example.com/mcp"
@@ -874,7 +874,7 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
             <SettingsField>
               Command
               <input
-                className={cn(settingsInputClass, "font-mono")}
+                className={settingsInputClass}
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 placeholder="~/bin/my-mcp"
@@ -883,7 +883,7 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
             <SettingsField>
               Args (space-separated)
               <input
-                className={cn(settingsInputClass, "font-mono")}
+                className={settingsInputClass}
                 value={args}
                 onChange={(e) => setArgs(e.target.value)}
                 placeholder="run /path/to/server.ts"

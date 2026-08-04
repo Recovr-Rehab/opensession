@@ -2519,7 +2519,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	white-space: nowrap;
 }
 .hovercard-mono {
-	font-family: var(--mono);
 	font-size: 0.95em;
 }
 
@@ -4505,7 +4504,6 @@ body.resizing-panel .panel-resize::after {
 	background: var(--hover);
 }
 .workspace-info-file-path {
-	font-family: var(--mono);
 	font-size: 12px;
 	display: flex;
 	align-items: baseline;
@@ -5341,8 +5339,7 @@ a.workspace-info-check-row {
 	display: flex;
 	gap: 8px;
 	margin-left: auto;
-	font-family: var(--mono);
-	font-size: 11.5px;
+	font-size: 11px;
 }
 .diff-file-group-files {
 	display: flex;
@@ -5391,8 +5388,7 @@ a.workspace-info-check-row {
 	overflow: hidden;
 	cursor: text;
 	user-select: text;
-	font-family: var(--mono);
-	font-size: 12.5px;
+	font-size: 12px;
 }
 /* The dir (left, low-signal) absorbs truncation with an ellipsis; the base
    (filename) stays whole and only clips in the pathological no-dir case — the
@@ -5478,7 +5474,6 @@ a.workspace-info-check-row {
 	display: flex;
 	gap: 8px;
 	margin-left: auto;
-	font-family: var(--mono);
 	font-size: 12px;
 	flex-shrink: 0;
 }
@@ -5617,7 +5612,6 @@ a.workspace-info-check-row {
 }
 
 .diff-comment-target {
-	font-family: var(--mono);
 	font-size: 11px;
 	color: var(--text-faint);
 }
@@ -5909,7 +5903,6 @@ a.workspace-info-check-row {
 }
 
 .diff-status {
-	font-family: var(--mono);
 	font-size: 11px;
 	font-weight: 700;
 	width: 18px;
@@ -5939,7 +5932,6 @@ a.workspace-info-check-row {
 }
 
 .diff-file-path {
-	font-family: var(--mono);
 	font-size: 12px;
 	white-space: nowrap;
 	overflow: hidden;
@@ -5952,7 +5944,7 @@ a.workspace-info-check-row {
 .diff-file-stats {
 	display: flex;
 	gap: 6px;
-	font-size: 11.5px;
+	font-size: 11px;
 	flex-shrink: 0;
 }
 
@@ -6576,8 +6568,7 @@ a.workspace-info-check-row {
 }
 
 .pr-branch {
-	font-family: var(--mono);
-	font-size: 11.5px;
+	font-size: 11px;
 	background: var(--bg-panel);
 	border: 1px solid var(--border);
 	padding: 2px 8px;
@@ -7183,7 +7174,6 @@ a.workspace-info-check-row {
 	min-width: 0;
 }
 .prc-branch {
-	font-family: var(--mono);
 	font-size: 11px;
 	color: var(--text-dim);
 	background: var(--bg-active);
@@ -7940,8 +7930,7 @@ a.workspace-info-check-row {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	font-family: var(--mono);
-	font-size: 11.5px;
+	font-size: 11px;
 	color: var(--text-dim);
 	overflow: hidden;
 	min-width: 0;
@@ -7973,7 +7962,6 @@ a.workspace-info-check-row {
 	flex-shrink: 0;
 	font-size: 11px;
 	font-weight: 600;
-	font-family: var(--mono);
 	color: var(--text-dim);
 	background: var(--bg-active);
 	border-radius: calc(5px * var(--rf)); corner-shape: var(--cs);
@@ -8083,7 +8071,6 @@ a.workspace-info-check-row {
 	gap: 7px;
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
-	font-family: var(--mono);
 }
 .rv-add {
 	color: var(--green);
@@ -9107,7 +9094,6 @@ a.workspace-info-check-row {
 /* No title on hand, so the label is a shortened id — monospace, like any other
    identifier in the transcript. */
 .session-link[data-session-id][data-session-label="id"] {
-	font-family: var(--mono);
 }
 .session-link[data-session-id]::after {
 	content: " ↗";
@@ -9513,7 +9499,6 @@ button.home-whisper-link:hover {
 }
 
 .home-row-branch {
-	font-family: var(--mono);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -9673,7 +9658,6 @@ button.home-whisper-link:hover {
 }
 
 .automation-webhook-url {
-	font-family: var(--mono);
 	font-size: 11px;
 	color: var(--text-dim);
 	white-space: nowrap;
@@ -11245,7 +11229,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 
 .automation-cron {
-	font-family: var(--mono);
 	background: var(--bg-active);
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
 	padding: 1px 7px;
@@ -11396,8 +11379,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	text-overflow: ellipsis;
 }
 .automations-row-trigger {
-	font-size: 11.5px;
-	font-family: var(--mono);
+	font-size: 11px;
 	color: var(--text-faint);
 	white-space: nowrap;
 	overflow: hidden;
@@ -11693,7 +11675,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 
 .conn-transport {
-	font-family: var(--mono);
 	background: var(--bg-active);
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
 	padding: 1px 6px;
@@ -11710,8 +11691,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .conn-error {
 	margin-top: 8px;
 	color: var(--red);
-	font-size: 11.5px;
-	font-family: var(--mono);
+	font-size: 11px;
 }
 
 .conn-remove {
@@ -11874,7 +11854,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .wiki-result-path {
 	color: var(--text-faint);
 	font-size: 11px;
-	font-family: var(--mono);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -11899,8 +11878,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 
 .wiki-doc-path {
-	font-family: var(--mono);
-	font-size: 11.5px;
+	font-size: 11px;
 	color: var(--text-faint);
 	margin-bottom: 16px;
 }
@@ -14242,7 +14220,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	flex-shrink: 0;
 }
 .note-pane-id {
-	font-family: var(--mono);
 	font-size: 12px;
 	color: var(--text-faint);
 }
@@ -15319,7 +15296,6 @@ html[data-theme="light"] .palette-card .palette-create {
 	color: var(--text-dim);
 }
 .ss-item-branch {
-	font-family: var(--mono, monospace);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	max-width: 220px;

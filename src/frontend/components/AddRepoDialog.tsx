@@ -101,7 +101,7 @@ export function AddRepoDialog({
 						<input
 							ref={inputRef}
 							type="text"
-							className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 font-mono text-sm text-fg outline-none placeholder:text-faint focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+							className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-fg outline-none placeholder:text-faint focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
 							value={value}
 							onChange={(event) =>
 								mode === "clone"

@@ -611,7 +611,7 @@ function ClaudeAccountsSection() {
 								<SettingRowDescription className="truncate">
 									{a.email ? `${a.email} · ` : ""}
 									{a.plan ? `${a.plan.replace("default_claude_", "")} · ` : ""}
-									<span className="font-mono">{a.tokenMasked}</span>
+									{a.tokenMasked}
 								</SettingRowDescription>
 								{a.noUsageScope && !a.usage ? (
 									<div className="mt-1.5 text-meta text-faint">
@@ -806,7 +806,7 @@ function CodexAccountsSection() {
 								<SettingRowDescription className="truncate">
 									{a.kind === "api_key" ? "API key" : "ChatGPT login"}
 									{" · "}
-									<span className="font-mono">{a.valueMasked}</span>
+									{a.valueMasked}
 								</SettingRowDescription>
 							</SettingRowText>
 							<SettingRowControl className="flex items-center gap-1.5">
@@ -915,7 +915,7 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 				<SettingsField className="mb-0 flex-1">
 					Token
 					<input
-						className={cn(settingsInputClass, "font-mono")}
+						className={settingsInputClass}
 						type="password"
 						value={token}
 						onChange={(e) => setToken(e.target.value)}
@@ -936,7 +936,7 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 				<SettingsField className="mb-0 flex-1">
 					Usage credentials path
 					<input
-						className={cn(settingsInputClass, "font-mono")}
+						className={settingsInputClass}
 						value={credentialsPath}
 						onChange={(e) => setCredentialsPath(e.target.value)}
 						placeholder="~/.claude/accounts/team/credentials.json"
@@ -1101,7 +1101,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 					<SettingsField className="mb-0 flex-1">
 						{kind === "api_key" ? "API key" : "CODEX_HOME path"}
 						<input
-							className={cn(settingsInputClass, "font-mono")}
+							className={settingsInputClass}
 							type={kind === "api_key" ? "password" : "text"}
 							value={value}
 							onChange={(e) => setValue(e.target.value)}
