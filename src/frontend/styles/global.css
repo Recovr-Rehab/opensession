@@ -9888,11 +9888,14 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	border: 1px solid var(--border);
 	border-radius: calc(64px * var(--rf)); corner-shape: var(--cs);
 	box-shadow: var(--composer-shadow);
-	padding: 14px 14px 10px 16px;
+	/* Symmetric horizontal padding: the old extra 2px on the left stacked with
+	   the leading icon button's own glyph inset and left the field visibly
+	   heavier on that side than the send button is on the right. */
+	padding: 14px 14px 10px;
 	/* Distance from the composer's outer left edge to its content box (padding
 	   + border). Popups anchored to a toolbar control read it to line their own
 	   left edge up with the composer's instead of with the control. */
-	--composer-inset-left: 17px;
+	--composer-inset-left: 15px;
 	transition:
 		border-color 0.15s,
 		box-shadow 0.15s;
@@ -10318,6 +10321,9 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
    corner (the full toolbar keeps the 8px square). */
 .composer.composer-min .composer-add-btn {
 	border-radius: 50%;
+	/* The pill insets everything by 4px; the expanded field's optical pull
+	   would hang the button off its rounded left end. */
+	margin-left: 0;
 }
 .composer.composer-min .composer-voice-wrap {
 	order: 3;
@@ -13945,6 +13951,16 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .composer-pop-wrap {
 	position: relative;
 	display: inline-flex;
+}
+/* The "+" is a 40px target around a 20px glyph, so aligning its BOX with the
+   composer's padding parks the visible ink 10px further in than the text above
+   it — the field then reads left-heavy against the send button, whose filled
+   circle is its own edge. Pull the button (not its wrapper, which the menu
+   anchors to) back out so the glyph sits about where the send circle does.
+   Stops short of full symmetry: the hover wash has to stay inside the field's
+   32px corner. */
+.composer-toolbar .composer-add-btn {
+	margin-left: -6px;
 }
 .composer-goal-btn.is-on {
 	width: auto;
