@@ -2187,20 +2187,21 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.sidebar-group--pinned .sidebar-item {
 		padding-left: 10px;
 	}
-	/* Under "Group by: Repo", drop the lane inset entirely on mobile so the
-	   repo head, its status lanes, and the workspace rows all share one left
-	   edge. The desktop indent is a nice nesting cue but it eats scarce
-	   horizontal space on a phone; the repo band + collapse already conveys
-	   the grouping. (These out-specificity the base mobile header/item
-	   padding rules, so restate their values.) */
+	/* Under the project groupings ("Project", "Project and status", "Project
+	   and inbox"), drop the lane inset entirely on mobile so the repo head, its
+	   nested lanes/bands, and the workspace rows all share one left edge. The
+	   desktop indent is a nice nesting cue but it eats scarce horizontal space
+	   on a phone; the repo band + collapse already conveys the grouping. These
+	   out-specify the phone list's shared content rail further down, so they
+	   have to restate its 4px inset. */
 	.sidebar-repo-lanes .sidebar-group-header {
-		padding-left: 10px;
+		padding-left: 4px;
 	}
 	.sidebar-repo-lanes .sidebar-item {
-		padding-left: 10px;
+		padding-left: 4px;
 	}
 	.sidebar-repo-lanes .sidebar-status-group .sidebar-item {
-		padding-left: 10px;
+		padding-left: 4px;
 	}
 }
 /* On touch, the full action set (Rename / Move / Archive) is still reached by
