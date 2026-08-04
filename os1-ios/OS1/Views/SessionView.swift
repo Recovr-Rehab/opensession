@@ -464,12 +464,17 @@ struct SessionView: View {
                             .lineLimit(1)
                     }
                 }
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(OS1VisualStyle.textFaint)
             }
-            .frame(maxWidth: 230, alignment: .leading)
-            .contentShape(Rectangle())
+            // Same glass pill the bar's own back and "+" controls wear, so the
+            // identity reads as the third control up there rather than loose
+            // text — and carries the tappability the dropped chevron used to
+            // hint at.
+            .padding(.leading, 8)
+            .padding(.trailing, 14)
+            .padding(.vertical, 6)
+            .frame(maxWidth: 220, alignment: .leading)
+            .contentShape(Capsule())
+            .glassSurface(in: Capsule(), interactive: true)
         }
         .buttonStyle(.plain)
         .tint(.primary)
