@@ -1059,11 +1059,12 @@ struct SessionTabsView: View {
     }
 }
 
-/// Workspace chat tabs, as a floating glass bar under the navigation bar —
-/// the top counterpart of the composer pill, spanning the width with the same
-/// inset, radius and near-solid surface. The transcript passes BEHIND it (the
-/// strip is attached as a `safeAreaBar`) and dissolves into it through the
-/// soft scroll edge effect plus `tabStripTopWash`.
+/// Workspace chat tabs, as individually floating glass pills under the
+/// navigation bar. Not one bar: each tab is its own capsule with its own
+/// surface, so the row reads as chips over the chat rather than a second band
+/// of chrome. The transcript passes BEHIND them (the strip is attached as a
+/// `safeAreaBar`) and dissolves through the soft scroll edge effect plus
+/// `tabStripTopWash`.
 ///
 /// The active tab is centered when the strip opens, while horizontal overflow
 /// remains native touch scrolling.
@@ -1077,43 +1078,27 @@ private struct SessionTabBar: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Namespace private var activeTabIndicator
 
-    /// Matches the composer's iOS radius: at the strip's 52pt height the ends
-    /// read as a capsule, so the two floating bars bracket the chat.
-    private static let cornerRadius: CGFloat = 26
-
-    private var surface: RoundedRectangle {
-        RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-    }
+    /// Every pill wears this shape — its glass, its material, and the active
+    /// tab's fill — so the three layers share one silhouette.
+    private var pillShape: Capsule { Capsule(style: .continuous) }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     ForEach(tabs) { session in
                         tab(session)
                     }
                 }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 4)
+                // The rail lives on the CONTENT, not the scroll view: pills
+                // stay on the composer's 12pt line at rest and still scroll
+                // out to the screen edges, where the wash takes them.
+                .padding(.horizontal, 12)
+                .padding(.vertical, 2)
             }
             .scrollIndicators(.hidden)
-            // Clipped to the surface, not just to the scroll view's rect: a
-            // pill scrolled against either end would otherwise paint into the
-            // rounded corners, outside the glass.
-            .clipShape(surface)
-            // Near-solid, exactly like the composer: the transcript passes
-            // behind the strip, and bare glass took on the luminance of
-            // whatever scrolled under it — a dark code block dragged the whole
-            // band dark. The page colour over a thick material holds it at a
-            // stable brightness; the chat still shows around it, not through
-            // it.
-            .background(OS1VisualStyle.background.opacity(0.7), in: surface)
-            .background(.thickMaterial, in: surface)
-            .glassSurface(in: surface)
-            // The composer's rail (SessionInputBar's `horizontalInset` at
-            // compact width), so the two floating bars line up edge to edge.
-            .padding(.horizontal, 12)
-            .padding(.top, 2)
+            // No top padding: the pills are the chat's own chrome rather than
+            // a second band, so they ride tight under the navigation bar.
             .padding(.bottom, 4)
             .tabStripTopWash()
             .onAppear {
@@ -1218,14 +1203,12 @@ private struct SessionTabBar: View {
                 .accessibilityLabel("Close chat")
             }
         }
+        // The active tab's fill sits INSIDE its own glass, above the material:
+        // with every pill carrying its own surface there is no shared band for
+        // an indicator to slide along, so "selected" is a tint on the pill.
         .background {
             if isActive {
-                // A capsule, not a rounded rectangle: the strip is a capsule
-                // itself now, and the indicator sits 4pt inside it — the two
-                // curves nest instead of the indicator's corner being clipped
-                // by the strip's end.
-                let indicator = Capsule(style: .continuous)
-                    .fill(OS1VisualStyle.hover)
+                let indicator = pillShape.fill(OS1VisualStyle.hover)
 
                 if reduceMotion {
                     indicator
@@ -1237,6 +1220,14 @@ private struct SessionTabBar: View {
                 }
             }
         }
+        // Near-solid, exactly like the composer: the transcript passes behind
+        // each pill, and bare glass took on the luminance of whatever scrolled
+        // under it — a dark code block dragged the whole tab dark. The page
+        // colour over a thick material holds it at a stable brightness; the
+        // chat still shows around it, not through it.
+        .background(OS1VisualStyle.background.opacity(0.7), in: pillShape)
+        .background(.thickMaterial, in: pillShape)
+        .glassSurface(in: pillShape, interactive: true)
         .id(session.id)
     }
 
