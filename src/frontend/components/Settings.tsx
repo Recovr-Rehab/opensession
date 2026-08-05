@@ -2674,11 +2674,10 @@ function ComposerPanel() {
 const IDENTITY_INPUT_CLASS = cn(settingsInputClass, "w-[140px]");
 
 /**
- * Instance identity. The source of truth is ~/.backstage/config.json
+ * Instance identity. The source of truth is ~/.opensession/config.json
  * (persona.name / branding.productName) on the server — there is no
  * settings-write API for the config file yet, so the fields render the
- * built-in defaults, disabled, until a read/write endpoint exists (the
- * needed backend change is documented in docs/rename-opensession-plan.md).
+ * built-in defaults, disabled, until a read/write endpoint exists.
  */
 function WorkspacePanel() {
 	return (
