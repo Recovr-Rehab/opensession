@@ -1,5 +1,6 @@
-// A few repos display under a different name than their internal id — the
-// OpenSession → OpenSession rename lives here so id `opensession` reads
+// A few repos display under a different name than their internal id. The
+// self-hosted repo is one of them: the product's wordmark is two words
+// ("Open Session") but its repo is one, so id `opensession` keeps reading
 // `opensession` everywhere its name is shown, with an `O` tile glyph.
 //
 // This is presentation only: ids stay canonical on the wire, in worktree

@@ -164,7 +164,7 @@ export interface PersonaSection {
  *  (distinct from persona: `persona.name` is the agent, `persona.product`
  *  is the company's product the agent supports). */
 export interface BrandingSection {
-  /** Product name rendered in titles/headers, e.g. "OpenSession". */
+  /** Product name rendered in titles/headers, e.g. "Open Session". */
   productName?: string;
   /** Short visual monogram for brand-mark contexts (logo chip, favicon);
    *  defaults to productName. */
@@ -266,8 +266,8 @@ function builtinRepos(): Record<string, Repo> {
   return {
     opensession: {
       id: "opensession",
-      label: "OpenSession",
-      description: "The OpenSession server, web UI, agents, and client apps.",
+      label: "Open Session",
+      description: "The Open Session server, web UI, agents, and client apps.",
       repo: OPENSESSION_ROOT,
       wtPrefix: "opensession",
       defaultBranch: "main",
@@ -621,12 +621,12 @@ export function personaName(): string {
 
 /**
  * What the platform itself is called in user-facing copy (page titles,
- * headers). NOT for paths/ids: state dirs, env vars, `bks-` prefixes and
- * service/socket names go through the rename-compat alias layer instead
- * (docs/rename-opensession-plan.md).
+ * headers). Two words by default; NOT for paths/ids, which stay one word:
+ * state dirs, env vars, package/MCP ids, `bks-` prefixes and service/socket
+ * names are literals and never follow the wordmark.
  */
 export function productName(): string {
-  return getConfig().branding?.productName || "OpenSession";
+  return getConfig().branding?.productName || "Open Session";
 }
 
 /** Short brand monogram for visual brand-mark contexts (logo chip, favicon);

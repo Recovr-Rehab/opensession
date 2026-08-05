@@ -1,6 +1,6 @@
 import "./lib/storage-migrate"; // must run before any lib reads its pref keys
 import { BASE_PATH, stripBasePath } from "./lib/base";
-import { DEFAULT_REPO_ID } from "./lib/brand";
+import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
 import { setSessionTitles } from "./lib/markdown";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -2855,7 +2855,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		{
 			id: "settings",
 			label: "Settings",
-			description: "Configure OpenSession",
+			description: `Configure ${PRODUCT_NAME}`,
 			category: "Navigate",
 			keywords: ["preferences", "appearance", "connections"],
 			icon: <IconGear size={18} />,

@@ -1,6 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { docTitle } from "../lib/brand";
+import { PRODUCT_NAME, docTitle } from "../lib/brand";
 import { fetchAnalytics } from "../lib/api";
 import type { AnalyticsSummary } from "../lib/types";
 import { Card } from "../ui/card";
@@ -417,7 +417,7 @@ export function Analytics() {
 					<div>
 						<h1 className="m-0 text-section-title font-semibold tracking-[-0.02em] text-fg">Analytics</h1>
 						<p className="m-0 mt-1 text-supporting text-dim">
-							What happened on OpenSession — sessions, tokens, models, PRs.
+							What happened on {PRODUCT_NAME} — sessions, tokens, models, PRs.
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
@@ -522,7 +522,7 @@ export function Analytics() {
 							<ChartCard title="Output tokens per day" subtitle="By model, top 5 in range" series={derived.modelSeries}>
 								<BarChart labels={derived.labels} series={derived.modelSeries} values={derived.modelValues} mode="stacked" />
 							</ChartCard>
-							<ChartCard title="Pull requests per day" subtitle="Opened & merged from OpenSession sessions" series={derived.prSeries}>
+							<ChartCard title="Pull requests per day" subtitle={`Opened & merged from ${PRODUCT_NAME} sessions`} series={derived.prSeries}>
 								<BarChart labels={derived.labels} series={derived.prSeries} values={derived.prValues} mode="grouped" formatValue={fmtInt} />
 							</ChartCard>
 							<ChartCard title="Turns per day" subtitle="Completed turns and errored events" series={derived.turnSeries}>
@@ -537,7 +537,7 @@ export function Analytics() {
 							</ChartCard>
 							<ChartCard
 								title="Factory health"
-								subtitle="Merged PRs in range: agent (OpenSession sessions) vs everything else"
+								subtitle={`Merged PRs in range: agent (${PRODUCT_NAME} sessions) vs everything else`}
 							>
 								<table className="w-full border-collapse text-label">
 									<thead>
@@ -656,7 +656,7 @@ export function Analytics() {
 									))}
 								</div>
 							</ChartCard>
-							<ChartCard title="Repos" subtitle="OpenSession's share of PRs, per repo">
+							<ChartCard title="Repos" subtitle={`${PRODUCT_NAME}'s share of PRs, per repo`}>
 								<table className="w-full border-collapse text-label">
 									<thead>
 										<tr className="text-left text-meta text-faint">
@@ -748,7 +748,7 @@ export function Analytics() {
 						{data.prs.length > 0 && (
 							<div className="mt-4">
 								<ChartCard
-									title="Pull requests from OpenSession"
+									title={`Pull requests from ${PRODUCT_NAME}`}
 									subtitle={`${fmtInt(data.prs.length)} PRs opened or merged in range`}
 								>
 									<div className="flex flex-col">

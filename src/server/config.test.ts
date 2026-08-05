@@ -59,7 +59,7 @@ describe("config loader", () => {
     expect(Object.keys(repos)).toEqual(["opensession"]);
     expect(repos.opensession).toMatchObject({
       id: "opensession",
-      label: "OpenSession",
+      label: "Open Session",
       wtPrefix: "opensession",
       defaultBranch: "main",
       ghRepo: "",
@@ -210,8 +210,8 @@ describe("config loader", () => {
   test("persona/branding: defaults with no config file", () => {
     withConfig(null);
     expect(personaName()).toBe("Assistant");
-    expect(productName()).toBe("OpenSession");
-    expect(productMark()).toBe("OpenSession");
+    expect(productName()).toBe("Open Session");
+    expect(productMark()).toBe("Open Session");
   });
 
   test("persona/branding: config overrides apply", () => {
@@ -232,7 +232,7 @@ describe("config loader", () => {
     // Empty/whitespace strings are treated as unset, not honored.
     withConfig(JSON.stringify({ persona: { name: "  " }, branding: { productName: "" } }));
     expect(personaName()).toBe("Assistant");
-    expect(productName()).toBe("OpenSession");
+    expect(productName()).toBe("Open Session");
   });
 
   test("identity: custom roster is parsed and validated", () => {

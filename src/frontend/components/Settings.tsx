@@ -2154,7 +2154,7 @@ function DeploysPanel() {
 	const header = (
 		<SettingsHeader
 			title="Deploys"
-			description="Internal web apps published from sessions with the publish_app tool. Each keeps running after its session ends, is served at /d/<name>/ behind the same sign-in as OpenSession, and is supervised — restarted on crash and after a server restart. Only $DATA_DIR survives a redeploy; everything else is reset from the published snapshot."
+			description={`Internal web apps published from sessions with the publish_app tool. Each keeps running after its session ends, is served at /d/<name>/ behind the same sign-in as ${PRODUCT_NAME}, and is supervised — restarted on crash and after a server restart. Only $DATA_DIR survives a redeploy; everything else is reset from the published snapshot.`}
 		/>
 	);
 

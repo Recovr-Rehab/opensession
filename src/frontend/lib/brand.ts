@@ -1,18 +1,19 @@
 /**
  * Product + agent branding for the frontend — the single place the UI gets
- * its names from, so the OpenSession → OpenSession rename is a one-line flip
- * here (see docs/rename-opensession-plan.md).
+ * its names from, so rebranding an instance is a one-line flip here.
  *
  * Server-side equivalents live in src/server/config.ts (productName(),
- * productMark(), personaName(), backed by ~/.backstage/config.json). The
+ * productMark(), personaName(), backed by ~/.opensession/config.json). The
  * frontend has no bootstrap/config API yet, so these are build-time
  * constants; when a config endpoint exists, hydrate them from it and keep
  * these values as the fallbacks.
  *
  * Naming rules:
  * - PRODUCT_NAME is the full wordmark, used in prose, titles, and headers.
+ *   It is two words ("Open Session"); the repo, package, env vars, state
+ *   dirs, MCP ids and URL prefixes stay one word (`opensession`).
  * - PRODUCT_MARK is the short visual monogram for brand-mark contexts only
- *   (logo chip, favicon, loading screen) — e.g. "OS" for OpenSession. Never
+ *   (logo chip, favicon, loading screen) — e.g. "OS" for Open Session. Never
  *   use the short mark in code identifiers, package names, or CLI/env names.
  * - These are display strings only. Protocol identifiers (localStorage
  *   `backstage-user`, `/backstage/` routes, `bks-` prefixes) stay literal.
@@ -35,7 +36,7 @@ const INSTANCE: InstanceBrand =
 				__OPENSESSION_INSTANCE__?: InstanceBrand;
 			}).__OPENSESSION_INSTANCE__ || {});
 
-export const PRODUCT_NAME = INSTANCE.productName || "OpenSession";
+export const PRODUCT_NAME = INSTANCE.productName || "Open Session";
 
 /** Short brand monogram for visual brand-mark contexts (logo chip, favicon,
  *  loading screen) — never in code identifiers, package names, or CLI/env. */
@@ -71,5 +72,5 @@ export const sessionSourceLabel = (source: string) =>
 /** Default document.title when no view-specific title applies. */
 export const DEFAULT_DOC_TITLE = PRODUCT_NAME;
 
-/** "<view> — OpenSession" document titles. */
+/** "<view> — Open Session" document titles. */
 export const docTitle = (view: string) => `${view} — ${PRODUCT_NAME}`;

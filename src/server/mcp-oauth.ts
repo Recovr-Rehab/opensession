@@ -23,7 +23,7 @@
  */
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes, createHash } from "crypto";
-import { configuredServer } from "./config";
+import { configuredServer, productName } from "./config";
 import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 
@@ -197,7 +197,7 @@ async function ensureServerAuth(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        client_name: "OpenSession",
+        client_name: productName(),
         redirect_uris: [callbackUrl()],
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],

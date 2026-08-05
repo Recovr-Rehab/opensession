@@ -3,6 +3,7 @@ import {
 	SessionUpgradeError,
 	upgradeSessionApi,
 } from "../lib/api";
+import { PRODUCT_NAME } from "../lib/brand";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import { IconGlobe } from "./icons";
@@ -54,7 +55,7 @@ export function MoveToCloudDialog({
 				<Modal.Header
 					icon={<IconGlobe size={22} />}
 					title="Move to cloud"
-					description="Push this branch and continue the same session in your cloud OpenSession. The local copy will be archived after the transfer succeeds."
+					description={`Push this branch and continue the same session in your cloud ${PRODUCT_NAME}. The local copy will be archived after the transfer succeeds.`}
 				/>
 
 				{error && (

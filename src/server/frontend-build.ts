@@ -187,9 +187,13 @@ export async function buildFrontend(): Promise<string> {
 		"window.__OPENSESSION_INSTANCE__ = window.__OPENSESSION_INSTANCE__ || {};",
 		`window.__OPENSESSION_INSTANCE__ = ${instance};`,
 	);
+	// The literals below are the default wordmark as it appears in
+	// src/frontend/index.html (title + apple-mobile-web-app/og/twitter titles).
+	// Keep them byte-identical to that file: a mismatch silently ships the
+	// default name instead of the instance's configured one.
 	indexHtml = indexHtml
-		.replaceAll("<title>OpenSession</title>", `<title>${htmlProductName}</title>`)
-		.replaceAll('content="OpenSession"', `content="${htmlProductName}"`);
+		.replaceAll("<title>Open Session</title>", `<title>${htmlProductName}</title>`)
+		.replaceAll('content="Open Session"', `content="${htmlProductName}"`);
 	indexHtml = indexHtml.replace(
 		'<script type="module" src="./App.tsx"></script>',
 		`<script type="module" crossorigin src="/${entryName}"></script>`,
