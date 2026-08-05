@@ -113,10 +113,29 @@ struct RepoTile: View {
         return palette[Int(hash.magnitude) % palette.count]
     }
 
-    private var iconURL: URL? {
+    private var iconURL: URL? { Self.iconURL(for: name) }
+
+    private static func iconURL(for name: String) -> URL? {
         ServerConfig.shared.baseURL?
             .appendingPathComponent("repo-icon")
             .appendingPathComponent("\(name).png")
+    }
+
+    /// The icon on its own, for the one place that can't host the tile: a menu
+    /// row, whose label is handed to UIKit and survives only as an image.
+    /// Reads the cache without touching it — a getter that started a load
+    /// would be mutating observed state from inside a view's body — so pair it
+    /// with `prefetchIcon` where the rows are known ahead of time.
+    @MainActor
+    static func cachedIcon(for name: String) -> Image? {
+        guard let url = iconURL(for: name) else { return nil }
+        return RepoImageCache.shared.images[url.absoluteString]
+    }
+
+    @MainActor
+    static func prefetchIcon(for name: String) {
+        guard let url = iconURL(for: name) else { return }
+        RepoImageCache.shared.ensureLoaded(url)
     }
 
     var body: some View {

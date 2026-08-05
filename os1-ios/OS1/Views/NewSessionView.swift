@@ -188,6 +188,16 @@ struct NewSessionView: View {
         .padding(.vertical, 8)
     }
 
+    /// Sized off the chip's text rather than the tile's own default, so the
+    /// icon reads as part of the label.
+    private var repoTileSize: CGFloat {
+        #if os(macOS)
+        18
+        #else
+        16
+        #endif
+    }
+
     private var repoLabel: String {
         if let match = repos.first(where: { $0.id == repo }) {
             return match.label ?? match.id
@@ -201,15 +211,29 @@ struct NewSessionView: View {
                 Button {
                     repo = repoInfo.id
                 } label: {
-                    if repo == repoInfo.id {
-                        Label(repoInfo.label ?? repoInfo.id, systemImage: "checkmark")
-                    } else {
+                    Label {
                         Text(repoInfo.label ?? repoInfo.id)
+                    } icon: {
+                        // The checkmark takes the slot when it's the current
+                        // repo — a menu row has one glyph, and which repo is
+                        // selected outranks showing its icon twice (the chip
+                        // above the menu already wears it).
+                        if repo == repoInfo.id {
+                            Image(systemName: "checkmark")
+                        } else if let icon = RepoTile.cachedIcon(for: repoInfo.id) {
+                            icon
+                        }
                     }
                 }
             }
         } label: {
-            chipLabel(icon: "folder", text: repoLabel, strong: true)
+            if repo.isEmpty {
+                chipLabel(icon: "folder", text: repoLabel, strong: true)
+            } else {
+                chipLabel(text: repoLabel, strong: true) {
+                    RepoTile(name: repo, size: repoTileSize)
+                }
+            }
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -414,13 +438,26 @@ struct NewSessionView: View {
     private func chipLabel(
         icon: String, text: String, highlighted: Bool = false, strong: Bool = false
     ) -> some View {
-        HStack(spacing: 5) {
+        chipLabel(text: text, highlighted: highlighted, strong: strong) {
             Image(systemName: icon)
                 #if os(iOS)
                 .font(.caption2)
                 #else
                 .font(.caption)
                 #endif
+        }
+    }
+
+    /// Same chip with a view in the glyph's place, so the repo can wear its
+    /// own icon rather than a folder standing in for it.
+    private func chipLabel<Icon: View>(
+        text: String,
+        highlighted: Bool = false,
+        strong: Bool = false,
+        @ViewBuilder icon: () -> Icon
+    ) -> some View {
+        HStack(spacing: 5) {
+            icon()
             Text(text)
                 #if os(iOS)
                 .font(.caption.weight(strong ? .medium : .regular))
@@ -464,6 +501,9 @@ struct NewSessionView: View {
         if !repos.isEmpty, !repos.contains(where: { $0.id == repo }) {
             repo = repos.first(where: { $0.isDefault == true })?.id ?? repos[0].id
         }
+        // The picker's rows can only show an icon the cache already holds, so
+        // fetch them here rather than when the menu opens.
+        for repoInfo in repos { RepoTile.prefetchIcon(for: repoInfo.id) }
         if let fetched = try? await modelsFetch {
             catalog = fetched
             let livePreferred = (try? await SettingsAPI.uiPrefs(
