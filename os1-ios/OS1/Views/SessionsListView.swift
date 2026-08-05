@@ -1198,10 +1198,14 @@ struct SessionsListView: View {
 
     /// A lane heading labels the rows under it, so its own insets are
     /// lopsided on purpose: air above to separate it from the previous lane,
-    /// almost none below so the label reads as attached to its rows. Those
-    /// insets only bite because the list drops its 44pt minimum row height
-    /// (see `list`) — that floor stretched the caption to a full row and left
-    /// the label marooned in the middle of it.
+    /// less below so the label reads as attached to its rows. The pair is
+    /// measured off the web sidebar at phone width, where the same caption
+    /// sits 19pt below the previous lane's last row and 9pt above its own
+    /// first one (`.sidebar-lane-group` header: 8px group margin + 9/5px
+    /// padding); the rows' own 2pt insets make up the rest. Those insets only
+    /// bite because the list drops its 44pt minimum row height (see `list`) —
+    /// that floor stretched the caption to a full row and left the label
+    /// marooned in the middle of it.
     private func statusLaneHeader(_ group: SessionGroup) -> some View {
         Button {
             toggleCollapsed(group.id)
@@ -1218,7 +1222,7 @@ struct SessionsListView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(collapseLabel(group.title, group.id))
-        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 1, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 17, leading: 16, bottom: 7, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
