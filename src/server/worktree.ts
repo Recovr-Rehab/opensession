@@ -1,5 +1,5 @@
 import { $ } from "bun";
-import { existsSync, mkdirSync, readFileSync, statSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "fs";
 import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
 import { stopPreview } from "./preview";
@@ -43,10 +43,26 @@ export function getRepo(id?: string): Repo {
   throw new Error(`Unknown repo "${id}"`);
 }
 
+/** Canonicalize a checkout path for identity COMPARISONS only: resolves
+ *  symlinks so session files persisted before a checkout rename (old path
+ *  kept behind as a symlink, e.g. projects/tella-backstage → opensession)
+ *  still match the registered repo. Never rewrite a stored worktreeDir with
+ *  this — transcript locations hash the recorded string, so canonicalizing
+ *  persisted data would orphan old transcripts. */
+export function canonicalPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
 /** Infer the repo that owns a checkout/worktree path. */
 export function repoForPath(p: string): Repo {
+  const cp = canonicalPath(p);
   for (const r of Object.values(configuredRepos())) {
-    if (p === r.repo || p.startsWith(`${worktreesDir()}/${r.wtPrefix}-`)) return r;
+    if (cp === canonicalPath(r.repo) || cp.startsWith(`${canonicalPath(worktreesDir())}/${r.wtPrefix}-`))
+      return r;
   }
   throw new Error(`No registered repo owns path "${p}"`);
 }
@@ -57,8 +73,9 @@ export function repoForPath(p: string): Repo {
  *  says nothing about the sessions running in it. */
 export function isSharedCheckoutDir(dir: string | null | undefined): boolean {
   if (!dir) return false;
+  const cd = canonicalPath(dir);
   for (const r of Object.values(configuredRepos())) {
-    if (dir === r.repo || dir === `${worktreesDir()}/${r.wtPrefix}-ask-checkout`)
+    if (cd === canonicalPath(r.repo) || cd === canonicalPath(`${worktreesDir()}/${r.wtPrefix}-ask-checkout`))
       return true;
   }
   return false;

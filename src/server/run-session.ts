@@ -26,6 +26,7 @@ import {
 	type StreamEvent,
 } from "./agent-runner";
 import { syncAgentSessionEngine } from "./agent-session-sync";
+import { getRunState, transitionRunState } from "./run-state";
 import {
 	automationDeniedTools,
 	automationMcpServersByName,
@@ -1461,6 +1462,17 @@ export async function runSessionPrompt(
 	markSessionStarting(sessionId);
 	try {
 		await runSessionPromptInner(sessionId, content, user, images, rawFiles, contextChats, slackReplyTo);
+	} catch (e) {
+		// A throw before the run registered (workspace revive, session-note
+		// build, …) would strand the FSM in "starting" forever — the wedge the
+		// run-state watchdog flags. Settle it; later throws have their own
+		// terminal transitions and are left alone.
+		if (getRunState(sessionId) === "starting")
+			transitionRunState(sessionId, "start_failed", {
+				source: "prompt_throw",
+				error: String(e),
+			});
+		throw e;
 	} finally {
 		unmarkSessionStarting(sessionId);
 	}

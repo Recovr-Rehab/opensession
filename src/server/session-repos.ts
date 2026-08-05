@@ -7,6 +7,7 @@
 
 import {
 	createWorktree,
+	canonicalPath,
 	getRepo,
 	listWorktrees,
 	prepareAttachedWorktree,
@@ -118,7 +119,10 @@ export function buildBranchNote(session: {
 	const repo = repoForPath(session.worktreeDir);
 	// Shared-checkout repos (opensession) and main-checkout cwds have their own
 	// rules; this note is for isolated per-branch worktrees only.
-	if (sharedCheckoutForNewSessions(repo) || session.worktreeDir === repo.repo)
+	if (
+		sharedCheckoutForNewSessions(repo) ||
+		canonicalPath(session.worktreeDir) === canonicalPath(repo.repo)
+	)
 		return undefined;
 	return [
 		"## Branch discipline (shared worktree)",
@@ -336,7 +340,8 @@ export function workspaceOwningWorktree(
 	worktreeDir: string | null | undefined,
 ): Workspace | null {
 	if (!worktreeDir) return null;
-	if (Object.values(REPOS).some((r) => r.repo === worktreeDir)) return null;
+	const cd = canonicalPath(worktreeDir);
+	if (Object.values(REPOS).some((r) => canonicalPath(r.repo) === cd)) return null;
 	return findWorkspaceByWorktree(worktreeDir);
 }
 

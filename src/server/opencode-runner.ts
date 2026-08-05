@@ -431,6 +431,37 @@ export function shardDbPathForKey(key: string): string {
   return `${SHARD_DB_DIR}/${safe}.db`;
 }
 
+/** How long a status-poll failure streak may ride on "the server is starved,
+ *  not dead" verdicts before the turn is ended anyway. */
+const STARVED_POLL_GRACE_MS = 10 * 60_000;
+
+/** Starvation-aware verdict for the status-poll zombie guards. After ~60s of
+ *  consecutive poll failures the guards used to end the turn unconditionally —
+ *  but under a host load spike a perfectly healthy `opencode serve` can be too
+ *  CPU-starved to answer a status poll for minutes while its turn keeps
+ *  running (a turn was dropped this way during the 2026-08-05 spike, load 13+
+ *  with ~18 engine servers). Probe with a generous timeout: an answer means
+ *  starved (keep watching, bounded by STARVED_POLL_GRACE_MS per streak); a
+ *  refusal means the server is actually gone (end the turn as before). */
+async function zombiePollVerdict(
+  url: string,
+  password: string,
+  streakStartedAt: number
+): Promise<"starved" | "dead" | "gave_up"> {
+  const alive = await opencodeServerHealthy(url, password, 20_000);
+  if (!alive) return "dead";
+  return Date.now() - streakStartedAt < STARVED_POLL_GRACE_MS ? "starved" : "gave_up";
+}
+
+function zombiePollFailureMessage(verdict: "dead" | "gave_up"): string {
+  return verdict === "dead"
+    ? "opencode server stopped answering status polls and refused a health probe — ending the turn " +
+        "(engine state preserved; send again to continue)"
+    : "opencode server answered health probes but was too starved to serve status for " +
+        `${Math.round(STARVED_POLL_GRACE_MS / 60_000)} minutes — ending the turn ` +
+        "(engine state preserved; send again to continue)";
+}
+
 // 90s, not 30s: under heavy host IO/swap pressure a healthy `opencode serve`
 // can genuinely take >30s to answer. A premature timeout is worse than a slow
 // start — the detached path falls back to a DIRECT child (dies with the next
@@ -5114,6 +5145,8 @@ async function* runOpencodeAttempt(
     if (bridgeLivenessGuard) stallGuard.start();
 
     let statusPollFailures = 0;
+    let statusPollStreakStart = 0;
+    let zombieProbeInFlight = false;
     const statusPoll = setInterval(() => {
       void (async () => {
         try {
@@ -5152,27 +5185,42 @@ async function* runOpencodeAttempt(
           } catch {}
         } catch (e) {
           // A silently-failing poll is how a finished/aborted engine turn
-          // becomes a forever-busy zombie run. Make it loud, and after ~60s of
-          // consecutive failures end the turn with an error instead of holding
-          // the session busy: a healthy server doesn't refuse status for a
-          // minute straight.
+          // becomes a forever-busy zombie run. Make it loud; after ~60s of
+          // consecutive failures let zombiePollVerdict decide between a dead
+          // server (end the turn) and one merely starved by host load (keep
+          // watching — the turn is usually still running and completes once
+          // the spike passes).
           statusPollFailures++;
+          if (statusPollFailures === 1) statusPollStreakStart = Date.now();
           if (statusPollFailures === 1 || statusPollFailures % 6 === 0) {
             console.warn(
               `[opencode-runner] status poll failing for ${ocSessionId} (${statusPollFailures}x): ${e}`
             );
           }
-          if (statusPollFailures >= 6) {
-            runFailure ??=
-              "opencode server stopped answering status polls for 60s — ending the turn " +
-              "(engine state preserved; send again to continue)";
-            if (journal?.osSessionId) {
-              transitionRunState(journal.osSessionId, "engine_died", {
-                source: "status_poll_zombie",
-                failures: statusPollFailures,
-              });
+          if (statusPollFailures >= 6 && entry && !zombieProbeInFlight) {
+            zombieProbeInFlight = true;
+            try {
+              const verdict = await zombiePollVerdict(entry.url, entry.password, statusPollStreakStart);
+              if (idle || abortController.signal.aborted) return;
+              if (verdict === "starved") {
+                console.warn(
+                  `[opencode-runner] server for ${ocSessionId} is alive but starved ` +
+                    `(${statusPollFailures} failed polls) — keeping the turn`
+                );
+                return;
+              }
+              runFailure ??= zombiePollFailureMessage(verdict);
+              if (journal?.osSessionId) {
+                transitionRunState(journal.osSessionId, "engine_died", {
+                  source: "status_poll_zombie",
+                  failures: statusPollFailures,
+                  verdict,
+                });
+              }
+              signalDone();
+            } finally {
+              zombieProbeInFlight = false;
             }
-            signalDone();
           }
         }
       })();
@@ -6253,6 +6301,8 @@ export async function tryReattachOpencodeRun(
         : undefined;
 
       let statusPollFailures = 0;
+      let statusPollStreakStart = 0;
+      let zombieProbeInFlight = false;
       const statusPoll = busy
         ? setInterval(() => {
             void (async () => {
@@ -6282,17 +6332,35 @@ export async function tryReattachOpencodeRun(
                   }
                 } catch {}
               } catch (e) {
+                // Same starved-vs-dead verdict as the primary turn watcher.
                 statusPollFailures++;
+                if (statusPollFailures === 1) statusPollStreakStart = Date.now();
                 if (statusPollFailures === 1 || statusPollFailures % 6 === 0) {
                   console.warn(
                     `[opencode-runner] status poll failing for ${ocSessionId} (${statusPollFailures}x): ${e}`
                   );
                 }
-                if (statusPollFailures >= 6) {
-                  runFailure ??=
-                    "opencode server stopped answering status polls for 60s — ending the turn " +
-                    "(engine state preserved; send again to continue)";
-                  signalDone();
+                if (statusPollFailures >= 6 && !zombieProbeInFlight) {
+                  zombieProbeInFlight = true;
+                  try {
+                    const verdict = await zombiePollVerdict(
+                      server.url,
+                      server.password,
+                      statusPollStreakStart
+                    );
+                    if (idle) return;
+                    if (verdict === "starved") {
+                      console.warn(
+                        `[opencode-runner] server for ${ocSessionId} is alive but starved ` +
+                          `(${statusPollFailures} failed polls) — keeping the turn`
+                      );
+                      return;
+                    }
+                    runFailure ??= zombiePollFailureMessage(verdict);
+                    signalDone();
+                  } finally {
+                    zombieProbeInFlight = false;
+                  }
                 }
               }
             })();
