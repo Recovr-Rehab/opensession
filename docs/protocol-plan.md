@@ -55,13 +55,17 @@ WS message types mix three tiers:
   (`session_status`, `usage_update`), diffs/git status, PR refs,
   session-transfer (fork/handoff), assets/uploads, models list.
 - **Official-app extensions**: notes (Yjs CRDT), terminal (`term_*`), feeds,
-  todos, pins, reports, analytics, workflows UI, presence/typing.
-- **Deployment (Tella) extensions**: Plain support, Slack channel links,
-  goals, papercuts, deploys, setup-team.
+  todos, pins, reports, analytics, workflows UI, presence/typing, **Slack
+  channel links** and the **goals engine** (both confirmed 2026-08-05 as
+  general product features, not Tella deployment specifics).
+- **Deployment (Tella) extensions**: Plain support triage, papercuts,
+  setup-team specifics.
 
-The runner protocol has a few Tella-isms in `RunHostSpec` that must become
-extensions or generic capability fields: `aws`, Claude account-pool fields
-(`accountId`/`accountStrict`/`usageCredits`), `journalKind`.
+The runner-side account fields (`accountId`/`accountStrict`/`usageCredits`),
+`aws`, and `journalKind` on `RunHostSpec` are likewise general (multi-account
+pooling and credential wiring are things any self-hosting team needs) — they
+stay first-class in the runner protocol, but naming should be generalized to
+be provider-agnostic (account pooling isn't Claude-only forever).
 
 ## Answer to "do we have to detach the webapp from the server?"
 
@@ -80,8 +84,13 @@ is extensions it should either not need or that get declared as such.
 
 ## Extraction steps
 
-1. **`@opensession/protocol` package** (answers the npm-name question):
-   - Runner protocol: `RunHostSpec` (minus Tella-isms → `extensions` field),
+1. **Protocol package.** Naming decided 2026-08-05: the `opensession` npm
+   team/name is taken, so keep the brand and publish scoped under an org we
+   already control — e.g. `@tellahq/opensession-protocol`. (Free unscoped
+   fallbacks if we ever want a neutral home: `open-session`,
+   `session-protocol`, `agentsession(s)`.) Contents:
+   - Runner protocol: `RunHostSpec` (account/credential fields generalized
+     to be provider-agnostic, Tella-only bits → `extensions` field),
      host/client messages, `StreamEvent`, `TurnUsage`, framing + seq/ack
      semantics.
    - Session record: session metadata schema (core subset of
@@ -94,8 +103,10 @@ is extensions it should either not need or that get declared as such.
 3. **Tier the route modules** — mark each `src/server/routes/*` file core /
    app-extension / deployment-extension; namespace non-core endpoints (e.g.
    `/api/x/plain/...`) so the core surface is enumerable.
-4. **De-Tella the runner spec** — account pool, `aws`, `journalKind` move to
-   a namespaced extensions bag on `RunHostSpec`.
+4. **Generalize the runner spec's account/credential fields** — keep account
+   pooling, `aws`-style credential wiring and `journalKind` first-class but
+   provider-agnostic; only genuinely Tella-internal bits move to a namespaced
+   extensions bag on `RunHostSpec`.
 5. **Second implementation as proof** — a trivial runner in another language
    (Python wrapper around any agent CLI) and/or a read-only TUI viewer built
    only on the published package. Two independent implementations is what
