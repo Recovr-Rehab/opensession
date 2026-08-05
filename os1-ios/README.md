@@ -51,9 +51,13 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   offers the way back down — reading `New messages` when output arrived while
   you were scrolled up. Token-level streaming via `stream_text`, and a
   horizontally scrollable chat tab strip when a workspace/worktree contains
-  multiple sessions. A bounded cache keeps recently visited conversations
-  loaded while their off-screen sockets remain disconnected, so returning to a
-  page does not show a loading screen.
+  multiple sessions. On iOS the trailing nav-bar control is a native overflow
+  menu carrying this worktree's actions — new chat, worktree details, its pull
+  request panel, rename, share link, hide/restore, and archive (which pops back
+  to the list) — the same set the sidebar row offers under long press. A
+  bounded cache keeps recently visited conversations loaded while their
+  off-screen sockets remain disconnected, so returning to a page does not show
+  a loading screen.
 - **Workspace details** — tapping the chat title opens a native worktree sheet
   with repository and branch metadata, local git status, changed files, pull
   request status, workspace context, and model/reasoning controls, matching
