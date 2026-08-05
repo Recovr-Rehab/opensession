@@ -55,6 +55,18 @@ cd opensession && bun install
 bun run setup
 ```
 
+If you plan to use self-development (sessions that modify OpenSession itself —
+see [../self-development.md](../self-development.md)), clone **your own fork**
+instead and add this repo as `upstream`: self-sessions push to `origin`, which
+must be a remote you can write to.
+
+```sh
+git clone https://github.com/<you>/opensession.git
+cd opensession
+git remote add upstream https://github.com/tellahq/opensession.git
+bun install && bun run setup
+```
+
 Nothing depends on the checkout living in a particular place — the CLI derives
 paths from wherever it is running, and onboarding writes the rest into
 `~/.opensession/config.json`. If you skip onboarding, the default mcp-config

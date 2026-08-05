@@ -257,6 +257,34 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
     warn(`could not prepare the service definition: ${(err as Error).message}`);
   }
 
+  // Self-development needs a writable origin: sessions on the self repo commit
+  // and push to it, and deploy_self fast-forwards from origin/main. A checkout
+  // cloned straight from the upstream project can't push there, and after the
+  // first local commit ff-only deploys abort forever. Warn now, at setup time,
+  // instead of letting the first self-session discover it via a 403.
+  try {
+    const originUrl = Bun.spawnSync(["git", "remote", "get-url", "origin"], {
+      cwd: REPO_ROOT,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+      .stdout.toString()
+      .trim();
+    if (/github\.com[/:]tellahq\/opensession(\.git)?$/.test(originUrl)) {
+      console.log(
+        yellow(
+          `\n  This checkout's origin is the upstream project (${originUrl}).\n` +
+            `  Fine for running it — but self-development sessions push to origin,\n` +
+            `  which you can't write to. To let the agent modify OpenSession itself,\n` +
+            `  fork it, point origin at your fork, and keep upstream for updates:\n` +
+            `    git remote rename origin upstream\n` +
+            `    git remote add origin git@github.com:<you>/opensession.git\n` +
+            `  See docs/self-development.md.\n`,
+        ),
+      );
+    }
+  } catch {}
+
   heading("Next steps");
   info(`1. ${bold("opensession start")}      start the server`);
   info(`2. ${bold("opensession doctor")}     check everything is wired up`);

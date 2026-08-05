@@ -36,6 +36,13 @@ cd opensession && bun install
 bun run setup                             # same wizard, without the installer
 ```
 
+> **Letting the agent improve OpenSession itself?** Clone your **fork**, not
+> this repo. Self-sessions commit and push to `origin` (and `deploy_self`
+> fast-forwards from it) — pointed at `tellahq/opensession` every push is
+> rejected and, once you've self-modified, updates from us stop fast-forwarding.
+> Fork, clone the fork, and keep us as an `upstream` remote for pulling
+> updates. Config-only use (your repos, your integrations) needs no fork.
+
 The installer accepts `--dir`, `--channel <ref>`, `--no-engine`,
 `--no-tailscale`, `--no-modify-path`, `--yes` and `--uninstall`; `--help`
 lists them all.

@@ -82,8 +82,15 @@ is set (meant for a dedicated deploy-only checkout; on a live shared checkout
 it instead records `rollback-needed` and leaves the tree for a human).
 `deploy_status({})` reads the pin, the last result, and the watchdog window.
 
-Prerequisites: the service user needs passwordless sudo for
-`systemctl restart <service>` and `systemd-run`. The optional watchdog —
+Prerequisites — **your own remote first**: self-sessions commit and push to
+`origin`, and `deploy_self` fast-forwards from `origin/main`. If your checkout
+was cloned straight from `tellahq/opensession`, every push is rejected (you
+can't write to our upstream) and, after your first local commit, ff-only
+deploys abort permanently because your history has diverged from ours. Clone
+your **fork** (keep `tellahq/opensession` as an `upstream` remote to pull our
+updates), and in worktree mode set the self repo's `ghRepo` in your config to
+the fork so the PR flow targets it. Beyond that, the service user needs
+passwordless sudo for `systemctl restart <service>` and `systemd-run`. The optional watchdog —
 `deploy/systemd/opensession-watchdog.{service,timer}` — probes health every
 60s but only ever acts inside a 15-minute window after a self-deploy restart,
 after 3 consecutive failures, at most once per deploy. Install it with:
