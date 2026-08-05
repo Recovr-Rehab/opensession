@@ -560,7 +560,7 @@ struct SessionsListView: View {
         return { workspace in
             #if os(iOS)
             if !hides.isEmpty, workspace.lane != .needsInput,
-               hides[HideStore.rowKey(for: workspace)] != nil {
+               hides[SidebarRowKeys.rowKey(for: workspace)] != nil {
                 return false
             }
             #endif
@@ -881,6 +881,9 @@ struct SessionsListView: View {
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing) { archiveButton(workspace, viaSwipe: true) }
+        // Swipe right to pin, left to archive: the pin is the reversible one,
+        // so it takes the leading edge (and its full swipe just toggles).
+        .swipeActions(edge: .leading) { pinButton(workspace) }
         .contextMenu {
             if canArchive { workspaceMenu(workspace) }
         }
@@ -888,8 +891,30 @@ struct SessionsListView: View {
     }
 
     #if os(iOS)
+    /// Leading swipe (and context menu) action. Non-destructive: the row stays
+    /// where it is and gains a copy in the Pinned band, so the cell just closes
+    /// — no `.destructive` role, and the toggle animates the band's insert.
+    @ViewBuilder
+    private func pinButton(_ workspace: SidebarWorkspace) -> some View {
+        if !workspace.isOptimistic {
+            let pinned = PinStore.shared.isPinned(workspace)
+            Button {
+                withAnimation(.snappy(duration: 0.28)) {
+                    PinStore.shared.toggle(workspace)
+                }
+            } label: {
+                Label(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash.fill" : "pin.fill")
+            }
+            .tint(OS1VisualStyle.yellow)
+        }
+    }
+
     @ViewBuilder
     private func workspaceMenu(_ workspace: SidebarWorkspace) -> some View {
+        // Same action as the leading swipe, for anyone who reaches for the
+        // long press instead.
+        pinButton(workspace)
+
         Button {
             detailsWorkspace = workspace
         } label: {
@@ -923,7 +948,7 @@ struct SessionsListView: View {
             // running for everyone else — so it isn't destructive-styled.
             if HideStore.shared.isHidden(workspace) {
                 Button {
-                    HideStore.shared.clear([HideStore.rowKey(for: workspace)])
+                    HideStore.shared.clear([SidebarRowKeys.rowKey(for: workspace)])
                 } label: {
                     Label("Restore to my sidebar", systemImage: "eye")
                 }
@@ -984,7 +1009,11 @@ struct SessionsListView: View {
                     Text("Archive")
                 }
             }
-            .tint(.purple)
+            // Grey, not red: archiving files work away, it doesn't destroy it
+            // (the Archived section below the list opens it again). The role is
+            // still destructive so the List runs its native row-removal
+            // choreography — see above.
+            .tint(.gray)
         }
     }
 
@@ -992,6 +1021,12 @@ struct SessionsListView: View {
         workspace.sessions.forEach {
             sessionPageCache.remove(sessionId: $0.id)
         }
+        #if os(iOS)
+        // The server unpins archived work for everyone (`unpinEverywhere`);
+        // dropping it locally too keeps the Pinned band from holding a row
+        // that just left the list.
+        PinStore.shared.unpin(workspace)
+        #endif
         #if os(macOS)
         if workspace.sessions.contains(where: { $0.id == selectedSessionID }) {
             selectedSessionID = nil
@@ -1018,8 +1053,42 @@ struct SessionsListView: View {
         )
     }
 
+    /// Rows this person pinned, lifted to the top of the list in their own pin
+    /// order. They also stay in their normal band below: pinning is quick
+    /// access, not a status — the rule the web sidebar's Pinned band follows.
+    /// Built from the filtered rows, so the search field and the repo/people
+    /// filters narrow the band like everything else.
+    #if os(iOS)
+    private var pinnedWorkspaces: [SidebarWorkspace] {
+        let store = PinStore.shared
+        guard !store.pins.isEmpty else { return [] }
+        return filteredWorkspaces
+            .compactMap { workspace in store.rank(workspace).map { (workspace, $0) } }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
+    }
+    #endif
+
     private var listSections: some View {
         Group {
+            #if os(iOS)
+            if !pinnedWorkspaces.isEmpty {
+                Section {
+                    ForEach(
+                        visibleWorkspaces(pinnedWorkspaces, collapsedKey: "pinned")
+                    ) { workspace in
+                        sessionRow(workspace)
+                    }
+                } header: {
+                    groupHeader(
+                        title: "Pinned",
+                        count: pinnedWorkspaces.count,
+                        collapseKey: "pinned"
+                    )
+                }
+            }
+            #endif
+
             if groupBy == .repoStatus || groupBy == .repoInbox {
                 ForEach(groupBy == .repoInbox ? repoInboxGroups : repoSessionGroups) { repoGroup in
                     // Folding a repo band takes its lane headings with it —

@@ -16,9 +16,13 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   ticker, larger mobile type, and the web client's warm dark palette, plus
   grouping with the web sidebar's shared, drag-to-reorder repository order,
   compact toolbar search/filter, iOS long-press worktree actions (details,
-  rename, sharing, pull request, hide from my sidebar, and archive),
-  swipe-to-archive, restore from the archived list, a floating create button,
-  and pull to refresh. Hiding is the personal counterpart to archiving (which
+  rename, sharing, pull request, pin, hide from my sidebar, and archive),
+  swipe right to pin and left to archive, restore from the archived list, a
+  floating create button, and pull to refresh. Pinned rows are lifted into a
+  Pinned band at the top of the list in the user's own pin order, sharing
+  `/api/pins` with the web sidebar; pinning is quick access rather than a
+  status, so a pinned row also stays in its normal band below, and archiving
+  a row drops its pin. Hiding is the personal counterpart to archiving (which
   is global): it drops the row from THIS user's sidebar — here and in the web
   one, sharing `/api/hides` — while the chat keeps running for everyone else.
   A hidden row comes back while one of its chats is blocked on a question,

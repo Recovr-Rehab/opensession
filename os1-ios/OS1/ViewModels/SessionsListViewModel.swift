@@ -546,7 +546,7 @@ final class SessionsListViewModel {
         var resurfaced = Set<String>()
         if !hideKeys.isEmpty {
             for session in active where session.lane == .needsInput && !session.isAutomation {
-                for key in HideStore.candidateKeys(for: session) where hideKeys.contains(key) {
+                for key in SidebarRowKeys.candidateKeys(for: session) where hideKeys.contains(key) {
                     resurfaced.insert(key)
                 }
             }

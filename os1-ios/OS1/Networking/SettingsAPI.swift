@@ -140,6 +140,22 @@ enum SettingsAPI {
         return response.hides ?? hides
     }
 
+    /// Per-user pinned rows, shared with the web sidebar's Pinned band (row
+    /// keys, in the user's own band order). PUT replaces the whole list.
+    static func pins(user: String) async throws -> [String] {
+        struct Response: Decodable, Sendable { var pins: [String]? }
+        let response: Response = try await request("/api/pins", query: ["user": user])
+        return response.pins ?? []
+    }
+
+    @discardableResult
+    static func savePins(user: String, pins: [String]) async throws -> [String] {
+        struct Response: Decodable, Sendable { var pins: [String]? }
+        let body: [String: Any] = ["user": user, "pins": pins]
+        let response: Response = try await request("/api/pins", method: "PUT", body: body)
+        return response.pins ?? pins
+    }
+
     /// Per-user read marks, shared with the web sidebar (session id → the ISO
     /// `lastActivity` it carried when last read). PUT replaces the whole map.
     static func reads(user: String) async throws -> [String: String] {

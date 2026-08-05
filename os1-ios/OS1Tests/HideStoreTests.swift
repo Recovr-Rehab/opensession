@@ -1,8 +1,9 @@
 import XCTest
 @testable import OS1
 
-/// Sidebar hides are shared with the web client through `/api/hides`, so the
-/// keys this app writes must be exactly the ones the web sidebar uses.
+/// Sidebar hides and pins are shared with the web client through `/api/hides`
+/// and `/api/pins`, so the row keys this app writes (`SidebarRowKeys`) must be
+/// exactly the ones the web sidebar uses.
 final class HideStoreTests: XCTestCase {
     private func sessions(_ json: String) throws -> [Session] {
         try JSONDecoder().decode([Session].self, from: Data(json.utf8))
@@ -19,7 +20,7 @@ final class HideStoreTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(rows.map(HideStore.rowKey(for:)), [
+        XCTAssertEqual(rows.map(SidebarRowKeys.rowKey(for:)), [
             "workspace:prj-1",
             "wt:/home/u/worktrees/feature",
             "bks-3",
@@ -31,7 +32,7 @@ final class HideStoreTests: XCTestCase {
             #"[{"id":"bks-1","projectId":"prj-1","worktreeDir":"/home/u/worktrees/feature"}]"#
         )[0]
 
-        XCTAssertEqual(HideStore.candidateKeys(for: session), [
+        XCTAssertEqual(SidebarRowKeys.candidateKeys(for: session), [
             "bks-1",
             "workspace:prj-1",
             "wt:/home/u/worktrees/feature",

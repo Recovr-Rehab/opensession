@@ -47,14 +47,12 @@ final class HideStore {
     }
 
     func isHidden(_ workspace: SidebarWorkspace) -> Bool {
-        hides[Self.rowKey(for: workspace)] != nil
+        hides[SidebarRowKeys.rowKey(for: workspace)] != nil
     }
 
     func hide(_ workspace: SidebarWorkspace) {
-        let key = Self.rowKey(for: workspace)
-        // The server drops over-long keys (src/server/hides.ts `clean`), which
-        // would look like a hide that survives until the next hydrate.
-        guard !key.isEmpty, key.count <= 128, hides[key] == nil else { return }
+        let key = SidebarRowKeys.rowKey(for: workspace)
+        guard SidebarRowKeys.isPersistable(key), hides[key] == nil else { return }
         hides[key] = Self.timestamp.string(from: .now)
         save()
     }
@@ -73,7 +71,7 @@ final class HideStore {
     /// actively working in, and "I replied but it's still gone" reads as a bug.
     /// Opening a hidden chat deliberately does NOT unhide it.
     func unhide(for session: Session) {
-        clear(Self.candidateKeys(for: session))
+        clear(SidebarRowKeys.candidateKeys(for: session))
     }
 
     private func save() {
@@ -91,35 +89,4 @@ final class HideStore {
         return formatter
     }()
 
-    /// Translate a `SidebarWorkspace.id` into the key the web sidebar uses, so
-    /// both clients hide the same row: `workspace:<id>` for a real workspace,
-    /// `wt:<dir>` for a legacy isolated-worktree row, and the bare chat id for
-    /// a solo chat. Only these forms may be persisted — the iOS-internal
-    /// `worktree:` / `session:` prefixes would be invisible to the web.
-    nonisolated static func rowKey(for workspace: SidebarWorkspace) -> String {
-        let id = workspace.id
-        if let dir = id.dropPrefix("worktree:") { return "wt:\(dir)" }
-        if let sessionId = id.dropPrefix("session:") { return sessionId }
-        return id
-    }
-
-    /// Every row key a chat can sit under. Used to clear a hide (over-clearing
-    /// is safe — it only ever restores a row) and to spot the hidden rows a
-    /// blocked chat should resurface.
-    nonisolated static func candidateKeys(for session: Session) -> [String] {
-        var keys = [session.id]
-        if let projectId = session.projectId, !projectId.isEmpty {
-            keys.append("workspace:\(projectId)")
-        }
-        if let dir = session.worktreeDir, !dir.isEmpty {
-            keys.append("wt:\(dir)")
-        }
-        return keys
-    }
-}
-
-private extension String {
-    func dropPrefix(_ prefix: String) -> String? {
-        hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil
-    }
 }
