@@ -470,13 +470,14 @@ export async function handleSystemRoutes(
 	// wall-capped at 120s by the harness (under Bun.serve's 240s idleTimeout),
 	// so the route can block for the result without hanging.
 	if (path === "/api/admin/pi-smoke" && req.method === "POST") {
-		let body: { dryRun?: unknown } = {};
+		let body: { dryRun?: unknown; model?: unknown } = {};
 		try {
 			body = ((await req.json()) ?? {}) as typeof body;
 		} catch {
 			// empty/non-JSON body → defaults
 		}
 		const dryRun = body.dryRun === true;
+		const model = typeof body.model === "string" ? body.model : undefined;
 		const by = requestUser(ctx);
 		console.log(
 			`[pi-smoke] admin trigger${by ? ` by ${by}` : ""}${dryRun ? " (dry-run)" : ""}`,
@@ -486,7 +487,7 @@ export async function handleSystemRoutes(
 			// friends) stays out of this hot route file; the heavy pi SDK import
 			// is itself dynamic inside the runner.
 			const { runPiSmokeTurn } = await import("../pi-runner");
-			const result = await runPiSmokeTurn({ dryRun, timeoutMs: 120_000 });
+			const result = await runPiSmokeTurn({ dryRun, timeoutMs: 120_000, model });
 			// Snippet, not the full turn output — this is a wiring probe.
 			return Response.json({ ...result, text: result.text.slice(0, 400) });
 		} catch (e) {

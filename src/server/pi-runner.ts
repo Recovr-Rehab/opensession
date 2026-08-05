@@ -2079,10 +2079,15 @@ export interface PiSmokeResult {
  * Never throws; real turns are wall-capped via cancelPiRun.
  */
 export async function runPiSmokeTurn(
-  opts: { dryRun?: boolean; timeoutMs?: number; prompt?: string } = {}
+  opts: { dryRun?: boolean; timeoutMs?: number; prompt?: string; model?: string } = {}
 ): Promise<PiSmokeResult> {
   const prompt = opts.prompt || "Reply with exactly the single word: ok";
   const timeoutMs = Math.max(5_000, Math.min(opts.timeoutMs ?? 120_000, 600_000));
+  // Optional model override so the smoke can exercise either provider path
+  // (pi/anthropic via the bridge, pi/openai via the codex pool). Anything
+  // that doesn't parse as a pi id falls back to the default.
+  const smokeModel =
+    opts.model && parsePiModel(opts.model) ? opts.model : SMOKE_MODEL;
   const enabled = piEngineEnabled();
   const sessionId = `os-test-pi-${Date.now().toString(36)}`;
   const started = Date.now();
@@ -2102,7 +2107,7 @@ export async function runPiSmokeTurn(
       reason:
         "dry run requested — engine is enabled but no turn was executed (no bridge, no SDK)",
       sessionId,
-      model: SMOKE_MODEL,
+      model: smokeModel,
       eventTypes: [],
       text: "",
       timedOut: false,
@@ -2138,7 +2143,7 @@ export async function runPiSmokeTurn(
         mcpServers: [],
         journal: { osSessionId: sessionId, kind: "pi-smoke" },
       },
-      SMOKE_MODEL
+      smokeModel
     )) {
       eventTypes.push(ev.type);
       if (ev.type === "init") engineSessionId = ev.sessionId;
