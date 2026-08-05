@@ -2,10 +2,8 @@
 
 Self-hosted agent-infrastructure server: a web UI plus Slack, Linear, Plain,
 and GitHub agents, driving coding sessions through the OpenCode engine
-(any model provider) in git worktrees or Docker sandboxes on your own box.
-
-> Not related to opencode's `opensession` npm session viewer or to
-> ColeMurray/background-agents ("Open-Inspect").
+(any model provider) in git worktrees on your own box, or in isolated
+sandboxes — Docker locally, with pluggable adapters for other providers.
 
 ![The OpenSession session view: a running agent turn with its tool calls, next to the workspace sidebar](docs/screenshot.png)
 
