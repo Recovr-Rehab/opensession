@@ -23,7 +23,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   one, sharing `/api/hides` — while the chat keeps running for everyone else.
   A hidden row comes back while one of its chats is blocked on a question,
   prompting in a chat clears its hide, and search ignores hides, so a hidden
-  row stays findable and its menu offers "Restore to my sidebar".
+  row stays findable and its menu offers "Restore to my sidebar". Unread rows
+  read like the web sidebar's, off the same shared store (`/api/reads`): a row
+  whose chats carry activity past your last read goes semibold at full label
+  strength instead of the usual dimmed medium, and reading a chat here clears
+  it in the browser too. Only chats you have opened can be unread — the mark
+  means "new since you read it", not "never seen".
 - **Session view** — live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind
