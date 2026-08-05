@@ -77,11 +77,11 @@ can't reach a private GitHub repo.
 Bearer token (from the device flow's `native: true` poll, same as os1-ios)
 against the REST surface:
 
-- `POST /backstage/api/sessions` — create with `{ prompt, repo, mode, model, images }`
-- `POST /backstage/api/sessions/:id/prompt` — follow-up via `deliverToSession`
-- `GET /backstage/api/sessions`, `GET /backstage/api/sessions/:id/transcript`
-- `GET /backstage/api/repos`, `GET /backstage/api/models`
-- `POST /backstage/api/auth/device` + `/auth/device/poll` — sign-in
+- `POST /api/sessions` — create with `{ prompt, repo, mode, model, images }`
+- `POST /api/sessions/:id/prompt` — follow-up via `deliverToSession`
+- `GET /api/sessions`, `GET /api/sessions/:id/transcript`
+- `GET /api/repos`, `GET /api/models`
+- `POST /api/auth/device` + `/auth/device/poll` — sign-in
 
 Chrome extensions with host permissions bypass CORS, so the server needs no
 CORS headers. Mutations pass the server's cross-site check because requests

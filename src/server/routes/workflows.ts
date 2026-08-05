@@ -55,7 +55,7 @@ export async function handleWorkflowsRoutes(
 	// All workflow runs for a session (newest first) — the Agents panel's
 	// initial load; live updates arrive as workflow_update WS messages.
 	{
-		const m = path.match(/^\/backstage\/api\/sessions\/([^/]+)\/workflows$/);
+		const m = path.match(/^\/api\/sessions\/([^/]+)\/workflows$/);
 		if (m && req.method === "GET") {
 			return Response.json({
 				runs: listWorkflowRunsForSession(decodeURIComponent(m[1])),
@@ -71,7 +71,7 @@ export async function handleWorkflowsRoutes(
 	// payload.
 	{
 		const m = path.match(
-			/^\/backstage\/api\/workflows\/([^/]+)\/agents\/(\d+)\/transcript$/,
+			/^\/api\/workflows\/([^/]+)\/agents\/(\d+)\/transcript$/,
 		);
 		if (m && req.method === "GET") {
 			const runId = decodeURIComponent(m[1]);
@@ -108,7 +108,7 @@ export async function handleWorkflowsRoutes(
 	// previews) — the panel's drill-in.
 	{
 		const m = path.match(
-			/^\/backstage\/api\/workflows\/([^/]+)\/agents\/(\d+)$/,
+			/^\/api\/workflows\/([^/]+)\/agents\/(\d+)$/,
 		);
 		if (m && req.method === "GET") {
 			const runId = decodeURIComponent(m[1]);
@@ -126,7 +126,7 @@ export async function handleWorkflowsRoutes(
 	}
 
 	{
-		const m = path.match(/^\/backstage\/api\/workflows\/([^/]+)\/cancel$/);
+		const m = path.match(/^\/api\/workflows\/([^/]+)\/cancel$/);
 		if (m && req.method === "POST") {
 			return Response.json({ ok: cancelWorkflow(decodeURIComponent(m[1])) });
 		}
@@ -134,7 +134,7 @@ export async function handleWorkflowsRoutes(
 
 	// Full run snapshot. Keep this last in the family — it's the loosest match.
 	{
-		const m = path.match(/^\/backstage\/api\/workflows\/([^/]+)$/);
+		const m = path.match(/^\/api\/workflows\/([^/]+)$/);
 		if (m && req.method === "GET") {
 			const run = getWorkflowRun(decodeURIComponent(m[1]));
 			if (!run)

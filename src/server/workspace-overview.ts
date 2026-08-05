@@ -7,9 +7,9 @@
  *
  * Media is returned as *references*, not bytes: transcript images are base64
  * data URLs that would balloon the JSON to many MB, so each one becomes a
- * `/backstage/api/sessions/<id>/transcript-image/<entryId>/<idx>` URL the
+ * `/api/sessions/<id>/transcript-image/<entryId>/<idx>` URL the
  * browser loads (and caches) lazily. Videos already stream via
- * /backstage/media, and http(s) image URLs pass through as-is.
+ * /media, and http(s) image URLs pass through as-is.
  */
 
 import { parseTranscriptAsync } from "./jsonl-parser";
@@ -51,7 +51,7 @@ function isOpeningPrompt(e: TranscriptEntry): boolean {
 function imageSrcFor(sessionId: string, entry: TranscriptEntry, idx: number, raw: string): string {
   // Only data URLs need the indirection; a real URL renders directly.
   if (!raw.startsWith("data:")) return raw;
-  return `/backstage/api/sessions/${encodeURIComponent(sessionId)}/transcript-image/${encodeURIComponent(entry.id)}/${idx}`;
+  return `/api/sessions/${encodeURIComponent(sessionId)}/transcript-image/${encodeURIComponent(entry.id)}/${idx}`;
 }
 
 export async function buildWorkspaceOverview(

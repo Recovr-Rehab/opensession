@@ -16,7 +16,7 @@ export async function handleChatRoutes(
 
 	// ── Team chat (native Backstage chat, unrelated to Slack). Channels:
 	// "watercooler" (team-wide) and "session:<id>" (per-session Chat tab). ──
-	if (path === "/backstage/api/chat/messages" && req.method === "GET") {
+	if (path === "/api/chat/messages" && req.method === "GET") {
 		const { getChatMessages, isValidChatChannel } = await import(
 			"../../server/chat"
 		);
@@ -28,7 +28,7 @@ export async function handleChatRoutes(
 	}
 
 	// Latest note per session channel — drives the sidebar's unread-note dots.
-	if (path === "/backstage/api/chat/session-activity" && req.method === "GET") {
+	if (path === "/api/chat/session-activity" && req.method === "GET") {
 		const { sessionNoteActivity } = await import("../../server/chat");
 		return Response.json({ channels: sessionNoteActivity() });
 	}
@@ -36,7 +36,7 @@ export async function handleChatRoutes(
 	// Upload an image for a chat message. Streams the body to permanent
 	// per-image storage (not the transient session-upload staging dir) and
 	// returns its {id,name,mime} ref, which the client attaches to the message.
-	if (path === "/backstage/api/chat/upload" && req.method === "POST") {
+	if (path === "/api/chat/upload" && req.method === "POST") {
 		try {
 			const { saveChatImage } = await import("../../server/chat");
 			const name = decodeURIComponent(
@@ -56,7 +56,7 @@ export async function handleChatRoutes(
 
 	// Serve a stored chat image by id (Content-Type from its sidecar).
 	const chatImgMatch = path.match(
-		/^\/backstage\/api\/chat\/image\/([0-9a-fA-F-]{36})$/,
+		/^\/api\/chat\/image\/([0-9a-fA-F-]{36})$/,
 	);
 	if (chatImgMatch && req.method === "GET") {
 		const { getChatImage } = await import("../../server/chat");
@@ -71,7 +71,7 @@ export async function handleChatRoutes(
 		});
 	}
 
-	if (path === "/backstage/api/chat/messages" && req.method === "POST") {
+	if (path === "/api/chat/messages" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		const user = requestUser(ctx, body?.user);
 		const text = typeof body?.text === "string" ? body.text.trim() : "";
@@ -105,8 +105,8 @@ export async function handleChatRoutes(
 		const { sendPushToUser } = await import("../../server/push");
 		const inSession = channel.startsWith("session:");
 		const chatUrl = inSession
-			? `/backstage/session/${encodeURIComponent(channel.slice("session:".length))}`
-			: "/backstage/watercooler";
+			? `/session/${encodeURIComponent(channel.slice("session:".length))}`
+			: "/watercooler";
 		const preview = text.length > 140 ? `${text.slice(0, 139)}…` : text;
 		const mentioned = mentionedUsers(text, user);
 		for (const name of mentioned) {
@@ -143,7 +143,7 @@ export async function handleChatRoutes(
 
 	// Toggle an emoji reaction on a chat message. The updated message fans
 	// out to every client (same broadcast pattern as new messages).
-	if (path === "/backstage/api/chat/react" && req.method === "POST") {
+	if (path === "/api/chat/react" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		const user = requestUser(ctx, body?.user);
 		const messageId =

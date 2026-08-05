@@ -126,14 +126,14 @@ Configure the hosted OpenSession URL and a web-session bearer token in
 `OPENSESSION_CLOUD_UPSTREAM` and `OPENSESSION_CLOUD_TOKEN` override those
 keys. The local and hosted repository ids may differ; OpenSession maps them by
 their case-insensitive GitHub `owner/name` (`ghRepo`). The authenticated hosted
-`GET /backstage/api/repos` response includes `id`, `ghRepo`, `defaultBranch`,
+`GET /api/repos` response includes `id`, `ghRepo`, `defaultBranch`,
 and `sharedCheckout` for this mapping.
 
 Upgrade an idle local code session:
 
 ```sh
 curl -sS -X POST \
-  http://127.0.0.1:3850/backstage/api/sessions/bks-019f8a5b-c122-7000-aebd-3cf01eb664ca/upgrade
+  http://127.0.0.1:3850/api/sessions/bks-019f8a5b-c122-7000-aebd-3cf01eb664ca/upgrade
 ```
 
 The request has no body. The worktree must be on the session's recorded branch
@@ -160,7 +160,7 @@ The upgrade route calls the authenticated hosted endpoint directly. It can
 also be curl-tested with a web-session bearer token:
 
 ```sh
-curl -sS https://os.example.com/backstage/api/sessions/import \
+curl -sS https://os.example.com/api/sessions/import \
   -H "Authorization: Bearer $OPENSESSION_CLOUD_TOKEN" \
   --json @- <<'JSON'
 {

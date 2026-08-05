@@ -58,7 +58,7 @@ export type SandboxWorkspaceMode = "bind" | "volume";
 
 /** How a sandboxed run's host process talks to backstage (Phase 3):
  *  "socket" (default) = unix socket in a shared run dir (docker bind mounts
- *  it); "ws" = the host DIALS OUT to backstage's /backstage/run-ws route —
+ *  it); "ws" = the host DIALS OUT to backstage's /run-ws route —
  *  required for remote providers (daytona/e2b force it), dogfooded by docker. */
 export type SandboxTransport = "socket" | "ws";
 
@@ -740,7 +740,7 @@ export function sandboxModelSupport(
   };
 }
 
-/** Shape served by GET /backstage/api/sandbox/status (read fresh per call). */
+/** Shape served by GET /api/sandbox/status (read fresh per call). */
 export interface SandboxCapabilityStatus {
   /** A sandbox config file exists — the control surface is worth showing. */
   enabled: boolean;

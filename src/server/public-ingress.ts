@@ -3,15 +3,15 @@
  * (docs/self-hosting-sandboxes.md "Public dial-back ingress").
  *
  * Remote providers (Daytona/E2B) run on third-party compute: their run hosts
- * and MCP proxies must dial back to backstage's /backstage/run-ws and
- * /backstage/rpc-ws WebSocket routes from the public internet. The main
+ * and MCP proxies must dial back to the server's /run-ws and /rpc-ws
+ * WebSocket routes from the public internet. The main
  * Bun.serve binds the tailnet and carries the whole app, so instead of
  * exposing IT, this module runs a SECOND Bun.serve that serves ONLY:
  *
- *   - /opensession/run-ws/<hostId> (WS upgrade — run host event stream;
- *                                   /backstage/run-ws/<hostId> legacy alias)
- *   - /opensession/rpc-ws          (WS upgrade — opensession-* MCP proxy channel;
- *                                   /backstage/rpc-ws legacy alias)
+ *   - /run-ws/<hostId>  (WS upgrade — run host event stream; historical
+ *                        /opensession + /backstage prefixed forms accepted)
+ *   - /rpc-ws           (WS upgrade — opensession-* MCP proxy channel; same
+ *                        historical prefixes accepted)
  *   - /ingress-health              (bare 200 "ok" for monitors/probes)
  *
  * Everything else is a bodyless 404 — no routes, no app surface, no
@@ -141,13 +141,16 @@ function ingressFetch(req: Request, server: IngressServer): Response | undefined
   if (path === "/ingress-health") {
     return new Response("ok");
   }
-  // Rename alias: accept the primary /opensession prefix and normalize it to
-  // the /backstage literal run-ws.ts matches on. Old baked dial-back URLs in
-  // live sandboxes/prewarms keep working; new launches can use either.
-  if (path === "/opensession/rpc-ws" || path.startsWith("/opensession/run-ws/")) {
-    path = "/backstage" + path.slice("/opensession".length);
+  // Canonical dial-back paths are bare (/run-ws, /rpc-ws). Old baked URLs in
+  // live sandboxes/prewarms carry a historical prefix (/opensession, or the
+  // pre-rename /backstage) — strip it so they keep working.
+  for (const prefix of ["/opensession", "/backstage"]) {
+    if (path === `${prefix}/rpc-ws` || path.startsWith(`${prefix}/run-ws/`)) {
+      path = path.slice(prefix.length);
+      break;
+    }
   }
-  if (path.startsWith("/backstage/run-ws/") || path === "/backstage/rpc-ws") {
+  if (path.startsWith("/run-ws/") || path === "/rpc-ws") {
     if (rateLimited(clientIp(req, server))) {
       return new Response(null, {
         status: 429,

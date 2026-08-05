@@ -5,7 +5,7 @@
  * dials OUT to backstage (which already listens on the Tailscale bind), never
  * the other way around.
  *
- *  - `/backstage/run-ws/<hostId>` — the run host's event stream. The host
+ *  - `/run-ws/<hostId>` — the run host's event stream. The host
  *    entry (src/runner-host/host.ts, OPENSESSION_RUN_WS_URL) dials it and speaks the
  *    exact NDJSON protocol, one JSON message per text frame. Accepted sockets
  *    are bridged into the SAME HostHandle machinery as the unix-socket path:
@@ -16,7 +16,7 @@
  *    and dedupes by it, so a reconnecting host replays the disconnect window
  *    without double-applying (see ws-buffer.ts; the unix-socket path stays
  *    live-only).
- *  - `/backstage/rpc-ws?host=<hostId>` — the opensession-* MCP proxy channel.
+ *  - `/rpc-ws?host=<hostId>` — the opensession-* MCP proxy channel.
  *    mcp-proxy.ts (OPENSESSION_RPC_WS_URL) dials it; each request frame
  *    `{id, path, token, server, tool?, args?}` goes through the same
  *    dispatchRunRpc core as the unix RPC socket and answers with
@@ -207,7 +207,7 @@ function handleUpgrade(
   server: UpgradableServer,
   path: string,
 ): Response | undefined {
-  if (path === "/backstage/rpc-ws") {
+  if (path === "/rpc-ws") {
     // WS-transport runs ONLY: authenticate with the run's hostId + wsToken
     // (the same registry as the run-ws route). A plain run-rpc token — which
     // every proxied run has, sandboxed or not — is deliberately NOT accepted
@@ -227,7 +227,7 @@ function handleUpgrade(
     }
     return undefined;
   }
-  const m = path.match(/^\/backstage\/run-ws\/([A-Za-z0-9_.-]+)$/);
+  const m = path.match(/^\/run-ws\/([A-Za-z0-9_.-]+)$/);
   if (!m) return new Response("not found", { status: 404 });
   const hostId = m[1];
   const expected = wsTokens.get(hostId);
@@ -468,7 +468,7 @@ g.__runWsImpl = impl;
 type Impl = typeof impl;
 const live = (): Impl => (g.__runWsImpl as Impl) ?? impl;
 
-/** Route handler for /backstage/run-ws/:hostId and /backstage/rpc-ws.
+/** Route handler for /run-ws/:hostId and /rpc-ws.
  *  Returns undefined when the socket was upgraded. */
 export function handleSandboxWsUpgrade(
   req: Request,

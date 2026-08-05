@@ -22,7 +22,7 @@ import { bold, dim, heading, info, ok, warn, wrote, yellow } from "./ui";
 async function responding(host: string, port: number): Promise<boolean> {
   try {
     const probeHost = host === "0.0.0.0" ? "127.0.0.1" : host;
-    const res = await fetch(`http://${probeHost}:${port}/backstage/api/health`, {
+    const res = await fetch(`http://${probeHost}:${port}/api/health`, {
       signal: AbortSignal.timeout(3000),
     });
     return res.ok;

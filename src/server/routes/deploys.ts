@@ -89,11 +89,11 @@ export async function handleDeployRoutes(
   }
 
   // ── Management ───────────────────────────────────────────────────────────
-  if (path === "/backstage/api/deploys" && req.method === "GET") {
+  if (path === "/api/deploys" && req.method === "GET") {
     return Response.json({ deploys: listDeploys() });
   }
 
-  const m = path.match(/^\/backstage\/api\/deploys\/([^/]+)(?:\/(logs|stop|start|rollback))?$/);
+  const m = path.match(/^\/api\/deploys\/([^/]+)(?:\/(logs|stop|start|rollback))?$/);
   if (!m) return undefined;
   const ref = decodeURIComponent(m[1]!);
   const action = m[2];

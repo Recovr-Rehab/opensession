@@ -16,14 +16,14 @@ export async function handleFeedsRoutes(
 ): Promise<Response | undefined> {
 	const { req, url, path } = ctx;
 
-	if (path === "/backstage/api/feeds" && req.method === "GET") {
+	if (path === "/api/feeds" && req.method === "GET") {
 		await ensureFeedsRegistered();
 		return Response.json({ feeds: listFeedDescriptors() });
 	}
 
 	// Create/update a config-declared feed ("any MCP is a project" —
 	// the feeds design W3). Body = a ConfigFeed; id is the upsert key.
-	if (path === "/backstage/api/feeds" && req.method === "POST") {
+	if (path === "/api/feeds" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
 		const { upsertConfigFeed } = await import("../feeds-config");
@@ -35,7 +35,7 @@ export async function handleFeedsRoutes(
 	// Sample tool call for the New-project form's mapping suggester: runs the
 	// named tool once on the signed-in user's grant and returns the raw JSON
 	// (truncated) so the client can propose the items path + field mapping.
-	if (path === "/backstage/api/feeds/preview" && req.method === "POST") {
+	if (path === "/api/feeds/preview" && req.method === "POST") {
 		const body = (await req.json().catch(() => null)) as {
 			server?: string;
 			tool?: string;
@@ -60,7 +60,7 @@ export async function handleFeedsRoutes(
 		}
 	}
 
-	const feedDelMatch = path.match(/^\/backstage\/api\/feeds\/([^/]+)$/);
+	const feedDelMatch = path.match(/^\/api\/feeds\/([^/]+)$/);
 	if (feedDelMatch && req.method === "DELETE") {
 		const { removeConfigFeed } = await import("../feeds-config");
 		const result = removeConfigFeed(decodeURIComponent(feedDelMatch[1]));
@@ -71,7 +71,7 @@ export async function handleFeedsRoutes(
 	// Options for one of a feed's filter controls (resolved via MCP on the
 	// viewer's grant — e.g. tella tags via list_tags).
 	const filterOptsMatch = path.match(
-		/^\/backstage\/api\/feeds\/([^/]+)\/filters\/([^/]+)\/options$/,
+		/^\/api\/feeds\/([^/]+)\/filters\/([^/]+)\/options$/,
 	);
 	if (filterOptsMatch && req.method === "GET") {
 		await ensureFeedsRegistered();
@@ -93,7 +93,7 @@ export async function handleFeedsRoutes(
 		}
 	}
 
-	const itemsMatch = path.match(/^\/backstage\/api\/feeds\/([^/]+)\/items$/);
+	const itemsMatch = path.match(/^\/api\/feeds\/([^/]+)\/items$/);
 	if (itemsMatch && req.method === "GET") {
 		await ensureFeedsRegistered();
 		const feedId = decodeURIComponent(itemsMatch[1]);

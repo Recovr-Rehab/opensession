@@ -43,7 +43,7 @@ const TOKEN_CACHE = join(homedir(), ".opensession-frontend-dev-token.json");
 
 async function tokenValid(candidate: string): Promise<boolean> {
 	try {
-		const res = await fetch(`${UPSTREAM}/backstage/api/auth/status`, {
+		const res = await fetch(`${UPSTREAM}/api/auth/status`, {
 			headers: { authorization: `Bearer ${candidate}` },
 		});
 		return res.ok && (await res.json()).authenticated === true;

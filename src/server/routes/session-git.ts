@@ -38,11 +38,11 @@ export async function handleSessionGitRoutes(
 
 	// Live git diff for a session's worktree (Changes tab)
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/diff$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/diff$/) &&
 		req.method === "GET"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/diff$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/diff$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -106,11 +106,11 @@ export async function handleSessionGitRoutes(
 	// AI file categories for the live worktree diff. This mirrors PR grouping,
 	// but targets the top-level session Changes tab (including uncommitted edits).
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/diff-groups$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/diff-groups$/) &&
 		req.method === "POST"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/diff-groups$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/diff-groups$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -142,7 +142,7 @@ export async function handleSessionGitRoutes(
 	// diff row). `{ repo, path, oldPath? }` — resets the file to its
 	// base-branch state so it drops out of the Changes diff. Destructive.
 	const discardMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/discard-file$/,
+		/^\/api\/sessions\/(.+)\/discard-file$/,
 	);
 	if (discardMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(discardMatch[1]);
@@ -206,11 +206,11 @@ export async function handleSessionGitRoutes(
 	// Local git state for a session's worktree (status header + Git status
 	// rows). `?repo=<project>` targets an attached repo's checkout.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/git-status$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/git-status$/) &&
 		req.method === "GET"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/git-status$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/git-status$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -251,11 +251,11 @@ export async function handleSessionGitRoutes(
 	// itself. `?side=new` (default) reads the working tree; `?side=base` shows
 	// the pre-change version via `git show <merge-base>:<path>`.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/worktree-image$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/worktree-image$/) &&
 		req.method === "GET"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/worktree-image$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/worktree-image$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session) return new Response("Session not found", { status: 404 });
@@ -312,7 +312,7 @@ export async function handleSessionGitRoutes(
 	// pre-change version via `git show <merge-base>:<path>`. POST with
 	// `{ repo?, path, content }` writes the working-tree file (edit-mode save).
 	const worktreeFileMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/worktree-file$/,
+		/^\/api\/sessions\/(.+)\/worktree-file$/,
 	);
 	if (worktreeFileMatch && (req.method === "GET" || req.method === "POST")) {
 		const sessionId = decodeURIComponent(worktreeFileMatch[1]);
@@ -392,11 +392,11 @@ export async function handleSessionGitRoutes(
 	// Push the session's branch (sets upstream on first push). Human-triggered
 	// from the status header — audited in git-status.ts.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/git-push$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/git-push$/) &&
 		req.method === "POST"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/git-push$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/git-push$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -430,11 +430,11 @@ export async function handleSessionGitRoutes(
 	// header. `body.base` merges origin/<default branch>; otherwise the branch's
 	// own upstream is pulled fast-forward-only. Audited in git-status.ts.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/git-pull$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/git-pull$/) &&
 		req.method === "POST"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/git-pull$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/git-pull$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)

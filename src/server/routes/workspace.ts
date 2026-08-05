@@ -55,7 +55,7 @@ export async function handleWorkspaceRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// List worktrees (optionally for a specific repo)
-	if (path === "/backstage/api/worktrees" && req.method === "GET") {
+	if (path === "/api/worktrees" && req.method === "GET") {
 		return Response.json(
 			await listWorktrees(url.searchParams.get("repo") || undefined),
 		);
@@ -67,7 +67,7 @@ export async function handleWorkspaceRoutes(
 	// yet. Each hit carries `insert` (what lands in the textarea: a bare path for
 	// the primary repo, `<repo>:path` for an attached one — folders with a
 	// trailing slash) and a `repo` label when more than one repo is in play.
-	if (path === "/backstage/api/files" && req.method === "GET") {
+	if (path === "/api/files" && req.method === "GET") {
 		const q = url.searchParams.get("q") || "";
 		const sessionId = url.searchParams.get("session");
 		const repos: Array<{ repo: string; dir: string; primary: boolean }> =
@@ -209,7 +209,7 @@ export async function handleWorkspaceRoutes(
 	// skills+commands (~/.claude) plus the checkout's project ones. Same
 	// session/repo resolution as /api/files, primary repo only (project
 	// skills load from the run's cwd, so attached repos don't apply).
-	if (path === "/backstage/api/skills" && req.method === "GET") {
+	if (path === "/api/skills" && req.method === "GET") {
 		const q = url.searchParams.get("q") || "";
 		const sessionId = url.searchParams.get("session");
 		const session = sessionId ? findSession(sessionId) : undefined;
@@ -231,7 +231,7 @@ export async function handleWorkspaceRoutes(
 	}
 
 	// Repos available to attach / start a chat against.
-	if (path === "/backstage/api/repos" && req.method === "GET") {
+	if (path === "/api/repos" && req.method === "GET") {
 		return Response.json({
 			repos: Object.values(REPOS).map((p) => ({
 				id: p.id,
@@ -247,11 +247,11 @@ export async function handleWorkspaceRoutes(
 
 	// ── Projects (folders that group chats) ──
 	// A Project is just metadata; membership lives on each chat's `projectId`.
-	if (path === "/backstage/api/projects" && req.method === "GET") {
+	if (path === "/api/projects" && req.method === "GET") {
 		return Response.json({ projects: listWorkspaces() });
 	}
 
-	if (path === "/backstage/api/projects" && req.method === "POST") {
+	if (path === "/api/projects" && req.method === "POST") {
 		const body = (await req.json().catch(() => ({}))) as {
 			name?: string;
 			repo?: string;
@@ -273,7 +273,7 @@ export async function handleWorkspaceRoutes(
 	// (adopt-don't-duplicate — see workspace-resolve.ts). Sidebar PR/ticket
 	// rows call this on click and then navigate to the workspace; the `name`
 	// hint (ticket title) avoids a Plain API round-trip.
-	if (path === "/backstage/api/workspaces/resolve" && req.method === "POST") {
+	if (path === "/api/workspaces/resolve" && req.method === "POST") {
 		const body = (await req.json().catch(() => ({}))) as {
 			pr?: { repo?: string; number?: number; branch?: string; title?: string };
 			plainThreadId?: string;
@@ -324,7 +324,7 @@ export async function handleWorkspaceRoutes(
 		);
 	}
 
-	const projectMatch = path.match(/^\/backstage\/api\/projects\/(.+)$/);
+	const projectMatch = path.match(/^\/api\/projects\/(.+)$/);
 	if (projectMatch && req.method === "PATCH") {
 		const id = decodeURIComponent(projectMatch[1]);
 		const body = (await req.json().catch(() => ({}))) as {
@@ -363,7 +363,7 @@ export async function handleWorkspaceRoutes(
 	// excluded (shared by every backstage/ask chat, so ownership is
 	// meaningless there); see workspaceOwningWorktree.
 	const newChatMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/new-chat$/,
+		/^\/api\/sessions\/(.+)\/new-chat$/,
 	);
 	if (newChatMatch && req.method === "POST") {
 		const sourceId = decodeURIComponent(newChatMatch[1]);
@@ -558,7 +558,7 @@ export async function handleWorkspaceRoutes(
 	//     original behavior. That moves the cwd, so the ask transcript is
 	//     copied into the new cwd's project dir to keep engine resume working.
 	const promoteMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/promote$/,
+		/^\/api\/sessions\/(.+)\/promote$/,
 	);
 	if (promoteMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(promoteMatch[1]);
@@ -638,7 +638,7 @@ export async function handleWorkspaceRoutes(
 
 	// Move a chat in/out of a Project (folder). `{ projectId: null }` detaches.
 	const setProjectMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/project$/,
+		/^\/api\/sessions\/(.+)\/project$/,
 	);
 	if (setProjectMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(setProjectMatch[1]);
@@ -658,7 +658,7 @@ export async function handleWorkspaceRoutes(
 	// Attach a secondary repo to a session (cross-repo work): creates/reuses an
 	// isolated worktree and records it on the session.
 	const attachMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/attach-repo$/,
+		/^\/api\/sessions\/(.+)\/attach-repo$/,
 	);
 	if (attachMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(attachMatch[1]);
@@ -686,7 +686,7 @@ export async function handleWorkspaceRoutes(
 	// Is this session fresh enough to switch its primary repo? Drives the
 	// clean-only, silent switcher in the RepoBar — no work means no footgun.
 	const switchableMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/repo-switchable$/,
+		/^\/api\/sessions\/(.+)\/repo-switchable$/,
 	);
 	if (switchableMatch && req.method === "GET") {
 		const sessionId = decodeURIComponent(switchableMatch[1]);
@@ -715,7 +715,7 @@ export async function handleWorkspaceRoutes(
 	// Rejects with 400 if the session has work unless `force` is set; the
 	// old worktree is left on disk either way, so work is never destroyed.
 	const switchMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/switch-primary-repo$/,
+		/^\/api\/sessions\/(.+)\/switch-primary-repo$/,
 	);
 	if (switchMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(switchMatch[1]);
@@ -744,7 +744,7 @@ export async function handleWorkspaceRoutes(
 	// disk so unmerged work isn't lost — clean it up via the worktrees sweep).
 	// POST, not DELETE, so it isn't swallowed by the generic DELETE /sessions/:id.
 	const detachMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/detach-repo$/,
+		/^\/api\/sessions\/(.+)\/detach-repo$/,
 	);
 	if (detachMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(detachMatch[1]);

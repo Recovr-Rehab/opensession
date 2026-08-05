@@ -84,7 +84,7 @@ export async function handlePrRoutes(
 	// Every open PR in the repo, attributed to teammates via the GitHub
 	// identity table — the sidebar's Open PRs section (which must include
 	// PRs that have no Backstage session).
-	if (path === "/backstage/api/open-prs" && req.method === "GET") {
+	if (path === "/api/open-prs" && req.method === "GET") {
 		return Response.json({ prs: getOpenPrs() });
 	}
 
@@ -92,7 +92,7 @@ export async function handlePrRoutes(
 	// checkboxes). GET lists the viewer's VIEWED paths; POST marks/unmarks one
 	// file. State lives on GitHub (markFileAsViewed), so it round-trips with
 	// github.com's own file list. See src/server/pr-viewed.ts.
-	if (path === "/backstage/api/pr-viewed-files" && req.method === "GET") {
+	if (path === "/api/pr-viewed-files" && req.method === "GET") {
 		const repoId = url.searchParams.get("repo");
 		const number = parseInt(url.searchParams.get("number") || "", 10);
 		if (!Number.isFinite(number))
@@ -111,7 +111,7 @@ export async function handlePrRoutes(
 			return Response.json({ error: e?.message || String(e) }, { status: 502 });
 		}
 	}
-	if (path === "/backstage/api/pr-viewed-files" && req.method === "POST") {
+	if (path === "/api/pr-viewed-files" && req.method === "POST") {
 		const body = (await req.json().catch(() => ({}))) as {
 			prId?: string;
 			path?: string;
@@ -140,7 +140,7 @@ export async function handlePrRoutes(
 
 	// Recent PRs across the covered repos, including merges made without an
 	// OpenSession workspace. Powers the root shipped-worktree index.
-	if (path === "/backstage/api/recent-prs" && req.method === "GET") {
+	if (path === "/api/recent-prs" && req.method === "GET") {
 		const person = url.searchParams.get("person");
 		return Response.json({ prs: person ? await getRecentPrsForPerson(person) : getRecentPrs() });
 	}
@@ -148,7 +148,7 @@ export async function handlePrRoutes(
 	// PR Tinder: the triage deck — every open tella-fusion PR with the
 	// rich card fields, the repo's labels, and which PRs this user already
 	// kept (so the deck doesn't re-deal them for 14 days).
-	if (path === "/backstage/api/pr-tinder" && req.method === "GET") {
+	if (path === "/api/pr-tinder" && req.method === "GET") {
 		const user = requestUser(ctx, url.searchParams.get("user"));
 		try {
 			const [prs, labels] = await Promise.all([
@@ -171,7 +171,7 @@ export async function handlePrRoutes(
 	// PR Tinder actions: keep (per-user, local state only), close (with an
 	// optional reason comment), reopen (the close undo), comment, label.
 	{
-		const m = path.match(/^\/backstage\/api\/pr-tinder\/(\d+)\/(\w+)$/);
+		const m = path.match(/^\/api\/pr-tinder\/(\d+)\/(\w+)$/);
 		if (m && req.method === "POST") {
 			const number = parseInt(m[1], 10);
 			const body = await req.json().catch(() => ({}));
@@ -253,11 +253,11 @@ export async function handlePrRoutes(
 	// attached repo's PR; `?repo=&branch=` a linked PR (which may be another
 	// branch of the primary repo); default/primary the session's own branch.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr$/) &&
 		req.method === "GET"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -306,11 +306,11 @@ export async function handlePrRoutes(
 
 	// PR diff for inline review in the PR tab
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-diff$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr-diff$/) &&
 		req.method === "GET"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-diff$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr-diff$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -327,11 +327,11 @@ export async function handlePrRoutes(
 	// AI-powered file categories for the PR Changes view. Kept separate from
 	// the diff endpoint so loading a review never blocks on model generation.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-diff-groups$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr-diff-groups$/) &&
 		req.method === "POST"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-diff-groups$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr-diff-groups$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -355,11 +355,11 @@ export async function handlePrRoutes(
 	// Link a PR to the session (a follow-up PR, or one in another repo/branch).
 	// Body: { url } or { repo, number } or { repo, branch }.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/link-pr$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/link-pr$/) &&
 		req.method === "POST"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/link-pr$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/link-pr$/)![1],
 		);
 		const body = await req.json().catch(() => ({}));
 		try {
@@ -383,11 +383,11 @@ export async function handlePrRoutes(
 	// Unlink a PR (drops the link only — the PR itself is untouched). POST, not
 	// DELETE, so it isn't swallowed by the generic DELETE /sessions/:id route.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/unlink-pr$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/unlink-pr$/) &&
 		req.method === "POST"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/unlink-pr$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/unlink-pr$/)![1],
 		);
 		const body = await req.json().catch(() => ({}));
 		if (!body.repo || !body.branch)
@@ -413,11 +413,11 @@ export async function handlePrRoutes(
 	// cached after that. null = no PR / generation failed (UI falls back
 	// to the plain diff).
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/review-guide$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/review-guide$/) &&
 		req.method === "GET"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/review-guide$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/review-guide$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -438,7 +438,7 @@ export async function handlePrRoutes(
 	// no textual hunks, so the client renders the picture itself (head ref for
 	// the new side, base ref for the old). Image extensions only; the repo must
 	// be registered. Served through gh so private repos work.
-	if (path === "/backstage/api/pr-image" && req.method === "GET") {
+	if (path === "/api/pr-image" && req.method === "GET") {
 		const filePath = url.searchParams.get("path") || "";
 		const ref = url.searchParams.get("ref") || "";
 		const { imageContentType, imageHeaders } = await import("../image-mime");
@@ -464,21 +464,21 @@ export async function handlePrRoutes(
 	// Session-less PR preview (sidebar PR rows with no chat yet): PR details
 	// and diff straight from repo+branch — same pr-info helpers as the
 	// session routes, minus the session lookup.
-	if (path === "/backstage/api/pr-preview" && req.method === "GET") {
+	if (path === "/api/pr-preview" && req.method === "GET") {
 		const branch = url.searchParams.get("branch") || "";
 		if (!branch)
 			return Response.json({ error: "branch required" }, { status: 400 });
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
 		return prApiResponse(() => getPrDetails(branch, repo.ghRepo));
 	}
-	if (path === "/backstage/api/pr-preview-diff" && req.method === "GET") {
+	if (path === "/api/pr-preview-diff" && req.method === "GET") {
 		const branch = url.searchParams.get("branch") || "";
 		if (!branch)
 			return Response.json({ error: "branch required" }, { status: 400 });
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
 		return prApiResponse(() => getPrDiff(branch, repo.ghRepo));
 	}
-	if (path === "/backstage/api/pr-preview-diff-groups" && req.method === "POST") {
+	if (path === "/api/pr-preview-diff-groups" && req.method === "POST") {
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
 		const body = await req.json().catch(() => ({}));
 		const input = validDiffGroupingInput(body);
@@ -491,7 +491,7 @@ export async function handlePrRoutes(
 	}
 	// Session-less review guide for the preview's Guide tab — getReviewGuide
 	// only needs branch+ghRepo (same generation/cache as the session route).
-	if (path === "/backstage/api/pr-preview-guide" && req.method === "GET") {
+	if (path === "/api/pr-preview-guide" && req.method === "GET") {
 		const branch = url.searchParams.get("branch") || "";
 		if (!branch)
 			return Response.json({ error: "branch required" }, { status: 400 });
@@ -499,7 +499,7 @@ export async function handlePrRoutes(
 		const { getReviewGuide } = await import("../../server/review-guide");
 		return prApiResponse(() => getReviewGuide(branch, repo.ghRepo));
 	}
-	if (path === "/backstage/api/pr-preview-review" && req.method === "POST") {
+	if (path === "/api/pr-preview-review" && req.method === "POST") {
 		const credential = githubMutationCredential(ctx);
 		if (!credential) return githubCredentialRequiredResponse();
 		const body = await req.json().catch(() => null);
@@ -550,7 +550,7 @@ export async function handlePrRoutes(
 		invalidateSessionsCache();
 		return Response.json(result);
 	}
-	if (path === "/backstage/api/pr-preview-merge" && req.method === "POST") {
+	if (path === "/api/pr-preview-merge" && req.method === "POST") {
 		const credential = githubMutationCredential(ctx);
 		if (!credential) return githubCredentialRequiredResponse();
 		const body = await req.json().catch(() => ({}));
@@ -580,7 +580,7 @@ export async function handlePrRoutes(
 			);
 		}
 	}
-	if (path === "/backstage/api/pr-preview-close" && req.method === "POST") {
+	if (path === "/api/pr-preview-close" && req.method === "POST") {
 		const credential = githubMutationCredential(ctx);
 		if (!credential) return githubCredentialRequiredResponse();
 		const body = await req.json().catch(() => ({}));
@@ -597,13 +597,13 @@ export async function handlePrRoutes(
 
 	// Post a comment on the session's PR (inline when path+line present)
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-comment$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr-comment$/) &&
 		req.method === "POST"
 	) {
 		const credential = githubMutationCredential(ctx);
 		if (!credential) return githubCredentialRequiredResponse();
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-comment$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr-comment$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -639,13 +639,13 @@ export async function handlePrRoutes(
 
 	// Submit a batched review (all pending inline comments + an event) on the PR.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-review$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr-review$/) &&
 		req.method === "POST"
 	) {
 		const credential = githubMutationCredential(ctx);
 		if (!credential) return githubCredentialRequiredResponse();
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-review$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr-review$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -707,13 +707,13 @@ export async function handlePrRoutes(
 
 	// Squash & merge the session's PR — human-triggered from the Reviews view.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-merge$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr-merge$/) &&
 		req.method === "POST"
 	) {
 		const credential = githubMutationCredential(ctx);
 		if (!credential) return githubCredentialRequiredResponse();
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-merge$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr-merge$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -757,13 +757,13 @@ export async function handlePrRoutes(
 	// fails often enough — and the pairing is knowable server-side — that the
 	// PR panel offers it as a button.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-stack$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr-stack$/) &&
 		req.method === "POST"
 	) {
 		const credential = githubMutationCredential(ctx);
 		if (!credential) return githubCredentialRequiredResponse();
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-stack$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr-stack$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -821,13 +821,13 @@ export async function handlePrRoutes(
 
 	// Close the session's PR without merging it — human-triggered from Reviews.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-close$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr-close$/) &&
 		req.method === "POST"
 	) {
 		const credential = githubMutationCredential(ctx);
 		if (!credential) return githubCredentialRequiredResponse();
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-close$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr-close$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -852,11 +852,11 @@ export async function handlePrRoutes(
 	// auto-fix, simplify, adversarial). tella-fusion only (the agent is
 	// repo-scoped), and there must be an open PR for the branch.
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-action$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/pr-action$/) &&
 		req.method === "POST"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-action$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/pr-action$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)

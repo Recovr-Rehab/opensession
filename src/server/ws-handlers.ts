@@ -843,7 +843,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							void sendPushToUser(name, {
 								title: `${user || "Someone"} mentioned you in ${session.title || "a session"}`,
 								body: preview,
-								url: `/backstage/session/${encodeURIComponent(sessionId)}`,
+								url: `/session/${encodeURIComponent(sessionId)}`,
 								tag: `backstage-mention-${sessionId}`,
 							});
 						}

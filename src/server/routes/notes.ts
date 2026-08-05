@@ -18,12 +18,12 @@ export async function handleNotesRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Notes (shared, collaborative; content syncs over WS) ──
-	if (path === "/backstage/api/notes" && req.method === "GET") {
+	if (path === "/api/notes" && req.method === "GET") {
 		seedIfEmpty();
 		return Response.json({ notes: listNotes() });
 	}
 
-	if (path === "/backstage/api/notes" && req.method === "POST") {
+	if (path === "/api/notes" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		const note = createNote(
 			typeof body?.title === "string" ? body.title : undefined,
@@ -33,7 +33,7 @@ export async function handleNotesRoutes(
 
 	// Full-text search across notes (merged with docs hits client-side).
 	// Must precede the generic /notes/:id matcher ("search" is not an id).
-	if (path === "/backstage/api/notes/search" && req.method === "GET") {
+	if (path === "/api/notes/search" && req.method === "GET") {
 		const { searchNotes } = await import("../../server/notes");
 		return Response.json({
 			hits: searchNotes(url.searchParams.get("q") || ""),
@@ -41,7 +41,7 @@ export async function handleNotesRoutes(
 	}
 
 	const noteBacklinksMatch = path.match(
-		/^\/backstage\/api\/notes\/([^/]+)\/backlinks$/,
+		/^\/api\/notes\/([^/]+)\/backlinks$/,
 	);
 	if (noteBacklinksMatch && req.method === "GET") {
 		const id = decodeURIComponent(noteBacklinksMatch[1]);
@@ -51,7 +51,7 @@ export async function handleNotesRoutes(
 		return Response.json({ notes: noteBacklinks(id) });
 	}
 
-	const noteMatch = path.match(/^\/backstage\/api\/notes\/([^/]+)$/);
+	const noteMatch = path.match(/^\/api\/notes\/([^/]+)$/);
 	if (noteMatch && req.method === "GET") {
 		const id = decodeURIComponent(noteMatch[1]);
 		if (!isValidNoteId(id))
@@ -72,7 +72,7 @@ export async function handleNotesRoutes(
 	}
 
 	const notePromptMatch = path.match(
-		/^\/backstage\/api\/notes\/([^/]+)\/prompt$/,
+		/^\/api\/notes\/([^/]+)\/prompt$/,
 	);
 	if (notePromptMatch && req.method === "POST") {
 		const id = decodeURIComponent(notePromptMatch[1]);
@@ -100,11 +100,11 @@ export async function handleNotesRoutes(
 	}
 
 	// ── Wiki ──
-	if (path === "/backstage/api/wiki/tree" && req.method === "GET") {
+	if (path === "/api/wiki/tree" && req.method === "GET") {
 		return Response.json(getWikiTree());
 	}
 
-	if (path === "/backstage/api/wiki/file" && req.method === "GET") {
+	if (path === "/api/wiki/file" && req.method === "GET") {
 		const rel = url.searchParams.get("path") || "";
 		const file = getWikiFile(rel);
 		if (!file)
@@ -112,7 +112,7 @@ export async function handleNotesRoutes(
 		return Response.json(file);
 	}
 
-	if (path === "/backstage/api/wiki/search" && req.method === "GET") {
+	if (path === "/api/wiki/search" && req.method === "GET") {
 		const q = url.searchParams.get("q") || "";
 		return Response.json(searchWiki(q));
 	}

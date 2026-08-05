@@ -303,7 +303,7 @@ describe("cloud session import", () => {
         content: "I remember.",
         timestamp: "2026-07-22T10:01:01.000Z",
         model: "opencode/anthropic/claude-sonnet-5",
-        videos: ["/backstage/media/demo.mp4"],
+        videos: ["/media/demo.mp4"],
       },
       {
         id: "notice-1",
@@ -324,7 +324,7 @@ describe("cloud session import", () => {
       expect.objectContaining({
         id: "a1",
         type: "assistant",
-        videos: ["/backstage/media/demo.mp4"],
+        videos: ["/media/demo.mp4"],
       }),
       expect.objectContaining({ id: "notice-1", type: "system" }),
     ]);
@@ -427,7 +427,7 @@ describe("local session upgrade", () => {
     let archived: any;
     const fetchMock = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith("/backstage/api/repos")) {
+      if (url.endsWith("/api/repos")) {
         calls.push("repos");
         expect((init?.headers as Record<string, string>).authorization).toBe(
           "Bearer secret",
@@ -484,7 +484,7 @@ describe("local session upgrade", () => {
   test("passes through an import error and leaves the local session untouched", async () => {
     let archived = false;
     const fetchMock = (async (input: string | URL | Request) => {
-      if (String(input).endsWith("/backstage/api/repos")) {
+      if (String(input).endsWith("/api/repos")) {
         return Response.json({
           repos: [{ id: "cloud-repo", ghRepo: "acme/widget" }],
         });
@@ -523,7 +523,7 @@ describe("local session upgrade", () => {
       SESSION_ID,
       upgradeDeps({
         fetch: (async (input: string | URL | Request) =>
-          String(input).endsWith("/backstage/api/repos")
+          String(input).endsWith("/api/repos")
             ? Response.json({
                 repos: [{ id: "cloud-repo", ghRepo: "acme/widget" }],
               })
@@ -540,7 +540,7 @@ describe("local session upgrade", () => {
       SESSION_ID,
       upgradeDeps({
         fetch: (async (input: string | URL | Request) =>
-          String(input).endsWith("/backstage/api/repos")
+          String(input).endsWith("/api/repos")
             ? Response.json({ message: "temporarily unavailable" }, { status: 502 })
             : new Response()) as typeof fetch,
       }),
@@ -555,12 +555,12 @@ describe("local session upgrade", () => {
     let archived: unknown;
     const fetchMock = (async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith("/backstage/api/repos")) {
+      if (url.endsWith("/api/repos")) {
         return Response.json({
           repos: [{ id: "cloud-repo", ghRepo: "acme/widget" }],
         });
       }
-      if (url.endsWith("/backstage/api/sessions/import")) {
+      if (url.endsWith("/api/sessions/import")) {
         return Response.json({ error: "Session already exists" }, { status: 409 });
       }
       return Response.json([
@@ -597,7 +597,7 @@ afterEach(() => {
 
 test("the upgrade route is dormant outside the local profile", async () => {
   process.env.OPENSESSION_PROFILE = "cloud";
-  const path = `/backstage/api/sessions/${SESSION_ID}/upgrade`;
+  const path = `/api/sessions/${SESSION_ID}/upgrade`;
   const req = new Request(`http://127.0.0.1:3850${path}`, { method: "POST" });
   const ctx: RouteContext = {
     req,

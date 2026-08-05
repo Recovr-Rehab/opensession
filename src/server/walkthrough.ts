@@ -7,7 +7,7 @@
  * Media the agent recorded lives in its worktree or /tmp, both of which are
  * pruned, so publishing STAGES copies under the composer-uploads dir
  * (~/.opensession-chats/uploads/walkthrough/<sessionId>/) — under the home
- * dir, so the existing /backstage/media route streams them to the chat and
+ * dir, so the existing /media route streams them to the chat and
  * the Review tab with no new endpoint.
  *
  * The walkthrough is also mirrored into the GitHub PR description as a
@@ -49,7 +49,7 @@ function ext(p: string): string {
   return p.slice(p.lastIndexOf(".")).toLowerCase();
 }
 
-/** Same path scoping as the /backstage/media route: absolute, no traversal,
+/** Same path scoping as the /media route: absolute, no traversal,
  *  under /tmp or the service user's home — the places agents can write. */
 function readablePath(p: string): boolean {
   return (

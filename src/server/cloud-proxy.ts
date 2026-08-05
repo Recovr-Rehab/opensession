@@ -22,10 +22,10 @@ const MAX_INITIAL_QUEUE = 100;
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
 const COLLECTION_ROUTES = new Set(["search", "archive-old", "import"]);
 const CLOUD_TARGET_GET_ROUTES = new Set([
-	"/backstage/api/models",
-	"/backstage/api/repos",
-	"/backstage/api/claude-accounts",
-	"/backstage/api/codex-accounts",
+	"/api/models",
+	"/api/repos",
+	"/api/claude-accounts",
+	"/api/codex-accounts",
 ]);
 
 type Client = ServerWebSocket<WSClientData>;
@@ -99,7 +99,7 @@ export async function resolveCloudIdentity(
 ): Promise<LocalProfileIdentity | null> {
 	if (!isLocalProfile() || !cloudToken()) return null;
 	try {
-		const response = await fetchImpl(upstreamUrl("/backstage/api/auth/status"), {
+		const response = await fetchImpl(upstreamUrl("/api/auth/status"), {
 			headers: proxyHeaders(new Headers()),
 			signal: AbortSignal.timeout(LIST_TIMEOUT_MS),
 		});
@@ -180,7 +180,7 @@ export function localSessionOwnsId(session: UnifiedSession | undefined): boolean
 }
 
 export function sessionIdFromApiPath(path: string): string | null {
-	const match = path.match(/^\/backstage\/api\/sessions\/([^/]+)(?:\/|$)/);
+	const match = path.match(/^\/api\/sessions\/([^/]+)(?:\/|$)/);
 	if (!match || COLLECTION_ROUTES.has(match[1])) return null;
 	try {
 		return decodeURIComponent(match[1]);
@@ -239,12 +239,12 @@ export function shouldProxyCloudFrontendRequest(
 		return false;
 	}
 	return !(
-		ctx.path === "/backstage/api" ||
-		ctx.path.startsWith("/backstage/api/") ||
-		ctx.path === "/backstage/ws" ||
-		ctx.path === "/backstage/rpc-ws" ||
-		ctx.path === "/backstage/run-ws" ||
-		ctx.path.startsWith("/backstage/run-ws/")
+		ctx.path === "/api" ||
+		ctx.path.startsWith("/api/") ||
+		ctx.path === "/ws" ||
+		ctx.path === "/rpc-ws" ||
+		ctx.path === "/run-ws" ||
+		ctx.path.startsWith("/run-ws/")
 	);
 }
 
@@ -431,7 +431,7 @@ export async function mergedCloudSessions(
 		return { sessions: mergeSessionLists(localSessions, []), cloudUnreachable: false };
 	}
 	try {
-		const response = await fetchImpl(upstreamUrl("/backstage/api/sessions"), {
+		const response = await fetchImpl(upstreamUrl("/api/sessions"), {
 			headers: proxyHeaders(new Headers()),
 			signal: AbortSignal.timeout(LIST_TIMEOUT_MS),
 		});

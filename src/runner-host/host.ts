@@ -81,7 +81,7 @@ const log = (...args: unknown[]) =>
 // ── Transport (single client: the backstage process) ─────────────────────────
 // Two modes, same protocol:
 //  - default: serve a unix socket in the run dir; backstage dials in (NDJSON).
-//  - OPENSESSION_RUN_WS_URL set: DIAL OUT to backstage's /backstage/run-ws/<hostId>
+//  - OPENSESSION_RUN_WS_URL set: DIAL OUT to backstage's /run-ws/<hostId>
 //    WebSocket route (one JSON message per text frame) — for sandboxes that
 //    can't share a unix socket with the host (remote providers; docker
 //    dogfoods it). Reconnects with backoff on drop, mirroring the socket
@@ -368,7 +368,7 @@ function onAskUser(input: Record<string, unknown>): Promise<AskResult> {
 function proxyMcpConfigs(): Record<string, unknown> | undefined {
   const names = spec.proxyMcpServers || [];
   if (!names.length || !spec.rpcToken) return undefined;
-  // WS transport: the proxies dial backstage's /backstage/rpc-ws route instead
+  // WS transport: the proxies dial backstage's /rpc-ws route instead
   // of the unix RPC socket (which isn't shareable across a remote boundary).
   // The upgrade there authenticates with THIS run's hostId + wsToken (only
   // ws-transport launches register one server-side); the per-frame rpc token

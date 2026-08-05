@@ -20,7 +20,7 @@
  * Delivery is broker-only: the agent never sees the secret, it gets a grant
  * token and calls
  *
- *   http://127.0.0.1:<port>/backstage/api/keychain/broker/<grantId>/<path>
+ *   http://127.0.0.1:<port>/api/keychain/broker/<grantId>/<path>
  *
  * (routes/keychain.ts) which injects the credential's header server-side and
  * proxies to the credential's host — constrained by the credential's
@@ -483,7 +483,7 @@ export const KEYCHAIN_ASK_DOMAIN = "keychain-ask";
 
 function brokerBaseUrl(): string {
   const port = parseInt(process.env.PORT || "3850");
-  return `http://127.0.0.1:${port}/backstage/api/keychain/broker`;
+  return `http://127.0.0.1:${port}/api/keychain/broker`;
 }
 
 /** The steer/tool text a session gets when its ask is approved. This is the

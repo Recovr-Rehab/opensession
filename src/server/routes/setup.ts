@@ -10,7 +10,7 @@
  * (config-mutation.ts).
  *
  * AUTHZ: the global web-auth gate in opensession.ts is the authorization —
- * when GitHub web sign-in is active every /backstage/api/* request already
+ * when GitHub web sign-in is active every /api/* request already
  * 401s without a signed-in team member, and these paths are NOT in the
  * gate's exempt list. No route here does its own auth.
  *
@@ -134,9 +134,9 @@ export async function handleSetupRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
   const { req, path } = ctx;
-  if (!path.startsWith("/backstage/api/setup/")) return undefined;
+  if (!path.startsWith("/api/setup/")) return undefined;
 
-  if (path === "/backstage/api/setup/status" && req.method === "GET") {
+  if (path === "/api/setup/status" && req.method === "GET") {
     const { configuredServer, configuredRepos, configuredIdentity } =
       await import("../config");
     const { INTEGRATIONS } = await import("../integrations/registry");
@@ -172,7 +172,7 @@ export async function handleSetupRoutes(
 
   // ── PUT /api/setup/integrations/:id — credentials + enable flag ──────────
   const integrationMatch = path.match(
-    /^\/backstage\/api\/setup\/integrations\/([^/]+)$/,
+    /^\/api\/setup\/integrations\/([^/]+)$/,
   );
   if (integrationMatch && req.method === "PUT") {
     const { findIntegration } = await import("../integrations/registry");
@@ -266,7 +266,7 @@ export async function handleSetupRoutes(
   }
 
   // ── PUT /api/setup/github — user PR auth + OAuth app settings ────────────
-  if (path === "/backstage/api/setup/github" && req.method === "PUT") {
+  if (path === "/api/setup/github" && req.method === "PUT") {
     const body = (await req.json().catch(() => null)) as {
       userPrAuth?: unknown;
       oauthClientId?: unknown;
@@ -341,7 +341,7 @@ export async function handleSetupRoutes(
   }
 
   // ── POST /api/setup/restart — apply boot-path changes ────────────────────
-  if (path === "/backstage/api/setup/restart" && req.method === "POST") {
+  if (path === "/api/setup/restart" && req.method === "POST") {
     if (!restartState.pending) {
       restartState.pending = true;
       audit({ kind: "setup_restart", by: ctx.authUser?.login || null });

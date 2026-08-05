@@ -1,7 +1,7 @@
 // The system-prompt appends interactive Claude runs get on top of the
 // claude_code preset. Extracted from claude-runner so the New Session
 // modal can preview exactly what a session will be told (GET
-// /backstage/api/system-prompt) without the two ever drifting apart.
+// /api/system-prompt) without the two ever drifting apart.
 //
 // The agent's display name comes from config (persona.name, default
 // "Michael"); the `opensession-*` MCP server ids referenced in the text are

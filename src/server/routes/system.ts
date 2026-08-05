@@ -230,7 +230,7 @@ export async function handleSystemRoutes(
 	// Health check (includes agent health — Tailscale-only, not public).
 	// frontendVersion lets clients detect a frontend-only rebuild (no bootId
 	// change) and refresh.
-	if (path === "/backstage/api/health") {
+	if (path === "/api/health") {
 		const agentHealth: Record<string, unknown> = {};
 		for (const a of getAgents()) {
 			agentHealth[a.name] = a.health();
@@ -255,7 +255,7 @@ export async function handleSystemRoutes(
 	// in-memory state: the per-user pins file plus the 2s session cache behind
 	// SessionControl. The central auth gate accepts either a signed-in web
 	// session or the route-scoped KEYPAD_TOKEN bearer credential.
-	if (path === "/backstage/api/keypad" && req.method === "GET") {
+	if (path === "/api/keypad" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		const control = getSessionControl();
 		// Per-user read marks (mirrored from the app's localStorage — reads.ts),
@@ -314,7 +314,7 @@ export async function handleSystemRoutes(
 	// Rebuild the frontend bundle in-process (no restart → live runs untouched).
 	// Drop-in replacement for `systemctl restart opensession` after a frontend/CSS
 	// change. Tailscale + team gated at the network layer like every route here.
-	if (path === "/backstage/api/rebuild-frontend" && req.method === "POST") {
+	if (path === "/api/rebuild-frontend" && req.method === "POST") {
 		if (IS_DEV || !frontend) {
 			return Response.json(
 				{ ok: false, error: "not available in dev mode" },
@@ -343,9 +343,9 @@ export async function handleSystemRoutes(
 	// handler just show the normal update pill, which is the best a broadcast
 	// can do for them. Does NOT rebuild; POST /api/rebuild-frontend first if
 	// the bundle itself changed. Team gated by the global auth layer like
-	// every /backstage/api/* route. Body: { force?: boolean } (default true).
+	// every /api/* route. Body: { force?: boolean } (default true).
 	if (
-		path === "/backstage/api/admin/frontend-reload" &&
+		path === "/api/admin/frontend-reload" &&
 		req.method === "POST"
 	) {
 		if (IS_DEV || !frontend) {
@@ -377,13 +377,13 @@ export async function handleSystemRoutes(
 	// Transcript v2 backfill (docs/transcripts.md §8): migrate legacy
 	// session transcripts into transcripts.db, in-process (invariant 8: the
 	// live server is the DB's only writer — never a standalone script). Team
-	// gated by the global auth layer like every /backstage/api/* route. Body:
+	// gated by the global auth layer like every /api/* route. Body:
 	// { limit?, dryRun?, wait? }. Idempotent (store imports are upserts), so
 	// it's also safe to run pre-activation to warm the store. A full run takes
 	// minutes (paced), so it defaults to background + immediate 202; pass
 	// `wait: true` (with a small `limit`) to block for the summary.
 	if (
-		path === "/backstage/api/admin/transcript-backfill" &&
+		path === "/api/admin/transcript-backfill" &&
 		req.method === "POST"
 	) {
 		let body: { limit?: unknown; dryRun?: unknown; wait?: unknown } = {};
@@ -420,13 +420,13 @@ export async function handleSystemRoutes(
 	// through the experimental in-process SDK adapter, so the orchestrator can
 	// verify SDK turn → transcripts.db rows → bus after a restart flips
 	// OPENSESSION_ENGINE_CLAUDE_DIRECT=1. Team gated by the global auth layer
-	// like every /backstage/api/* route. Body: { dryRun? }. With the flag off
+	// like every /api/* route. Body: { dryRun? }. With the flag off
 	// (or dryRun: true) this never picks an account or spawns the SDK — it
 	// returns ok:false + reason (200), never a 500. Real turns are wall-capped
 	// at 120s by the harness (well under Bun.serve's 240s idleTimeout), so the
 	// route can block for the result without hanging.
 	if (
-		path === "/backstage/api/admin/claude-direct-smoke" &&
+		path === "/api/admin/claude-direct-smoke" &&
 		req.method === "POST"
 	) {
 		let body: { dryRun?: unknown } = {};
@@ -465,7 +465,7 @@ export async function handleSystemRoutes(
 	// can't carry big files). Body is the raw file bytes; filename in the
 	// `x-file-name` header. Returns { name, path } the client echoes back in
 	// its next prompt/create_session `files` entry.
-	if (path === "/backstage/api/upload" && req.method === "POST") {
+	if (path === "/api/upload" && req.method === "POST") {
 		try {
 			const rawName = req.headers.get("x-file-name") || "file";
 			const name = decodeURIComponent(rawName);
@@ -494,7 +494,7 @@ export async function handleSystemRoutes(
 	// endpoint is that run's window into yesterday's work — like /api/health for
 	// the health monitor. Default date is yesterday (UTC). Use `?section=` to
 	// pull individual detail sections under the engine's tool-output cap.
-	if (path === "/backstage/api/audit/digest" && req.method === "GET") {
+	if (path === "/api/audit/digest" && req.method === "GET") {
 		const { buildAuditDigest, listAuditDates } = await import(
 			"../../server/audit"
 		);
@@ -555,7 +555,7 @@ export async function handleSystemRoutes(
 	}
 
 	// ── Audit log viewer (Settings → Audit log) ──
-	if (path === "/backstage/api/audit" && req.method === "GET") {
+	if (path === "/api/audit" && req.method === "GET") {
 		const { listAuditDates, readAuditEvents } = await import(
 			"../../server/audit"
 		);

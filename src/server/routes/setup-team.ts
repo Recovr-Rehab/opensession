@@ -89,12 +89,12 @@ export async function handleSetupTeamRoutes(
 ): Promise<Response | undefined> {
   const { req, path } = ctx;
 
-  if (path === "/backstage/api/setup/team" && req.method === "GET") {
+  if (path === "/api/setup/team" && req.method === "GET") {
     const { configuredIdentity } = await import("../config");
     return Response.json({ members: configuredIdentity().team });
   }
 
-  if (path === "/backstage/api/setup/team" && req.method === "POST") {
+  if (path === "/api/setup/team" && req.method === "POST") {
     const body = (await req.json().catch(() => null)) as MemberPatch | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return Response.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -129,7 +129,7 @@ export async function handleSetupTeamRoutes(
   }
 
   const memberMatch = path.match(
-    /^\/backstage\/api\/setup\/team\/([^/]+)(\/remove)?$/,
+    /^\/api\/setup\/team\/([^/]+)(\/remove)?$/,
   );
   if (memberMatch) {
     const targetName = decodeURIComponent(memberMatch[1]).trim().toLowerCase();

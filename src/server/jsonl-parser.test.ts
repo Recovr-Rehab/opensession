@@ -563,7 +563,7 @@ describe("Codex rollout parsing", () => {
     expect(entries[0].id).toBe("tr-call_shell_1");
     expect(entries[0].toolUseId).toBe("call_shell_1");
     expect(entries[0].videos).toEqual([
-      "/backstage/media?path=%2Ftmp%2Fbackstage-demo.mp4",
+      "/media?path=%2Ftmp%2Fbackstage-demo.mp4",
     ]);
   });
 
@@ -586,7 +586,7 @@ describe("Codex rollout parsing", () => {
     expect(entries[0].id).toBe("tr-call_mcp_1");
     expect(entries[0].toolUseId).toBe("call_mcp_1");
     expect(entries[0].videos).toEqual([
-      "/backstage/media?path=%2Fvar%2Ftmp%2Fmcp-recording.webm",
+      "/media?path=%2Fvar%2Ftmp%2Fmcp-recording.webm",
     ]);
   });
 
@@ -607,7 +607,7 @@ describe("Codex rollout parsing", () => {
     expect(entries[0].type).toBe("assistant");
     expect(entries[0].content).toBe("Captured the production flow.");
     expect(entries[0].videos).toEqual([
-      "/backstage/media?path=%2Ftmp%2Fcodex-demo.mov",
+      "/media?path=%2Ftmp%2Fcodex-demo.mov",
     ]);
   });
 });
@@ -628,7 +628,7 @@ describe("assistant video markers", () => {
     expect(entries[0].type).toBe("assistant");
     expect(entries[0].content).toBe("Captured the production flow.");
     expect(entries[0].videos).toEqual([
-      `/backstage/media?path=${encodeURIComponent(assetPath)}`,
+      `/media?path=${encodeURIComponent(assetPath)}`,
     ]);
   });
 });
@@ -638,8 +638,8 @@ describe("extractBackstageVideos", () => {
     expect(
       extractBackstageVideos("before\nOPENSESSION_VIDEO: /tmp/capture-one.mp4\nOPENSESSION_VIDEO: /tmp/second.webm")
     ).toEqual([
-      "/backstage/media?path=%2Ftmp%2Fcapture-one.mp4",
-      "/backstage/media?path=%2Ftmp%2Fsecond.webm",
+      "/media?path=%2Ftmp%2Fcapture-one.mp4",
+      "/media?path=%2Ftmp%2Fsecond.webm",
     ]);
   });
 });

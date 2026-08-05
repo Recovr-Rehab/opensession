@@ -17,11 +17,11 @@ export async function handleActionsRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Actions (run a registered repo script behind a form) ──
-	if (path === "/backstage/api/actions" && req.method === "GET") {
+	if (path === "/api/actions" && req.method === "GET") {
 		return Response.json(listActions());
 	}
 
-	if (path === "/backstage/api/actions" && req.method === "POST") {
+	if (path === "/api/actions" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
@@ -32,7 +32,7 @@ export async function handleActionsRoutes(
 
 	// Suggest inputs for a script being registered (parses $1..$9 / $VAR).
 	if (
-		path === "/backstage/api/actions/introspect" &&
+		path === "/api/actions/introspect" &&
 		req.method === "POST"
 	) {
 		const body = (await req.json().catch(() => ({}))) as {
@@ -48,7 +48,7 @@ export async function handleActionsRoutes(
 	}
 
 	const actionRunMatch = path.match(
-		/^\/backstage\/api\/actions\/([^/]+)\/run$/,
+		/^\/api\/actions\/([^/]+)\/run$/,
 	);
 	if (actionRunMatch && req.method === "POST") {
 		const action = getAction(actionRunMatch[1]);
@@ -65,7 +65,7 @@ export async function handleActionsRoutes(
 		return Response.json(result);
 	}
 
-	const actionMatch = path.match(/^\/backstage\/api\/actions\/([^/]+)$/);
+	const actionMatch = path.match(/^\/api\/actions\/([^/]+)$/);
 	if (actionMatch && req.method === "GET") {
 		const action = getAction(actionMatch[1]);
 		return action

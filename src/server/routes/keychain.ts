@@ -55,8 +55,8 @@ export async function handleKeychainRoutes(
   const { req, url, path } = ctx;
 
   // ── Broker ────────────────────────────────────────────────────────────────
-  if (path.startsWith("/backstage/api/keychain/broker/")) {
-    const rest = path.slice("/backstage/api/keychain/broker/".length);
+  if (path.startsWith("/api/keychain/broker/")) {
+    const rest = path.slice("/api/keychain/broker/".length);
     const slash = rest.indexOf("/");
     const grantId = slash === -1 ? rest : rest.slice(0, slash);
     const upstreamPath = slash === -1 ? "/" : rest.slice(slash);
@@ -131,7 +131,7 @@ export async function handleKeychainRoutes(
   }
 
   // ── Management ────────────────────────────────────────────────────────────
-  if (path === "/backstage/api/keychain" && req.method === "GET") {
+  if (path === "/api/keychain" && req.method === "GET") {
     return Response.json({
       credentials: listCredentials(),
       grants: listGrants(),
@@ -139,7 +139,7 @@ export async function handleKeychainRoutes(
     });
   }
 
-  if (path === "/backstage/api/keychain/credentials" && req.method === "POST") {
+  if (path === "/api/keychain/credentials" && req.method === "POST") {
     const body = await req.json().catch(() => null);
     if (!body || typeof body.service !== "string" || typeof body.secret !== "string") {
       return Response.json(
@@ -174,7 +174,7 @@ export async function handleKeychainRoutes(
     }
   }
 
-  const credMatch = path.match(/^\/backstage\/api\/keychain\/credentials\/([^/]+)$/);
+  const credMatch = path.match(/^\/api\/keychain\/credentials\/([^/]+)$/);
   if (credMatch && req.method === "DELETE") {
     try {
       const ok = deleteCredential(decodeURIComponent(credMatch[1]!), requestUser(ctx));
@@ -186,7 +186,7 @@ export async function handleKeychainRoutes(
     }
   }
 
-  const grantMatch = path.match(/^\/backstage\/api\/keychain\/grants\/([^/]+)$/);
+  const grantMatch = path.match(/^\/api\/keychain\/grants\/([^/]+)$/);
   if (grantMatch && req.method === "DELETE") {
     const result = revokeGrant(decodeURIComponent(grantMatch[1]!), requestUser(ctx));
     return "error" in result

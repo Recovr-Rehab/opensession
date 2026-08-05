@@ -20,7 +20,7 @@ export async function handleMediaRoutes(
 	// video blocks the way Read returns images). Path-scoped: absolute path under
 	// /tmp or the service user's home, no traversal, known media extension. Range-enabled
 	// so the <video> scrubber can seek.
-	if (path === "/backstage/media" && req.method === "GET") {
+	if (path === "/media" && req.method === "GET") {
 		const mediaPath = url.searchParams.get("path") || "";
 		const mediaTypes: Record<string, string> = {
 			".mp4": "video/mp4",

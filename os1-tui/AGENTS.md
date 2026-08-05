@@ -82,7 +82,7 @@ COLUMNS=120 LINES=30 timeout 10 script -qec "bun src/index.ts --host http://127.
 ## Adding server surface
 
 New endpoint → a method on `Api` (in `src/client/api.ts`) with the bare `/api/…`
-path; the server normalizes onto its internal `/backstage/api/*` literals. New
+path; the server normalizes onto its internal `/api/*` literals. New
 WebSocket frame → a variant in `ServerFrame` plus a `applyFrame` case plus a test
 in `test/session-store.test.ts`. Frames this client doesn't model are ignored by
 identity, so an unknown frame can never crash a session.

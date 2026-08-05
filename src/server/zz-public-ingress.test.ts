@@ -60,9 +60,9 @@ describe("public ingress surface", () => {
     for (const path of [
       "/",
       "/backstage/",
-      "/backstage/api/sessions",
-      "/backstage/api/health",
-      "/backstage/ws",
+      "/api/sessions",
+      "/api/health",
+      "/ws",
       "/robots.txt",
     ]) {
       const res = await fetch(`http://${BASE}${path}`);
@@ -75,7 +75,7 @@ describe("public ingress surface", () => {
 describe("upgrade auth (shared with run-ws.ts)", () => {
   test("run-ws without a token is 403", async () => {
     ingress.resetPublicIngressRateLimit();
-    const res = await fetch(`http://${BASE}/backstage/run-ws/rh-nope`, {
+    const res = await fetch(`http://${BASE}/run-ws/rh-nope`, {
       headers: { upgrade: "websocket" },
     });
     expect(res.status).toBe(403);
@@ -85,7 +85,7 @@ describe("upgrade auth (shared with run-ws.ts)", () => {
     runWs.registerRunWsHost("rh-ingress-auth", "right-token");
     try {
       const res = await fetch(
-        `http://${BASE}/backstage/run-ws/rh-ingress-auth?token=garbage`,
+        `http://${BASE}/run-ws/rh-ingress-auth?token=garbage`,
         { headers: { upgrade: "websocket" } },
       );
       expect(res.status).toBe(403);
@@ -98,7 +98,7 @@ describe("upgrade auth (shared with run-ws.ts)", () => {
     const hostId = "rh-ingress-ok";
     runWs.registerRunWsHost(hostId, "sekrit");
     try {
-      const ws = new WebSocket(`ws://${BASE}/backstage/run-ws/${hostId}?token=sekrit`);
+      const ws = new WebSocket(`ws://${BASE}/run-ws/${hostId}?token=sekrit`);
       const firstMsg = await new Promise<any>((resolve, reject) => {
         ws.onmessage = (ev) => resolve(JSON.parse(String(ev.data)));
         ws.onerror = () => reject(new Error("ws error"));
@@ -113,14 +113,14 @@ describe("upgrade auth (shared with run-ws.ts)", () => {
   });
 
   test("rpc-ws requires host + wsToken", async () => {
-    const noHost = await fetch(`http://${BASE}/backstage/rpc-ws`, {
+    const noHost = await fetch(`http://${BASE}/rpc-ws`, {
       headers: { upgrade: "websocket", authorization: "Bearer whatever" },
     });
     expect(noHost.status).toBe(403);
     runWs.registerRunWsHost("rh-ingress-rpc", "rpc-sekrit");
     try {
       const ws = new WebSocket(
-        `ws://${BASE}/backstage/rpc-ws?host=rh-ingress-rpc&token=rpc-sekrit`,
+        `ws://${BASE}/rpc-ws?host=rh-ingress-rpc&token=rpc-sekrit`,
       );
       const opened = await new Promise<boolean>((resolve) => {
         ws.onopen = () => resolve(true);
@@ -140,13 +140,13 @@ describe("rate limiting", () => {
     ingress.resetPublicIngressRateLimit();
     let last = 0;
     for (let i = 0; i < 30; i++) {
-      const res = await fetch(`http://${BASE}/backstage/run-ws/rh-flood`, {
+      const res = await fetch(`http://${BASE}/run-ws/rh-flood`, {
         headers: { upgrade: "websocket" },
       });
       last = res.status;
     }
     expect(last).toBe(403); // still auth-rejected, not rate-limited
-    const over = await fetch(`http://${BASE}/backstage/run-ws/rh-flood`, {
+    const over = await fetch(`http://${BASE}/run-ws/rh-flood`, {
       headers: { upgrade: "websocket" },
     });
     expect(over.status).toBe(429);
@@ -159,7 +159,7 @@ describe("rate limiting", () => {
   test("buckets key on the proxy-appended (last) X-Forwarded-For hop", async () => {
     ingress.resetPublicIngressRateLimit();
     const hit = (xff: string) =>
-      fetch(`http://${BASE}/backstage/run-ws/rh-xff`, {
+      fetch(`http://${BASE}/run-ws/rh-xff`, {
         headers: { upgrade: "websocket", "x-forwarded-for": xff },
       });
     for (let i = 0; i < 31; i++) await hit("203.0.113.7");

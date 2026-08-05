@@ -216,15 +216,15 @@ export async function handleOs1UpdateRoutes(
 ): Promise<Response | undefined> {
 	const { req, url, path } = ctx;
 	if (
-		!path.startsWith("/backstage/api/os1-mac/") &&
-		!path.startsWith("/backstage/api/os1-chrome/")
+		!path.startsWith("/api/os1-mac/") &&
+		!path.startsWith("/api/os1-chrome/")
 	)
 		return undefined;
 	if (req.method !== "GET") return undefined;
 
 	// Omaha/gupdate feed Chrome's extension updater polls (also the update URL
 	// in ExtensionInstallForcelist). "noupdate" when no release exists yet.
-	if (path === "/backstage/api/os1-chrome/updates.xml") {
+	if (path === "/api/os1-chrome/updates.xml") {
 		const rel = await chromeLatestRelease();
 		const base = configuredServer().publicBaseUrl.replace(/\/$/, "");
 		const app = rel
@@ -243,7 +243,7 @@ export async function handleOs1UpdateRoutes(
 
 	// The signed .crx Chrome installs from.
 	const crx = path.match(
-		/^\/backstage\/api\/os1-chrome\/download\/(os1-chrome-v[\w.-]+)\.crx$/,
+		/^\/api\/os1-chrome\/download\/(os1-chrome-v[\w.-]+)\.crx$/,
 	);
 	if (crx) {
 		const rel = await chromeLatestRelease();
@@ -266,7 +266,7 @@ export async function handleOs1UpdateRoutes(
 	// Squirrel.Mac static JSON feed. Squirrel compares currentRelease with the
 	// app version itself; unlike the dynamic server mode, this mode cannot use a
 	// 204 response to signal that the app is current.
-	if (path === "/backstage/api/os1-mac/update") {
+	if (path === "/api/os1-mac/update") {
 		const current = parseVersion(url.searchParams.get("version") || "");
 		const rel = await latestRelease();
 		if (!rel) {
@@ -274,7 +274,7 @@ export async function handleOs1UpdateRoutes(
 			return Response.json({ currentRelease, releases: [] });
 		}
 		// Canonical public form is prefix-less (os.tella.dev root); it
-		// normalizes back onto /backstage/api/* in the fetch preamble.
+		// normalizes back onto /api/* in the fetch preamble.
 		const base = configuredServer().publicBaseUrl.replace(/\/$/, "");
 		return Response.json({
 			currentRelease: rel.version.join("."),
@@ -294,7 +294,7 @@ export async function handleOs1UpdateRoutes(
 	}
 
 	// The signed app zip Squirrel installs from.
-	const dl = path.match(/^\/backstage\/api\/os1-mac\/download\/(v\d+\.\d+\.\d+[\w.-]*)\.zip$/);
+	const dl = path.match(/^\/api\/os1-mac\/download\/(v\d+\.\d+\.\d+[\w.-]*)\.zip$/);
 	if (dl) {
 		const rel = await latestRelease();
 		if (!rel || rel.tag !== dl[1]) {

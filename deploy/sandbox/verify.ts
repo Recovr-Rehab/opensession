@@ -534,11 +534,11 @@ try {
     "mounts: " + wsMounts.out.trim().split("\n").length + " entries");
 
   // Upgrade auth: an unknown host id / bad token must be refused pre-upgrade.
-  const badAuth = await fetch(`http://127.0.0.1:${wsSrv.port}/backstage/run-ws/rh-nope`, {
+  const badAuth = await fetch(`http://127.0.0.1:${wsSrv.port}/run-ws/rh-nope`, {
     headers: { authorization: "Bearer wrong" },
   });
   ok("run-ws upgrade refuses a bad token (403)", badAuth.status === 403, String(badAuth.status));
-  const badRpc = await fetch(`http://127.0.0.1:${wsSrv.port}/backstage/rpc-ws`);
+  const badRpc = await fetch(`http://127.0.0.1:${wsSrv.port}/rpc-ws`);
   ok("rpc-ws upgrade refuses a missing token (403)", badRpc.status === 403, String(badRpc.status));
 
   // rpc-ws bridge from INSIDE the container. The upgrade is gated on a
@@ -553,13 +553,13 @@ try {
   const probeWsToken = crypto.randomUUID(); // upgrade credential
   rpcRegister(scratchToken, { sessionId: WS_SESSION_ID });
   runWs.registerRunWsHost(probeHostId, probeWsToken);
-  const oldShape = await fetch(`http://127.0.0.1:${wsSrv.port}/backstage/rpc-ws`, {
+  const oldShape = await fetch(`http://127.0.0.1:${wsSrv.port}/rpc-ws`, {
     headers: { authorization: `Bearer ${scratchToken}` },
   });
   ok("rpc-ws refuses a plain run-rpc token without a host id (403)",
     oldShape.status === 403, String(oldShape.status));
   const rpcProbe = await wsSbx.exec(["bun", "-e", `
-    const ws = new WebSocket("${wsBase}/backstage/rpc-ws?host=${probeHostId}", { headers: { authorization: "Bearer ${probeWsToken}" } });
+    const ws = new WebSocket("${wsBase}/rpc-ws?host=${probeHostId}", { headers: { authorization: "Bearer ${probeWsToken}" } });
     const bail = setTimeout(() => { console.log("TIMEOUT"); process.exit(1); }, 10000);
     ws.onopen = () => ws.send(JSON.stringify({ id: "p1", path: "/mcp/list", token: "${scratchToken}", server: "michael-sessions" }));
     ws.onmessage = (ev) => { console.log(String(ev.data)); clearTimeout(bail); process.exit(0); };

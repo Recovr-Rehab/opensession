@@ -44,11 +44,11 @@ describe("local profile", () => {
 	});
 
 	test("requires verified identity for local APIs and the UI socket", () => {
-		expect(localAuthRequestKind("/backstage/api/auth/status", "GET")).toBe("status");
-		expect(localAuthRequestKind("/backstage/api/sessions", "GET")).toBe("protected");
-		expect(localAuthRequestKind("/backstage/api/auth/logout", "POST")).toBe("protected");
-		expect(localAuthRequestKind("/backstage/ws", "GET")).toBe("protected");
-		expect(localAuthRequestKind("/backstage/api/health", "GET")).toBeNull();
+		expect(localAuthRequestKind("/api/auth/status", "GET")).toBe("status");
+		expect(localAuthRequestKind("/api/sessions", "GET")).toBe("protected");
+		expect(localAuthRequestKind("/api/auth/logout", "POST")).toBe("protected");
+		expect(localAuthRequestKind("/ws", "GET")).toBe("protected");
+		expect(localAuthRequestKind("/api/health", "GET")).toBeNull();
 		expect(localAuthRequestKind("/backstage/assets/app.js", "GET")).toBeNull();
 	});
 

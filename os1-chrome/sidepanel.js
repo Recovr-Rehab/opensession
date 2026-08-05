@@ -30,7 +30,7 @@ let detail = { id: null, title: "", entryCount: 0, metaTick: 0 };
 // ── API ──────────────────────────────────────────────────────────────────────
 
 function apiUrl(path) {
-  return cfg.serverUrl.replace(/\/+$/, "") + "/backstage/api" + path;
+  return cfg.serverUrl.replace(/\/+$/, "") + "/api" + path;
 }
 
 async function api(path, opts = {}) {

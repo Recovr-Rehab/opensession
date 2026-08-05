@@ -233,11 +233,11 @@ export async function handleLocalReposRoutes(
   if (!isLocalProfile()) return undefined;
   const { req, path } = ctx;
 
-  if (path === "/backstage/api/repos" && req.method === "GET") {
+  if (path === "/api/repos" && req.method === "GET") {
     return Response.json({ repos: Object.values(configuredRepos()) });
   }
 
-  if (path === "/backstage/api/repos" && req.method === "POST") {
+  if (path === "/api/repos" && req.method === "POST") {
     const body = (await req.json().catch(() => null)) as {
       url?: unknown;
       path?: unknown;
@@ -262,7 +262,7 @@ export async function handleLocalReposRoutes(
     }
   }
 
-  const removeMatch = path.match(/^\/backstage\/api\/repos\/([^/]+)\/remove$/);
+  const removeMatch = path.match(/^\/api\/repos\/([^/]+)\/remove$/);
   if (removeMatch && req.method === "POST") {
     const id = decodeURIComponent(removeMatch[1]);
     const result = await withRepoMutationLock(async () => removeRepo(id));

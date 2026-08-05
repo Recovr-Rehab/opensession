@@ -4,11 +4,11 @@
  * shell so cold starts are instant and a dead/black-holed tailnet gets the
  * app's own reconnecting state instead of a white error page.
  *
- * Prefix-agnostic: the app is served under /opensession/ (primary) and the
- * legacy /backstage/ alias; one registration exists per prefix (scope). All
- * asset/navigation URLs derive from this registration's scope, and pushed
- * URLs are re-prefixed onto it — so a payload built with either prefix opens
- * correctly inside whichever install received it.
+ * Prefix-agnostic: the app serves at the bare domain root; registrations from
+ * the historical /opensession/ + /backstage/ scopes may still exist on older
+ * installs. All asset/navigation URLs derive from this registration's scope,
+ * and pushed URLs are re-prefixed onto it — so a payload built with any
+ * historical prefix opens correctly inside whichever install received it.
  */
 const PREFIX = new URL(self.registration.scope).pathname.replace(/\/$/, "");
 

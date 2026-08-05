@@ -93,7 +93,7 @@ function extractImages(content: any): string[] {
 // Composer file attachments (non-image) are staged to disk and announced to
 // the agent via a note withUploadsNote() appends to the prompt. Parse the note
 // back out so the user bubble renders the attachments — inline for media the
-// /backstage/media route can stream, a file chip otherwise — instead of the
+// /media route can stream, a file chip otherwise — instead of the
 // raw plumbing text.
 const UPLOADS_NOTE_RE =
   /\s*\[The user attached \d+ file\(s\), saved to disk — read them with your file tools if relevant:\n([\s\S]*?)\n\]\s*$/;
@@ -125,7 +125,7 @@ function attachUploads(
   files: { name: string; path: string }[],
 ): void {
   for (const f of files) {
-    const url = `/backstage/media?path=${encodeURIComponent(f.path)}`;
+    const url = `/media?path=${encodeURIComponent(f.path)}`;
     if (UPLOAD_VIDEO_EXT_RE.test(f.path)) {
       entry.videos = [...(entry.videos || []), url];
     } else if (UPLOAD_IMAGE_EXT_RE.test(f.path)) {
@@ -138,7 +138,7 @@ function attachUploads(
 
 // Transcript messages can't return video blocks (unlike Read-of-image), so a
 // tool or assistant can print `OPENSESSION_VIDEO: <abs-path>` and we turn each
-// marker into a /backstage/media URL the frontend streams.
+// marker into a /media URL the frontend streams.
 // (BACKSTAGE_VIDEO is the pre-rename marker — it lives forever in old
 // transcripts and in scripts that haven't updated yet, so keep reading it.)
 const VIDEO_MARKER = /^[\t ]*(?:OPENSESSION|BACKSTAGE)_VIDEO:[\t ]*(\/\S+)[\t ]*$/gm;
@@ -151,7 +151,7 @@ function extractMarker(text: string, marker: RegExp): string[] {
   if (!text) return [];
   const out: string[] = [];
   for (const m of text.matchAll(marker)) {
-    out.push(`/backstage/media?path=${encodeURIComponent(m[1])}`);
+    out.push(`/media?path=${encodeURIComponent(m[1])}`);
   }
   return out;
 }
@@ -201,7 +201,7 @@ export function extractImplicitMedia(text: string): {
     } catch {
       continue;
     }
-    add(`/backstage/media?path=${encodeURIComponent(p)}`, p);
+    add(`/media?path=${encodeURIComponent(p)}`, p);
   }
   for (const m of text.matchAll(REMOTE_MEDIA_RE)) add(m[1], m[1]);
   return { images, videos };

@@ -17,7 +17,7 @@ export async function handleHumanAsksRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Human asks (waiting-on-teammates board) ──
-	if (path === "/backstage/api/human-asks" && req.method === "GET") {
+	if (path === "/api/human-asks" && req.method === "GET") {
 		const { listAsks } = await import("../../server/human-asks");
 		return Response.json({
 			asks: listAsks({
@@ -27,7 +27,7 @@ export async function handleHumanAsksRoutes(
 	}
 
 	const askNudgeMatch = path.match(
-		/^\/backstage\/api\/human-asks\/([^/]+)\/nudge$/,
+		/^\/api\/human-asks\/([^/]+)\/nudge$/,
 	);
 	if (askNudgeMatch && req.method === "POST") {
 		const { getAsk } = await import("../../server/human-asks");
@@ -50,7 +50,7 @@ export async function handleHumanAsksRoutes(
 	}
 
 	const askCancelMatch = path.match(
-		/^\/backstage\/api\/human-asks\/([^/]+)$/,
+		/^\/api\/human-asks\/([^/]+)$/,
 	);
 	if (askCancelMatch && req.method === "DELETE") {
 		const { cancelAsk } = await import("../../server/human-asks");

@@ -37,9 +37,9 @@ export function localAuthRequestKind(
 	path: string,
 	method: string,
 ): "status" | "protected" | null {
-	if (path === "/backstage/api/auth/status" && method === "GET") return "status";
-	if (path === "/backstage/ws") return "protected";
-	if (path.startsWith("/backstage/api/") && path !== "/backstage/api/health") {
+	if (path === "/api/auth/status" && method === "GET") return "status";
+	if (path === "/ws") return "protected";
+	if (path.startsWith("/api/") && path !== "/api/health") {
 		return "protected";
 	}
 	return null;

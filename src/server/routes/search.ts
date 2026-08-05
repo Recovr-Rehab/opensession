@@ -11,7 +11,7 @@ export async function handleSearchRoutes(
 ): Promise<Response | undefined> {
 	const { req, url, path } = ctx;
 
-	if (path === "/backstage/api/search/history" && req.method === "GET") {
+	if (path === "/api/search/history" && req.method === "GET") {
 		const q = url.searchParams.get("q")?.trim();
 		if (!q) return Response.json({ error: "missing ?q=" }, { status: 400 });
 		const repo = url.searchParams.get("repo") || undefined;

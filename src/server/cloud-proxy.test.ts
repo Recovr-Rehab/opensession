@@ -208,19 +208,19 @@ describe("local cloud request routing", () => {
 		const request = new Request("http://127.0.0.1:3850/session/bks-1");
 		const ctx = {
 			req: request,
-			path: "/backstage/session/bks-1",
+			path: "/session/bks-1",
 		};
 		expect(shouldProxyCloudFrontendRequest(ctx)).toBe(true);
 		expect(
 			shouldProxyCloudFrontendRequest({
 				...ctx,
-				path: "/backstage/api/health",
+				path: "/api/health",
 			}),
 		).toBe(false);
 		expect(
 			shouldProxyCloudFrontendRequest({
 				...ctx,
-				path: "/backstage/ws",
+				path: "/ws",
 			}),
 		).toBe(false);
 		expect(
@@ -250,7 +250,7 @@ describe("local cloud request routing", () => {
 			{
 				req: request,
 				url: new URL(request.url),
-				path: "/backstage/session/bks-1",
+				path: "/session/bks-1",
 				publicPrefix: "",
 			},
 			(async (url: string | URL | Request, init?: RequestInit) => {
@@ -351,20 +351,20 @@ describe("local cloud request routing", () => {
 	});
 
 	test("extracts normalized session API ids only", () => {
-		expect(sessionIdFromApiPath("/backstage/api/sessions/cloud%2Fid/transcript")).toBe("cloud/id");
-		expect(sessionIdFromApiPath("/backstage/api/sessions")).toBeNull();
-		expect(sessionIdFromApiPath("/backstage/api/models")).toBeNull();
+		expect(sessionIdFromApiPath("/api/sessions/cloud%2Fid/transcript")).toBe("cloud/id");
+		expect(sessionIdFromApiPath("/api/sessions")).toBeNull();
+		expect(sessionIdFromApiPath("/api/models")).toBeNull();
 		for (const literal of ["search", "archive-old", "import"]) {
-			expect(sessionIdFromApiPath(`/backstage/api/sessions/${literal}`)).toBeNull();
+			expect(sessionIdFromApiPath(`/api/sessions/${literal}`)).toBeNull();
 		}
 	});
 
 	test("routes local ids locally and non-local ids to configured cloud", () => {
-		const path = "/backstage/api/sessions/bks-cloud/diff";
+		const path = "/api/sessions/bks-cloud/diff";
 		expect(sessionRequestTarget(path, true, true)).toBe("local");
 		expect(sessionRequestTarget(path, false, true)).toBe("cloud");
 		expect(sessionRequestTarget(path, false, false)).toBe("local");
-		expect(sessionRequestTarget("/backstage/api/models", false, true)).toBe("none");
+		expect(sessionRequestTarget("/api/models", false, true)).toBe("none");
 	});
 
 	test("only proxies allowlisted cloud-target metadata reads", () => {
@@ -373,13 +373,13 @@ describe("local cloud request routing", () => {
 		const ctx = {
 			req: request,
 			url: new URL(request.url),
-			path: "/backstage/api/models",
+			path: "/api/models",
 		};
 		expect(shouldProxyCloudTargetRequest(ctx)).toBe(true);
 		expect(
 			shouldProxyCloudTargetRequest({
 				...ctx,
-				path: "/backstage/api/automations",
+				path: "/api/automations",
 			}),
 		).toBe(false);
 		expect(
@@ -399,7 +399,7 @@ describe("local cloud request routing", () => {
 			{
 				req: request,
 				url: new URL(request.url),
-				path: "/backstage/api/models",
+				path: "/api/models",
 				publicPrefix: "",
 			},
 			(async (url: string | URL | Request, init?: RequestInit) => {
@@ -408,7 +408,7 @@ describe("local cloud request routing", () => {
 				return Response.json({ models: [], default: "dial/medium" });
 			}) as unknown as typeof fetch,
 		);
-		expect(seenUrl).toBe("https://cloud.example/backstage/api/models?detail=full");
+		expect(seenUrl).toBe("https://cloud.example/api/models?detail=full");
 		expect(authorization).toBe("Bearer secret-token");
 		expect(await response?.json()).toEqual({ models: [], default: "dial/medium" });
 	});
@@ -425,7 +425,7 @@ describe("local cloud request routing", () => {
 			{
 				req: request,
 				url: new URL(request.url),
-				path: "/backstage/api/sessions/cloud/pr-action",
+				path: "/api/sessions/cloud/pr-action",
 				publicPrefix: "",
 			},
 			(async (url: string | URL | Request, init?: RequestInit) => {
@@ -440,7 +440,7 @@ describe("local cloud request routing", () => {
 			() => false,
 		);
 		expect(seen).toEqual({
-			url: "https://cloud.example/backstage/api/sessions/cloud/pr-action?repo=app",
+			url: "https://cloud.example/api/sessions/cloud/pr-action?repo=app",
 			method: "POST",
 			authorization: "Bearer secret-token",
 			body: '{"action":"ready"}',

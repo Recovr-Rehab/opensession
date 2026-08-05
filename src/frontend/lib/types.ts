@@ -272,7 +272,7 @@ export interface WalkthroughShot {
 }
 
 /** Agent-published PR walkthrough: demo video + before/after + writeup.
- *  Paths are server-absolute; stream them via /backstage/media?path=. */
+ *  Paths are server-absolute; stream them via /media?path=. */
 export interface SessionWalkthrough {
 	summary: string;
 	video?: string;

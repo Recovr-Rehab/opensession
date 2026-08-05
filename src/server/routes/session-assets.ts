@@ -28,7 +28,7 @@ export async function handleSessionAssetsRoutes(
 
 	// GET /api/sessions/:id/assets → { dir, files: [{path,size,mtime}] }
 	const listMatch = path.match(
-		/^\/backstage\/api\/sessions\/([^/]+)\/assets$/,
+		/^\/api\/sessions\/([^/]+)\/assets$/,
 	);
 	if (listMatch && req.method === "GET") {
 		try {
@@ -49,7 +49,7 @@ export async function handleSessionAssetsRoutes(
 	// GET /api/sessions/:id/assets/raw/<relpath> → the file itself.
 	// ?download=1 forces an attachment disposition.
 	const rawMatch = path.match(
-		/^\/backstage\/api\/sessions\/([^/]+)\/assets\/raw\/(.+)$/,
+		/^\/api\/sessions\/([^/]+)\/assets\/raw\/(.+)$/,
 	);
 	if (rawMatch && req.method === "GET") {
 		let found: ReturnType<typeof findAssetPath>;
@@ -79,7 +79,7 @@ export async function handleSessionAssetsRoutes(
 	// POST /api/sessions/:id/assets/delete { path } — POST (not DELETE) so the
 	// generic session-delete route can never swallow it.
 	const delMatch = path.match(
-		/^\/backstage\/api\/sessions\/([^/]+)\/assets\/delete$/,
+		/^\/api\/sessions\/([^/]+)\/assets\/delete$/,
 	);
 	if (delMatch && req.method === "POST") {
 		try {

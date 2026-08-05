@@ -20,7 +20,7 @@ describe("report asset routes", () => {
 			html: '<img src="assets/evidence/frame.jpg">',
 			assets: [{ path: "evidence/frame.jpg", data }],
 		});
-		const path = `/backstage/api/reports/${automationId}/${report.id}/assets/evidence/frame.jpg`;
+		const path = `/api/reports/${automationId}/${report.id}/assets/evidence/frame.jpg`;
 		const url = new URL(`http://localhost${path}`);
 
 		const response = await handleReportsRoutes({

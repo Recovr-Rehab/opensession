@@ -27,12 +27,12 @@ export async function handlePrefsRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Web Push (phone/desktop notifications, app closed) ──
-	if (path === "/backstage/api/push/vapid-key" && req.method === "GET") {
+	if (path === "/api/push/vapid-key" && req.method === "GET") {
 		const { getVapidPublicKey } = await import("../../server/push");
 		return Response.json({ publicKey: getVapidPublicKey() });
 	}
 
-	if (path === "/backstage/api/push/subscribe" && req.method === "POST") {
+	if (path === "/api/push/subscribe" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
@@ -46,7 +46,7 @@ export async function handlePrefsRoutes(
 		return Response.json(result);
 	}
 
-	if (path === "/backstage/api/push/unsubscribe" && req.method === "POST") {
+	if (path === "/api/push/unsubscribe" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body || typeof body.endpoint !== "string")
 			return Response.json({ error: "endpoint required" }, { status: 400 });
@@ -56,13 +56,13 @@ export async function handlePrefsRoutes(
 	}
 
 	// ── Warm preview templates (per-repo prebuilt worktrees, scheduled) ──
-	if (path === "/backstage/api/warm-templates" && req.method === "GET") {
+	if (path === "/api/warm-templates" && req.method === "GET") {
 		return Response.json({ repos: warmTemplateStatus() });
 	}
 
 	{
 		const m = path.match(
-			/^\/backstage\/api\/warm-templates\/([^/]+)(\/refresh)?$/,
+			/^\/api\/warm-templates\/([^/]+)(\/refresh)?$/,
 		);
 		if (m) {
 			const repoId = decodeURIComponent(m[1]);
@@ -99,12 +99,12 @@ export async function handlePrefsRoutes(
 	}
 
 	// ── Preview pool (warm, pre-booted dev-server containers per repo) ──
-	if (path === "/backstage/api/preview-pool" && req.method === "GET") {
+	if (path === "/api/preview-pool" && req.method === "GET") {
 		return Response.json({ repos: previewPoolStatus() });
 	}
 
 	{
-		const m = path.match(/^\/backstage\/api\/preview-pool\/([^/]+)(\/refresh)?$/);
+		const m = path.match(/^\/api\/preview-pool\/([^/]+)(\/refresh)?$/);
 		if (m) {
 			const repoId = decodeURIComponent(m[1]);
 			if (!(repoId in REPOS))
@@ -138,7 +138,7 @@ export async function handlePrefsRoutes(
 
 	// ── Memory (Settings → Memory: the same repo/user/team/channel stores
 	// the opensession-memory tools + Slack channel memory read/write) ──
-	if (path === "/backstage/api/memory") {
+	if (path === "/api/memory") {
 		if (req.method === "GET") {
 			return Response.json({
 				scopes: await listAllMemory(Object.keys(REPOS)),
@@ -188,12 +188,12 @@ export async function handlePrefsRoutes(
 	// Keyed on the self-selected `user` name (team-internal, not auth). GET reads
 	// a user's pins; PUT replaces them wholesale (the frontend sends the full list
 	// on every toggle and on first-load localStorage migration).
-	if (path === "/backstage/api/pins" && req.method === "GET") {
+	if (path === "/api/pins" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		return Response.json({ pins: getUserPins(user) });
 	}
 
-	if (path === "/backstage/api/pins" && req.method === "PUT") {
+	if (path === "/api/pins" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body ||
@@ -213,12 +213,12 @@ export async function handlePrefsRoutes(
 	// the user starts (see personal-prompts.ts). Keyed through the identity
 	// table, so all of a teammate's surfaces share one prompt. GET reads it;
 	// PUT replaces it wholesale (empty string clears).
-	if (path === "/backstage/api/personal-prompt" && req.method === "GET") {
+	if (path === "/api/personal-prompt" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		return Response.json({ prompt: getPersonalPrompt(user) });
 	}
 
-	if (path === "/backstage/api/personal-prompt" && req.method === "PUT") {
+	if (path === "/api/personal-prompt" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body ||
@@ -241,12 +241,12 @@ export async function handlePrefsRoutes(
 	// the hardware macropad feed (GET /api/keypad) — can flag sessions with
 	// unread activity. GET reads a user's marks; PUT replaces them wholesale
 	// (the frontend pushes its full map on every mark change), same shape as pins.
-	if (path === "/backstage/api/reads" && req.method === "GET") {
+	if (path === "/api/reads" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		return Response.json({ reads: getUserReads(user) });
 	}
 
-	if (path === "/backstage/api/reads" && req.method === "PUT") {
+	if (path === "/api/reads" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body ||
@@ -265,12 +265,12 @@ export async function handlePrefsRoutes(
 	// ── Per-user UI prefs (cross-device view preferences, e.g. the turn-
 	// activity fold setting). GET reads a user's map; PUT merges a patch —
 	// merge, not replace, so one device can't clobber keys set on another.
-	if (path === "/backstage/api/ui-prefs" && req.method === "GET") {
+	if (path === "/api/ui-prefs" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		return Response.json({ prefs: getUiPrefs(user) });
 	}
 
-	if (path === "/backstage/api/ui-prefs" && req.method === "PUT") {
+	if (path === "/api/ui-prefs" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body ||
@@ -289,12 +289,12 @@ export async function handlePrefsRoutes(
 	// ── Per-user sidebar lanes ──
 	// Same per-user model as pins: GET reads a user's lane map; PUT replaces
 	// it wholesale (the frontend sends the full map on every lane change).
-	if (path === "/backstage/api/lanes" && req.method === "GET") {
+	if (path === "/api/lanes" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		return Response.json({ lanes: getUserLanes(user) });
 	}
 
-	if (path === "/backstage/api/lanes" && req.method === "PUT") {
+	if (path === "/api/lanes" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body ||
@@ -313,12 +313,12 @@ export async function handlePrefsRoutes(
 	// ── Per-user workspace snoozes ──
 	// Same per-user model as pins: GET reads a user's snooze map; PUT replaces
 	// it wholesale (the frontend sends the full map on every snooze change).
-	if (path === "/backstage/api/snoozes" && req.method === "GET") {
+	if (path === "/api/snoozes" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		return Response.json({ snoozes: getUserSnoozes(user) });
 	}
 
-	if (path === "/backstage/api/snoozes" && req.method === "PUT") {
+	if (path === "/api/snoozes" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body ||
@@ -341,12 +341,12 @@ export async function handlePrefsRoutes(
 	// hiding a row drops it from THIS user's sidebar while the chat keeps
 	// running for everyone else. Same per-user model as pins: GET reads a
 	// user's hide map; PUT replaces it wholesale.
-	if (path === "/backstage/api/hides" && req.method === "GET") {
+	if (path === "/api/hides" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		return Response.json({ hides: getUserHides(user) });
 	}
 
-	if (path === "/backstage/api/hides" && req.method === "PUT") {
+	if (path === "/api/hides" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body ||
@@ -365,12 +365,12 @@ export async function handlePrefsRoutes(
 	// ── Per-user session tab colors ──
 	// Same per-user model as pins: GET reads a user's tab colors; PUT replaces
 	// the whole map (the frontend sends the full map on every color change).
-	if (path === "/backstage/api/tab-colors" && req.method === "GET") {
+	if (path === "/api/tab-colors" && req.method === "GET") {
 		const user = url.searchParams.get("user") || "Anonymous";
 		return Response.json({ colors: getUserTabColors(user) });
 	}
 
-	if (path === "/backstage/api/tab-colors" && req.method === "PUT") {
+	if (path === "/api/tab-colors" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body ||

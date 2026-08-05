@@ -195,7 +195,7 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
   const port = server.port || 3850;
 
   try {
-    const res = await fetch(`http://${host}:${port}/backstage/api/health`, {
+    const res = await fetch(`http://${host}:${port}/api/health`, {
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) ok(`responding on ${host}:${port}`);

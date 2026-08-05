@@ -152,7 +152,7 @@ if (isLocalProfile()) {
 // hot reload (loadAgents runs only on a real boot, inside the guard below).
 let agents: AgentModule[] = (g.__agents as AgentModule[] | undefined) ?? [];
 
-console.log(`Starting Backstage server on ${HOST}:${PORT}...`);
+console.log(`Starting OpenSession server on ${HOST}:${PORT}...`);
 
 // Reuse the listening server across hot reloads so existing WebSocket clients
 // and in-flight runs survive a tweak; a fresh `bun run` just creates it once.
@@ -230,17 +230,13 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				);
 			}
 			// The bare domain root is the ONLY public URL form (os.tella.dev,
-			// 2026-07-10 — prefixes dropped). Handlers below still match the
-			// historical /backstage/* literals, so the root form normalizes onto
-			// /backstage here, and `${publicPrefix}/...` embeds (sw.js scope,
-			// manifest start_url/icons, page redirects) stay root-relative
-			// because publicPrefix is "" for it.
-			//
-			// Old-prefix traffic: page loads 301 to the root form; everything
-			// else keeps normalizing silently instead of redirecting — WebSocket
-			// upgrades (sandbox dial-back URLs baked into RUNNING sandboxes hit
-			// run-ws/rpc-ws through the public ingress with the old literals) and
-			// API calls from not-yet-reloaded tabs (a redirect would break POSTs).
+			// 2026-07-10 — prefixes dropped) and handlers below match bare
+			// paths. Historical prefixes (/opensession, then the pre-rename
+			// /backstage) are accepted here and stripped: page loads 301 to the
+			// root form; everything else normalizes silently instead of
+			// redirecting — WebSocket upgrades (dial-back URLs baked into
+			// RUNNING sandboxes carry a prefix) and API calls from
+			// not-yet-reloaded tabs (a redirect would break POSTs).
 			let path = url.pathname;
 			const publicPrefix =
 				path === "/opensession" || path.startsWith("/opensession/")
@@ -248,19 +244,15 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					: path === "/backstage" || path.startsWith("/backstage/")
 						? "/backstage"
 						: "";
-			if (publicPrefix === "/opensession") {
-				path = "/backstage" + path.slice("/opensession".length);
-			} else if (publicPrefix === "") {
-				path = "/backstage" + path;
-			}
-			if (
-				publicPrefix !== "" &&
-				(req.method === "GET" || req.method === "HEAD") &&
-				!req.headers.get("upgrade") &&
-				!path.startsWith("/backstage/api/")
-			) {
-				const stripped = path.slice("/backstage".length) || "/";
-				return Response.redirect(stripped + url.search, 301);
+			if (publicPrefix) {
+				path = path.slice(publicPrefix.length) || "/";
+				if (
+					(req.method === "GET" || req.method === "HEAD") &&
+					!req.headers.get("upgrade") &&
+					!path.startsWith("/api/")
+				) {
+					return Response.redirect(path + url.search, 301);
+				}
 			}
 
 			// Cross-site rejection (web-auth.ts crossSiteViolation): browser
@@ -272,11 +264,11 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			// their own per-launch tokens and never match these paths.
 			{
 				const mutation =
-					path.startsWith("/backstage/api/") &&
+					path.startsWith("/api/") &&
 					req.method !== "GET" &&
 					req.method !== "HEAD" &&
 					req.method !== "OPTIONS";
-				if (mutation || path === "/backstage/ws") {
+				if (mutation || path === "/ws") {
 					const violation = crossSiteViolation(req);
 					if (violation) {
 						return Response.json(
@@ -319,9 +311,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				// deploy.sh's post-restart poll, monitors, and the client's
 				// bootId-change detection — all pre-auth by nature.
 				const openHealth =
-					path === "/backstage/api/health" && req.method === "GET";
+					path === "/api/health" && req.method === "GET";
 				const keypadBearer =
-					path === "/backstage/api/keypad" &&
+					path === "/api/keypad" &&
 					req.method === "GET" &&
 					keypadBearerAuthorized(req);
 				// The OS¹ mac shell's Squirrel updater and Chrome's extension
@@ -329,8 +321,8 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				// with plain clients (no cookies); tailnet-only exposure makes
 				// these safe to leave open, like /api/health.
 				const openOs1Update =
-					(path.startsWith("/backstage/api/os1-mac/") ||
-						path.startsWith("/backstage/api/os1-chrome/")) &&
+					(path.startsWith("/api/os1-mac/") ||
+						path.startsWith("/api/os1-chrome/")) &&
 					req.method === "GET";
 				// An execution node dialling in has no browser session: it
 				// registers with a one-time pairing code and then heartbeats with
@@ -338,8 +330,8 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				// AND require the caller to be on the tailnet (src/server/nodes.ts),
 				// so the sign-in gate would only make them impossible to use.
 				const openNodeAuth =
-					(path === "/backstage/api/nodes/register" ||
-						path === "/backstage/api/nodes/heartbeat") &&
+					(path === "/api/nodes/register" ||
+						path === "/api/nodes/heartbeat") &&
 					req.method === "POST";
 				// The keychain broker's caller is an agent subprocess on
 				// loopback with no browser session. Its own credential is the
@@ -348,7 +340,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				// expiring, revocable and audited per call (src/server/
 				// keychain.ts). Same reasoning as the node routes above.
 				const openKeychainBroker = path.startsWith(
-					"/backstage/api/keychain/broker/",
+					"/api/keychain/broker/",
 				);
 				if (
 					!authUser &&
@@ -357,9 +349,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					!openOs1Update &&
 					!openNodeAuth &&
 					!openKeychainBroker &&
-					((path.startsWith("/backstage/api/") &&
-						!path.startsWith("/backstage/api/auth/")) ||
-						path === "/backstage/ws" ||
+					((path.startsWith("/api/") &&
+						!path.startsWith("/api/auth/")) ||
+						path === "/ws" ||
 						// Agent-published apps (src/server/deploys.ts). Explicitly
 						// listed because /d/ is a page-ish path, and page loads are
 						// otherwise left open so the sign-in screen can render — a
@@ -382,7 +374,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			}
 
 			// WebSocket upgrade
-			if (path === "/backstage/ws") {
+			if (path === "/ws") {
 				// The verified identity is stamped in the historical picker format
 				// (first name — what createdBy/attribution have always stored);
 				// the GitHub login rides along for createdByLogin stamping.
@@ -421,25 +413,24 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			// nesting it inside the sandbox condition meant it never ran and the
 			// path fell through to the SPA fallback, which answered 200.
 			// Tailnet-gated and token-authenticated before the upgrade.
-			if (path === "/backstage/node-ws") {
+			if (path === "/node-ws") {
 				const rejected = handleNodeWsUpgrade(req, server, path);
 				return rejected ?? (undefined as any);
 			}
 
-			if (path.startsWith("/backstage/run-ws/") || path === "/backstage/rpc-ws") {
+			if (path.startsWith("/run-ws/") || path === "/rpc-ws") {
 				return handleSandboxWsUpgrade(req, server, path);
 			}
 
-			// SPA fallback: any unmatched GET under /backstage/ that isn't an API
-			// path serves the app shell, so client-side routes deep-link correctly
-			// even when they're missing from the explicit `routes` map above (which
-			// has silently 404'd every newly added view — settings, actions — until
-			// someone remembered to register it).
+			// SPA fallback: any unmatched non-API GET serves the app shell, so
+			// client-side routes deep-link correctly even when they're missing
+			// from the explicit `routes` map above (which has silently 404'd
+			// every newly added view — settings, actions — until someone
+			// remembered to register it).
 			if (
 				frontend &&
 				(req.method === "GET" || req.method === "HEAD") &&
-				path.startsWith("/backstage/") &&
-				!path.startsWith("/backstage/api/")
+				!path.startsWith("/api/")
 			) {
 				return new Response(frontend.indexHtml, {
 					headers: SPA_HEADERS,
@@ -466,7 +457,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				: false,
 });
 
-console.log(`Backstage running at http://${HOST}:${PORT}/backstage/`);
+console.log(`OpenSession running at http://${HOST}:${PORT}/`);
 
 
 // --- Agent loading and webhook server ---

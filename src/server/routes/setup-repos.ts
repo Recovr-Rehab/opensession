@@ -243,7 +243,7 @@ export async function handleSetupRepoRoutes(
 ): Promise<Response | undefined> {
   const { req, path } = ctx;
 
-  if (path === "/backstage/api/setup/github/repos" && req.method === "GET") {
+  if (path === "/api/setup/github/repos" && req.method === "GET") {
     // Credential preference: the signed-in user's stored GitHub token, else
     // the bot PAT, else an empty (but well-formed) answer.
     const userCredential = ctx.authUser?.login
@@ -285,7 +285,7 @@ export async function handleSetupRepoRoutes(
     }
   }
 
-  if (path === "/backstage/api/setup/repos" && req.method === "POST") {
+  if (path === "/api/setup/repos" && req.method === "POST") {
     const body = (await req.json().catch(() => null)) as {
       fullName?: unknown;
       id?: unknown;

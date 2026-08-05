@@ -18,13 +18,13 @@ export async function handleAutomationsRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Automations ──
-	if (path === "/backstage/api/automation-templates" && req.method === "GET") {
+	if (path === "/api/automation-templates" && req.method === "GET") {
 		return Response.json(AUTOMATION_TEMPLATES);
 	}
 
 	// Draft an automation config from a free-text description (one-shot
 	// Haiku; the draft only pre-fills the form, it's never saved directly).
-	if (path === "/backstage/api/automations/draft" && req.method === "POST") {
+	if (path === "/api/automations/draft" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body || typeof body.description !== "string")
 			return Response.json({ error: "description required" }, { status: 400 });
@@ -37,7 +37,7 @@ export async function handleAutomationsRoutes(
 		return Response.json(draft);
 	}
 
-	if (path === "/backstage/api/automations" && req.method === "GET") {
+	if (path === "/api/automations" && req.method === "GET") {
 		const list = listAutomations().map((a) => ({
 			...a,
 			isRunning: isAutomationRunning(a.id),
@@ -45,7 +45,7 @@ export async function handleAutomationsRoutes(
 		return Response.json(list);
 	}
 
-	if (path === "/backstage/api/automations" && req.method === "POST") {
+	if (path === "/api/automations" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
@@ -55,7 +55,7 @@ export async function handleAutomationsRoutes(
 	}
 
 	const autoRunMatch = path.match(
-		/^\/backstage\/api\/automations\/([^/]+)\/run$/,
+		/^\/api\/automations\/([^/]+)\/run$/,
 	);
 	if (autoRunMatch && req.method === "POST") {
 		const automation = getAutomation(autoRunMatch[1]);
@@ -74,7 +74,7 @@ export async function handleAutomationsRoutes(
 	// Re-fire an automation with the original triggering event of one of its
 	// past runs — the HTTP twin of the Slack thread-reply "retrigger". Body:
 	// {sessionId} of the automation-owned session whose event to replay.
-	if (path === "/backstage/api/automations/retrigger" && req.method === "POST") {
+	if (path === "/api/automations/retrigger" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body || typeof body.sessionId !== "string")
 			return Response.json({ error: "sessionId required" }, { status: 400 });
@@ -84,7 +84,7 @@ export async function handleAutomationsRoutes(
 		return Response.json(result);
 	}
 
-	const autoMatch = path.match(/^\/backstage\/api\/automations\/([^/]+)$/);
+	const autoMatch = path.match(/^\/api\/automations\/([^/]+)$/);
 	if (autoMatch && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (!body)
@@ -102,7 +102,7 @@ export async function handleAutomationsRoutes(
 
 	// ── Scheduled prompts (composer "send later") ──
 	const schedListMatch = path.match(
-		/^\/backstage\/api\/sessions\/([^/]+)\/scheduled-prompts$/,
+		/^\/api\/sessions\/([^/]+)\/scheduled-prompts$/,
 	);
 	if (schedListMatch && req.method === "GET") {
 		const { listScheduledPrompts } = await import(
@@ -131,7 +131,7 @@ export async function handleAutomationsRoutes(
 	}
 
 	const schedDelMatch = path.match(
-		/^\/backstage\/api\/scheduled-prompts\/([^/]+)$/,
+		/^\/api\/scheduled-prompts\/([^/]+)$/,
 	);
 	if (schedDelMatch && req.method === "DELETE") {
 		const { deleteScheduledPrompt } = await import(

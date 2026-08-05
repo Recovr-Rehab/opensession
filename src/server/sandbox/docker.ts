@@ -199,7 +199,7 @@ interface DockerSandboxState {
    *  on the next ensure() recreates the container with fresh mounts. */
   attachedDirs?: string[];
   /** Run transport the container was created for. "ws" containers don't mount
-   *  the run-rpc socket (proxies dial /backstage/rpc-ws instead); a config
+   *  the run-rpc socket (proxies dial /rpc-ws instead); a config
    *  flip recreates the container on the next ensure (mounts are create-time).
    *  Absent (pre-Phase-3 state files) = "socket". */
   transport?: SandboxTransport;
@@ -599,7 +599,7 @@ async function createContainer(
   mkdirSync(stateDir("audit"), { recursive: true });
 
   // run-rpc socket (opensession-* proxies). WS transport skips it — the proxies
-  // dial /backstage/rpc-ws instead, which also removes the stale-inode caveat
+  // dial /rpc-ws instead, which also removes the stale-inode caveat
   // (a rebound socket needed a container restart to re-resolve). Guard:
   // mounting a MISSING host path would make docker create a directory there
   // and break run-rpc's bind.
@@ -879,9 +879,9 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
         wsEnv.push(
           // Primary prefix — the server accepts /backstage too, so URLs baked
           // into already-running containers stay valid.
-          ...env(`OPENSESSION_RUN_WS_URL=${base}/opensession/run-ws/${hostId}`),
+          ...env(`OPENSESSION_RUN_WS_URL=${base}/run-ws/${hostId}`),
           ...env(`OPENSESSION_RUN_WS_TOKEN=${spec.wsToken}`),
-          ...env(`OPENSESSION_RPC_WS_URL=${base}/opensession/rpc-ws`),
+          ...env(`OPENSESSION_RPC_WS_URL=${base}/rpc-ws`),
         );
       }
       const args = [

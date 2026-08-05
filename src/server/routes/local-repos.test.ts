@@ -71,7 +71,7 @@ describe("local repo routes", () => {
   test("registers an existing repo and unregisters without deleting it", async () => {
     const repoPath = makeRepo("My Project");
     const registered = await handleLocalReposRoutes(
-      context("/backstage/api/repos", {
+      context("/api/repos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: repoPath }),
@@ -89,7 +89,7 @@ describe("local repo routes", () => {
     expect(Object.keys(configuredRepos())).toEqual(["my-project"]);
 
     const removed = await handleLocalReposRoutes(
-      context("/backstage/api/repos/my-project/remove", { method: "POST" }),
+      context("/api/repos/my-project/remove", { method: "POST" }),
     );
     expect(removed?.status).toBe(200);
     expect(configuredRepos()).toEqual({});
@@ -99,7 +99,7 @@ describe("local repo routes", () => {
   test("clones URL repos under the local profile root", async () => {
     const source = makeRepo("source-repo");
     const registered = await handleLocalReposRoutes(
-      context("/backstage/api/repos", {
+      context("/api/repos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: `file://${source}` }),
@@ -114,7 +114,7 @@ describe("local repo routes", () => {
   test("promotes the next repo when the default is removed", async () => {
     for (const name of ["first", "second"]) {
       const response = await handleLocalReposRoutes(
-        context("/backstage/api/repos", {
+        context("/api/repos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path: makeRepo(name) }),
@@ -126,7 +126,7 @@ describe("local repo routes", () => {
     expect(configuredRepos().second.default).toBeUndefined();
 
     const removed = await handleLocalReposRoutes(
-      context("/backstage/api/repos/first/remove", { method: "POST" }),
+      context("/api/repos/first/remove", { method: "POST" }),
     );
     expect(removed?.status).toBe(200);
     expect(configuredRepos().second.default).toBe(true);
@@ -136,7 +136,7 @@ describe("local repo routes", () => {
     process.env.OPENSESSION_PROFILE = "cloud";
     expect(
       await handleLocalReposRoutes(
-        context("/backstage/api/repos", { method: "POST", body: "{}" }),
+        context("/api/repos", { method: "POST", body: "{}" }),
       ),
     ).toBeUndefined();
   });

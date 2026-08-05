@@ -119,7 +119,7 @@ export function removePushSubscription(endpoint: string): boolean {
 export interface PushPayload {
   title: string;
   body?: string;
-  /** In-app path to open on tap, e.g. /backstage/session/<id>. */
+  /** In-app path to open on tap, e.g. /session/<id>. */
   url?: string;
   tag?: string;
 }

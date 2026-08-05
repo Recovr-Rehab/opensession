@@ -21,7 +21,7 @@
  * at call time — by then the live process has long since loaded it, and tests
  * importing this module never bind the live rpc socket.
  *
- * Wiring (W5, not done here): POST /backstage/api/admin/transcript-backfill →
+ * Wiring (W5, not done here): POST /api/admin/transcript-backfill →
  * runTranscriptBackfill; boot path calls kickTranscriptBackfillOnce().
  */
 

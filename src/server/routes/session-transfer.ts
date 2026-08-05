@@ -35,8 +35,10 @@ import {
 } from "../agent-runner";
 import type { RouteContext } from "./context";
 
+// os- is the current mint prefix; bks- ids exist in sessions created before
+// the 2026-08-05 rename and stay importable forever (ids are never rewritten).
 const OPENSESSION_UUID_V7 =
-  /^bks-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  /^(?:os|bks)-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export interface ImportedFromLocalMarker {
   importedFrom: "local";
@@ -540,9 +542,9 @@ async function finishLocalUpgrade(
   let importUrl: string;
   let sessionsUrl: string;
   try {
-    reposUrl = upstreamEndpoint(cloud.upstream, "/backstage/api/repos");
-    importUrl = upstreamEndpoint(cloud.upstream, "/backstage/api/sessions/import");
-    sessionsUrl = upstreamEndpoint(cloud.upstream, "/backstage/api/sessions");
+    reposUrl = upstreamEndpoint(cloud.upstream, "/api/repos");
+    importUrl = upstreamEndpoint(cloud.upstream, "/api/sessions/import");
+    sessionsUrl = upstreamEndpoint(cloud.upstream, "/api/sessions");
   } catch (error) {
     return errorResponse(error instanceof Error ? error.message : String(error));
   }
@@ -806,7 +808,7 @@ export async function handleSessionTransferRoutes(
 ): Promise<Response | undefined> {
   if (
     !isLocalProfile() &&
-    ctx.path === "/backstage/api/sessions/import" &&
+    ctx.path === "/api/sessions/import" &&
     ctx.req.method === "POST"
   ) {
     const body = await ctx.req.json().catch(() => null);
@@ -825,7 +827,7 @@ export async function handleSessionTransferRoutes(
   }
 
   const upgradeMatch = ctx.path.match(
-    /^\/backstage\/api\/sessions\/([^/]+)\/upgrade$/,
+    /^\/api\/sessions\/([^/]+)\/upgrade$/,
   );
   if (isLocalProfile() && upgradeMatch && ctx.req.method === "POST") {
     try {

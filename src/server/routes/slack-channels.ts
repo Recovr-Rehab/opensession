@@ -19,7 +19,7 @@ export async function handleSlackChannelRoutes(
 	// the caller's OWN read cursor via their grant, so the sidebar unread dot
 	// clears. No grant → no-op (the bot has no per-user cursor to move).
 	const readMatch = path.match(
-		/^\/backstage\/api\/slack\/channels\/([^/]+)\/read$/,
+		/^\/api\/slack\/channels\/([^/]+)\/read$/,
 	);
 	if (readMatch && req.method === "POST") {
 		const caller = ctx.authUser?.login || ctx.authUser?.name || undefined;
@@ -51,7 +51,7 @@ export async function handleSlackChannelRoutes(
 	}
 
 	const msgsMatch = path.match(
-		/^\/backstage\/api\/slack\/channels\/([^/]+)\/messages$/,
+		/^\/api\/slack\/channels\/([^/]+)\/messages$/,
 	);
 	if (!msgsMatch) return undefined;
 

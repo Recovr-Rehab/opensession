@@ -3,7 +3,7 @@
  * Non-image attachments are staged to disk (the vision path only takes
  * images), then the agent is handed their absolute paths in the opening
  * prompt. Large files (a packed .crx, a zip, a PDF) stream straight to disk
- * over a dedicated HTTP endpoint (POST /backstage/api/upload) and only their
+ * over a dedicated HTTP endpoint (POST /api/upload) and only their
  * {name,path} reference rides the WebSocket — base64-over-WS can't carry them
  * (frame cap + memory). The legacy inline {name,dataUrl}-over-WS path is still
  * accepted for small files and older clients.

@@ -16,7 +16,7 @@ export async function handlePapercutsRoutes(
 	const { req, url, path } = ctx;
 
 	// Recent papercuts + the per-repo config, one call for the Settings panel.
-	if (path === "/backstage/api/papercuts" && req.method === "GET") {
+	if (path === "/api/papercuts" && req.method === "GET") {
 		const repo = url.searchParams.get("repo") || undefined;
 		const days = parseInt(url.searchParams.get("days") || "", 10) || undefined;
 		const limit = parseInt(url.searchParams.get("limit") || "", 10) || undefined;
@@ -26,7 +26,7 @@ export async function handlePapercutsRoutes(
 		});
 	}
 
-	if (path === "/backstage/api/papercuts/config" && req.method === "PUT") {
+	if (path === "/api/papercuts/config" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (!body || typeof body.repo !== "string" || typeof body.enabled !== "boolean") {
 			return Response.json(

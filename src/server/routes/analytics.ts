@@ -13,8 +13,8 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
 	const { req, url, path } = ctx;
 	if (req.method !== "GET") return undefined;
 	// Compact today/7d numbers for the Home overview strip (rollups only).
-	if (path === "/backstage/api/analytics/home") return Response.json(buildHomeStats());
-	if (path !== "/backstage/api/analytics") return undefined;
+	if (path === "/api/analytics/home") return Response.json(buildHomeStats());
+	if (path !== "/api/analytics") return undefined;
 
 	const today = new Date().toISOString().slice(0, 10);
 	const defaultFrom = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);

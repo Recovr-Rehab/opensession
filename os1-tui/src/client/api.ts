@@ -3,7 +3,7 @@
  * the server needs no new endpoints for this client to exist.
  *
  * Paths are written bare (`/api/…`): the server normalizes them onto its
- * internal `/backstage/api/*` literals, which is what keeps this client working
+ * internal `/api/*` literals, which is what keeps this client working
  * against both the prefix-less deployment and older ones.
  */
 

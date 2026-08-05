@@ -95,7 +95,7 @@ export function handleNodeWsUpgrade(
   server: { upgrade(req: Request, opts: any): boolean; requestIP?(req: Request): { address: string } | null },
   path: string,
 ): Response | undefined {
-  if (path !== "/backstage/node-ws") return undefined;
+  if (path !== "/node-ws") return undefined;
 
   const address = server.requestIP?.(req)?.address ?? "";
   if (!isTailnetAddress(address)) {

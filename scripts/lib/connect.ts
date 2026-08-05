@@ -94,7 +94,7 @@ export async function connect(opts: ConnectOptions): Promise<number> {
 
   let response: Response;
   try {
-    response = await fetch(`${server}/backstage/api/nodes/register`, {
+    response = await fetch(`${server}/api/nodes/register`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -156,7 +156,7 @@ export async function nodeRun(): Promise<number> {
   }
 
   const wsUrl =
-    identity.server.replace(/^http/, "ws") + `/backstage/node-ws?id=${encodeURIComponent(identity.id)}`;
+    identity.server.replace(/^http/, "ws") + `/node-ws?id=${encodeURIComponent(identity.id)}`;
   let attempt = 0;
   let stopping = false;
 
@@ -278,7 +278,7 @@ async function localApi(): Promise<string> {
       // fall through to defaults
     }
   }
-  return `http://${host}:${port}/backstage/api/nodes`;
+  return `http://${host}:${port}/api/nodes`;
 }
 
 /**
@@ -344,7 +344,7 @@ export async function nodesPair(): Promise<number> {
   info(dim(`  valid for 10 minutes, single use`));
   heading("On the machine you want to attach");
   info(dim("  curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash"));
-  info(`  opensession connect --server ${(await localApi()).replace("/backstage/api/nodes", "")} --code ${result.code}`);
+  info(`  opensession connect --server ${(await localApi()).replace("/api/nodes", "")} --code ${result.code}`);
   return 0;
 }
 

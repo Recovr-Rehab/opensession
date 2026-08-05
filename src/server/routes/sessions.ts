@@ -130,7 +130,7 @@ export async function handleSessionsRoutes(
 	// WS-only, but creation routes through the same SessionControl path the
 	// opensession-sessions MCP tools use — worktree, branch, opening run and
 	// all). The web UI keeps its richer create_session WS message.
-	if (path === "/backstage/api/sessions" && req.method === "POST") {
+	if (path === "/api/sessions" && req.method === "POST") {
 		const body = (await req.json().catch(() => null)) as {
 			prompt?: unknown;
 			repo?: unknown;
@@ -194,7 +194,7 @@ export async function handleSessionsRoutes(
 	}
 
 	// List sessions
-	if (path === "/backstage/api/sessions" && req.method === "GET") {
+	if (path === "/api/sessions" && req.method === "GET") {
 		if (
 			sessionsResponseSnapshot &&
 			sessionsResponseSnapshot.expiresAt > Date.now()
@@ -238,7 +238,7 @@ export async function handleSessionsRoutes(
 	// semantics as the opensession-sessions MCP send_to_session: steers a busy
 	// run by default, `busy: "queue"` waits behind it, idle starts a fresh turn.
 	{
-		const m = path.match(/^\/backstage\/api\/sessions\/([^/]+)\/prompt$/);
+		const m = path.match(/^\/api\/sessions\/([^/]+)\/prompt$/);
 		if (m && req.method === "POST") {
 			const sessionId = decodeURIComponent(m[1]);
 			const body = (await req.json().catch(() => null)) as {
@@ -278,11 +278,11 @@ export async function handleSessionsRoutes(
 
 	// Get transcript for a session
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)\/transcript$/) &&
+		path.match(/^\/api\/sessions\/(.+)\/transcript$/) &&
 		req.method === "GET"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)\/transcript$/)![1],
+			path.match(/^\/api\/sessions\/(.+)\/transcript$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)
@@ -299,7 +299,7 @@ export async function handleSessionsRoutes(
 	// thing here.
 	{
 		const m = path.match(
-			/^\/backstage\/api\/sessions\/(.+)\/entry\/([^/]+)$/,
+			/^\/api\/sessions\/(.+)\/entry\/([^/]+)$/,
 		);
 		if (m && req.method === "GET") {
 			const session = findSession(decodeURIComponent(m[1]));
@@ -343,7 +343,7 @@ export async function handleSessionsRoutes(
 	// transcript-image refs (below), not inline base64.
 	{
 		const m = path.match(
-			/^\/backstage\/api\/workspaces\/([^/]+)\/overview$/,
+			/^\/api\/workspaces\/([^/]+)\/overview$/,
 		);
 		if (m && req.method === "GET") {
 			const wsId = decodeURIComponent(m[1]);
@@ -359,7 +359,7 @@ export async function handleSessionsRoutes(
 	// browser can cache thumbnails instead of shipping data URLs in JSON.
 	{
 		const m = path.match(
-			/^\/backstage\/api\/sessions\/(.+)\/transcript-image\/([^/]+)\/(\d+)$/,
+			/^\/api\/sessions\/(.+)\/transcript-image\/([^/]+)\/(\d+)$/,
 		);
 		if (m && req.method === "GET") {
 			const session = findSession(decodeURIComponent(m[1]));
@@ -421,7 +421,7 @@ export async function handleSessionsRoutes(
 	// hundreds of transcripts to the few that contain the query, then we
 	// parse only those (cached) to pull a clean snippet — which also drops
 	// matches that only occur in transcript metadata (base64, JSON keys).
-	if (path === "/backstage/api/sessions/search" && req.method === "GET") {
+	if (path === "/api/sessions/search" && req.method === "GET") {
 		const q = (url.searchParams.get("q") || "").trim();
 		if (q.length < 2) return Response.json({ matches: [] });
 		const byPath = new Map<string, string>(); // transcriptPath → sessionId
@@ -450,7 +450,7 @@ export async function handleSessionsRoutes(
 	// Every sub-agent this session spawned (opencode task-tool children +
 	// Claude-SDK subagent layout) — feeds the Agents tab's sub-agents card.
 	{
-		const m = path.match(/^\/backstage\/api\/sessions\/(.+)\/subagents$/);
+		const m = path.match(/^\/api\/sessions\/(.+)\/subagents$/);
 		if (m && req.method === "GET") {
 			const session = findSession(decodeURIComponent(m[1]));
 			if (!session)
@@ -470,7 +470,7 @@ export async function handleSessionsRoutes(
 	// session id (ses_…) from the task tool / the subagents list above.
 	{
 		const m = path.match(
-			/^\/backstage\/api\/sessions\/(.+)\/subagent\/([^/]+)$/,
+			/^\/api\/sessions\/(.+)\/subagent\/([^/]+)$/,
 		);
 		if (m && req.method === "GET") {
 			const session = findSession(decodeURIComponent(m[1]));
@@ -495,7 +495,7 @@ export async function handleSessionsRoutes(
 
 	// Bulk-archive idle sessions
 	if (
-		path === "/backstage/api/sessions/archive-old" &&
+		path === "/api/sessions/archive-old" &&
 		req.method === "POST"
 	) {
 		const body = await req.json().catch(() => ({}));
@@ -507,7 +507,7 @@ export async function handleSessionsRoutes(
 
 	// Archive / unarchive a single session
 	const archiveMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/archive$/,
+		/^\/api\/sessions\/(.+)\/archive$/,
 	);
 	if (archiveMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(archiveMatch[1]);
@@ -576,7 +576,7 @@ export async function handleSessionsRoutes(
 	// Rename a session (manual display title; empty/blank clears it back to
 	// the derived title). Works for any source via the override registry.
 	const titleMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/title$/,
+		/^\/api\/sessions\/(.+)\/title$/,
 	);
 	if (titleMatch && req.method === "PUT") {
 		const sessionId = decodeURIComponent(titleMatch[1]);
@@ -595,7 +595,7 @@ export async function handleSessionsRoutes(
 	// lane keys (needsinput/inprogress/review/merged/pending); null/invalid
 	// clears the override back to the derived lane.
 	const statusMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/status$/,
+		/^\/api\/sessions\/(.+)\/status$/,
 	);
 	if (statusMatch && req.method === "PUT") {
 		const sessionId = decodeURIComponent(statusMatch[1]);
@@ -614,7 +614,7 @@ export async function handleSessionsRoutes(
 	// request. Setting one pushes a "needs your review" notification to the
 	// reviewer's registered devices (mirrors the needs-input ask push).
 	const reviewMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/review$/,
+		/^\/api\/sessions\/(.+)\/review$/,
 	);
 	if (reviewMatch && req.method === "PUT") {
 		const sessionId = decodeURIComponent(reviewMatch[1]);
@@ -652,7 +652,7 @@ export async function handleSessionsRoutes(
 						await sendPushToUser(existing.by, {
 							title: "Review complete",
 							body: `${by || "Someone"} reviewed ${session.title || sessionId}`.slice(0, 180),
-							url: `/backstage/session/${encodeURIComponent(sessionId)}`,
+							url: `/session/${encodeURIComponent(sessionId)}`,
 							tag: `review-${sessionId}`,
 						});
 					} catch {}
@@ -731,7 +731,7 @@ export async function handleSessionsRoutes(
 					await sendPushToUser(reviewer, {
 						title: "Needs your review",
 						body: `${by || "Someone"} asked you to review ${session.title || sessionId}`.slice(0, 180),
-						url: `/backstage/session/${encodeURIComponent(sessionId)}`,
+						url: `/session/${encodeURIComponent(sessionId)}`,
 						tag: `review-${sessionId}`,
 					});
 				} catch {}
@@ -742,11 +742,11 @@ export async function handleSessionsRoutes(
 
 	// Delete a session (+ optional worktree cleanup)
 	if (
-		path.match(/^\/backstage\/api\/sessions\/(.+)$/) &&
+		path.match(/^\/api\/sessions\/(.+)$/) &&
 		req.method === "DELETE"
 	) {
 		const sessionId = decodeURIComponent(
-			path.match(/^\/backstage\/api\/sessions\/(.+)$/)![1],
+			path.match(/^\/api\/sessions\/(.+)$/)![1],
 		);
 		const session = findSession(sessionId);
 		if (!session)

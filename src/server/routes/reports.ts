@@ -21,13 +21,13 @@ export async function handleReportsRoutes(
 	if (req.method !== "GET") return undefined;
 
 	// One row per automation that has published reports (latest + count).
-	if (path === "/backstage/api/reports") {
+	if (path === "/api/reports") {
 		return Response.json({ groups: listReportGroups() });
 	}
 
 	// The reports published by one run, powering its right-sidebar Reports tab.
 	const sessionMatch = path.match(
-		/^\/backstage\/api\/reports\/session\/([^/]+)$/,
+		/^\/api\/reports\/session\/([^/]+)$/,
 	);
 	if (sessionMatch) {
 		return Response.json({
@@ -39,7 +39,7 @@ export async function handleReportsRoutes(
 	// `sandbox` keeps agent-authored HTML inert (no scripts, no top navigation)
 	// while allow-same-origin lets it be styled/read normally.
 	const rawMatch = path.match(
-		/^\/backstage\/api\/reports\/([^/]+)\/([^/]+)\/raw$/,
+		/^\/api\/reports\/([^/]+)\/([^/]+)\/raw$/,
 	);
 	if (rawMatch) {
 		const html = readReportHtml(
@@ -59,7 +59,7 @@ export async function handleReportsRoutes(
 
 	// Durable files referenced by report HTML as assets/<path>.
 	const assetMatch = path.match(
-		/^\/backstage\/api\/reports\/([^/]+)\/([^/]+)\/assets\/(.+)$/,
+		/^\/api\/reports\/([^/]+)\/([^/]+)\/assets\/(.+)$/,
 	);
 	if (assetMatch) {
 		const asset = readReportAsset(
@@ -81,7 +81,7 @@ export async function handleReportsRoutes(
 	}
 
 	// A group's history, newest first.
-	const groupMatch = path.match(/^\/backstage\/api\/reports\/([^/]+)$/);
+	const groupMatch = path.match(/^\/api\/reports\/([^/]+)$/);
 	if (groupMatch) {
 		return Response.json({
 			reports: listReports(decodeURIComponent(groupMatch[1])),

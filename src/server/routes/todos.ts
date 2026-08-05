@@ -17,7 +17,7 @@ export async function handleTodosRoutes(
 ): Promise<Response | undefined> {
 	const { req, url, path } = ctx;
 
-	if (path === "/backstage/api/todos" && req.method === "GET") {
+	if (path === "/api/todos" && req.method === "GET") {
 		const user = requestUser(ctx, url.searchParams.get("user"));
 		const status = url.searchParams.get("status") || "open";
 		if (!STATUSES.has(status))
@@ -30,7 +30,7 @@ export async function handleTodosRoutes(
 		});
 	}
 
-	if (path === "/backstage/api/todos" && req.method === "POST") {
+	if (path === "/api/todos" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body || typeof body.text !== "string" || !body.text.trim())
 			return Response.json({ error: "expected { text: string }" }, { status: 400 });
@@ -51,7 +51,7 @@ export async function handleTodosRoutes(
 		}
 	}
 
-	const patchMatch = path.match(/^\/backstage\/api\/todos\/(todo-[A-Za-z0-9-]+)$/);
+	const patchMatch = path.match(/^\/api\/todos\/(todo-[A-Za-z0-9-]+)$/);
 	if (patchMatch && req.method === "PATCH") {
 		const body = await req.json().catch(() => null);
 		if (!body) return Response.json({ error: "expected a JSON body" }, { status: 400 });
@@ -84,7 +84,7 @@ export async function handleTodosRoutes(
 		}
 	}
 
-	if (path === "/backstage/api/desk/ensure" && req.method === "POST") {
+	if (path === "/api/desk/ensure" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		const user = requestUser(ctx, body?.user);
 		if (!user) return Response.json({ error: "missing user" }, { status: 400 });
@@ -98,7 +98,7 @@ export async function handleTodosRoutes(
 
 	// Hide the chat before now in the overlay (display marker only — the full
 	// transcript stays in the expanded session view).
-	if (path === "/backstage/api/desk/clear" && req.method === "POST") {
+	if (path === "/api/desk/clear" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		const user = requestUser(ctx, body?.user);
 		if (!user) return Response.json({ error: "missing user" }, { status: 400 });

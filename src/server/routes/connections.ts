@@ -18,7 +18,7 @@ export async function handleConnectionsRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Connections ──
-	if (path === "/backstage/api/connections" && req.method === "GET") {
+	if (path === "/api/connections" && req.method === "GET") {
 		const force = url.searchParams.get("refresh") === "1";
 		const mcpServers = await getConnections(force);
 		const agentHealth: Record<string, unknown> = {};
@@ -26,7 +26,7 @@ export async function handleConnectionsRoutes(
 		return Response.json({ mcpServers, agents: agentHealth });
 	}
 
-	if (path === "/backstage/api/connections/mcp" && req.method === "POST") {
+	if (path === "/api/connections/mcp" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
@@ -39,7 +39,7 @@ export async function handleConnectionsRoutes(
 	// Callback first: AuthKit-style redirects land here with ?code&state. The
 	// signed-in cookie rides along (same-site), so the auth gate passes.
 	if (
-		path === "/backstage/api/connections/mcp-oauth/callback" &&
+		path === "/api/connections/mcp-oauth/callback" &&
 		req.method === "GET"
 	) {
 		const code = url.searchParams.get("code") || "";
@@ -72,7 +72,7 @@ export async function handleConnectionsRoutes(
 
 	// Tool catalog of an HTTP MCP server (New-project tool picker).
 	const mcpToolsMatch = path.match(
-		/^\/backstage\/api\/connections\/mcp\/([^/]+)\/tools$/,
+		/^\/api\/connections\/mcp\/([^/]+)\/tools$/,
 	);
 	if (mcpToolsMatch && req.method === "GET") {
 		try {
@@ -91,7 +91,7 @@ export async function handleConnectionsRoutes(
 	}
 
 	const mcpOauthMatch = path.match(
-		/^\/backstage\/api\/connections\/mcp\/([^/]+)\/oauth$/,
+		/^\/api\/connections\/mcp\/([^/]+)\/oauth$/,
 	);
 	if (mcpOauthMatch && req.method === "GET") {
 		const { mcpOauthStatus, isOauthCapable, oauthPresetFor } = await import(
@@ -122,7 +122,7 @@ export async function handleConnectionsRoutes(
 		});
 	}
 	const mcpOauthStartMatch = path.match(
-		/^\/backstage\/api\/connections\/mcp\/([^/]+)\/oauth\/start$/,
+		/^\/api\/connections\/mcp\/([^/]+)\/oauth\/start$/,
 	);
 	if (mcpOauthStartMatch && req.method === "POST") {
 		const name = decodeURIComponent(mcpOauthStartMatch[1]);
@@ -162,7 +162,7 @@ export async function handleConnectionsRoutes(
 	}
 
 	const mcpDelMatch = path.match(
-		/^\/backstage\/api\/connections\/mcp\/([^/]+)$/,
+		/^\/api\/connections\/mcp\/([^/]+)$/,
 	);
 	if (mcpDelMatch && req.method === "DELETE") {
 		const result = removeMcpServer(decodeURIComponent(mcpDelMatch[1]));
@@ -191,7 +191,7 @@ export async function handleConnectionsRoutes(
 	// returned masked), plus their picker model ids. anthropic/openai are
 	// rejected — they run on the subscription bridges, not raw keys.
 	if (
-		path === "/backstage/api/settings/model-providers" &&
+		path === "/api/settings/model-providers" &&
 		req.method === "GET"
 	) {
 		const pickerModels = readOpencodeBridgeConfig()?.pickerModels || [];
@@ -209,7 +209,7 @@ export async function handleConnectionsRoutes(
 	}
 
 	const modelProviderMatch = path.match(
-		/^\/backstage\/api\/settings\/model-providers\/([^/]+)$/,
+		/^\/api\/settings\/model-providers\/([^/]+)$/,
 	);
 	if (modelProviderMatch && req.method === "PUT") {
 		const id = decodeURIComponent(modelProviderMatch[1]);
@@ -318,7 +318,7 @@ export async function handleConnectionsRoutes(
 	// ── GitHub user auth (PRs as the session owner, opt-in via config) ──
 	// Device-flow connect per teammate; tokens live server-side (0600) and are
 	// never returned here. See src/server/github-auth.ts.
-	if (path === "/backstage/api/connections/github" && req.method === "GET") {
+	if (path === "/api/connections/github" && req.method === "GET") {
 		const { githubUserAuthSettings, connectedGithubAccount, connectedGithubAccounts } = await import(
 			"../github-auth"
 		);
@@ -349,7 +349,7 @@ export async function handleConnectionsRoutes(
 	}
 
 	if (
-		path === "/backstage/api/connections/github/device" &&
+		path === "/api/connections/github/device" &&
 		req.method === "POST"
 	) {
 		if (!ctx.authUser?.login)
@@ -361,7 +361,7 @@ export async function handleConnectionsRoutes(
 	}
 
 	if (
-		path === "/backstage/api/connections/github/device/poll" &&
+		path === "/api/connections/github/device/poll" &&
 		req.method === "POST"
 	) {
 		if (!ctx.authUser?.login)
@@ -378,7 +378,7 @@ export async function handleConnectionsRoutes(
 	}
 
 	const ghAccountMatch = path.match(
-		/^\/backstage\/api\/connections\/github\/account\/([^/]+)$/,
+		/^\/api\/connections\/github\/account\/([^/]+)$/,
 	);
 	if (ghAccountMatch && req.method === "DELETE") {
 		const login = decodeURIComponent(ghAccountMatch[1]);
@@ -399,7 +399,7 @@ export async function handleConnectionsRoutes(
 	// The prompt is editable so routing can be tweaked without a deploy;
 	// the JSON output contract is appended in code and can't be broken here.
 	if (
-		path === "/backstage/api/connections/plain-router" &&
+		path === "/api/connections/plain-router" &&
 		req.method === "GET"
 	) {
 		const { getRouterConfig, DEFAULT_ROUTER_PROMPT, DEFAULT_BASIC_MODEL } =
@@ -412,7 +412,7 @@ export async function handleConnectionsRoutes(
 	}
 
 	if (
-		path === "/backstage/api/connections/plain-router" &&
+		path === "/api/connections/plain-router" &&
 		req.method === "PUT"
 	) {
 		const body = (await req.json().catch(() => null)) as {

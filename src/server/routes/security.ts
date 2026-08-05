@@ -19,7 +19,7 @@ export async function handleSecurityRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Security (deepsec scans + profiles) ──
-	if (path === "/backstage/api/security" && req.method === "GET") {
+	if (path === "/api/security" && req.method === "GET") {
 		return Response.json({
 			scans: listScans(),
 			profiles: listProfiles(),
@@ -30,7 +30,7 @@ export async function handleSecurityRoutes(
 		});
 	}
 
-	if (path === "/backstage/api/security/scans" && req.method === "POST") {
+	if (path === "/api/security/scans" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
@@ -129,14 +129,14 @@ export async function handleSecurityRoutes(
 		return Response.json({ scan });
 	}
 
-	const scanMatch = path.match(/^\/backstage\/api\/security\/scans\/([^/]+)$/);
+	const scanMatch = path.match(/^\/api\/security\/scans\/([^/]+)$/);
 	if (scanMatch && req.method === "DELETE") {
 		return deleteScan(scanMatch[1])
 			? Response.json({ ok: true })
 			: Response.json({ error: "Not found" }, { status: 404 });
 	}
 
-	if (path === "/backstage/api/security/profiles" && req.method === "POST") {
+	if (path === "/api/security/profiles" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
@@ -146,7 +146,7 @@ export async function handleSecurityRoutes(
 	}
 
 	const profileMatch = path.match(
-		/^\/backstage\/api\/security\/profiles\/([^/]+)$/,
+		/^\/api\/security\/profiles\/([^/]+)$/,
 	);
 	if (profileMatch && req.method === "PUT") {
 		const body = await req.json().catch(() => null);

@@ -25,9 +25,9 @@
  *    your work (same contract as docker volume mode).
  *  - `makeRemoteSandbox` / `makeRemoteLauncher`: the Sandbox handle whose
  *    launchRun starts HOST_ENTRY in-sandbox with the WS-transport env — the
- *    sandbox dials back to `callbackBaseUrl`'s /backstage/run-ws route (there
+ *    sandbox dials back to `callbackBaseUrl`'s /run-ws route (there
  *    is no socket option remotely), and the opensession-* MCP proxies dial
- *    /backstage/rpc-ws. Run dirs use the SAME absolute path host-side and
+ *    /rpc-ws. Run dirs use the SAME absolute path host-side and
  *    in-sandbox: spec.json is mirrored host-side (so restart-resume can
  *    re-register tokens), while meta/journal/log live only in the sandbox.
  *  - `resumeRemoteSandboxRun`: restart-resume mirroring the docker path —
@@ -916,9 +916,9 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
             : {}),
           // Dial-back on the primary prefix — the ingress/main serve accept
           // both, and URLs already baked into live sandboxes stay valid.
-          OPENSESSION_RUN_WS_URL: `${base}/opensession/run-ws/${hostId}`,
+          OPENSESSION_RUN_WS_URL: `${base}/run-ws/${hostId}`,
           OPENSESSION_RUN_WS_TOKEN: spec.wsToken,
-          OPENSESSION_RPC_WS_URL: `${base}/opensession/rpc-ws`,
+          OPENSESSION_RPC_WS_URL: `${base}/rpc-ws`,
           ...(process.env.OPENSESSION_MODEL
             ? {
                 OPENSESSION_MODEL: process.env.OPENSESSION_MODEL!,

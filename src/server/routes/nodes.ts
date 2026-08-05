@@ -59,18 +59,18 @@ export async function handleNodesRoutes(
   const { req, path } = ctx;
 
   // ── list ──
-  if (path === "/backstage/api/nodes" && req.method === "GET") {
+  if (path === "/api/nodes" && req.method === "GET") {
     return Response.json({ nodes: listNodes().map(publicNode) });
   }
 
   // ── mint a pairing code ──
-  if (path === "/backstage/api/nodes/pair" && req.method === "POST") {
+  if (path === "/api/nodes/pair" && req.method === "POST") {
     const { code, expiresAt } = createPairing(requestUser(ctx) || undefined);
     return Response.json({ code, expiresAt, pending: listPairings().length });
   }
 
   // ── register (called by the node itself, with a pairing code) ──
-  if (path === "/backstage/api/nodes/register" && req.method === "POST") {
+  if (path === "/api/nodes/register" && req.method === "POST") {
     let body: Record<string, unknown>;
     try {
       body = await req.json();
@@ -109,7 +109,7 @@ export async function handleNodesRoutes(
   }
 
   // ── heartbeat (node proves it is still alive) ──
-  if (path === "/backstage/api/nodes/heartbeat" && req.method === "POST") {
+  if (path === "/api/nodes/heartbeat" && req.method === "POST") {
     const auth = req.headers.get("authorization") ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     const id = req.headers.get("x-opensession-node") ?? "";
@@ -124,7 +124,7 @@ export async function handleNodesRoutes(
   }
 
   // ── remove ──
-  const match = path.match(/^\/backstage\/api\/nodes\/(node-[^/]+)$/);
+  const match = path.match(/^\/api\/nodes\/(node-[^/]+)$/);
   if (match && req.method === "DELETE") {
     if (!removeNode(match[1])) {
       return Response.json({ error: "no such node" }, { status: 404 });

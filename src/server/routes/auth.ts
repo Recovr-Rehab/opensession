@@ -1,6 +1,6 @@
 /**
  * Web sign-in routes (GitHub device flow → HttpOnly session cookie). These
- * are the ONLY /backstage/api/* routes exempt from the sign-in gate in
+ * are the ONLY /api/* routes exempt from the sign-in gate in
  * opensession.ts — they're how a signed-out browser gets in. Active only
  * when per-user GitHub auth is opted in (web-auth.ts / github-auth.ts);
  * otherwise /auth/status just reports `required: false` and the UI keeps
@@ -55,9 +55,9 @@ export async function handleAuthRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
 	const { req, path } = ctx;
-	if (!path.startsWith("/backstage/api/auth/")) return undefined;
+	if (!path.startsWith("/api/auth/")) return undefined;
 
-	if (path === "/backstage/api/auth/status" && req.method === "GET") {
+	if (path === "/api/auth/status" && req.method === "GET") {
 		if (isLocalProfile()) {
 			const login = localProfileLogin();
 			const name = localProfileUser();
@@ -85,7 +85,7 @@ export async function handleAuthRoutes(
 	// ?code&state → exchange (client secret), team gate, session cookie, and a
 	// redirect into the app. Sign-in errors land on /?auth_error=… so the
 	// sign-in screen can show them.
-	if (path === "/backstage/api/auth/login" && req.method === "GET") {
+	if (path === "/api/auth/login" && req.method === "GET") {
 		if (!githubRedirectFlowAvailable())
 			return Response.json(
 				{ error: "Redirect sign-in is not configured" },
@@ -104,7 +104,7 @@ export async function handleAuthRoutes(
 		});
 	}
 
-	if (path === "/backstage/api/auth/callback" && req.method === "GET") {
+	if (path === "/api/auth/callback" && req.method === "GET") {
 		const fail = (msg: string) =>
 			new Response(null, {
 				status: 302,
@@ -141,7 +141,7 @@ export async function handleAuthRoutes(
 		return new Response(null, { status: 302, headers });
 	}
 
-	if (path === "/backstage/api/auth/device" && req.method === "POST") {
+	if (path === "/api/auth/device" && req.method === "POST") {
 		if (!webAuthRequired())
 			return Response.json({ error: "Sign-in is not enabled" }, { status: 400 });
 		const result = await startGithubDeviceFlow();
@@ -157,7 +157,7 @@ export async function handleAuthRoutes(
 	// PR token (github-auth store) and signs the browser in (session cookie) —
 	// one authorize covers both. Non-team logins are rejected and their token
 	// discarded.
-	if (path === "/backstage/api/auth/device/poll" && req.method === "POST") {
+	if (path === "/api/auth/device/poll" && req.method === "POST") {
 		if (!webAuthRequired())
 			return Response.json({ error: "Sign-in is not enabled" }, { status: 400 });
 		const body = await req.json().catch(() => null);
@@ -215,7 +215,7 @@ export async function handleAuthRoutes(
 		);
 	}
 
-	if (path === "/backstage/api/auth/logout" && req.method === "POST") {
+	if (path === "/api/auth/logout" && req.method === "POST") {
 		const token = webAuthToken(req);
 		if (token) destroyWebSession(token);
 		return Response.json(

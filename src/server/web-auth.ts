@@ -6,7 +6,7 @@
  * here runs. On: loading the app requires signing in with GitHub (the same
  * device flow that connects the PR token — one authorize covers both), the
  * server mints an opaque session token in an HttpOnly cookie, and every
- * /backstage/api/* request plus the UI WebSocket is 401-gated on it
+ * /api/* request plus the UI WebSocket is 401-gated on it
  * (opensession.ts fetch preamble). The cookie's verified identity also
  * OVERRIDES any client-claimed `user` on the WebSocket (ws-handlers.ts), so
  * attribution/gating stop trusting self-declared names.

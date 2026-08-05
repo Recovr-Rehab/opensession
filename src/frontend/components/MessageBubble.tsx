@@ -352,7 +352,7 @@ function EntryFiles({ files }: { files?: TranscriptEntry["files"] }) {
 				<a
 					key={i}
 					className="composer-file-card msg-file-card"
-					href={`/backstage/media?path=${encodeURIComponent(f.path)}`}
+					href={`/media?path=${encodeURIComponent(f.path)}`}
 					download={f.name}
 					title={f.name}
 				>

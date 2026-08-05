@@ -73,7 +73,7 @@ async function until<T>(fn: () => T | undefined | false, timeoutMs = 5_000): Pro
 /** Scripted host: dials the run-ws route and records inbound messages. */
 function dialHost(hostId: string, token: string) {
   const inbox: any[] = [];
-  const sock = new WebSocket(`ws://${BASE}/backstage/run-ws/${hostId}`, {
+  const sock = new WebSocket(`ws://${BASE}/run-ws/${hostId}`, {
     headers: { authorization: `Bearer ${token}` },
   } as unknown as string[]);
   let open = false;
@@ -339,13 +339,13 @@ describe("run-ws seq/ack replay", () => {
 describe("run-ws upgrade auth", () => {
   test("run-ws rejects a wrong/missing token pre-upgrade", async () => {
     runWs.registerRunWsHost("rh-zz-auth", "right-token");
-    const wrong = await fetch(`http://${BASE}/backstage/run-ws/rh-zz-auth`, {
+    const wrong = await fetch(`http://${BASE}/run-ws/rh-zz-auth`, {
       headers: { authorization: "Bearer wrong-token" },
     });
     expect(wrong.status).toBe(403);
-    const missing = await fetch(`http://${BASE}/backstage/run-ws/rh-zz-auth`);
+    const missing = await fetch(`http://${BASE}/run-ws/rh-zz-auth`);
     expect(missing.status).toBe(403);
-    const unknownHost = await fetch(`http://${BASE}/backstage/run-ws/rh-zz-nope`, {
+    const unknownHost = await fetch(`http://${BASE}/run-ws/rh-zz-nope`, {
       headers: { authorization: "Bearer right-token" },
     });
     expect(unknownHost.status).toBe(403);
@@ -356,7 +356,7 @@ describe("run-ws upgrade auth", () => {
     const rpcToken = crypto.randomUUID();
     registerRunToken(rpcToken, { sessionId: "bks-zz-rpc" });
     runWs.registerRunWsHost("rh-zz-auth2", "ws-token-2");
-    const res = await fetch(`http://${BASE}/backstage/run-ws/rh-zz-auth2`, {
+    const res = await fetch(`http://${BASE}/run-ws/rh-zz-auth2`, {
       headers: { authorization: `Bearer ${rpcToken}` },
     });
     expect(res.status).toBe(403);
@@ -371,22 +371,22 @@ describe("rpc-ws upgrade auth (WS-transport opt-in only)", () => {
     // these; it must NOT be a network credential.
     const rpcToken = crypto.randomUUID();
     registerRunToken(rpcToken, { sessionId: "bks-zz-rpcws" });
-    const asBearer = await fetch(`http://${BASE}/backstage/rpc-ws`, {
+    const asBearer = await fetch(`http://${BASE}/rpc-ws`, {
       headers: { authorization: `Bearer ${rpcToken}` },
     });
     expect(asBearer.status).toBe(403);
     // Even naming a live ws-transport host doesn't make an rpc token work.
     runWs.registerRunWsHost("rh-zz-rpcws", "ws-token-3");
-    const withHost = await fetch(`http://${BASE}/backstage/rpc-ws?host=rh-zz-rpcws`, {
+    const withHost = await fetch(`http://${BASE}/rpc-ws?host=rh-zz-rpcws`, {
       headers: { authorization: `Bearer ${rpcToken}` },
     });
     expect(withHost.status).toBe(403);
     // And a valid wsToken presented for the WRONG host is refused.
-    const wrongHost = await fetch(`http://${BASE}/backstage/rpc-ws?host=rh-zz-nope`, {
+    const wrongHost = await fetch(`http://${BASE}/rpc-ws?host=rh-zz-nope`, {
       headers: { authorization: "Bearer ws-token-3" },
     });
     expect(wrongHost.status).toBe(403);
-    const noHost = await fetch(`http://${BASE}/backstage/rpc-ws`, {
+    const noHost = await fetch(`http://${BASE}/rpc-ws`, {
       headers: { authorization: "Bearer ws-token-3" },
     });
     expect(noHost.status).toBe(403);
@@ -403,7 +403,7 @@ describe("rpc-ws upgrade auth (WS-transport opt-in only)", () => {
     registerInteractiveMcpBuilder(() => ({})); // no servers — 404 proves dispatch ran
 
     const inbox: any[] = [];
-    const sock = new WebSocket(`ws://${BASE}/backstage/rpc-ws?host=${hostId}`, {
+    const sock = new WebSocket(`ws://${BASE}/rpc-ws?host=${hostId}`, {
       headers: { authorization: `Bearer ${wsToken}` },
     } as unknown as string[]);
     let open = false;

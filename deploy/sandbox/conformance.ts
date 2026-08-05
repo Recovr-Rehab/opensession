@@ -192,8 +192,8 @@ await Bun.write(
 // (typical cloud security groups): pin the listener port and front it with any
 // websocket-capable tunnel (cloudflared quick tunnel, tailscale funnel, …) or
 // — the permanent setup — the publicIngress Caddy path routes (docs/
-// self-hosting-sandboxes.md), which forward ONLY /backstage/run-ws/*,
-// /backstage/rpc-ws and /ingress-health; the remote probe uses the last one.
+// self-hosting-sandboxes.md), which forward ONLY /run-ws/*,
+// /rpc-ws and /ingress-health; the remote probe uses the last one.
 //   SBX_CONF_LISTEN_PORT=3860 SBX_CONF_PUBLIC_BASE=wss://sessions.example.com \
 //     bun run deploy/sandbox/conformance.ts daytona
 const LISTEN_PORT = parseInt(process.env.SBX_CONF_LISTEN_PORT || "0", 10) || 0;

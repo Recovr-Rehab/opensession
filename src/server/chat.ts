@@ -20,7 +20,7 @@ import { teamFirstNames } from "./people";
 
 const CHAT_DIR = stateDir("chat");
 // Attached images live here permanently (unlike the transient session-upload
-// staging dir), served back by id via GET /backstage/api/chat/image/:id.
+// staging dir), served back by id via GET /api/chat/image/:id.
 const CHAT_IMG_DIR = `${CHAT_DIR}/images`;
 
 // Keep each channel's store bounded — the UI only ever loads the recent tail.

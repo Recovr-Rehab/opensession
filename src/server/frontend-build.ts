@@ -333,7 +333,7 @@ export function sharedCheckoutEditors(writeCapableOnly = false): string | undefi
 }
 
 // Debounced in-process rebuild + client nudge. Triggered by the frontend
-// file-watch, a SIGUSR2 signal, or POST /backstage/api/rebuild-frontend — all of
+// file-watch, a SIGUSR2 signal, or POST /api/rebuild-frontend — all of
 // which replace the "systemctl restart to see my CSS change" habit that was
 // interrupting every live Claude run. Clients get a non-intrusive refresh toast;
 // the bundle is served from the mutated `frontend` object with no restart.

@@ -993,7 +993,7 @@ export function opencodeToolResultImages(part: PartData): string[] {
   ) {
     return [];
   }
-  return [`/backstage/media?path=${encodeURIComponent(path)}`];
+  return [`/media?path=${encodeURIComponent(path)}`];
 }
 
 function toIso(ms: number | undefined, fallback: string): string {

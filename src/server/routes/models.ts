@@ -23,7 +23,7 @@ export async function handleModelsRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Models available to sessions ──
-	if (path === "/backstage/api/models" && req.method === "GET") {
+	if (path === "/api/models" && req.method === "GET") {
 		if (isLocalProfile()) {
 			const models = localProfileModels();
 			return Response.json({
@@ -67,7 +67,7 @@ export async function handleModelsRoutes(
 	// kill-switch file on every call, so a config flip shows up on the
 	// next fetch. Behavior is unit-tested via sandboxCapabilityStatus()
 	// (src/server/sandbox/capability-status.test.ts).
-	if (path === "/backstage/api/sandbox/status" && req.method === "GET") {
+	if (path === "/api/sandbox/status" && req.method === "GET") {
 		return Response.json(sandboxCapabilityStatus());
 	}
 
@@ -80,7 +80,7 @@ export async function handleModelsRoutes(
 	// rate-limited per user, and validation lives in requestPrewarm —
 	// unknown provider/repo answer {state:"unsupported"}, no-remote
 	// setups {state:"disabled"}. Frontend swallows every failure.
-	if (path === "/backstage/api/sandbox/prewarm" && req.method === "POST") {
+	if (path === "/api/sandbox/prewarm" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		const provider = typeof body?.provider === "string" ? body.provider : "";
 		const repoId = typeof body?.repo === "string" ? body.repo : "";
@@ -97,7 +97,7 @@ export async function handleModelsRoutes(
 	// What an interactive session will be told on top of the claude_code
 	// preset — previewed in the New Session modal. Same builder the runner
 	// uses (src/server/system-prompt.ts), so this can't drift from reality.
-	if (path === "/backstage/api/system-prompt" && req.method === "GET") {
+	if (path === "/api/system-prompt" && req.method === "GET") {
 		const isAsk = url.searchParams.get("mode") === "ask";
 		return Response.json({
 			preset: "claude_code",
@@ -115,7 +115,7 @@ export async function handleModelsRoutes(
 
 	// Toggle interactive auto model-switch (manual vs auto) on running out
 	// of credits. { auto: boolean }.
-	if (path === "/backstage/api/models/auto-fallback" && req.method === "PUT") {
+	if (path === "/api/models/auto-fallback" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		if (!body || typeof body.auto !== "boolean") {
 			return Response.json(
@@ -130,7 +130,7 @@ export async function handleModelsRoutes(
 
 	// Suggest a branch name from a task prompt (one no-tools Haiku call).
 	// Used to auto-fill the New Session "Branch name" field as you type.
-	if (path === "/backstage/api/suggest-branch" && req.method === "POST") {
+	if (path === "/api/suggest-branch" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		const prompt = typeof body?.prompt === "string" ? body.prompt : "";
 		const branch = await suggestBranchName(prompt);
@@ -140,7 +140,7 @@ export async function handleModelsRoutes(
 	// Voice dictation: raw audio body (whatever MediaRecorder produced) in,
 	// transcribed text out. Providers chain in src/server/transcribe.ts —
 	// hosted keys when configured, local whisper.cpp otherwise.
-	if (path === "/backstage/api/transcribe" && req.method === "POST") {
+	if (path === "/api/transcribe" && req.method === "POST") {
 		try {
 			const audio = await req.blob();
 			if (audio.size === 0) {
@@ -162,7 +162,7 @@ export async function handleModelsRoutes(
 	}
 
 	// Set (or clear, with model:null) the default model new sessions run on.
-	if (path === "/backstage/api/models/default" && req.method === "PUT") {
+	if (path === "/api/models/default" && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		// Two independent knobs: `model` = the global default (Slack/Linear/
 		// Plain loops, workflows); `interactiveModel` = what NEW interactive

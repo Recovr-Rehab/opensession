@@ -228,7 +228,7 @@ describe("opencodeToolResultImages", () => {
           input: { filePath: path },
           attachments: [{ type: "file", mime }],
         },
-      })).toEqual([`/backstage/media?path=${encodeURIComponent(path)}`]);
+      })).toEqual([`/media?path=${encodeURIComponent(path)}`]);
     }
     expect(opencodeToolResultImages({
       type: "tool",
@@ -247,7 +247,7 @@ describe("opencodeToolResultImages", () => {
     let prior: string | undefined;
     beforeAll(() => {
       prior = process.env.OPENSESSION_RUN_WS_URL;
-      process.env.OPENSESSION_RUN_WS_URL = "wss://example.invalid/opensession/run-ws/rh-test";
+      process.env.OPENSESSION_RUN_WS_URL = "wss://example.invalid/run-ws/rh-test";
     });
     afterAll(() => {
       if (prior === undefined) delete process.env.OPENSESSION_RUN_WS_URL;
@@ -262,7 +262,7 @@ describe("opencodeToolResultImages", () => {
         tool: "read",
         state: {
           status: "completed",
-          // A path only the sandbox can resolve — /backstage/media would 404.
+          // A path only the sandbox can resolve — /media would 404.
           input: { filePath: "/workspace/build/shot.png" },
           attachments: [{ type: "file", mime: "image/png", url: dataUrl }],
         },
@@ -351,7 +351,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].content).toBe("Captured the production flow.");
     expect(entries[0].videos).toEqual([
-      "/backstage/media?path=%2Ftmp%2Fopencode-demo.mov",
+      "/media?path=%2Ftmp%2Fopencode-demo.mov",
     ]);
   });
   test("maps Read image attachments to the authenticated local media route", () => {
@@ -396,7 +396,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
     expect(entries[1]).toMatchObject({
       type: "tool_result",
       content: "Image read successfully",
-      images: ["/backstage/media?path=%2Ftmp%2Fstoryboard-videos.png"],
+      images: ["/media?path=%2Ftmp%2Fstoryboard-videos.png"],
     });
   });
   test("autocompact summaries become compaction system entries", () => {
@@ -479,7 +479,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
 
 describe("persisted transcript file", () => {
   test("tool result lines round-trip local image URLs without base64 payloads", () => {
-    const url = "/backstage/media?path=%2Ftmp%2Fstoryboard-videos.png";
+    const url = "/media?path=%2Ftmp%2Fstoryboard-videos.png";
     const line = transcriptLineToolResult(
       "tu-image",
       "Image read successfully",

@@ -17,7 +17,7 @@ export async function handleGoalsRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Goals (long-running, self-pacing missions) ──
-	if (path === "/backstage/api/goals" && req.method === "GET") {
+	if (path === "/api/goals" && req.method === "GET") {
 		const list = listGoals().map((g) => ({
 			...g,
 			isRunning: runningGoals.has(g.id),
@@ -25,7 +25,7 @@ export async function handleGoalsRoutes(
 		return Response.json(list);
 	}
 
-	if (path === "/backstage/api/goals" && req.method === "POST") {
+	if (path === "/api/goals" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
@@ -35,7 +35,7 @@ export async function handleGoalsRoutes(
 	}
 
 	// Specific sub-routes must precede the bare /:id matcher.
-	const goalRunMatch = path.match(/^\/backstage\/api\/goals\/([^/]+)\/run$/);
+	const goalRunMatch = path.match(/^\/api\/goals\/([^/]+)\/run$/);
 	if (goalRunMatch && req.method === "POST") {
 		const goal = getGoal(goalRunMatch[1]);
 		if (!goal) return Response.json({ error: "Not found" }, { status: 404 });
@@ -48,7 +48,7 @@ export async function handleGoalsRoutes(
 	}
 
 	const goalResumeMatch = path.match(
-		/^\/backstage\/api\/goals\/([^/]+)\/resume$/,
+		/^\/api\/goals\/([^/]+)\/resume$/,
 	);
 	if (goalResumeMatch && req.method === "POST") {
 		const body = await req.json().catch(() => null);
@@ -58,7 +58,7 @@ export async function handleGoalsRoutes(
 	}
 
 	const goalPauseMatch = path.match(
-		/^\/backstage\/api\/goals\/([^/]+)\/pause$/,
+		/^\/api\/goals\/([^/]+)\/pause$/,
 	);
 	if (goalPauseMatch && req.method === "POST") {
 		const body = await req.json().catch(() => null);
@@ -70,7 +70,7 @@ export async function handleGoalsRoutes(
 		return Response.json(result);
 	}
 
-	const goalMatch = path.match(/^\/backstage\/api\/goals\/([^/]+)$/);
+	const goalMatch = path.match(/^\/api\/goals\/([^/]+)$/);
 	if (goalMatch && req.method === "GET") {
 		const goal = getGoal(goalMatch[1]);
 		if (!goal) return Response.json({ error: "Not found" }, { status: 404 });

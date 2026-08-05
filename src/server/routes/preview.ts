@@ -21,7 +21,7 @@ export async function handlePreviewRoutes(
 	// services (.ports.conf) are listening, so the header can link to the
 	// webapp and show/stop running processes.
 	{
-		const m = path.match(/^\/backstage\/api\/sessions\/(.+)\/preview$/);
+		const m = path.match(/^\/api\/sessions\/(.+)\/preview$/);
 		if (m && req.method === "GET") {
 			const session = findSession(decodeURIComponent(m[1]));
 			if (!session)
@@ -67,7 +67,7 @@ export async function handlePreviewRoutes(
 	// Screenshot the running preview (headless Chrome → PNG).
 	{
 		const m = path.match(
-			/^\/backstage\/api\/sessions\/(.+)\/preview\/screenshot$/,
+			/^\/api\/sessions\/(.+)\/preview\/screenshot$/,
 		);
 		if (m && req.method === "POST") {
 			const session = findSession(decodeURIComponent(m[1]));
@@ -116,7 +116,7 @@ export async function handlePreviewRoutes(
 	// Start the session's dev server (Tella Local) if it isn't up yet.
 	{
 		const m = path.match(
-			/^\/backstage\/api\/sessions\/(.+)\/preview\/start$/,
+			/^\/api\/sessions\/(.+)\/preview\/start$/,
 		);
 		if (m && req.method === "POST") {
 			const session = findSession(decodeURIComponent(m[1]));
@@ -151,7 +151,7 @@ export async function handlePreviewRoutes(
 	// Stop the session's dev server (scoped to its worktree's process group).
 	{
 		const m = path.match(
-			/^\/backstage\/api\/sessions\/(.+)\/preview\/stop$/,
+			/^\/api\/sessions\/(.+)\/preview\/stop$/,
 		);
 		if (m && req.method === "POST") {
 			const session = findSession(decodeURIComponent(m[1]));

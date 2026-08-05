@@ -10,7 +10,7 @@ export async function handlePeopleRoutes(
 ): Promise<Response | undefined> {
 	const { req, path } = ctx;
 
-	if (path === "/backstage/api/people" && req.method === "GET") {
+	if (path === "/api/people" && req.method === "GET") {
 		const { teamDirectory } = await import("../../server/people");
 		return Response.json({ people: teamDirectory() });
 	}

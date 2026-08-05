@@ -89,7 +89,7 @@ export async function handlePlainRoutes(
 	// triage run with the same context the automation gets on thread_created.
 	// Linked from the Plain support cards.
 	const plainTriageMatch = path.match(
-		/^\/backstage\/plain-triage\/([^/]+)$/,
+		/^\/plain-triage\/([^/]+)$/,
 	);
 	if (plainTriageMatch && req.method === "GET") {
 		const threadId = decodeURIComponent(plainTriageMatch[1]);
@@ -110,7 +110,7 @@ export async function handlePlainRoutes(
 	// would be dead by the time the image is rendered. Cached hard by the
 	// browser — attachment bytes are immutable once uploaded.
 	const plainAttachmentMatch = path.match(
-		/^\/backstage\/api\/plain\/attachments\/([^/]+)$/,
+		/^\/api\/plain\/attachments\/([^/]+)$/,
 	);
 	if (plainAttachmentMatch && req.method === "GET") {
 		const attachmentId = decodeURIComponent(plainAttachmentMatch[1]);
@@ -149,7 +149,7 @@ export async function handlePlainRoutes(
 	// The conversation timeline for a session's linked Plain thread,
 	// flattened for the session viewer's read-only Plain sidebar.
 	const plainThreadMatch = path.match(
-		/^\/backstage\/api\/sessions\/(.+)\/plain\/thread$/,
+		/^\/api\/sessions\/(.+)\/plain\/thread$/,
 	);
 	if (plainThreadMatch && req.method === "GET") {
 		const sessionId = decodeURIComponent(plainThreadMatch[1]);
@@ -181,7 +181,7 @@ export async function handlePlainRoutes(
 
 	// The Support sidebar's ticket queue: every TODO Plain thread, newest
 	// status change first (Plain's own Todo-inbox ordering). Cached ~30s.
-	if (path === "/backstage/api/plain/threads" && req.method === "GET") {
+	if (path === "/api/plain/threads" && req.method === "GET") {
 		if (plainTodoCache && Date.now() - plainTodoCache.ts < PLAIN_TODO_TTL)
 			return Response.json({ threads: plainTodoCache.data });
 		try {
@@ -201,7 +201,7 @@ export async function handlePlainRoutes(
 	// A thread's conversation timeline by thread id — the session-less
 	// Support preview reads this (no session exists for the ticket yet).
 	const plainThreadByIdMatch = path.match(
-		/^\/backstage\/api\/plain\/threads\/([^/]+)$/,
+		/^\/api\/plain\/threads\/([^/]+)$/,
 	);
 	if (plainThreadByIdMatch && req.method === "GET") {
 		const threadId = decodeURIComponent(plainThreadByIdMatch[1]);
@@ -230,7 +230,7 @@ export async function handlePlainRoutes(
 	// itself — agent runs never get this path as a tool; automation runs
 	// are denied Plain thread writes at the tool layer.
 	const plainReplyMatch = path.match(
-		/^\/backstage\/api\/plain\/threads\/([^/]+)\/reply$/,
+		/^\/api\/plain\/threads\/([^/]+)\/reply$/,
 	);
 	if (plainReplyMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainReplyMatch[1]);
@@ -310,7 +310,7 @@ export async function handlePlainRoutes(
 	// closes it, Todo (re)opens/unsnoozes it, Snoozed parks it. Human-gated
 	// like the reply route — agent runs never see these paths as tools.
 	const plainStatusMatch = path.match(
-		/^\/backstage\/api\/plain\/threads\/([^/]+)\/status$/,
+		/^\/api\/plain\/threads\/([^/]+)\/status$/,
 	);
 	if (plainStatusMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainStatusMatch[1]);
@@ -354,7 +354,7 @@ export async function handlePlainRoutes(
 
 	// Change a thread's priority (0 = Urgent … 3 = Low).
 	const plainPriorityMatch = path.match(
-		/^\/backstage\/api\/plain\/threads\/([^/]+)\/priority$/,
+		/^\/api\/plain\/threads\/([^/]+)\/priority$/,
 	);
 	if (plainPriorityMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainPriorityMatch[1]);
@@ -394,7 +394,7 @@ export async function handlePlainRoutes(
 	// the customer in Plain — all their threads get filtered — so marking
 	// also closes this thread to get it out of the Todo queue right away.
 	const plainSpamMatch = path.match(
-		/^\/backstage\/api\/plain\/threads\/([^/]+)\/spam$/,
+		/^\/api\/plain\/threads\/([^/]+)\/spam$/,
 	);
 	if (plainSpamMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainSpamMatch[1]);
@@ -445,7 +445,7 @@ export async function handlePlainRoutes(
 	}
 
 	// Workspace users for the Assign menu (alias accounts filtered out).
-	if (path === "/backstage/api/plain/users" && req.method === "GET") {
+	if (path === "/api/plain/users" && req.method === "GET") {
 		if (plainUsersCache && Date.now() - plainUsersCache.ts < PLAIN_META_TTL)
 			return Response.json({ users: plainUsersCache.data });
 		try {
@@ -465,7 +465,7 @@ export async function handlePlainRoutes(
 	}
 
 	// Active label types for the Labels menu.
-	if (path === "/backstage/api/plain/label-types" && req.method === "GET") {
+	if (path === "/api/plain/label-types" && req.method === "GET") {
 		if (
 			plainLabelTypesCache &&
 			Date.now() - plainLabelTypesCache.ts < PLAIN_META_TTL
@@ -487,7 +487,7 @@ export async function handlePlainRoutes(
 
 	// Assign a thread to a teammate (or unassign with userId: null).
 	const plainAssignMatch = path.match(
-		/^\/backstage\/api\/plain\/threads\/([^/]+)\/assign$/,
+		/^\/api\/plain\/threads\/([^/]+)\/assign$/,
 	);
 	if (plainAssignMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainAssignMatch[1]);
@@ -520,7 +520,7 @@ export async function handlePlainRoutes(
 	// Toggle labels on a thread: adds take label-type ids, removes take the
 	// thread's label instance ids.
 	const plainLabelsMatch = path.match(
-		/^\/backstage\/api\/plain\/threads\/([^/]+)\/labels$/,
+		/^\/api\/plain\/threads\/([^/]+)\/labels$/,
 	);
 	if (plainLabelsMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainLabelsMatch[1]);
@@ -561,7 +561,7 @@ export async function handlePlainRoutes(
 
 	// Rename a thread.
 	const plainTitleMatch = path.match(
-		/^\/backstage\/api\/plain\/threads\/([^/]+)\/title$/,
+		/^\/api\/plain\/threads\/([^/]+)\/title$/,
 	);
 	if (plainTitleMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainTitleMatch[1]);
@@ -594,7 +594,7 @@ export async function handlePlainRoutes(
 	// the thread, else starts the triage automation and waits for its
 	// session to boot (~15-60s — the client shows a progress state).
 	const plainTriageApiMatch = path.match(
-		/^\/backstage\/api\/plain\/triage\/([^/]+)$/,
+		/^\/api\/plain\/triage\/([^/]+)$/,
 	);
 	if (plainTriageApiMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainTriageApiMatch[1]);

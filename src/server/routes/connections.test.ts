@@ -20,7 +20,7 @@ function context(
 describe("GitHub connection ownership", () => {
   test("requires sign-in before starting a connection", async () => {
     const response = await handleConnectionsRoutes(
-      context("/backstage/api/connections/github/device", "POST", null),
+      context("/api/connections/github/device", "POST", null),
     );
     expect(response?.status).toBe(403);
   });
@@ -28,7 +28,7 @@ describe("GitHub connection ownership", () => {
   test("cannot disconnect another signed-in user's account", async () => {
     const response = await handleConnectionsRoutes(
       context(
-        "/backstage/api/connections/github/account/happylinks",
+        "/api/connections/github/account/happylinks",
         "DELETE",
         { login: "9ranty", name: "Grant" },
       ),

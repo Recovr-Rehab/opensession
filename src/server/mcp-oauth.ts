@@ -5,7 +5,7 @@
  * Replaces the unusable headless flow (opencode's CLI OAuth listens on the
  * VPS's 127.0.0.1, unreachable from the user's browser): OpenSession runs the
  * OAuth 2.1 + PKCE flow itself with a redirect to
- * `<publicBaseUrl>/backstage/api/connections/mcp-oauth/callback`, so a
+ * `<publicBaseUrl>/api/connections/mcp-oauth/callback`, so a
  * Connect button works from any signed-in device (iPhone PWA included).
  *
  * Grants are stored per server in ~/.opensession-mcp-oauth.json (0600):
@@ -128,7 +128,7 @@ export function oauthPresetFor(name: string): OauthPreset | undefined {
 }
 
 function callbackUrl(): string {
-  return `${configuredServer().publicBaseUrl}/backstage/api/connections/mcp-oauth/callback`;
+  return `${configuredServer().publicBaseUrl}/api/connections/mcp-oauth/callback`;
 }
 
 /** RFC 9728 → RFC 8414 discovery for an MCP server URL. */

@@ -9,7 +9,7 @@
  *
  * Env (set in the injected MCP config by codex-runner.ts / host.ts):
  *   OPENSESSION_RPC_SOCKET  — backstage's run-rpc unix socket path, OR
- *   OPENSESSION_RPC_WS_URL  — backstage's /backstage/rpc-ws WebSocket route (remote
+ *   OPENSESSION_RPC_WS_URL  — backstage's /rpc-ws WebSocket route (remote
  *                     sandboxes, where a unix socket can't cross the boundary)
  *   OPENSESSION_RPC_WS_HOST — WS mode: this run's hostId (the rpc-ws upgrade is
  *                     authenticated per ws-transport run, not per rpc token)

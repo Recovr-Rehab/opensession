@@ -17,11 +17,11 @@ export async function handleAccountsRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// ── Claude account pool (tokens are never sent back, only masked) ──
-	if (path === "/backstage/api/claude-accounts" && req.method === "GET") {
+	if (path === "/api/claude-accounts" && req.method === "GET") {
 		return Response.json({ accounts: listAccountsPublic() });
 	}
 
-	if (path === "/backstage/api/claude-accounts" && req.method === "POST") {
+	if (path === "/api/claude-accounts" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (!body?.name || !body?.token) {
 			return Response.json(
@@ -40,7 +40,7 @@ export async function handleAccountsRoutes(
 	}
 
 	if (
-		path === "/backstage/api/claude-accounts/refresh" &&
+		path === "/api/claude-accounts/refresh" &&
 		req.method === "POST"
 	) {
 		await refreshAllUsage();
@@ -48,7 +48,7 @@ export async function handleAccountsRoutes(
 	}
 
 	const accountDelMatch = path.match(
-		/^\/backstage\/api\/claude-accounts\/([^/]+)$/,
+		/^\/api\/claude-accounts\/([^/]+)$/,
 	);
 	if (accountDelMatch && req.method === "DELETE") {
 		return removeAccount(decodeURIComponent(accountDelMatch[1]))
@@ -71,11 +71,11 @@ export async function handleAccountsRoutes(
 	}
 
 	// ── Codex (OpenAI) account pool ──
-	if (path === "/backstage/api/codex-accounts" && req.method === "GET") {
+	if (path === "/api/codex-accounts" && req.method === "GET") {
 		return Response.json({ accounts: listCodexAccountsPublic() });
 	}
 
-	if (path === "/backstage/api/codex-accounts" && req.method === "POST") {
+	if (path === "/api/codex-accounts" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
 		if (
 			!body?.name ||
@@ -100,7 +100,7 @@ export async function handleAccountsRoutes(
 	// ── Device-code sign-in (browser-free `codex login --device-auth`) ──
 	// Keep these ahead of the generic /codex-accounts/:id matchers.
 	if (
-		path === "/backstage/api/codex-accounts/device-login" &&
+		path === "/api/codex-accounts/device-login" &&
 		req.method === "POST"
 	) {
 		const body = await req.json().catch(() => null);
@@ -124,7 +124,7 @@ export async function handleAccountsRoutes(
 	}
 
 	const deviceLoginMatch = path.match(
-		/^\/backstage\/api\/codex-accounts\/device-login\/([^/]+)$/,
+		/^\/api\/codex-accounts\/device-login\/([^/]+)$/,
 	);
 	if (deviceLoginMatch && req.method === "GET") {
 		const login = getDeviceLogin(decodeURIComponent(deviceLoginMatch[1]));
@@ -139,7 +139,7 @@ export async function handleAccountsRoutes(
 	}
 
 	const codexAccountDelMatch = path.match(
-		/^\/backstage\/api\/codex-accounts\/([^/]+)$/,
+		/^\/api\/codex-accounts\/([^/]+)$/,
 	);
 	if (codexAccountDelMatch && req.method === "DELETE") {
 		return removeCodexAccount(decodeURIComponent(codexAccountDelMatch[1]))
