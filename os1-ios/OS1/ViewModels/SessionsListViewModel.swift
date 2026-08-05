@@ -590,6 +590,22 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
         sessions.contains(where: \.isOptimistic)
     }
     var effectiveRepo: String { mainSession.effectiveRepo }
+
+    /// This row's page on the web app, for sharing: the workspace chat URL
+    /// when the row is a real workspace, the bare session URL otherwise.
+    @MainActor var shareURL: URL? {
+        guard let base = ServerConfig.shared.baseURL else { return nil }
+        if let projectId = mainSession.projectId, !projectId.isEmpty {
+            return base
+                .appendingPathComponent("workspace")
+                .appendingPathComponent(projectId)
+                .appendingPathComponent("chat")
+                .appendingPathComponent(mainSession.id)
+        }
+        return base
+            .appendingPathComponent("session")
+            .appendingPathComponent(mainSession.id)
+    }
     /// Any chat of the row is mid-turn — the row counts as live even when a
     /// blocked sibling owns its lane.
     var isRunning: Bool { sessions.contains { $0.isRunning == true } }

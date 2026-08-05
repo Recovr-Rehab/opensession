@@ -10,6 +10,11 @@ struct SessionView: View {
     private let onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)?
     /// Opens the new-session composer from the iOS navigation bar.
     private let onNewSession: (() -> Void)?
+    /// Worktree-level actions behind the iOS overflow menu. They belong to the
+    /// sessions list, which owns the optimistic row removal and the refresh
+    /// that follows — nil simply leaves those entries out of the menu.
+    private let onRenameWorkspace: ((String) -> Void)?
+    private let onArchiveWorkspace: (() -> Void)?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -68,15 +73,17 @@ struct SessionView: View {
     /// Model/effort catalog for the toolbar picker; fetched on first open.
     @State private var catalog: ModelCatalog?
 
-    /// PR details sheet, opened from the macOS toolbar PR chip.
-    #if os(macOS)
+    /// PR details sheet — the macOS toolbar PR chip, the iOS overflow menu.
     @State private var showPrPanel = false
-    #endif
 
     /// Native counterpart of mobile web's title-opened workspace info page.
     @State private var showWorktreeInfo = false
 
     #if os(iOS)
+    /// Rename prompt, raised from the overflow menu.
+    @State private var renamingWorkspace = false
+    @State private var renameText = ""
+
     /// Web link tapped in the transcript, shown over the session. The
     /// enclosing action — the one `SessionsListView` installs to turn
     /// `bks-…` links into a push — stays in charge of everything else.
@@ -91,7 +98,9 @@ struct SessionView: View {
         composerDraft: SessionViewModel.ComposerDraft? = nil,
         onSelectTab: ((Session) -> Void)? = nil,
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
-        onNewSession: (() -> Void)? = nil
+        onNewSession: (() -> Void)? = nil,
+        onRenameWorkspace: ((String) -> Void)? = nil,
+        onArchiveWorkspace: (() -> Void)? = nil
     ) {
         _viewModel = State(initialValue: SessionViewModel(
             session: session,
@@ -102,19 +111,25 @@ struct SessionView: View {
         self.onSelectTab = onSelectTab
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
+        self.onRenameWorkspace = onRenameWorkspace
+        self.onArchiveWorkspace = onArchiveWorkspace
     }
 
     init(
         viewModel: SessionViewModel,
         tabs: [Session],
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
-        onNewSession: (() -> Void)? = nil
+        onNewSession: (() -> Void)? = nil,
+        onRenameWorkspace: ((String) -> Void)? = nil,
+        onArchiveWorkspace: (() -> Void)? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
         self.tabs = tabs
         self.onSelectTab = nil
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
+        self.onRenameWorkspace = onRenameWorkspace
+        self.onArchiveWorkspace = onArchiveWorkspace
     }
 
     var body: some View {
@@ -367,11 +382,17 @@ struct SessionView: View {
             #endif
             #if os(iOS)
             ToolbarItem(placement: .topTrailingCompat) {
-                Button(action: { onNewSession?() }) {
-                    Image(systemName: "plus")
-                        .foregroundStyle(OS1VisualStyle.text)
-                }
-                .accessibilityLabel("New chat")
+                SessionActionsMenu(
+                    viewModel: viewModel,
+                    tabs: tabs,
+                    onNewSession: onNewSession,
+                    onRenameWorkspace: onRenameWorkspace,
+                    onArchiveWorkspace: onArchiveWorkspace,
+                    showWorktreeInfo: $showWorktreeInfo,
+                    showPrPanel: $showPrPanel,
+                    renaming: $renamingWorkspace,
+                    renameText: $renameText
+                )
             }
             #else
             // macOS retains the PR chip in its roomier toolbar; on iOS the
@@ -395,12 +416,21 @@ struct SessionView: View {
             }
             #endif
         }
-        #if os(macOS)
         .sheet(isPresented: $showPrPanel) {
             PrPanelView(viewModel: viewModel)
         }
-        #endif
         #if os(iOS)
+        .alert("Rename workspace", isPresented: $renamingWorkspace) {
+            TextField("Workspace name", text: $renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") { onRenameWorkspace?(renameText) }
+                .disabled(
+                    viewModel.session.projectId != nil
+                        && renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+        } message: {
+            Text("Choose a name for this workspace.")
+        }
         .sheet(isPresented: $showWorktreeInfo) {
             WorktreeInfoView(
                 viewModel: viewModel,
@@ -696,6 +726,120 @@ struct SessionView: View {
     }
 }
 
+#if os(iOS)
+/// The chat's overflow menu — the trailing nav-bar control, a native `Menu` so
+/// iOS renders (and animates) it as a real UIMenu.
+///
+/// It carries the worktree actions the sidebar row offers under long-press, so
+/// the chat isn't a dead end for them: details, its pull request, rename, share,
+/// hide and archive — plus "New chat", which used to be the bare `+` this menu
+/// replaced.
+///
+/// Its own view struct on purpose. The menu reads `prDetails` and the hide
+/// store, and reading either inside `SessionView.body` would re-evaluate the
+/// whole body — transcript included — every time one of them moved.
+private struct SessionActionsMenu: View {
+    let viewModel: SessionViewModel
+    /// The chats of this worktree — the sidebar row, regrouped below.
+    let tabs: [Session]
+    let onNewSession: (() -> Void)?
+    let onRenameWorkspace: ((String) -> Void)?
+    let onArchiveWorkspace: (() -> Void)?
+    @Binding var showWorktreeInfo: Bool
+    @Binding var showPrPanel: Bool
+    @Binding var renaming: Bool
+    @Binding var renameText: String
+
+    var body: some View {
+        Menu {
+            if let onNewSession {
+                Button(action: onNewSession) {
+                    Label("New chat", systemImage: "plus")
+                }
+            }
+            Button {
+                showWorktreeInfo = true
+            } label: {
+                Label("Worktree details", systemImage: "info.circle")
+            }
+            if let number = viewModel.prDetails?.number ?? viewModel.session.prNumber {
+                Button {
+                    showPrPanel = true
+                } label: {
+                    Label {
+                        Text(verbatim: "Pull request #\(number)")
+                    } icon: {
+                        Image(systemName: "arrow.triangle.pull")
+                    }
+                }
+            }
+
+            Section {
+                // The rename itself runs from SessionView's alert; the menu
+                // only raises it, so the callback's presence is the gate.
+                if onRenameWorkspace != nil {
+                    Button {
+                        renameText = workspace?.title ?? viewModel.session.displayTitle
+                        renaming = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                }
+                if let link = workspace?.shareURL {
+                    ShareLink(item: link) {
+                        Label("Share link", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+
+            if let workspace, !workspace.isOptimistic {
+                Section {
+                    // Hiding is the personal counterpart to archiving: the row
+                    // leaves YOUR sidebar while the chat keeps running for
+                    // everyone else — so it isn't destructive-styled.
+                    if HideStore.shared.isHidden(workspace) {
+                        Button {
+                            // `unhide` rather than clearing this row's key:
+                            // it drops every key the chat could sit under,
+                            // which is deliberately safe (over-clearing only
+                            // ever restores a row) and keeps the menu off the
+                            // row-key helper.
+                            HideStore.shared.unhide(for: viewModel.session)
+                        } label: {
+                            Label("Restore to my sidebar", systemImage: "eye")
+                        }
+                    } else {
+                        Button {
+                            HideStore.shared.hide(workspace)
+                        } label: {
+                            Label("Hide from my sidebar", systemImage: "eye.slash")
+                        }
+                    }
+                    if let onArchiveWorkspace {
+                        Button(role: .destructive, action: onArchiveWorkspace) {
+                            Label("Archive", systemImage: "archivebox")
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .foregroundStyle(OS1VisualStyle.text)
+        }
+        .accessibilityLabel("Chat actions")
+    }
+
+    /// The sidebar row these chats form. `tabs` is exactly one worktree's
+    /// chats, so regrouping them reproduces the row — and, crucially, the row
+    /// KEY that hides are stored under — without reaching for the list's model.
+    private var workspace: SidebarWorkspace? {
+        SessionsListViewModel.sidebarWorkspaces(in: tabs).first { workspace in
+            workspace.sessions.contains { $0.id == viewModel.session.id }
+        }
+    }
+}
+#endif
+
 /// The way back to the bottom of a transcript the reader scrolled away from.
 ///
 /// It doubles as the "there is output you haven't seen" signal: when new
@@ -746,6 +890,10 @@ struct SessionTabsView: View {
     let viewModelForSession: (Session) -> SessionViewModel
     let onSaveComposerDraft: (Session, SessionViewModel.ComposerDraft) -> Void
     let onNewSession: () -> Void
+    /// Rename the worktree these chats share, from the chat's overflow menu.
+    let onRenameWorkspace: (String) -> Void
+    /// Archive every chat of the worktree, from the chat's overflow menu.
+    let onArchiveWorkspace: () -> Void
     /// Close (archive) a chat closed from the tab strip.
     let onCloseTab: (Session) -> Void
 
@@ -766,6 +914,8 @@ struct SessionTabsView: View {
         viewModelForSession: @escaping (Session) -> SessionViewModel,
         onSaveComposerDraft: @escaping (Session, SessionViewModel.ComposerDraft) -> Void,
         onNewSession: @escaping () -> Void,
+        onRenameWorkspace: @escaping (String) -> Void,
+        onArchiveWorkspace: @escaping () -> Void,
         onCloseTab: @escaping (Session) -> Void
     ) {
         initialSession = session
@@ -773,6 +923,8 @@ struct SessionTabsView: View {
         self.viewModelForSession = viewModelForSession
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
+        self.onRenameWorkspace = onRenameWorkspace
+        self.onArchiveWorkspace = onArchiveWorkspace
         self.onCloseTab = onCloseTab
         _activeId = State(initialValue: session.id)
     }
@@ -805,7 +957,15 @@ struct SessionTabsView: View {
                     onSaveComposerDraft: { draft in
                         onSaveComposerDraft(session, draft)
                     },
-                    onNewSession: onNewSession
+                    onNewSession: onNewSession,
+                    onRenameWorkspace: onRenameWorkspace,
+                    // Archiving the worktree from within it leaves nothing to
+                    // show here, so pop back to the sessions list — the same
+                    // landing as closing the last tab.
+                    onArchiveWorkspace: {
+                        onArchiveWorkspace()
+                        dismiss()
+                    }
                 )
                 .transition(conversationTransition)
             }

@@ -823,6 +823,14 @@ struct SessionsListView: View {
                 onNewSession: {
                     newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
                 },
+                onRenameWorkspace: { name in
+                    guard let workspace = workspace(containing: session) else { return }
+                    viewModel.rename(workspace, to: name)
+                },
+                onArchiveWorkspace: {
+                    guard let workspace = workspace(containing: session) else { return }
+                    archive(workspace)
+                },
                 onCloseTab: { closed in
                     sessionPageCache.remove(sessionId: closed.id)
                     viewModel.archive(closed)
@@ -883,7 +891,7 @@ struct SessionsListView: View {
             Label("Rename", systemImage: "pencil")
         }
 
-        if let link = workspaceLink(workspace) {
+        if let link = workspace.shareURL {
             ShareLink(item: link) {
                 Label("Share link", systemImage: "square.and.arrow.up")
             }
@@ -928,19 +936,14 @@ struct SessionsListView: View {
         }
     }
 
-    private func workspaceLink(_ workspace: SidebarWorkspace) -> URL? {
-        guard let base = ServerConfig.shared.baseURL else { return nil }
-        let session = workspace.mainSession
-        if let projectId = session.projectId, !projectId.isEmpty {
-            return base
-                .appendingPathComponent("workspace")
-                .appendingPathComponent(projectId)
-                .appendingPathComponent("chat")
-                .appendingPathComponent(session.id)
+    /// The sidebar row a pushed chat belongs to, so the chat's own overflow
+    /// menu can act on the whole worktree. Resolved ids first: a chat pushed
+    /// while it was still optimistic keeps its temp id in the stack.
+    private func workspace(containing session: Session) -> SidebarWorkspace? {
+        let id = resolvedSessionIds[session.id] ?? session.id
+        return viewModel.sidebarWorkspaces.first { workspace in
+            workspace.sessions.contains { $0.id == id }
         }
-        return base
-            .appendingPathComponent("session")
-            .appendingPathComponent(session.id)
     }
     #endif
 
