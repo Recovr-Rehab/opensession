@@ -1047,6 +1047,9 @@ export async function maybeLaunchSandboxedRun(
 	session: UnifiedSession,
 	opts: {
 		prompt: string;
+		/** Transcript id of the already-written user line (host-engine runs
+		 *  upsert instead of duplicating it — mirrors the host runAgent call). */
+		promptEntryId?: string;
 		engineSessionId?: string;
 		cwd: string;
 		user?: string;
@@ -1191,6 +1194,7 @@ export async function maybeLaunchSandboxedRun(
 			);
 			return runAgent({
 				prompt: opts.prompt,
+				promptEntryId: opts.promptEntryId,
 				sessionId: opts.engineSessionId,
 				cwd: engineCwd,
 				mode: session.mode,
@@ -1892,6 +1896,7 @@ async function runSessionPromptInner(
 	// in-process path below.
 	const sandboxRun = await maybeLaunchSandboxedRun(session, {
 		prompt,
+		promptEntryId,
 		engineSessionId: engineSessionId || undefined,
 		cwd,
 		user,

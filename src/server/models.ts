@@ -14,9 +14,10 @@
  *
  * Second engine (opt-in): explicit `pi/<provider>/<model>` ids run on the pi
  * runner (pi-runner.ts) instead — they resolve to provider "pi", never map
- * onto opencode (toOpencodeModel passes them through), and surface in the
- * picker only via ~/.opensession-pi.json (refreshPiPickerModels). Nothing
- * defaults to pi.
+ * onto opencode (toOpencodeModel passes them through engine-prefix-intact;
+ * only the retired-codex-slug reroute applies, staying pi-prefixed), and
+ * surface in the picker only via ~/.opensession-pi.json
+ * (refreshPiPickerModels). Nothing defaults to pi.
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -589,9 +590,10 @@ export function refreshPiPickerModels(): void {
   }
   try {
     for (const id of piPickerModels()) {
-      // v1 serves only pi/anthropic/* (the loopback Anthropic bridge); other
-      // providers would just error at run start, so they stay unadvertised.
-      if (!id.startsWith("pi/anthropic/")) continue;
+      // Served providers only: pi/anthropic/* (the loopback Anthropic bridge)
+      // and pi/openai/* (the ChatGPT-subscription codex pool). Anything else
+      // would just error at run start, so it stays unadvertised.
+      if (!id.startsWith("pi/anthropic/") && !id.startsWith("pi/openai/")) continue;
       KNOWN_MODELS.push({
         id,
         provider: "pi",
@@ -913,9 +915,13 @@ const RETIRED_CODEX_REROUTE: Record<string, string> = {
 
 export function toOpencodeModel(model?: string | null): string | undefined {
   const mapped = toOpencodeModelRaw(model);
-  const tail = mapped?.match(/^opencode\/openai\/(.+)$/)?.[1];
-  const reroute = tail && RETIRED_CODEX_REROUTE[tail];
-  return reroute ? `opencode/openai/${reroute}` : mapped;
+  // The retired-slug reroute covers BOTH engines' openai ids — a
+  // pi/openai/gpt-5.5 would otherwise run the 272k-window model on pi
+  // (compact-heavy, the exact loop the retirement exists to prevent). The
+  // engine prefix is preserved: pi ids stay pi, opencode ids stay opencode.
+  const m = mapped?.match(/^(opencode|pi)\/openai\/(.+)$/);
+  const reroute = m && RETIRED_CODEX_REROUTE[m[2]];
+  return reroute ? `${m[1]}/openai/${reroute}` : mapped;
 }
 
 function toOpencodeModelRaw(model?: string | null): string | undefined {

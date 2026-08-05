@@ -173,7 +173,9 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           model: z
             .string()
             .optional()
-            .describe("Optional model id (e.g. 'claude-opus-5', 'gpt-5.5')."),
+            .describe(
+              "Optional model id — a tier ('claude-opus-5', 'gpt-5.5') or an engine-prefixed id ('pi/anthropic/claude-opus-5')."
+            ),
           accountId: z
             .string()
             .optional()
@@ -235,7 +237,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           mode: z.enum(["ask", "code"]).optional(),
           enabled: z.boolean().optional(),
           mcpServers: z.array(z.string()).optional(),
-          model: z.string().optional(),
+          model: z
+            .string()
+            .optional()
+            .describe(
+              "Model id — a tier ('claude-opus-5', 'gpt-5.5') or an engine-prefixed id ('pi/anthropic/claude-opus-5'); '' resets to the default."
+            ),
           accountId: z
             .string()
             .optional()

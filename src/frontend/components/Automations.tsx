@@ -1040,6 +1040,16 @@ function McpPicker({
 
 // ── Classic / watch form (step 2) ────────────────────────────
 
+/** " (Claude)" / " (OpenAI Codex)" by the model's ACCOUNT POOL — the engine
+ *  provider ("opencode"/"pi") says nothing about whose subscription pays, and
+ *  keying off it labeled every engine entry "(Claude)". Pool-less models get
+ *  no suffix. */
+function accountPoolSuffix(m: ModelOption): string {
+  if (m.accountProvider === "codex") return " (OpenAI Codex)";
+  if (m.accountProvider === "claude") return " (Claude)";
+  return "";
+}
+
 function AutomationForm({
   kind,
   initial,
@@ -1288,7 +1298,8 @@ function AutomationForm({
               <option value="">Default{defaultModel ? ` — ${defaultModel}` : ""}</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.label} ({m.provider === "codex" ? "OpenAI Codex" : "Claude"})
+                  {m.label}
+                  {accountPoolSuffix(m)}
                 </option>
               ))}
             </select>
@@ -1300,7 +1311,8 @@ function AutomationForm({
               <option value="">None — fail instead of falling back</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.label} ({m.provider === "codex" ? "OpenAI Codex" : "Claude"})
+                  {m.label}
+                  {accountPoolSuffix(m)}
                 </option>
               ))}
             </select>

@@ -29,6 +29,7 @@ import { suggestBranchName } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
 import { type Workspace, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
+import { resolveModel } from "../models";
 import { REPOS, createWorktree, createWorktreeForExistingBranch, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, worktreeHasWork, worktreeHeadBranch } from "../worktree";
 import { randomUUIDv7 } from "bun";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
@@ -377,6 +378,10 @@ export async function handleWorkspaceRoutes(
 			 *  provider id (including "modal" / "lambda-microvm" — must be configured).
 			 *  Recorded on the session file; the first prompt launches it. */
 			sandbox?: boolean | string;
+			/** Model the sibling's runs should use (picker id). Validated against
+			 *  the sandbox capability matrix and stamped on the session; unset =
+			 *  the default model, like every other create. */
+			model?: string;
 		};
 		// share (default): reuse the workspace's worktree/branch (parallel chats,
 		// one branch). stack: a new worktree branched off it (stacked PRs). ask:
@@ -495,8 +500,18 @@ export async function handleWorkspaceRoutes(
 		}
 		// Sandbox opt-in: boolean true = config default provider; a string
 		// must name a configured provider. A sibling chat's first prompt
-		// launches the sandbox through the normal prompt path.
-		const sandboxResolved = resolveRequestedSandbox(body.sandbox, repoId);
+		// launches the sandbox through the normal prompt path. The requested
+		// model (unset = the default) is checked against the capability matrix
+		// so an unsupported model × environment combo fails at create, matching
+		// the WS create paths.
+		const siblingModel = body.model
+			? resolveModel(String(body.model))?.id
+			: undefined;
+		const sandboxResolved = resolveRequestedSandbox(
+			body.sandbox,
+			repoId,
+			siblingModel,
+		);
 		if (!sandboxResolved.ok)
 			return Response.json({ error: sandboxResolved.error }, { status: 400 });
 		// A sibling in a ticket-linked chat/workspace stays linked to the ticket
@@ -527,6 +542,10 @@ export async function handleWorkspaceRoutes(
 			lastActivity: new Date().toISOString(),
 			title: "New chat",
 			mode,
+			// Stamp the validated model so the sibling actually runs what the
+			// sandbox check vetted (validating one model and running another
+			// would make the create-gate meaningless).
+			...(siblingModel ? { model: siblingModel } : {}),
 			...(sandboxResolved.provider
 				? {
 						sandbox: {

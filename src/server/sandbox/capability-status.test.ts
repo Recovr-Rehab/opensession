@@ -15,6 +15,7 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
+  RUNNABLE_SANDBOX_PROVIDERS,
   SANDBOX_MODEL_FAMILIES,
   resolveRequestedSandbox,
   sandboxConfig,
@@ -219,6 +220,27 @@ describe("model-family × environment capability matrix", () => {
       "opencode-anthropic",
     );
     expect(sandboxModelFamilyFor("opencode/google/gemini-3").id).toBe("opencode-other");
+    // Both pi provider splits land on the ONE pi row (match is provider-only).
+    expect(sandboxModelFamilyFor("pi/anthropic/claude-sonnet-5").id).toBe("pi");
+    expect(sandboxModelFamilyFor("pi/openai/gpt-5.5").id).toBe("pi");
+  });
+
+  test("pi is enabled in every environment, engine always placed on host", () => {
+    const pi = SANDBOX_MODEL_FAMILIES.find((f) => f.id === "pi")!;
+    for (const [env, enabled] of Object.entries(pi.environments)) {
+      expect(`${env}:${enabled}`).toBe(`${env}:true`);
+    }
+    for (const provider of RUNNABLE_SANDBOX_PROVIDERS) {
+      // The matrix admits the combo…
+      expect(sandboxModelSupport("pi/anthropic/claude-sonnet-5", provider)).toEqual({
+        ok: true,
+      });
+      // …and placement forces variant A (engine-on-host) everywhere — the
+      // in-sandbox runner-host can never run pi (host-only bridge auth,
+      // in-memory MCP, host session state).
+      expect(sandboxEnginePlacement("pi/anthropic/claude-sonnet-5", provider)).toBe("host");
+      expect(sandboxEnginePlacement("pi/openai/gpt-5.5", provider)).toBe("host");
+    }
   });
 
   test("host is always fine; sandboxes gate by family", () => {
@@ -353,5 +375,18 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
       ok: true,
       provider: null,
     });
+  });
+
+  test("pi models pass the create-gate on configured providers", () => {
+    write({ provider: "docker", daytona: { apiKey: "dtn_x" } });
+    expect(
+      resolveRequestedSandbox("daytona", undefined, "pi/anthropic/claude-sonnet-5"),
+    ).toEqual({ ok: true, provider: "daytona" });
+    expect(
+      resolveRequestedSandbox("docker", undefined, "pi/anthropic/claude-sonnet-5"),
+    ).toEqual({ ok: true, provider: "docker" });
+    // The boolean default-provider path vets the model the same way.
+    const viaDefault = resolveRequestedSandbox(true, undefined, "pi/openai/gpt-5.5");
+    expect(viaDefault.ok).toBe(true);
   });
 });

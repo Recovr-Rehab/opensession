@@ -21,6 +21,7 @@ import {
   modelEfforts,
   interactiveDefaultModel,
   interactiveFallbackModel,
+  KNOWN_MODELS,
   LOCAL_PROFILE_MODELS,
   localProfileDefaultModel,
   localProfileModels,
@@ -28,6 +29,7 @@ import {
   opencodeModelLabel,
   piModelLabel,
   providerFor,
+  refreshPiPickerModels,
   resolveConcreteModel,
   resolveModel,
   toOpencodeModel,
@@ -184,6 +186,71 @@ describe("pi engine model routing", () => {
     expect(fallbackTier("pi/anthropic/claude-opus-5")).toBe(
       fallbackTier("claude-opus-5")
     );
+  });
+
+  it("resolves pi/openai ids to the pi provider on the codex pool with openai efforts", () => {
+    const m = resolveModel("pi/openai/gpt-5.6-sol");
+    expect(m?.id).toBe("pi/openai/gpt-5.6-sol");
+    expect(m?.provider).toBe("pi");
+    expect(providerFor("pi/openai/gpt-5.6-sol")).toBe("pi");
+    // Account pinning draws from the codex (ChatGPT-subscription) pool, same
+    // as opencode/openai.
+    expect(accountProviderForModel("pi/openai/gpt-5.6-sol")).toBe("codex");
+    expect(modelEfforts("pi/openai/gpt-5.6-sol")).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(piModelLabel("pi/openai/gpt-5.6-sol")).toBe("Pi · GPT-5.6 Sol");
+    expect(fallbackTier("pi/openai/gpt-5.6-sol")).toBe(fallbackTier("gpt-5.6-sol"));
+  });
+
+  it("reroutes retired codex slugs on pi ids too, preserving the engine prefix", () => {
+    expect(toOpencodeModel("pi/openai/gpt-5.5")).toBe("pi/openai/gpt-5.6-sol");
+    expect(toOpencodeModel("pi/openai/gpt-5.4")).toBe("pi/openai/gpt-5.6-sol");
+    expect(toOpencodeModel("pi/openai/gpt-5.4-mini")).toBe("pi/openai/gpt-5.6-luna");
+    expect(toOpencodeModel("pi/openai/gpt-5.3-codex-spark")).toBe(
+      "pi/openai/gpt-5.6-luna"
+    );
+    // Non-retired and non-openai pi ids stay untouched.
+    expect(toOpencodeModel("pi/openai/gpt-5.6-sol")).toBe("pi/openai/gpt-5.6-sol");
+    expect(toOpencodeModel("pi/anthropic/claude-opus-5")).toBe(
+      "pi/anthropic/claude-opus-5"
+    );
+  });
+
+  it("surfaces pi/anthropic AND pi/openai picker models; other pi providers stay unadvertised", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-models-"));
+    const cfg = join(dir, "pi.json");
+    writeFileSync(
+      cfg,
+      JSON.stringify({
+        enabled: true,
+        pickerModels: [
+          "pi/anthropic/claude-opus-5",
+          "pi/openai/gpt-5.6-sol",
+          "pi/mistral/large",
+        ],
+      })
+    );
+    const prev = process.env.OPENSESSION_PI_CONFIG;
+    process.env.OPENSESSION_PI_CONFIG = cfg;
+    try {
+      refreshPiPickerModels();
+      const piIds = KNOWN_MODELS.filter((m) => m.provider === "pi").map((m) => m.id);
+      expect(piIds).toContain("pi/anthropic/claude-opus-5");
+      expect(piIds).toContain("pi/openai/gpt-5.6-sol");
+      expect(piIds).not.toContain("pi/mistral/large");
+    } finally {
+      // Restore the real config and re-fold so KNOWN_MODELS reflects boot
+      // state again for the rest of the process.
+      if (prev === undefined) delete process.env.OPENSESSION_PI_CONFIG;
+      else process.env.OPENSESSION_PI_CONFIG = prev;
+      refreshPiPickerModels();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

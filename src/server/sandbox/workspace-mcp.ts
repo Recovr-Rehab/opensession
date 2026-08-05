@@ -207,7 +207,7 @@ export function remoteWorkspaceInstructions(sandbox: Sandbox): string {
     "## Remote sandbox workspace",
     "",
     `Your coding workspace is ${sandbox.cwd} inside the ${sandbox.provider} sandbox.`,
-    "Your model loop runs outside that sandbox. OpenCode's local filesystem and shell tools are disabled.",
+    "Your model loop runs outside that sandbox. The engine's local filesystem and shell tools are disabled.",
     "Use the opensession-workspace tools for every file read, search, edit, command, build, test, and git operation.",
     "Do not infer workspace state from the engine's host cwd; it is an empty control directory and is not the user's repository.",
   ].join("\n");

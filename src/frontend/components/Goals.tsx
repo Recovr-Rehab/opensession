@@ -490,6 +490,16 @@ function formatNext(iso: string): string {
   return `in ${Math.round(diff / 86_400_000)}d`;
 }
 
+/** " (Claude)" / " (OpenAI Codex)" by the model's ACCOUNT POOL — the engine
+ *  provider ("opencode"/"pi") says nothing about whose subscription pays, and
+ *  keying off it labeled every engine entry "(Claude)". Pool-less models get
+ *  no suffix. */
+function accountPoolSuffix(m: ModelOption): string {
+  if (m.accountProvider === "codex") return " (OpenAI Codex)";
+  if (m.accountProvider === "claude") return " (Claude)";
+  return "";
+}
+
 function GoalForm({
   initial,
   inline,
@@ -617,7 +627,8 @@ function GoalForm({
             <option value="">Default{defaultModel ? ` — ${defaultModel}` : ""}</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.label} ({m.provider === "codex" ? "OpenAI Codex" : "Claude"})
+                {m.label}
+                {accountPoolSuffix(m)}
               </option>
             ))}
           </select>
@@ -629,7 +640,8 @@ function GoalForm({
             <option value="">None — fail instead</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.label} ({m.provider === "codex" ? "OpenAI Codex" : "Claude"})
+                {m.label}
+                {accountPoolSuffix(m)}
               </option>
             ))}
           </select>

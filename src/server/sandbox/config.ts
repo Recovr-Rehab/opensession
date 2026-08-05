@@ -645,14 +645,15 @@ export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
     environments: { ...ALL_ENVIRONMENTS },
   },
   {
-    // The pi engine runs in-process on this host (per-turn SDK session with
-    // host-side bridge auth, pi-runner.ts) — nothing of it can be placed in a
-    // sandbox yet.
+    // The pi engine always stays in-process on this host (per-turn SDK session
+    // with host-side bridge auth, pi-runner.ts), so every environment runs it
+    // engine-on-host with only the workspace inside the sandbox
+    // (sandboxEnginePlacement forces "host" for this family).
     id: "pi",
     label: "Pi",
     match: { provider: "pi" },
-    environments: { local: true, docker: false, daytona: false, e2b: false, box: false, modal: false, microvm: false, "lambda-microvm": false },
-    hint: "the pi engine runs in-process on the host",
+    environments: { ...ALL_ENVIRONMENTS },
+    hint: "engine runs on the host; the sandbox isolates the workspace",
   },
   {
     // Native Codex runs need a writable CODEX_HOME (refresh-token rotation) —
@@ -705,13 +706,16 @@ export function sandboxModelFamilyFor(model?: string | null): SandboxModelFamily
  * family: credentials, account rotation and engine state stay on this host.
  * Docker retains the existing in-container OpenAI/Anthropic runner because it
  * already has explicit local mounts; OpenCode-other remains host-only there
- * because its provider auth is not mounted.
+ * because its provider auth is not mounted. Pi is host-only on EVERY provider:
+ * its bridge auth, session state and in-memory MCP servers exist only in this
+ * process, so the in-sandbox runner-host can never run it.
  */
 export function sandboxEnginePlacement(
   model: string | undefined | null,
   provider: RunnableSandboxProviderId,
 ): "host" | "sandbox" {
   const family = sandboxModelFamilyFor(model).id;
+  if (family === "pi") return "host";
   if (family === "opencode-other") return "host";
   if (
     provider !== "docker" &&

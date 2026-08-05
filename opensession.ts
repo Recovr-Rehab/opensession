@@ -18,7 +18,7 @@ import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
 import { makeAskHandler } from "./src/server/asks";
-import { ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, startScheduler } from "./src/server/automations";
+import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, startScheduler } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, frontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
@@ -44,7 +44,9 @@ import { startPublicIngress } from "./src/server/public-ingress";
 import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions } from "./src/server/run-session";
 import { handleSandboxWsUpgrade, timerPoisonRequestCheck } from "./src/server/run-ws";
 import { handleNodeWsUpgrade } from "./src/server/node-ws";
-import { type Sandbox } from "./src/server/sandbox";
+import { getSandboxProvider, type Sandbox } from "./src/server/sandbox";
+import { isRunnableSandboxProvider } from "./src/server/sandbox/config";
+import { createRemoteWorkspaceMcpServer } from "./src/server/sandbox/workspace-mcp";
 import { findSession, invalidateSessionsCache, recordRunOutcome } from "./src/server/session-cache";
 import { getSessionControl } from "./src/server/session-control";
 import { buildReposNote } from "./src/server/session-repos";
@@ -695,15 +697,64 @@ if (!g.__opensessionBooted) {
 				return makeAskHandler(bksSessionId);
 			},
 			(bksSessionId, user) => {
-				const session = findSession(bksSessionId);
-				if (!session || session.source !== "opensession" || session.automation)
+				// Fail-soft: a broken rebuild must degrade the resumed run to
+				// tool-less, never wedge the boot-resume sweep.
+				try {
+					const session = findSession(bksSessionId);
+					if (!session || session.source !== "opensession") return undefined;
+					// Automation-owned sessions rebuild the run's OWN server set
+					// (report/papercuts/workflows/self/turn — the automation bar,
+					// never the interactive admin/sessions surface). Required for pi
+					// resumes: in-process engines hold no surviving stdio proxies, so
+					// without this the re-prompted run is tool-less. Harmless for
+					// opencode — its rebuilt proxies resolve through run-rpc's
+					// fail-closed automation fallback either way.
+					if (session.automation)
+						return automationResumeMcpForSession(session, bksSessionId);
+					const servers: Record<string, unknown> = session.goalId
+						? {
+								...interactiveMcpServers(user, bksSessionId),
+								"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
+							}
+						: interactiveMcpServers(user, bksSessionId);
+					// Engine-on-host sandbox sessions get their workspace tools back
+					// (mirrors the run-rpc fallback in interactive-mcp.ts). The lazy
+					// source re-resolves the sandbox per tool call, so a dead sandbox
+					// fails the call — not the boot.
+					if (session.sandbox?.engine === "host") {
+						servers["opensession-workspace"] = createRemoteWorkspaceMcpServer(
+							async () => {
+								const current = findSession(bksSessionId);
+								const info = current?.sandbox;
+								if (
+									info?.engine !== "host" ||
+									!info.sandboxId ||
+									!isRunnableSandboxProvider(info.provider)
+								) {
+									throw new Error(
+										`Remote workspace for ${bksSessionId} is not materialized.`,
+									);
+								}
+								const sandbox = await getSandboxProvider(info.provider).get(
+									info.sandboxId,
+								);
+								if (!sandbox) {
+									throw new Error(
+										`${info.provider} sandbox ${info.sandboxId} is unavailable; retry the session after the sandbox has restarted.`,
+									);
+								}
+								return sandbox;
+							},
+						);
+					}
+					return servers;
+				} catch (e) {
+					console.error(
+						`[runner] In-process MCP rebuild failed for ${bksSessionId}:`,
+						e,
+					);
 					return undefined;
-				return session.goalId
-					? {
-							...interactiveMcpServers(user, bksSessionId),
-							"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
-						}
-					: interactiveMcpServers(user, bksSessionId);
+				}
 			},
 			(bksSessionId) => {
 				const session = findSession(bksSessionId);

@@ -628,6 +628,92 @@ export function automationRunMcpForSession(
   return servers;
 }
 
+/**
+ * The COMPLETE in-process server set an automation run carries — report (every
+ * run) + papercuts (per-repo toggle) + workflows / self-improve pair (human-set
+ * flags) + turn. One builder, two callers: runAutomation at dispatch, and the
+ * boot-resume rebuild (automationResumeMcpForSession below). Everything here
+ * is held to the automation bar: append-only, nothing sensitive readable, no
+ * control surface — the admin/sessions siblings must never join this set.
+ */
+export function automationRunInProcessMcp(
+  a: Automation,
+  sessionId: string,
+  ctx: {
+    /** Resolved repo id (getRepo(a.repo).id) — papercuts toggle + workflow scope. */
+    repoId: string;
+    /** Working directory for workflow fan-outs (run worktree or ask checkout). */
+    cwd: string;
+    /** Live view of the run's model — a mid-run fallback swaps it (papercuts defaults). */
+    model: () => string | undefined;
+  }
+): Record<string, unknown> {
+  return {
+    "opensession-report": createReportMcpServer({
+      automationId: a.id,
+      automationName: a.name,
+      sessionId,
+    }),
+    ...(papercutsEnabledForRepo(ctx.repoId)
+      ? {
+          "opensession-papercuts": createPapercutsMcpServer({
+            sessionId,
+            runKind: "automation",
+            by: `${a.name} (automation)`,
+            defaults: () => ({ repo: ctx.repoId, model: ctx.model() }),
+          }),
+        }
+      : {}),
+    ...(a.workflows
+      ? {
+          "opensession-workflows": createWorkflowsMcpServer({
+            sessionId,
+            user: `${a.name} (automation)`,
+            workspace: (requestedRepo) =>
+              !requestedRepo || requestedRepo === ctx.repoId
+                ? { cwd: ctx.cwd, repo: ctx.repoId }
+                : undefined,
+            // A script's mcp.* surface is the automation's own least-privilege
+            // one — never a way around the allowlist or the denied writes.
+            mcpAllowlist: a.mcpServers,
+            deniedTools: AUTOMATION_DENIED_TOOLS,
+          }),
+        }
+      : {}),
+    ...(a.selfImprove ? selfImproveMcpServers(a, sessionId) : {}),
+    // Held to the same bar as opensession-papercuts: append-only, reads
+    // nothing, controls nothing. It only lets an unattended run say "I
+    // looked and there was nothing to report" instead of ending on silence
+    // that reads exactly like an early stop (src/server/turn-outcome.ts).
+    "opensession-turn": createTurnMcpServer({ turnKey: sessionId }),
+  };
+}
+
+/**
+ * automationRunInProcessMcp for a session file — the boot/resume rebuild
+ * (opensession.ts's inProcessMcpFor callback). A restart wipes the per-run
+ * registration, and a re-prompted run on an in-process engine (pi) has no
+ * surviving stdio proxies at all — so rebuild the run's full server set from
+ * the automation record; for opencode the same set is harmless (its proxies
+ * resolve through run-rpc's fail-closed automation fallback). Undefined when
+ * the session isn't automation-owned or the automation record is gone (the
+ * resumed run then proceeds without in-process tools, as before).
+ */
+export function automationResumeMcpForSession(
+  session: { automation?: string; worktreeDir?: string | null; model?: string },
+  sessionId: string
+): Record<string, unknown> | undefined {
+  if (!session.automation) return undefined;
+  const a = listAutomations().find((x) => x.name === session.automation);
+  if (!a) return undefined;
+  const repo = getRepo(a.repo);
+  return automationRunInProcessMcp(a, sessionId, {
+    repoId: repo.id,
+    cwd: session.worktreeDir || repo.repo,
+    model: () => session.model,
+  });
+}
+
 export function deleteAutomation(id: string): boolean {
   const path = `${AUTOMATIONS_DIR}/${id}.json`;
   if (!existsSync(path)) return false;
@@ -748,6 +834,9 @@ export const DEFAULT_OPENCODE_AUTOMATION_MODEL = "opencode/openai/gpt-5.6-sol";
 export function opencodeAutomationModel(model?: string): string | undefined {
   const m = (model || "").trim();
   if (m.startsWith("opencode/")) return m;
+  // Pi ids name their engine explicitly (pi/<provider>/<model>) — pass through
+  // untouched; the tier flip below is only for engine-less tier ids.
+  if (m.startsWith("pi/")) return m;
   // The openai path keys off codex accounts, not the bridge flag — always map.
   if (m.startsWith("gpt-")) return `opencode/openai/${m}`;
   // The default is Sol (openai path), so it applies regardless of the
@@ -839,7 +928,7 @@ export async function runAutomation(
         options?.modelOverride || automation.model,
       );
       const displayModel = (runModelForPrompt || "").replace(
-        /^opencode\/[^/]+\//,
+        /^(?:opencode|pi)\/[^/]+\//,
         "",
       );
       if (displayModel)
@@ -999,65 +1088,19 @@ export async function runAutomation(
       `[automations] Running "${automation.name}" → ${bksId}${runModel ? ` (${runModel})` : ""}${options?.modelOverride ? " [routed]" : ""}`
     );
 
-    // In-process servers for automation runs — all held to the automation
-    // bar (append-only, nothing sensitive readable, no control surface; the
-    // run-rpc builder in interactive-mcp.ts fails closed so an automation
-    // session can never resolve the admin/sessions siblings through the same
-    // socket). Registered per run so the proxy executes THESE instances with
-    // automation context.
-    // - opensession-report: every run — publish_report into this automation's
-    //   own Reports group (reports.ts), the Reports-view surface.
-    // - opensession-papercuts: friction log; per-repo toggle in Settings.
-    // - opensession-workflows: HUMAN-flagged automations only (`workflows`,
-    //   e.g. the morning support digest) — see workflow-tools.ts trust notes.
-    // - self-improve pair: human-set `selfImprove` flag (Dreaming).
-    const reportMcp = {
-      "opensession-report": createReportMcpServer({
-        automationId: automation.id,
-        automationName: automation.name,
-        sessionId: bksId,
-      }),
-    };
-    const papercutsMcp = papercutsEnabledForRepo(repo.id)
-      ? {
-          "opensession-papercuts": createPapercutsMcpServer({
-            sessionId: bksId,
-            runKind: "automation",
-            by: `${automation.name} (automation)`,
-            defaults: () => ({ repo: repo.id, model: effectiveModel }),
-          }),
-        }
-      : undefined;
-    const workflowsMcp = automation.workflows
-      ? {
-          "opensession-workflows": createWorkflowsMcpServer({
-            sessionId: bksId,
-            user: `${automation.name} (automation)`,
-            workspace: (requestedRepo) =>
-              !requestedRepo || requestedRepo === repo.id
-                ? { cwd, repo: repo.id }
-                : undefined,
-            // Same scoping as the run itself: a workflow script's mcp.* calls
-            // see this automation's allowlist, minus the denied writes.
-            mcpAllowlist: automation.mcpServers,
-            deniedTools: AUTOMATION_DENIED_TOOLS,
-          }),
-        }
-      : undefined;
-    const selfMcp = automation.selfImprove
-      ? selfImproveMcpServers(automation, bksId)
-      : undefined;
-    const inProcessMcp = {
-      ...reportMcp,
-      ...(papercutsMcp || {}),
-      ...(workflowsMcp || {}),
-      ...(selfMcp || {}),
-      // Held to the same bar as opensession-papercuts: append-only, reads
-      // nothing, controls nothing. It only lets an unattended run say "I
-      // looked and there was nothing to report" instead of ending on silence
-      // that reads exactly like an early stop (src/server/turn-outcome.ts).
-      "opensession-turn": createTurnMcpServer({ turnKey: bksId }),
-    };
+    // In-process servers for automation runs — the full automation-bar set
+    // (see automationRunInProcessMcp; the run-rpc builder in
+    // interactive-mcp.ts fails closed so an automation session can never
+    // resolve the admin/sessions siblings through the same socket).
+    // Registered per run so the proxies execute THESE instances with
+    // automation context — kept even when the primary is a pi model (direct
+    // in-memory mounting, no proxies): a mid-run usage-limit fallback can
+    // land the run on opencode, whose stdio proxies need this registration.
+    const inProcessMcp = automationRunInProcessMcp(automation, bksId, {
+      repoId: repo.id,
+      cwd,
+      model: () => effectiveModel,
+    });
     registerSessionMcpServers(bksId, inProcessMcp);
 
     let engineSessionId = "";

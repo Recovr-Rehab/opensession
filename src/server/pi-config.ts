@@ -17,8 +17,9 @@
  *         // Full pi/<provider>/<model> ids to surface in the UI model
  *         // picker; malformed entries are dropped. Any other well-formed
  *         // pi/ id still resolves (resolveModel's pi/ branch) — it's just
- *         // not advertised. v1 serves only pi/anthropic/* (the loopback
- *         // Anthropic bridge); other providers error clearly at run time.
+ *         // not advertised. Served providers: anthropic (the loopback
+ *         // bridge) and openai (the codex-accounts pool); anything else
+ *         // errors clearly at run time.
  *     "bridgeAccounts": ["<claude-accounts id>"]
  *         // Optional: designated accounts for the loopback Anthropic bridge
  *         // when opencode's own bridgeAccountIds list is empty — same
@@ -27,13 +28,16 @@
  *         // default) = pi rides whatever opencode designates.
  *   }
  *
- * Read fresh per call (tiny file) so edits apply without a restart. No write
- * path and no secrets in v1 — the file is hand-edited, so plain reads with a
- * fail-soft null are enough (mirrors opencode-config.ts).
+ * Read fresh per call (tiny file) so edits apply without a restart. The write
+ * path (Settings → Accounts "Pi engine" card via routes/connections.ts) is a
+ * raw-JSON read-modify-write clone of opencode-config.ts's — unknown fields
+ * survive, atomic rename + 0600 (no secrets today; the mode keeps the
+ * invariant if the file ever grows one).
  */
 
-import { existsSync, readFileSync } from "fs";
+import { chmodSync, existsSync, readFileSync } from "fs";
 import { stateDir } from "./paths";
+import { writeJsonAtomic } from "./shared/atomic-write";
 
 /** Pi-config file path (env override is a test seam, not the feature flag). */
 export function piConfigPath(): string {
@@ -57,18 +61,24 @@ export interface PiEngineConfig {
  *  downstream). bridgeAccounts keeps non-empty strings only; nothing left (or
  *  not an array) normalizes to the field being absent, so `bridgeAccounts`
  *  present always means "at least one designated id". */
+/** Whether `id` is a full `pi/<provider>/<model>` model id — the shape the
+ *  picker, the write API, and normalizePiConfig's drop rule all agree on (a
+ *  bare "pi/foo" would mint a bogus opencode passthrough downstream). */
+export function isPiModelId(id: unknown): id is string {
+  return (
+    typeof id === "string" &&
+    id.startsWith("pi/") &&
+    id.slice("pi/".length).includes("/")
+  );
+}
+
 export function normalizePiConfig(raw: unknown): PiEngineConfig {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { enabled: false, pickerModels: [] };
   }
   const r = raw as Record<string, unknown>;
   const pickerModels = Array.isArray(r.pickerModels)
-    ? r.pickerModels.filter(
-        (x: unknown): x is string =>
-          typeof x === "string" &&
-          x.startsWith("pi/") &&
-          x.slice("pi/".length).includes("/")
-      )
+    ? r.pickerModels.filter(isPiModelId)
     : [];
   const bridgeAccounts = Array.isArray(r.bridgeAccounts)
     ? r.bridgeAccounts.filter(
@@ -112,4 +122,76 @@ export function piBridgeAccounts(): string[] {
   const cfg = readPiEngineConfig();
   if (!cfg?.enabled) return [];
   return cfg.bridgeAccounts || [];
+}
+
+// ── Write path (Settings → Accounts "Pi engine" card) ───────────────────────
+//
+// Raw-JSON read-modify-write, cloned from opencode-config.ts: normalization
+// drops/renames fields, so writes always go through the raw object to preserve
+// everything we don't own. Atomic rename + 0600.
+
+function readRawPiConfig(): Record<string, unknown> {
+  const path = piConfigPath();
+  if (!existsSync(path)) return {};
+  // Unlike the read path (fail-soft null), a write built on `{}` would clobber
+  // a config that's merely unparseable — fail loudly instead.
+  const raw = JSON.parse(readFileSync(path, "utf-8"));
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`Cannot update ${path}: existing content is not a JSON object`);
+  }
+  return raw as Record<string, unknown>;
+}
+
+function writeRawPiConfig(raw: Record<string, unknown>): void {
+  const path = piConfigPath();
+  writeJsonAtomic(path, raw);
+  chmodSync(path, 0o600);
+}
+
+function rawPiPickerModels(raw: Record<string, unknown>): string[] {
+  return Array.isArray(raw.pickerModels)
+    ? raw.pickerModels.filter((x: unknown): x is string => typeof x === "string" && !!x)
+    : [];
+}
+
+/** Turn the pi engine on or off. */
+export function setPiEnabled(enabled: boolean): void {
+  const raw = readRawPiConfig();
+  raw.enabled = enabled;
+  writeRawPiConfig(raw);
+}
+
+/** Add a `pi/<provider>/<model>` id to pickerModels (idempotent). Throws on a
+ *  malformed id — matching normalizePiConfig's drop rule, so a UI add can't
+ *  write an id the reader would silently discard. Returns the stored list. */
+export function addPiPickerModel(id: string): string[] {
+  if (!isPiModelId(id)) {
+    throw new Error(`Invalid pi model id "${id}" (expected pi/<provider>/<model>)`);
+  }
+  const raw = readRawPiConfig();
+  const list = rawPiPickerModels(raw);
+  if (!list.includes(id)) list.push(id);
+  raw.pickerModels = list;
+  writeRawPiConfig(raw);
+  return list;
+}
+
+/** Remove an id from pickerModels. Returns the stored list. */
+export function removePiPickerModel(id: string): string[] {
+  const raw = readRawPiConfig();
+  const list = rawPiPickerModels(raw).filter((x) => x !== id);
+  raw.pickerModels = list;
+  writeRawPiConfig(raw);
+  return list;
+}
+
+/** Replace the designated bridge accounts. An empty list deletes the field —
+ *  normalization treats present-and-empty as absent anyway, so deleting keeps
+ *  the file canonical (present always means "at least one designated id"). */
+export function setPiBridgeAccounts(ids: string[]): void {
+  const raw = readRawPiConfig();
+  const clean = ids.filter((x) => typeof x === "string" && !!x);
+  if (clean.length) raw.bridgeAccounts = clean;
+  else delete raw.bridgeAccounts;
+  writeRawPiConfig(raw);
 }

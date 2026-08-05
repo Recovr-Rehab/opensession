@@ -469,6 +469,12 @@ describe("opencodeAutomationModel (automations dispatch on opencode)", () => {
     );
     expect(opencodeAutomationModel("codex-mini")).toBe("codex-mini");
   });
+  test("pi ids name their engine — pass through untouched", () => {
+    expect(opencodeAutomationModel("pi/anthropic/claude-sonnet-5")).toBe(
+      "pi/anthropic/claude-sonnet-5"
+    );
+    expect(opencodeAutomationModel("pi/openai/gpt-5.5-codex")).toBe("pi/openai/gpt-5.5-codex");
+  });
 });
 
 describe("proxyOpencodeMcpConfigs", () => {

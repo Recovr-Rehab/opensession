@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
+  addPiPickerModel,
+  isPiModelId,
   normalizePiConfig,
   piBridgeAccounts,
+  piConfigPath,
   piEngineEnabled,
   piPickerModels,
   readPiEngineConfig,
+  removePiPickerModel,
+  setPiBridgeAccounts,
+  setPiEnabled,
 } from "./pi-config";
 
 const savedConfig = process.env.OPENSESSION_PI_CONFIG;
@@ -88,6 +94,24 @@ describe("normalizePiConfig", () => {
   });
 });
 
+describe("isPiModelId", () => {
+  it("accepts only full pi/<provider>/<model> ids", () => {
+    expect(isPiModelId("pi/anthropic/claude-opus-5")).toBe(true);
+    expect(isPiModelId("pi/openai/gpt-5.2-codex")).toBe(true);
+    for (const bad of [
+      "pi/anthropic", // no model segment
+      "pi/", // empty remainder
+      "opencode/anthropic/claude-opus-5", // wrong engine
+      "claude-opus-5", // bare native id
+      42,
+      null,
+      undefined,
+    ]) {
+      expect(isPiModelId(bad)).toBe(false);
+    }
+  });
+});
+
 describe("readPiEngineConfig", () => {
   it("returns null when the file is missing", () => {
     const dir = withConfigFile();
@@ -146,6 +170,89 @@ describe("readPiEngineConfig", () => {
     expect(piBridgeAccounts()).toEqual([]);
     // Enabled without accounts designates nothing either.
     writeFileSync(join(dir, "pi.json"), JSON.stringify({ enabled: true }));
+    expect(piBridgeAccounts()).toEqual([]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("write path", () => {
+  const rawFile = () => JSON.parse(readFileSync(piConfigPath(), "utf-8"));
+
+  it("setPiEnabled creates the file when missing and toggles in place", () => {
+    const dir = withConfigFile();
+    setPiEnabled(true);
+    expect(rawFile()).toEqual({ enabled: true });
+    expect(piEngineEnabled()).toBe(true);
+    setPiEnabled(false);
+    expect(rawFile()).toEqual({ enabled: false });
+    expect(piEngineEnabled()).toBe(false);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("writes 0600 and preserves unknown fields", () => {
+    const dir = withConfigFile({ enabled: false, futureField: { keep: "me" } });
+    setPiEnabled(true);
+    expect(rawFile()).toEqual({ enabled: true, futureField: { keep: "me" } });
+    expect(statSync(piConfigPath()).mode & 0o777).toBe(0o600);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses to write over an unparseable file", () => {
+    const dir = withConfigFile("{not json");
+    expect(() => setPiEnabled(true)).toThrow();
+    expect(() => addPiPickerModel("pi/anthropic/claude-opus-5")).toThrow();
+    // The broken content survives untouched — nothing clobbered it with {}.
+    expect(readFileSync(piConfigPath(), "utf-8")).toBe("{not json");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("addPiPickerModel appends idempotently and validates the id", () => {
+    const dir = withConfigFile({ enabled: true });
+    expect(addPiPickerModel("pi/anthropic/claude-opus-5")).toEqual([
+      "pi/anthropic/claude-opus-5",
+    ]);
+    expect(addPiPickerModel("pi/openai/gpt-5.2-codex")).toEqual([
+      "pi/anthropic/claude-opus-5",
+      "pi/openai/gpt-5.2-codex",
+    ]);
+    // Idempotent — a repeat add doesn't duplicate.
+    expect(addPiPickerModel("pi/anthropic/claude-opus-5")).toEqual([
+      "pi/anthropic/claude-opus-5",
+      "pi/openai/gpt-5.2-codex",
+    ]);
+    // Malformed ids throw instead of writing something the reader drops.
+    for (const bad of ["pi/anthropic", "anthropic/claude-opus-5", "opencode/xai/grok-4", ""]) {
+      expect(() => addPiPickerModel(bad)).toThrow(/Invalid pi model id/);
+    }
+    expect(rawFile().pickerModels).toEqual([
+      "pi/anthropic/claude-opus-5",
+      "pi/openai/gpt-5.2-codex",
+    ]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("removePiPickerModel filters the stored list (missing id is a no-op)", () => {
+    const dir = withConfigFile({
+      enabled: true,
+      pickerModels: ["pi/anthropic/claude-opus-5", "pi/openai/gpt-5.2-codex"],
+    });
+    expect(removePiPickerModel("pi/anthropic/claude-opus-5")).toEqual([
+      "pi/openai/gpt-5.2-codex",
+    ]);
+    expect(removePiPickerModel("pi/never/was-there")).toEqual(["pi/openai/gpt-5.2-codex"]);
+    expect(piPickerModels()).toEqual(["pi/openai/gpt-5.2-codex"]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("setPiBridgeAccounts replaces wholesale; empty deletes the field", () => {
+    const dir = withConfigFile({ enabled: true, bridgeAccounts: ["old-1"] });
+    setPiBridgeAccounts(["acc-1", "acc-2"]);
+    expect(rawFile().bridgeAccounts).toEqual(["acc-1", "acc-2"]);
+    expect(piBridgeAccounts()).toEqual(["acc-1", "acc-2"]);
+    // Empty selection deletes the field — the file stays canonical
+    // (bridgeAccounts present always means "at least one designated id").
+    setPiBridgeAccounts([]);
+    expect("bridgeAccounts" in rawFile()).toBe(false);
     expect(piBridgeAccounts()).toEqual([]);
     rmSync(dir, { recursive: true, force: true });
   });

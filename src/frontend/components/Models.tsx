@@ -26,7 +26,9 @@ import {
 } from "../ui/settings";
 import { Switch } from "../ui/switch";
 import { cn } from "../ui/cn";
-import { IconDotsHorizontal, IconHistory, IconPlus, IconSliders, IconTrash } from "./icons";
+import { toast } from "../ui/toast";
+import { fetchProviderAccounts, type ProviderAccountOption } from "../lib/api";
+import { IconDotsHorizontal, IconHistory, IconPlus, IconSliders, IconTrash, IconX } from "./icons";
 
 // The Settings → Accounts panel: the Claude / Codex subscription accounts
 // session runs draw from, plus the default model new runs start on. Everything
@@ -98,6 +100,8 @@ export function AccountsPanel() {
 				<DefaultModelRow />
 				<AutoFallbackRow />
 			</SettingCard>
+
+			<PiEngineSection />
 
 			<ClaudeAccountsSection />
 			<CodexAccountsSection />
@@ -266,6 +270,252 @@ function AutoFallbackRow() {
 				/>
 			</SettingRowControl>
 		</SettingRow>
+	);
+}
+
+// ── Pi engine ──────────────────────────────────────────────────────────────
+
+interface PiEngineConfig {
+	enabled: boolean;
+	pickerModels: string[];
+	bridgeAccounts?: string[];
+}
+
+/**
+ * The pi engine's config card (~/.opensession-pi.json via
+ * /api/settings/pi-engine): the on/off switch, which pi/<provider>/<model>
+ * ids the picker advertises, and which Claude accounts may serve its loopback
+ * Anthropic bridge. Lives in Accounts because the bridge-accounts selector
+ * draws on the same Claude pool the rest of this panel manages.
+ */
+function PiEngineSection() {
+	const [cfg, setCfg] = useState<PiEngineConfig | null>(null);
+	const [claudeAccounts, setClaudeAccounts] = useState<ProviderAccountOption[] | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [testing, setTesting] = useState(false);
+	const [newModel, setNewModel] = useState("");
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		fetch(`${BASE_PATH}/api/settings/pi-engine`)
+			.then((r) => (r.ok ? r.json() : null))
+			.then((body) => body && setCfg(body))
+			.catch(() => {});
+		fetchProviderAccounts()
+			.then((list) => setClaudeAccounts(list.filter((a) => a.provider === "claude")))
+			.catch(() => setClaudeAccounts([]));
+	}, []);
+
+	/** PUT a partial update (present field = wholesale replace), optimistically
+	 *  showing `optimistic` and reverting + toasting when the save fails. */
+	async function save(patch: Partial<PiEngineConfig>, optimistic: PiEngineConfig) {
+		if (saving) return;
+		const prev = cfg;
+		setSaving(true);
+		setError(null);
+		setCfg(optimistic);
+		try {
+			const res = await fetch(`${BASE_PATH}/api/settings/pi-engine`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(patch),
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			setCfg(body);
+		} catch (e: any) {
+			setCfg(prev);
+			setError(e.message);
+			toast(e.message, { variant: "error" });
+		}
+		setSaving(false);
+	}
+
+	function handleAddModel() {
+		if (!cfg) return;
+		const tail = newModel.trim();
+		if (!tail) return;
+		// Accept "pi/anthropic/claude-opus-5" or bare "anthropic/claude-opus-5".
+		const id = tail.startsWith("pi/") ? tail : `pi/${tail}`;
+		if (!id.slice("pi/".length).includes("/")) {
+			toast(`"${tail}" isn't a <provider>/<model> id`, { variant: "error" });
+			return;
+		}
+		setNewModel("");
+		if (cfg.pickerModels.includes(id)) return;
+		const pickerModels = [...cfg.pickerModels, id];
+		save({ pickerModels }, { ...cfg, pickerModels });
+	}
+
+	function handleRemoveModel(id: string) {
+		if (!cfg) return;
+		const pickerModels = cfg.pickerModels.filter((m) => m !== id);
+		save({ pickerModels }, { ...cfg, pickerModels });
+	}
+
+	function handleToggleAccount(accountId: string) {
+		if (!cfg) return;
+		const current = cfg.bridgeAccounts || [];
+		const next = current.includes(accountId)
+			? current.filter((id) => id !== accountId)
+			: [...current, accountId];
+		save(
+			{ bridgeAccounts: next },
+			{ ...cfg, ...(next.length ? { bridgeAccounts: next } : { bridgeAccounts: undefined }) },
+		);
+	}
+
+	async function handleTest() {
+		if (testing) return;
+		setTesting(true);
+		try {
+			const res = await fetch(`${BASE_PATH}/api/admin/pi-smoke`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({}),
+			});
+			const body = await res.json();
+			if (body.ok) toast(body.text || "Pi engine turn completed", { variant: "success" });
+			else toast(body.reason || body.error || "Pi smoke turn failed", { variant: "error" });
+		} catch (e: any) {
+			toast(e.message || "Pi smoke turn failed", { variant: "error" });
+		}
+		setTesting(false);
+	}
+
+	const selected = cfg?.bridgeAccounts || [];
+	return (
+		<>
+			<SettingsGroupLabel
+				actions={
+					<Button size="sm" onClick={handleTest} disabled={testing || !cfg?.enabled}>
+						{testing ? "Running…" : "Test engine"}
+					</Button>
+				}
+			>
+				Pi engine
+			</SettingsGroupLabel>
+
+			{error && (
+				<InlineAlert className="mb-2" onDismiss={() => setError(null)}>
+					{error}
+				</InlineAlert>
+			)}
+
+			<SettingCard>
+				<SettingRow>
+					<SettingRowText>
+						<SettingRowTitle>Run sessions on the pi engine</SettingRowTitle>
+						<SettingRowDescription>
+							pi.dev's coding agent as an alternative engine — its models join the
+							session picker as pi/&lt;provider&gt;/&lt;model&gt; while enabled.
+						</SettingRowDescription>
+					</SettingRowText>
+					<SettingRowControl>
+						<Switch
+							checked={cfg?.enabled ?? false}
+							aria-label="Enable the pi engine"
+							disabled={!cfg || saving}
+							onCheckedChange={(next) => cfg && save({ enabled: next }, { ...cfg, enabled: next })}
+						/>
+					</SettingRowControl>
+				</SettingRow>
+
+				<SettingRow className="items-start">
+					<SettingRowText>
+						<SettingRowTitle>Picker models</SettingRowTitle>
+						<SettingRowDescription>
+							The pi model ids the UI picker advertises. Other well-formed pi ids
+							still resolve when typed — they're just not listed.
+						</SettingRowDescription>
+						{cfg && cfg.pickerModels.length > 0 && (
+							<div className="mt-1.5 flex flex-wrap gap-1">
+								{cfg.pickerModels.map((m) => (
+									<span
+										key={m}
+										className="inline-flex items-center gap-1 rounded-sm bg-active px-1.5 py-px text-meta text-dim"
+										title={m}
+									>
+										{m.split("/").slice(1).join("/")}
+										<button
+											type="button"
+											className="text-faint hover:text-red"
+											aria-label={`Remove ${m}`}
+											disabled={saving}
+											onClick={() => handleRemoveModel(m)}
+										>
+											<IconX size={12} />
+										</button>
+									</span>
+								))}
+							</div>
+						)}
+					</SettingRowText>
+					<SettingRowControl className="flex items-center gap-1.5">
+						<input
+							className={cn(settingsInputClass, "w-56")}
+							value={newModel}
+							onChange={(e) => setNewModel(e.target.value)}
+							onKeyDown={(e) => e.key === "Enter" && handleAddModel()}
+							placeholder="anthropic/claude-opus-5"
+							aria-label="Add pi picker model"
+							disabled={!cfg || saving}
+						/>
+						<Button
+							size="sm"
+							icon={<IconPlus size={16} />}
+							onClick={handleAddModel}
+							disabled={!cfg || saving || !newModel.trim()}
+						>
+							Add
+						</Button>
+					</SettingRowControl>
+				</SettingRow>
+
+				<SettingRow className="items-start">
+					<SettingRowText>
+						<SettingRowTitle>Bridge accounts</SettingRowTitle>
+						<SettingRowDescription>
+							{selected.length === 0
+								? "Claude accounts that may serve pi's loopback Anthropic bridge. None selected — pi uses OpenCode's bridge designation."
+								: "Claude accounts that may serve pi's loopback Anthropic bridge (never the whole pool)."}
+						</SettingRowDescription>
+						{claudeAccounts && claudeAccounts.length > 0 && (
+							<div className="mt-1.5 flex flex-col gap-1">
+								{claudeAccounts.map((a) => (
+									<label
+										key={a.id}
+										className="inline-flex cursor-pointer items-center gap-2 text-supporting text-dim"
+									>
+										<input
+											type="checkbox"
+											checked={selected.includes(a.id)}
+											disabled={!cfg || saving}
+											onChange={() => handleToggleAccount(a.id)}
+										/>
+										<span className="truncate">{a.name}</span>
+										{a.owner && (
+											<span className="rounded-sm bg-active px-1.5 py-px text-meta text-faint">
+												👤 {a.owner}
+											</span>
+										)}
+									</label>
+								))}
+							</div>
+						)}
+						{claudeAccounts && claudeAccounts.length === 0 && (
+							<div className="mt-1 text-meta text-faint">
+								No Claude accounts in the pool yet — add one below first.
+							</div>
+						)}
+					</SettingRowText>
+				</SettingRow>
+			</SettingCard>
+			<SettingsHint>
+				Changes apply to new runs immediately — the pi config is read fresh per run,
+				no restart needed.
+			</SettingsHint>
+		</>
 	);
 }
 

@@ -9,8 +9,9 @@
 import type { RouteContext } from "./context";
 import { getAgents } from "../agents-registry";
 import { addMcpServer, getConnections, removeMcpServer, setMcpAllowedUsers } from "../connections";
-import { refreshOpencodePickerModels } from "../models";
+import { refreshOpencodePickerModels, refreshPiPickerModels } from "../models";
 import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setOpencodeProvider } from "../opencode-config";
+import { addPiPickerModel, isPiModelId, readPiEngineConfig, removePiPickerModel, setPiBridgeAccounts, setPiEnabled } from "../pi-config";
 
 export async function handleConnectionsRoutes(
 	ctx: RouteContext,
@@ -311,6 +312,96 @@ export async function handleConnectionsRoutes(
 			return Response.json(
 				{ error: e?.message || "Failed to remove provider" },
 				{ status: 500 },
+			);
+		}
+	}
+
+	// ── Pi engine (Settings → Accounts "Pi engine" card) ──
+	// The pi engine's on/off switch, picker model ids and designated bridge
+	// accounts in ~/.opensession-pi.json. GET returns the raw-file view (not the
+	// enabled-gated getters — an editor needs to see the ids while the engine is
+	// off); no secrets in this file, so nothing to mask.
+	if (path === "/api/settings/pi-engine" && req.method === "GET") {
+		return Response.json(
+			readPiEngineConfig() ?? { enabled: false, pickerModels: [] },
+		);
+	}
+
+	if (path === "/api/settings/pi-engine" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		if (!body || typeof body !== "object") {
+			return Response.json({ error: "Invalid JSON" }, { status: 400 });
+		}
+		if ("enabled" in body && typeof body.enabled !== "boolean") {
+			return Response.json(
+				{ error: "enabled must be a boolean" },
+				{ status: 400 },
+			);
+		}
+		// Each present field replaces its stored value wholesale (mirrors the
+		// model-providers `models` semantics). Validate everything before the
+		// first write so a bad id can't leave a half-applied update.
+		let pickerModels: string[] | undefined;
+		if ("pickerModels" in body) {
+			if (!Array.isArray(body.pickerModels)) {
+				return Response.json(
+					{ error: "pickerModels must be an array of model ids" },
+					{ status: 400 },
+				);
+			}
+			pickerModels = [];
+			for (const m of body.pickerModels) {
+				if (typeof m !== "string" || !m.trim()) {
+					return Response.json(
+						{ error: "pickerModels entries must be non-empty strings" },
+						{ status: 400 },
+					);
+				}
+				// Accept "pi/anthropic/claude-opus-5" or the bare
+				// "anthropic/claude-opus-5" — normalize onto the pi/ prefix.
+				const tail = m.trim();
+				const id = tail.startsWith("pi/") ? tail : `pi/${tail}`;
+				if (!isPiModelId(id)) {
+					return Response.json(
+						{
+							error: `Invalid pi model id "${tail}" (expected pi/<provider>/<model>)`,
+						},
+						{ status: 400 },
+					);
+				}
+				if (!pickerModels.includes(id)) pickerModels.push(id);
+			}
+		}
+		let bridgeAccounts: string[] | undefined;
+		if ("bridgeAccounts" in body) {
+			if (
+				!Array.isArray(body.bridgeAccounts) ||
+				body.bridgeAccounts.some((x: unknown) => typeof x !== "string" || !x)
+			) {
+				return Response.json(
+					{ error: "bridgeAccounts must be an array of account ids" },
+					{ status: 400 },
+				);
+			}
+			bridgeAccounts = body.bridgeAccounts;
+		}
+		try {
+			if (typeof body.enabled === "boolean") setPiEnabled(body.enabled);
+			if (pickerModels) {
+				for (const m of readPiEngineConfig()?.pickerModels || []) {
+					if (!pickerModels.includes(m)) removePiPickerModel(m);
+				}
+				for (const m of pickerModels) addPiPickerModel(m);
+			}
+			if (bridgeAccounts) setPiBridgeAccounts(bridgeAccounts);
+			refreshPiPickerModels();
+			return Response.json(
+				readPiEngineConfig() ?? { enabled: false, pickerModels: [] },
+			);
+		} catch (e: any) {
+			return Response.json(
+				{ error: e?.message || "Failed to save pi engine config" },
+				{ status: 400 },
 			);
 		}
 	}

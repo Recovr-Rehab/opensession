@@ -1,12 +1,14 @@
 /**
  * Focused pi-runner tests: the pure pieces — model-id parsing, the
- * deny-by-default run gate, the local-tool path containment guard (the
- * in-process engine's security invariant), and the custom bash tool's
- * exit-gated completion (wedge regression). The engine turn itself is covered
- * by the smoke harness (POST /api/admin/pi-smoke) against a live bridge, not
- * unit tests.
+ * deny-by-default run gate, the provider-aware usage-limit classifier, the
+ * local-tool path containment guard (the in-process engine's security
+ * invariant), the custom bash tool's exit-gated completion (wedge
+ * regression), and the pi/openai account-wiring failure paths (isolated
+ * codex store — every case fails before the SDK import or any network use).
+ * The engine turn itself is covered by the smoke harness
+ * (POST /api/admin/pi-smoke) against a live bridge, not unit tests.
  */
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -19,13 +21,16 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   assertContainedPiPath,
+  isPiUsageLimitShape,
   makeGuardedGrepExecute,
   makeGuardedToolOps,
   makePiBashTool,
   parsePiModel,
   piGateReason,
+  runPi,
   runPiSmokeTurn,
 } from "./pi-runner";
+import { __setCodexAccountsPathForTest } from "./codex-accounts";
 
 describe("parsePiModel", () => {
   test("splits pi/<provider>/<model>", () => {
@@ -79,6 +84,145 @@ describe("piGateReason", () => {
     // Request/automation data can NAME the kind, but only runPiSmokeTurn can
     // arm the module-scoped bypass — from out here it must stay refused.
     expect(piGateReason({ journal: { kind: "pi-smoke" } })).toContain('"pi-smoke"');
+  });
+});
+
+describe("isPiUsageLimitShape (provider-aware)", () => {
+  test("anthropic runs match the loopback bridge's shapes", () => {
+    expect(isPiUsageLimitShape("HTTP 429 from bridge", "anthropic")).toBe(true);
+    expect(isPiUsageLimitShape("upstream returned 529", "anthropic")).toBe(true);
+    expect(isPiUsageLimitShape("overloaded_error", "anthropic")).toBe(true);
+    expect(isPiUsageLimitShape("no designated bridge account", "anthropic")).toBe(true);
+    expect(isPiUsageLimitShape("ordinary tool failure", "anthropic")).toBe(false);
+  });
+
+  test("openai runs match the shared codex classifier plus the raw code shapes", () => {
+    expect(
+      isPiUsageLimitShape(
+        "You have hit your ChatGPT usage limit (Plus plan). Try again in ~3 hr.",
+        "openai"
+      )
+    ).toBe(true);
+    expect(isPiUsageLimitShape("usage_limit_reached", "openai")).toBe(true);
+    expect(isPiUsageLimitShape("usage_not_included", "openai")).toBe(true);
+    expect(isPiUsageLimitShape("rate_limit_exceeded", "openai")).toBe(true);
+    expect(isPiUsageLimitShape("insufficient_quota", "openai")).toBe(true);
+    expect(isPiUsageLimitShape("Too Many Requests", "openai")).toBe(true);
+    expect(isPiUsageLimitShape("status 429", "openai")).toBe(true);
+    // Bridge-only shapes must NOT flag openai runs (overload/529 is transient
+    // there, not exhaustion).
+    expect(isPiUsageLimitShape("no designated bridge account", "openai")).toBe(false);
+    expect(isPiUsageLimitShape("overloaded_error", "openai")).toBe(false);
+    expect(isPiUsageLimitShape("upstream returned 529", "openai")).toBe(false);
+    expect(isPiUsageLimitShape("ordinary tool failure", "openai")).toBe(false);
+  });
+});
+
+describe("runPi pi/openai account wiring (no engine, no network)", () => {
+  // Enabled pi config + an isolated codex store: every path exercised here
+  // must fail BEFORE the SDK import — a throw any later would mean a live
+  // engine (or chatgpt.com) was nearly reached from a unit test.
+  const dir = mkdtempSync(join(tmpdir(), "pi-openai-"));
+  const cfgPath = join(dir, "pi.json");
+  const storePath = join(dir, "codex-accounts.json");
+  let prevCfg: string | undefined;
+  let prevStore = "";
+  beforeAll(() => {
+    writeFileSync(cfgPath, JSON.stringify({ enabled: true, pickerModels: [] }));
+    prevCfg = process.env.OPENSESSION_PI_CONFIG;
+    process.env.OPENSESSION_PI_CONFIG = cfgPath;
+    prevStore = __setCodexAccountsPathForTest(storePath);
+  });
+  afterAll(() => {
+    if (prevCfg === undefined) delete process.env.OPENSESSION_PI_CONFIG;
+    else process.env.OPENSESSION_PI_CONFIG = prevCfg;
+    __setCodexAccountsPathForTest(prevStore);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const collect = async (model: string) => {
+    const events: Array<Record<string, unknown>> = [];
+    for await (const ev of runPi(
+      // No osSessionId: journal/store writes are skipped — pure wiring test.
+      { prompt: "hi", cwd: dir, mode: "ask", mcpServers: [], journal: { kind: "prompt" } },
+      model
+    )) {
+      events.push(ev as unknown as Record<string, unknown>);
+    }
+    return events;
+  };
+
+  test("unwired pi providers get the clear both-pools error", async () => {
+    const events = await collect("pi/mistral/large");
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("error");
+    expect(String(events[0].content)).toContain("pi/anthropic/*");
+    expect(String(events[0].content)).toContain("pi/openai/*");
+  });
+
+  test("dry codex pool → flagged terminal so the model-fallback walk engages", async () => {
+    const events = await collect("pi/openai/gpt-5.6-sol");
+    const err = events.find((e) => e.type === "error")!;
+    expect(err).toBeDefined();
+    expect(String(err.content)).toContain("no codex accounts configured");
+    // The pre-init throw's text never matches the classifier — the catch must
+    // honor the thrown error's usageLimitExhausted property.
+    expect(err.usageLimitExhausted).toBe(true);
+  });
+
+  test("api_key codex accounts are refused with a clear, unflagged error", async () => {
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "k1",
+            name: "org-key",
+            kind: "api_key",
+            value: "sk-test",
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      })
+    );
+    const events = await collect("pi/openai/gpt-5.6-sol");
+    const err = events.find((e) => e.type === "error")!;
+    expect(err).toBeDefined();
+    expect(String(err.content)).toMatch(/API-key account/);
+    // Wrong account kind is a configuration wall, not an exhausted pool — it
+    // must not trigger the fallback walk.
+    expect(err.usageLimitExhausted).toBeUndefined();
+  });
+
+  test("expired ChatGPT access token → flagged terminal (dry-pool parity)", async () => {
+    const codexHome = join(dir, "codex-home");
+    mkdirSync(codexHome, { recursive: true });
+    const payload = Buffer.from(
+      JSON.stringify({ exp: Math.floor((Date.now() - 60_000) / 1000) })
+    ).toString("base64url");
+    writeFileSync(
+      join(codexHome, "auth.json"),
+      JSON.stringify({ tokens: { access_token: `h.${payload}.s` } })
+    );
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "h1",
+            name: "pool-home",
+            kind: "home",
+            value: codexHome,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      })
+    );
+    const events = await collect("pi/openai/gpt-5.6-sol");
+    const err = events.find((e) => e.type === "error")!;
+    expect(err).toBeDefined();
+    expect(String(err.content)).toContain("expired");
+    expect(err.usageLimitExhausted).toBe(true);
   });
 });
 
