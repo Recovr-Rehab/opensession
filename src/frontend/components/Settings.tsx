@@ -2694,11 +2694,11 @@ function WorkspacePanel() {
 						<>
 							What the agent calls itself in prompts, Slack messages, and the
 							UI. Configured via <code>persona.name</code> in{" "}
-							<code>~/.backstage/config.json</code> on the server.
+							<code>~/.opensession/config.json</code> on the server.
 						</>
 					}
 					control={
-						<Tooltip label="Wire-up pending. Edit ~/.backstage/config.json for now.">
+						<Tooltip label="Wire-up pending. Edit ~/.opensession/config.json for now.">
 							{/* Disabled inputs swallow hover events, so the tooltip
 							    hangs off a wrapping span. */}
 							<span className="inline-flex">
@@ -2722,7 +2722,7 @@ function WorkspacePanel() {
 						</>
 					}
 					control={
-						<Tooltip label="Wire-up pending. Edit ~/.backstage/config.json for now.">
+						<Tooltip label="Wire-up pending. Edit ~/.opensession/config.json for now.">
 							<span className="inline-flex">
 								<input
 									className={IDENTITY_INPUT_CLASS}
