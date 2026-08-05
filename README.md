@@ -7,6 +7,8 @@ sandboxes — Docker locally, with pluggable adapters for other providers.
 
 ![The OpenSession session view: a running agent turn with its tool calls, next to the workspace sidebar](docs/screenshot.png)
 
+*More: [pull-request review, diffs, automations, mobile →](docs/screenshots.md)*
+
 ## Quickstart
 
 ```sh
