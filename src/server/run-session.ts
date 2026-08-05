@@ -105,6 +105,7 @@ import {
 	touchBackstageSession,
 	SESSIONS_DIR,
 } from "./session-cache";
+import { markRecapPendingIfUnwatched } from "./recap";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
 import {
 	broadcastQueue,
@@ -2265,6 +2266,10 @@ async function runSessionPromptInner(
 		// linger on "Ahead by N commits" (see autoPushSessionBranches). Only on a
 		// clean finish — an errored/aborted turn may be mid-work. Fire-and-forget.
 		if (!endedWithError) void autoPushSessionBranches(session);
+		// Clean finish with nobody looking → next returning viewer gets a recap
+		// system chip (recap.ts). Errored turns already land a failure chip.
+		if (!endedWithError && (assistantText.trim() || toolUseCount > 0))
+			markRecapPendingIfUnwatched(sessionId);
 	}
 }
 

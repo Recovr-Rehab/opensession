@@ -8799,6 +8799,18 @@ a.workspace-info-check-row {
 	   below the box top; nudge the glyph down to sit on the first line. */
 	margin-top: 2px;
 }
+/* Session recap (away-summary): 1-3 sentences, so left-aligned like toned
+   notices, italic body with an upright "recap:" prefix — reads as the harness
+   whispering a catch-up, not the model speaking. */
+.msg-system-text[data-recap] {
+	text-align: left;
+	font-style: italic;
+}
+.msg-recap-prefix {
+	font-style: normal;
+	font-weight: 600;
+}
+
 .msg-system-text[data-tone="error"] {
 	color: var(--red);
 	background: var(--red-soft);

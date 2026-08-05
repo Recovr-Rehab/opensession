@@ -626,6 +626,19 @@ export function transcriptLineCompactionSummary(
   return transcriptLineUser(`<compaction-summary>${text}</compaction-summary>`, id, ts);
 }
 
+/** Session recap (away-summary): the one-liner recap.ts generates when a
+ *  viewer returns to a session whose turn finished with nobody watching. Same
+ *  user-role + harness-marker pattern as runner notices; the jsonl parser maps
+ *  it to a system entry with `recap: true` so the UI renders a "recap:" line
+ *  instead of a user bubble. */
+export function transcriptLineRecap(
+  text: string,
+  id?: string,
+  ts?: string
+): JsonlLine {
+  return transcriptLineUser(`<recap>${text}</recap>`, id, ts);
+}
+
 export function transcriptLineAssistantText(
   text: string,
   id?: string,

@@ -37,6 +37,7 @@ import { SESSION_EFFORTS, findSession, invalidateSessionsCache, maybePersistEffo
 import { buildBranchNote, buildPlanFirstNote, memoryNoteFor, workspaceOwningWorktree } from "./session-repos";
 import { engineSessionPatch, engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift } from "./sessions";
 import { handleSlashCommand } from "./slash-commands";
+import { maybeRecapOnReturn } from "./recap";
 import { resizeTerminal, startSessionTerminal, stopAllTerminals, stopTerminal, writeTerminal } from "./terminals";
 import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
@@ -486,6 +487,11 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// unread counts and notifications still land — but an away socket
 				// stops showing its owner's face to everyone else.
 				setClientAway(ws, msg.away === true);
+				// Coming back to a session whose turn finished while everyone was
+				// away → drop in an away-summary system chip (recap.ts).
+				const returnedTo = ws.data?.watchingSessionId;
+				if (msg.away !== true && returnedTo)
+					maybeRecapOnReturn(returnedTo, ws.data?.user || undefined);
 				break;
 			}
 
@@ -513,6 +519,11 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					typeof msg.feedEpoch === "string" ? msg.feedEpoch : undefined;
 				if (msg.user) data.user = msg.user;
 				joinSession(ws, sessionId);
+
+				// Opening a session whose last turn finished with nobody watching →
+				// drop in an away-summary system chip (recap.ts). Fire-and-forget;
+				// the recap arrives through the transcript bus like any append.
+				maybeRecapOnReturn(sessionId, data.user || undefined);
 
 				// Transcript v2 (flag + supportsSeq gated): eligible watches are
 				// served from the owned store + bus with seq cursors — no mirror

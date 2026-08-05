@@ -215,6 +215,20 @@ function SystemNotice({ entry }: { entry: TranscriptEntry }) {
 	);
 }
 
+/** Away-summary written while nobody watched (see server recap.ts) — a
+ *  Claude Code-style "recap: …" line so a returning viewer catches up without
+ *  rereading the tail. */
+function RecapNotice({ entry }: { entry: TranscriptEntry }) {
+	return (
+		<div className="msg msg-system" data-eid={entry.id}>
+			<span className="msg-system-text" data-recap="">
+				<span className="msg-recap-prefix">recap: </span>
+				{entry.content}
+			</span>
+		</div>
+	);
+}
+
 function CompactionNotice({
 	entry,
 	sessionId,
@@ -575,6 +589,10 @@ export const MessageBubble = React.memo(function MessageBubble({
 
 	if (entry.type === "system" && entry.compaction) {
 		return <CompactionNotice entry={entry} sessionId={sessionId} />;
+	}
+
+	if (entry.type === "system" && entry.recap) {
+		return <RecapNotice entry={entry} />;
 	}
 
 	if (entry.type === "system") {

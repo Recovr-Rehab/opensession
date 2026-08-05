@@ -199,6 +199,24 @@ describe("parseTranscript", () => {
     });
   });
 
+  it("maps recap lines to system entries with the recap flag", () => {
+    const path = writeFixture([
+      userLine(
+        "rc1",
+        "<recap>We shipped the recap feature and pushed to main. Next: open a session to see it.</recap>",
+      ),
+    ]);
+    const entries = parseTranscript(path);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "sys-rc1",
+      type: "system",
+      recap: true,
+      content:
+        "We shipped the recap feature and pushed to main. Next: open a session to see it.",
+    });
+  });
+
   it("returns [] for an empty file", () => {
     const path = writeFixture([]);
     expect(parseTranscript(path)).toEqual([]);

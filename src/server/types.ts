@@ -531,6 +531,10 @@ export interface TranscriptEntry {
   // context window) — the UI renders a collapsed "context compacted" chip
   // instead of an assistant bubble.
   compaction?: boolean;
+  // Set on a system entry holding a session recap (the away-summary written
+  // when a turn finished with nobody watching — see recap.ts) — the UI renders
+  // it as a "recap:" line instead of a generic system chip.
+  recap?: boolean;
 }
 
 export interface FileWatcherState {

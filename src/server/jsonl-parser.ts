@@ -323,6 +323,16 @@ function harnessEntryFor(
       ? [{ id, type: "system", content: body, timestamp: ts, compaction: true }]
       : [];
   }
+  // Session recap (transcriptLineRecap in opencode-transcript.ts): the
+  // away-summary recap.ts writes when a viewer returns to a session whose turn
+  // finished while nobody was watching. A system entry with `recap` set, so
+  // the UI renders a "recap:" line instead of a generic system chip.
+  if (t.startsWith("<recap>")) {
+    const body = t.match(/<recap>([\s\S]*?)<\/recap>/)?.[1]?.trim();
+    return body
+      ? [{ id, type: "system", content: body, timestamp: ts, recap: true }]
+      : [];
+  }
   // The SDK writes this marker into the jsonl whenever a turn is interrupted
   // ("… for tool use" when the abort landed on a pending tool call).
   // Interrupt-and-redirect is the default send-while-busy now, so this would

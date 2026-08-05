@@ -494,6 +494,9 @@ export interface TranscriptEntry {
 	// Set on a system entry holding an engine context-compaction summary —
 	// rendered as a collapsed "context compacted" chip, not an assistant bubble.
 	compaction?: boolean;
+	// Set on a system entry holding a session recap (away-summary generated when
+	// a turn finished with nobody watching) — rendered as a "recap:" line.
+	recap?: boolean;
 }
 
 export interface DiffFile {
