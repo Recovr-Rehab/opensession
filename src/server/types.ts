@@ -20,21 +20,9 @@ export interface ExternalRef {
  * (input + cache read + cache creation) — the live "how full is the window"
  * number, shown against `contextWindow`.
  */
-export interface SessionUsage {
-  costUsd: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  /** Most recent turn's full prompt size (context currently in use). */
-  contextTokens: number;
-  /** Token ceiling of the model that produced `contextTokens`. */
-  contextWindow: number;
-  /** Number of completed turns folded into these totals. */
-  turns: number;
-  /** ISO time of the last update. */
-  updatedAt: string;
-}
+// Moved to the protocol package; re-exported for existing import sites.
+export type { SessionUsage } from "@tellahq/opensession-protocol/session";
+import type { SessionUsage } from "@tellahq/opensession-protocol/session";
 
 /**
  * What the last automated (os-review) run concluded about a PR, as the UI needs
@@ -487,55 +475,8 @@ export interface BackstageSessionFile {
   };
 }
 
-export interface TranscriptEntry {
-  id: string;
-  type: "user" | "assistant" | "tool_use" | "tool_result" | "system";
-  content: string;
-  timestamp: string;
-  toolName?: string;
-  toolInput?: unknown;
-  toolUseId?: string;
-  requestId?: string;
-  // Set on a tool_result whose block carried is_error — the UI shows the step
-  // with an error state instead of a success check.
-  isError?: boolean;
-  // On assistant text entries: the model that wrote this message (Claude jsonl
-  // message.model, or the run's opencode/<provider>/<model> id). Per-message —
-  // mid-session switches and usage-limit fallbacks make the session-level
-  // model unreliable history.
-  model?: string;
-  // Set on a Task/Agent tool_result: the spawned sub-agent's id. The SDK writes
-  // the sub-agent's own transcript to <transcript>/subagents/agent-<agentId>.jsonl,
-  // so this links a tool call to its sub-agent conversation (see subagents.ts).
-  agentId?: string;
-  // Ready-to-render image srcs (http(s), data:, or authenticated local-media
-  // URLs) extracted from image blocks — e.g. a Read or a pasted image.
-  images?: string[];
-  // Ready-to-render video srcs (served via /backstage/media) parsed from
-  // `BACKSTAGE_VIDEO: <path>` markers a tool printed — e.g. tella-local rec.mjs.
-  videos?: string[];
-  // Non-media composer attachments (staged to disk server-side) parsed back out
-  // of the uploads note — rendered as downloadable chips on the user bubble.
-  files?: { name: string; path: string }[];
-  // Set when `content` was clamped for the UI WebSocket (see
-  // clampEntriesForWire in jsonl-parser.ts) — `contentLength` is the full
-  // length; the UI fetches the whole entry on demand.
-  contentClamped?: boolean;
-  contentLength?: number;
-  /** Owned transcript-store display order and mutation cursor. Present only
-   * on v2 frames; changeSeq advances on both inserts and rewrites. */
-  seq?: number;
-  changeSeq?: number;
-  // Set on a system entry holding an engine context-compaction summary (the
-  // handoff the model wrote when its history was summarized to fit the
-  // context window) — the UI renders a collapsed "context compacted" chip
-  // instead of an assistant bubble.
-  compaction?: boolean;
-  // Set on a system entry holding a session recap (the away-summary written
-  // when a turn finished with nobody watching — see recap.ts) — the UI renders
-  // it as a "recap:" line instead of a generic system chip.
-  recap?: boolean;
-}
+// Moved to the protocol package; re-exported for existing import sites.
+export type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
 
 export interface FileWatcherState {
   path: string;

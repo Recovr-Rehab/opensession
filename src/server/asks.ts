@@ -26,12 +26,10 @@ const g = globalThis as any;
 
 const ASK_UI_TIMEOUT_MS = 4 * 60 * 1000;
 
-export interface AskQuestionInput {
-	question: string;
-	header?: string;
-	options?: Array<{ label: string; description?: string }>;
-	multiSelect?: boolean;
-}
+// Moved to the protocol package (as AskQuestion); the old name stays for
+// existing import sites.
+export type { AskQuestion as AskQuestionInput } from "@tellahq/opensession-protocol/session";
+import type { AskQuestion as AskQuestionInput } from "@tellahq/opensession-protocol/session";
 
 export interface PendingAsk {
 	questionId: string;

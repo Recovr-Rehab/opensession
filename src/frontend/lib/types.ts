@@ -1,6 +1,27 @@
 // Type-only (erased at build): the dynamic-workflow run snapshot broadcast to
 // the session's Agents panel.
-import type { WorkflowRunSnapshot } from "../../server/workflow-types";
+import type { WorkflowRunSnapshot } from "../../shared/workflow-types";
+// The protocol core: durable record types and the WebSocket frames any
+// session client speaks. This file re-exports them and layers the reference
+// app's own variants on top — new frames go in the package when any client
+// would need them, here when they're this app's feature.
+import type {
+	ProtocolClientMessage,
+	ProtocolServerMessage,
+} from "@tellahq/opensession-protocol/session";
+
+export type {
+	TranscriptEntry,
+	SessionUsage,
+	AskQuestion,
+	ProtocolClientMessage,
+	ProtocolServerMessage,
+} from "@tellahq/opensession-protocol/session";
+import type {
+	TranscriptEntry,
+	SessionUsage,
+	AskQuestion,
+} from "@tellahq/opensession-protocol/session";
 
 export type SessionSource = "slack" | "linear" | "backstage" | "cli";
 
@@ -243,18 +264,6 @@ export interface ChatMessage {
  * message. `contextTokens` is the most recent turn's full prompt size, shown
  * against `contextWindow` as the live "how full is the context window" gauge.
  */
-export interface SessionUsage {
-	costUsd: number;
-	inputTokens: number;
-	outputTokens: number;
-	cacheReadTokens: number;
-	cacheCreationTokens: number;
-	contextTokens: number;
-	contextWindow: number;
-	turns: number;
-	updatedAt: string;
-}
-
 /** One before/after screenshot pair in a session walkthrough. */
 export interface WalkthroughShot {
 	before?: string;
@@ -457,47 +466,6 @@ export interface Project {
 	externalRefs?: ExternalRef[];
 }
 
-export interface TranscriptEntry {
-	id: string;
-	type: "user" | "assistant" | "tool_use" | "tool_result" | "system";
-	content: string;
-	timestamp: string;
-	toolName?: string;
-	toolInput?: unknown;
-	toolUseId?: string;
-	requestId?: string;
-	// Set on a tool_result whose block carried is_error — shown as a failed step.
-	isError?: boolean;
-	// On assistant text entries: the model that wrote this message (per-message,
-	// so mid-session switches and usage-limit fallbacks stay honest).
-	model?: string;
-	// Set on a Task/Agent tool_result: the spawned sub-agent's id. Lets the UI
-	// open that sub-agent's conversation in the right sidebar.
-	agentId?: string;
-	// Ready-to-render image srcs (http(s) URLs or data: URLs), e.g. from a Read
-	// of an image file or a pasted image.
-	images?: string[];
-	// Ready-to-render video srcs (served via <base>/media), parsed from
-	// `BACKSTAGE_VIDEO: <path>` markers a tool printed — e.g. tella-local rec.mjs.
-	videos?: string[];
-	// Non-media composer attachments (staged to disk server-side) — rendered as
-	// downloadable chips on the user bubble; `path` feeds <base>/media?path=.
-	files?: { name: string; path: string }[];
-	// Set when `content` was clamped for the WebSocket wire (server-side, giant
-	// entries only) — `contentLength` is the full length; the full entry is at
-	// GET /api/sessions/:id/entry/:entryId.
-	contentClamped?: boolean;
-	contentLength?: number;
-	/** Transcript v2: immutable display order plus monotonic mutation cursor. */
-	seq?: number;
-	changeSeq?: number;
-	// Set on a system entry holding an engine context-compaction summary —
-	// rendered as a collapsed "context compacted" chip, not an assistant bubble.
-	compaction?: boolean;
-	// Set on a system entry holding a session recap (away-summary generated when
-	// a turn finished with nobody watching) — rendered as a "recap:" line.
-	recap?: boolean;
-}
 
 export interface DiffFile {
 	path: string;
@@ -663,146 +631,13 @@ export interface GitStatusInfo {
 }
 
 export type WSClientMessage =
-	// Liveness probe — the server echoes `pong`. Detects half-open sockets
-	// (iOS/Safari kills backgrounded connections without firing onclose).
-	| { type: "ping" }
+	// The protocol core: liveness ping, watch/unwatch + history paging,
+	// prompt/interrupt + queue control, cancel, create_session.
+	| ProtocolClientMessage
 	// Presence only: this tab went hidden or idle (or came back). The watch is
 	// untouched — the transcript keeps streaming — but an away socket stops
 	// showing this person's face to teammates.
 	| { type: "away"; away: boolean }
-	| {
-			type: "watch";
-			sessionId: string;
-			user?: string;
-			/** Reconnect resume cursor: the endOffset/rev of the last
-			 *  transcript_init/append this client received for the session. When
-			 *  they still match the live mirror file, the server skips the full
-			 *  transcript_init replace and replays only the gap from the jsonl. */
-			sinceOffset?: number;
-			sinceRev?: string;
-			/** Transcript v2 capability: this bundle understands seq-cursor
-			 *  frames (docs/transcripts.md). Old servers ignore it. */
-			supportsSeq?: boolean;
-			/** This bundle resumes every mutation, including old-seq rewrites. */
-			supportsChangeSeq?: boolean;
-			/** Seq-mode resume cursor: the lastSeq of the last v2 frame this
-			 *  client received for the session (used instead of offset/rev). */
-			sinceSeq?: number;
-			sinceChangeSeq?: number;
-			/** Ordered ephemeral-feed capability and reconnect cursor. */
-			supportsFeed?: boolean;
-			sinceFeedSeq?: number;
-			feedEpoch?: string;
-	  }
-	| { type: "unwatch"; sessionId: string }
-	| {
-			type: "load_history";
-			sessionId: string;
-			beforeOffset?: number;
-			beforeRev?: string;
-			/** Transcript v2 seq paging: earliest seq the client holds — the
-			 *  server returns the page just before it. */
-			beforeSeq?: number;
-			/** Entries per page (seq paging only), server-capped. "Jump to the
-			 *  start" walks the whole backlog and asks for fatter pages. */
-			limit?: number;
-	  }
-	| {
-			type: "prompt";
-			sessionId: string;
-			content: string;
-			user?: string;
-			images?: string[];
-			files?: unknown;
-			busyMode?: "queue" | "steer";
-			/** Reasoning effort — persisted on the session and enforced per run. */
-			effort?: "low" | "medium" | "high" | string;
-			fastMode?: boolean;
-			/** Sibling-chat ids whose transcripts ride along as context (the
-			    fresh-chat "Add chat transcripts" chips). */
-			contextChats?: string[];
-	  }
-	| {
-			type: "interrupt_prompt";
-			sessionId: string;
-			content: string;
-			user?: string;
-			images?: string[];
-			files?: unknown;
-			effort?: "low" | "medium" | "high" | string;
-			fastMode?: boolean;
-	  }
-	| {
-			type: "delete_queued_prompt";
-			sessionId: string;
-			queueId?: string;
-			queueIndex?: number;
-	  }
-	| {
-			type: "update_queued_prompt";
-			sessionId: string;
-			queueId?: string;
-			queueIndex?: number;
-			content: string;
-	  }
-	| {
-			type: "steer_queued_prompt";
-			sessionId: string;
-			queueId?: string;
-			queueIndex?: number;
-	  }
-	| {
-			type: "interrupt_queued_prompt";
-			sessionId: string;
-			queueId?: string;
-			queueIndex?: number;
-	  }
-	| {
-			// Drag-to-reorder: `order` is the queued items' ids in their new send
-			// order. The server reconciles its queue array to match.
-			type: "reorder_queued_prompt";
-			sessionId: string;
-			order: string[];
-	  }
-	| { type: "cancel" }
-	| {
-			type: "create_session";
-			branch: string;
-			prompt: string;
-			user: string;
-			/** Local-profile bridge only: create this session on the hosted upstream. */
-			cloud?: boolean;
-			mode?: "ask" | "code" | "scratch";
-			repo?: string;
-			/** Existing workspace (folder) to add this new chat to. */
-			projectId?: string;
-			/** Existing workspace to add this chat to (alias of projectId, preferred). */
-			workspaceId?: string;
-			/** Create a new workspace for this chat (New modal default). */
-			createWorkspace?: { name?: string };
-			/**
-			 * How the chat relates to its workspace's worktree: share it (default),
-			 * stack a new worktree off it, or ask (no worktree).
-			 */
-			chatMode?: "share" | "stack" | "ask";
-			model?: string;
-			/** Optional MCP server allowlist for the opening run. [] means no external MCP servers. */
-			mcpServers?: string[];
-			/** Run in a sandbox: true = server's default provider, or an explicit
-			 *  configured provider id (including "modal" / "lambda-microvm"). Omit = host. */
-			sandbox?: boolean | string;
-			images?: string[];
-			/** Reasoning effort — persisted on the new session and enforced per run. */
-			effort?: "low" | "medium" | "high";
-			/** Fork an existing session, keeping its real conversation history. */
-			forkFrom?: { sourceId: string; messageId?: string };
-			/**
-			 * Session opened from a sidebar PR row: `branch` is the PR's existing
-			 * head branch — check it out (isolated worktree) instead of creating a
-			 * new branch off origin/default.
-			 */
-			fromPr?: boolean;
-	  }
 	// Collaborative notes (Yjs updates relayed as base64 over this socket).
 	| { type: "watch_note"; noteId: string; user?: string }
 	| { type: "leave_note" }
@@ -813,92 +648,10 @@ export type WSClientMessage =
 	| { type: "chat_typing"; channel: string; user: string };
 
 export type WSServerMessage =
-	// sessionId on the session-scoped messages lets viewers drop events meant
-	// for a different chat (socket races, creator-side direct sends). Optional
-	// because a few direct replies (slash-command notices, pre-create errors)
-	// legitimately have no session.
-	| {
-			type: "transcript_init";
-			sessionId?: string;
-			entries: TranscriptEntry[];
-			truncated?: boolean;
-			/** Byte offset the shipped tail begins at — the "load earlier"
-			 *  pagination cursor (absent on older servers → full-resend fallback). */
-			startOffset?: number;
-			/** Resume cursor: where this snapshot ends in the mirror file, and an
-			 *  opaque tag identifying which file that was. Echoed back on a
-			 *  reconnect watch as sinceOffset/sinceRev. */
-			endOffset?: number;
-			rev?: string;
-			/** Transcript v2 (seq protocol): present iff served from the owned
-			 *  store. firstSeq/lastSeq bound the shipped entries' seqs; their
-			 *  presence switches the client into seq mode for the session. */
-			v2?: boolean;
-			firstSeq?: number;
-			lastSeq?: number;
-			lastChangeSeq?: number;
-	  }
-	| {
-			/** Older entries from one "load earlier" page. Client merges by id and
-			 *  re-sorts by time (prepend semantics). */
-			type: "transcript_history";
-			sessionId?: string;
-			entries: TranscriptEntry[];
-			truncated?: boolean;
-			startOffset?: number;
-			/** Transcript v2 seq page bounds (see transcript_init). */
-			v2?: boolean;
-			firstSeq?: number;
-			lastSeq?: number;
-	  }
-	| {
-			type: "transcript_append";
-			sessionId?: string;
-			entries: TranscriptEntry[];
-			/** Resume cursor after this append (see transcript_init.endOffset). */
-			endOffset?: number;
-			rev?: string;
-			/** Transcript v2 seq bounds. Upsert republishes reuse the entry's
-			 *  ORIGINAL seq, so firstSeq can sit below the client's lastSeq —
-			 *  merge by id, track lastSeq as a max, never assume monotonic. */
-			v2?: boolean;
-			firstSeq?: number;
-			lastSeq?: number;
-			lastChangeSeq?: number;
-	  }
-	| {
-			type: "session_feed";
-			sessionId: string;
-			feedEpoch: string;
-			feedSeq: number;
-			runId?: string;
-			turnId?: string;
-			entryId?: string;
-			phase: "delta" | "committed" | "status";
-			event:
-				| { type: "transcript_append"; sessionId?: string; entries: TranscriptEntry[]; firstSeq?: number; lastSeq?: number; lastChangeSeq?: number; v2?: boolean }
-				| { type: "stream_start"; sessionId: string; by?: string }
-				| { type: "stream_text"; sessionId?: string; text: string }
-				| { type: "stream_tool_use"; sessionId?: string; entry: TranscriptEntry }
-				| { type: "stream_tool_result"; sessionId?: string; entry: TranscriptEntry }
-				| { type: "stream_done"; sessionId?: string }
-				| { type: "session_status"; sessionId?: string; isRunning: boolean };
-	  }
-	| {
-			type: "feed_snapshot";
-			sessionId: string;
-			feedEpoch: string;
-			feedSeq: number;
-			active: null | {
-				runId: string;
-				turnId: string;
-				entryId: string;
-				by?: string;
-				text: string;
-				startedAt: number;
-			};
-	  }
-	| { type: "session_status"; sessionId?: string; isRunning: boolean }
+	// The protocol core: hello/pong/error/notice, the transcript frames (init/
+	// history/append + the session_feed live-turn feed), stream_*, status,
+	// usage, queue, asks, session_created / workspace_status / model_changed.
+	| ProtocolServerMessage
 	| { type: "presence"; sessionId: string; viewers: string[] }
 	| {
 			type: "global_presence";
@@ -913,24 +666,7 @@ export type WSServerMessage =
 	// inside the sandbox) + optional fallback explanation.
 	| { type: "term_ready"; termId?: string; target: "host" | "docker" | "daytona"; cwd?: string }
 	| { type: "term_notice"; termId?: string; message: string }
-	| { type: "stream_start"; sessionId: string; by?: string }
-	| { type: "stream_text"; sessionId?: string; text: string }
-	| { type: "stream_tool_use"; sessionId?: string; entry: TranscriptEntry }
-	| { type: "stream_tool_result"; sessionId?: string; entry: TranscriptEntry }
-	| { type: "stream_done"; sessionId?: string }
-	| { type: "usage_update"; sessionId: string; usage: SessionUsage }
 	| { type: "cache_warning"; sessionId: string }
-	| {
-			type: "session_created";
-			id: string;
-			workspaceId?: string;
-			/** True when this create made a brand-new workspace (vs. adding a chat). */
-			newWorkspace?: boolean;
-			/** True while the session's worktree is still being created. */
-			preparingWorkspace?: boolean;
-	  }
-	// The create run finished (or failed) preparing the session's worktree.
-	| { type: "workspace_status"; sessionId: string; ready: boolean }
 	// A silent server-side auto-push published the session's local commits (repo
 	// id for multi-repo sessions) — the PR status header refetches on this.
 	| { type: "git_pushed"; sessionId: string; repo?: string }
@@ -946,11 +682,9 @@ export type WSServerMessage =
 	| { type: "reports_changed"; automationId: string; sessionId?: string }
 	// The Desk todo list changed (any mutation, any surface — see todos.ts).
 	| { type: "todos_changed"; user: string }
-	| { type: "notice"; sessionId?: string; message: string }
 	// Dynamic workflow run snapshot changed (workflow-store broadcasts every
 	// mutation) — powers the session's Agents panel.
 	| { type: "workflow_update"; sessionId: string; run: WorkflowRunSnapshot }
-	| { type: "model_changed"; sessionId: string; model: string; from?: string; by?: string }
 	| {
 			type: "subscription_changed";
 			sessionId: string;
@@ -958,41 +692,10 @@ export type WSServerMessage =
 			name: string | null;
 			by?: string;
 	  }
-	| {
-			type: "queue_update";
-			sessionId: string;
-			queued: Array<{
-				id: string;
-				content: string;
-				user?: string;
-				images?: string[];
-				files?: unknown;
-			}>;
-			steered?: Array<{
-				id: string;
-				content: string;
-				user?: string;
-				images?: string[];
-				files?: unknown;
-			}>;
-	  }
-	| {
-			type: "ask_question";
-			sessionId: string;
-			questionId: string;
-			questions: AskQuestion[];
-	  }
-	| { type: "ask_resolved"; sessionId: string; questionId: string }
 	// `by` on restart/update notices names the session(s) that likely caused
 	// it (best-effort, from in-flight runs in the server checkout) — absent
 	// when the trigger wasn't an opensession session.
 	| { type: "server_restarting"; by?: string }
-	// First frame on every socket: the server process's bootId, so a reconnect
-	// can tell a real restart (changed) from a transient blip (unchanged).
-	// Absent on old servers — clients fall back to /api/health's bootId.
-	// `restartBy` (when the boot was seconds after a shutdown) names the
-	// session that likely triggered that restart.
-	| { type: "hello"; bootId: string; restartBy?: string }
 	// `force` (admin frontend-reload broadcasts, e.g. before a protocol
 	// change): tabs auto-reload after a short grace instead of waiting for a
 	// click — see UpdatePill.
@@ -1008,16 +711,8 @@ export type WSServerMessage =
 	// An existing message changed in place (reaction toggled) — replace by id;
 	// never bumps unread badges.
 	| { type: "chat_message_updated"; channel: string; message: ChatMessage }
-	| { type: "chat_typing"; channel: string; user: string }
-	| { type: "pong" }
-	| { type: "error"; sessionId?: string; message: string };
+	| { type: "chat_typing"; channel: string; user: string };
 
-export interface AskQuestion {
-	question: string;
-	header?: string;
-	options?: Array<{ label: string; description?: string }>;
-	multiSelect?: boolean;
-}
 
 // ── Analytics (sidebar → Analytics; GET /api/analytics) ──
 

@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./events": "./src/events.ts",
     "./runner": "./src/runner.ts",
+    "./session": "./src/session.ts",
     "./identity": "./src/identity.ts"
   },
   "repository": {
