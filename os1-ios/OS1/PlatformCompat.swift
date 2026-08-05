@@ -39,7 +39,7 @@ extension View {
         #endif
     }
 
-    /// The person's own messages get the same blue-gray bubble on both
+    /// The person's own messages get the same neutral gray bubble on both
     /// platforms (`OS1VisualStyle.userMessage` resolves per appearance).
     func userMessagePanelCompat<S: Shape>(in shape: S) -> some View {
         background(OS1VisualStyle.userMessage, in: shape)

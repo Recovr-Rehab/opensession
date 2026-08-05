@@ -20,8 +20,8 @@ enum OS1VisualStyle {
     static let textFaint = Color(uiColor: .tertiaryLabel)
     static let userMessage = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.149, green: 0.192, blue: 0.259, alpha: 1)
-            : UIColor(red: 0.933, green: 0.949, blue: 0.969, alpha: 1)
+            ? UIColor(white: 0.192, alpha: 1)
+            : UIColor(white: 0.949, alpha: 1)
     })
     #else
     static let background = Color(nsColor: .windowBackgroundColor)
@@ -32,12 +32,12 @@ enum OS1VisualStyle {
     static let text = Color(nsColor: .labelColor)
     static let textDim = Color(nsColor: .secondaryLabelColor)
     static let textFaint = Color(nsColor: .tertiaryLabelColor)
-    /// Same blue-gray tint as the iOS user bubble, resolved per appearance,
+    /// Same neutral gray as the iOS user bubble, resolved per appearance,
     /// so the two apps read as one product.
     static let userMessage = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(red: 0.149, green: 0.192, blue: 0.259, alpha: 1)
-            : NSColor(red: 0.933, green: 0.949, blue: 0.969, alpha: 1)
+            ? NSColor(white: 0.192, alpha: 1)
+            : NSColor(white: 0.949, alpha: 1)
     })
     #endif
     static let accent = Color(red: 1.0, green: 0.231, blue: 0.231)
