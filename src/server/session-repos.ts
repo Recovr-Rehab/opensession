@@ -177,7 +177,10 @@ export function buildReposNote(session: UnifiedSession): string | undefined {
 	const lines = [
 		"## Repos in this session",
 		"This session spans multiple repos. Each is an isolated git worktree — `cd` into the right one to read or edit its files, and commit/push/open PRs in each repo independently (don't edit another repo's shared main checkout).",
-		`- **${primaryRepo}** (primary): ${session.worktreeDir}${session.branch ? ` — branch \`${session.branch}\`` : ""}`,
+		// Canonicalized for the note only — the stored worktreeDir stays literal
+		// (see canonicalPath) — so a session that predates a checkout rename
+		// points the agent at the path that exists today.
+		`- **${primaryRepo}** (primary): ${canonicalPath(session.worktreeDir!)}${session.branch ? ` — branch \`${session.branch}\`` : ""}`,
 	];
 	for (const r of attached)
 		lines.push(`- **${r.repo}**: ${r.dir} — branch \`${r.branch}\``);

@@ -137,7 +137,15 @@
  */
 
 import { configuredServer, githubWriteOwners, personaName, productName } from "./config";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { dirname, join } from "path";
 import type { Subprocess } from "bun";
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
@@ -1639,14 +1647,26 @@ export function buildOpencodeInstructions(input: {
   // runs in the session's `?directory=`. Left uncorrected it defends against
   // the phantom cwd by prefixing `cd <worktree> &&` onto every single command.
   if (input.cwd) {
+    // Canonicalized for the TEXT only — the run's `?directory=` keeps the
+    // stored string, which engine-session identity is keyed on (worktree.ts's
+    // canonicalPath carries the same warning). A session persisted before a
+    // checkout rename stores the pre-rename path, and naming it here makes the
+    // model narrate `cd …/tella-backstage &&` back in every command — while
+    // `pwd` reports the post-rename path, since getcwd() resolves symlinks.
+    // Importing canonicalPath here would cycle back through worktree/preview,
+    // so this is the same two lines locally.
+    let cwd = input.cwd;
+    try {
+      cwd = realpathSync(cwd);
+    } catch {}
     parts.push(
       `## Working directory\nYour Bash tool, file tools, and relative paths all run in ` +
-        `\`${input.cwd}\` — you are already there.\n` +
+        `\`${cwd}\` — you are already there.\n` +
         `The engine's own environment block reports a different "primary working directory" ` +
         `(a neutral scratch path ending in \`/shared-cwd\`, "Is a git repository: false"): ` +
         `that is the shared engine server's cwd, not this session's, and it does not apply ` +
         `to your tool calls. Trust this line instead — run \`pwd\` if you want to confirm. ` +
-        `Don't prefix commands with \`cd ${input.cwd} &&\`; it's redundant noise on every ` +
+        `Don't prefix commands with \`cd ${cwd} &&\`; it's redundant noise on every ` +
         `call. Only \`cd\` when you genuinely need a different directory (another repo's ` +
         `worktree, a subdirectory a tool requires).`
     );

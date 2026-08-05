@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
   parseOpencodeModel,
   opencodeGateReason,
@@ -644,6 +647,26 @@ describe("buildOpencodeInstructions", () => {
     expect(shared).toContain("`/home/ubuntu/projects/opensession` — you are already there");
     expect(shared).toContain("cd /home/ubuntu/projects/opensession &&");
     expect(buildOpencodeInstructions({ isAsk: false })).not.toContain("## Working directory");
+  });
+  test("a pre-rename checkout path is named by the path that exists today", () => {
+    // Sessions persisted before a checkout rename store the old path, which
+    // survives as a symlink. Naming it here would have the model narrate the
+    // pre-rename name back in every command, so the text resolves it.
+    const root = mkdtempSync(join(tmpdir(), "opensession-cwd-test-"));
+    const real = join(root, "opensession");
+    const legacy = join(root, "tella-backstage");
+    mkdirSync(real);
+    symlinkSync("opensession", legacy);
+    const s = buildOpencodeInstructions({ isAsk: false, cwd: legacy });
+    expect(s).toContain(`\`${real}\` — you are already there`);
+    expect(s).not.toContain("tella-backstage");
+    rmSync(root, { recursive: true, force: true });
+  });
+  test("an unresolvable cwd is left exactly as given", () => {
+    const missing = join(tmpdir(), "opensession-cwd-missing-does-not-exist");
+    expect(buildOpencodeInstructions({ isAsk: false, cwd: missing })).toContain(
+      `\`${missing}\` — you are already there`
+    );
   });
   test("ask mode gets the read-only guardrail", () => {
     const s = buildOpencodeInstructions({ isAsk: true });
