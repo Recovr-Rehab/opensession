@@ -385,11 +385,16 @@ enum OS1API {
         model: String? = nil,
         effort: String? = nil,
         fastMode: Bool = false,
-        images: [String] = []
+        images: [String] = [],
+        workspaceId: String? = nil
     ) async throws -> String {
         struct CreateResponse: Decodable { let id: String }
         var body: [String: Any] = ["prompt": prompt, "mode": mode]
         if !repo.isEmpty { body["repo"] = repo }
+        // Join an existing workspace as a sibling chat (a new tab) rather than
+        // starting a standalone session: the server takes the workspace's
+        // worktree/branch for code chats, so the tabs share one checkout.
+        if let workspaceId, !workspaceId.isEmpty { body["workspaceId"] = workspaceId }
         if let model, !model.isEmpty { body["model"] = model }
         if let effort, !effort.isEmpty { body["effort"] = effort }
         if fastMode { body["fastMode"] = true }
@@ -491,7 +496,7 @@ enum OS1API {
             }
             return .rejected(message)
         } catch {
-            return .unavailable(await Reachability.describe(error))
+            return .unavailable(error.localizedDescription)
         }
     }
 

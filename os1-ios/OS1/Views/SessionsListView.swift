@@ -67,6 +67,9 @@ struct SessionsListView: View {
     struct NewSessionRequest: Identifiable {
         let id = UUID()
         var repo: String?
+        /// Set when the create joins an existing workspace as a new tab (the
+        /// chat's ⋯ menu); nil starts a standalone session.
+        var workspaceId: String?
     }
 
     @AppStorage("os1.list.groupBy") private var groupByRaw = GroupBy.repoStatus.rawValue
@@ -244,7 +247,10 @@ struct SessionsListView: View {
             }
         }
         .sheet(item: $newSessionRequest) { request in
-            NewSessionView(initialRepo: request.repo) { session, seed in
+            NewSessionView(
+                initialRepo: request.repo,
+                initialWorkspaceId: request.workspaceId
+            ) { session, seed in
                 openOptimistic(session, seed: seed)
             } onResolved: { tempId, result in
                 resolveCreate(tempId: tempId, result: result)
@@ -358,7 +364,10 @@ struct SessionsListView: View {
                     SettingsView()
                 }
                 .sheet(item: $newSessionRequest) { request in
-                    NewSessionView(initialRepo: request.repo) { session, seed in
+                    NewSessionView(
+                        initialRepo: request.repo,
+                        initialWorkspaceId: request.workspaceId
+                    ) { session, seed in
                         openOptimistic(session, seed: seed)
                     } onResolved: { tempId, result in
                         resolveCreate(tempId: tempId, result: result)
@@ -828,7 +837,15 @@ struct SessionsListView: View {
                     composerDrafts[id] = draft.isEmpty ? nil : draft
                 },
                 onNewSession: {
-                    newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
+                    // The chat's ⋯ → "New chat in this workspace": a sibling
+                    // tab, not a standalone session. The workspace id comes from
+                    // the latest polled copy — the row NavigationPath retained
+                    // predates a workspace this chat may have joined since.
+                    let current = viewModel.sessions.first { $0.id == session.id }
+                    newSessionRequest = NewSessionRequest(
+                        repo: session.effectiveRepo,
+                        workspaceId: current?.projectId ?? session.projectId
+                    )
                 },
                 onRenameWorkspace: { name in
                     guard let workspace = workspace(containing: session) else { return }

@@ -754,7 +754,15 @@ private struct SessionActionsMenu: View {
         Menu {
             if let onNewSession {
                 Button(action: onNewSession) {
-                    Label("New chat", systemImage: "plus")
+                    // A chat in a workspace gets a sibling tab (sharing the
+                    // worktree in code mode); a workspace-less legacy chat has
+                    // nothing to join, so the plain wording stays honest.
+                    Label(
+                        viewModel.session.projectId == nil
+                            ? "New chat"
+                            : "New chat in this workspace",
+                        systemImage: "plus"
+                    )
                 }
             }
             Button {

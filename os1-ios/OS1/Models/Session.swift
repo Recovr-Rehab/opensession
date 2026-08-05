@@ -164,12 +164,18 @@ extension Session {
         model: String?,
         effort: String?,
         fastMode: Bool,
-        startedBy: String
+        startedBy: String,
+        workspaceId: String? = nil
     ) -> Session {
         var session = Session(id: id)
         session.title = title
         session.source = "opensession"
         session.repo = repo
+        // A chat created into an existing workspace carries its id from the
+        // start, so the pending row joins that workspace's tab strip (and its
+        // sidebar row) immediately instead of flashing as a separate session
+        // until the first poll lands.
+        session.projectId = workspaceId
         session.mode = mode
         session.model = model
         session.effort = effort

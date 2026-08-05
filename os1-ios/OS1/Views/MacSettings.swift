@@ -372,7 +372,7 @@ struct MacConnectionSettingsView: View {
             _ = try await OS1API.sessions()
             checkResult = "Connected — auth OK."
         } catch {
-            checkResult = await Reachability.describe(error)
+            checkResult = error.localizedDescription
         }
     }
 }

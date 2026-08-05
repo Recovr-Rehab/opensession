@@ -18,6 +18,10 @@ struct NewSessionView: View {
     /// Preset repo (the per-repo "+" in the sessions list); nil = remembered.
     var initialRepo: String?
 
+    /// Workspace this chat joins as a new tab (the chat's ⋯ → "New chat in
+    /// this workspace"); nil starts a standalone session in its own workspace.
+    var initialWorkspaceId: String?
+
     /// Called the moment Start is tapped, with an optimistic session row
     /// (temporary `pending-` id) plus the prompt/images to seed the
     /// conversation view instantly.
@@ -59,7 +63,7 @@ struct NewSessionView: View {
                 controls
             }
             .background(OS1VisualStyle.background)
-            .navigationTitle("New session")
+            .navigationTitle(initialWorkspaceId == nil ? "New session" : "New chat")
             .inlineTitleBarCompat()
             #if os(macOS)
             .frame(minWidth: 560, minHeight: 440)
@@ -240,6 +244,13 @@ struct NewSessionView: View {
         .disabled(repos.isEmpty)
     }
 
+    /// Joining a workspace changes what code mode means: the chat shares that
+    /// workspace's worktree and branch rather than cutting a new one, so the
+    /// chip says so instead of promising a branch it won't create.
+    private var codeModeLabel: String {
+        initialWorkspaceId == nil ? "New branch" : "Same branch"
+    }
+
     /// The palette calls this "what to create from", and its two entries that
     /// exist here are a fresh branch (code) and Ask; the same words are used so
     /// the two screens describe one choice. Worktrees and scratch sessions have
@@ -250,8 +261,12 @@ struct NewSessionView: View {
                 mode = "code"
             } label: {
                 Label {
-                    Text("New branch")
-                    Text("Isolated worktree, can open a PR")
+                    Text(codeModeLabel)
+                    Text(
+                        initialWorkspaceId == nil
+                            ? "Isolated worktree, can open a PR"
+                            : "Shares this workspace's worktree"
+                    )
                 } icon: {
                     if mode == "code" { Image(systemName: "checkmark") }
                 }
@@ -269,7 +284,7 @@ struct NewSessionView: View {
         } label: {
             chipLabel(
                 icon: mode == "code" ? "arrow.branch" : "text.magnifyingglass",
-                text: mode == "code" ? "New branch" : "Ask"
+                text: mode == "code" ? codeModeLabel : "Ask"
             )
         }
         .menuStyle(.button)
@@ -552,7 +567,8 @@ struct NewSessionView: View {
             model: model.isEmpty ? nil : model,
             effort: effort.isEmpty ? nil : effort,
             fastMode: fastMode,
-            startedBy: ServerConfig.shared.userName
+            startedBy: ServerConfig.shared.userName,
+            workspaceId: initialWorkspaceId
         )
         dismiss()
         onCreated(
@@ -568,7 +584,8 @@ struct NewSessionView: View {
                     model: model.isEmpty ? nil : model,
                     effort: effort.isEmpty ? nil : effort,
                     fastMode: fastMode,
-                    images: imageURLs
+                    images: imageURLs,
+                    workspaceId: initialWorkspaceId
                 )
                 onResolved(pending.id, .success(id))
             } catch {

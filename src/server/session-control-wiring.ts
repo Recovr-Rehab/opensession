@@ -229,6 +229,7 @@ registerSessionControl({
 		fastMode: fastModeInput,
 		images: imageUrls,
 		mcpServers,
+		workspaceId,
 		parentSessionId,
 		reportBack,
 		user,
@@ -252,6 +253,14 @@ registerSessionControl({
 		const createFastMode = fastModeInput === true;
 		const images = parseImageDataUrls(imageUrls);
 		const parentSession = parentSessionId ? findSession(parentSessionId) : null;
+		// Explicit workspace join (the native apps' "new chat in this workspace" —
+		// this path's equivalent of the web tab strip's "+"). An unknown id is a
+		// hard error: falling back to a standalone create would silently mint the
+		// duplicate sidebar row the caller asked to avoid.
+		const joinedWorkspace = workspaceId ? getWorkspace(workspaceId) : null;
+		if (workspaceId && !joinedWorkspace) {
+			throw new Error(`No such workspace: ${workspaceId}`);
+		}
 		// A child defaults to the parent's primary repo, but an explicit repo —
 		// or a prompt that names exactly one attached worktree — inherits that
 		// exact repo context. This is load-bearing for reviewers of in-progress
@@ -259,7 +268,15 @@ registerSessionControl({
 		const parentRepoContext = parentSession
 			? resolveSessionRepoContext(parentSession, repoInput, prompt)
 			: null;
-		const repo = getRepo(repoInput || parentRepoContext?.repo || parentSession?.repo);
+		// A joined workspace's repo outranks the global default: a caller that
+		// names only a workspace means "a chat in there", and defaulting to the
+		// configured default repo would mint a foreign worktree inside it.
+		const repo = getRepo(
+			repoInput ||
+				joinedWorkspace?.repo ||
+				parentRepoContext?.repo ||
+				parentSession?.repo,
+		);
 		// Sandbox opt-in: true = config default provider, or an explicit
 		// provider id validated against the config — an unconfigured pick fails
 		// the create loudly instead of silently running on the host.
@@ -271,14 +288,18 @@ registerSessionControl({
 			parentSession?.projectId
 				? getWorkspace(parentSession.projectId)
 				: null;
-		// Least privilege: children in feed-item workspaces default their MCP
+		// The workspace this chat lands in: the one it explicitly joins, else the
+		// parent's. Everything a chat inherits from its workspace — repo context,
+		// worktree, feed refs and their MCP scoping — reads from this.
+		const contextWorkspace = joinedWorkspace ?? parentWorkspace;
+		// Least privilege: chats in feed-item workspaces default their MCP
 		// allowlist to the feed's declared servers, else inherit the parent's
 		// scoping — never widen back to the full mcp-config.
 		const { feedMcpServersForRefs } = await import("./feeds");
 		const effectiveMcpServers = mcpServers?.length
 			? mcpServers
-			: parentWorkspace?.externalRefs?.length
-				? ((await feedMcpServersForRefs(parentWorkspace.externalRefs)) ??
+			: contextWorkspace?.externalRefs?.length
+				? ((await feedMcpServersForRefs(contextWorkspace.externalRefs)) ??
 					parentSession?.mcpServers)
 				: parentSession?.mcpServers;
 
@@ -297,7 +318,7 @@ registerSessionControl({
 			// child sees the parent's downloads); standalone scratch creates get
 			// a fresh one. Never a repo checkout (the feeds design).
 			wtPath = ensureScratchDir(
-				parentSession?.projectId || randomUUIDv7(),
+				joinedWorkspace?.id || parentSession?.projectId || randomUUIDv7(),
 			);
 			sessionBranch = "";
 		} else if (isAsk) {
@@ -311,20 +332,23 @@ registerSessionControl({
 				wtPath = await ensureAskCheckout(repo.id);
 			}
 		} else {
-			// Same workspace ⇒ same worktree: a code child joining the parent's
-			// workspace shares its worktree/branch instead of creating a fresh one.
-			// Only when the repo matches — a child explicitly targeting another
-			// repo still gets its own isolated worktree there.
+			// Same workspace ⇒ same worktree: a code chat joining a workspace (its
+			// parent's, or one it named) shares that worktree/branch instead of
+			// creating a fresh one. Only when the repo matches — a chat explicitly
+			// targeting another repo still gets its own isolated worktree there.
 			const shared =
 				sharedParentContext
 					? {
 							dir: sharedParentContext.dir,
 							branch: sharedParentContext.branch,
 						}
-					: parentWorkspace?.worktreeDir &&
-				repoForPath(parentWorkspace.worktreeDir).id === repo.id &&
-				existsSync(parentWorkspace.worktreeDir)
-					? { dir: parentWorkspace.worktreeDir, branch: parentWorkspace.branch }
+					: contextWorkspace?.worktreeDir &&
+				repoForPath(contextWorkspace.worktreeDir).id === repo.id &&
+				existsSync(contextWorkspace.worktreeDir)
+					? {
+							dir: contextWorkspace.worktreeDir,
+							branch: contextWorkspace.branch,
+						}
 					: parentSession?.worktreeDir &&
 							parentSession.mode !== "ask" &&
 							repoForPath(parentSession.worktreeDir).id === repo.id &&
@@ -337,7 +361,7 @@ registerSessionControl({
 			} else {
 				if (!sessionBranch.trim()) {
 					throw new Error(
-						"Code-mode child needs a branch because the selected parent repo has no sharable worktree.",
+						"Code-mode chat needs a branch because the workspace it joins has no sharable worktree.",
 					);
 				}
 				const worktrees = await listWorktrees(repo.id);
@@ -345,10 +369,31 @@ registerSessionControl({
 				if (!wtPath) wtPath = await createWorktree(branch!, repo.id);
 			}
 		}
+		// The first code chat in a joined workspace that owns no worktree yet (an
+		// ask-style or ticket workspace) materializes it, so the next chat joining
+		// the workspace inherits THIS worktree instead of minting a second one and
+		// silently splitting the tabs across two trees. Only an isolated worktree
+		// is owned — never a shared main/ask checkout, which every other chat in
+		// the repo uses too.
+		if (
+			joinedWorkspace &&
+			!joinedWorkspace.worktreeDir &&
+			!isAsk &&
+			!isScratch &&
+			ownedWorktree(wtPath)
+		) {
+			updateWorkspace(joinedWorkspace.id, {
+				worktreeDir: wtPath,
+				...(sessionBranch ? { branch: sessionBranch } : {}),
+			});
+		}
 
 		const bksId = newSessionId();
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
-		let projectId = parentSession?.projectId || null;
+		// A joined workspace is the chat's workspace, which also skips the mint /
+		// adopt block below — and with it the auto-naming: a chat that merely
+		// joins an existing workspace must never rename it.
+		let projectId = joinedWorkspace?.id || parentSession?.projectId || null;
 		// A workspace minted below from THIS chat's provisional first line is
 		// renamed once the generated summary lands, exactly like the web create
 		// path — the sidebar rows (web and native) are titled by the workspace,
@@ -453,10 +498,15 @@ registerSessionControl({
 					// a worker that owes its parent a report from a child session
 					// that was explicitly told not to report (e.g. the PR chat).
 					...(parentSessionId && reportBack ? { reportBack: true } : {}),
-					// Feed-item linkage follows the parent workspace (Video tab +
+					// Feed-item linkage follows the chat's workspace (Video tab +
 					// sidebar feed-row join — the feeds design).
-					...(parentWorkspace?.externalRefs?.length
-						? { externalRefs: parentWorkspace.externalRefs }
+					...(contextWorkspace?.externalRefs?.length
+						? { externalRefs: contextWorkspace.externalRefs }
+						: {}),
+					// A chat in a support-ticket workspace is on that ticket too —
+					// same rule as the web tab strip's "+".
+					...(joinedWorkspace?.plainThreadId
+						? { plainThreadId: joinedWorkspace.plainThreadId }
 						: {}),
 					// Persist the MCP scoping so follow-up prompts keep it.
 					...(effectiveMcpServers?.length
@@ -502,9 +552,44 @@ registerSessionControl({
 		// prompts on existing chats — this create path bypasses
 		// runSessionPromptInner.
 		const createMentionsNote = sessionMentionsNote(prompt);
-		const openingPrompt = createMentionsNote
+		let openingPrompt = createMentionsNote
 			? `${prompt}\n\n${createMentionsNote}`
 			: prompt;
+		// A chat joining a workspace opens with the workspace's own context, the
+		// same as the web create: the feed item it hangs off, and the support
+		// ticket it belongs to. Without this a "new tab" in a ticket workspace is
+		// an amnesiac chat that has to be told what it's looking at.
+		if (joinedWorkspace) {
+			const { wrapContext } = await import("./prompt-context");
+			if (joinedWorkspace.externalRefs?.length) {
+				const { externalRefsOpeningContext } = await import("./feeds");
+				const refsContext = await externalRefsOpeningContext(
+					joinedWorkspace.externalRefs,
+					{ scratch: isScratch, user },
+				);
+				if (refsContext) openingPrompt += `\n\n${wrapContext(refsContext)}`;
+			}
+			if (joinedWorkspace.plainThreadId) {
+				const threadId = joinedWorkspace.plainThreadId;
+				try {
+					const { getThreadWithMessages, formatThreadContext } = await import(
+						"../agents/plain/api"
+					);
+					const thread = await getThreadWithMessages(threadId);
+					openingPrompt += `\n\n${wrapContext(
+						`This chat was opened from a Plain support ticket. Ticket context:\n\n${formatThreadContext(thread, true)}`,
+					)}`;
+				} catch (e) {
+					console.error(
+						`[create_session] Plain thread lookup failed for ${threadId}:`,
+						e,
+					);
+					openingPrompt += `\n\n${wrapContext(
+						`This chat was opened from Plain support ticket ${threadId} (the context lookup failed — use the plain MCP tools to fetch the thread).`,
+					)}`;
+				}
+			}
+		}
 
 		// Make the id resolvable before returning it. Callers can navigate to the
 		// fresh chat immediately, while engine startup continues in the background.

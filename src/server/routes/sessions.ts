@@ -151,11 +151,18 @@ export async function handleSessionsRoutes(
 			images?: unknown;
 			branch?: unknown;
 			user?: unknown;
+			workspaceId?: unknown;
 		} | null;
 		const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
 		if (!prompt) {
 			return Response.json({ error: "prompt required" }, { status: 400 });
 		}
+		// Join an existing workspace as a sibling chat — the native apps' "new
+		// chat in this workspace", equivalent to the web tab strip's "+".
+		const workspaceId =
+			typeof body?.workspaceId === "string" && body.workspaceId
+				? body.workspaceId
+				: "";
 		const mode =
 			body?.mode === "code"
 				? ("code" as const)
@@ -163,7 +170,11 @@ export async function handleSessionsRoutes(
 					? ("scratch" as const)
 					: ("ask" as const);
 		let branch = typeof body?.branch === "string" ? body.branch.trim() : "";
-		if (mode === "code" && !branch) {
+		// A code chat joining a workspace that already owns a worktree works on
+		// that worktree's branch, so skip the (LLM) branch suggestion — it would
+		// only be discarded. A workspace with no worktree yet still needs one.
+		const joinsWorktree = !!(workspaceId && getWorkspace(workspaceId)?.worktreeDir);
+		if (mode === "code" && !branch && !joinsWorktree) {
 			branch =
 				(await suggestBranchName(prompt).catch(() => null)) ||
 				`session-${Date.now().toString(36)}`;
@@ -172,7 +183,8 @@ export async function handleSessionsRoutes(
 			const { id } = await getSessionControl().createSession({
 				prompt,
 				mode,
-				...(mode === "code" ? { branch } : {}),
+				...(mode === "code" && branch ? { branch } : {}),
+				...(workspaceId ? { workspaceId } : {}),
 				...(typeof body?.repo === "string" && body.repo
 					? { repo: body.repo }
 					: {}),
