@@ -30,7 +30,6 @@ describe("integration registry", () => {
     // Agents register webhook routes in load order; this array IS that order.
     expect(INTEGRATIONS.map((i) => i.id)).toEqual([
       "plain",
-      "tella",
       "linear",
       "slack",
       "stripe",
@@ -68,11 +67,11 @@ describe("isEnabled", () => {
 });
 
 describe("activeIntegrations", () => {
-  test("self-gating modules load even with everything disabled", () => {
+  test("nothing loads with everything disabled", () => {
     disableAll();
-    const ids = activeIntegrations().map((i) => i.id);
-    // tella is `always` — it self-gates on its MCP server being connected.
-    expect(ids).toEqual(["tella"]);
+    // No `always: true` modules remain in the registry; the mechanism stays
+    // for future self-gating modules.
+    expect(activeIntegrations().map((i) => i.id)).toEqual([]);
   });
 
   test("stripe stays out without its webhook secret", () => {
@@ -88,6 +87,6 @@ describe("activeIntegrations", () => {
     disableAll();
     process.env.ENABLE_GITHUB_AGENT = "true";
     process.env.ENABLE_PLAIN_AGENT = "true";
-    expect(activeIntegrations().map((i) => i.id)).toEqual(["plain", "tella", "github"]);
+    expect(activeIntegrations().map((i) => i.id)).toEqual(["plain", "github"]);
   });
 });

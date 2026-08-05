@@ -19,9 +19,9 @@
  *
  * Zero-code projects use ~/.opensession-feeds.json instead (feeds-config.ts);
  * a module is only needed when custom code enters the picture (bespoke item
- * fetching, webhooks, background tasks). src/agents/tella is the reference
- * feed module; extraction to `@opensession/feed-*` packages later is
- * mechanical because this interface is the boundary.
+ * fetching, webhooks, background tasks) — implement getFeed() on the module
+ * (see docs/extending.md); extraction to `@opensession/feed-*` packages later
+ * is mechanical because this interface is the boundary.
  */
 export interface AgentModule {
   /** Display name (e.g. "slack", "linear", "plain") */

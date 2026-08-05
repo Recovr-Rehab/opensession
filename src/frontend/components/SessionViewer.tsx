@@ -4086,7 +4086,7 @@ export function SessionViewer({
 					{session.worktreeDir &&
 						hasWorkspace &&
 						// Scratch sessions are repo-less: a static feed-kind tile
-						// ("tella") instead of the repo switch/attach menu.
+						// instead of the repo switch/attach menu.
 						(session.mode === "scratch" ? (
 							<span className="flex min-w-0 items-center gap-1.5">
 								<span

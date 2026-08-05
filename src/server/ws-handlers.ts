@@ -1598,15 +1598,15 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// mapping) and hand the agent the ticket conversation so the
 					// first message is self-contained. A chat created inside a
 					// ticket workspace (tab-strip "+") inherits the thread too.
-					// A chat created inside a feed-item workspace (Tella video, …)
+					// A chat created inside a feed-item workspace (PostHog dashboard, …)
 					// inherits the workspace's externalRefs — that's what keeps the
 					// Video tab on its chats and joins the sidebar feed row to the
 					// session — and gets the item named in its opening context.
 					const inheritedRefs = workspace?.externalRefs;
 					// Least privilege for feed-workspace chats: unless the creator
 					// explicitly picked servers, the session's MCP allowlist is the
-					// feed's declared list (e.g. tella → ["tella"]) — never the full
-					// mcp-config (a video chat must not see Plain/Stripe/WorkOS).
+					// feed's declared list (e.g. posthog → ["posthog"]) — never the full
+					// mcp-config (a feed chat must not see Plain/Stripe/WorkOS).
 					const feedMcpServers =
 						!createMcpServers?.length && inheritedRefs?.length
 							? await (

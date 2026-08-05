@@ -9,7 +9,7 @@
  *
  * Registration is lazy (ensureFeedsRegistered from the routes) so this module
  * has no import-time side effects; providers whose backing connection is
- * absent (e.g. no tella MCP server / no OAuth grant yet) simply don't
+ * absent (e.g. no backing MCP server / no OAuth grant yet) simply don't
  * register, which hides the band. MCP-backed feeds are per-viewer: items are
  * fetched on the requesting user's grant and cached per user.
  */
@@ -41,17 +41,17 @@ export interface FeedItem {
 }
 
 /**
- * One filter control on a feed band (the feeds design — "filters, like
- * tella has tag/playlist filters on list_videos, configurable per
- * project/plugin"). `key` is the LIST-TOOL ARGUMENT the selected value is
+ * One filter control on a feed band (the feeds design — e.g. a video feed
+ * filtering by tag/playlist on its list tool, configurable per
+ * project/plugin). `key` is the LIST-TOOL ARGUMENT the selected value is
  * passed as; options are static or resolved from another MCP tool on the
- * viewer's grant (e.g. tella tags via list_tags).
+ * viewer's grant (e.g. a list_tags tool).
  */
 export interface FeedFilterSpec {
   key: string;
   label: string;
   /** "arg" (default): the selected value is passed as this list-tool
-   *  argument (tella tagIds/playlistId). "meta": filtered client-side
+   *  argument (e.g. tagIds/playlistId). "meta": filtered client-side
    *  against item.meta (plain assignee/labels). */
   mode?: "arg" | "meta";
   /** meta mode: dot-path into item.meta. Arrays match when SOME element's
@@ -82,7 +82,7 @@ export interface FeedLane {
 }
 
 export interface FeedDescriptor {
-  /** Feed id — also the RepoTile/brand icon key (e.g. "tella"). */
+  /** Feed id — also the RepoTile/brand icon key (e.g. "posthog"). */
   id: string;
   /** Band title in the sidebar. */
   title: string;
@@ -94,9 +94,9 @@ export interface FeedDescriptor {
   /**
    * External MCP servers (mcp-config.json names) sessions in this feed's
    * workspaces get — their session allowlist defaults to exactly this list,
-   * so a Tella-video chat never sees Plain/Stripe/WorkOS tools. Names not
+   * so a feed-item chat never sees Plain/Stripe/WorkOS tools. Names not
    * (yet) in mcp-config are skipped by filterMcpServers, so declaring a
-   * future server (e.g. "tella") is safe and lights up when it's added.
+   * future server is safe and lights up when it's added.
    */
   mcpServers?: string[];
   /** Web panel the workspace tab renders for this feed's items
@@ -270,7 +270,7 @@ export async function getFeedItems(
   return items;
 }
 
-// Filter-option lists resolved via MCP (e.g. tella tags), cached briefly.
+// Filter-option lists resolved via MCP (e.g. tag lists), cached briefly.
 const filterOptionsCache = new Map<
   string,
   { options: { value: string; label: string }[]; ts: number }
@@ -367,24 +367,12 @@ export async function externalRefsOpeningContext(
   if (opts.scratch)
     out +=
       "\n\nYour working directory is a scratch space (not a git repo) — download media, run ffmpeg, write files there freely. Use the available MCP tools for the linked service when the task concerns the object itself. IMPORTANT — showing media: when your work produces a video or image, make sure its ABSOLUTE local path (or a direct media URL) appears in your output — recognized media paths/URLs render inline in the chat automatically (local files must exist on disk). To force it explicitly, print `OPENSESSION_VIDEO: /abs/path.mp4` or `OPENSESSION_IMAGE: /abs/path.png` on its own line. Media that never appears as a path/URL/marker in output is invisible to the user.";
-  for (const r of refs.filter((x) => x.kind === "tella")) {
-    try {
-      const { getVideo, formatVideoContext } = await import(
-        "../agents/tella/api"
-      );
-      const video = await getVideo(r.id, opts.user);
-      if (video)
-        out += `\n\nTella video context for ${r.id}:\n\n${formatVideoContext(video)}`;
-    } catch (e) {
-      console.error(`[feeds] Tella video lookup failed for ${r.id}:`, e);
-    }
-  }
   // Generic per-feed context (the feeds design — posthog dashboards
   // etc.): the descriptor's context tool called with the item id, result
   // injected as a JSON excerpt. Declarative — no per-feed code.
   await ensureFeedsRegistered();
   syncConfigFeeds();
-  for (const r of refs.filter((x) => x.kind !== "tella")) {
+  for (const r of refs) {
     const entry = [...registry.values()].find(
       (e) => e.provider.descriptor.refKind === r.kind,
     );
@@ -436,8 +424,7 @@ const feedAgentsSeen = new Set<string>();
 let scratchSweepDone = false;
 /** Idempotently register the code-feed providers (called from the routes):
  *  every loaded AgentModule with a getFeed() contribution (the W4 plugin
- *  seam), plus the direct tella fallback for boot orderings where the module
- *  didn't load. Config feeds overlay separately (syncConfigFeeds). */
+ *  seam). Config feeds overlay separately (syncConfigFeeds). */
 export async function ensureFeedsRegistered(): Promise<void> {
   try {
     const { getAgents } = await import("./agents-registry");
@@ -454,10 +441,6 @@ export async function ensureFeedsRegistered(): Promise<void> {
   } catch {}
   if (scratchSweepDone) return;
   scratchSweepDone = true;
-  if (!registry.has("tella")) {
-    const { registerTellaFeed } = await import("../agents/tella/feed");
-    registerTellaFeed();
-  }
   // Once per boot: sweep scratch dirs whose workspace is gone (deleted
   // workspaces clean up inline in deleteWorkspace; this catches dirs from
   // before that hook and workspace-less creates). 14-day grace on mtime.

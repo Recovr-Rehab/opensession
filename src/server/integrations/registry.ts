@@ -15,7 +15,7 @@
  * changes. This is a boot path, so it needs a real `systemctl restart`.
  *
  * ARRAY ORDER IS BOOT ORDER. It matches the original hand-written sequence
- * (plain, tella, linear, slack, stripe, grafana, github) so that agent
+ * (plain, linear, slack, stripe, grafana, github) so that agent
  * registration — including webhook route registration — happens in exactly the
  * order it always has. Present them in a friendlier order in UI if you like,
  * but do not reshuffle this array casually.
@@ -85,21 +85,6 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     load: async () => {
       const { PlainAgent } = await import("../../agents/plain/index");
       return new PlainAgent();
-    },
-  },
-  {
-    id: "tella",
-    label: "Tella feeds",
-    doc: "docs/extending.md",
-    enableFlag: "ENABLE_TELLA_MODULE",
-    env: [],
-    // Reference feed module: self-gating. getFeed() stays null until the tella
-    // MCP server is configured and connected, so an unconfigured module
-    // contributes no webhooks and an empty route map.
-    always: true,
-    load: async () => {
-      const { TellaAgent } = await import("../../agents/tella/index");
-      return new TellaAgent();
     },
   },
   {

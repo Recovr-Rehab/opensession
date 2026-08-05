@@ -1537,8 +1537,8 @@ function readFilter(): FilterState {
 }
 
 function sessionRepo(s: UnifiedSession): string {
-	// Repo-less feed/scratch chats file under their feed's kind ("tella") so
-	// they don't mislabel as the default repo (the feeds design).
+	// Repo-less feed/scratch chats file under their feed's kind so they
+	// don't mislabel as the default repo (the feeds design).
 	return s.repo || s.externalRefs?.[0]?.kind || DEFAULT_PROJECT;
 }
 
