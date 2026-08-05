@@ -7,8 +7,7 @@ and GitHub agents, driving coding sessions through the OpenCode engine
 > Not related to opencode's `opensession` npm session viewer or to
 > ColeMurray/background-agents ("Open-Inspect").
 
-<!-- TODO: screenshot — docs/screenshot.png (session view + sidebar) -->
-*(screenshot placeholder)*
+![The OpenSession session view: a running agent turn with its tool calls, next to the workspace sidebar](docs/screenshot.png)
 
 ## Quickstart
 
