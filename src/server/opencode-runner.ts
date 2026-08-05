@@ -522,7 +522,7 @@ export function parseOpencodeModel(
  *  inherit interactive trust; ask mode + no MCP servers keeps them read-only
  *  workers, and staying interactive keeps them shared-server eligible (no
  *  per-agent `opencode serve` — the 2026-07-09 SQLite contention trap). */
-const INTERACTIVE_KINDS = new Set(["prompt", "goal", "create", "linear", "slack", "workflow"]);
+export const INTERACTIVE_KINDS = new Set(["prompt", "goal", "create", "linear", "slack", "workflow"]);
 
 /** Unattended kinds allowed on this engine — with the least-privilege policy
  *  (opencodeRunPolicy) enforced via stripped tools. "automation" is the
@@ -533,7 +533,7 @@ const INTERACTIVE_KINDS = new Set(["prompt", "goal", "create", "linear", "slack"
  *  (deny by default). */
 const AUTOMATION_KINDS = new Set(["automation", "plain", "action", "security-scan"]);
 
-function isUnattendedKind(base: string): boolean {
+export function isUnattendedKind(base: string): boolean {
   return AUTOMATION_KINDS.has(base) || base.startsWith("github-");
 }
 
@@ -550,7 +550,7 @@ function poolWaitMsFor(kind?: string): number {
   return isUnattendedKind(baseJournalKind(kind)) ? POOL_WAIT_UNATTENDED_MS : 0;
 }
 
-function baseJournalKind(kind?: string): string {
+export function baseJournalKind(kind?: string): string {
   return (kind || "").replace(/(-(resume|rerun|fallback))+$/, "");
 }
 

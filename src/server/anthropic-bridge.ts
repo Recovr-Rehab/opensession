@@ -26,8 +26,14 @@
  *    starts a fresh SDK session with a full flat-text replay.
  *
  * Containment (all enforced here, not in prompts):
- *  - Never starts unless ~/.opensession-opencode.json has `enabled: true`.
- *  - Only `bridgeAccountIds` accounts ever serve traffic — never the pool.
+ *  - Never starts unless a config designates serving accounts: opencode's
+ *    ~/.opensession-opencode.json (`enabled` + `bridgeAccountIds`) or — the
+ *    pi engine's own designation, since pi/anthropic/* has no other path —
+ *    ~/.opensession-pi.json (`enabled` + `bridgeAccounts`).
+ *  - Only designated accounts ever serve traffic — never the pool. Per
+ *    request, opencode's `bridgeAccountIds` list is walked first; only when
+ *    that list is empty does pi's `bridgeAccounts` list serve, through the
+ *    same usable-account gate.
  *  - Binds 127.0.0.1 only, and every request must present the per-boot bridge
  *    key (x-api-key) that only the opencode-runner hands out — so another
  *    local process can't quietly burn subscription capacity through it.
@@ -74,6 +80,7 @@ import { audit, summarizeText } from "./audit";
 import { getAccountById, getUsableAccountById, type ClaudeAccount } from "./claude-accounts";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
 import { bridgePort, bridgeMaxRequestsPerHour, readOpencodeBridgeConfig } from "./opencode-config";
+import { piBridgeAccounts, readPiEngineConfig } from "./pi-config";
 import { mkdirSync } from "fs";
 
 const HOME = homeDir();
@@ -107,22 +114,27 @@ export interface BridgeInfo {
 
 /**
  * Start the bridge (idempotent) and return its URL + access key. Throws when
- * the config is missing/disabled or names no usable account — callers surface
- * that as a clear model-level error.
+ * no config designates serving accounts — callers surface that as a clear
+ * model-level error. Serves when EITHER opencode is enabled with
+ * bridgeAccountIds OR the pi engine is enabled with bridgeAccounts (see the
+ * containment doc — pickBridgeAccount applies the same precedence per
+ * request).
  */
 export function ensureAnthropicBridge(): BridgeInfo {
   const cfg = readOpencodeBridgeConfig();
-  if (!cfg?.enabled) {
+  const piCfg = readPiEngineConfig();
+  const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
+  const piIds = piCfg?.enabled ? piCfg.bridgeAccounts || [] : [];
+  if (!ocIds.length && !piIds.length) {
     throw new Error(
-      "The Anthropic bridge is disabled. opencode/anthropic/* models need ~/.opensession-opencode.json " +
-        'with {"enabled": true, "bridgeAccountIds": ["<claude-accounts id>"]} — or use an API-key ' +
-        "provider configured via `opencode auth login` instead."
-    );
-  }
-  if (!cfg.bridgeAccountIds?.length) {
-    throw new Error(
-      "The Anthropic bridge has no designated accounts: set bridgeAccountIds in ~/.opensession-opencode.json " +
-        "to the claude-accounts id(s) that may serve bridge traffic (the general pool is never used)."
+      cfg?.enabled || piCfg?.enabled
+        ? "The Anthropic bridge has no designated accounts: set bridgeAccountIds in " +
+          "~/.opensession-opencode.json (or, for pi runs, bridgeAccounts in ~/.opensession-pi.json) " +
+          "to the claude-accounts id(s) that may serve bridge traffic (the general pool is never used)."
+        : "The Anthropic bridge is disabled. Enable it in ~/.opensession-opencode.json " +
+          '({"enabled": true, "bridgeAccountIds": ["<claude-accounts id>"]}) or, for pi/anthropic/* ' +
+          'models, in ~/.opensession-pi.json ({"enabled": true, "bridgeAccounts": [...]}) — or use an ' +
+          "API-key provider configured via `opencode auth login` instead."
     );
   }
   const port = bridgePort();
@@ -144,11 +156,19 @@ export function ensureAnthropicBridge(): BridgeInfo {
   return { url: `http://127.0.0.1:${port}`, key: bridgeKey() };
 }
 
-/** Pick the first usable designated account (utilization-gated). */
+/** Pick the first usable designated account (utilization-gated). Opencode's
+ *  bridgeAccountIds list first; when it names none, pi's bridgeAccounts (both
+ *  gated on their own config's `enabled`). Never the general pool. */
 function pickBridgeAccount(model: string | undefined): ClaudeAccount | { error: string } {
   const cfg = readOpencodeBridgeConfig();
-  const ids = cfg?.bridgeAccountIds || [];
-  if (!cfg?.enabled || !ids.length) return { error: "bridge disabled or no bridgeAccountIds configured" };
+  const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
+  const ids = ocIds.length ? ocIds : piBridgeAccounts();
+  if (!ids.length) {
+    return {
+      error:
+        "bridge has no designated accounts (opencode bridgeAccountIds / pi bridgeAccounts both empty or disabled)",
+    };
+  }
   for (const id of ids) {
     const usable = getUsableAccountById(id, model);
     if (usable) return usable;

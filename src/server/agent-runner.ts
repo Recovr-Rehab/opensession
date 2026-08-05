@@ -1,12 +1,16 @@
 /**
  * Agent runner dispatcher: one entry point for "run a prompt in a session".
- * Everything executes on the opencode engine — native model ids (claude-*,
- * gpt-*) are mapped onto their opencode/<provider>/<model> form at dispatch;
- * the runner emits the shared StreamEvent shape.
+ * Almost everything executes on the opencode engine — native model ids
+ * (claude-*, gpt-*) are mapped onto their opencode/<provider>/<model> form at
+ * dispatch; explicit pi/<provider>/<model> ids dispatch to the in-process pi
+ * runner instead (config-gated, see pi-runner.ts). Both emit the shared
+ * StreamEvent shape, so everything downstream of runOnModel is engine-blind.
  *
  * Note on session ids: `sessionId` is the engine session id (an opencode
- * session id; the field names claudeSessionId/codexThreadId survive in
- * session state for on-disk compat with pre-single-engine sessions).
+ * session id, or a pi session uuid for pi runs; the field names
+ * claudeSessionId/codexThreadId survive in session state for on-disk compat
+ * with pre-single-engine sessions — pi runs journal their engine id in the
+ * claudeSessionId slot like every other engine).
  */
 
 import { journalClear, takeInterruptedRuns } from "./run-journal";
@@ -22,6 +26,17 @@ import {
   steerOpencodeRun,
   EMPTY_COMPLETION_RESULT,
 } from "./opencode-runner";
+// Static import is deliberate: the pi-runner module itself is cheap (the
+// heavy @earendil-works SDK import stays dynamic inside it, prewarmed only
+// when the engine is enabled), and the dispatchers below need its registry
+// checks on every busy/steer/cancel call.
+import {
+  runPi,
+  isPiSessionBusy,
+  steerPiRun,
+  cancelPiRun,
+  activePiRunCount,
+} from "./pi-runner";
 import {
   providerFor,
   nextFallbackModel,
@@ -197,14 +212,18 @@ export function __setEngineForTest(fn: EngineRunner | null): void {
   engineForTest = fn;
 }
 
-function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncGenerator<StreamEvent> {
-  // Single engine: map native ids (claude-*, gpt-*, codex-best-available)
-  // onto their opencode form; explicit opencode/<provider>/<model> ids pass
-  // through. Anything that still doesn't parse as an opencode id gets the
-  // runner's clear error (e.g. anthropic bridge disabled).
+function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncIterable<StreamEvent> {
+  // Engine dispatch: pi/<provider>/<model> ids run on the in-process pi
+  // runner; everything else maps onto the opencode engine — native ids
+  // (claude-*, gpt-*, codex-best-available) get their opencode form, explicit
+  // opencode/<provider>/<model> ids pass through. Anything that still doesn't
+  // parse as an engine id gets the runner's clear error (e.g. anthropic
+  // bridge disabled). The test seam stays FIRST, before the engine branch, so
+  // a fake engine intercepts both engines' turns (fake-engine.test.ts).
   const requested = model || getDefaultModel();
   const mapped = toOpencodeModel(requested) || requested;
   if (engineForTest) return engineForTest(opts, mapped);
+  if (requested.startsWith("pi/")) return runPi(opts, requested);
   return runOpencode(opts, mapped);
 }
 
@@ -399,8 +418,11 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
     let prompt = currentOpts.prompt;
     let handoffEntries: TranscriptEntry[] = [];
     if (crossProvider) {
-      // The engine session is always an opencode session id, so read the prior
-      // turn from OpenCode's store regardless of which model family produced it.
+      // Read the prior turn from the CURRENT engine's store: an opencode
+      // session id reads from OpenCode's store regardless of which model
+      // family produced it; a pi run's history is served from the owned
+      // transcript store via the "pi" branch (the id is a pi session uuid —
+      // the old hardcoded "opencode" arg would return nothing for it).
       // Gate on currentEngineId (present when resuming an existing session),
       // NOT on sawInit: an account pool that is dry *at pick time* throws
       // usageLimitExhausted BEFORE any init event, so sawInit stays false — yet
@@ -408,7 +430,11 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
       // Requiring sawInit here dropped that history and started the fallback
       // model on a blank session (the "history lost after fallback" bug).
       const entries = currentEngineId
-        ? await readEngineTranscriptAsync(currentOpts.cwd, currentEngineId, "opencode")
+        ? await readEngineTranscriptAsync(
+            currentOpts.cwd,
+            currentEngineId,
+            currentOc.startsWith("pi/") ? "pi" : "opencode"
+          )
         : [];
       handoffEntries = entries;
       if (entries.length) {
@@ -451,14 +477,22 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
 }
 
 /** Underlying engine provider family of a model id ("anthropic" / "openai"),
- *  read from its opencode mapping. Drives resume-vs-fresh on a fallback hop. */
+ *  read from its opencode mapping. Drives resume-vs-fresh on a fallback hop.
+ *  Families are ENGINE-scoped: a pi engine session can never be resumed by
+ *  opencode (or vice versa) even when both sides run the same upstream
+ *  provider, so pi/<provider>/… reports "pi-<provider>" — a pi↔opencode hop
+ *  is always cross-family (fresh session + transcript handoff) while pi→pi
+ *  stays same-family and resumes its own session. */
 export function engineFamily(model: string): string {
+  const piFamily = model.match(/^pi\/([^/]+)\//)?.[1];
+  if (piFamily) return `pi-${piFamily}`;
   const oc = toOpencodeModel(model) || model;
   return oc.match(/^opencode\/([^/]+)\//)?.[1] || providerFor(model);
 }
 
 /** Map an engine family to the handoff note's provider label. */
-function familyLabel(family: string): "claude" | "codex" | "opencode" {
+function familyLabel(family: string): "claude" | "codex" | "opencode" | "pi" {
+  if (family.startsWith("pi-")) return "pi";
   if (family === "anthropic") return "claude";
   if (family === "openai") return "codex";
   return "opencode";
@@ -532,7 +566,12 @@ export function unmarkSessionStarting(id: string): void {
 export function isAgentSessionBusy(...ids: Array<string | null | undefined>): boolean {
   for (const id of ids) {
     if (!id) continue;
-    if (pendingStarts.has(id) || isOpencodeSessionBusy(id) || hostRunBusy(id))
+    if (
+      pendingStarts.has(id) ||
+      isOpencodeSessionBusy(id) ||
+      isPiSessionBusy(id) ||
+      hostRunBusy(id)
+    )
       return true;
   }
   return false;
@@ -544,12 +583,13 @@ export function isAgentSessionBusy(...ids: Array<string | null | undefined>): bo
  * not count external CLI/tmux runs — we can't drain those.)
  */
 export function activeAgentRunCount(): number {
-  return activeOpencodeRunCount();
+  return activeOpencodeRunCount() + activePiRunCount();
 }
 
 /** Of those, how many execute on a DETACHED engine server that survives a
  *  restart — the graceful-shutdown drain skips waiting on these (boot
- *  reattaches them via the journal instead). */
+ *  reattaches them via the journal instead). Pi runs are in-process and never
+ *  detach, so they contribute 0 here and the drain always waits on them. */
 export function activeDetachedAgentRunCount(): number {
   return activeDetachedOpencodeRunCount();
 }
@@ -557,7 +597,8 @@ export function activeDetachedAgentRunCount(): number {
 /**
  * Steer a message into an in-flight run. Opencode runs steer in-band since
  * 2026-07-12 (steerOpencodeRun: a noReply history append the running turn
- * picks up at its next step boundary — Claude-SDK-steer semantics);
+ * picks up at its next step boundary — Claude-SDK-steer semantics); pi runs
+ * steer natively (session.steer folds the message in at the next step);
  * host-forwarded runs steer over RPC. False = nothing steerable — caller
  * should queue.
  */
@@ -569,6 +610,7 @@ export function steerAgentRun(
   for (const id of ids) {
     if (!id) continue;
     if (steerOpencodeRun(id, text, images)) return true;
+    if (steerPiRun(id, text, images)) return true;
     // Host-forward RPC is text-only: a send with images falls through
     // (caller queues it — the queue drain delivers images).
     if (!images?.length && hostSteer(id, text)) return true;
@@ -620,6 +662,7 @@ export function cancelAgentRun(...ids: Array<string | null | undefined>): boolea
   for (const id of ids) {
     if (!id) continue;
     if (cancelOpencodeRun(id)) cancelled = true;
+    if (cancelPiRun(id)) cancelled = true;
     if (hostCancel(id)) cancelled = true;
   }
   return cancelled;

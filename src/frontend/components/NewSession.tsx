@@ -20,6 +20,7 @@ import {
   IconBox,
   IconFolderPlus,
   IconMap,
+  IconStack,
 } from "./icons";
 import type { WSServerMessage } from "../lib/types";
 import { VoiceInput } from "./VoiceInput";
@@ -286,6 +287,31 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       f.match.provider === effectiveModelProvider &&
       (!f.match.idPrefix || effectiveModelId.startsWith(f.match.idPrefix)),
   );
+  // Engine switcher (advanced): flips the selected model between execution
+  // engines while keeping the same underlying model when both serve it
+  // (opencode/anthropic/claude-opus-5 ⇄ pi/anthropic/claude-opus-5). Only
+  // rendered when a second engine is actually configured (pi models present
+  // in /api/models); legacy native ids dispatch on opencode, so they count
+  // as that engine here. The model menu still lists every engine's models —
+  // this is a quick toggle, not a filter.
+  const engineChoices = models.some((m) => m.provider === "pi")
+    ? (["opencode", "pi"] as const)
+    : null;
+  const currentEngine = effectiveModelProvider === "pi" ? "pi" : "opencode";
+  const engineLabel = (e: string) => (e === "pi" ? "Pi" : "OpenCode");
+  const switchEngine = (target: "opencode" | "pi") => {
+    if (target === currentEngine) return;
+    const tail = effectiveModelId.split("/").pop();
+    const candidates = models.filter((m) => m.provider === target);
+    const match =
+      candidates.find((m) => m.id.split("/").pop() === tail) ||
+      (target === "opencode" && candidates.some((m) => m.id === defaultModel)
+        ? candidates.find((m) => m.id === defaultModel)
+        : undefined) ||
+      candidates[0];
+    if (match) setModel(match.id);
+  };
+
   const sandboxModelWarning = (() => {
     if (!sandboxProvider || !modelFamily) return null;
     if (modelFamily.environments[sandboxProvider as "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm"]) return null;
@@ -1017,6 +1043,46 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                         );
                       },
                     )}
+                  </Menu.Group>
+                </Menu.Popup>
+              </Menu.Root>
+            )}
+            {/* Engine switcher rides with the other advanced controls; hidden
+                entirely unless a second engine is configured. */}
+            {engineChoices && optionsVisible && (
+              <Menu.Root>
+                <Tooltip label={`Engine — ${engineLabel(currentEngine)}`}>
+                  <Menu.Trigger
+                    type="button"
+                    className={`palette-icon-btn ${currentEngine === "pi" ? "is-on" : ""}`}
+                    disabled={creating}
+                    aria-label="Engine"
+                  >
+                    <IconStack size={20} />
+                  </Menu.Trigger>
+                </Tooltip>
+                <Menu.Popup align="start" sideOffset={6} className="max-w-[min(300px,calc(100vw-1rem))]">
+                  <Menu.Group>
+                    <Menu.GroupLabel className="pt-1.5">Engine</Menu.GroupLabel>
+                    {engineChoices.map((e) => {
+                      const selected = currentEngine === e;
+                      return (
+                        <Menu.Item key={e} onClick={() => switchEngine(e)} className="items-start">
+                          <IconCheck
+                            size={17}
+                            className={`mt-0.5 shrink-0 text-dim ${selected ? "" : "invisible"}`}
+                          />
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span>{engineLabel(e)}</span>
+                            <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
+                              {e === "pi"
+                                ? "pi.dev harness, in-process — native mid-turn steering"
+                                : "Default engine — server pools, sandboxes, detached runs"}
+                            </span>
+                          </span>
+                        </Menu.Item>
+                      );
+                    })}
                   </Menu.Group>
                 </Menu.Popup>
               </Menu.Root>

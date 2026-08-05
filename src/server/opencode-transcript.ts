@@ -309,6 +309,16 @@ export function recordBksSessionFor(ocSessionId: string, unifiedId: string): voi
   }
 }
 
+/** The unified session an engine session belongs to, per the persisted map —
+ *  the read side of recordBksSessionFor. Durable for the whole session
+ *  lifetime (runners record it before yielding init; nothing clears it on run
+ *  end), which is what makes it the resolution anchor for engine-id reads
+ *  that happen after the run journal was cleared — the fallback-hop pi
+ *  transcript read in sessions.ts. */
+export function bksSessionFor(ocSessionId: string | null | undefined): string | undefined {
+  return ocSessionId ? bksMap().get(ocSessionId) : undefined;
+}
+
 // ── v2 store-degraded flag (failure-side dirty marker, §8) ───────────────────
 //
 // With mirror writes retired there is no file growth to notice when a store

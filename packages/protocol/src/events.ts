@@ -126,7 +126,7 @@ export interface StreamEvent {
    */
   videos?: string[];
   /** Which backend emitted this event (set on init/done). */
-  provider?: "claude" | "codex" | "opencode";
+  provider?: "claude" | "codex" | "opencode" | "pi";
   /** Effective model for the run (set on init/done). */
   model?: string;
   /**

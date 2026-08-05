@@ -165,9 +165,13 @@ export interface UnifiedSession {
    *  session files from before this field may still carry a `ses_…` id in
    *  claudeSessionId — readers fall back on the id shape. */
   opencodeSessionId?: string;
+  /** Pi engine session id (the pi session header uuid), when this session has
+   *  run on a pi/* model. Own slot, no legacy mirror — nothing pre-pi ever
+   *  read a pi id, so there is no compat ride to keep. */
+  piSessionId?: string;
   /** Provider whose engine last drove a run — lets the next run detect an
    *  in-place cross-provider switch and bridge context. */
-  lastEngineProvider?: "claude" | "codex" | "opencode";
+  lastEngineProvider?: "claude" | "codex" | "opencode" | "pi";
   /** Model that last actually drove a run. Anthropic and OpenAI models both
    *  report provider "opencode", so provider alone can't detect a family
    *  switch (which lands on another server as a fresh engine session and
@@ -255,6 +259,11 @@ export interface SlackSessionFile {
   mode?: "conversational" | "worktree";
   model?: string;
   codexThreadId?: string | null;
+  /** Pi engine session id, written by agent-session-sync for pi/* runs (its
+   *  own slot — pi uuids are shape-indistinguishable from claude ids, so the
+   *  claude slot can't carry them unambiguously; a claude-slot mirror rides
+   *  along for the owning loop's resume path). */
+  piSessionId?: string | null;
 }
 
 // Linear session file format
@@ -271,6 +280,8 @@ export interface LinearSessionFile {
   lastActiveUser?: { id: string; name: string; email: string | null } | null;
   updatedAt?: string;
   model?: string;
+  /** Pi engine session id (see SlackSessionFile.piSessionId). */
+  piSessionId?: string | null;
 }
 
 // CLI session file format (~/.claude/sessions/*.json)
@@ -440,10 +451,11 @@ export interface NativeSessionFile {
   accountId?: string; // pinned Claude/Codex provider account; unset = auto pool
   codexThreadId?: string; // codex thread id once the session has run on a codex model
   opencodeSessionId?: string; // opencode session id (ses_…) once the session has run on an opencode/* model
+  piSessionId?: string; // pi engine session id (uuid) once the session has run on a pi/* model
   /** Provider whose engine last actually drove a run in this session. Lets the
    *  next run detect an in-place cross-provider switch (Claude↔Codex) and hand
    *  the incoming engine a transcript bridge so context carries over. */
-  lastEngineProvider?: "claude" | "codex" | "opencode";
+  lastEngineProvider?: "claude" | "codex" | "opencode" | "pi";
   lastEngineModel?: string; // model that last drove a run (family-switch detection)
   modelHistory?: Array<{ model: string; from?: string; at: string; by?: string }>;
   usage?: SessionUsage; // cumulative token/cost accounting for this session's runs

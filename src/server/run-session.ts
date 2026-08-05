@@ -574,16 +574,21 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 			(event.type === "init" || event.type === "done") &&
 			event.sessionId
 		) {
+			const provider =
+				event.provider || providerFor(event.model || session.model);
 			if (
-				syncAgentSessionEngine(session, {
-					engineSessionId: event.sessionId,
-				})
+				syncAgentSessionEngine(
+					session,
+					provider === "pi"
+						? { piSessionId: event.sessionId }
+						: { engineSessionId: event.sessionId },
+				)
 			)
 				invalidateSessionsCache();
 			if (session.worktreeDir)
 				attachSessionWatchersToEngineTranscript(
 					osSessionId,
-					event.provider || providerFor(event.model || session.model),
+					provider,
 					session.worktreeDir,
 					event.sessionId,
 				);
@@ -702,9 +707,10 @@ export function attachSessionWatchersToTranscript(
 
 export function attachSessionWatchersToEngineTranscript(
 	sessionId: string,
-	// "opencode" resolves to no transcript path (opencode keeps its own storage);
-	// those sessions stream through run events only, so this attaches nothing.
-	provider: "claude" | "codex" | "opencode",
+	// "opencode" and "pi" resolve to no transcript path (both keep their turns
+	// in the owned store); those sessions stream through run events only, so
+	// this attaches nothing for them.
+	provider: "claude" | "codex" | "opencode" | "pi",
 	cwd: string,
 	engineSessionId: string,
 	attempt = 0,
@@ -1524,14 +1530,24 @@ async function runSessionPromptInner(
 		pendingImportedEngineId ||
 		(provider === "codex"
 			? session.codexThreadId
-			: provider === "opencode"
-				? session.opencodeSessionId ||
+			: provider === "pi"
+				? // Slack/linear files sync pi ids into their piSessionId slot (with
+					// a claude-slot mirror for the owning loop) — fall back to a
+					// non-ses_ claude slot for files from before the pi slot existed.
+					// A genuine claude uuid riding there just misses the pi session
+					// dir and starts fresh, same as no id.
+					session.piSessionId ||
 					(isOpencodeSessionId(session.claudeSessionId)
-						? session.claudeSessionId
-						: undefined)
-				: isOpencodeSessionId(session.claudeSessionId)
-					? undefined
-					: session.claudeSessionId);
+						? undefined
+						: session.claudeSessionId || undefined)
+				: provider === "opencode"
+					? session.opencodeSessionId ||
+						(isOpencodeSessionId(session.claudeSessionId)
+							? session.claudeSessionId
+							: undefined)
+					: isOpencodeSessionId(session.claudeSessionId)
+						? undefined
+						: session.claudeSessionId);
 	// A claude session with no engine id yet is a *fresh* chat (e.g. a new sibling
 	// chat opened from the tab strip's +): its first prompt starts a new claude
 	// conversation, and finalSessionId is persisted below — same as codex, which
@@ -1588,21 +1604,36 @@ async function runSessionPromptInner(
 		const prevEngineId =
 			lastProvider === "codex"
 				? session.codexThreadId
-				: lastProvider === "opencode"
-					? session.opencodeSessionId ||
+				: lastProvider === "pi"
+					? // Same pi-slot + claude-slot fallback as the run-start arm above,
+						// so a pi→anything switch on a slack/linear session still finds
+						// the id to build its handoff from.
+						session.piSessionId ||
 						(isOpencodeSessionId(session.claudeSessionId)
-							? session.claudeSessionId
-							: undefined)
-					: isOpencodeSessionId(session.claudeSessionId)
-						? undefined
-						: session.claudeSessionId;
-		const prevEntries = prevEngineId
-			? await readEngineTranscriptAsync(
-					session.worktreeDir || defaultRepo().repo,
-					prevEngineId,
-					lastProvider,
-				)
-			: [];
+							? undefined
+							: session.claudeSessionId || undefined)
+					: lastProvider === "opencode"
+						? session.opencodeSessionId ||
+							(isOpencodeSessionId(session.claudeSessionId)
+								? session.claudeSessionId
+								: undefined)
+						: isOpencodeSessionId(session.claudeSessionId)
+							? undefined
+							: session.claudeSessionId;
+		// The pi read serves the owned transcript store, where THIS turn's
+		// prompt is already durably persisted (storeAppendUserLineEarly above) —
+		// drop it so the handoff describes history *before* the prompt, which
+		// follows below the note anyway (engine-handoff-transcript.ts filters
+		// the same way). No-op for engine-native reads, which predate the prompt.
+		const prevEntries = (
+			prevEngineId
+				? await readEngineTranscriptAsync(
+						session.worktreeDir || defaultRepo().repo,
+						prevEngineId,
+						lastProvider,
+					)
+				: []
+		).filter((e) => e.id !== promptEntryId);
 		if (prevEntries.length) {
 			switchHandoffEntries = prevEntries;
 			// Claude coming back to a thread it already ran (engineSessionId set)
@@ -1796,7 +1827,8 @@ async function runSessionPromptInner(
 		session.externalRefs?.length &&
 		!session.claudeSessionId &&
 		!session.opencodeSessionId &&
-		!session.codexThreadId
+		!session.codexThreadId &&
+		!session.piSessionId
 	) {
 		try {
 			const { externalRefsOpeningContext } = await import("./feeds");
@@ -1995,10 +2027,15 @@ async function runSessionPromptInner(
 						// id lives only in the run journal, the session file keeps
 						// pointing at the dead engine session (frozen transcript), and
 						// queued prompts fork the stale thread (slack-can-you-try,
-						// 2026-07-16).
-						syncAgentSessionEngine(session, {
-							engineSessionId: finalSessionId,
-						})
+						// 2026-07-16). Pi ids take their own patch slot: shape-ambiguous
+						// in the claude slot, the next turn's run-start arm couldn't
+						// tell them from a claude id and minted a fresh pi session.
+						syncAgentSessionEngine(
+							session,
+							effectiveProvider === "pi"
+								? { piSessionId: finalSessionId }
+								: { engineSessionId: finalSessionId },
+						)
 					) {
 						invalidateSessionsCache();
 					}
@@ -2218,9 +2255,12 @@ async function runSessionPromptInner(
 			},
 		);
 	} else if (finalSessionId) {
-		syncAgentSessionEngine(session, {
-			engineSessionId: finalSessionId,
-		});
+		syncAgentSessionEngine(
+			session,
+			effectiveProvider === "pi"
+				? { piSessionId: finalSessionId }
+				: { engineSessionId: finalSessionId },
+		);
 	}
 
 	// A terminal failure keeps the session in the "Needs input" bucket until a

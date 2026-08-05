@@ -7,7 +7,7 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
-import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, localProfileDefaultModel, localProfileModels, modelEfforts, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
+import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, localProfileDefaultModel, localProfileModels, modelEfforts, refreshOpencodePickerModels, refreshPiPickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
 import { type Sandbox } from "../sandbox";
 import { sandboxCapabilityStatus } from "../sandbox/config";
 import { suggestBranchName } from "../suggest-branch";
@@ -37,26 +37,29 @@ export async function handleModelsRoutes(
 				autoFallback: false,
 			});
 		}
-		// Re-fold the opencode entries from config on every fetch (cheap, tiny
-		// JSON read — same "read fresh" contract as /sandbox/status below) so a
-		// config flip like the Orchestrator opt-in shows up on the next picker
-		// open, not the next restart/settings-save.
+		// Re-fold the opencode + pi entries from config on every fetch (cheap,
+		// tiny JSON reads — same "read fresh" contract as /sandbox/status below)
+		// so a config flip like the Orchestrator opt-in or the pi enable shows
+		// up on the next picker open, not the next restart/settings-save.
 		refreshOpencodePickerModels();
-		// Single-engine core: the picker surfaces ONLY opencode models.
+		refreshPiPickerModels();
+		// Engine-prefixed core: the picker surfaces ONLY opencode + pi models.
 		// Native claude/codex ids stay resolvable + executable (the direct
 		// Slack/Linear/Plain agent loops still run them on the SDK), just
-		// not selectable here. Guard: with opencode not configured, fall
+		// not selectable here. Guard: with neither engine configured, fall
 		// back to the full registry so the picker is never empty.
-		const opencodeOnly = KNOWN_MODELS.filter((m) => m.provider === "opencode");
-		const opencodeConfigured = opencodeOnly.length > 0;
+		const engineModels = KNOWN_MODELS.filter(
+			(m) => m.provider === "opencode" || m.provider === "pi",
+		);
+		const engineConfigured = engineModels.length > 0;
 		return Response.json({
-			models: (opencodeConfigured ? opencodeOnly : KNOWN_MODELS).map((model) => ({
+			models: (engineConfigured ? engineModels : KNOWN_MODELS).map((model) => ({
 				...model,
 				efforts: modelEfforts(model.id),
 				accountProvider: accountProviderForModel(model.id),
 				fastModeSupported: supportsOpenaiFastMode(toOpencodeModel(model.id)),
 			})),
-			default: opencodeConfigured ? interactiveDefaultModel() : getDefaultModel(),
+			default: engineConfigured ? interactiveDefaultModel() : getDefaultModel(),
 			autoFallback: getModelFallbackAuto(),
 		});
 	}

@@ -57,7 +57,10 @@ export function isAutomationOwnedSession(
 /** Whether the shared run journal shows an in-flight run for this session. */
 export function sessionHasJournaledRun(
   sessionId: string,
-  data?: Pick<NativeSessionFile, "claudeSessionId" | "codexThreadId" | "opencodeSessionId">
+  data?: Pick<
+    NativeSessionFile,
+    "claudeSessionId" | "codexThreadId" | "opencodeSessionId" | "piSessionId"
+  >
 ): boolean {
   const engineIds = new Set(
     [
@@ -65,6 +68,7 @@ export function sessionHasJournaledRun(
       data?.claudeSessionId,
       data?.codexThreadId,
       data?.opencodeSessionId,
+      data?.piSessionId,
     ].filter(Boolean) as string[]
   );
   return journaledRuns().some(

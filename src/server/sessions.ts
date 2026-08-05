@@ -23,7 +23,9 @@ import {
   existingOpencodeTranscriptPath,
   isTranscriptStoreDegraded,
   clearTranscriptStoreDegraded,
+  bksSessionFor,
 } from "./opencode-transcript";
+import { activeRunRecords } from "./run-journal";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { prWorkspaceReader, sessionPrBranch } from "./session-pr-target";
 import { isLockHeld, readPrState, type LastReviewState } from "../agents/github/state";
@@ -89,7 +91,7 @@ export function getTranscriptPath(
 export function getEngineTranscriptPath(
   worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "opencode"
+  provider: "claude" | "codex" | "opencode" | "pi"
 ): string | null {
   if (provider === "codex") {
     return findCodexRollout(engineSessionId)?.path || null;
@@ -99,6 +101,10 @@ export function getEngineTranscriptPath(
   // and reload paths work unchanged. Null until the session's first persisted
   // run (the runner creates the file before yielding init).
   if (provider === "opencode") return existingOpencodeTranscriptPath(engineSessionId);
+  // Pi has no per-session file at all: the pi runner persists every turn
+  // straight into the owned transcript store (viewers stream over the store
+  // bus, readers go through readEngineTranscript's pi branch below).
+  if (provider === "pi") return null;
   return getTranscriptPath(worktreeDir, engineSessionId);
 }
 
@@ -112,23 +118,85 @@ export function getEngineTranscriptPath(
 export function readEngineTranscript(
   worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "opencode"
+  provider: "claude" | "codex" | "opencode" | "pi"
 ): TranscriptEntry[] {
   if (provider === "opencode") return readOpencodeTranscript(engineSessionId);
+  if (provider === "pi") return piStoreTranscript(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
   return path ? parseTranscript(path) : [];
 }
 
 /** readEngineTranscript with the file parse yielding to the event loop —
- *  identical output. The opencode SQLite read stays sync (bounded pages). */
+ *  identical output. The opencode SQLite read stays sync (bounded pages),
+ *  and so does the pi store read (same bounded store pages). */
 export async function readEngineTranscriptAsync(
   worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "opencode"
+  provider: "claude" | "codex" | "opencode" | "pi"
 ): Promise<TranscriptEntry[]> {
   if (provider === "opencode") return readOpencodeTranscript(engineSessionId);
+  if (provider === "pi") return piStoreTranscript(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
   return path ? parseTranscriptAsync(path) : [];
+}
+
+/**
+ * A pi engine session's transcript as entries. Pi has no engine-owned store
+ * to read (no jsonl, no SQLite) — the pi runner persists every turn into the
+ * owned transcript store under the UNIFIED session id. So this resolves the
+ * owning session from the pi engine id and serves its merged transcript
+ * (store-first, legacy merge fallback) — the same read
+ * engine-handoff-transcript.ts uses for fresh-engine recovery. Feeds the
+ * cross-engine handoff notes in the pi→anything direction; unresolvable ids
+ * return [] and the handoff degrades to the "partial work may exist" note.
+ *
+ * The main consumer is the mid-turn fallback hop (agent-runner), which can
+ * read while the 2s session cache still predates the init patch — or, once
+ * the dead run unwound, after runPi's finally already journal-cleared its
+ * record. So the owner resolves through sources in durability-at-read-time
+ * order:
+ *  1. the run journal — live for the whole turn (pi journals its engine id
+ *     in the claudeSessionId slot, legacy name, with the owning osSessionId);
+ *  2. the persisted pi→unified map (bksSessionFor — recorded before the
+ *     runner ever yields init, and never cleared on run end);
+ *  3. the session scan — the piSessionId slot, plus a claude-slot match for
+ *     slack/linear files whose pi id predates the pi slot there (equality on
+ *     the uuid can only mean this engine session; ses_/claude ids of other
+ *     sessions never collide with a pi uuid).
+ */
+function piStoreTranscript(piSessionId: string): TranscriptEntry[] {
+  if (!piSessionId) return [];
+  try {
+    // Call-time require, not a static import: session-cache imports this
+    // module (getAllSessions), so the static edge must stay one-directional.
+    // By the time a pi transcript is read the cache module is long-loaded —
+    // this is a module-cache hit (the importLegacyIntoStore pattern in
+    // opencode-transcript.ts).
+    const cacheMod = require("./session-cache") as typeof import("./session-cache");
+    const sessions = cacheMod.getCachedSessions();
+    const byUnifiedId = (unifiedId: string | undefined) =>
+      unifiedId
+        ? sessions.find(
+            (s) => s.id === unifiedId || s.aliasIds?.includes(unifiedId)
+          )
+        : undefined;
+    const journaled = activeRunRecords().find(
+      (r) => r.claudeSessionId === piSessionId && r.osSessionId
+    );
+    const owner =
+      byUnifiedId(journaled?.osSessionId) ??
+      byUnifiedId(bksSessionFor(piSessionId)) ??
+      sessions.find(
+        (s) => s.piSessionId === piSessionId || s.claudeSessionId === piSessionId
+      );
+    return owner ? mergedSessionTranscript(owner) : [];
+  } catch (e) {
+    console.warn(
+      `[sessions] pi transcript read failed for ${piSessionId}:`,
+      e instanceof Error ? e.message : e
+    );
+    return [];
+  }
 }
 
 /** What mergedSessionTranscript needs from a session. `id` (the unified
@@ -477,7 +545,7 @@ export function trailingUserTexts(session: {
 }
 
 export function engineSessionPatch(
-  provider: "claude" | "codex" | "opencode",
+  provider: "claude" | "codex" | "opencode" | "pi",
   engineSessionId: string
 ): Partial<NativeSessionFile> {
   if (provider === "codex") return { codexThreadId: engineSessionId || undefined };
@@ -492,6 +560,9 @@ export function engineSessionPatch(
       opencodeSessionId: engineSessionId || undefined,
       claudeSessionId: engineSessionId || undefined,
     };
+  // Pi gets its own slot with NO claude-slot mirror: the mirror exists only
+  // for pre-opencodeSessionId readers, and nothing pre-pi ever read a pi id.
+  if (provider === "pi") return { piSessionId: engineSessionId || undefined };
   return { claudeSessionId: engineSessionId || undefined };
 }
 
@@ -500,6 +571,7 @@ function sessionEngineKeys(session: UnifiedSession): string[] {
     session.claudeSessionId ? `claude:${session.claudeSessionId}` : null,
     session.codexThreadId ? `codex:${session.codexThreadId}` : null,
     session.opencodeSessionId ? `opencode:${session.opencodeSessionId}` : null,
+    session.piSessionId ? `pi:${session.piSessionId}` : null,
   ].filter((key): key is string => !!key);
 }
 
@@ -694,6 +766,10 @@ function scanSlackSessions(): UnifiedSession[] {
         : undefined,
       model: data.model,
       codexThreadId: data.codexThreadId || undefined,
+      // Written by agent-session-sync when a web-UI run on a pi/* model minted
+      // an engine session; without it every pi read falls to the claude-slot
+      // ride and the run-start arm can't resume the pi session.
+      piSessionId: data.piSessionId || undefined,
     }));
   }
   return sessions;
@@ -755,6 +831,8 @@ function scanLinearSessions(): UnifiedSession[] {
           }
         : undefined,
       model: data.model,
+      // Same pi-slot mapping as the slack scan (agent-session-sync writes it).
+      piSessionId: data.piSessionId || undefined,
     }));
   }
   return sessions;
@@ -817,6 +895,7 @@ function scanNativeSessions(): UnifiedSession[] {
       accountId: data.accountId,
       codexThreadId: data.codexThreadId,
       opencodeSessionId: data.opencodeSessionId,
+      piSessionId: data.piSessionId,
       lastEngineProvider: data.lastEngineProvider,
       lastEngineModel: data.lastEngineModel,
       modelHistory: data.modelHistory,

@@ -461,6 +461,42 @@ export async function handleSystemRoutes(
 		}
 	}
 
+	// Pi engine smoke turn: one scripted turn against a throwaway
+	// `os-test-pi-*` session through the in-process pi SDK runner, for
+	// post-restart verification (SDK turn → bridge → transcripts.db rows).
+	// Config-gated (~/.opensession-pi.json), not env-gated: with the engine
+	// disabled (or dryRun: true) this never touches the bridge or the SDK —
+	// it returns ok:false + reason (200), never a 500. Real turns are
+	// wall-capped at 120s by the harness (under Bun.serve's 240s idleTimeout),
+	// so the route can block for the result without hanging.
+	if (path === "/api/admin/pi-smoke" && req.method === "POST") {
+		let body: { dryRun?: unknown } = {};
+		try {
+			body = ((await req.json()) ?? {}) as typeof body;
+		} catch {
+			// empty/non-JSON body → defaults
+		}
+		const dryRun = body.dryRun === true;
+		const by = requestUser(ctx);
+		console.log(
+			`[pi-smoke] admin trigger${by ? ` by ${by}` : ""}${dryRun ? " (dry-run)" : ""}`,
+		);
+		try {
+			// Dynamic import: the pi runner's module graph (opencode-runner and
+			// friends) stays out of this hot route file; the heavy pi SDK import
+			// is itself dynamic inside the runner.
+			const { runPiSmokeTurn } = await import("../pi-runner");
+			const result = await runPiSmokeTurn({ dryRun, timeoutMs: 120_000 });
+			// Snippet, not the full turn output — this is a wiring probe.
+			return Response.json({ ...result, text: result.text.slice(0, 400) });
+		} catch (e) {
+			return Response.json(
+				{ ok: false, error: String((e as Error)?.message || e) },
+				{ status: 500 },
+			);
+		}
+	}
+
 	// Stream a large composer attachment straight to disk (base64-over-WS
 	// can't carry big files). Body is the raw file bytes; filename in the
 	// `x-file-name` header. Returns { name, path } the client echoes back in

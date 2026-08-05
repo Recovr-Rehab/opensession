@@ -59,6 +59,7 @@ export const ENGINE_LABELS: Record<string, string> = {
 	claude: "Claude",
 	codex: "Codex",
 	opencode: "OpenCode",
+	pi: "Pi",
 };
 
 /** De-emphasized group name for the native Claude-SDK/Codex entries that stick
@@ -66,19 +67,31 @@ export const ENGINE_LABELS: Record<string, string> = {
 export const LEGACY_GROUP_LABEL = "Legacy (direct SDK)";
 
 /**
- * OpenCode model ids are config-driven slugs shaped
- * `opencode/<provider>/<model>` (e.g. "opencode/anthropic/claude-sonnet-5").
- * Split one into its upstream provider + model so the UI never shows the raw
- * slashed id. Null for anything that isn't an opencode id.
+ * Engine model ids are config-driven slugs shaped
+ * `<engine>/<provider>/<model>` ("opencode/anthropic/claude-sonnet-5",
+ * "pi/anthropic/claude-opus-5"). Split one into a grouping provider + model
+ * slug so the UI never shows the raw slashed id. For opencode ids the
+ * grouping provider is the upstream segment (the engine is invisible); pi ids
+ * group under the ENGINE itself ("pi" → the "Pi" picker section) so they
+ * never mingle with the opencode rows serving the same upstream. Null for
+ * anything that isn't an engine-prefixed id.
  */
 export function opencodeModelParts(
 	id: string,
 ): { provider: string; model: string } | null {
-	if (!id.startsWith("opencode/")) return null;
-	const rest = id.slice("opencode/".length);
+	const engine = id.startsWith("opencode/")
+		? "opencode"
+		: id.startsWith("pi/")
+			? "pi"
+			: null;
+	if (!engine) return null;
+	const rest = id.slice(engine.length + 1);
 	const slash = rest.indexOf("/");
 	if (slash <= 0) return null;
-	return { provider: rest.slice(0, slash), model: rest.slice(slash + 1) };
+	return {
+		provider: engine === "pi" ? "pi" : rest.slice(0, slash),
+		model: rest.slice(slash + 1),
+	};
 }
 
 /** Pure slug prettifier: "claude-sonnet-5" → "Sonnet 5", "claude-haiku-4-5" →
@@ -122,6 +135,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 	orchestrator: "The Orchestrator",
 	anthropic: "Anthropic",
 	openai: "OpenAI",
+	pi: "Pi",
 	xai: "xAI",
 	meta: "Meta",
 	google: "Google",
@@ -135,7 +149,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 /** Section order in the grouped main list; unlisted providers follow in
  * config order. */
-const PROVIDER_ORDER = ["dial", "custom", "orchestrator", "anthropic", "openai", "cerebras", "xai", "meta", "moonshotai"];
+const PROVIDER_ORDER = ["dial", "custom", "orchestrator", "anthropic", "openai", "pi", "cerebras", "xai", "meta", "moonshotai"];
 
 /** Preferred display order for the opencode main list (by id tail); anything
  * unlisted keeps its registry/config order after these. */
@@ -163,10 +177,14 @@ const OPENCODE_TAIL_ORDER = [
 	"zai-glm-4.7",
 ];
 
+/** The engine providers whose entries form the first-class model list. */
+const ENGINE_PROVIDERS = new Set(["opencode", "pi"]);
+
 /**
- * Split the registry into the first-class opencode entries (sorted for
- * display) and the legacy native claude/codex ones. When opencode models are
- * configured they ARE the model list; natives tuck under LEGACY_GROUP_LABEL.
+ * Split the registry into the first-class engine entries (opencode + pi,
+ * sorted for display) and the legacy native claude/codex ones. When engine
+ * models are configured they ARE the model list; natives tuck under
+ * LEGACY_GROUP_LABEL.
  */
 export function splitModelOptions(models: ModelOption[]): {
 	opencode: ModelOption[];
@@ -177,11 +195,11 @@ export function splitModelOptions(models: ModelOption[]): {
 		return i === -1 ? OPENCODE_TAIL_ORDER.length : i;
 	};
 	const opencode = models
-		.filter((m) => m.provider === "opencode")
+		.filter((m) => ENGINE_PROVIDERS.has(m.provider))
 		.map((m, i) => [m, i] as const)
 		.sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
 		.map(([m]) => m);
-	return { opencode, legacy: models.filter((m) => m.provider !== "opencode") };
+	return { opencode, legacy: models.filter((m) => !ENGINE_PROVIDERS.has(m.provider)) };
 }
 
 type ModelMenuOption = {

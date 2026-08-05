@@ -26,11 +26,9 @@
     "website:dev": "bun --hot scripts/website-dev.ts"
   },
   "dependencies": {
-    "@tellahq/opensession-protocol": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.2.104",
     "@aws-sdk/client-lambda-microvms": "3.1090.0",
     "@base-ui/react": "^1.6.0",
-    "@lezer/highlight": "^1.2.3",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.0",
@@ -38,6 +36,8 @@
     "@codemirror/state": "^6.7.0",
     "@codemirror/view": "^6.43.4",
     "@daytonaio/sdk": "0.194.0",
+    "@earendil-works/pi-coding-agent": "^0.83.0",
+    "@lezer/highlight": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "^1.17.15",
     "@pierre/diffs": "1.3.2",
@@ -47,6 +47,7 @@
     "@shikijs/langs": "3.23.0",
     "@shikijs/themes": "3.23.0",
     "@team-plain/typescript-sdk": "^5.12.1",
+    "@tellahq/opensession-protocol": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "clsx": "^2.1.1",

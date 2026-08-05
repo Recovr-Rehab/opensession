@@ -1556,7 +1556,7 @@ export async function triggerPrActionApi(
 
 export interface ModelOption {
 	id: string;
-	provider: "claude" | "codex" | "opencode";
+	provider: "claude" | "codex" | "opencode" | "pi";
 	label: string;
 	aliases: string[];
 	efforts: string[];
@@ -1733,7 +1733,7 @@ export async function fetchConnections(): Promise<{
 export interface SandboxModelFamilyInfo {
 	id: string;
 	label: string;
-	match: { provider: "claude" | "codex" | "opencode"; idPrefix?: string };
+	match: { provider: "claude" | "codex" | "opencode" | "pi"; idPrefix?: string };
 	environments: Record<"local" | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm", boolean>;
 	hint?: string;
 }

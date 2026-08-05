@@ -17,8 +17,14 @@
  * Writes are surgical: only existing files are patched (never created), only
  * the engine-session fields are touched, and the shape matches what the
  * owners write (atomic JSON; slack/linear files carry the opencode id in the
- * claude slot). The slack loop's in-memory session is updated too so a thread
- * reply arriving before its next disk load doesn't resurrect the stale id.
+ * claude slot). Pi engine ids get their own `piSessionId` slot — pi uuids are
+ * shape-indistinguishable from claude ids, so the claude slot alone can't
+ * say which engine owns the id (the run-start arm in run-session resolved
+ * undefined and minted a fresh pi session every web-UI turn) — while a
+ * claude-slot mirror still rides along, because the owning loops' own resume
+ * paths read that slot (slack handlers pass session.claudeSessionId). The
+ * slack loop's in-memory session is updated too so a thread reply arriving
+ * before its next disk load doesn't resurrect the stale id.
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -37,6 +43,10 @@ const LINEAR_SESSION_DIR = statePath(".linear-sessions");
 
 export interface EngineSessionPatch {
 	engineSessionId?: string;
+	/** Pi engine session id — lands in the file's own piSessionId slot AND
+	 *  mirrors into the claude slot (see module doc). Callers pick this field
+	 *  over engineSessionId when the run's provider is "pi". */
+	piSessionId?: string;
 	model?: string;
 }
 
@@ -48,6 +58,16 @@ function patchFile(path: string, patch: EngineSessionPatch, activityField: strin
 		if (patch.engineSessionId && data.claudeSessionId !== patch.engineSessionId) {
 			data.claudeSessionId = patch.engineSessionId;
 			changed = true;
+		}
+		if (patch.piSessionId) {
+			if (data.piSessionId !== patch.piSessionId) {
+				data.piSessionId = patch.piSessionId;
+				changed = true;
+			}
+			if (data.claudeSessionId !== patch.piSessionId) {
+				data.claudeSessionId = patch.piSessionId;
+				changed = true;
+			}
 		}
 		if (patch.model && data.model !== patch.model) {
 			data.model = patch.model;
@@ -72,7 +92,7 @@ export function syncAgentSessionEngine(
 	session: Pick<UnifiedSession, "id" | "source" | "branch" | "slackThread">,
 	patch: EngineSessionPatch,
 ): boolean {
-	if (!patch.engineSessionId && !patch.model) return false;
+	if (!patch.engineSessionId && !patch.piSessionId && !patch.model) return false;
 
 	if (session.source === "slack") {
 		// Both file shapes exist: the key-named file the loop owns
@@ -95,6 +115,9 @@ export function syncAgentSessionEngine(
 			);
 			if (live) {
 				if (patch.engineSessionId) live.claudeSessionId = patch.engineSessionId;
+				// The loop's resume path reads claudeSessionId — the mirror is what
+				// keeps its next thread-driven turn on the fresh pi session.
+				if (patch.piSessionId) live.claudeSessionId = patch.piSessionId;
 				if (patch.model) live.model = patch.model;
 			}
 		}

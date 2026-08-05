@@ -148,9 +148,11 @@ function DefaultModelRow() {
 		setSaving(false);
 	}
 
-	// Opencode entries are the first-class list (friendly names, no engine
-	// noise); the native claude/codex entries stay selectable under
-	// de-emphasized legacy groups while the migration lands.
+	// Engine entries (opencode + pi) are the first-class list — opencode with
+	// friendly names and no engine noise, pi keeping its registry label ("Pi ·
+	// Claude Opus 5") so it never reads as a duplicate row in this flat select.
+	// The native claude/codex entries stay selectable under de-emphasized
+	// legacy groups while the migration lands.
 	const { opencode: opencodeModels, legacy } = splitModelOptions(models || []);
 	const claudeModels = legacy.filter((m) => m.provider === "claude");
 	const codexModels = legacy.filter((m) => m.provider === "codex");
@@ -176,7 +178,7 @@ function DefaultModelRow() {
 				>
 					{opencodeModels.map((m) => (
 						<option key={m.id} value={m.id}>
-							{shortModelLabel(m.id, models || [])}
+							{m.provider === "pi" ? m.label : shortModelLabel(m.id, models || [])}
 						</option>
 					))}
 					{claudeModels.length > 0 && (

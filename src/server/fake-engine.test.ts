@@ -12,7 +12,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
-import { __setEngineForTest, runAgent } from "./agent-runner";
+import { __setEngineForTest, engineFamily, runAgent } from "./agent-runner";
 import { __setActiveRunsPathForTest, activeRunRecords } from "./run-journal";
 import type { StreamEvent } from "./run-events";
 import { makeFakeEngine } from "./testing/fake-engine";
@@ -186,6 +186,43 @@ describe("fake engine through runAgent", () => {
 		expect(run?.transientFallback).toBe(true);
 		const switchEvent = events.find((event) => event.type === "model_switch");
 		expect(switchEvent?.temporaryFallback).toBe(true);
+	});
+
+	test("pi model ids reach the engine seam unmapped (no opencode rewrite)", async () => {
+		// The seam sits AFTER model mapping and BEFORE the pi/opencode branch,
+		// so this asserts both halves of the pi dispatch contract: toOpencodeModel
+		// leaves pi/<provider>/<model> ids untouched, and a fake engine still
+		// intercepts pi-model turns.
+		const fake = makeFakeEngine([
+			{ kind: "clean", engineSessionId: "0199fake-pi-session", text: ["pi hi"] },
+		]);
+		__setEngineForTest(fake.engine);
+		const events = await collect(
+			runAgent({
+				prompt: "pi turn",
+				cwd: "/tmp",
+				mcpServers: [],
+				model: "pi/anthropic/claude-opus-5",
+				fallbackModel: "none",
+			}),
+		);
+		expect(types(events)).toEqual(["init", "text_chunk", "done"]);
+		expect(fake.calls).toHaveLength(1);
+		expect(fake.calls[0].model).toBe("pi/anthropic/claude-opus-5");
+	});
+
+	test("engineFamily scopes pi ids to the pi engine (never resumable cross-engine)", () => {
+		// Same upstream provider, different engine ⇒ different family: a fallback
+		// hop pi→opencode must start fresh with a transcript handoff, never hand
+		// a pi session uuid to opencode as a resume target.
+		expect(engineFamily("pi/anthropic/claude-opus-5")).toBe("pi-anthropic");
+		expect(engineFamily("pi/anthropic/claude-opus-5")).not.toBe(
+			engineFamily("opencode/anthropic/claude-opus-5"),
+		);
+		// Pi→pi stays same-family, so a pi run CAN resume its own session.
+		expect(engineFamily("pi/anthropic/claude-sonnet-5")).toBe(
+			engineFamily("pi/anthropic/claude-opus-5"),
+		);
 	});
 
 	test("script exhaustion fails loud instead of hanging", async () => {

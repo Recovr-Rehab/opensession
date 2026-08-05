@@ -600,7 +600,7 @@ export interface SandboxModelFamily {
   /** First-match-wins rules (applied in SANDBOX_MODEL_FAMILIES order):
    *  the model's runner provider, plus an optional canonical-id prefix for
    *  the opencode/<provider>/ split. */
-  match: { provider: "claude" | "codex" | "opencode"; idPrefix?: string };
+  match: { provider: "claude" | "codex" | "opencode" | "pi"; idPrefix?: string };
   environments: Record<SandboxEnvironmentId, boolean>;
   /** Why the unsupported environments are unsupported (warning suffix). */
   hint?: string;
@@ -643,6 +643,16 @@ export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
     label: "OpenCode (other providers)",
     match: { provider: "opencode" },
     environments: { ...ALL_ENVIRONMENTS },
+  },
+  {
+    // The pi engine runs in-process on this host (per-turn SDK session with
+    // host-side bridge auth, pi-runner.ts) — nothing of it can be placed in a
+    // sandbox yet.
+    id: "pi",
+    label: "Pi",
+    match: { provider: "pi" },
+    environments: { local: true, docker: false, daytona: false, e2b: false, box: false, modal: false, microvm: false, "lambda-microvm": false },
+    hint: "the pi engine runs in-process on the host",
   },
   {
     // Native Codex runs need a writable CODEX_HOME (refresh-token rotation) —

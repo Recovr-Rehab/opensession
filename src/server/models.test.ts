@@ -26,6 +26,8 @@ import {
   localProfileModels,
   normalizeModelEffort,
   opencodeModelLabel,
+  piModelLabel,
+  providerFor,
   resolveConcreteModel,
   resolveModel,
   toOpencodeModel,
@@ -131,6 +133,56 @@ describe("toOpencodeModel", () => {
   it("maps claude tiers onto the single opencode engine", () => {
     expect(toOpencodeModel("claude-fable-5")).toBe(
       "opencode/anthropic/claude-fable-5",
+    );
+  });
+});
+
+describe("pi engine model routing", () => {
+  it("resolves explicit pi/<provider>/<model> ids to the pi provider", () => {
+    const m = resolveModel("pi/anthropic/claude-opus-5");
+    expect(m?.id).toBe("pi/anthropic/claude-opus-5");
+    expect(m?.provider).toBe("pi");
+    expect(resolveModel("PI/Anthropic/Claude-Opus-5")?.id).toBe(
+      "pi/anthropic/claude-opus-5"
+    );
+    expect(providerFor("pi/anthropic/claude-opus-5")).toBe("pi");
+  });
+
+  it("rejects truncated pi ids instead of minting a bogus opencode passthrough", () => {
+    expect(resolveModel("pi/anthropic")).toBeNull();
+    expect(resolveModel("pi/")).toBeNull();
+  });
+
+  it("never maps pi ids onto the opencode engine", () => {
+    expect(toOpencodeModel("pi/anthropic/claude-opus-5")).toBe(
+      "pi/anthropic/claude-opus-5"
+    );
+  });
+
+  it("draws pi/anthropic from the claude account pool (the bridge's pool)", () => {
+    expect(accountProviderForModel("pi/anthropic/claude-opus-5")).toBe("claude");
+  });
+
+  it("exposes the anthropic effort variants on pi/anthropic ids", () => {
+    expect(modelEfforts("pi/anthropic/claude-opus-5")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(modelEfforts("pi/anthropic/claude-haiku-4-5")).toEqual(["high", "max"]);
+    expect(normalizeModelEffort("pi/anthropic/claude-haiku-4-5", "low")).toBe("high");
+  });
+
+  it("labels pi ids with the engine kept visible", () => {
+    expect(piModelLabel("pi/anthropic/claude-opus-5")).toBe("Pi · Claude Opus 5");
+    expect(piModelLabel("pi/anthropic/claude-sonnet-6")).toBe("Pi · Sonnet 6");
+  });
+
+  it("tiers pi ids by their native model for the fallback walk", () => {
+    expect(fallbackTier("pi/anthropic/claude-opus-5")).toBe(
+      fallbackTier("claude-opus-5")
     );
   });
 });

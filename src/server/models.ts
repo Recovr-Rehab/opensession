@@ -11,6 +11,12 @@
  * gpt-*) stay RESOLVABLE (resolveModel prefix passthrough) for stored session
  * state, env vars and provider bookkeeping — agent-runner maps them onto
  * their opencode form at dispatch.
+ *
+ * Second engine (opt-in): explicit `pi/<provider>/<model>` ids run on the pi
+ * runner (pi-runner.ts) instead — they resolve to provider "pi", never map
+ * onto opencode (toOpencodeModel passes them through), and surface in the
+ * picker only via ~/.opensession-pi.json (refreshPiPickerModels). Nothing
+ * defaults to pi.
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -22,11 +28,12 @@ import {
   opencodeProviders,
   BRIDGE_PROVIDER_IDS,
 } from "./opencode-config";
+import { piPickerModels } from "./pi-config";
 import { stateDir } from "./paths";
 import { isLocalProfile, localProfileRoot } from "./profile";
 import { discoverLocalEngineCredentials } from "./local-engine-auth";
 
-export type Provider = "claude" | "codex" | "opencode";
+export type Provider = "claude" | "codex" | "opencode" | "pi";
 
 export interface ModelInfo {
   id: string;
@@ -51,7 +58,9 @@ const CLAUDE_EFFORTS: SessionEffort[] = ["low", "medium", "high", "xhigh", "max"
  * `opencode models <provider> --verbose`; the selected value is sent verbatim
  * as the prompt's `variant`. */
 export function modelEfforts(model: string): SessionEffort[] {
-  const id = model.replace(/^opencode\//, "");
+  // Pi ids expose the same variants as their opencode siblings: our effort
+  // levels map 1:1 onto pi's ThinkingLevel (pi-runner.ts).
+  const id = model.replace(/^(?:opencode|pi)\//, "");
   const slash = id.indexOf("/");
   const provider =
     slash === -1
@@ -471,6 +480,20 @@ export function opencodeModelLabel(id: string): string {
   return base.replace(/^Claude\s+/i, "").replace(/\s*\(Codex\)$/i, "");
 }
 
+/**
+ * Friendly label for a pi/<provider>/<model> id. Unlike opencode (an
+ * implementation detail hidden from names), the engine prefix is kept — "Pi ·
+ * Claude Opus 5" — so a pi entry never reads as a duplicate of the
+ * opencode-served model beside it in flat lists (/model output, Settings).
+ */
+export function piModelLabel(id: string): string {
+  const tail = id.split("/").pop() || id;
+  const native = KNOWN_MODELS.find(
+    (m) => m.provider !== "opencode" && m.provider !== "pi" && m.id === tail
+  );
+  return `Pi · ${native?.label || prettifyModelSlug(tail)}`;
+}
+
 /** The models a session can actually select — the same live set the picker and
  *  GET /api/models expose (the opencode-provider entries, refreshed from
  *  opencode's picker; the full registry as a fallback when opencode isn't
@@ -553,6 +576,32 @@ export function refreshOpencodePickerModels(): void {
   } catch {}
 }
 refreshOpencodePickerModels();
+
+// Pi engine models are the same opt-in shape: `pickerModels` from
+// ~/.opensession-pi.json surface in the UI picker only while the engine is
+// enabled (piPickerModels returns [] otherwise); any other well-formed
+// pi/<provider>/<model> id still resolves via resolveModel's pi/ branch, it's
+// just not advertised. Folded at module load and re-folded from GET
+// /api/models, next to the opencode refresh.
+export function refreshPiPickerModels(): void {
+  for (let i = KNOWN_MODELS.length - 1; i >= 0; i--) {
+    if (KNOWN_MODELS[i].provider === "pi") KNOWN_MODELS.splice(i, 1);
+  }
+  try {
+    for (const id of piPickerModels()) {
+      // v1 serves only pi/anthropic/* (the loopback Anthropic bridge); other
+      // providers would just error at run start, so they stay unadvertised.
+      if (!id.startsWith("pi/anthropic/")) continue;
+      KNOWN_MODELS.push({
+        id,
+        provider: "pi",
+        label: piModelLabel(id),
+        aliases: [],
+      });
+    }
+  } catch {}
+}
+refreshPiPickerModels();
 
 /** Per-provider defaults: claude-fable-5 for Anthropic, gpt-5.6-sol for OpenAI. */
 export const DEFAULT_CLAUDE_MODEL = "claude-fable-5";
@@ -873,6 +922,11 @@ function toOpencodeModelRaw(model?: string | null): string | undefined {
   const m = (model || "").trim();
   if (!m) return model ?? undefined;
   if (m.startsWith("opencode/")) return m;
+  // Pi engine ids never map onto opencode — the dispatcher routes pi/ models
+  // to the pi runner; passing them through untouched keeps the shared
+  // bookkeeping (accountProviderForModel, the fallback walk) working on them
+  // instead of minting a bogus opencode/pi/… id below.
+  if (m.startsWith("pi/")) return m;
   // Dial/orchestrator presets resolve to their MAIN model here; the preset id
   // itself stays on the session (and in opts.model) so the runner can wire the
   // oracle / workers.
@@ -908,7 +962,9 @@ export function accountProviderForModel(
 ): AccountProvider | undefined {
   const requested = model || interactiveDefaultModel();
   const resolved = toOpencodeModel(requested) || requested;
-  const upstream = resolved.match(/^opencode\/([^/]+)\//)?.[1];
+  // pi/anthropic/* draws from the same claude pool as opencode/anthropic —
+  // the pi runner's loopback bridge picks from the designated claude accounts.
+  const upstream = resolved.match(/^(?:opencode|pi)\/([^/]+)\//)?.[1];
   if (upstream === "anthropic" || resolved.startsWith("claude-")) return "claude";
   if (upstream === "openai" || resolved.startsWith("gpt-") || resolved.startsWith("codex-")) {
     return "codex";
@@ -933,11 +989,11 @@ export function interactiveDefaultModel(): string {
   return toOpencodeModel(getDefaultModel()) || getDefaultModel();
 }
 
-/** Strip the opencode engine prefix so a mapped id ("opencode/openai/gpt-5.6-sol")
- *  resolves to its native key ("gpt-5.6-sol") for tier lookup. Native ids pass
- *  through unchanged. */
+/** Strip the engine prefix so a mapped id ("opencode/openai/gpt-5.6-sol",
+ *  "pi/anthropic/claude-opus-5") resolves to its native key for tier lookup.
+ *  Native ids pass through unchanged. */
 function nativeModelId(id: string | undefined | null): string {
-  return (id || "").replace(/^opencode\/[^/]+\//, "");
+  return (id || "").replace(/^(?:opencode|pi)\/[^/]+\//, "");
 }
 
 /** Routing tier for a model id (native or opencode-mapped). Unlisted → 1. */
@@ -1065,6 +1121,15 @@ export function resolveModel(input: string): ModelInfo | null {
   if (s.startsWith("opencode/") && s.slice("opencode/".length).includes("/")) {
     return { id: s, provider: "opencode", label: s, aliases: [] };
   }
+  // Pi engine: explicit pi/<provider>/<model> ids pass through — the only way
+  // a session lands on the pi runner (nothing defaults to it). A truncated
+  // "pi/foo" is rejected outright rather than falling into the generic slash
+  // passthrough below, which would mint a bogus opencode/pi/… id.
+  if (s.startsWith("pi/")) {
+    return s.slice("pi/".length).includes("/")
+      ? { id: s, provider: "pi", label: s, aliases: [] }
+      : null;
+  }
   // A bare "<provider>/<model>" (e.g. "openai/gpt-5.6-sol", "anthropic/claude-…")
   // is an opencode engine id written without the engine prefix — a shape a
   // workflow's agent({model}) override can easily use. Normalize it to the
@@ -1087,8 +1152,9 @@ export function modelLabel(model?: string | null): string {
   const id = model || getDefaultModel();
   const known = KNOWN_MODELS.find((m) => m.id === id)?.label;
   if (known) return known;
-  // Non-picker opencode ids still deserve a friendly name, not a slashed slug.
+  // Non-picker opencode/pi ids still deserve a friendly name, not a slashed slug.
   if (id.startsWith("opencode/")) return opencodeModelLabel(id);
+  if (id.startsWith("pi/")) return piModelLabel(id);
   return id;
 }
 
