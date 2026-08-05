@@ -65,7 +65,15 @@ struct NewSessionView: View {
             .frame(minWidth: 560, minHeight: 440)
             #endif
             .toolbar {
+                #if os(iOS)
+                // The send disc carries its own filled circle, so the toolbar's
+                // glass capsule around it read as a white ring on the black
+                // accent. Cancel keeps the glass — it's a bare glyph.
                 ToolbarItem(placement: .confirmationAction) { startButton }
+                    .sharedBackgroundVisibility(.hidden)
+                #else
+                ToolbarItem(placement: .confirmationAction) { startButton }
+                #endif
                 ToolbarItem(placement: .cancellationAction) { cancelButton }
             }
             .task { await load() }
