@@ -491,7 +491,7 @@ enum OS1API {
             }
             return .rejected(message)
         } catch {
-            return .unavailable(error.localizedDescription)
+            return .unavailable(await Reachability.describe(error))
         }
     }
 
