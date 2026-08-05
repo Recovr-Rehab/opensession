@@ -1394,9 +1394,16 @@ private struct SessionInputBar: View {
         #endif
     }
 
+    /// Messages this app is still holding for the server. Read here, in the
+    /// input bar, rather than in `SessionView.body` — an outbox change must
+    /// not re-evaluate the whole transcript.
+    private var unsentItems: [Outbox.Item] {
+        viewModel.outbox.items(for: viewModel.session.id)
+    }
+
     private var hasQueueItems: Bool {
         !viewModel.deliveringItems.isEmpty || !viewModel.steeredItems.isEmpty
-            || !viewModel.queuedItems.isEmpty
+            || !viewModel.queuedItems.isEmpty || !unsentItems.isEmpty
     }
 
     private var visibleNotice: String? {
@@ -1417,18 +1424,32 @@ private struct SessionInputBar: View {
                 .foregroundStyle(OS1VisualStyle.textFaint)
 
             ForEach(viewModel.deliveringItems) { item in
-                QueuedMessageRow(item: item, phase: .delivering)
+                QueuedMessageRow(content: item.content, phase: .delivering)
             }
             ForEach(viewModel.steeredItems) { item in
-                QueuedMessageRow(item: item, phase: .steering)
+                QueuedMessageRow(content: item.content, phase: .steering)
             }
             ForEach(viewModel.queuedItems) { item in
                 QueuedMessageRow(
-                    item: item,
+                    content: item.content,
                     phase: .queued,
                     onSteer: viewModel.isRunning
                         ? { viewModel.steerQueued(item) } : nil,
                     onDelete: { viewModel.deleteQueued(item) }
+                )
+            }
+            // Still ours: written, saved, not yet acknowledged by the server.
+            // These sit last because they're the furthest from the transcript.
+            ForEach(unsentItems) { item in
+                QueuedMessageRow(
+                    content: item.content,
+                    phase: item.failed ? .failed : .unsent,
+                    detail: item.failed
+                        ? item.lastError
+                        : (viewModel.outbox.sendingId == item.id ? "Sending…" : nil),
+                    onRetry: item.failed
+                        ? { viewModel.outbox.retry(id: item.id) } : nil,
+                    onDelete: { viewModel.outbox.delete(id: item.id) }
                 )
             }
         }
@@ -1462,13 +1483,17 @@ private struct SessionInputBar: View {
     private var queueTitle: String {
         let queued = viewModel.queuedItems.count
         let inFlight = viewModel.steeredItems.count + viewModel.deliveringItems.count
-        if queued == 0 {
-            return "\(inFlight) in flight"
+        let unsent = unsentItems.count
+        // Unsent leads: "waiting on your connection" is the more urgent fact,
+        // and it's the one the person can act on.
+        if unsent > 0 && queued == 0 && inFlight == 0 {
+            return "\(unsent) unsent \(unsent == 1 ? "message" : "messages")"
         }
-        if inFlight == 0 {
-            return "\(queued) queued \(queued == 1 ? "message" : "messages")"
-        }
-        return "\(queued) queued · \(inFlight) in flight"
+        var parts: [String] = []
+        if queued > 0 { parts.append("\(queued) queued") }
+        if inFlight > 0 { parts.append("\(inFlight) in flight") }
+        if unsent > 0 { parts.append("\(unsent) unsent") }
+        return parts.joined(separator: " · ")
     }
 
     /// The message composer mirrors the web input: draft above, controls on a
@@ -1782,17 +1807,22 @@ private struct SessionInputBar: View {
 
     // MARK: - Queue rows
 
-    /// One message waiting on the current run. "Queued" holds until the run
-    /// fully finishes; "Steering" is already committed to deliver at the
-    /// run's next turn boundary (a receipt — no actions left to take);
-    /// "Delivering" has left the server queue and is waiting on its
-    /// transcript echo (~1s file watcher) — inert, just kept visible.
+    /// One message that isn't in the transcript yet. "Unsent" hasn't reached
+    /// the server at all (no signal, or it's still being retried) and is held
+    /// on disk until it does; "Undelivered" is one the server refused, waiting
+    /// on the person. "Queued" holds until the run fully finishes; "Steering"
+    /// is already committed to deliver at the run's next turn boundary (a
+    /// receipt — no actions left to take); "Delivering" has left the server
+    /// queue and is waiting on its transcript echo (~1s file watcher) — inert,
+    /// just kept visible.
     private struct QueuedMessageRow: View {
-        enum Phase { case queued, steering, delivering }
+        enum Phase { case queued, steering, delivering, unsent, failed }
 
-        let item: QueueItem
+        let content: String
         let phase: Phase
+        var detail: String?
         var onSteer: (() -> Void)?
+        var onRetry: (() -> Void)?
         var onDelete: (() -> Void)?
 
         private var label: String {
@@ -1800,16 +1830,32 @@ private struct SessionInputBar: View {
             case .queued: "Queued — after this run"
             case .steering: "Steering — delivers next turn"
             case .delivering: "Delivering…"
+            case .unsent: detail ?? "Unsent — sends when you're back online"
+            case .failed: detail ?? "Couldn't send"
+            }
+        }
+
+        private var labelColor: Color {
+            switch phase {
+            case .queued, .unsent: .orange
+            case .failed: .red
+            case .steering, .delivering: .green
             }
         }
 
         var body: some View {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(phase == .queued ? Color.orange : Color.green)
-                    Text(item.content)
+                    HStack(spacing: 4) {
+                        if phase == .unsent {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                        }
+                        Text(label)
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(labelColor)
+                    Text(content)
                         .font(.footnote)
                         .lineLimit(2)
                         .foregroundStyle(.secondary)
@@ -1822,12 +1868,20 @@ private struct SessionInputBar: View {
                         .buttonBorderShape(.capsule)
                         .controlSize(.small)
                 }
+                if let onRetry {
+                    Button("Retry", action: onRetry)
+                        .font(.footnote.weight(.medium))
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                }
                 if let onDelete {
                     Button(action: onDelete) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.tertiary)
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("Discard message")
                 }
             }
             .padding(.horizontal, 10)

@@ -14,6 +14,7 @@
  * A future autonomous monitor (src/agents/loops) can call the same
  * getSessionControl() surface directly, no MCP involved.
  */
+import type { ImageInput } from "./run-events";
 import type { UnifiedSession, TranscriptEntry } from "./types";
 
 /**
@@ -110,6 +111,10 @@ export interface SessionControl {
    * `opts.slackReplyTo` marks the message as coming from a Slack thread — the
    * answering turn's reply is mirrored back into that thread (rides the queue,
    * so it survives a busy run and a restart).
+   * `opts.images` carries composer attachments on every branch (steer folds
+   * them into the live run, the queue stores their data URLs, an idle send
+   * passes them to the fresh turn) — that's what lets a REST caller match the
+   * WebSocket composer instead of silently dropping the pictures.
    */
   deliverToSession(
     id: string,
@@ -118,6 +123,16 @@ export interface SessionControl {
     opts?: {
       busy?: "steer" | "queue";
       slackReplyTo?: { channel: string; threadTs: string };
+      /** Decoded images for the run/steer path. */
+      images?: ImageInput[];
+      /** The same images as `data:` URLs, for the queue's stored copy. */
+      imageUrls?: string[];
+      /**
+       * Hold a queued message until the agent FULLY completes (child workers
+       * included) instead of delivering at the next drain point — the web and
+       * native composers' "queue" semantics.
+       */
+      hold?: boolean;
     },
   ): Promise<DeliverResult>;
   /** Cancel a session's in-flight run (only runs this process owns). */

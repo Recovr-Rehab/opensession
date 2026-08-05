@@ -113,6 +113,9 @@ final class SessionViewModel {
     private var socket: (any SessionSocket)?
     /// Injection seam for tests; production always builds a real OS1Socket.
     private let socketFactory: @MainActor () -> any SessionSocket
+    /// Where sends go. Messages live here — on disk — until the server
+    /// acknowledges them, so nothing is lost to a dead socket or no signal.
+    let outbox: Outbox
     private var reconnectTask: Task<Void, Never>?
     /// Multiple views can briefly overlap during a reversed tab transition.
     /// The connection stays alive until the last mounted view releases it.
@@ -280,10 +283,12 @@ final class SessionViewModel {
         session: Session,
         seed: OptimisticSeed? = nil,
         composerDraft: ComposerDraft? = nil,
-        socketFactory: @escaping @MainActor () -> any SessionSocket = { OS1Socket() }
+        socketFactory: @escaping @MainActor () -> any SessionSocket = { OS1Socket() },
+        outbox: Outbox = .shared
     ) {
         self.session = session
         self.socketFactory = socketFactory
+        self.outbox = outbox
         self.isRunning = session.isRunning ?? false
         self.queuedCount = session.queuedCount ?? 0
         self.model = session.model ?? ""
@@ -351,6 +356,13 @@ final class SessionViewModel {
 
     private func startConnection() {
         stopped = false
+        // While this conversation is on screen it shows its own deliveries;
+        // a closed session needs no observer (reopening it resyncs from the
+        // server, which by then holds the message).
+        outbox.observe(sessionId: session.id) { [weak self] item, delivery in
+            self?.acceptDelivery(item, delivery)
+        }
+        outbox.poke()
         connect()
         loadPr()
         loadNotes()
@@ -368,6 +380,7 @@ final class SessionViewModel {
 
     private func stopConnection() {
         stopped = true
+        outbox.stopObserving(sessionId: session.id)
         reconnectTask?.cancel()
         resyncProbeTask?.cancel()
         creationRetryTask?.cancel()
@@ -429,6 +442,9 @@ final class SessionViewModel {
     /// down and reconnect immediately.
     func appDidBecomeActive() {
         guard !stopped else { return }
+        // Coming back is the most likely moment for "we have signal again".
+        outbox.clearBackoff()
+        outbox.poke()
         loadPr()
         guard connectionState == .connected, let socket else {
             // Not connected (or a pre-suspension connect is stuck mid
@@ -454,14 +470,21 @@ final class SessionViewModel {
         }
     }
 
+    /// Nothing here asks whether we're connected: an offline send is held in
+    /// the outbox and delivered when the server is reachable again. Disabling
+    /// the button was how messages used to be lost — you'd type, tap a dead
+    /// button (or hit a socket that only LOOKED alive), and the text vanished.
     var canSend: Bool {
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        // A note is plain text over REST — no socket needed, and no image
-        // path behind it (the composer's picker rows hide in note mode).
+        // A note is plain text over REST — and no image path behind it (the
+        // composer's picker rows hide in note mode).
         if noteMode { return hasText }
-        return (hasText || !attachedImages.isEmpty) && connectionState == .connected
+        return hasText || !attachedImages.isEmpty
     }
 
+    /// Hand the draft to the outbox. It's on disk before the composer clears,
+    /// and it stays there until the server says it has it — so a send made in
+    /// a tunnel arrives when the signal does, in the order it was written.
     func sendDraft(busyModeOverride: String? = nil) {
         if noteMode {
             postNote()
@@ -469,51 +492,64 @@ final class SessionViewModel {
         }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = attachedImages.map(\.dataURL)
-        guard !text.isEmpty || !images.isEmpty, let socket else { return }
+        guard !text.isEmpty || !images.isEmpty else { return }
+        let busyMode = busyModeOverride
+            ?? UserDefaults.standard.string(forKey: "os1.composer.busySend")
+            ?? "queue"
+        guard outbox.enqueue(
+            sessionId: session.id,
+            content: text,
+            images: images,
+            effort: effort.isEmpty ? nil : effort,
+            fastMode: fastMode ? true : nil,
+            busyMode: busyMode,
+            user: ServerConfig.shared.userName
+        ) != nil else {
+            // Full: keep the draft where it is rather than swallowing it.
+            notice = "Too many unsent messages — send or delete some first."
+            return
+        }
         // You can't be done with a chat you're actively working in: prompting
         // clears any sidebar hide covering it (opening it deliberately doesn't).
         HideStore.shared.unhide(for: session)
         draft = ""
         attachedImages = []
-        let busyMode = busyModeOverride
-            ?? UserDefaults.standard.string(forKey: "os1.composer.busySend")
-            ?? "queue"
-        if isRunning {
-            // A send during a run is held server-side (busyMode "queue") and
-            // only enters the transcript when the queue delivers it after the
-            // run — echoing it into the thread now would strand a bubble out
-            // of chronological order. Echo it as a queue chip instead; the
-            // server's next queue_update replaces this local copy.
-            let item = QueueItem(
-                id: "local-queued-\(UUID().uuidString)",
-                content: text,
-                user: ServerConfig.shared.userName
+        sendSeq += 1
+    }
+
+    /// The server took a message: put it where the server says it went. This
+    /// replaces the old guess from local `isRunning` — a client that has been
+    /// offline has no idea whether a run started meanwhile, and a bubble in
+    /// the wrong place blinks out at the next resync.
+    private func acceptDelivery(_ item: Outbox.Item, _ delivery: Outbox.Delivery) {
+        switch delivery.status {
+        case "queued", "steered":
+            // Held server-side; it enters the transcript when the queue
+            // delivers it. Show the chip the queue_update will replace.
+            let chip = QueueItem(
+                id: "local-queued-\(item.id)",
+                content: item.content,
+                user: item.user
             )
-            if busyMode == "steer" { steeredItems.append(item) }
-            else { queuedItems.append(item) }
+            if delivery.status == "steered" { steeredItems.append(chip) }
+            else { queuedItems.append(chip) }
             queuedCount = queuedItems.count
-        } else {
-            let localId = "local-\(UUID().uuidString)"
+        case "handled":
+            // A slash command (/model, /goal …) — the server's answer is the
+            // whole result; nothing enters the transcript.
+            if !delivery.message.isEmpty { notice = delivery.message }
+        default:
+            let localId = "local-\(item.id)"
             localEchoIds.insert(localId)
             entries.append(TranscriptEntry(
                 id: localId,
                 type: "user",
-                content: text,
+                content: item.content,
                 timestamp: ISO8601DateFormatter().string(from: .now),
-                images: images.isEmpty ? nil : images
+                images: delivery.images.isEmpty ? nil : delivery.images
             ))
             rebuildDisplayItems()
         }
-        socket.prompt(
-            sessionId: session.id,
-            content: text,
-            user: ServerConfig.shared.userName,
-            images: images.isEmpty ? nil : images,
-            effort: effort.isEmpty ? nil : effort,
-            fastMode: fastMode ? true : nil,
-            busyMode: busyMode
-        )
-        sendSeq += 1
     }
 
     /// Post the draft as a team note on the session's chat channel. Notes are
@@ -525,7 +561,22 @@ final class SessionViewModel {
         guard !text.isEmpty else { return }
         draft = ""
         let sessionId = session.id
-        Task { try? await OS1API.postSessionNote(sessionId: sessionId, text: text) }
+        Task { [weak self] in
+            do {
+                try await OS1API.postSessionNote(sessionId: sessionId, text: text)
+            } catch {
+                guard let self else { return }
+                // A swallowed failure used to lose the note outright. Hand the
+                // text back when the composer is still free to take it.
+                if self.draft.isEmpty {
+                    self.draft = text
+                    self.noteMode = true
+                    self.notice = "Couldn't post the note — try again."
+                } else {
+                    self.notice = "Couldn't post the note."
+                }
+            }
+        }
         sendSeq += 1
     }
 
@@ -671,6 +722,11 @@ final class SessionViewModel {
             connectionState = .connected
             // Watch after the handshake frame so the send cannot race the upgrade.
             socket?.watch(sessionId: session.id)
+            // A completed handshake is proof the server is reachable — better
+            // evidence than any network path status, so anything waiting out a
+            // backoff goes now.
+            outbox.clearBackoff()
+            outbox.poke()
 
         case .transcriptInit(let id, let newEntries, let cursor) where id == session.id:
             creationRetryTask?.cancel()

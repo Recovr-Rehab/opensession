@@ -26,8 +26,18 @@ import {
 	getCachedSessions,
 	invalidateSessionsCache,
 	isLegacySideChat,
+	maybePersistEffort,
+	maybePersistFastMode,
 	runErrors,
 } from "../session-cache";
+import { asDataUrlList, parseImageDataUrls } from "../uploads";
+import { mentionedUsers } from "../chat";
+import { sendPushToUser } from "../push";
+import {
+	promptReceipt,
+	promptReceiptKey,
+	rememberPromptReceipt,
+} from "../prompt-receipts";
 import { searchIndex } from "../session-index";
 import { resolvePrTarget } from "../session-repos";
 import { destroySessionSandbox } from "../session-sandbox";
@@ -234,9 +244,16 @@ export async function handleSessionsRoutes(
 
 	// Deliver a follow-up prompt to an existing session. REST shape for the
 	// native/extension clients (os1-ios, os1-chrome) — the web UI keeps its
-	// richer WS "prompt" message (images, staged files, steer receipts). Same
-	// semantics as the opensession-sessions MCP send_to_session: steers a busy
-	// run by default, `busy: "queue"` waits behind it, idle starts a fresh turn.
+	// richer WS "prompt" message (staged file attachments, context chats).
+	// Same semantics as the opensession-sessions MCP send_to_session: steers a
+	// busy run by default, `busy: "queue"` waits behind it, idle starts a fresh
+	// turn.
+	//
+	// Unlike the WS frame this one ACKNOWLEDGES: the reply names where the
+	// message landed (started/steered/queued/handled), which is what lets the
+	// native outbox hold a send until the server has really taken it. Composer
+	// parity with the WS path — images, the effort/fast pills, @-mention
+	// pushes — lives here so a client can use this as its only send path.
 	{
 		const m = path.match(/^\/api\/sessions\/([^/]+)\/prompt$/);
 		if (m && req.method === "POST") {
@@ -246,6 +263,10 @@ export async function handleSessionsRoutes(
 				prompt?: unknown;
 				user?: unknown;
 				busy?: unknown;
+				images?: unknown;
+				effort?: unknown;
+				fastMode?: unknown;
+				clientId?: unknown;
 			} | null;
 			const raw =
 				typeof body?.content === "string" && body.content.trim()
@@ -254,17 +275,54 @@ export async function handleSessionsRoutes(
 						? body.prompt
 						: "";
 			const content = raw.trim();
-			if (!content) {
+			const images = parseImageDataUrls(body?.images);
+			const imageUrls = asDataUrlList(body?.images);
+			// An image-only send is a real message — only reject an empty one.
+			if (!content && !images?.length) {
 				return Response.json({ error: "content required" }, { status: 400 });
 			}
-			// No findSession pre-check: the 2s session cache can lag a
-			// just-created session, and deliverToSession resolves the id (and
-			// reports unknown ids) itself.
+			const clientId =
+				typeof body?.clientId === "string" && body.clientId.trim()
+					? body.clientId.trim().slice(0, 200)
+					: undefined;
+			const receiptKey = clientId
+				? promptReceiptKey(sessionId, clientId)
+				: undefined;
+			if (receiptKey) {
+				const seen = promptReceipt(receiptKey);
+				// Already delivered under this id — replay the answer instead of
+				// posting the message a second time.
+				if (seen) return Response.json({ ...seen.body, duplicate: true });
+			}
+			// No findSession GATE: the 2s session cache can lag a just-created
+			// session, and deliverToSession resolves the id (and reports unknown
+			// ids) itself. The lookup here only drives the best-effort extras.
+			const session = findSession(sessionId);
+			if (session) {
+				// The composer's effort/fast pills ride every send; persist a
+				// change so this and future runs honor it, as the WS path does.
+				maybePersistEffort(
+					session,
+					typeof body?.effort === "string" ? body.effort : undefined,
+				);
+				maybePersistFastMode(
+					session,
+					typeof body?.fastMode === "boolean" ? body.fastMode : undefined,
+				);
+			}
+			const user = requestUser(ctx, body?.user);
 			const res = await getSessionControl().deliverToSession(
 				sessionId,
 				content,
-				requestUser(ctx, body?.user),
-				body?.busy === "queue" ? { busy: "queue" } : undefined,
+				user,
+				{
+					busy: body?.busy === "queue" ? "queue" : undefined,
+					// Queue-by-choice holds until the agent fully completes,
+					// matching what the composers mean by "queue".
+					hold: body?.busy === "queue",
+					images,
+					imageUrls,
+				},
 			);
 			if (res.status === "error") {
 				return Response.json(
@@ -272,7 +330,23 @@ export async function handleSessionsRoutes(
 					{ status: /no session/i.test(res.message) ? 404 : 400 },
 				);
 			}
-			return Response.json(res);
+			// @People-mentions ping the tagged teammates on every delivery path,
+			// exactly like the WS prompt (same matcher, never the sender).
+			if (session && content.includes("@")) {
+				const preview =
+					content.length > 140 ? `${content.slice(0, 139)}…` : content;
+				for (const name of mentionedUsers(content, String(user || ""))) {
+					void sendPushToUser(name, {
+						title: `${user || "Someone"} mentioned you in ${session.title || "a session"}`,
+						body: preview,
+						url: `/session/${encodeURIComponent(sessionId)}`,
+						tag: `opensession-mention-${sessionId}`,
+					});
+				}
+			}
+			const payload = { ...res, ...(clientId ? { clientId } : {}) };
+			if (receiptKey) rememberPromptReceipt(receiptKey, payload);
+			return Response.json(payload);
 		}
 	}
 

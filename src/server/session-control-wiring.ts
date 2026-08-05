@@ -150,15 +150,22 @@ registerSessionControl({
 				steerAgentRun(
 					[session.claudeSessionId, session.codexThreadId, session.id],
 					attributed,
+					opts?.images,
 				)
 			) {
-				recordSteer(id, { content, user });
+				recordSteer(id, { content, user, images: opts?.imageUrls });
 				return {
 					status: "steered" as const,
 					message: "Folded into the running turn.",
 				};
 			}
-			enqueuePrompt(id, { content, user, slackReplyTo: opts?.slackReplyTo });
+			enqueuePrompt(id, {
+				content,
+				user,
+				images: opts?.imageUrls,
+				slackReplyTo: opts?.slackReplyTo,
+				...(opts?.hold ? { hold: true } : {}),
+			});
 			watchExternalRunAndDrain(id);
 			return {
 				status: "queued" as const,
@@ -184,7 +191,7 @@ registerSessionControl({
 			id,
 			content,
 			user,
-			undefined,
+			opts?.images,
 			undefined,
 			undefined,
 			opts?.slackReplyTo,

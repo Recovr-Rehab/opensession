@@ -20,8 +20,8 @@ private final class SafeImageRedirectDelegate: NSObject, URLSessionTaskDelegate 
     }
 }
 
-/// Thin REST client for the Open Session HTTP API. Prompting is WS-only on the
-/// server, so this covers reads plus the occasional mutation.
+/// Thin REST client for the Open Session HTTP API: reads, the occasional
+/// mutation, and — through `deliverPrompt` — every message this app sends.
 @MainActor
 enum OS1API {
     private static let imageSession = URLSession(
@@ -398,6 +398,101 @@ enum OS1API {
         if !user.isEmpty { body["user"] = user }
         let response: CreateResponse = try await post("/api/sessions", body: body)
         return response.id
+    }
+
+    /// What the server did with a message — or why it couldn't.
+    ///
+    /// The distinction that matters to the outbox is retryable vs terminal:
+    /// anything that smells like connectivity comes back `.unavailable` and is
+    /// tried again, while a refusal is `.rejected` and waits for a human.
+    enum PromptDelivery: Sendable {
+        /// Accepted. `status` is where it landed: started/steered/queued/handled.
+        case delivered(status: String, message: String)
+        /// The server understood and refused — retrying won't help.
+        case rejected(String)
+        /// No such session (yet): a freshly created chat may not be persisted.
+        case missing(String)
+        /// Couldn't reach the server, or it failed on its own. Retry.
+        case unavailable(String)
+    }
+
+    /// Deliver one message. The reply is the acknowledgement the outbox waits
+    /// for; `clientId` makes a retry idempotent, so a reply lost on the way
+    /// back can never post the message twice.
+    static func deliverPrompt(
+        sessionId: String,
+        content: String,
+        images: [String] = [],
+        user: String,
+        busyMode: String,
+        effort: String? = nil,
+        fastMode: Bool? = nil,
+        clientId: String
+    ) async -> PromptDelivery {
+        struct DeliverResponse: Decodable, Sendable {
+            let status: String?
+            let message: String?
+            let error: String?
+        }
+        let config = ServerConfig.shared
+        guard let base = config.baseURL, config.isConfigured else {
+            return .unavailable(APIError.notConfigured.localizedDescription)
+        }
+        let escaped = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        guard let url = URL(
+            string: base.absoluteString + "/api/sessions/\(escaped)/prompt"
+        ) else {
+            return .rejected(APIError.badURL.localizedDescription)
+        }
+
+        var body: [String: Any] = [
+            "content": content,
+            "busy": busyMode == "steer" ? "steer" : "queue",
+            "clientId": clientId,
+        ]
+        if !user.isEmpty { body["user"] = user }
+        if !images.isEmpty { body["images"] = images }
+        if let effort, !effort.isEmpty { body["effort"] = effort }
+        if let fastMode { body["fastMode"] = fastMode }
+
+        var request = config.authorizedRequest(url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Shorter than URLSession's 60s default: a send that hasn't been
+        // answered in 20s is better retried than left hanging, and the
+        // clientId makes that safe.
+        request.timeoutInterval = 20
+        guard let payload = try? JSONSerialization.data(withJSONObject: body) else {
+            return .rejected("Message couldn't be encoded.")
+        }
+        request.httpBody = payload
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let decoded = try? await decodeDetached(DeliverResponse.self, from: data)
+            guard let http = response as? HTTPURLResponse else {
+                return .unavailable("No response from the server.")
+            }
+            if (200..<300).contains(http.statusCode) {
+                return .delivered(
+                    status: decoded?.status ?? "started",
+                    message: decoded?.message ?? ""
+                )
+            }
+            let message = decoded?.error ?? decoded?.message
+                ?? APIError.http(http.statusCode).localizedDescription
+            if http.statusCode == 404 { return .missing(message) }
+            // 401 is "signed out", not "bad message" — a re-auth fixes it, so
+            // hold the message rather than failing it.
+            if http.statusCode == 401 || http.statusCode >= 500 {
+                return .unavailable(message)
+            }
+            return .rejected(message)
+        } catch {
+            return .unavailable(error.localizedDescription)
+        }
     }
 
     private static func post<T: Decodable & Sendable>(
