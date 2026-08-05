@@ -425,7 +425,7 @@ async function passUpstreamError(response: Response): Promise<Response> {
             ? body.error
             : typeof body.message === "string" && body.message
               ? body.message
-              : `Cloud OpenSession returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+              : `Cloud Open Session returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
         return Response.json({ ...body, error }, { status: response.status });
       }
     } catch {}
@@ -433,7 +433,7 @@ async function passUpstreamError(response: Response): Promise<Response> {
   const detail = text.trim().slice(0, 2_000);
   return errorResponse(
     detail ||
-      `Cloud OpenSession returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+      `Cloud Open Session returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
     response.status,
   );
 }
@@ -553,13 +553,13 @@ async function finishLocalUpgrade(
   try {
     reposResponse = await deps.fetch(reposUrl, { headers });
   } catch (error) {
-    return errorResponse(`Cloud OpenSession is unreachable: ${error}`, 502);
+    return errorResponse(`Cloud Open Session is unreachable: ${error}`, 502);
   }
   if (!reposResponse.ok) return passUpstreamError(reposResponse);
   const reposBody = await reposResponse.json().catch(() => null);
   const cloudRepos = Array.isArray(reposBody?.repos) ? reposBody.repos : null;
   if (!cloudRepos) {
-    return errorResponse("Cloud OpenSession returned an invalid repository list", 502);
+    return errorResponse("Cloud Open Session returned an invalid repository list", 502);
   }
   const ghRepo = normalizeGitHubRepo(repo.ghRepo);
   const cloudRepo = cloudRepos.find(
@@ -570,7 +570,7 @@ async function finishLocalUpgrade(
   );
   if (!cloudRepo) {
     return errorResponse(
-      `GitHub repository "${repo.ghRepo}" is not registered on the cloud OpenSession`,
+      `GitHub repository "${repo.ghRepo}" is not registered on the cloud Open Session`,
     );
   }
 
@@ -609,7 +609,7 @@ async function finishLocalUpgrade(
       body: JSON.stringify(importBody),
     });
   } catch (error) {
-    return errorResponse(`Cloud OpenSession is unreachable: ${error}`, 502);
+    return errorResponse(`Cloud Open Session is unreachable: ${error}`, 502);
   }
   let destination: { id: string; url: string } | null = null;
   if (imported.ok) {
@@ -652,7 +652,7 @@ async function finishLocalUpgrade(
     return passUpstreamError(imported);
   }
   if (!destination) {
-    return errorResponse("Cloud OpenSession returned an invalid import response", 502);
+    return errorResponse("Cloud Open Session returned an invalid import response", 502);
   }
 
   try {

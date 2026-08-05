@@ -213,7 +213,7 @@ async function launchHostUnit(hostId: string, dir: string): Promise<void> {
   const args = [
     "sudo", "-n", "systemd-run", "--collect", "--quiet",
     `--unit=bks-run-${hostId}`,
-    `--description=OpenSession run host ${hostId}`,
+    `--description=Open Session run host ${hostId}`,
     "--uid=ubuntu", "--gid=ubuntu",
     "-p", `WorkingDirectory=${REPO_ROOT}`,
     // Same env the opensession service runs with; MCP servers and account pools

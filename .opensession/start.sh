@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Boot a SAFE dev instance of OpenSession for an agent-host preview.
+# Boot a SAFE dev instance of Open Session for an agent-host preview.
 #
-# This is the repo's lifecycle start script: an OpenSession server runs it —
+# This is the repo's lifecycle start script: an Open Session server runs it —
 # detached, cwd = this checkout — when someone presses a session's Preview
 # button (src/server/preview.ts, resolvePreviewBoot/startPreview). It must
 # bring the server up in the FOREGROUND (exec, no backgrounding) so the
@@ -37,7 +37,7 @@ if [ -z "${WEBAPP_PORT:-}" ]; then
 	exit 1
 fi
 if [ "$WEBAPP_PORT" = "3850" ]; then
-	echo "ERROR: WEBAPP_PORT=3850 is the production OpenSession port — refusing to boot." >&2
+	echo "ERROR: WEBAPP_PORT=3850 is the production Open Session port — refusing to boot." >&2
 	exit 1
 fi
 

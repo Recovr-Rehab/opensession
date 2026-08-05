@@ -1,9 +1,9 @@
-# OpenSession website
+# Open Session website
 
 The public marketing site is a separate entry from the authenticated
-OpenSession app. Its product preview renders the production app inside an
+Open Session app. Its product preview renders the production app inside an
 iframe with deterministic browser-side fixtures, so the UI stays synchronized
-with the product without connecting to an OpenSession instance.
+with the product without connecting to an Open Session instance.
 
 ```sh
 bun run website:dev    # http://127.0.0.1:3865

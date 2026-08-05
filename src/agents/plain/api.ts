@@ -443,7 +443,7 @@ function threadWaitingState(thread: any): {
   };
 }
 
-/** A TODO-queue thread summary for the OpenSession Support sidebar. */
+/** A TODO-queue thread summary for the Open Session Support sidebar. */
 export interface SupportThreadSummary {
   id: string;
   title: string | null;

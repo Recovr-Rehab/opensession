@@ -1,7 +1,7 @@
-# Working on the OpenSession web UI
+# Working on the Open Session web UI
 
 The root `AGENTS.md` still applies. This file defines the consistency rules for
-everything under `src/frontend/`. Preserve the established OpenSession visual
+everything under `src/frontend/`. Preserve the established Open Session visual
 language instead of introducing a new local style for each feature.
 
 ## Copy and naming

@@ -1,5 +1,5 @@
 /**
- * A tiny Yjs network provider that rides OpenSession's existing multiplexed
+ * A tiny Yjs network provider that rides Open Session's existing multiplexed
  * WebSocket (the same socket sessions use) instead of a dedicated y-websocket
  * server. Binary Yjs document updates and awareness (cursor) updates are
  * base64-encoded inside the JSON envelope the socket already speaks.

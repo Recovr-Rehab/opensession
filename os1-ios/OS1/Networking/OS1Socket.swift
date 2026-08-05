@@ -32,7 +32,7 @@ extension SessionSocket {
     }
 }
 
-/// One WebSocket connection to the OpenSession server (`/ws`), authenticated
+/// One WebSocket connection to the Open Session server (`/ws`), authenticated
 /// with the bearer token on the upgrade request.
 ///
 /// The server never pings; clients are expected to send `{"type":"ping"}` and

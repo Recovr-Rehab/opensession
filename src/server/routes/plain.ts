@@ -259,7 +259,7 @@ export async function handlePlainRoutes(
 				const customerId = thread?.customer?.id;
 				if (!customerId) throw new Error("Thread has no customer");
 				const noteText = firstName
-					? `**${senderName} (via OpenSession):**\n\n${text}`
+					? `**${senderName} (via Open Session):**\n\n${text}`
 					: text;
 				const ok = await postNote(threadId, customerId, noteText);
 				if (!ok) throw new Error("Plain rejected the note");

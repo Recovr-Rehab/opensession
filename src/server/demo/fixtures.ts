@@ -115,7 +115,7 @@ export const DEMO_REPO_FILES: Record<string, string> = {
   "README.md": [
     "# acme-todo",
     "",
-    "A tiny demo task app. Entirely synthetic — used to seed OpenSession's",
+    "A tiny demo task app. Entirely synthetic — used to seed Open Session's",
     "demo dataset. Nothing here corresponds to a real project.",
     "",
   ].join("\n"),

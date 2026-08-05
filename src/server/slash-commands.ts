@@ -1,5 +1,5 @@
 /**
- * OpenSession-native slash commands (/goal /loop /model /account /compact /help) —
+ * Open Session-native slash commands (/goal /loop /model /account /compact /help) —
  * consumed by the WS prompt path, the opensession-sessions send_to_session tool,
  * and interactive resumes. Returns a notice string when the message was handled
  * as a command, or null to send it to the engine as a normal prompt.
@@ -26,7 +26,7 @@ import { broadcastToSession } from "./ws-hub";
 import type { UnifiedSession } from "./types";
 
 /**
- * OpenSession-native slash commands. Returns a notice string when the message
+ * Open Session-native slash commands. Returns a notice string when the message
  * was consumed as a command, or null to send it to Claude as a normal prompt.
  */
 export function handleSlashCommand(

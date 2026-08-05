@@ -9,7 +9,7 @@
  * clean-only switchPrimaryRepo the RepoBar UI uses).
  *
  * Wired the same way as opensession-sessions/opensession-admin: interactive runs only
- * (OpenSession web sessions + Slack), never automations. The handlers run in the
+ * (Open Session web sessions + Slack), never automations. The handlers run in the
  * parent process and call back into opensession.ts's attachRepo via the injected
  * context, so the session file and live state update immediately.
  */

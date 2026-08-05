@@ -424,7 +424,7 @@ export async function switchPrimaryRepo(
 	let wtPath: string;
 	let branch: string;
 	if (sharedCheckoutForNewSessions(target)) {
-		// OpenSession: sessions edit the live main checkout on its default branch.
+		// Open Session: sessions edit the live main checkout on its default branch.
 		wtPath = target.repo;
 		branch = target.defaultBranch;
 	} else {

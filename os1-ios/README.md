@@ -1,6 +1,6 @@
 # OS1 for iOS
 
-A native SwiftUI client for an OpenSession (OS1) server, on your phone. The
+A native SwiftUI client for an Open Session (OS1) server, on your phone. The
 deployment default is the `OS1DefaultServerURL` Info.plist value generated from
 `project.yml`; users can override it in Settings. Not feature complete; this is
 the v0.1 base: sign in with a token, see your sessions live, open one, watch

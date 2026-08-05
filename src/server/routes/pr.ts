@@ -83,7 +83,7 @@ export async function handlePrRoutes(
 
 	// Every open PR in the repo, attributed to teammates via the GitHub
 	// identity table — the sidebar's Open PRs section (which must include
-	// PRs that have no OpenSession session).
+	// PRs that have no Open Session session).
 	if (path === "/api/open-prs" && req.method === "GET") {
 		return Response.json({ prs: getOpenPrs() });
 	}
@@ -139,7 +139,7 @@ export async function handlePrRoutes(
 	}
 
 	// Recent PRs across the covered repos, including merges made without an
-	// OpenSession workspace. Powers the root shipped-worktree index.
+	// Open Session workspace. Powers the root shipped-worktree index.
 	if (path === "/api/recent-prs" && req.method === "GET") {
 		const person = url.searchParams.get("person");
 		return Response.json({ prs: person ? await getRecentPrsForPerson(person) : getRecentPrs() });

@@ -35,7 +35,7 @@ export interface TriggerResult {
   ok: boolean;
   message: string;
   url?: string;
-  /** OpenSession session id for this run (for an Open-in-OpenSession link + Stop button). */
+  /** Open Session session id for this run (for an "Open in Open Session" link + Stop button). */
   bksId?: string;
   /** Resolves when the behavior finishes — lets the caller update a control card (drop Stop). */
   done?: Promise<unknown>;

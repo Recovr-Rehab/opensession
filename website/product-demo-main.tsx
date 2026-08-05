@@ -251,7 +251,7 @@ const responseFor = (url: URL, method: string): Response => {
 			repos: [
 				{
 					id: "opensession",
-					label: "OpenSession",
+					label: "Open Session",
 					ghRepo: "tellahq/opensession",
 					defaultBranch: "main",
 					sharedCheckout: true,
@@ -398,7 +398,7 @@ class DemoWebSocket extends EventTarget {
 				id: `demo-assistant-${Date.now()}`,
 				type: "assistant",
 				content:
-					"This is a deterministic product preview, so the real coding agent is not contacted. In OpenSession, this prompt would start a live run here.",
+					"This is a deterministic product preview, so the real coding agent is not contacted. In Open Session, this prompt would start a live run here.",
 				timestamp,
 				model: "openai/gpt-5.6-sol",
 			};
@@ -444,7 +444,7 @@ Object.defineProperty(window, "EventSource", {
 Object.assign(window, {
 	__OPENSESSION_DEMO__: true,
 	__OPENSESSION_INSTANCE__: {
-		productName: "OpenSession",
+		productName: "Open Session",
 		productMark: "OS",
 		personaName: "Michael",
 		defaultRepoId: "opensession",

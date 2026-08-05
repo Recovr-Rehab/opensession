@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// GitHub device-flow sign-in against the OpenSession server. The server owns
+/// GitHub device-flow sign-in against the Open Session server. The server owns
 /// the OAuth app: we start a flow (`/api/auth/device`), show the user code,
 /// and poll (`/api/auth/device/poll`, `native: true`) until GitHub confirms —
 /// the server then mints its own web-session token and returns it in the body

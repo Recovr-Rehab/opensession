@@ -18,7 +18,7 @@ function attr(v: string | null | undefined): string {
     .replace(/>/g, "&gt;");
 }
 
-// OpenSession session ids (`bks-<uuidv7>` and legacy `bks-<slug>`), as they appear
+// Open Session session ids (`bks-<uuidv7>` and legacy `bks-<slug>`), as they appear
 // in agent output — usually in a codespan, e.g. a create_session result or an
 // orchestrator saying "delegated to `bks-…`". Rendered as a clickable link so you
 // can jump from an orchestrator into the worker it spawned (and back). A

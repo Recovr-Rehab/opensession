@@ -46,7 +46,7 @@ const DESK_MODEL = "opencode/anthropic/claude-sonnet-5";
 const DESK_EFFORT = "low";
 
 /** Get-or-create the user's Desk session (same direct-mint shape as side
- *  chats: ask mode, no worktree; repo opensession so it reads the OpenSession
+ *  chats: ask mode, no worktree; repo opensession so it reads the Open Session
  *  checkout when it needs context). */
 export function ensureDeskSession(user: string): {
 	sessionId: string;

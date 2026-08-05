@@ -42,7 +42,7 @@ Point a Plain webhook at `POST /plain/webhook` on the
 Consumed events (`src/agents/plain/handlers.ts`):
 
 - `thread.thread_created` — gated, then fires the triage automation (below)
-- `thread.thread_status_transitioned` to `DONE` — archives the OpenSession
+- `thread.thread_status_transitioned` to `DONE` — archives the Open Session
   sessions linked to that thread
 - `thread.note_created` containing the mention handle
   (`integrations.plain.mentionHandle`, default `@<persona.name>`) — runs the

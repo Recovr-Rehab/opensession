@@ -55,7 +55,7 @@ cd opensession && bun install
 bun run setup
 ```
 
-If you plan to use self-development (sessions that modify OpenSession itself —
+If you plan to use self-development (sessions that modify Open Session itself —
 see [../self-development.md](../self-development.md)), clone **your own fork**
 instead and add this repo as `upstream`: self-sessions push to `origin`, which
 must be a remote you can write to.
@@ -196,7 +196,7 @@ enables (not `1`). The env flag wins when set, otherwise
 [integrations-misc.md](integrations-misc.md#boot-guards).
 
 Not for operators: `OPENSESSION_RPC_*` / `OPENSESSION_RUN_WS_*` / `OPENSESSION_MCP_SERVER` (set by
-OpenSession for its own runner-host/MCP-proxy subprocesses), and
+Open Session for its own runner-host/MCP-proxy subprocesses), and
 `OPENSESSION_FORCE_LIMIT` / `OPENSESSION_RUN_JOURNAL` (dev/test seams).
 
 Note: agent subprocesses do **not** inherit this env file — runs get a
@@ -255,7 +255,7 @@ MCP servers give runs their external tools. Copy
 `mcp-config.json` in the repo root (or point `OPENSESSION_MCP_CONFIG`
 elsewhere). Per server: `{ "type": "http", "url": … }` or
 `{ "command": …, "args": [], "env": {} }` — credentials go in the server's
-own `env` block or URL, never the process env. Two OpenSession-specific
+own `env` block or URL, never the process env. Two Open Session-specific
 fields:
 
 - `allowedUsers: ["Alice", "alice@example.com"]` — optional per-user gate;

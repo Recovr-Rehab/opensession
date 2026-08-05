@@ -1,6 +1,6 @@
 /**
  * Run-host protocol: the wire contract between a detached run-host process
- * (the reference implementation: src/runner-host/host.ts) and the OpenSession
+ * (the reference implementation: src/runner-host/host.ts) and the Open Session
  * server (src/server/host-client.ts).
  *
  * A run host is a small standalone process that owns ONE agent run (the
@@ -44,7 +44,7 @@ export type McpScope = "all" | string[];
 /** Everything a host needs to drive one run — a serializable RunAgentOpts. */
 export interface RunHostSpec {
   hostId: string;
-  /** OpenSession session this run belongs to (busy/steer/cancel key, journal). */
+  /** Open Session session this run belongs to (busy/steer/cancel key, journal). */
   osSessionId: string;
   prompt: string;
   /** Engine session id to resume (claude session id / codex thread id). */

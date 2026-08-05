@@ -1,6 +1,6 @@
 # Recipes
 
-Optional, generic starting points that ship with OpenSession. Nothing here is
+Optional, generic starting points that ship with Open Session. Nothing here is
 installed or enabled by default.
 
 ```sh

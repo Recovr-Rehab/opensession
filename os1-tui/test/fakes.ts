@@ -1,7 +1,7 @@
 /**
  * A fake server, at both seams: `fetch` for REST and a fake WebSocket for the
  * watch. Together they let the whole app render and be driven by keystrokes with
- * no OpenSession running anywhere.
+ * no Open Session running anywhere.
  */
 
 import type { Session, ServerFrame, TranscriptEntry } from "../src/client/types";

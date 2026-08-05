@@ -1,6 +1,6 @@
 # Self-hosting sandboxes
 
-How to run OpenSession sessions inside isolated sandboxes on your own
+How to run Open Session sessions inside isolated sandboxes on your own
 infrastructure. Companion to `deploy/sandbox/README.md` (the runner image +
 provider internals). This page is the operator's view: what to install, the
 full config schema, the provider guides, and the safety switches.
@@ -25,7 +25,7 @@ cat > ~/.opensession-sandbox.json <<'EOF'
 { "provider": "docker", "image": "opensession-runner:latest" }
 EOF
 
-# 4. Restart OpenSession to load runner-internal changes
+# 4. Restart Open Session to load runner-internal changes
 sudo systemctl restart opensession
 
 # 5. Verify
@@ -321,7 +321,7 @@ to `provider: "local"` (today's host behavior). Env override for the path:
 ### Local Firecracker MicroVM (host engine, guest workspace)
 
 The `microvm` provider is the local version of the brain/hands split. The
-OpenCode model loop and provider credentials stay on the OpenSession host;
+OpenCode model loop and provider credentials stay on the Open Session host;
 `opensession-workspace` executes explicit filesystem and command methods
 against a per-session Firecracker guest. OpenCode OpenAI and Claude models use
 this host-engine path too.
@@ -337,7 +337,7 @@ With no image argument, the refresh builds
 `deploy/sandbox/microvm/Dockerfile.workspace`: a dedicated credential-free
 workspace image with Git, Bun, Node, ripgrep, jq, sqlite3, iproute2, Python and
 native-build basics. It deliberately contains no Claude/OpenCode CLI,
-OpenSession runner checkout, or model account directories. Passing a second
+Open Session runner checkout, or model account directories. Passing a second
 image argument is an explicit experimental override. Golden publication is
 locked against clone creation and rolls back all three artifacts on failure,
 so a clone can never observe a disk/memory/vmstate generation mix.
@@ -352,7 +352,7 @@ prewarm TTL and restart-orphan cleanup.
 Do not point this provider at `/opt/firecracker/store`: that is the preview
 pool's app-specific golden. The sandbox golden starts only the structured
 control daemon and contains no seeded app credentials. Clones use COW ext4
-disks and transient systemd scopes, so they survive an OpenSession restart.
+disks and transient systemd scopes, so they survive an Open Session restart.
 They do not yet survive a host reboot/Firecracker crash; push work regularly.
 Each restored guest is currently 4 vCPU/12 GB, and browser preview ports are
 not exposed yet.
@@ -484,7 +484,7 @@ is `sbxtest-*` scratch), and keep the conformance matrix green:
 bun run deploy/sandbox/conformance.ts docker-socket docker-ws
 ```
 
-To certify the external-engine path through the real OpenSession WebSocket
+To certify the external-engine path through the real Open Session WebSocket
 and session lifecycle, run:
 
 ```sh
@@ -623,7 +623,7 @@ in `deploy/sandbox/lambda-microvm/`.
   privilege role: agent code has root-equivalent control inside the VM and can
   use every permission granted to that role.
 - Preview ports intentionally return no URL yet. AWS requires expiring auth
-  headers on every request, so browser previews need an OpenSession reverse
+  headers on every request, so browser previews need an Open Session reverse
   proxy rather than exposing the raw endpoint.
 - No prewarm adapter or Shell-tab integration yet.
 - To certify: `bun run deploy/sandbox/conformance.ts lambda-microvm` after the
@@ -631,10 +631,10 @@ in `deploy/sandbox/lambda-microvm/`.
 
 ## Licensing notes
 
-- **Daytona** is AGPL-3.0. OpenSession consumes it **over its API** (via the
+- **Daytona** is AGPL-3.0. Open Session consumes it **over its API** (via the
   Apache-2.0 `@daytonaio/sdk`) and vendors none of its code, so AGPL
   obligations sit with whoever *operates* the Daytona deployment, not with
-  OpenSession's codebase. Self-hosters running Daytona themselves take on
+  Open Session's codebase. Self-hosters running Daytona themselves take on
   AGPL's network-service obligations for their Daytona instance.
 - **E2B**: the JS SDK is MIT; the self-host infra repo is Apache-2.0.
 - **Modal**: the official `modal` TypeScript SDK is Apache-2.0.

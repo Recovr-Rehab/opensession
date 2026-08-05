@@ -11,7 +11,7 @@ What helps:
 
 - **What's wrong or missing.** The symptom or gap, in your own words.
 - **What you'd expect instead.** The behavior you want, not the implementation.
-- **Why it matters to you.** How you run OpenSession and what this blocks.
+- **Why it matters to you.** How you run Open Session and what this blocks.
 
 Name the file something findable, e.g. `worktree-disk-budget.md` or
 `slack-thread-replies.txt`. No numbering scheme, no template, no required

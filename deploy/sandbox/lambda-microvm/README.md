@@ -29,7 +29,7 @@ VM. Automatic idle suspension is off by default because an agent's outbound
 WebSocket does not count as endpoint activity; `idleSuspendSeconds` opts in.
 Browser previews are not yet
 supported because their endpoint requires authentication headers; exposing them
-needs a tailnet-gated OpenSession reverse proxy with token refresh.
+needs a tailnet-gated Open Session reverse proxy with token refresh.
 
 Do not attach a general-purpose execution role. Agent code controls the VM and
 can use every permission in `executionRoleArn`; if runtime AWS access is needed,

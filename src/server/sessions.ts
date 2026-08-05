@@ -1819,7 +1819,7 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
  * first teammate assignee (sessions instruct the agent to `--assignee` the
  * requester); with neither, `person` is null and the frontend attributes
  * through the session that opened them. Powers the sidebar's Open PRs
- * section, which must show a person's PRs even when no OpenSession session
+ * section, which must show a person's PRs even when no Open Session session
  * exists for them — e.g. PRs opened from another tool (Conductor, local CLI)
  * under their own account.
  */
@@ -1841,7 +1841,7 @@ export interface OpenPrEntry {
 	mergeable: string;
 	/** Person keys of teammates with a pending review request on this PR. */
 	reviewRequested: string[];
-	/** An automated OpenSession review is still running for this PR. */
+	/** An automated Open Session review is still running for this PR. */
 	reviewActive: boolean;
 	/** What the last automated review concluded, so the queue can show the
 	 *  score without opening the PR. Absent until one has run. */
@@ -1854,7 +1854,7 @@ export interface RecentPrEntry extends Omit<OpenPrEntry, "reviewActive" | "osRev
 	deletions: number;
 }
 
-/** The recent repo-wide PR window, including PRs created outside OpenSession. */
+/** The recent repo-wide PR window, including PRs created outside Open Session. */
 export function getRecentPrs(): RecentPrEntry[] {
 	const out: RecentPrEntry[] = [];
 	for (const [repoId, byBranch] of getPrsByRepo()) {
@@ -2058,7 +2058,7 @@ export function getAllSessions(): UnifiedSession[] {
         existing.isRunning = true;
       }
       // Keep the dropped ID as an alias so deep links to it (e.g. the
-      // Slack "Open in OpenSession" button, which uses slack-<channel>-<ts>)
+      // Slack "Open in Open Session" button, which uses slack-<channel>-<ts>)
       // still resolve to the surviving session.
       existing.aliasIds = [...(existing.aliasIds || []), session.id];
       for (const aliasKey of engineKeys) byEngineId.set(aliasKey, existing);

@@ -1,6 +1,6 @@
 /**
  * Certify the "brain on host, hands in sandbox" boundary through the real
- * OpenSession WebSocket/session path.
+ * Open Session WebSocket/session path.
  *
  * Examples:
  *   bun run deploy/sandbox/verify-external-engine.ts --provider microvm
@@ -9,11 +9,11 @@
  *
  * The suite creates one disposable code session per provider, requires all six
  * opensession-workspace tools, verifies the files only exist in the sandbox,
- * optionally restarts OpenSession and proves a second turn keeps the same
+ * optionally restarts Open Session and proves a second turn keeps the same
  * boundary after model fallback, then deletes the session and provider
  * resource in a finally block.
  *
- * This intentionally targets a LIVE OpenSession instance. It never commits,
+ * This intentionally targets a LIVE Open Session instance. It never commits,
  * pushes, or opens a PR. Branches use `sbxtest/external-*` and workspace test
  * files use `.opensession-boundary-*`; both are unique per run.
  */
@@ -97,7 +97,7 @@ Options:
   --model <id>      Opening OpenCode OpenAI/Claude model (default ${DEFAULT_MODEL})
   --repo <id>       Registered repo id (default ${DEFAULT_REPO})
   --user <name>     Web-session login/name to use
-  --server <url>    Live OpenSession base URL (default ${DEFAULT_SERVER})
+  --server <url>    Live Open Session base URL (default ${DEFAULT_SERVER})
   --restart         Restart the systemd service between turn one and turn two
   --service <name>  systemd unit for --restart (default opensession)
   --timeout <sec>   Per-turn timeout (default 300)

@@ -907,7 +907,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					break;
 				}
 
-				// Codex sessions start a fresh thread on first prompt. OpenSession
+				// Codex sessions start a fresh thread on first prompt. Open Session
 				// chats with no engine id are *fresh* chats (a new sibling from the
 				// tab strip's +): runSessionPrompt starts a new conversation. Only
 				// non-opensession sources genuinely need an id to resume.
@@ -1444,7 +1444,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// add (ensureAskCheckout).
 						wtPath = await ensureAskCheckout(repo.id);
 					} else if (sharedCheckoutForNewSessions(repo)) {
-						// OpenSession: code sessions edit the live main checkout on the
+						// Open Session: code sessions edit the live main checkout on the
 						// default branch (hot-reloads in the running server). No worktree.
 						wtPath = repo.repo;
 					} else if (workspace?.worktreeDir && chatMode === "share") {

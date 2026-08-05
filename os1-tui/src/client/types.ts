@@ -1,5 +1,5 @@
 /**
- * Wire types for the OpenSession client protocol.
+ * Wire types for the Open Session client protocol.
  *
  * Deliberately a narrow, hand-written mirror of what the server actually sends
  * — not a shared import from src/server. This package must stay compilable and

@@ -1,6 +1,6 @@
 /**
  * Regression pins for the OpenCode engine's on-disk state paths after the
- * OpenSession → OpenSession rename (docs/rename-opensession-plan.md).
+ * Backstage → Open Session rename.
  *
  * The invariant under test: every state path the engine touches derives from
  * the SAME rename-compat dual-read resolution — never a hardcoded

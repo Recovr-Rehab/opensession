@@ -1,7 +1,7 @@
 # @tellahq/opensession-protocol
 
-The wire and record contracts for [OpenSession](https://opensession.com) cloud
-agent sessions — **bring your own runner, bring your own UI**. The OpenSession
+The wire and record contracts for [Open Session](https://opensession.com) cloud
+agent sessions — **bring your own runner, bring your own UI**. The Open Session
 server, web UI, and native clients (terminal, iOS/macOS, Chrome) are the
 reference implementations; anything speaking these types can run or watch a
 session.

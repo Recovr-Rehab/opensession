@@ -1,6 +1,6 @@
-// OpenSession side panel — the whole client lives here. Extension pages have
+// Open Session side panel — the whole client lives here. Extension pages have
 // full chrome.* API access, so the panel drives captures (screenshot, element
-// pick via scripting injection) itself and talks to the OpenSession server
+// pick via scripting injection) itself and talks to the Open Session server
 // with plain fetch + Bearer token (device-flow sign-in, stored in
 // chrome.storage.local). No frameworks, no build step.
 
@@ -350,7 +350,7 @@ function buildPrompt(text) {
     }
   }
   if (!lines.length) return text;
-  return `${text}\n\n--- Context captured from Chrome (OpenSession extension) ---\n${lines.join("\n")}`;
+  return `${text}\n\n--- Context captured from Chrome (Open Session extension) ---\n${lines.join("\n")}`;
 }
 
 async function startSession() {

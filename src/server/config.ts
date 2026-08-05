@@ -1,5 +1,5 @@
 /**
- * OpenSession instance configuration.
+ * Open Session instance configuration.
  *
  * Single `~/.opensession/config.json` (dual-read fallback to `~/.backstage/
  * config.json`; path overridable via OPENSESSION_CONFIG, or the deprecated
@@ -55,7 +55,7 @@ export interface PathsSection {
 }
 
 export interface CloudSection {
-  /** Hosted OpenSession instance merged into the local profile. */
+  /** Hosted Open Session instance merged into the local profile. */
   upstream?: string;
   /** Web-session bearer token for the hosted instance. */
   token?: string;
@@ -207,9 +207,9 @@ export interface Repo {
   /** GitHub `owner/name` for PR operations (gh CLI). */
   ghRepo: string;
   // When true, code sessions run directly in the main checkout on the default
-  // branch instead of an isolated worktree. OpenSession is self-hosting from its
+  // branch instead of an isolated worktree. Open Session is self-hosting from its
   // main checkout; sessions share one tree and commit straight to the default
-  // branch (see "OpenSession dev workflow" in AGENTS.md: add → commit → push,
+  // branch (see "Open Session dev workflow" in AGENTS.md: add → commit → push,
   // never reset/discard the shared repo).
   sharedCheckout?: boolean;
   /** Instance default repo (defaultRepo()). */

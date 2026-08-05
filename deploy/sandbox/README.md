@@ -187,7 +187,7 @@ start, stamped per worktree under `<chats-dir>/preview-setup/` (SETUP_STAMP_DIR
 in preview.ts).
 
 **`.tunnels.env` contract** (adopted from background-agents): when a preview
-starts, OpenSession writes `<worktree>/.tunnels.env` — dotenv, consumable by
+starts, Open Session writes `<worktree>/.tunnels.env` — dotenv, consumable by
 in-container dev processes:
 
 ```
@@ -289,7 +289,7 @@ needed after changing it.
   with `deploy/sandbox/microvm/refresh-sandbox-golden.sh`; by default that
   builds the dedicated minimal `Dockerfile.workspace` image (Git, Bun, Node,
   ripgrep, jq, sqlite3, iproute2, Python, and native-build basics, but no model
-  CLI or OpenSession runner payload). Golden publication is locked against
+  CLI or Open Session runner payload). Golden publication is locked against
   concurrent clone creation and rolls back as one disk/memory/vmstate
   generation on failure. Never reuse the preview-pool golden in
   `/opt/firecracker/store`.

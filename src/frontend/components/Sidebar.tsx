@@ -2063,7 +2063,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const onReviewSubmitted = () => void load();
 		window.addEventListener(PR_REVIEW_SUBMITTED_EVENT, onReviewSubmitted);
 		// The response is backed by the server's PR cache, but also carries live
-		// OpenSession review state. Poll it often enough that a PR moves in and out
+		// Open Session review state. Poll it often enough that a PR moves in and out
 		// of "Review running" promptly without triggering extra GitHub requests.
 		const t = setInterval(load, 15_000);
 		return () => {
@@ -2322,7 +2322,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		);
 	}, [filtered, filter.sort]);
 
-	// PRs with an automated OpenSession review in flight, keyed `repo\nbranch`
+	// PRs with an automated Open Session review in flight, keyed `repo\nbranch`
 	// — the same signal the PR rows spell out as "Review running". The review
 	// itself runs in a `bks-ghpr-*` chat that lives in the Automations band, so
 	// the workspace lanes below can't see it in their own chats.

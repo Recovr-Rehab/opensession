@@ -516,7 +516,7 @@ describe("local session upgrade", () => {
     expect(reposFailure.status).toBe(502);
     expect(reposFailure.headers.get("content-type")).toContain("application/json");
     expect(await reposFailure.json()).toEqual({
-      error: "Cloud OpenSession returned HTTP 502",
+      error: "Cloud Open Session returned HTTP 502",
     });
 
     const importFailure = await upgradeLocalSession(
@@ -533,7 +533,7 @@ describe("local session upgrade", () => {
     expect(importFailure.status).toBe(502);
     expect(importFailure.headers.get("content-type")).toContain("application/json");
     expect(await importFailure.json()).toEqual({
-      error: "Cloud OpenSession returned HTTP 502",
+      error: "Cloud Open Session returned HTTP 502",
     });
 
     const messageFailure = await upgradeLocalSession(

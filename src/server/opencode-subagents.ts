@@ -12,7 +12,7 @@ import type { SubagentTranscript } from "./subagents";
 //
 //  - On the opencode engine, the in-session `task` tool spawns a CHILD opencode
 //    session (session.parent_id in opencode's SQLite links it; the task part's
-//    state.metadata.sessionId names it). OpenSession's transcript mirror only
+//    state.metadata.sessionId names it). Open Session's transcript mirror only
 //    keeps the child's final output inline in the tool_result text, so the
 //    child's own conversation — and the fact that sub-agents ran at all —
 //    was invisible to the UI until this module.

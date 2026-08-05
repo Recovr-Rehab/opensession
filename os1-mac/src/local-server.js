@@ -69,7 +69,7 @@ function resolveServerSource(config, resourcesPath, homeDir) {
   if (configuredDir) {
     const configured = serverSourceAt(configuredDir);
     if (!configured) {
-      throw new Error(`OpenSession server source is missing at ${configuredDir}`);
+      throw new Error(`Open Session server source is missing at ${configuredDir}`);
     }
     return configured;
   }
@@ -78,7 +78,7 @@ function resolveServerSource(config, resourcesPath, homeDir) {
   const bundled = serverSourceAt(path.join(resourcesPath, "server"));
   if (bundled) return bundled;
   throw new Error(
-    `OpenSession server was not found: no checkout at ${path.join(homeDir, "os1", "server")} and no bundled server in this build`,
+    `Open Session server was not found: no checkout at ${path.join(homeDir, "os1", "server")} and no bundled server in this build`,
   );
 }
 

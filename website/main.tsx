@@ -182,7 +182,7 @@ function LandingPage() {
 						<div className="trust-note">
 							<IconRepo size={20} />
 							<p>
-								<strong>Private by design.</strong> OpenSession trusts everyone
+								<strong>Private by design.</strong> Open Session trusts everyone
 								who can reach it. Keep your instance on Tailscale, behind a VPN,
 								or behind an SSH tunnel.
 							</p>

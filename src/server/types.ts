@@ -292,7 +292,7 @@ export interface CLISessionFile {
   startedAt: number;
 }
 
-// OpenSession session file format
+// Open Session session file format
 /**
  * A secondary repo attached to a session for cross-repo work. Each gets its own
  * isolated worktree (never the shared main checkout), so the agent can branch,

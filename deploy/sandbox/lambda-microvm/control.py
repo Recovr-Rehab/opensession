@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Structured command and lifecycle endpoint for OpenSession Lambda MicroVMs."""
+"""Structured command and lifecycle endpoint for Open Session Lambda MicroVMs."""
 
 import base64
 import json
@@ -24,7 +24,7 @@ def drain_output(stream, state):
 
 
 def output_text(state):
-    suffix = b"\n[output truncated by OpenSession]\n" if state["truncated"] else b""
+    suffix = b"\n[output truncated by Open Session]\n" if state["truncated"] else b""
     return (bytes(state["data"]) + suffix).decode("utf-8", errors="replace")
 
 

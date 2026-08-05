@@ -29,9 +29,9 @@ const REGION =
   (typeof configuredRegion === "string" ? configuredRegion : "us-east-1");
 
 export const AWS_HUMAN_AUTH_DENIAL =
-  "AWS device login is not a human gate in OpenSession. Do not run `aws login` or " +
+  "AWS device login is not a human gate in Open Session. Do not run `aws login` or " +
   "`aws sso login`, and do not ask anyone to open an AWS authorization URL or enter a " +
-  "device code. OpenSession supplies non-interactive read credentials to eligible runs. " +
+  "device code. Open Session supplies non-interactive read credentials to eligible runs. " +
   "If those credentials are unavailable or insufficient, report the infrastructure " +
   "failure and continue without AWS.";
 

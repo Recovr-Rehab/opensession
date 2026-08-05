@@ -1,6 +1,6 @@
 # The clients
 
-OpenSession is one server with several front ends. Only the first is required —
+Open Session is one server with several front ends. Only the first is required —
 everything else is optional and talks to the same instance.
 
 | Client | Where | Needs building? |
@@ -91,7 +91,7 @@ token and talks to the same REST surface as everything else.
 
 **Work in progress** — usable, but the roughest of the clients; expect gaps.
 
-`os1-tui/` — OpenSession in a terminal. A TUI with a workspace sidebar, live
+`os1-tui/` — Open Session in a terminal. A TUI with a workspace sidebar, live
 transcripts, tabs and tmux keys, for when you are already in a terminal and do
 not want to reach for a browser.
 

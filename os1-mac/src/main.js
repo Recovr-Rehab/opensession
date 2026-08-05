@@ -28,7 +28,7 @@ if (process.platform === "darwin") {
 }
 
 // OS1_URL selects the hosted instance. Distributors can set OS1_CLOUD_URL;
-// the portable fallback is a locally running OpenSession server.
+// the portable fallback is a locally running Open Session server.
 const CLOUD_URL =
   process.env.OS1_CLOUD_URL ||
   packageConfig.defaultServer ||
@@ -77,7 +77,7 @@ function setAppUrl(url) {
 }
 
 // ---- Auto-update ------------------------------------------------------------
-// Electron's built-in Squirrel.Mac updater against the OpenSession server's
+// Electron's built-in Squirrel.Mac updater against the Open Session server's
 // release proxy (src/server/routes/os1-update.ts server-side). The server
 // serves Squirrel's static JSON feed; Squirrel compares versions and downloads
 // the signed zip immediately when newer, so "available" doubles as
@@ -571,7 +571,7 @@ app.whenReady().then(async () => {
       };
     } catch (error) {
       localSupervisor.setState("error", error.message);
-      const missingServer = String(error.message).startsWith("OpenSession server source is missing");
+      const missingServer = String(error.message).startsWith("Open Session server source is missing");
       initialStatus = {
         mode: missingServer ? "missing" : "error",
         detail: error.message,

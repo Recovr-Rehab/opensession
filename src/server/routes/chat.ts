@@ -14,7 +14,7 @@ export async function handleChatRoutes(
 ): Promise<Response | undefined> {
 	const { req, url, path, publicPrefix } = ctx;
 
-	// ── Team chat (native OpenSession chat, unrelated to Slack). Channels:
+	// ── Team chat (native Open Session chat, unrelated to Slack). Channels:
 	// "watercooler" (team-wide) and "session:<id>" (per-session Chat tab). ──
 	if (path === "/api/chat/messages" && req.method === "GET") {
 		const { getChatMessages, isValidChatChannel } = await import(

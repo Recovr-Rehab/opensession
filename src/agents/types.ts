@@ -1,5 +1,5 @@
 /**
- * Interface for agent modules — OpenSession's plugin seam
+ * Interface for agent modules — Open Session's plugin seam
  * (the feeds design W4). A module ("package") can contribute any subset
  * of the five project surfaces:
  *

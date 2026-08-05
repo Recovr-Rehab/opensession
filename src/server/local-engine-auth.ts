@@ -123,7 +123,7 @@ function cacheKeychainCredentials(path: string, oauth: ClaudeOauthCredentials): 
  *
  * Credential sources are read fresh on every call so a Claude Code or Codex
  * refresh causes the next OpenCode server ensure to drain onto the new access
- * token. OpenSession never refreshes or writes either CLI-owned source: OAuth
+ * token. Open Session never refreshes or writes either CLI-owned source: OAuth
  * refresh tokens rotate, so a second writer could invalidate the CLI login.
  */
 export function discoverLocalEngineCredentials(
@@ -201,7 +201,7 @@ export function localClaudeAccount(): ClaudeAccount | { error: string } {
     return {
       error:
         credentials.errors.find((error) => error.includes("Claude")) ||
-        "Claude Code credentials were not found; run `claude` and log in, then restart OpenSession",
+        "Claude Code credentials were not found; run `claude` and log in, then restart Open Session",
     };
   }
   const { oauth } = credentials.claude;
@@ -209,7 +209,7 @@ export function localClaudeAccount(): ClaudeAccount | { error: string } {
     return {
       error:
         "Claude Code's access token is expired. Run `claude` once so the CLI refreshes its login, then retry. " +
-        "OpenSession will not rotate the CLI's refresh token behind its back.",
+        "Open Session will not rotate the CLI's refresh token behind its back.",
     };
   }
   return {
@@ -226,7 +226,7 @@ export function localCodexAccount(): CodexAccount | { error: string } {
     return {
       error:
         credentials.errors.find((error) => error.includes("Codex")) ||
-        "Codex CLI credentials were not found; run `codex login`, then restart OpenSession",
+        "Codex CLI credentials were not found; run `codex login`, then restart Open Session",
     };
   }
   return {
@@ -249,8 +249,8 @@ export function localProviderError(provider: string): string | null {
   );
   const login = provider === "anthropic" ? "run `claude` and log in" : "run `codex login`";
   return sourceError
-    ? `${sourceError}; ${login}, then restart OpenSession`
-    : `${provider === "anthropic" ? "Claude Code" : "Codex CLI"} credentials were not found; ${login}, then restart OpenSession`;
+    ? `${sourceError}; ${login}, then restart Open Session`
+    : `${provider === "anthropic" ? "Claude Code" : "Codex CLI"} credentials were not found; ${login}, then restart Open Session`;
 }
 
 /** Empty provider-local OpenCode state keeps native `opencode auth login`
@@ -265,7 +265,7 @@ export function assertLocalEngineCredentials(): LocalEngineCredentials {
   const detail = credentials.errors.length ? ` (${credentials.errors.join("; ")})` : "";
   throw new Error(
     "OPENSESSION_PROFILE=local found no model subscription credentials. " +
-      "Log into Claude Code with `claude` and/or Codex with `codex login`, then restart OpenSession." +
+      "Log into Claude Code with `claude` and/or Codex with `codex login`, then restart Open Session." +
       detail,
   );
 }

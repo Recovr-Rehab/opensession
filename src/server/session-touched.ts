@@ -2,7 +2,7 @@
  * Which files a session itself wrote.
  *
  * On a per-session worktree this is the same question as `git status`, so
- * nobody needed to ask it. On a repo that uses a shared checkout — OpenSession's
+ * nobody needed to ask it. On a repo that uses a shared checkout — Open Session's
  * own, where every session edits one tree on the default branch — the two come
  * apart: the working tree holds every concurrent session's in-flight edits, and
  * a panel that reports that count as "your uncommitted files" is always wrong

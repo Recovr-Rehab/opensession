@@ -1,5 +1,5 @@
 #!/bin/bash
-# PID 1 for OpenSession preview microVMs (Firecracker guests).
+# PID 1 for Open Session preview microVMs (Firecracker guests).
 #
 # The rootfs is a `docker export` of the preview-pool golden image, so there
 # is no systemd — this script is the whole boot: mount the API filesystems,

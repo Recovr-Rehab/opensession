@@ -232,7 +232,7 @@ export interface OpenPr {
 	checks: { total: number; passed: number; failed: number; pending: number };
 	/** Person keys of teammates with a pending review request on this PR. */
 	reviewRequested?: string[];
-	/** An automated OpenSession review is still running for this PR. */
+	/** An automated Open Session review is still running for this PR. */
 	reviewActive?: boolean;
 	/** What the last automated review concluded. Absent until one has run. */
 	osReview?: OsReview;
@@ -252,7 +252,7 @@ export interface RecentPr extends OpenPr {
 	deletions: number;
 }
 
-/** Recent PRs across repos, including PRs merged outside OpenSession. */
+/** Recent PRs across repos, including PRs merged outside Open Session. */
 export async function fetchRecentPrs(person?: string): Promise<RecentPr[]> {
 	const suffix = person ? `?person=${encodeURIComponent(person)}` : "";
 	const data = await request<{ prs: RecentPr[] }>(`/recent-prs${suffix}`, {

@@ -255,7 +255,7 @@ const PR_CHORD = /Mac|iPhone|iPad|iPod/.test(navigator.platform)
 	: "Ctrl+G";
 
 /**
- * The PR chip links to OpenSession's review by default. GitHub remains a
+ * The PR chip links to Open Session's review by default. GitHub remains a
  * separate outbound action, while the context menu holds copy actions.
  */
 function PrNumberChip({

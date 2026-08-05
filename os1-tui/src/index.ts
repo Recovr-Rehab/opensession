@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * `os` — the OpenSession terminal client.
+ * `os` — the Open Session terminal client.
  *
  * A client and nothing else: HTTP + one WebSocket per watched session. It never
  * imports the server, never spawns an agent, never touches a worktree. That's
@@ -51,7 +51,7 @@ const hostFlag = typeof flags.get("host") === "string" ? (flags.get("host") as s
 
 function usage(): void {
 	console.log(`
-os — OpenSession in your terminal (v${VERSION})
+os — Open Session in your terminal (v${VERSION})
 
   os                        open the TUI against the configured server
   os --host os.company.dev  …against a specific server (and remember it)

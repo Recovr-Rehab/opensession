@@ -657,7 +657,7 @@ export async function processMessage(
     };
     activeSessions.set(sessionKey, session);
     createdSession = true;
-    // Persist immediately — the "Open in OpenSession" link posted below points
+    // Persist immediately — the "Open in Open Session" link posted below points
     // at slack-<channel>-<ts>, which only resolves once this file exists.
     await saveSession(session);
   }
@@ -717,7 +717,7 @@ export async function processMessage(
   const streamer = new SlackStreamer(channel, threadTs, msg.userId);
   await streamer.setStatus("is thinking...");
 
-  // Post a status message with the live OpenSession session link and a Stop
+  // Post a status message with the live Open Session session link and a Stop
   // button, so the run can be followed/cancelled even if Slack's assistant DM
   // disables the input field while we're working.
   const opensessionUrl = `${configuredServer().publicBaseUrl}/session/slack-${encodeURIComponent(sessionKey)}`;
@@ -728,8 +728,8 @@ export async function processMessage(
     action_id: `opensession:${sessionKey}`,
   };
 
-  // Action rows for the live progress card: Stop+OpenSession while running,
-  // OpenSession-only once finished.
+  // Action rows for the live progress card: Stop+Open Session while running,
+  // Open Session only once finished.
   const runningActions = {
     type: "actions",
     block_id: `stop-actions-${sessionKey}`,
@@ -785,7 +785,7 @@ export async function processMessage(
   );
 
   // Backwards-compatible alias: every exit path already calls this to collapse
-  // the Stop button into the OpenSession link. Now it also renders the terminal
+  // the Stop button into the Open Session link. Now it also renders the terminal
   // checklist state.
   const dismissStopButton = (label: string): Promise<void> =>
     progress.finish(label);
@@ -1353,7 +1353,7 @@ const UI_BASE =
   configuredServer().publicBaseUrl;
 
 /**
- * Slack card for a triggered PR action. While running: Open-in-OpenSession + Stop.
+ * Slack card for a triggered PR action. While running: "Open in Open Session" + Stop.
  * Once done: Stop is dropped (it's useless) and a "finished" note is added.
  */
 function prActionCardBlocks(message: string, bksId: string, running: boolean): any[] {

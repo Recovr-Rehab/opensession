@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Drain-aware git-pull deploy for OpenSession, run ON the EC2 box by a CI
+# Drain-aware git-pull deploy for Open Session, run ON the EC2 box by a CI
 # deploy job (this repo ships no such workflow — wire up your own) via AWS SSM
 # Run Command (AWS-RunShellScript). No inbound ingress, no SSH — CI
 # authenticates to AWS with OIDC and calls ssm:SendCommand; the SSM agent on
@@ -72,7 +72,7 @@ fi
 OPENSESSION_RESOURCE_SOURCE="$REPO_DIR/deploy/systemd/opensession.service.d/resources.conf"
 OPENSESSION_RESOURCE_PATH="/etc/systemd/system/opensession.service.d/resources.conf"
 if ! cmp -s "$OPENSESSION_RESOURCE_SOURCE" "$OPENSESSION_RESOURCE_PATH"; then
-  echo "[deploy] OpenSession resource override changed — syncing drop-in + daemon-reload"
+  echo "[deploy] Open Session resource override changed — syncing drop-in + daemon-reload"
   install -d -m 0755 "$(dirname "$OPENSESSION_RESOURCE_PATH")"
   install -m 0644 "$OPENSESSION_RESOURCE_SOURCE" "$OPENSESSION_RESOURCE_PATH"
   systemctl daemon-reload
@@ -81,7 +81,7 @@ fi
 OPENSESSION_SLICE_SOURCE="$REPO_DIR/deploy/systemd/user/opensession.slice"
 OPENSESSION_SLICE_PATH="$SERVICE_HOME_DIR/.config/systemd/user/opensession.slice"
 if ! cmp -s "$OPENSESSION_SLICE_SOURCE" "$OPENSESSION_SLICE_PATH"; then
-  echo "[deploy] OpenSession user slice changed — syncing aggregate resource budget"
+  echo "[deploy] Open Session user slice changed — syncing aggregate resource budget"
   install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$(dirname "$OPENSESSION_SLICE_PATH")"
   install -m 0644 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
     "$OPENSESSION_SLICE_SOURCE" "$OPENSESSION_SLICE_PATH"

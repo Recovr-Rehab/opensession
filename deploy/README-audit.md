@@ -1,6 +1,6 @@
-# OpenSession audit logs
+# Open Session audit logs
 
-OpenSession keeps a structured audit trail of every agent run
+Open Session keeps a structured audit trail of every agent run
 (`src/server/audit.ts`): one JSON line per event, in a daily file.
 
 ## What gets logged
@@ -29,7 +29,7 @@ the retention in the example CloudWatch shipping config.
 
 ## Shipping to CloudWatch (optional, one-time setup, needs admin)
 
-OpenSession runs as a systemd unit that hard-denies IMDS
+Open Session runs as a systemd unit that hard-denies IMDS
 (`opensession.service`), so the app itself can never hold AWS credentials —
 instead the standalone amazon-cloudwatch-agent (its own systemd service,
 IMDS allowed) tails the audit files into a log group. The example config

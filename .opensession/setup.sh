@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot worktree setup for the OpenSession self-preview.
+# One-shot worktree setup for the Open Session self-preview.
 #
 # The preview flow runs this once per worktree (stamped by the caller — see
 # src/server/preview.ts setupStampPath) before the first start.sh, with the

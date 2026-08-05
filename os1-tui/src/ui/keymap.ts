@@ -100,7 +100,7 @@ function act(action: Action, prefixArmed = false): Resolution {
 }
 
 /**
- * The prefix command table — tmux's, with OpenSession verbs where tmux has no
+ * The prefix command table — tmux's, with Open Session verbs where tmux has no
  * equivalent. Shared by every mode: `^b d` detaches even mid-typing, which is
  * what tmux users expect.
  */

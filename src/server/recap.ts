@@ -94,7 +94,7 @@ export function maybeRecapOnReturn(sessionId: string, user?: string): void {
 }
 
 const RECAP_SYSTEM =
-  "You write session recaps for OpenSession, an agent-session dashboard. " +
+  "You write session recaps for Open Session, an agent-session dashboard. " +
   "The viewer stepped away while the agent kept working and is coming back now. " +
   "Recap the session in under 60 words, 1-3 plain sentences, no markdown, no preamble. " +
   "Lead with the overall goal and where the work stands now, then end with the single " +

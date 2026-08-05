@@ -6,7 +6,7 @@
  *   - `<CopyCheck>` for the subtle inline swap — a button's link/copy glyph
  *     morphs into a drawing checkmark for a beat, then swaps back.
  *
- * OpenSession is served over plain HTTP on the tailnet, so clipboard writes go
+ * Open Session is served over plain HTTP on the tailnet, so clipboard writes go
  * through `copyToClipboard` (secure-context aware, hidden-textarea fallback).
  */
 

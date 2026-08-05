@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Build the bundled OpenSession server sidecar for the Electron shell.
+ * Build the bundled Open Session server sidecar for the Electron shell.
  *
  * The output (build/vendor/server/, packaged as Contents/Resources/server) is
  * what local mode runs when no source checkout exists (src/local-server.js):

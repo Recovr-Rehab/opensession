@@ -18,14 +18,14 @@
  *   - rollbackTo flips the live version back to an earlier snapshot
  *
  * Deliberately NOT ported from qm: per-scope share grants. Reaching a deploy
- * requires reaching OpenSession, which is already tailnet- and team-gated —
+ * requires reaching Open Session, which is already tailnet- and team-gated —
  * an ACL lattice on top would be the scope machinery the qm analysis
  * explicitly recommended against at our size. Deploys are visible to the team;
  * that is stated in the tool description so nobody publishes secrets expecting
  * per-person privacy.
  *
  * Security posture, stated plainly: a deploy is arbitrary agent-authored code
- * running unsandboxed and persistently as the OpenSession user. Sessions
+ * running unsandboxed and persistently as the Open Session user. Sessions
  * already run arbitrary code — what is new is that it outlives the session. So
  * publishing is interactive-only (never automations, whose input is untrusted
  * text), every publish/relaunch/stop is audited, and the Deploys UI lists what

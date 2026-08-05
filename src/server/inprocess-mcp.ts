@@ -5,7 +5,7 @@
  * createSdkMcpServer/tool helpers with the exact same call shape.
  *
  * The server object carries a live McpServer `instance` that executes inside
- * the OpenSession process (tools close over live state: SessionControl,
+ * the Open Session process (tools close over live state: SessionControl,
  * pendingAsks, attachRepo…). Consumers:
  *  - run-rpc.ts connects `instance` over an InMemoryTransport pair and
  *    forwards tools/list + tools/call from the per-run stdio proxies

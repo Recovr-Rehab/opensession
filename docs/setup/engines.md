@@ -39,7 +39,7 @@ schema from `src/server/opencode-config.ts`:
 
 ## Account pools — the mental model
 
-OpenSession runs a whole team on **subscription capacity, not API keys**. For
+Open Session runs a whole team on **subscription capacity, not API keys**. For
 each provider you enroll one or more accounts — Claude Max subscriptions,
 ChatGPT-plan logins — into a pool, and every agent turn checks one out:
 

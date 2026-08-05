@@ -72,7 +72,7 @@ export async function handleWorkspaceRoutes(
 		const sessionId = url.searchParams.get("session");
 		const repos: Array<{ repo: string; dir: string; primary: boolean }> =
 			[];
-		// OpenSession sessions have an owned JSON file, so read their small record
+		// Open Session sessions have an owned JSON file, so read their small record
 		// directly instead of refreshing the entire cross-source session catalog.
 		const session =
 			findNativeSessionForFileMentions(sessionId) ??
@@ -221,7 +221,7 @@ export async function handleWorkspaceRoutes(
 			const proj = getRepo(url.searchParams.get("repo") || undefined);
 			if (existsSync(proj.repo)) dir = proj.repo;
 		}
-		// OpenSession's own slash commands (/compact, /model, /goal, …) only
+		// Open Session's own slash commands (/compact, /model, /goal, …) only
 		// work on existing opensession sessions — handleSlashCommand runs in
 		// the prompt path, not on new-session opening prompts.
 		const includeBuiltins = session?.source === "opensession";

@@ -238,7 +238,7 @@ export function deleteWorktree(branch: string): void {
 
 // --- Action activity streaming ---
 
-/** Base URL of the OpenSession web UI, linked from Linear sessions. */
+/** Base URL of the Open Session web UI, linked from Linear sessions. */
 export const OPENSESSION_UI_BASE =
   process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;

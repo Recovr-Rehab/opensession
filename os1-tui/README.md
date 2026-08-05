@@ -1,6 +1,6 @@
 # os1-tui — `os`
 
-OpenSession in your terminal. A herdr-style TUI that connects to an OpenSession
+Open Session in your terminal. A herdr-style TUI that connects to an Open Session
 server and shows you *your* sessions: workspace sidebar, live transcripts, tabs,
 tmux keys.
 

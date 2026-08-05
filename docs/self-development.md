@@ -1,6 +1,6 @@
-# Self-development: working on OpenSession with OpenSession
+# Self-development: working on Open Session with Open Session
 
-OpenSession can develop itself: open a session on the `opensession` repo, edit
+Open Session can develop itself: open a session on the `opensession` repo, edit
 the server, and press **Preview** to boot your edited code as an isolated dev
 instance next to the one you are using. This doc explains the pieces and their
 boundaries.

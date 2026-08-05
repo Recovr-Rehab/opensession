@@ -7,7 +7,7 @@
  *   team — workspace-wide facts (the SAME store as Slack public-channel memory)
  *
  * Wired the same way as the opensession-* siblings: interactive runs only
- * (OpenSession web sessions), NEVER automations. Automation runs process
+ * (Open Session web sessions), NEVER automations. Automation runs process
  * untrusted event/ticket text — a write tool here would make prompt injection
  * persistent (plant a "fact" once, poison every future run). Automations get
  * read-only injection instead (runAutomation appends renderSessionMemoryNote).

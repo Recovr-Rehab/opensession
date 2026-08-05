@@ -31,7 +31,7 @@ beforeAll(async () => {
 				opensession: {
 					repo: "/home/ubuntu/projects/opensession",
 					ghRepo: "tellahq/backstage",
-					label: "OpenSession",
+					label: "Open Session",
 				},
 			},
 		}),
@@ -157,7 +157,7 @@ describe("getAllSessions", () => {
 
 	it("deduplicates Codex sessions by thread id and keeps dropped ids as aliases", async () => {
 		writeSession("bks-codex-shared-thread", {
-			title: "OpenSession Codex thread",
+			title: "Open Session Codex thread",
 			repo: "opensession",
 			model: "gpt-5.5",
 			codexThreadId: "codex-thread-shared",

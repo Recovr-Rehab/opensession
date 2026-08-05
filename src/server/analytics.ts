@@ -1,5 +1,5 @@
 /**
- * Analytics: what happened on/because of OpenSession, aggregated for the
+ * Analytics: what happened on/because of Open Session, aggregated for the
  * Analytics view (sidebar → Analytics). Three sources, all read-only:
  *
  * - The audit log (~/.opensession-audit/audit-YYYY-MM-DD.jsonl) for per-turn
@@ -9,7 +9,7 @@
  *   never do).
  * - The session store (~/.opensession-chats) for who created what: person,
  *   automation, mode, branch, repo.
- * - `gh pr list` for PRs opened/merged in the range, attributed to OpenSession
+ * - `gh pr list` for PRs opened/merged in the range, attributed to Open Session
  *   by head-branch ∈ {branches of code-mode sessions} (review sessions are
  *   ask-mode and don't own their branch, so reviewed-only PRs don't count).
  */
@@ -665,7 +665,7 @@ export interface AnalyticsSummary {
 	prs: AnalyticsPr[];
 	factory: {
 		days: Array<{ date: string; reviewed: number; unreviewed: number }>;
-		/** Merged PRs whose head branch belongs to an OpenSession code session. */
+		/** Merged PRs whose head branch belongs to an Open Session code session. */
 		agent: FactoryCohort;
 		/** Every other merged PR in range (humans + external bots). */
 		other: FactoryCohort;

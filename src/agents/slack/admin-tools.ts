@@ -49,7 +49,7 @@ export interface AdminToolContext extends MemoryContext {
   /**
    * Slack thread anchor (thread_ts) of the originating message, when this runs
    * from a Slack thread. Lets schedule_once post a reminder back into "this"
-   * thread. Absent in OpenSession sessions (no Slack thread).
+   * thread. Absent in Open Session sessions (no Slack thread).
    */
   threadTs?: string;
 }
@@ -292,7 +292,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
         async (args: { id: string }) => {
           const a = getAutomation(args.id);
           if (!a) return text(`No automation with id \`${args.id}\`.`);
-          // Fire-and-forget; the run reports into the OpenSession session list.
+          // Fire-and-forget; the run reports into the Open Session session list.
           void runAutomation(a, undefined, { trigger: "manual" }).catch((e) =>
             console.error("[admin] run_automation failed:", e)
           );
@@ -340,7 +340,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           }
 
           // Post back into "this" Slack thread by default — only possible when we
-          // actually have one (Slack runs carry channel+threadTs; OpenSession doesn't).
+          // actually have one (Slack runs carry channel+threadTs; Open Session doesn't).
           const inSlackThread = !!ctx.threadTs && !!ctx.channel && ctx.channel !== "opensession";
           const replyInThread = args.replyInThread !== false && inSlackThread;
 

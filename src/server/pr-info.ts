@@ -775,7 +775,7 @@ export async function mergePr(
 
 /**
  * Add and/or remove GitHub reviewers on the PR for `branch` (best-effort — the
- * caller ignores the result on failure). Mirrors the OpenSession review-request
+ * caller ignores the result on failure). Mirrors the Open Session review-request
  * chip onto GitHub's own Reviewers list: setting a reviewer in the info panel
  * also `--add-reviewer`s them, re-assigning removes the old and adds the new,
  * and clearing removes them. `gh pr edit` takes the branch as the PR selector,

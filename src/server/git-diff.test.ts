@@ -16,9 +16,9 @@ describe("getSessionDiff", () => {
     dirs.push(dir);
     const env = {
       ...process.env,
-      GIT_AUTHOR_NAME: "OpenSession Test",
+      GIT_AUTHOR_NAME: "Open Session Test",
       GIT_AUTHOR_EMAIL: "test@opensession.local",
-      GIT_COMMITTER_NAME: "OpenSession Test",
+      GIT_COMMITTER_NAME: "Open Session Test",
       GIT_COMMITTER_EMAIL: "test@opensession.local",
     };
     expect(Bun.spawnSync(["git", "init", "-b", "main"], { cwd: dir, env }).exitCode).toBe(0);

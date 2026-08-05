@@ -7,7 +7,7 @@ import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 
 /**
- * Analytics: what happened on/because of OpenSession over a date range —
+ * Analytics: what happened on/because of Open Session over a date range —
  * sessions, tokens, models, PRs, people, automations. Data comes aggregated
  * from GET /api/analytics (src/server/analytics.ts); this file is pure
  * presentation: stat tiles + hand-rolled SVG bar charts (stacked/grouped)

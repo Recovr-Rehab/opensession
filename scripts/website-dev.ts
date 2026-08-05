@@ -23,4 +23,4 @@ Bun.serve({
 	},
 });
 
-console.log(`OpenSession website: http://127.0.0.1:${port}`);
+console.log(`Open Session website: http://127.0.0.1:${port}`);

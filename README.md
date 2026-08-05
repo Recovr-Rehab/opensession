@@ -1,11 +1,11 @@
-# OpenSession
+# Open Session
 
 Self-hosted agent-infrastructure server: a web UI plus Slack, Linear, Plain,
 and GitHub agents, driving coding sessions through the OpenCode engine
 (any model provider) in git worktrees on your own box, or in isolated
 sandboxes — Docker locally, with pluggable adapters for other providers.
 
-![The OpenSession session view: a running agent turn with its tool calls, next to the workspace sidebar](docs/screenshot.png)
+![The Open Session session view: a running agent turn with its tool calls, next to the workspace sidebar](docs/screenshot.png)
 
 *More: [pull-request review, diffs, automations, mobile →](docs/screenshots.md)*
 
@@ -35,7 +35,7 @@ cd opensession && bun install
 bun run setup                             # same wizard, without the installer
 ```
 
-> **Letting the agent improve OpenSession itself?** Clone your **fork**, not
+> **Letting the agent improve Open Session itself?** Clone your **fork**, not
 > this repo. Self-sessions commit and push to `origin` (and `deploy_self`
 > fast-forwards from it) — pointed at `tellahq/opensession` every push is
 > rejected and, once you've self-modified, updates from us stop fast-forwarding.
@@ -52,7 +52,7 @@ You're installing agent infrastructure — let an agent install it. Paste this
 into Claude Code (or any coding agent) running on the box you want it on:
 
 ```text
-Set up OpenSession (https://github.com/tellahq/opensession) on this machine
+Set up Open Session (https://github.com/tellahq/opensession) on this machine
 for me. Go step by step and ask me one question at a time before acting.
 
 1. Check the basics: OS, git, whether ~/.opensession already exists.
@@ -92,7 +92,7 @@ Then read the real setup guide — secrets, accounts, integrations, systemd:
 - [docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md) — isolated
   Docker/Daytona/E2B/Box/Modal/AWS Lambda MicroVM execution for sessions
 
-> **No built-in authentication.** OpenSession trusts everyone who can reach the
+> **No built-in authentication.** Open Session trusts everyone who can reach the
 > address it binds to. Keep it on Tailscale, a private network, or behind an SSH
 > tunnel — never expose it publicly. See the
 > [trust model](docs/setup/README.md#trust-model-read-this), and
@@ -102,7 +102,7 @@ Repositories, identity, branding, public URLs, integration enablement,
 deployment policy, client endpoints, action seeds, and automation seeds are
 instance configuration
 ([docs/instance-configuration.md](docs/instance-configuration.md)). The source
-defaults to a local, single-repository OpenSession install.
+defaults to a local, single-repository Open Session install.
 
 ## Clients
 

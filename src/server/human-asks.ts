@@ -1,5 +1,5 @@
 /**
- * human-asks — the "human in the loop" registry. Lets a OpenSession session ask a
+ * human-asks — the "human in the loop" registry. Lets an Open Session session ask a
  * *teammate* a question over Slack and fold the answer back into the session,
  * the way the AskUserQuestion machinery asks the session's own driver.
  *
@@ -25,7 +25,7 @@
  * Slack agent's slack-api helpers; nothing there imports back into the server, so
  * there's no import cycle.
  *
- * Wired into interactive runs only (Slack + OpenSession sessions), never automation
+ * Wired into interactive runs only (Slack + Open Session sessions), never automation
  * runs — same privilege boundary as opensession-sessions/opensession-admin: untrusted
  * ticket text must not be able to DM the team as Michael.
  */
@@ -71,7 +71,7 @@ export type DeliverWhen = "now" | "when_done" | "on_pr" | { atIso: string };
 
 export interface HumanAsk {
   id: string;
-  /** OpenSession session that raised the ask (answers route back here). */
+  /** Open Session session that raised the ask (answers route back here). */
   sessionId: string;
   /** Display name of whoever drove the session when it asked. */
   createdBy: string;
@@ -612,7 +612,7 @@ function resolveAsk(
     console.error(`[human-asks] no session control to deliver answer for ${a.id}`);
     return;
   }
-  // Unicode emoji (the OpenSession markdown renderer doesn't expand :shortcodes:)
+  // Unicode emoji (the Open Session markdown renderer doesn't expand :shortcodes:)
   // and a structured header the web UI keys on to render this as a distinct
   // "human reply" bubble rather than one of the session driver's own messages.
   const who = via === "ui" ? answeredBy || a.person.name : a.person.name;

@@ -40,7 +40,7 @@ export type SandboxProviderId =
  * container/volume names off `sessionId`.
  */
 export interface SandboxSessionSpec {
-  /** OpenSession session id (bks-…). Container providers name resources by it. */
+  /** Open Session session id (bks-…). Container providers name resources by it. */
   sessionId: string;
   /** Registered repo id (worktree.ts REPOS). Defaults to tella-fusion. */
   repo?: string;

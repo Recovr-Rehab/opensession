@@ -29,7 +29,7 @@ export function createSearchMcpServer() {
 	const tools = [
 		tool(
 			"search_history",
-			"Search past OpenSession sessions (distilled question/resolution records, lexical match + recency-weighted). Use BEFORE re-deriving something that has likely been solved here before: a bug that looks familiar, an error string, 'how did we fix/decide X', which session touched a file or subsystem. Exact tokens work best — error fragments, file names, function names, flag names. Results are distilled records, not the transcript: take the session id of anything you'd act on and expand it with read_history.",
+			"Search past Open Session sessions (distilled question/resolution records, lexical match + recency-weighted). Use BEFORE re-deriving something that has likely been solved here before: a bug that looks familiar, an error string, 'how did we fix/decide X', which session touched a file or subsystem. Exact tokens work best — error fragments, file names, function names, flag names. Results are distilled records, not the transcript: take the session id of anything you'd act on and expand it with read_history.",
 			{
 				query: z
 					.string()

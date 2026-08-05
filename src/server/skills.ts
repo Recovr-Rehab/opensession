@@ -41,7 +41,7 @@ const SYSTEM_SKILLS: SkillEntry[] = [
 ];
 
 /**
- * OpenSession's own slash commands (handled by handleSlashCommand in opensession.ts
+ * Open Session's own slash commands (handled by handleSlashCommand in opensession.ts
  * before anything reaches the runner). Listed here so they show up in the
  * composer's "/" autocomplete alongside file-based skills/commands — keep in
  * sync with the handler and its /help text.

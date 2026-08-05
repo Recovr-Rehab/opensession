@@ -2363,7 +2363,7 @@ export function sessionMentionsNote(
 		return `- @session:${id} — ${bits.join(" · ")}`;
 	});
 	return (
-		`[The @session mentions above refer to other OpenSession sessions:\n${lines.join("\n")}\n` +
+		`[The @session mentions above refer to other Open Session sessions:\n${lines.join("\n")}\n` +
 		`Use the opensession-sessions MCP tools with these ids: get_session (state, pending question, ` +
 		`transcript tail), send_to_session (a message — or a slash command handled by opensession ` +
 		`itself, e.g. "/loop 15m <prompt>" to set a recurring self-prompt on the target that fires ` +

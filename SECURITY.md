@@ -23,7 +23,7 @@ we can meet it.
 
 ## Read this before reporting: the trust model
 
-**OpenSession has no built-in authentication by default, and that is a design
+**Open Session has no built-in authentication by default, and that is a design
 choice rather than a bug.** It binds to `127.0.0.1` and trusts whoever can reach
 that address. The "user" in the UI is a self-selected display name — attribution,
 not access control.
@@ -102,7 +102,7 @@ that changes, this section will say so.
 
 ## For operators
 
-If you run OpenSession, the highest-value things you can do:
+If you run Open Session, the highest-value things you can do:
 
 1. **Keep it off the public internet.** [networking.md](docs/setup/networking.md)
    — and verify from *outside* your network, which is the only check that proves

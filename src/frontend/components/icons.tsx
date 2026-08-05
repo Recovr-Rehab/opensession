@@ -2,7 +2,7 @@ import React from "react";
 
 /**
  * Icon set lifted from tella-fusion's `iconic-pro` library
- * (packages/core/webapp/src/frontend/assets/icons/iconic-pro) so OpenSession's
+ * (packages/core/webapp/src/frontend/assets/icons/iconic-pro) so Open Session's
  * chat UI uses the same quality stroke icons as the product instead of emoji.
  * All are 24×24, `currentColor`, stroke-width 1.5 — size via the `size` prop.
  *

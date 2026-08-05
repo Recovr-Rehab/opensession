@@ -39,7 +39,7 @@ Pairing code
   valid for 10 minutes, single use
 ```
 
-On the **machine you want to attach** — install OpenSession, then connect:
+On the **machine you want to attach** — install Open Session, then connect:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash

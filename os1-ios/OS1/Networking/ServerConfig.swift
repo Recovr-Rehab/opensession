@@ -3,7 +3,7 @@ import Observation
 
 /// Server endpoint + credentials. The URL lives in UserDefaults, the bearer
 /// token in the keychain. `ws` path and `Authorization` header conventions
-/// follow the OpenSession server (see README for the wire protocol).
+/// follow the Open Session server (see README for the wire protocol).
 // Deliberately not actor-isolated: views read `shared` from nonisolated
 // property initializers, and the backing stores (UserDefaults/Keychain) are
 // safe to touch from any thread.

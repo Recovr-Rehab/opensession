@@ -20,7 +20,7 @@ private final class SafeImageRedirectDelegate: NSObject, URLSessionTaskDelegate 
     }
 }
 
-/// Thin REST client for the OpenSession HTTP API. Prompting is WS-only on the
+/// Thin REST client for the Open Session HTTP API. Prompting is WS-only on the
 /// server, so this covers reads plus the occasional mutation.
 @MainActor
 enum OS1API {

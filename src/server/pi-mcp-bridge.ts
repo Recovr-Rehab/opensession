@@ -26,7 +26,7 @@
  *    a fresh Authorization is injected per REQUEST by the relay, so
  *    short-lived tokens never sit in bridge state and can't expire mid-turn.
  *  - stdio servers spawn with getDefaultEnvironment() + the server's own
- *    configured env — never this process's env (it holds OpenSession tokens).
+ *    configured env — never this process's env (it holds Open Session tokens).
  *
  * Lifecycle: connections open during creation because MCP has no offline tool
  * discovery — `tools/list` needs a live connection, so a resolved server
@@ -215,7 +215,7 @@ export async function createPiMcpBridge(opts: {
         command: String(cfg.command),
         args: (cfg.args as string[]) || [],
         // Safe inherit-set + the server's own configured credentials — never
-        // this process's env (it holds OpenSession tokens).
+        // this process's env (it holds Open Session tokens).
         env: {
           ...getDefaultEnvironment(),
           ...((cfg.env as Record<string, string>) || {}),

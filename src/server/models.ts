@@ -896,7 +896,7 @@ export function interactiveFallbackModel(_primaryModel?: string): string | undef
 /** Codex models retired 2026-07-25 (Michiel: "no 5.5 and 5.4", then "also
  *  remove spark, there are cheap 5.6 models instead, terra and luna"). Their
  *  real ChatGPT-backend window is 272k, and the backend reserves the 128k
- *  output ceiling out of it → a 144k input cap. OpenSession sessions carry a
+ *  output ceiling out of it → a 144k input cap. Open Session sessions carry a
  *  ~125k fixed per-turn payload (MCP tool schemas + system prompt +
  *  instructions), which sits exactly on opencode's autocompact arm point
  *  (~124k) — so every turn trips a pointless compaction (bks-019f982d: 12
@@ -973,7 +973,7 @@ export function accountProviderForModel(
 }
 
 /**
- * Default model for interactive OpenSession sessions and the picker: the global
+ * Default model for interactive Open Session sessions and the picker: the global
  * default mapped onto the opencode engine (so new interactive sessions and the
  * picker's "default" row run on opencode). getDefaultModel() itself is left
  * native — the direct agent loops (Slack/Linear/Plain) still read it and run it

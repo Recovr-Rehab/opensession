@@ -47,7 +47,7 @@ deploy/sandbox/microvm/.cache-busybox
 # macOS Finder metadata
 .DS_Store
 
-# Vendored third-party agent skills — instance-local, not part of OpenSession
+# Vendored third-party agent skills — instance-local, not part of Open Session
 # (MIT content fetched from emilkowalski/skills and jakubkrehel/skills)
 .agents/skills/
 .claude/skills

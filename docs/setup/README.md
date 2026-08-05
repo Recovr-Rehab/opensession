@@ -1,6 +1,6 @@
-# OpenSession setup
+# Open Session setup
 
-Operator documentation for self-hosting OpenSession. Start at
+Operator documentation for self-hosting Open Session. Start at
 [install.md](install.md); the other pages are per-integration and optional.
 
 For a single-user, interactive-only installation on macOS, use the smaller
@@ -8,7 +8,7 @@ For a single-user, interactive-only installation on macOS, use the smaller
 
 ## What it is
 
-OpenSession is a self-hosted agent-infrastructure server. One Bun process serves:
+Open Session is a self-hosted agent-infrastructure server. One Bun process serves:
 
 - **A web UI** for creating and steering coding sessions (chats) that run
   against registered git repos, in isolated worktrees or Docker sandboxes.
@@ -74,7 +74,7 @@ UI and API at the root of your instance URL.
 
 ## Trust model (read this)
 
-**By default there is no authentication.** OpenSession binds to `HOST` (default
+**By default there is no authentication.** Open Session binds to `HOST` (default
 `127.0.0.1`) and trusts everyone who can reach that address. The UI "user" is a
 self-selected display name in localStorage — it drives attribution and per-user
 tool gating, not access control. On a default install, **the bind address is the

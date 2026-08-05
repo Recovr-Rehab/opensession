@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# migrate-opensession-state.sh — one-shot OpenSession → OpenSession state rename
+# migrate-opensession-state.sh — one-shot Backstage → Open Session state rename
 # (docs/rename-opensession-plan.md, Tier B).
 #
 # Renames every `~/.opensession-*` state dir/file (plus `~/.backstage` and

@@ -53,13 +53,13 @@ export function createNotesMcpServer(deps: NotesToolDeps = defaultDeps) {
   const tools = [
     tool(
       "list_notes",
-      "List all shared OpenSession notes, newest first. Returns each note's id, title, and last-updated timestamp; use the id with read_note, update_note, or delete_note.",
+      "List all shared Open Session notes, newest first. Returns each note's id, title, and last-updated timestamp; use the id with read_note, update_note, or delete_note.",
       {},
       async () => text(JSON.stringify({ notes: deps.list() }, null, 2)),
     ),
     tool(
       "read_note",
-      "Read a shared OpenSession note by id, including its metadata and complete Markdown content. Use list_notes when the id is unknown.",
+      "Read a shared Open Session note by id, including its metadata and complete Markdown content. Use list_notes when the id is unknown.",
       {
         id: z.string().describe("The note id returned by list_notes."),
       },
@@ -81,7 +81,7 @@ export function createNotesMcpServer(deps: NotesToolDeps = defaultDeps) {
     ),
     tool(
       "update_note",
-      "Replace a shared OpenSession note's complete Markdown content. This is available in read-only Ask sessions because it changes shared Desk state, not repository files. The change is applied as a minimal Yjs diff and appears immediately for people editing the note. Read the note first to avoid overwriting newer content.",
+      "Replace a shared Open Session note's complete Markdown content. This is available in read-only Ask sessions because it changes shared Desk state, not repository files. The change is applied as a minimal Yjs diff and appears immediately for people editing the note. Read the note first to avoid overwriting newer content.",
       {
         id: z.string().describe("The note id returned by list_notes."),
         content: z.string().describe("The complete replacement Markdown content."),
@@ -96,7 +96,7 @@ export function createNotesMcpServer(deps: NotesToolDeps = defaultDeps) {
     ),
     tool(
       "delete_note",
-      "Permanently delete a shared OpenSession note by id. This removes the note for everyone and cannot be undone.",
+      "Permanently delete a shared Open Session note by id. This removes the note for everyone and cannot be undone.",
       {
         id: z.string().describe("The note id returned by list_notes."),
       },

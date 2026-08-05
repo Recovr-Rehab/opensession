@@ -166,7 +166,7 @@ export function linearEmailToGithubUsername(email: string | null): string | null
 /**
  * Resolve a teammate reference (a web-picker first name like "Kent", a full
  * name, an alias, a Slack id, or an email) to their GitHub login — for turning
- * a OpenSession review request into a real GitHub reviewer assignment. Reuses the
+ * an Open Session review request into a real GitHub reviewer assignment. Reuses the
  * same identity table as commit attribution. Returns null for anyone without a
  * known GitHub account.
  */

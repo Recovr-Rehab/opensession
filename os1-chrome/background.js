@@ -1,9 +1,9 @@
-// OpenSession Chrome extension — background service worker.
+// Open Session Chrome extension — background service worker.
 //
 // Deliberately tiny: the side panel (sidepanel.js) drives captures itself via
 // chrome.scripting/chrome.tabs (extension pages have full API access). The
 // worker only owns the bits that need a persistent-ish registration: opening
-// the panel from the toolbar icon, and the right-click "Send to OpenSession"
+// the panel from the toolbar icon, and the right-click "Send to Open Session"
 // entry that seeds the composer with the page/selection context.
 
 chrome.sidePanel
@@ -14,7 +14,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: "os1-send",
-      title: "Send to OpenSession",
+      title: "Send to Open Session",
       contexts: ["page", "selection", "image"],
     });
   });

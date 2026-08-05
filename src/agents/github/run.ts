@@ -104,12 +104,12 @@ const UI_BASE =
   process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
-/** OpenSession UI link to any session id (also used for handoff "open session" links). */
+/** Open Session UI link to any session id (also used for handoff "open session" links). */
 export function uiSessionUrl(sessionId: string): string {
   return `${UI_BASE}/session/${sessionId}`;
 }
 
-/** OpenSession UI link to a run's session, for "open to monitor" links in PR comments. */
+/** Open Session UI link to a run's session, for "open to monitor" links in PR comments. */
 export function sessionUrl(prNumber: number, kind: GithubRunKind, ghRepo?: string): string {
   return uiSessionUrl(bksIdFor(prNumber, kind, ghRepo));
 }

@@ -1,6 +1,6 @@
-# Networking: keeping OpenSession private
+# Networking: keeping Open Session private
 
-**OpenSession has no built-in authentication.** It trusts everyone who can
+**Open Session has no built-in authentication.** It trusts everyone who can
 reach the address it binds to. The "user" in the UI is a self-selected display
 name in localStorage — it drives attribution and per-user tool scoping, not
 access control.
@@ -30,7 +30,7 @@ small team.
 
 ### 1. Install it on the box
 
-**The OpenSession installer already did this** unless you passed
+**The Open Session installer already did this** unless you passed
 `--no-tailscale`. Check with `tailscale ip -4`; if it prints a `100.x` address
 you are already on a tailnet and can skip to step 3.
 
@@ -60,7 +60,7 @@ account. It *can* if you give it an
 tailscale ip -4        # e.g. 100.64.12.34
 ```
 
-### 4. Bind OpenSession to it
+### 4. Bind Open Session to it
 
 If you joined the tailnet *before* onboarding, this is already done — the
 wizard offers the tailnet address as the bind default. Otherwise:
@@ -105,7 +105,7 @@ binds to, so bind the proxy to the tailnet address too.
 ### Verify you are actually private
 
 ```sh
-# What is OpenSession listening on? Should be 127.0.0.1 or a 100.x tailnet IP.
+# What is Open Session listening on? Should be 127.0.0.1 or a 100.x tailnet IP.
 ss -tlnp | grep -E '3850|3848'
 
 # From somewhere off the tailnet (your phone on cellular, a cloud shell):
@@ -163,7 +163,7 @@ Renewal is the part people forget — put it on a timer.
 
 ### 3. Terminate TLS in front of the server
 
-Keep OpenSession on `127.0.0.1:3850` and let a proxy hold the certificate.
+Keep Open Session on `127.0.0.1:3850` and let a proxy hold the certificate.
 Caddy, bound to the tailnet address:
 
 ```caddy
@@ -179,9 +179,9 @@ interface, which quietly undoes the whole arrangement — the certificate makes 
 look secure while the port is open to the world.
 
 **A TLS proxy adds encryption, not authentication.** Anything that can reach the
-proxy can use OpenSession.
+proxy can use Open Session.
 
-### 4. Tell OpenSession its own name
+### 4. Tell Open Session its own name
 
 ```sh
 # ~/.opensession.env

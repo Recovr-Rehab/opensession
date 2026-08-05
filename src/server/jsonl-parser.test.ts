@@ -477,7 +477,7 @@ describe("Codex rollout parsing", () => {
         type: "response_item",
         payload: {
           type: "web_search_call",
-          action: { query: "OpenSession Codex support" },
+          action: { query: "Open Session Codex support" },
         },
       }),
       JSON.stringify({

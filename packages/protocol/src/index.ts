@@ -1,5 +1,5 @@
 /**
- * OpenSession protocol — the contracts a cloud agent session is made of:
+ * Open Session protocol — the contracts a cloud agent session is made of:
  *
  * - `./events`  — engine-neutral run event stream (`StreamEvent`, `TurnUsage`)
  * - `./runner`  — the run-host wire contract (`RunHostSpec`, host/client
@@ -8,7 +8,7 @@
  *                 asks, usage, core WebSocket frames): "bring your own UI"
  * - `./identity` — cross-cutting identity records (`GitIdentity`)
  *
- * The OpenSession server, web UI, and native clients are the reference
+ * The Open Session server, web UI, and native clients are the reference
  * implementations; anything speaking these types can run or watch a session.
  */
 export * from "./events";

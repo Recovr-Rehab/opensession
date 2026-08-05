@@ -1,6 +1,6 @@
 # Instance configuration
 
-OpenSession application code has portable defaults. Team-specific repositories,
+Open Session application code has portable defaults. Team-specific repositories,
 identity, domains, policy, integrations, and routines belong in
 `~/.opensession/config.json`; use
 [`config.example.json`](../config.example.json) as the schema and starting

@@ -1,5 +1,5 @@
 /**
- * Native OpenSession team chat — nothing to do with Slack. Two kinds of rooms
+ * Native Open Session team chat — nothing to do with Slack. Two kinds of rooms
  * share one implementation, keyed by channel id:
  *
  *   - "watercooler"      the team-wide room (left-sidebar entry)

@@ -65,7 +65,7 @@ export function createNodesMcpServer() {
     tools: [
       tool(
         "list_nodes",
-        "List machines attached to this OpenSession server that can run commands " +
+        "List machines attached to this Open Session server that can run commands " +
           "(macOS, Linux, Windows). Use this when work needs a platform or toolchain " +
           "this server does not have — an Xcode build, a Windows compile, a specific " +
           "GPU. Shows which are online right now.",

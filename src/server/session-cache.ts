@@ -297,7 +297,7 @@ export function maybePersistFastMode(
 // every account, credit/API errors). Those need a human to act — the sidebar
 // surfaces them as "Needs input" instead of letting them sink into the Backlog.
 // Keyed by canonical session id; parked on globalThis for hot reloads.
-// OpenSession-owned sessions also persist the error on their session file (via
+// Open Session-owned sessions also persist the error on their session file (via
 // recordRunOutcome) so the flag survives a real restart.
 export const runErrors: Map<string, { message: string; at: string }> =
 	(g.__runErrors ??= new Map());

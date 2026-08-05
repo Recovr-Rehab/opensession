@@ -165,7 +165,7 @@ registerSessionControl({
 				message: "Queued behind the current run.",
 			};
 		}
-		// OpenSession chats with no engine id are fresh chats — the first prompt
+		// Open Session chats with no engine id are fresh chats — the first prompt
 		// starts a new conversation (see runSessionPrompt).
 		if (
 			providerFor(session.model) === "claude" &&

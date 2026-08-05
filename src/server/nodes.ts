@@ -3,7 +3,7 @@
  *
  * The motivating case is platform-locked work: an iOS build needs macOS with
  * Xcode, a Windows build needs MSVC, and neither can happen on the Linux box
- * that hosts OpenSession. Sandboxes do not solve this (they are ephemeral Linux
+ * that hosts Open Session. Sandboxes do not solve this (they are ephemeral Linux
  * containers); a node is a persistent machine you own, attached on purpose.
  *
  * Trust model — this is the important part. A connected node executes agent

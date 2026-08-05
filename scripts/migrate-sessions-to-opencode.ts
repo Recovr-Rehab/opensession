@@ -146,7 +146,7 @@ const fmt = (r: Row) =>
   (r.skip ? `  (SKIP: ${r.skip})` : "") +
   (r.title ? `\n      ${r.title}` : "");
 
-console.log(`OpenSession session store: ${OPENSESSION_CHATS_DIR}`);
+console.log(`Open Session session store: ${OPENSESSION_CHATS_DIR}`);
 console.log(`\n${candidates.length} session(s) would migrate:\n`);
 for (const r of candidates) console.log(fmt(r));
 console.log(`\n${skipped.length} skipped:\n`);

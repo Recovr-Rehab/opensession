@@ -1,4 +1,4 @@
-# Extending OpenSession
+# Extending Open Session
 
 Five extension points, in rough order of how often you will reach for them.
 Adding capability should mean touching one of these — if you find yourself
@@ -7,7 +7,7 @@ extension point rather than that you need to edit the entry file.
 
 ## 1. MCP servers — give sessions new tools
 
-The lowest-effort way to add capability, and the one that requires no OpenSession
+The lowest-effort way to add capability, and the one that requires no Open Session
 code at all. Any [Model Context Protocol](https://modelcontextprotocol.io)
 server becomes tools your sessions can call.
 

@@ -1,6 +1,6 @@
 Default to using Bun instead of Node.js.
 
-OpenSession was born as Tella's internal agent server, code-named "backstage".
+Open Session was born as Tella's internal agent server, code-named "backstage".
 The code is fully renamed (2026-08-05); what remains of that history is
 READ-side tolerance for persisted data — old `bks-`/`prj-` ids in session
 files and links, legacy markers in old transcripts, and historical
@@ -110,7 +110,7 @@ Modules with module-scope side effects (listener/ticker registration guarded
 by `__opensessionBooted`) are explicitly side-effect-imported at the top of
 opensession.ts — if you add such a module, add it to that import list.
 
-## OpenSession dev workflow (self-hosting — read this first)
+## Open Session dev workflow (self-hosting — read this first)
 
 Naming: OPENSESSION_* env vars, `~/.opensession-*` state. URLs are prefix-less
 since 2026-07-10: the app serves at the bare domain root (your instance URL),
@@ -127,7 +127,7 @@ in-process MCP ids). Emit sites use only the new names (`os-`/`ws-` id
 prefixes, `OPENSESSION_VIDEO:`, `===OPENSESSION-SUMMARY===`,
 `<opensession:context>`); never rename what persisted data still carries.
 
-OpenSession runs itself from its main checkout. OpenSession code sessions do
+Open Session runs itself from its main checkout. Open Session code sessions do
 **not** get their own worktree
 (`sharedCheckout` in `src/server/worktree.ts`); they all work in this one shared
 checkout on the default branch. That's intentional wild-west iteration. The rules that keep
@@ -317,13 +317,13 @@ the bot credential, web mutations 403 to "connect your account"). A refresh
 rotates the token string, which changes the shared-server config hash →
 drain-respawn at next run start, by design.
 
-## Self-management tools (Slack + interactive OpenSession sessions)
+## Self-management tools (Slack + interactive Open Session sessions)
 
 The `opensession-admin` in-process MCP server (src/agents/slack/admin-tools.ts) lets the agent manage its own setup from Slack: channel memory (remember/list_memory/forget) and — gated to the trusted user (`isAdmin` = no `ALLOWED_SLACK_USER_ID` set, or sender matches it) — automations (list/create/update/delete/run) and MCP connections (list/add/remove). It is wired ONLY into interactive Slack runs (handlers.ts `processMessage`); automation runs never go through there, so they never receive these tools. Do not add `opensession-admin` to automation/`runAgent` paths — that would let untrusted ticket text reconfigure the agent. Channel memory is scoped in src/agents/slack/memory.ts (public channel → shared `workspace` store; private channel/DM → isolated, with read-only workspace view) and auto-injected into the system prompt each run.
 
-Both `opensession-admin` and `opensession-sessions` are ALSO available inside **interactive OpenSession sessions** (web UI + loops), not just Slack: `interactiveMcpServers(user, sessionId)` (src/server/interactive-mcp.ts) builds them and they are passed as `inProcessMcp` from the interactive run paths (`runSessionPrompt`, both `create_session` paths). They're withheld from automation runs **and** from interactive resumes of automation-owned sessions (gated on `!isAutomationSession`, the same gate as `deniedTools`) — untrusted ticket text must never reach these tools. OpenSession is network- and team-gated and already exposes all of this through its UI, so interactive users are treated as `isAdmin: true` there. The in-process servers are built with our own `src/server/inprocess-mcp.ts` (a thin @modelcontextprotocol/sdk wrapper) and reach opencode runs as stdio MCP proxies that forward to the in-process tools through OpenSession's run-RPC socket; the Slack loop registers its own slack-context server set per run via `registerSessionMcpServers` (run-rpc.ts) so those proxies execute the right context. The runner adds a short "Managing <persona.name>" context block when these tools are present so the session knows they exist.
+Both `opensession-admin` and `opensession-sessions` are ALSO available inside **interactive Open Session sessions** (web UI + loops), not just Slack: `interactiveMcpServers(user, sessionId)` (src/server/interactive-mcp.ts) builds them and they are passed as `inProcessMcp` from the interactive run paths (`runSessionPrompt`, both `create_session` paths). They're withheld from automation runs **and** from interactive resumes of automation-owned sessions (gated on `!isAutomationSession`, the same gate as `deniedTools`) — untrusted ticket text must never reach these tools. Open Session is network- and team-gated and already exposes all of this through its UI, so interactive users are treated as `isAdmin: true` there. The in-process servers are built with our own `src/server/inprocess-mcp.ts` (a thin @modelcontextprotocol/sdk wrapper) and reach opencode runs as stdio MCP proxies that forward to the in-process tools through Open Session's run-RPC socket; the Slack loop registers its own slack-context server set per run via `registerSessionMcpServers` (run-rpc.ts) so those proxies execute the right context. The runner adds a short "Managing <persona.name>" context block when these tools are present so the session knows they exist.
 
-The `opensession-sessions` in-process MCP (src/agents/slack/sessions-tools.ts) is a sibling, wired the same way (interactive runs only — Slack and OpenSession sessions per above — never automations). It lets the agent see and steer every *other* OpenSession session: read tools `list_sessions` (with a `waiting` filter for sessions blocked on an AskUserQuestion) and `get_session` (state + pending question + transcript tail) are open to any whitelisted user; the control tools — `answer_session_question` (resolves a paused question), `send_to_session` (steer/queue/start a turn), `cancel_session`, `create_session` — are gated to the trusted user via `isAdmin`. The tools don't touch in-process state directly; they go through the `SessionControl` registry (src/server/session-control.ts) that src/server/session-control-wiring.ts populates at boot with the same helpers (`runSessionPromptAndDrain`, `steerAgentRun`, `makeAskHandler`, the `pendingAsks`/`promptQueues` maps) the WebSocket handlers use — so steering from here behaves exactly like a human in the web UI, and an autonomous monitor can call the same registry directly without the MCP. Sessions whose runs aren't owned by this process (CLI/tmux) are surfaced as `observe-only` and can't be steered/cancelled. Do NOT wire `opensession-sessions` into automation/`runAgent` paths — cross-session control from untrusted ticket text would be a privilege-escalation path. (Sole carve-out: `automation.selfImprove` below, which grants the spawn_task suite only — never answer/send/cancel/create.)
+The `opensession-sessions` in-process MCP (src/agents/slack/sessions-tools.ts) is a sibling, wired the same way (interactive runs only — Slack and Open Session sessions per above — never automations). It lets the agent see and steer every *other* Open Session session: read tools `list_sessions` (with a `waiting` filter for sessions blocked on an AskUserQuestion) and `get_session` (state + pending question + transcript tail) are open to any whitelisted user; the control tools — `answer_session_question` (resolves a paused question), `send_to_session` (steer/queue/start a turn), `cancel_session`, `create_session` — are gated to the trusted user via `isAdmin`. The tools don't touch in-process state directly; they go through the `SessionControl` registry (src/server/session-control.ts) that src/server/session-control-wiring.ts populates at boot with the same helpers (`runSessionPromptAndDrain`, `steerAgentRun`, `makeAskHandler`, the `pendingAsks`/`promptQueues` maps) the WebSocket handlers use — so steering from here behaves exactly like a human in the web UI, and an autonomous monitor can call the same registry directly without the MCP. Sessions whose runs aren't owned by this process (CLI/tmux) are surfaced as `observe-only` and can't be steered/cancelled. Do NOT wire `opensession-sessions` into automation/`runAgent` paths — cross-session control from untrusted ticket text would be a privilege-escalation path. (Sole carve-out: `automation.selfImprove` below, which grants the spawn_task suite only — never answer/send/cancel/create.)
 
 **Papercuts is the one deliberate exception** to "no in-process servers for automations": `opensession-papercuts` (src/agents/slack/papercuts-tools.ts, store in src/server/papercuts.ts → ~/.opensession-papercuts) is an append-only friction log with no reads of anything sensitive and no control surface, so automation runs DO carry it (automations.ts registers the instances per run). Two invariants keep that safe: the run-rpc interactive builder (interactive-mcp.ts) fails closed for automation-owned sessions — a registered automation run token can never resolve the admin/sessions siblings through the socket — and the "Managing <persona.name>" instructions block is gated on `opensession-sessions` presence, not on any in-process server. Per-repo toggle (default on) in Settings → Papercuts; entries mirror into the audit log so the digest/Dreaming sees them. Keep new additions to automation runs held to the same bar: append-only, nothing sensitive readable, no control surface — anything more stays interactive-only.
 
@@ -332,14 +332,14 @@ The `opensession-sessions` in-process MCP (src/agents/slack/sessions-tools.ts) i
 ## Model routing and delegation
 
 Interactive sessions should act as orchestrators, not as the only worker. Use
-the OpenSession `opensession-sessions` MCP tools to spin up focused worker
+the Open Session `opensession-sessions` MCP tools to spin up focused worker
 sessions when that reduces context noise or parallelizes work.
 
 Pick the model that fits each task — intelligence and taste come first, cost
 isn't a reason to downgrade. All models run on the opencode engine (ids are
 `opencode/<provider>/<model>`; bare native ids map onto that form at dispatch).
 
-How to delegate from an OpenSession session:
+How to delegate from an Open Session session:
 - Use `opensession-sessions.create_session`, setting `model` to whatever fits
   the worker's task.
 - For workers that only need filesystem/code access, pass `mcpServers: []` so
@@ -381,7 +381,7 @@ tie-breaker. Do not ship mediocre output just because it was cheaper to produce.
 
 ## Multi-repo sessions
 
-A session is no longer single-repo. Beyond its primary `project`/`worktreeDir`/`branch`, it can **attach** secondary repos (`attachedRepos: {project,branch,dir}[]` on the session file + `UnifiedSession`). The registered repos live in `REPOS` (`src/server/worktree.ts`) — the repos registered in your config, each with a `defaultBranch` and `ghRepo` (`owner/name` for the gh CLI). All but the self-hosted OpenSession repo (`sharedCheckout`) use the normal worktree+PR flow.
+A session is no longer single-repo. Beyond its primary `project`/`worktreeDir`/`branch`, it can **attach** secondary repos (`attachedRepos: {project,branch,dir}[]` on the session file + `UnifiedSession`). The registered repos live in `REPOS` (`src/server/worktree.ts`) — the repos registered in your config, each with a `defaultBranch` and `ghRepo` (`owner/name` for the gh CLI). All but the self-hosted Open Session repo (`sharedCheckout`) use the normal worktree+PR flow.
 
 - **Attaching** creates (or reuses) an *isolated* worktree via `prepareAttachedWorktree` (never another repo's shared main checkout — that's the "parked on a random branch / collisions" trap). Default branch = the session's primary branch, so cross-repo PRs line up. Two entry points, both hitting `POST /api/sessions/:id/attach-repo` → `attachRepo()` in src/server/session-repos.ts: the `opensession-repos` in-process MCP server (`attach_repo`/`list_repos`, src/agents/slack/repos-tools.ts — wired in `interactiveMcpServers` exactly like the other sibling servers, interactive runs only, never automations) and the `RepoBar` UI in the session viewer. Detach via `POST /api/sessions/:id/detach-repo` (POST, not DELETE — a DELETE on `/sessions/:id/...` is swallowed by the generic session-delete route).
 - **Agent awareness**: `runSessionPrompt` passes `reposNote` (built by `buildReposNote`) through `runAgent`; the opencode runner injects it via the per-session instructions file (OpenCode's system-append channel — see buildOpencodeInstructions). It lists primary + attached repos with their worktree paths so the agent cd's into the right isolated checkout. Only present when the session has attached repos.

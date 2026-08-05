@@ -1,5 +1,5 @@
 /**
- * Local-profile bridge to a hosted OpenSession instance. HTTP requests are
+ * Local-profile bridge to a hosted Open Session instance. HTTP requests are
  * routed by session ownership; one lazy upstream WebSocket carries isolated
  * virtual-client lanes for every local browser socket.
  */
@@ -321,7 +321,7 @@ export async function proxyCloudFrontendRequest(
 		return cloudFrontendResponse(response);
 	} catch (error) {
 		console.warn("[cloud-proxy] frontend request failed:", error);
-		return new Response("Cloud OpenSession frontend is unreachable", {
+		return new Response("Cloud Open Session frontend is unreachable", {
 			status: 502,
 			headers: {
 				"Content-Type": "text/plain; charset=utf-8",
@@ -354,7 +354,7 @@ export async function proxyCloudSessionRequest(
 	} catch (error) {
 		console.warn("[cloud-proxy] session request failed:", error);
 		return Response.json(
-			{ error: "Cloud OpenSession is unreachable" },
+			{ error: "Cloud Open Session is unreachable" },
 			{ status: 502 },
 		);
 	}
@@ -379,7 +379,7 @@ export async function proxyCloudTargetRequest(
 	if (!shouldProxyCloudTargetRequest(ctx)) return undefined;
 	if (!cloudEnabled()) {
 		return Response.json(
-			{ error: "Cloud OpenSession is not configured" },
+			{ error: "Cloud Open Session is not configured" },
 			{ status: 502 },
 		);
 	}
@@ -395,7 +395,7 @@ export async function proxyCloudTargetRequest(
 	} catch (error) {
 		console.warn("[cloud-proxy] target metadata request failed:", error);
 		return Response.json(
-			{ error: "Cloud OpenSession is unreachable" },
+			{ error: "Cloud Open Session is unreachable" },
 			{ status: 502 },
 		);
 	}
@@ -554,7 +554,7 @@ function connectUpstream(): void {
 				if (client) {
 					sendClient(client, {
 						type: "error",
-						message: "Cloud OpenSession disconnected before the message was sent",
+						message: "Cloud Open Session disconnected before the message was sent",
 					});
 				}
 			}
@@ -597,7 +597,7 @@ function forwardUpstream(client: Client, message: any): void {
 	sendClient(client, {
 		type: "error",
 		sessionId: message.sessionId,
-		message: "Cloud OpenSession is reconnecting; this message was not sent",
+		message: "Cloud Open Session is reconnecting; this message was not sent",
 	});
 	scheduleReconnect();
 }
@@ -641,7 +641,7 @@ export function routeCloudWebSocketMessage(client: Client, message: any): boolea
 		if (!cloudEnabled()) {
 			sendClient(client, {
 				type: "error",
-				message: "Cloud OpenSession is not configured",
+				message: "Cloud Open Session is not configured",
 			});
 			return true;
 		}

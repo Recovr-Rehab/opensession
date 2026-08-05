@@ -1,4 +1,4 @@
-// OpenSession element picker — injected on demand into the inspected page
+// Open Session element picker — injected on demand into the inspected page
 // (isolated world). Hover highlights the element under the cursor; click
 // selects it, Escape cancels. On select the element is tagged with a
 // data-os1-picked attribute (so a follow-up MAIN-world script can find the

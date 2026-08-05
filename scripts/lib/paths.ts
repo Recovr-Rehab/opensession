@@ -1,5 +1,5 @@
 /**
- * Where an OpenSession install lives on disk.
+ * Where an Open Session install lives on disk.
  *
  * Layout, modelled on opencode's single dot-directory:
  *

@@ -153,7 +153,7 @@ if (isLocalProfile()) {
 // hot reload (loadAgents runs only on a real boot, inside the guard below).
 let agents: AgentModule[] = (g.__agents as AgentModule[] | undefined) ?? [];
 
-console.log(`Starting OpenSession server on ${HOST}:${PORT}...`);
+console.log(`Starting Open Session server on ${HOST}:${PORT}...`);
 
 // Reuse the listening server across hot reloads so existing WebSocket clients
 // and in-flight runs survive a tweak; a fresh `bun run` just creates it once.
@@ -374,7 +374,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 						// Agent-published apps (src/server/deploys.ts). Explicitly
 						// listed because /d/ is a page-ish path, and page loads are
 						// otherwise left open so the sign-in screen can render — a
-						// published app must get OpenSession's audience, not a
+						// published app must get Open Session's audience, not a
 						// wider one.
 						/^\/(?:opensession\/)?d\//.test(path))
 				) {
@@ -476,7 +476,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				: false,
 });
 
-console.log(`OpenSession running at http://${HOST}:${PORT}/`);
+console.log(`Open Session running at http://${HOST}:${PORT}/`);
 
 
 // --- Agent loading and webhook server ---

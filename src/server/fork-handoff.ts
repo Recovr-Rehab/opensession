@@ -94,7 +94,7 @@ export function buildChatContextNote(
 }
 
 /**
- * Context bridge for an *in-place* engine switch: the same OpenSession session
+ * Context bridge for an *in-place* engine switch: the same Open Session session
  * flipped its model from one provider to another (e.g. a Fable orchestrator
  * handing the wheel to a gpt-5.5 executor, or vice versa). The new engine has
  * no memory of the conversation so far — its provider's thread/session either

@@ -1,10 +1,10 @@
-# OpenSession for Chrome (os1-chrome)
+# Open Session for Chrome (os1-chrome)
 
 Chrome extension (MV3) — a side panel that captures context from the
 page you're looking at and kicks
-off OpenSession agent sessions with it. In the spirit of Claude for Chrome and
+off Open Session agent sessions with it. In the spirit of Claude for Chrome and
 Ramp's Inspect extension, but deliberately small: it's a **capture + dispatch**
-surface, not a full OpenSession client. Never distributed via the Web Store.
+surface, not a full Open Session client. Never distributed via the Web Store.
 
 ## What it does
 
@@ -20,13 +20,13 @@ surface, not a full OpenSession client. Never distributed via the Web Store.
   queued), click through to a transcript view.
 - **Session detail**: transcript tail (polled), follow-up prompts (steer/queue
   semantics, same as the web UI), link out to the full web UI.
-- **Right-click → "Send to OpenSession"**: seeds the composer with the page +
+- **Right-click → "Send to Open Session"**: seeds the composer with the page +
   selection.
 
 ## Install
 
 **Managed.** A deployment may force-install the extension through Chrome policy
-and point it at its own OpenSession update feed
+and point it at its own Open Session update feed
 (`https://<your-server>/api/os1-chrome/updates.xml`). `deployment.json` supplies
 the default server; `manifest.json` deliberately contains no
 organization-specific update URL.
@@ -94,7 +94,7 @@ see `crossSiteViolation` in `src/server/web-auth.ts`.
 - `manifest.json` — MV3; loopback host access is built in, and the extension
   requests access to the team server selected in Settings. `activeTab` covers
   page capture when invoked from the toolbar.
-- `deployment.json` — distribution-owned default OpenSession server.
+- `deployment.json` — distribution-owned default Open Session server.
 - `background.js` — tiny service worker: opens the panel on icon click, owns
   the context-menu entry.
 - `sidepanel.html/css/js` — the whole client. No frameworks.

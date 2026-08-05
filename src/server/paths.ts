@@ -77,7 +77,7 @@ export function __setChatsDirForTest(dir: string): string {
 }
 
 /**
- * Native OpenSession session ids are minted as `os-<uuidv7>`. Sessions
+ * Native Open Session session ids are minted as `os-<uuidv7>`. Sessions
  * created before the 2026-08-05 rename carry the original `bks-` prefix —
  * ids are opaque keys into persisted state and external links, so they are
  * never rewritten. This is the ONLY place code may care about the prefix;

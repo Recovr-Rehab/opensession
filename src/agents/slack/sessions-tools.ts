@@ -1,6 +1,6 @@
 /**
  * opensession-sessions — an in-process MCP server that lets Michael see and steer
- * every other OpenSession session from Slack: what's running, what's waiting on a
+ * every other Open Session session from Slack: what's running, what's waiting on a
  * question, and the controls to answer / message / cancel / spin up sessions.
  *
  * Like opensession-admin and opensession-github, this is an in-process SDK MCP wired

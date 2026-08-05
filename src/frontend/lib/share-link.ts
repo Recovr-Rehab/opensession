@@ -1,4 +1,4 @@
-// Build shareable OpenSession links and copy them to the clipboard. The app is
+// Build shareable Open Session links and copy them to the clipboard. The app is
 // served over plain HTTP on the Tailscale IP, so `navigator.clipboard` is often
 // absent (it needs a secure context) — every copy path falls back to a hidden
 // textarea + execCommand, the same trick the viewer's share button uses.

@@ -42,8 +42,8 @@ cross-repo change lines up. Attaching never reuses another repo's main checkout.
 ## The shared-checkout exception
 
 A repository can be marked as a *shared checkout*, meaning its sessions all work
-directly in the main clone instead of getting worktrees. OpenSession's own
-repository is configured this way, so that sessions improving OpenSession are
+directly in the main clone instead of getting worktrees. Open Session's own
+repository is configured this way, so that sessions improving Open Session are
 editing the thing that is running.
 
 It is a deliberate trade and it has sharp edges. In a shared checkout:

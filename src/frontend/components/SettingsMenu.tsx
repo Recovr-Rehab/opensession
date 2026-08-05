@@ -25,7 +25,7 @@ import { PRODUCT_MARK, PRODUCT_NAME } from "../lib/brand";
 // Trigger shapes via `variant`:
 //   "chevron" — a small chevron.
 //   "brand"   — the mobile top bar logo.
-//   "top"     — the whole OpenSession brand (logo + wordmark) in the desktop
+//   "top"     — the whole Open Session brand (logo + wordmark) in the desktop
 //               sidebar's top row, as one hover area that opens the account
 //               menu. The logo carries the connection dot; the chevron only
 //               shows on hover (or while the menu is open).

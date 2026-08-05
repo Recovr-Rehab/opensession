@@ -6,7 +6,7 @@
  *   /api/deploys       →  list / stop / relaunch / rollback / delete
  *
  * The proxy sits INSIDE the sign-in gate on purpose: a published app is
- * whatever an agent wrote, so it gets exactly the audience OpenSession itself
+ * whatever an agent wrote, so it gets exactly the audience Open Session itself
  * has (tailnet + team), never a wider one. `/d/` is a page-ish path rather than
  * `/api/`, so the gate's own carve-out for page loads does not apply to it —
  * see the explicit check in opensession.ts.

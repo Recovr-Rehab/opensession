@@ -6058,7 +6058,7 @@ a.workspace-info-check-row {
 	}
 }
 
-/* The PR number opens OpenSession's review; the adjacent outbound action opens
+/* The PR number opens Open Session's review; the adjacent outbound action opens
    the provider. Join them as a split button so the related actions read as one
    control while the wider internal-review side remains primary. */
 .pr-num-chip-group {

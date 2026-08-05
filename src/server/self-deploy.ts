@@ -1,5 +1,5 @@
 /**
- * opensession-self-deploy — agent-callable self-deploy of THIS OpenSession
+ * opensession-self-deploy — agent-callable self-deploy of THIS Open Session
  * instance. One action tool (deploy_self) plus a read tool (deploy_status).
  *
  * The tool itself only pre-validates and LAUNCHES: the actual
@@ -159,7 +159,7 @@ async function launchDeployUnit(unit: string, targetSha: string): Promise<void> 
 	const args = [
 		"sudo", "-n", "systemd-run", "--collect", "--quiet",
 		`--unit=${unit}`,
-		`--description=OpenSession self-deploy to ${targetSha.slice(0, 10)}`,
+		`--description=Open Session self-deploy to ${targetSha.slice(0, 10)}`,
 		`--uid=${user}`, `--gid=${user}`,
 		"-p", `WorkingDirectory=${checkout}`,
 		...env(`HOME=${homeDir()}`),
@@ -196,7 +196,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 	const tools = [
 		tool(
 			"deploy_self",
-			"Deploy THIS OpenSession instance to a git sha and RESTART THE LIVE SERVER. Fetches origin, fast-forwards the deploy checkout (ff-only — aborts on a dirty/diverged tree), restarts opensession.service, health-gates the restart, and auto-records a last-known-good pin for rollback. The restart is graceful: detached engine turns survive and sessions reattach, but the UI blips. Requires confirm: true.",
+			"Deploy THIS Open Session instance to a git sha and RESTART THE LIVE SERVER. Fetches origin, fast-forwards the deploy checkout (ff-only — aborts on a dirty/diverged tree), restarts opensession.service, health-gates the restart, and auto-records a last-known-good pin for rollback. The restart is graceful: detached engine turns survive and sessions reattach, but the UI blips. Requires confirm: true.",
 			{
 				sha: z
 					.string()
@@ -207,7 +207,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 				confirm: z
 					.boolean()
 					.describe(
-						"Must be exactly true. This restarts the live OpenSession instance for everyone — confirm deliberately, never as a default.",
+						"Must be exactly true. This restarts the live Open Session instance for everyone — confirm deliberately, never as a default.",
 					),
 			},
 			async (args: { sha?: string; confirm: boolean }) => {
@@ -221,7 +221,7 @@ export function createSelfDeployMcpServer(ctx: SelfDeployToolContext) {
 				}
 				if (args.confirm !== true) {
 					return text(
-						"Refusing: deploy_self restarts the live OpenSession instance. Call again with confirm: true once you actually mean to deploy.",
+						"Refusing: deploy_self restarts the live Open Session instance. Call again with confirm: true once you actually mean to deploy.",
 					);
 				}
 				const checkout = deployCheckout();

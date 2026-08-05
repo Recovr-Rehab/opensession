@@ -2,7 +2,7 @@
   "name": "opensession",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenSession — self-hosted agent session dashboard: run, watch, and steer AI coding sessions from the web UI, Slack, and native clients",
+  "description": "Open Session — self-hosted agent session dashboard: run, watch, and steer AI coding sessions from the web UI, Slack, and native clients",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

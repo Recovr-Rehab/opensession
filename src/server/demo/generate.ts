@@ -78,7 +78,7 @@ function git(cwd: string, ...args: string[]): void {
     [
       "git",
       "-c",
-      "user.name=OpenSession Demo",
+      "user.name=Open Session Demo",
       "-c",
       "user.email=demo@opensession.invalid",
       "-c",
@@ -283,7 +283,7 @@ export function generateDemoData(
     demo: true,
     version: 1,
     generatedAt: new Date(now).toISOString(),
-    note: "Synthetic OpenSession demo dataset — delete this file to regenerate.",
+    note: "Synthetic Open Session demo dataset — delete this file to regenerate.",
   });
 
   return {

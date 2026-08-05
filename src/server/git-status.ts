@@ -43,7 +43,7 @@ export interface GitStatusInfo {
   uncommittedFiles: number;
   /**
    * This dir is a repo's shared checkout rather than a per-session worktree
-   * (OpenSession's own repo works this way — every session edits one tree on
+   * (Open Session's own repo works this way — every session edits one tree on
    * the default branch), so the working tree also holds other sessions' edits.
    * `uncommittedFiles` is then scoped to the files this session wrote, and
    * anything that commits must name paths rather than stage the tree.

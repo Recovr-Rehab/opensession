@@ -1,5 +1,5 @@
 /*
- * OpenSession service worker — Web Push + app-shell cache. Shows pushes as
+ * Open Session service worker — Web Push + app-shell cache. Shows pushes as
  * notifications and focuses/opens the right session on tap; caches the SPA
  * shell so cold starts are instant and a dead/black-holed tailnet gets the
  * app's own reconnecting state instead of a white error page.

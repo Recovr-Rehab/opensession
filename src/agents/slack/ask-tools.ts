@@ -3,7 +3,7 @@
  * AskUserQuestion flow. Claude runs pause on the native AskUserQuestion tool
  * (claude-runner's canUseTool → onAskUser); Codex has no such hook, so this
  * exposes the same handler as a callable tool. A call blocks on the session's
- * question card in the OpenSession UI (broadcast + push, Slack escalation after
+ * question card in the Open Session UI (broadcast + push, Slack escalation after
  * the UI timeout — see makeAskHandler in opensession.ts) and returns the human's
  * answers as the tool result.
  *

@@ -1,13 +1,13 @@
 # OS¹ for Mac
 
-A thin Electron shell around a configured OpenSession server, with
-an opt-in local mode that supervises a local OpenSession backend. Both modes use
+A thin Electron shell around a configured Open Session server, with
+an opt-in local mode that supervises a local Open Session backend. Both modes use
 the current hosted frontend; in local mode the loopback server proxies that app
 shell so its same-origin API and WebSocket requests stay local. The app only
 owns the window, navigation policy, local process lifecycle, notifications,
 dock badge and deep links.
 
-The shell lives in `os1-mac/` inside the OpenSession repository so native
+The shell lives in `os1-mac/` inside the Open Session repository so native
 window changes and their frontend counterparts can ship together.
 
 ## Development
@@ -67,7 +67,7 @@ keeps it current); a source checkout tracks whatever you pull.
 
 ### Iterating on the frontend before it ships
 
-The shell renders whatever the server serves. To test unmerged OpenSession
+The shell renders whatever the server serves. To test unmerged Open Session
 frontend changes against **live production data**, run this from the
 repository root:
 
@@ -134,7 +134,7 @@ allowed navigation origin); the device-flow fallback link works too. The
   origin.
 - **Universal links** (plain `https://os.tella.dev/…` links opening the app,
   e.g. from Slack — Tella's host; see the rebrand note under Signing & release):
-  the server side is done — OpenSession serves
+  the server side is done — Open Session serves
   `/.well-known/apple-app-site-association` for app IDs
   `6GUXT43C8B.dev.tella.os1` (the iOS + Mac App Store pair) and
   `6GUXT43C8B.dev.tella.os1.shell` (this shell). Signed CI
@@ -211,7 +211,7 @@ the tag. Installed apps (≥ 0.2.0) pick it up on their next check. Dev runs
 
 - **Dock badge**: the web app sets its badge via `navigator.setAppBadge` in the
   service worker, which doesn't reach Electron's dock. Frontend change in the
-  OpenSession repo: when `window.os1` exists, also call `window.os1.setBadge(n)`.
+  Open Session repo: when `window.os1` exists, also call `window.os1.setBadge(n)`.
 - **Universal links**: see above.
 - **Web Push**: push events don't arrive in Electron (no FCM); notifications
   while the app is running come through the page's WebSocket + Notification

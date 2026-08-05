@@ -774,7 +774,7 @@ export async function runAutomation(
     eventContext?: string;
     /**
      * Pre-generated opensession session id. Lets a caller post UI/Slack controls
-     * that reference the session (e.g. an Open-in-OpenSession link and a Stop
+     * that reference the session (e.g. an "Open in Open Session" link and a Stop
      * button) before the run starts, instead of waiting for onSessionCreated.
      */
     osSessionId?: string;

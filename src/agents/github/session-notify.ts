@@ -1,5 +1,5 @@
 /**
- * Merge/deploy/preview events for PR-linked OpenSession sessions. When a PR whose
+ * Merge/deploy/preview events for PR-linked Open Session sessions. When a PR whose
  * head branch belongs to a session (primary branch or an attached repo) is
  * merged, a `[GitHub]` message is delivered into that session's chat through the
  * SessionControl registry — the same steer/queue/start path a human message

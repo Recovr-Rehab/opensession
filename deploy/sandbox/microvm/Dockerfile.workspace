@@ -2,7 +2,7 @@
 #
 # This is deliberately separate from deploy/sandbox/Dockerfile:
 # - no OpenCode or Claude CLI
-# - no OpenSession runner source or dependencies
+# - no Open Session runner source or dependencies
 # - no model/provider account directories
 #
 # The host owns the model loop and credentials. The guest contains only the

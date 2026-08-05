@@ -306,7 +306,7 @@ function toHttpsUrl(origin: string): string | null {
 function injectToken(httpsUrl: string): string {
   const cred = sandboxConfig().cloneCredential;
   if (cred?.type === "https-token") {
-    // Hosted OpenSession keeps a long-lived, tellahq-scoped bot credential in
+    // Hosted Open Session keeps a long-lived, tellahq-scoped bot credential in
     // GITHUB_API_TOKEN. Prefer it for GitHub clones over the config's token:
     // GitHub App user tokens expire in ~8h, so persisting one in sandbox.json
     // makes every fresh Daytona/Modal bootstrap fail days later. Self-hosters
@@ -368,7 +368,7 @@ export async function assertDialbackReachable(
   if (probe.exitCode !== 0) {
     const detail = (probe.stderr || probe.stdout).trim().slice(0, 200);
     throw new Error(
-      `${label} sandboxes can't reach this OpenSession server yet — ` +
+      `${label} sandboxes can't reach this Open Session server yet — ` +
         `${redactUrl(httpBase)} is unreachable from inside the sandbox` +
         `${detail ? ` (${detail})` : ""}. Remote sandboxes must dial back to ` +
         `callbackBaseUrl/publicIngress, which needs the provider org's egress tier ` +
@@ -1002,7 +1002,7 @@ export interface OcSessionRef {
  * The in-sandbox runner writes its JSONL inside the sandbox, where nothing
  * host-side can read it back (docker bind-mounts OPENCODE_TRANSCRIPTS_DIR;
  * remote sandboxes have no mount), so a daytona/e2b opencode session would
- * render "No transcript available" after a reload. OpenSession already receives
+ * render "No transcript available" after a reload. Open Session already receives
  * every stream event over the dial-back — rebuild the same claude-shape lines
  * from them here. Applied ONLY on the remote adapters (this module): docker's
  * bind mount already lands the in-sandbox writes on the host, and mirroring

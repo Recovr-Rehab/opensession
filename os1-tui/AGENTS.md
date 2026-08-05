@@ -1,6 +1,6 @@
 # Working on os1-tui
 
-`os` is the fifth OpenSession client (after the web UI, `os1-mac`, `os1-ios`,
+`os` is the fifth Open Session client (after the web UI, `os1-mac`, `os1-ios`,
 `os1-chrome`). Read `README.md` first — it has the key table, the module map and
 the protocol notes. This file is the build/verify loop and the invariants.
 

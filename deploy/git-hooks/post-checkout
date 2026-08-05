@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tripwire for the SHARED OpenSession checkout (the self-hosted instance's main
+# Tripwire for the SHARED Open Session checkout (the self-hosted instance's main
 # checkout): it is live and every session commits on the default branch here. A
 # branch SWITCH (git checkout <other>) yanks the working tree out from under the
 # running server and other sessions and orphans their un-pushed commits — the
@@ -18,7 +18,7 @@ branch=$(git symbolic-ref --short -q HEAD || echo "DETACHED")
 if [ "$branch" != "$default" ]; then
   toplevel=$(git rev-parse --show-toplevel 2>/dev/null || echo "this checkout")
   printf '\n\033[41m\033[97m  SHARED CHECKOUT SWITCHED OFF %s (now on: %s)  \033[0m\n' "$default" "$branch" >&2
-  printf '  %s is the live, shared OpenSession checkout. Switch back NOW:\n' "$toplevel" >&2
+  printf '  %s is the live, shared Open Session checkout. Switch back NOW:\n' "$toplevel" >&2
   printf '      git checkout %s\n' "$default" >&2
   printf '  Branch work must use a separate `git worktree` — never a switch here.\n\n' >&2
 fi

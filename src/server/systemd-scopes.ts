@@ -1,5 +1,5 @@
 /**
- * Resource-controlled transient scopes used by OpenSession on Linux.
+ * Resource-controlled transient scopes used by Open Session on Linux.
  *
  * Limits are deliberately applied at the scope boundary rather than to the
  * model process alone: agent shell commands, MCP proxies, compilers, and dev

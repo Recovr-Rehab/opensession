@@ -9,7 +9,7 @@
  *   1. re-runs the configured Loki instant query,
  *   2. collapses the series to one row per distinct `dedupLabel` value,
  *   3. for each value not investigated within `dedupDays`, posts a control card
- *      to the configured Slack channel (Open-in-OpenSession + Stop) and fires one
+ *      to the configured Slack channel ("Open in Open Session" + Stop) and fires one
  *      run of that automation, handing it the matched Loki labels as the
  *      triggering event.
  *

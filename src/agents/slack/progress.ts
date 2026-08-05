@@ -32,9 +32,9 @@ const MIN_EDIT_INTERVAL_MS = 1100;
 export class SlackProgress {
   private channel: string;
   private ts: string | null;
-  /** Action block(s) shown while running (Stop + OpenSession). */
+  /** Action block(s) shown while running (Stop + Open Session). */
   private runningBlocks: any[];
-  /** Action block(s) shown after finishing (OpenSession only). */
+  /** Action block(s) shown after finishing (Open Session only). */
   private finalBlocks: any[];
 
   private todos: ProgressTodo[] = [];
@@ -132,7 +132,7 @@ export class SlackProgress {
 
   /**
    * Stop updating and render the terminal state of the card. The completed
-   * checklist stays visible; the Stop button is swapped for the OpenSession link.
+   * checklist stays visible; the Stop button is swapped for the Open Session link.
    */
   async finish(label: string): Promise<void> {
     if (this.finished) return;

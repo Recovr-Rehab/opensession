@@ -1,5 +1,5 @@
 /**
- * Session-scoped memory for OpenSession runs — repo / user / team scopes,
+ * Session-scoped memory for Open Session runs — repo / user / team scopes,
  * generalizing the Slack channel memory (src/agents/slack/memory.ts) and
  * sharing its store (~/.michael-memory) so facts flow both ways:
  *

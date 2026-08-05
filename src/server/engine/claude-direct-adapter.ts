@@ -20,7 +20,7 @@
  *    host ~/.claude credentials (the silent host-credential fallback the
  *    bridge's env block leaves open is closed here on purpose).
  *  - Minimal subprocess env: PATH/HOME/LANG + the two vars above. No
- *    OpenSession tokens, ever.
+ *    Open Session tokens, ever.
  *  - Transcript: store-only since the 2026-07-23 mirror retirement (§11) —
  *    normalized entries go through appendOpencodeTranscript(sdkSessionId, …)
  *    as claude-shape jsonl lines, which storeAppendLines (opencode-transcript

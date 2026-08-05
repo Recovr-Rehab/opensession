@@ -77,7 +77,7 @@ it to read.
 
 - DMs and mentions are ignored unless the sender matches
   `ALLOWED_SLACK_USER_ID` — **except** mentions in worktree channels or
-  channels linked to an OpenSession session, where the whole team can drive.
+  channels linked to an Open Session session, where the whole team can drive.
 - `isAdmin = !ALLOWED_SLACK_USER_ID || sender === ALLOWED_SLACK_USER_ID`.
   Admin unlocks the mutating tools of the in-process MCP servers
   (`opensession-admin` self-management, session control, goals, human-asks);

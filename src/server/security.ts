@@ -169,7 +169,7 @@ export function deleteProfile(id: string): boolean {
 
 // ── Scan targets ─────────────────────────────────────────────
 
-/** Repos a headless scan can target. OpenSession is excluded: it's the shared
+/** Repos a headless scan can target. Open Session is excluded: it's the shared
  *  self-hosting checkout, so a code-mode scan would write branches under the
  *  live server (see worktree.ts sharedCheckout). */
 export function scannableRepos(): Repo[] {

@@ -103,7 +103,7 @@ export interface RunAgentOpts {
    * In-process SDK MCP servers (opensession-sessions / opensession-admin) for trusted
    * interactive runs only — never automations. Claude receives them directly;
    * Codex receives stdio proxy configs that forward to the same in-process
-   * servers through OpenSession's run RPC socket.
+   * servers through Open Session's run RPC socket.
    */
   inProcessMcp?: Record<string, unknown>;
   /**

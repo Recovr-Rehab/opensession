@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking. OpenSession is a self-hosted agent-infrastructure server —
+Thanks for looking. Open Session is a self-hosted agent-infrastructure server —
 one Bun process serving a web UI, a set of integrations, and the machinery that
 runs agent sessions in git worktrees.
 

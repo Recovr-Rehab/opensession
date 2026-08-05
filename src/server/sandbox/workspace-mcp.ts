@@ -2,7 +2,7 @@
  * opensession-workspace — the "hands" half of an engine-outside-sandbox run.
  *
  * The OpenCode model loop, provider auth, and conversation state stay on the
- * OpenSession host. These explicit tools execute against the session's
+ * Open Session host. These explicit tools execute against the session's
  * Sandbox handle, so the model can work in Docker/Daytona/Modal/etc. without
  * receiving provider credentials or a host mount of the remote filesystem.
  *
@@ -74,7 +74,7 @@ export function createRemoteWorkspaceMcpServer(source: SandboxSource) {
     tools: [
       tool(
         "execute",
-        "Run a shell command inside the session sandbox, in the remote workspace root. Use this for builds, tests, git, package managers, and other commands. The command never runs on the OpenSession host.",
+        "Run a shell command inside the session sandbox, in the remote workspace root. Use this for builds, tests, git, package managers, and other commands. The command never runs on the Open Session host.",
         {
           command: z.string().min(1).describe("Shell command to run inside the sandbox."),
         },

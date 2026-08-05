@@ -809,7 +809,7 @@ export function meridianProxyBaseUrl(port: string | number | undefined): string 
 export function missingAssistantTurnError(provider: string): string {
   return (
     `opencode ${provider} turn ended without an assistant message. ` +
-    "The provider or engine bridge failed before producing output; retry after checking the OpenSession server logs."
+    "The provider or engine bridge failed before producing output; retry after checking the Open Session server logs."
   );
 }
 
@@ -1569,7 +1569,7 @@ export function buildOpencodeInstructions(input: {
       "controlled channel fails, stop and report the failure instead of escalating to a " +
       "third-party host."
   );
-  // OpenSession vends bounded instance-role credentials to eligible runs.
+  // Open Session vends bounded instance-role credentials to eligible runs.
   // Interactive SSO was both unnecessary and noisy: models started `aws sso
   // login`, then blocked the UI and pinged teammates with expiring device
   // codes. asks.ts + humans-tools.ts enforce this too; the prompt prevents the
@@ -1577,9 +1577,9 @@ export function buildOpencodeInstructions(input: {
   parts.push(
     "## AWS access is non-interactive\nNEVER run `aws login` or `aws sso login`, and NEVER " +
       "ask a human to authorize AWS, open an AWS device-login URL, enter a device code, or " +
-      "confirm an AWS login. OpenSession supplies non-interactive read credentials to eligible " +
+      "confirm an AWS login. Open Session supplies non-interactive read credentials to eligible " +
       "runs. Use those ambient credentials without setting `AWS_PROFILE` or passing `--profile`. " +
-      "If AWS access is missing, expired, or insufficient, treat that as an OpenSession " +
+      "If AWS access is missing, expired, or insufficient, treat that as an Open Session " +
       "infrastructure limitation: report it clearly and continue without AWS. Do not inspect " +
       "or reuse the host's personal AWS SSO profiles, and do not try to work around the failure " +
       "with another login path."
@@ -1606,7 +1606,7 @@ export function buildOpencodeInstructions(input: {
     "## GitHub checks authentication\nThe ambient GitHub PAT or user token cannot read " +
       "GitHub Checks API data. When inspecting PR checks, use the private-key-backed command " +
       `\`bun ${GH_CHECKS_CLI_PATH} <pr-number> --repo <owner/repo>\`. It mints a short-lived, ` +
-      "read-only installation token from OpenSession's GitHub App. Do not conclude that checks " +
+      "read-only installation token from Open Session's GitHub App. Do not conclude that checks " +
       "are inaccessible from a `gh pr checks` or `statusCheckRollup` permission error."
   );
   // Observed 2026-07-10 (bks-019f4b70): twice in one session the model ended
@@ -1995,7 +1995,7 @@ export function steerOpencodeRun(id: string, text: string, images?: ImageInput[]
 
 /** Minimal env for the opencode server process (mirrors codexEnv). Provider
  * auth is bound explicitly before spawn; OpenCode's native auth store is not
- * part of the local-profile contract. OpenSession tokens never are.
+ * part of the local-profile contract. Open Session tokens never are.
  *
  * Public-repo containment note (2026-07-26): the gh-guard PATH shims that
  * used to front this env are gone — GitHub writes outside tellahq are now
@@ -3544,7 +3544,7 @@ async function* runOpencodeAttempt(
   // once the bridge account is known.
   const sessionKey = journal?.osSessionId || cwd;
   // Cerebras' self-serve tier allows only 30k input tokens/minute. A shared
-  // interactive server carries the complete external + OpenSession MCP catalog,
+  // interactive server carries the complete external + Open Session MCP catalog,
   // which exceeds that limit before generation starts. Keep Cerebras on a
   // compact per-session server; its core coding tools remain available.
   const compactCerebras = parsed.providerID === "cerebras";

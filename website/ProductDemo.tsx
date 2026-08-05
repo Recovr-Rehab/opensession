@@ -65,7 +65,7 @@ export function ProductDemo({ feature }: { feature: number }) {
 			<iframe
 				ref={frameRef}
 				className="product-demo-frame"
-				title="Interactive OpenSession product preview"
+				title="Interactive Open Session product preview"
 				aria-hidden={!ready}
 				tabIndex={ready ? undefined : -1}
 				src="/product-demo.html"

@@ -4,7 +4,7 @@
 # this file into /etc/systemd/system; a raw copy ships someone else's paths.
 # ============================================================================
 [Unit]
-Description=OpenSession - agent session dashboard
+Description=Open Session - agent session dashboard
 After=network.target
 
 [Service]

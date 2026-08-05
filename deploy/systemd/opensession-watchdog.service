@@ -1,4 +1,4 @@
-# OpenSession self-deploy watchdog — one conservative health probe per timer
+# Open Session self-deploy watchdog — one conservative health probe per timer
 # tick (see opensession-watchdog.timer). Repo copy only: installed at rollout
 # (like the sibling drop-ins deploy.sh syncs), never auto-installed by the app.
 #
@@ -15,7 +15,7 @@
 # obeys the same clean-tree + OPENSESSION_DEPLOY_ALLOW_RESET=1 rules as a
 # failed deploy (on the shared checkout it will only restart, never reset).
 [Unit]
-Description=OpenSession self-deploy health watchdog (probe)
+Description=Open Session self-deploy health watchdog (probe)
 # Probing a stopped service is fine (it just counts); no hard dependency on
 # opensession.service so the probe also runs while the service flaps.
 

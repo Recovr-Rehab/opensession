@@ -1,12 +1,12 @@
-# A clean EC2 box for OpenSession
+# A clean EC2 box for Open Session
 
-You do not need AWS to run OpenSession — any Linux box works. This page exists
+You do not need AWS to run Open Session — any Linux box works. This page exists
 because "spin up a fresh VM" is the most common way people try it, and a couple
 of traps along the way cost an afternoon each.
 
 ## Sizing
 
-OpenSession runs agent turns, builds frontends and cuts git worktrees, so it
+Open Session runs agent turns, builds frontends and cuts git worktrees, so it
 wants memory and disk more than cores.
 
 | Use | Instance | Disk | IOPS / throughput |
@@ -26,7 +26,7 @@ Worktrees and engine state grow steadily; disk is the resource that bites first.
 **Set IOPS and throughput explicitly.** This is the non-obvious part of gp3: it
 does *not* scale with capacity the way gp2 did. A 1 TB gp3 gets exactly the same
 3,000 IOPS and 125 MB/s as an 8 GB one unless you ask for more. Everything
-OpenSession does that feels slow — cloning repos, cutting worktrees, installing
+Open Session does that feels slow — cloning repos, cutting worktrees, installing
 dependencies, building frontends — is small-file I/O, and 125 MB/s is where it
 goes to die.
 
@@ -78,7 +78,7 @@ SG=$(aws ec2 describe-security-groups --filters \
 
 if [ -z "$SG" ] || [ "$SG" = None ]; then
   SG=$(aws ec2 create-security-group --group-name opensession \
-    --description "OpenSession" --vpc-id "$VPC" --query GroupId --output text)
+    --description "Open Session" --vpc-id "$VPC" --query GroupId --output text)
 fi
 
 aws ec2 authorize-security-group-ingress --group-id "$SG" \
@@ -149,7 +149,7 @@ Then follow [install.md](install.md) for accounts and integrations.
 
 The security group above opens **only** port 22, and only to your current IP.
 Nothing else about this box is reachable, which is the correct starting point:
-OpenSession has no built-in authentication and trusts everyone who can reach
+Open Session has no built-in authentication and trusts everyone who can reach
 the address it binds to.
 
 Deciding how to reach the UI — Tailscale, an SSH tunnel, a custom domain — is
@@ -204,7 +204,7 @@ operations: **disk grows online, instance type does not.**
 ### More disk, no reboot
 
 EBS resizes live. You grow the volume, then grow the partition, then grow the
-filesystem — all with the box running and OpenSession serving.
+filesystem — all with the box running and Open Session serving.
 
 From your laptop:
 

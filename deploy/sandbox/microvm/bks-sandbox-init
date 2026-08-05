@@ -1,5 +1,5 @@
 #!/bin/bash
-# PID 1 for general OpenSession Firecracker sandboxes.
+# PID 1 for general Open Session Firecracker sandboxes.
 #
 # Unlike bks-init (the preview-pool golden), this starts no app and contains no
 # repo-specific credential seeding. The host/model reaches the guest only

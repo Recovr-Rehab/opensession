@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Agent-callable self-deploy for OpenSession, with a last-known-good pin, a
+# Agent-callable self-deploy for Open Session, with a last-known-good pin, a
 # post-restart health gate, and (opt-in) auto-rollback.
 #
 # Modes:

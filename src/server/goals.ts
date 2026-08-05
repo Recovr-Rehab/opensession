@@ -42,7 +42,7 @@ export interface Goal {
   mode: "ask" | "code";
   /** Repo id for code-mode worktrees (key in worktree.ts REPOS). Default tella-fusion. */
   repo?: string;
-  /** OpenSession session this goal drives (context continuity). Set on first wake. */
+  /** Open Session session this goal drives (context continuity). Set on first wake. */
   osSessionId?: string;
   /** Engine (Claude/Codex) session id to resume each wake. Set on first wake. */
   engineSessionId?: string;

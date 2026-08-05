@@ -6,7 +6,7 @@
 # by clone.sh at spawn. Install:
 #   sudo cp deploy/sandbox/microvm/bks-host-setup.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable bks-host-setup
-Description=OpenSession preview host setup (IMDS rule re-arm)
+Description=Open Session preview host setup (IMDS rule re-arm)
 After=docker.service network-online.target
 Wants=docker.service
 

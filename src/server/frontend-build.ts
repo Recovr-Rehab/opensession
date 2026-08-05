@@ -340,7 +340,7 @@ function sessionTitle(id: string | undefined): string | undefined {
 }
 
 /**
- * Best-effort "who caused this" label for update/restart notices. OpenSession
+ * Best-effort "who caused this" label for update/restart notices. Open Session
  * sessions all work in THIS shared checkout, so when the file-watch fires (or
  * a session runs `systemctl restart`), the culprit is an in-flight run whose
  * cwd is this checkout — the run journal knows those, with user + session id.

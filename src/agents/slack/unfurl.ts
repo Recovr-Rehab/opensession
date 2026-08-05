@@ -1,5 +1,5 @@
 /**
- * Slack link unfurling for OpenSession session links.
+ * Slack link unfurling for Open Session session links.
  *
  * When someone pastes an `os.tella.dev/session/<id>` link into Slack, Slack
  * fires a `link_shared` event (the app must have `links:read`/`links:write` and
@@ -28,7 +28,7 @@ function uiHost(): string {
 }
 
 /**
- * Extract a session id from an OpenSession URL, or null if it isn't one of ours.
+ * Extract a session id from an Open Session URL, or null if it isn't one of ours.
  * Handles the legacy `/opensession/…` and `/backstage/…` path prefixes that
  * 301 to the bare form (Slack sends whatever the user pasted), and both URL
  * shapes the UI produces:
@@ -184,7 +184,7 @@ function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[] } {
 }
 
 /**
- * Handle a Slack `link_shared` event: look up every OpenSession session link in
+ * Handle a Slack `link_shared` event: look up every Open Session session link in
  * the message and post rich previews back via chat.unfurl. Unknown or foreign
  * links are ignored; if none resolve we make no API call.
  */

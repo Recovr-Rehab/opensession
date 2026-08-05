@@ -1,6 +1,6 @@
 # Local profile (macOS)
 
-The local profile runs OpenSession as a single-user, interactive coding tool on
+The local profile runs Open Session as a single-user, interactive coding tool on
 your own machine. It is opt-in: only the exact environment value
 `OPENSESSION_PROFILE=local` enables it. An unset variable, or any other value,
 keeps the normal server behavior.
@@ -14,7 +14,7 @@ The profile is deliberately smaller than a hosted installation:
 - Repositories start empty and are registered explicitly.
 - Sessions and worktrees stay under `~/os1` by default.
 - Model access comes from the Claude Code and Codex CLI subscriptions already
-  logged in on the Mac. OpenSession uses its bundled local bridges; it never
+  logged in on the Mac. Open Session uses its bundled local bridges; it never
   requires or reads an `opencode auth login` credential.
 - Agent loops, webhooks, automations, schedulers, public ingress, remote sandbox
   prewarming, and cloud account pollers do not start.
@@ -39,7 +39,7 @@ Claude Code stores its macOS login in the Keychain item
 `~/.codex/auth.json`. Only providers with discovered credentials appear in the
 model picker. If neither login exists, startup fails with an actionable error.
 
-OpenSession does not rotate either CLI's refresh token. It re-reads current
+Open Session does not rotate either CLI's refresh token. It re-reads current
 access credentials for each run, copies only the macOS Claude access token and
 expiry into a private `~/os1` cache for the bridge, and gives OpenCode an
 access-only Codex seed with an invalid refresh token. If a CLI access token has
@@ -47,7 +47,7 @@ expired, run that CLI once to refresh its own login and retry.
 Native `opencode auth login` state is isolated from local-profile model servers
 and is never used as a fallback.
 
-## Start OpenSession
+## Start Open Session
 
 ```sh
 git clone https://github.com/tellahq/opensession.git
@@ -77,7 +77,7 @@ curl -sS http://127.0.0.1:3850/api/repos \
   --json '{"path":"/Users/ada/code/my-app"}'
 ```
 
-Or let OpenSession clone a repository into `~/os1/repos/<repo-id>`:
+Or let Open Session clone a repository into `~/os1/repos/<repo-id>`:
 
 ```sh
 curl -sS http://127.0.0.1:3850/api/repos \
@@ -88,7 +88,7 @@ Clone URLs may use HTTPS, SSH, SCP-style SSH, or `file://`. Other Git
 transports, including Git's command-executing `ext::` transport and plain HTTP,
 are rejected.
 
-The checkout must be a Git repository with a checked-out branch. OpenSession
+The checkout must be a Git repository with a checked-out branch. Open Session
 uses `origin/HEAD` when available, then falls back to the current branch, and
 derives `owner/name` for GitHub remotes. Your first registered repository
 becomes the default and appears in the new-session repository picker.
@@ -111,7 +111,7 @@ session cannot be removed; the endpoint returns HTTP 409 instead.
 
 ## Upgrade a local session to the cloud
 
-Configure the hosted OpenSession URL and a web-session bearer token in
+Configure the hosted Open Session URL and a web-session bearer token in
 `~/os1/config.json`:
 
 ```json
@@ -124,7 +124,7 @@ Configure the hosted OpenSession URL and a web-session bearer token in
 ```
 
 `OPENSESSION_CLOUD_UPSTREAM` and `OPENSESSION_CLOUD_TOKEN` override those
-keys. The local and hosted repository ids may differ; OpenSession maps them by
+keys. The local and hosted repository ids may differ; Open Session maps them by
 their case-insensitive GitHub `owner/name` (`ghRepo`). The authenticated hosted
 `GET /api/repos` response includes `id`, `ghRepo`, `defaultBranch`,
 and `sharedCheckout` for this mapping.
@@ -137,7 +137,7 @@ curl -sS -X POST \
 ```
 
 The request has no body. The worktree must be on the session's recorded branch
-with no staged, unstaged, or untracked files. OpenSession never commits during
+with no staged, unstaged, or untracked files. Open Session never commits during
 an upgrade. It pushes the current `HEAD` to `origin`, imports the session into
 the matching hosted repository, then atomically archives the local session with
 an `upgradedTo` marker. A dirty worktree returns HTTP 409 and an
@@ -214,7 +214,7 @@ remains continuous. No transcript mirror file is created or written.
 
 ## Cloud sessions
 
-The local app can merge sessions from a hosted OpenSession instance into the
+The local app can merge sessions from a hosted Open Session instance into the
 same sidebar. Add a web-session bearer token to `~/os1/config.json`:
 
 ```json
@@ -272,7 +272,7 @@ shown above (or choose an OpenAI default in Settings).
 
 ## Local state
 
-Defaults are isolated from a hosted OpenSession installation:
+Defaults are isolated from a hosted Open Session installation:
 
 | Data | Default path |
 | --- | --- |

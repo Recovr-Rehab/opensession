@@ -65,7 +65,7 @@ export function filterMcpServers(
 }
 
 /**
- * Money-moving Stripe tools: interactive OpenSession runs drop the whole
+ * Money-moving Stripe tools: interactive Open Session runs drop the whole
  * server fail-closed (no per-call approval bridge on the opencode engine);
  * unattended runs strip these from the tool list with propose-it-in-your-
  * output guidance. The raw-API tools are included because they can hit any

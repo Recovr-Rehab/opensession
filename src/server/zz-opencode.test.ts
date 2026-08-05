@@ -305,7 +305,7 @@ describe("opencodeRunPolicy (unattended least-privilege enforcement)", () => {
     expect(note.message).not.toContain("unattended");
   });
 
-  test("all runs strip OpenCode's native question tool in favor of the OpenSession card", () => {
+  test("all runs strip OpenCode's native question tool in favor of the Open Session card", () => {
     expect(opencodeRunPolicy({ journalKind: "prompt" }).disables.question).toBe(false);
     expect(opencodeRunPolicy({ journalKind: "automation" }).disables.question).toBe(false);
   });
