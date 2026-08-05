@@ -664,7 +664,7 @@ async function poolUnfreeze(c: PoolContainer): Promise<boolean> {
 async function poolRestartDev(c: PoolContainer): Promise<void> {
   if (isMicrovm(c)) {
     await mvmAgent(c, {
-      command: `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; cd ${WORKSPACE} && : > /tmp/boot.log && (setpriv --reuid 1000 --regid 1000 --init-groups env HOME=${homeDir()} USER=ubuntu PATH=/usr/local/sbin:/usr/local/bin:/usr/local/bun/bin:/usr/sbin:/usr/bin:/sbin:/bin WEBAPP_PORT=${CONTAINER_PORT} BACKSTAGE_BOOT_MODE=snapshot-restore bash .opensession/start.sh < /dev/null > /tmp/boot.log 2>&1 &) && echo relaunched`,
+      command: `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; cd ${WORKSPACE} && : > /tmp/boot.log && (setpriv --reuid 1000 --regid 1000 --init-groups env HOME=${homeDir()} USER=ubuntu PATH=/usr/local/sbin:/usr/local/bin:/usr/local/bun/bin:/usr/sbin:/usr/bin:/sbin:/bin WEBAPP_PORT=${CONTAINER_PORT} OPENSESSION_BOOT_MODE=snapshot-restore bash .opensession/start.sh < /dev/null > /tmp/boot.log 2>&1 &) && echo relaunched`,
       timeoutMs: 30_000,
     }, true);
     return;
@@ -682,7 +682,7 @@ async function poolRestartDev(c: PoolContainer): Promise<void> {
  *  when the exec ends (verified live: setsid-orphaned dev servers died a
  *  couple of minutes after passing the ready gate). */
 async function launchDaytonaDev(c: PoolContainer): Promise<void> {
-  const env = `WEBAPP_PORT=${CONTAINER_PORT} BACKSTAGE_BOOT_MODE=snapshot-restore${c.previewUrl ? ` PREVIEW_URL=${c.previewUrl}` : ""}`;
+  const env = `WEBAPP_PORT=${CONTAINER_PORT} OPENSESSION_BOOT_MODE=snapshot-restore${c.previewUrl ? ` PREVIEW_URL=${c.previewUrl}` : ""}`;
   // stdin MUST be detached: next dev exits cleanly on stdin EOF (its
   // keyboard-shortcut listener), and the process session's pipe closing
   // produced exactly that — "next dev exited with code 0" crash-loops.
@@ -1006,7 +1006,7 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
 
     const setup = await poolExec(
       c,
-      `export PATH="/usr/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"; cd ${WORKSPACE} && [ -f .opensession/setup.sh ] && BACKSTAGE_BOOT_MODE=fresh bash .opensession/setup.sh || true`,
+      `export PATH="/usr/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"; cd ${WORKSPACE} && [ -f .opensession/setup.sh ] && OPENSESSION_BOOT_MODE=fresh bash .opensession/setup.sh || true`,
       20 * 60_000,
     );
     if (setup.out.includes("ERROR:")) return void (await fail(`setup.sh: ${setup.out.slice(-400)}`));
@@ -1083,8 +1083,8 @@ export async function refreshGoldenImage(repoId: string, force = false): Promise
           const r = await sudoRun(
             [
               "env",
-              `BKS_AWS_B64=${b64}`,
-              `BKS_AWS_CONFIG_B64=${configB64}`,
+              `OPENSESSION_AWS_B64=${b64}`,
+              `OPENSESSION_AWS_CONFIG_B64=${configB64}`,
               "bash",
               `${MVM_SCRIPTS}/refresh-golden.sh`,
               repoId,
@@ -1170,7 +1170,7 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<void> {
     // One-shot provisioning via the repo's own lifecycle contract.
     const setup = await dockerExec(
       name,
-      `cd ${WORKSPACE} && [ -f .opensession/setup.sh ] && BACKSTAGE_BOOT_MODE=fresh bash .opensession/setup.sh || true`,
+      `cd ${WORKSPACE} && [ -f .opensession/setup.sh ] && OPENSESSION_BOOT_MODE=fresh bash .opensession/setup.sh || true`,
       15 * 60_000,
     );
     if (setup.out.includes("ERROR:")) return void (await fail(`setup.sh: ${setup.out.slice(-500)}`));
@@ -1190,7 +1190,7 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<void> {
     if (!hostPort) return void (await fail(`no published port: ${inspect.out}`));
     await docker([
       "exec", "-d",
-      "-e", `WEBAPP_PORT=${CONTAINER_PORT}`, "-e", "BACKSTAGE_BOOT_MODE=fresh",
+      "-e", `WEBAPP_PORT=${CONTAINER_PORT}`, "-e", "OPENSESSION_BOOT_MODE=fresh",
       "-w", WORKSPACE, name,
       "bash", "-c", `${BOOT_PREP} && exec bash .opensession/start.sh > /tmp/boot.log 2>&1`,
     ]);
@@ -1280,7 +1280,7 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
     "-p", `127.0.0.1:${hostPort}:${CONTAINER_PORT}`,
     "--cpus", String(cfg.cpus), "--memory", cfg.memory,
     "-e", `WEBAPP_PORT=${CONTAINER_PORT}`,
-    "-e", "BACKSTAGE_BOOT_MODE=snapshot-restore",
+    "-e", "OPENSESSION_BOOT_MODE=snapshot-restore",
     "-e", `PREVIEW_URL=${previewUrl}`,
     // No AWS_* env: apps may resolve credentials via their configured profile;
     // refreshContainerCreds writes both default and named sections.

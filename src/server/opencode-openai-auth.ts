@@ -91,7 +91,7 @@
  */
 
 import { homeDir } from "./paths";
-import { envAlias, stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "fs";
 import {
   getCodexAccountById,
@@ -141,7 +141,7 @@ export const OPENCODE_OPENAI_PLACEHOLDER_REFRESH = "codex-managed-no-refresh";
  *  remote launcher's launch env, read in-sandbox by bindOpenaiAccount's
  *  fallback. Unset (host / docker) = no seed dir, CODEX_HOME is the source. */
 export function openaiRemoteSeedDir(): string | undefined {
-  return envAlias("OPENSESSION_OPENAI_SEED_DIR", "BACKSTAGE_OPENAI_SEED_DIR");
+  return process.env.OPENSESSION_OPENAI_SEED_DIR;
 }
 
 /** The one path shape both sides of the seed contract use: the launcher

@@ -16,7 +16,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { $ } from "bun";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { OPENSESSION_CHATS_DIR } from "./paths";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "./github-limit";

@@ -24,13 +24,10 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes, createHash } from "crypto";
 import { configuredServer } from "./config";
-import { statePath } from "./rename-compat";
+import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 
-const STORE_PATH = statePath(
-  ".opensession-mcp-oauth.json",
-  ".backstage-mcp-oauth.json",
-);
+const STORE_PATH = statePath(".opensession-mcp-oauth.json");
 
 interface OauthEndpoints {
   authorize: string;

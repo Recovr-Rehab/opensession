@@ -23,7 +23,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias, stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import {
   MERIDIAN_CFG_ROOT,
   OPENCODE_STATE_DIR,
@@ -63,20 +63,17 @@ describe("opencode engine state paths (rename-compat consistency)", () => {
 
   it("bridge config file resolves through the compat seam", () => {
     expect(configPath()).toBe(
-      envAlias("OPENSESSION_OPENCODE_CONFIG", "BACKSTAGE_OPENCODE_CONFIG") ||
+      process.env.OPENSESSION_OPENCODE_CONFIG ||
         stateDir("opencode.json"),
     );
   });
 
   it("transcript mirror + sqlite store stay on their pinned (un-renamed) homes", () => {
     expect(OPENCODE_TRANSCRIPTS_DIR).toBe(
-      envAlias(
-        "OPENSESSION_OPENCODE_TRANSCRIPTS_DIR",
-        "BACKSTAGE_OPENCODE_TRANSCRIPTS_DIR",
-      ) || `${HOME}/.claude/projects/-opencode-engine`,
+      process.env.OPENSESSION_OPENCODE_TRANSCRIPTS_DIR || `${HOME}/.claude/projects/-opencode-engine`,
     );
     expect(OPENCODE_DB_PATH).toBe(
-      envAlias("OPENSESSION_OPENCODE_DB", "BACKSTAGE_OPENCODE_DB") ||
+      process.env.OPENSESSION_OPENCODE_DB ||
         `${HOME}/.local/share/opencode/opencode.db`,
     );
   });
@@ -88,7 +85,7 @@ describe("opencode engine state paths (rename-compat consistency)", () => {
     // sides must share the env contract and the per-account path shape —
     // never derive them independently.
     expect(openaiRemoteSeedDir()).toBe(
-      envAlias("OPENSESSION_OPENAI_SEED_DIR", "BACKSTAGE_OPENAI_SEED_DIR"),
+      process.env.OPENSESSION_OPENAI_SEED_DIR,
     );
     expect(REMOTE_OPENAI_SEED_DIR).toBe(`${REMOTE_HOME}/.opensession-openai-seeds`);
     expect(openaiSeedAuthPath(REMOTE_OPENAI_SEED_DIR, "acct-1")).toBe(
@@ -134,14 +131,14 @@ describe("shard DB path derivation (pinned)", () => {
 describe("remote openai seed material (rotation-proof contract)", () => {
   const scratch = mkdtempSync(join(tmpdir(), "bks-openai-seed-"));
   const prevNew = process.env.OPENSESSION_OPENAI_SEED_DIR;
-  const prevOld = process.env.BACKSTAGE_OPENAI_SEED_DIR;
+  const prevOld = process.env.OPENSESSION_OPENAI_SEED_DIR;
   const dataDirs: string[] = [];
 
   afterAll(() => {
     if (prevNew === undefined) delete process.env.OPENSESSION_OPENAI_SEED_DIR;
     else process.env.OPENSESSION_OPENAI_SEED_DIR = prevNew;
-    if (prevOld === undefined) delete process.env.BACKSTAGE_OPENAI_SEED_DIR;
-    else process.env.BACKSTAGE_OPENAI_SEED_DIR = prevOld;
+    if (prevOld === undefined) delete process.env.OPENSESSION_OPENAI_SEED_DIR;
+    else process.env.OPENSESSION_OPENAI_SEED_DIR = prevOld;
     rmSync(scratch, { recursive: true, force: true });
     for (const d of dataDirs) rmSync(d, { recursive: true, force: true });
   });

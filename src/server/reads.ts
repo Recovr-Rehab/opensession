@@ -19,7 +19,7 @@
 
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 const READS_DIR = stateDir("reads");
 

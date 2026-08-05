@@ -6,7 +6,7 @@ import { join } from "path";
 // Point the module at a temp store BEFORE it loads (env is read at import).
 const dir = mkdtempSync(join(tmpdir(), "claude-accounts-test-"));
 const storePath = join(dir, "accounts.json");
-process.env.BACKSTAGE_CLAUDE_ACCOUNTS_PATH = storePath;
+process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH = storePath;
 
 const mkAccount = (id: string, owner?: string) => ({
   id,

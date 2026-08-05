@@ -153,7 +153,7 @@ export interface Sandbox {
   workspace?: "bind" | "volume";
   /** How the current container came to exist (docker only): "fresh" = created
    *  from the base image, "snapshot-restore" = recreated from a per-session
-   *  snapshot image. Lifecycle scripts get it as BACKSTAGE_BOOT_MODE (the
+   *  snapshot image. Lifecycle scripts get it as OPENSESSION_BOOT_MODE (the
    *  background-agents boot-mode pattern). */
   bootMode?: "fresh" | "snapshot-restore";
   /** One-shot commands in the workspace (git status, ls-files, …). Never throws

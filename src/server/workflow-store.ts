@@ -17,7 +17,7 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
 import { broadcastToSession } from "./ws-hub";
 import {

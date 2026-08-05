@@ -21,7 +21,7 @@
  * highly confident, else discuss in the card thread.
  */
 import { configuredServer, productName } from "../../server/config";
-import { envAlias, stateDir } from "../../server/rename-compat";
+import { stateDir } from "../../server/paths";
 import { randomUUIDv7 } from "bun";
 import { mkdirSync, readFileSync, existsSync, unlinkSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
@@ -41,7 +41,7 @@ const GRAFANA_TOKEN = process.env.GRAFANA_SERVICE_ACCOUNT_TOKEN || "";
 const LOKI_DATASOURCE_UID = process.env.LOKI_DATASOURCE_UID || "loki";
 
 const UI_BASE =
-  envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") ||
+  process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
 const DEFAULT_LOOKBACK = "20m";

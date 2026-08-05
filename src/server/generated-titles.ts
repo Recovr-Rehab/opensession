@@ -10,11 +10,11 @@
  */
 import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { BACKSTAGE_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR } from "./paths";
 import { opencodeOneShot } from "./opencode-oneshot";
 import { getTitleOverride } from "./title-overrides";
 
-const REGISTRY_PATH = `${BACKSTAGE_CHATS_DIR}/generated-titles.json`;
+const REGISTRY_PATH = `${OPENSESSION_CHATS_DIR}/generated-titles.json`;
 
 let cache: Record<string, string> | null = null;
 let cacheMtimeMs = 0;
@@ -106,7 +106,7 @@ export async function ensureGeneratedTitle(
 	// Desk sessions keep their fixed title (direct file read — importing the
 	// sessions cache here would be an import cycle).
 	try {
-		const f = `${BACKSTAGE_CHATS_DIR}/${id}.json`;
+		const f = `${OPENSESSION_CHATS_DIR}/${id}.json`;
 		if (existsSync(f) && JSON.parse(readFileSync(f, "utf-8")).desk) return null;
 	} catch {}
 	const source = prompt.trim().slice(0, 2000);
@@ -167,7 +167,7 @@ function sweepCandidates(): Array<{ id: string; title: string }> {
 	const out: Array<{ id: string; title: string; created: number }> = [];
 	let files: string[] = [];
 	try {
-		files = readdirSync(BACKSTAGE_CHATS_DIR);
+		files = readdirSync(OPENSESSION_CHATS_DIR);
 	} catch {
 		return [];
 	}
@@ -177,7 +177,7 @@ function sweepCandidates(): Array<{ id: string; title: string }> {
 		if (getGeneratedTitle(id) || getTitleOverride(id)) continue;
 		let d: any;
 		try {
-			d = JSON.parse(readFileSync(`${BACKSTAGE_CHATS_DIR}/${f}`, "utf-8"));
+			d = JSON.parse(readFileSync(`${OPENSESSION_CHATS_DIR}/${f}`, "utf-8"));
 		} catch {
 			continue;
 		}

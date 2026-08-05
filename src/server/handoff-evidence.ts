@@ -358,7 +358,7 @@ export interface BeaconDeps {
 }
 
 async function defaultBeaconDeps(): Promise<BeaconDeps> {
-	const [{ BACKSTAGE_CHATS_DIR }, { getSessionControl }, { touchBackstageSession }, fs] =
+	const [{ OPENSESSION_CHATS_DIR }, { getSessionControl }, { touchBackstageSession }, fs] =
 		await Promise.all([
 			import("./paths"),
 			import("./session-control"),
@@ -368,7 +368,7 @@ async function defaultBeaconDeps(): Promise<BeaconDeps> {
 	return {
 		readSessionFile: (id) => {
 			try {
-				const p = `${BACKSTAGE_CHATS_DIR}/${id}.json`;
+				const p = `${OPENSESSION_CHATS_DIR}/${id}.json`;
 				if (!fs.existsSync(p)) return null;
 				return JSON.parse(fs.readFileSync(p, "utf-8"));
 			} catch {

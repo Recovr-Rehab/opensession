@@ -26,13 +26,13 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { existsSync, readFileSync } from "fs";
 import { randomUUIDv7 } from "bun";
-import { statePath } from "./rename-compat";
+import { statePath } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
 /** Resolved per call, not at import: tests point HOME at a scratch directory,
  *  and a module-level constant would have already baked in the real one. */
 function storePath(): string {
-  return statePath(".opensession-nodes.json", ".backstage-nodes.json");
+  return statePath(".opensession-nodes.json");
 }
 
 /** Tailscale hands out addresses from the CGNAT range. */

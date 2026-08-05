@@ -21,7 +21,6 @@
  */
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias } from "./rename-compat";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { resolveModel } from "./models";
 import type { ActiveRunRecord } from "./run-journal";
@@ -43,7 +42,7 @@ function readJson<T>(path: string): T | null {
  *  module stays import-light and usable from standalone scripts. */
 function journaledRuns(): ActiveRunRecord[] {
   const path =
-    envAlias("OPENSESSION_RUN_JOURNAL", "BACKSTAGE_RUN_JOURNAL") ||
+    process.env.OPENSESSION_RUN_JOURNAL ||
     `${OPENSESSION_CHATS_DIR}/active-runs.json`;
   const journal = readJson<Record<string, ActiveRunRecord>>(path);
   return journal ? Object.values(journal) : [];

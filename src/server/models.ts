@@ -22,7 +22,7 @@ import {
   opencodeProviders,
   BRIDGE_PROVIDER_IDS,
 } from "./opencode-config";
-import { envAlias, stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { isLocalProfile, localProfileRoot } from "./profile";
 import { discoverLocalEngineCredentials } from "./local-engine-auth";
 
@@ -135,7 +135,7 @@ export function localProfileDefaultModel(): string {
       "No local model subscriptions found. Log into Claude Code with `claude` and/or Codex with `codex login`.",
     );
   }
-  const envRequested = envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL");
+  const envRequested = process.env.OPENSESSION_MODEL;
   const requested = envRequested || loadInteractiveOverride() || loadOverride();
   if (!requested) return models[0].id;
   const native = (toOpencodeModel(requested) || requested).replace(/^opencode\//, "");
@@ -685,7 +685,7 @@ function patchDefaultModelStore(patch: Record<string, string | null>): void {
  * the next run without a restart.
  */
 export function getDefaultModel(): string {
-  return loadOverride() || envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL") || DEFAULT_CLAUDE_MODEL;
+  return loadOverride() || process.env.OPENSESSION_MODEL || DEFAULT_CLAUDE_MODEL;
 }
 
 /**
@@ -737,7 +737,7 @@ export function setInteractiveDefaultModel(input: string | null): string {
  * set it to "none" to disable the automatic fallback entirely.
  */
 export const DEFAULT_FALLBACK_MODEL: string | undefined = (() => {
-  const v = (envAlias("OPENSESSION_FALLBACK_MODEL", "MICHAEL_FALLBACK_MODEL") || "").trim().toLowerCase();
+  const v = (process.env.OPENSESSION_FALLBACK_MODEL || "").trim().toLowerCase();
   if (v === "none") return undefined;
   return v || "claude-opus-5";
 })();

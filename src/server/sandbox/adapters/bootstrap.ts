@@ -53,7 +53,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from "fs";
 import { dirname } from "path";
 import { OPENSESSION_CHATS_DIR } from "../../paths";
-import { envAlias, stateDir, withLegacySessionId } from "../../rename-compat";
+import { stateDir, } from "../../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
 import { RESUME_CONTINUATION_PROMPT } from "../../agent-runner";
@@ -360,11 +360,11 @@ export async function assertDialbackReachable(
   const wsBase = remoteSandboxCallbackBaseUrl();
   const httpBase = wsBase.replace(/^ws(s?):\/\//, "http$1://");
   const probe = await driver.exec(
-    `command -v curl >/dev/null 2>&1 || { echo __BKS_NO_CURL__; exit 0; }; ` +
+    `command -v curl >/dev/null 2>&1 || { echo __OPENSESSION_NO_CURL__; exit 0; }; ` +
       `curl -sS -o /dev/null -m 5 -w '%{http_code}' ${shellQuoteWord(`${httpBase}/`)}`,
     { timeoutMs: 20_000 },
   );
-  if (probe.stdout.includes("__BKS_NO_CURL__")) return;
+  if (probe.stdout.includes("__OPENSESSION_NO_CURL__")) return;
   if (probe.exitCode !== 0) {
     const detail = (probe.stderr || probe.stdout).trim().slice(0, 200);
     throw new Error(
@@ -790,7 +790,7 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
       await driver.writeFile(`${dir}/${HOST_SPEC_NAME}`, JSON.stringify(spec));
     },
     async launch(hostId, dir) {
-      const spec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`));
+      const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
       if (!spec?.wsToken) {
         throw new Error(`remote launch of ${hostId}: spec.json (with wsToken) missing from ${dir}`);
       }
@@ -822,7 +822,7 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
       // legacy filename — that's the name that exists remotely, which the
       // (dual-reading) in-sandbox build resolves.
       const ocCfgSrc =
-        envAlias("OPENSESSION_OPENCODE_CONFIG", "BACKSTAGE_OPENCODE_CONFIG") ||
+        process.env.OPENSESSION_OPENCODE_CONFIG ||
         // Dual-read the host path (a new-name-only host has no
         // ~/.backstage-opencode.json); the remote destination below stays the
         // legacy name the in-sandbox build dual-reads.
@@ -905,30 +905,24 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
           NODE_ENV: "production",
           // Deterministic opencode resolution (bootstrap installed it here) —
           // don't depend on PATH probing inside the run host.
-          // New env names primary; deprecated aliases ride along so a
-          // pinned/older remote runner bundle keeps working.
           OPENSESSION_OPENCODE_BIN: REMOTE_OPENCODE,
-          BACKSTAGE_OPENCODE_BIN: REMOTE_OPENCODE,
           OPENSESSION_RUN_JOURNAL: `${dir}/journal.json`,
-          BACKSTAGE_RUN_JOURNAL: `${dir}/journal.json`,
           // Where bindOpenaiAccount finds the uploaded rotation-proof openai
-          // seeds (only set when something was uploaded this launch). Old
-          // alias rides along like the other env pairs.
+          // seeds (only set when something was uploaded this launch).
           ...(openaiUpload.accounts.length
             ? {
                 OPENSESSION_OPENAI_SEED_DIR: REMOTE_OPENAI_SEED_DIR,
-                BACKSTAGE_OPENAI_SEED_DIR: REMOTE_OPENAI_SEED_DIR,
               }
             : {}),
           // Dial-back on the primary prefix — the ingress/main serve accept
           // both, and URLs already baked into live sandboxes stay valid.
-          BKS_RUN_WS_URL: `${base}/opensession/run-ws/${hostId}`,
-          BKS_RUN_WS_TOKEN: spec.wsToken,
-          BKS_RPC_WS_URL: `${base}/opensession/rpc-ws`,
-          ...(envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")
+          OPENSESSION_RUN_WS_URL: `${base}/opensession/run-ws/${hostId}`,
+          OPENSESSION_RUN_WS_TOKEN: spec.wsToken,
+          OPENSESSION_RPC_WS_URL: `${base}/opensession/rpc-ws`,
+          ...(process.env.OPENSESSION_MODEL
             ? {
-                OPENSESSION_MODEL: envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")!,
-                MICHAEL_MODEL: envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")!,
+                OPENSESSION_MODEL: process.env.OPENSESSION_MODEL!,
+                MICHAEL_MODEL: process.env.OPENSESSION_MODEL!,
               }
             : {}),
         };
@@ -1279,7 +1273,7 @@ export async function resumeRemoteSandboxRun(
   await driver.ensureStarted();
 
   const oldDir = launcher.newRunDir(run.runKey);
-  const oldSpec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`));
+  const oldSpec = readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`);
   if (oldSpec?.wsToken) {
     // Ended while we were down? meta.json lives in-sandbox only.
     const meta = await driver.exec(`cat ${shellQuoteWord(`${oldDir}/meta.json`)} 2>/dev/null`);

@@ -6,7 +6,6 @@
  * processMessage      — runs a queued message through runAgent (opencode engine)
  */
 
-import { envAlias } from "../../server/rename-compat";
 import { copyFileSync, existsSync } from "fs";
 import { runCommand } from "../../server/run-command";
 
@@ -1350,7 +1349,7 @@ I'm now in a worktree (branch: ${branch}) for this task. Please analyze what nee
 // ---------------------------------------------------------------------------
 
 const UI_BASE =
-  envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") ||
+  process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
 /**

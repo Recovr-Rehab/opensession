@@ -8,7 +8,6 @@
 
 import { requestUser, type RouteContext } from "./context";
 import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, localProfileDefaultModel, localProfileModels, modelEfforts, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
-import { envAlias } from "../rename-compat";
 import { type Sandbox } from "../sandbox";
 import { sandboxCapabilityStatus } from "../sandbox/config";
 import { suggestBranchName } from "../suggest-branch";
@@ -107,7 +106,7 @@ export async function handleModelsRoutes(
 				isAsk,
 				sessionLink: isAsk
 					? undefined
-					: `${envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") || configuredServer().publicBaseUrl}/session/<this-session>`,
+					: `${process.env.OPENSESSION_UI_BASE || configuredServer().publicBaseUrl}/session/<this-session>`,
 				user: url.searchParams.get("user") || undefined,
 				interactiveTools: true,
 			}),

@@ -7,7 +7,7 @@ import {
   readFileSync,
   unlinkSync,
 } from "node:fs";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 // Structured audit log, modeled on tellahq/incident-agent's src/audit.ts.
 // One JSON line per event into a daily file under ~/.opensession-audit/.

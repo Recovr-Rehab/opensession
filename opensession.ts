@@ -40,7 +40,6 @@ import { assertLocalEngineCredentials } from "./src/server/local-engine-auth";
 import { assertLocalEngineRuntime } from "./src/server/opencode-runner";
 import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifications";
 import { startPublicIngress } from "./src/server/public-ingress";
-import { envAlias } from "./src/server/rename-compat";
 import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions } from "./src/server/run-session";
 import { handleSandboxWsUpgrade, timerPoisonRequestCheck } from "./src/server/run-ws";
 import { handleNodeWsUpgrade } from "./src/server/node-ws";
@@ -459,7 +458,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 		// explicitly asked for — the systemd service is production, and the overlay
 		// pops "Script error." boxes on iOS with no diagnostics behind them.
 		development:
-			envAlias("OPENSESSION_DEV", "BACKSTAGE_DEV") === "1"
+			process.env.OPENSESSION_DEV === "1"
 				? {
 						hmr: true,
 						console: true,

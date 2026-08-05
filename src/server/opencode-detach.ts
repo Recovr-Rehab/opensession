@@ -34,7 +34,6 @@
 import { homeDir } from "./paths";
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from "fs";
 import type { Subprocess } from "bun";
-import { envAlias } from "./rename-compat";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   engineScopeSystemdArgs,
@@ -97,7 +96,7 @@ export function enableOpencodeServerDetach(): void {
 }
 
 export function opencodeDetachActive(): boolean {
-  if (envAlias("OPENSESSION_OC_DETACH", "BACKSTAGE_OC_DETACH") === "0") return false;
+  if (process.env.OPENSESSION_OC_DETACH === "0") return false;
   if (g.__opencodeDetachEnabled !== true) return false;
   return systemdUserScopesAvailable();
 }
@@ -133,7 +132,7 @@ export interface DetachedServerRecord {
 }
 
 const REGISTRY_PATH =
-  envAlias("OPENSESSION_OC_SERVER_REGISTRY", "BACKSTAGE_OC_SERVER_REGISTRY") ||
+  process.env.OPENSESSION_OC_SERVER_REGISTRY ||
   `${HOME}/.opensession-opencode-servers.json`;
 
 export function readDetachedRegistry(): DetachedServerRecord[] {

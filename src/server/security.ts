@@ -19,11 +19,11 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import { runAgent } from "./agent-runner";
 import { createWorktree, listWorktrees, REPOS, getRepo, type Repo } from "./worktree";
 import { personaName, productName } from "./config";
-import { BACKSTAGE_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR } from "./paths";
 import { providerFor, modelLabel } from "./models";
 import { engineSessionPatch } from "./sessions";
 import type { BackstageSessionFile } from "./types";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { shouldPersistModelSwitch } from "./run-events";
 
 const SECURITY_DIR = stateDir("security");
@@ -314,7 +314,7 @@ export async function executeScan(
           mode: "code",
           repo: repo.id,
         };
-        writeJsonAtomic(`${BACKSTAGE_CHATS_DIR}/${bksId}.json`, data);
+        writeJsonAtomic(`${OPENSESSION_CHATS_DIR}/${bksId}.json`, data);
       };
       persistSession();
 

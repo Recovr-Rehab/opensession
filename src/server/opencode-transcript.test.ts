@@ -15,10 +15,10 @@ import type { TranscriptEntry } from "./types";
 const scratch = mkdtempSync(join(tmpdir(), "oc-transcript-test-"));
 const dbPath = join(scratch, "opencode.db");
 const transcriptsDir = join(scratch, "transcripts");
-const priorDb = process.env.BACKSTAGE_OPENCODE_DB;
-const priorTranscriptsDir = process.env.BACKSTAGE_OPENCODE_TRANSCRIPTS_DIR;
-process.env.BACKSTAGE_OPENCODE_DB = dbPath;
-process.env.BACKSTAGE_OPENCODE_TRANSCRIPTS_DIR = transcriptsDir;
+const priorDb = process.env.OPENSESSION_OPENCODE_DB;
+const priorTranscriptsDir = process.env.OPENSESSION_OPENCODE_TRANSCRIPTS_DIR;
+process.env.OPENSESSION_OPENCODE_DB = dbPath;
+process.env.OPENSESSION_OPENCODE_TRANSCRIPTS_DIR = transcriptsDir;
 
 const mod = await import(`./opencode-transcript.ts?test=${crypto.randomUUID()}`);
 const {
@@ -68,7 +68,7 @@ const priorChatsDir = __setChatsDirForTest(scratch);
 // The store's import-first gate reads OpenCode's SQLite through the BARE
 // opencode-transcript module, not this file's cache-busted `mod` — and the
 // bare one resolves its db path at ITS load, which in a full `bun test` run
-// happened under the real env, long before this file set BACKSTAGE_OPENCODE_DB.
+// happened under the real env, long before this file set OPENSESSION_OPENCODE_DB.
 // Left alone the legacy-import test then probes the real ~/.opensession
 // database, finds no ses_testabc123, and imports nothing (passes in isolation,
 // fails in the suite). The live-binding seams repoint it whoever loaded first.
@@ -119,10 +119,10 @@ function seedDb() {
 
 beforeAll(seedDb);
 afterAll(() => {
-  if (priorDb === undefined) delete process.env.BACKSTAGE_OPENCODE_DB;
-  else process.env.BACKSTAGE_OPENCODE_DB = priorDb;
-  if (priorTranscriptsDir === undefined) delete process.env.BACKSTAGE_OPENCODE_TRANSCRIPTS_DIR;
-  else process.env.BACKSTAGE_OPENCODE_TRANSCRIPTS_DIR = priorTranscriptsDir;
+  if (priorDb === undefined) delete process.env.OPENSESSION_OPENCODE_DB;
+  else process.env.OPENSESSION_OPENCODE_DB = priorDb;
+  if (priorTranscriptsDir === undefined) delete process.env.OPENSESSION_OPENCODE_TRANSCRIPTS_DIR;
+  else process.env.OPENSESSION_OPENCODE_TRANSCRIPTS_DIR = priorTranscriptsDir;
   // Hand the singleton back intact before `scratch` disappears — restoring
   // only the path bindings would leave a live store pointed at a removed db.
   __setTranscriptStoreForTest(priorStore);
@@ -242,16 +242,16 @@ describe("opencodeToolResultImages", () => {
   });
 
   describe("inside a sandboxed run host", () => {
-    // BKS_RUN_WS_URL marks a run host that dialed OUT over WS — a sandbox,
+    // OPENSESSION_RUN_WS_URL marks a run host that dialed OUT over WS — a sandbox,
     // whose filesystem the media route cannot reach.
     let prior: string | undefined;
     beforeAll(() => {
-      prior = process.env.BKS_RUN_WS_URL;
-      process.env.BKS_RUN_WS_URL = "wss://example.invalid/opensession/run-ws/rh-test";
+      prior = process.env.OPENSESSION_RUN_WS_URL;
+      process.env.OPENSESSION_RUN_WS_URL = "wss://example.invalid/opensession/run-ws/rh-test";
     });
     afterAll(() => {
-      if (prior === undefined) delete process.env.BKS_RUN_WS_URL;
-      else process.env.BKS_RUN_WS_URL = prior;
+      if (prior === undefined) delete process.env.OPENSESSION_RUN_WS_URL;
+      else process.env.OPENSESSION_RUN_WS_URL = prior;
     });
 
     const dataUrl = "data:image/png;base64,aGVsbG8=";

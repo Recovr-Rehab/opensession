@@ -59,7 +59,7 @@ import type { RunHostSpec } from "../runner-host/protocol";
 // make sure a fresh unified session never picks up stray real data.
 //
 // recordBksSessionFor (called on every init) writes the oc→unified mapping
-// through a THIRD globalThis-parked seam, OPENCODE_BKS_MAP_PATH — not
+// through a THIRD globalThis-parked seam, OPENCODE_SESSION_MAP_PATH — not
 // derived from OPENSESSION_CHATS_DIR, so __setChatsDirForTest doesn't touch
 // it. __setOpencodeBksMapPathForTest redirects the path; the in-memory map
 // itself is also parked on globalThis (same shape as transcriptStore()), so

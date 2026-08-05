@@ -38,7 +38,7 @@ import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { audit } from "./audit";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 export const DEPLOYS_DIR = stateDir("deploys");
 const REGISTRY = join(DEPLOYS_DIR, "registry.json");

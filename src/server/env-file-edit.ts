@@ -17,7 +17,7 @@
  */
 
 import { chmodSync, existsSync, readFileSync } from "fs";
-import { statePath } from "./rename-compat";
+import { statePath } from "./paths";
 import { backupFile } from "./config-mutation";
 import { writeFileAtomic } from "./shared/atomic-write";
 
@@ -26,7 +26,7 @@ import { writeFileAtomic } from "./shared/atomic-write";
 export function envFilePath(): string {
   return (
     process.env.OPENSESSION_ENV_FILE ||
-    statePath(".opensession.env", ".backstage.env")
+    statePath(".opensession.env")
   );
 }
 

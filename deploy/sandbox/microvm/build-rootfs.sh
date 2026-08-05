@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build a Firecracker rootfs from a Docker-exported filesystem. Used by both
 # the preview pool and the separate minimal host-engine workspace golden. Usage:
-#   BKS_INIT=/path/to/init build-rootfs.sh <golden.tar> <out.ext4> [size-gb]
+#   OPENSESSION_INIT=/path/to/init build-rootfs.sh <golden.tar> <out.ext4> [size-gb]
 #
 # The image is sparse (only written blocks take disk). Injects:
 #   /sbin/bks-init            guest PID 1 (see bks-init)
@@ -11,7 +11,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TAR="$1"; OUT="$2"; SIZE_GB="${3:-25}"
-INIT="${BKS_INIT:-$HERE/bks-init}"
+INIT="${OPENSESSION_INIT:-$HERE/bks-init}"
 
 BUSYBOX_URL=https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox
 [ -f "$HERE/.cache-busybox" ] || curl -fsSL "$BUSYBOX_URL" -o "$HERE/.cache-busybox"

@@ -80,7 +80,7 @@ const POLL_INTERVAL_MS = 2_500;
  *  truncates large command outputs — bootstrap only greps errors from these). */
 const TAIL_BYTES = 200_000;
 /** Delimits stdout from stderr in the detached-exec readback. */
-const OUT_ERR_DELIM = "__BKS_OUT_ERR_9c1b__";
+const OUT_ERR_DELIM = "__OS_OUT_ERR_9c1b__";
 
 /** States where the VM is up and can take commands. `running` is their
  *  "agent busy" state — still a live VM. */
@@ -259,13 +259,13 @@ function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     const dir = `/tmp/.bks-exec/${id}`;
     const script = `{ ${shell}\n} >${dir}/out 2>${dir}/err; echo $? >${dir}/code`;
     const emit =
-      `if [ -f ${dir}/code ]; then echo "BKS_DONE:$(cat ${dir}/code)"; ` +
+      `if [ -f ${dir}/code ]; then echo "OPENSESSION_DONE:$(cat ${dir}/code)"; ` +
       `tail -c ${TAIL_BYTES} ${dir}/out; printf '%s' ${shellQuoteWord(OUT_ERR_DELIM)}; ` +
-      `tail -c ${TAIL_BYTES} ${dir}/err; rm -rf ${dir}; else echo BKS_WAIT; fi`;
+      `tail -c ${TAIL_BYTES} ${dir}/err; rm -rf ${dir}; else echo OPENSESSION_WAIT; fi`;
     const parseDone = (stdout: string) => {
-      if (!stdout.startsWith("BKS_DONE:")) return null;
+      if (!stdout.startsWith("OPENSESSION_DONE:")) return null;
       const nl = stdout.indexOf("\n");
-      const code = Number(stdout.slice("BKS_DONE:".length, nl < 0 ? undefined : nl).trim());
+      const code = Number(stdout.slice("OPENSESSION_DONE:".length, nl < 0 ? undefined : nl).trim());
       const rest = nl < 0 ? "" : stdout.slice(nl + 1);
       const di = rest.indexOf(OUT_ERR_DELIM);
       return {
@@ -279,7 +279,7 @@ function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
         `i=0; while [ $i -lt 25 ] && [ ! -f ${dir}/code ]; do sleep 0.1; i=$((i+1)); done; ${emit}`,
       30_000,
     );
-    if (start.exitCode !== 0 || (!start.stdout.startsWith("BKS_DONE:") && !start.stdout.includes("BKS_WAIT"))) {
+    if (start.exitCode !== 0 || (!start.stdout.startsWith("OPENSESSION_DONE:") && !start.stdout.includes("OPENSESSION_WAIT"))) {
       return {
         exitCode: start.exitCode || 1,
         stdout: "",
@@ -318,10 +318,10 @@ function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       // the process survives this API call and this backstage process.
       const shell = composeShell(cmd, opts);
       const r = await execSync(
-        `setsid sh -c ${shellQuoteWord(shell)} </dev/null >/dev/null 2>&1 & echo BKS_BG`,
+        `setsid sh -c ${shellQuoteWord(shell)} </dev/null >/dev/null 2>&1 & echo OPENSESSION_BG`,
         30_000,
       );
-      if (r.exitCode !== 0 || !r.stdout.includes("BKS_BG")) {
+      if (r.exitCode !== 0 || !r.stdout.includes("OPENSESSION_BG")) {
         throw new Error(`box execBackground failed: ${(r.stderr || r.stdout).slice(0, 300)}`);
       }
     },

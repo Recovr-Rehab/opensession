@@ -75,7 +75,7 @@ export interface RunHostSpec {
    * dials the server's run-ws WS route (/opensession/run-ws/<hostId>; the
    * /backstage/* form is the legacy alias) instead of serving a
    * unix socket in its run dir; the launcher passes it to the host process as
-   * BKS_RUN_WS_TOKEN and registers it (keyed by hostId) so the route can
+   * OPENSESSION_RUN_WS_TOKEN and registers it (keyed by hostId) so the route can
    * validate the dial-back. Persisted in spec.json so a restarted server
    * re-registers it on reattach (the host's WS reconnect must keep working).
    */

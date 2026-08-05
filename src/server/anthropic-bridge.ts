@@ -67,7 +67,7 @@
  */
 
 import { homeDir } from "./paths";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { query, createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit, summarizeText } from "./audit";

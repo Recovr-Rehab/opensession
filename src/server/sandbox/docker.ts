@@ -112,7 +112,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync } from "fs";
 import { dirname, resolve as resolvePath } from "path";
 import { homeDir, OPENSESSION_CHATS_DIR } from "../paths";
-import { envAlias, stateDir, withLegacySessionId } from "../rename-compat";
+import { stateDir, } from "../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
 import { RESUME_CONTINUATION_PROMPT } from "../agent-runner";
@@ -207,7 +207,7 @@ interface DockerSandboxState {
    *  skipped — snapshot restore / script absent). One-shot per sandbox. */
   setupRan?: boolean;
   /** How the current container came to exist: fresh create vs snapshot
-   *  restore. Lifecycle scripts receive it as BACKSTAGE_BOOT_MODE. */
+   *  restore. Lifecycle scripts receive it as OPENSESSION_BOOT_MODE. */
   bootMode?: "fresh" | "snapshot-restore";
 }
 
@@ -622,12 +622,12 @@ async function createContainer(
   roIfExists(`${HOME}/.gitconfig`, "gitconfig");
   roIfExists(`${HOME}/.config/gh`, "gh config");
   roIfExists(
-    envAlias("OPENSESSION_MCP_CONFIG", "BACKSTAGE_MCP_CONFIG") ||
+    process.env.OPENSESSION_MCP_CONFIG ||
       configuredPaths().mcpConfig,
     "mcp-config.json",
   );
   roIfExists(
-    envAlias("OPENSESSION_CLAUDE_ACCOUNTS_PATH", "BACKSTAGE_CLAUDE_ACCOUNTS_PATH") ||
+    process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH ||
       stateDir("claude-accounts.json"),
     "claude account pool",
   );
@@ -656,7 +656,7 @@ async function createContainer(
   // the in-container process (which has no such env) dual-reads.
   {
     const src =
-      envAlias("OPENSESSION_OPENCODE_CONFIG", "BACKSTAGE_OPENCODE_CONFIG") ||
+      process.env.OPENSESSION_OPENCODE_CONFIG ||
       stateDir("opencode.json");
     if (existsSync(src)) mounts.push(...vol(src, `${HOME}/.backstage-opencode.json`, true));
   }
@@ -828,7 +828,7 @@ async function runWorkspaceSetup(
     [
       "exec", "-w", assertSafePath(cwd),
       "-e", `OPENSESSION_BOOT_MODE=${bootMode}`,
-      "-e", `BACKSTAGE_BOOT_MODE=${bootMode}`, // deprecated alias for older hooks
+      "-e", `OPENSESSION_BOOT_MODE=${bootMode}`, // deprecated alias for older hooks
       name,
       "sh", "-c", `bash ${assertSafePath(script)} >> ${log} 2>&1`,
     ],
@@ -871,7 +871,7 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
       // WS transport: register the run's dial-back token (spec.json was just
       // written to `dir` — respawns included) and point the host at the run-ws
       // + rpc-ws routes instead of socket paths.
-      const spec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`));
+      const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
       const wsEnv: string[] = [];
       if (spec?.wsToken) {
         const base = sandboxCallbackBaseUrl();
@@ -879,9 +879,9 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
         wsEnv.push(
           // Primary prefix — the server accepts /backstage too, so URLs baked
           // into already-running containers stay valid.
-          ...env(`BKS_RUN_WS_URL=${base}/opensession/run-ws/${hostId}`),
-          ...env(`BKS_RUN_WS_TOKEN=${spec.wsToken}`),
-          ...env(`BKS_RPC_WS_URL=${base}/opensession/rpc-ws`),
+          ...env(`OPENSESSION_RUN_WS_URL=${base}/opensession/run-ws/${hostId}`),
+          ...env(`OPENSESSION_RUN_WS_TOKEN=${spec.wsToken}`),
+          ...env(`OPENSESSION_RPC_WS_URL=${base}/opensession/rpc-ws`),
         );
       }
       const args = [
@@ -889,18 +889,18 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
         // New env names primary; deprecated aliases ride along so an
         // un-migrated in-container build keeps working.
         ...env(`OPENSESSION_RUN_JOURNAL=${dir}/journal.json`),
-        ...env(`BACKSTAGE_RUN_JOURNAL=${dir}/journal.json`),
+        ...env(`OPENSESSION_RUN_JOURNAL=${dir}/journal.json`),
         ...env("NODE_ENV=production"),
-        ...(envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")
+        ...(process.env.OPENSESSION_MODEL
           ? [
-              ...env(`OPENSESSION_MODEL=${envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")}`),
-              ...env(`MICHAEL_MODEL=${envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")}`),
+              ...env(`OPENSESSION_MODEL=${process.env.OPENSESSION_MODEL}`),
+              ...env(`MICHAEL_MODEL=${process.env.OPENSESSION_MODEL}`),
             ]
           : []),
-        ...(envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE")
+        ...(process.env.OPENSESSION_UI_BASE
           ? [
-              ...env(`OPENSESSION_UI_BASE=${envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE")}`),
-              ...env(`MICHAEL_UI_BASE=${envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE")}`),
+              ...env(`OPENSESSION_UI_BASE=${process.env.OPENSESSION_UI_BASE}`),
+              ...env(`MICHAEL_UI_BASE=${process.env.OPENSESSION_UI_BASE}`),
             ]
           : []),
         ...wsEnv,
@@ -1500,9 +1500,9 @@ export async function resumeDockerSandboxRun(
 
   const launcher = makeDockerLauncher(run.sandboxId, run.osSessionId);
   const oldDir = launcher.newRunDir(run.runKey);
-  const oldSpec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`));
+  const oldSpec = readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`);
   if (oldSpec) {
-    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${oldDir}/${HOST_META_NAME}`));
+    const meta = readJsonSafe<RunHostMeta>(`${oldDir}/${HOST_META_NAME}`);
     if (meta?.done) {
       // Ended while backstage was down: hand the terminal event to the normal
       // consumption bookkeeping, then clean up.

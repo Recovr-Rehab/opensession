@@ -11,7 +11,7 @@
 import { mkdirSync, readFileSync, existsSync } from "fs";
 import webpush from "web-push";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { configuredIntegration } from "./config";
 
 const PUSH_DIR = stateDir("push");

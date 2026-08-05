@@ -19,7 +19,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { audit } from "./audit";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { REPOS } from "./worktree";
 

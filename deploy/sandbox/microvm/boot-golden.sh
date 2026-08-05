@@ -15,7 +15,7 @@ sudo bash "$(dirname "$0")/setup-net.sh" "$TAP" "$HOST_IP/30"
 rm -f "$API"
 "$FC" --api-sock "$API" > "$LOG" 2>&1 &
 FC_PID=$!
-[ -n "${BKS_FIRECRACKER_PID_FILE:-}" ] && printf '%s\n' "$FC_PID" > "$BKS_FIRECRACKER_PID_FILE"
+[ -n "${OPENSESSION_FIRECRACKER_PID_FILE:-}" ] && printf '%s\n' "$FC_PID" > "$OPENSESSION_FIRECRACKER_PID_FILE"
 echo "firecracker pid $FC_PID (api $API, serial log $LOG)"
 sleep 0.3
 fc() { curl -s --unix-socket "$API" -X "$1" "http://x$2" -H 'Content-Type: application/json' -d "$3"; }

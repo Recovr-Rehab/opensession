@@ -13,7 +13,7 @@
  * reviewer (Greptile's meta-lesson: judge comments by author behavior, never
  * by asking a model to grade itself).
  */
-import { stateDir } from "../../server/rename-compat";
+import { stateDir } from "../../server/paths";
 import { audit } from "../../server/audit";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { existsSync, readFileSync } from "fs";

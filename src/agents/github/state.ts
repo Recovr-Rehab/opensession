@@ -7,7 +7,7 @@
  * In-process locks coalesce rapid webhook bursts (force-push, stacked commits)
  * within one process; the on-disk state guards across restarts.
  */
-import { stateDir } from "../../server/rename-compat";
+import { stateDir } from "../../server/paths";
 import { prKey } from "./constants";
 import type { HandoffState } from "./handoff-gates";
 import { mkdirSync, readFileSync, existsSync, readdirSync } from "fs";

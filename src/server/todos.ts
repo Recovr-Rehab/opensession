@@ -15,7 +15,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { randomUUIDv7 } from "bun";
 import { audit } from "./audit";
 import { sendPushToUser } from "./push";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { resolveTeammate } from "./shared/user-mappings";
 import { broadcastToAll } from "./ws-hub";

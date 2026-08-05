@@ -1,5 +1,5 @@
 /**
- * Dev-instance mode — OPENSESSION_DEV=1 (alias BACKSTAGE_DEV).
+ * Dev-instance mode — OPENSESSION_DEV=1 (alias OPENSESSION_DEV).
  *
  * Historically the flag only swapped the frontend build pipeline
  * (frontend-build.ts IS_DEV, which stays self-contained) and enabled Bun HMR.
@@ -17,11 +17,10 @@
  * interactive run fleet-wide (2026-07-16/17 outages).
  */
 
-import { envAlias } from "./rename-compat";
 
 /** True iff this process is a dev instance (OPENSESSION_DEV=1). */
 export function isDevInstance(): boolean {
-	return envAlias("OPENSESSION_DEV", "BACKSTAGE_DEV") === "1";
+	return process.env.OPENSESSION_DEV === "1";
 }
 
 /**
@@ -34,9 +33,9 @@ export function isDevInstance(): boolean {
 export function devInstanceBootError(
 	env: Record<string, string | undefined> = process.env,
 ): string | null {
-	if ((env.OPENSESSION_DEV || env.BACKSTAGE_DEV) !== "1") return null;
+	if ((env.OPENSESSION_DEV || env.OPENSESSION_DEV) !== "1") return null;
 	if (env.OPENSESSION_STATE_DIR) return null;
-	if (env.OPENSESSION_CHATS_DIR || env.BACKSTAGE_CHATS_DIR) return null;
+	if (env.OPENSESSION_CHATS_DIR || env.OPENSESSION_CHATS_DIR) return null;
 	return (
 		"OPENSESSION_DEV=1 refuses to boot on the live state: set OPENSESSION_STATE_DIR " +
 		"(isolated state root; every ~/.opensession-* store resolves under it) or at " +

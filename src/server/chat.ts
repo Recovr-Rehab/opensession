@@ -15,7 +15,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { teamFirstNames } from "./people";
 
 const CHAT_DIR = stateDir("chat");

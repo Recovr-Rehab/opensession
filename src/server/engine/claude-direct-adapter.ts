@@ -10,7 +10,7 @@
  *
  * Containment / scope (all enforced here):
  *  - Hard flag gate: every turn refuses unless
- *    `OPENSESSION_ENGINE_CLAUDE_DIRECT=1` (envAlias — old BACKSTAGE_ name
+ *    `OPENSESSION_ENGINE_CLAUDE_DIRECT=1` (envAlias — old OPENSESSION_ name
  *    honored). NEVER wired into model pickers or defaults; callers are
  *    scripted throwaway test sessions (`bks-test-claude-direct-*`) only.
  *  - Auth: a subscription account from claude-accounts (pickAccount /
@@ -44,7 +44,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { mkdirSync } from "fs";
-import { envAlias, stateDir } from "../rename-compat";
+import { stateDir } from "../paths";
 import { audit, summarizeText } from "../audit";
 import {
   pickAccount,
@@ -83,7 +83,7 @@ export const CLAUDE_DIRECT_STATE_DIR = stateDir("claude-direct");
  *  something imports it anyway. */
 export function claudeDirectEnabled(): boolean {
   return (
-    envAlias("OPENSESSION_ENGINE_CLAUDE_DIRECT", "BACKSTAGE_ENGINE_CLAUDE_DIRECT") === "1"
+    process.env.OPENSESSION_ENGINE_CLAUDE_DIRECT === "1"
   );
 }
 

@@ -12,7 +12,7 @@
  */
 import { readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { BACKSTAGE_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR } from "./paths";
 
 /** The manual lanes a session can be pinned into — mirrors the frontend's MineStatus. */
 export type ManualStatus =
@@ -34,7 +34,7 @@ export function isManualStatus(v: unknown): v is ManualStatus {
 	return typeof v === "string" && VALID.has(v);
 }
 
-const REGISTRY_PATH = `${BACKSTAGE_CHATS_DIR}/status-overrides.json`;
+const REGISTRY_PATH = `${OPENSESSION_CHATS_DIR}/status-overrides.json`;
 
 let cache: Record<string, ManualStatus> | null = null;
 

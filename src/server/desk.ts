@@ -13,7 +13,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { randomUUIDv7 } from "bun";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
 	findSession,

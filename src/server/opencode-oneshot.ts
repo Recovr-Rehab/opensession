@@ -36,7 +36,6 @@ import { ensureAnthropicBridge } from "./anthropic-bridge";
 import { isClaudeUsageLimitError } from "./runner-shared";
 import { markExhausted, getUsableAccountById, type ClaudeAccount } from "./claude-accounts";
 import { localProfileDefaultModel, toOpencodeModel } from "./models";
-import { envAlias } from "./rename-compat";
 import { audit } from "./audit";
 import { isLocalProfile } from "./profile";
 import { bindOpenaiAccount, pickOpenaiAccount } from "./opencode-openai-auth";
@@ -119,10 +118,10 @@ export async function opencodeOneShot(
   if (process.env.NODE_ENV === "test") return null;
   const localProfile = isLocalProfile();
   const requested = localProfile
-    ? envAlias("OPENSESSION_ONESHOT_MODEL", "BACKSTAGE_ONESHOT_MODEL") ||
+    ? process.env.OPENSESSION_ONESHOT_MODEL ||
       `opencode/${localProfileDefaultModel()}`
     : opts.model ||
-      envAlias("OPENSESSION_ONESHOT_MODEL", "BACKSTAGE_ONESHOT_MODEL") ||
+      process.env.OPENSESSION_ONESHOT_MODEL ||
       DEFAULT_ONESHOT_MODEL;
   const model = toOpencodeModel(requested) || requested;
   const parsed = parseOpencodeModel(model);

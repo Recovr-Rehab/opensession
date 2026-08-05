@@ -34,7 +34,6 @@ describe("demo dataset generator (isolated child process)", () => {
             // overrides may leak in from the outer environment.
             OPENSESSION_STATE_DIR: "",
             OPENSESSION_CHATS_DIR: "",
-            BACKSTAGE_CHATS_DIR: "",
             OPENSESSION_CONFIG: join(home, "config.json"),
           },
           stdout: "pipe",

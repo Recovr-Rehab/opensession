@@ -5,14 +5,14 @@ import type { UnifiedSession } from "./types";
 import { stopPreview } from "./preview";
 import { configuredPaths, configuredRepos, configuredSelfDev, defaultRepo, type Repo } from "./config";
 import { isLocalProfile } from "./profile";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 // The Repo type + registry defaults live in config.ts now. Re-exported so existing
 // `import { type Repo } from "./worktree"` call sites keep working.
 export type { Repo } from "./config";
 
 // Root all per-branch worktrees live under. Env-overridable
-// (BACKSTAGE_WORKTREES_DIR) → config `paths.worktreesDir` → this VPS's path.
+// (OPENSESSION_WORKTREES_DIR) → config `paths.worktreesDir` → this VPS's path.
 const worktreesDir = () => configuredPaths().worktreesDir;
 
 /**

@@ -35,7 +35,7 @@ import {
 } from "../agent-runner";
 import type { RouteContext } from "./context";
 
-const BKS_UUID_V7 =
+const OPENSESSION_UUID_V7 =
   /^bks-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export interface ImportedFromLocalMarker {
@@ -116,7 +116,7 @@ function errorResponse(error: string, status = 400, extra?: object): Response {
 }
 
 function validImportId(id: unknown): id is string {
-  return typeof id === "string" && BKS_UUID_V7.test(id);
+  return typeof id === "string" && OPENSESSION_UUID_V7.test(id);
 }
 
 function validDate(value: unknown): value is string {

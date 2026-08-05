@@ -158,7 +158,7 @@ differ):
    the same dir). Run detached with `WEBAPP_PORT` (the allocated port —
    pre-published container port in sandboxes, a free host port for host
    previews, seeded into `.ports.conf` either way), `PREVIEW_URL`, and
-   `BACKSTAGE_BOOT_MODE` (`fresh` | `snapshot-restore`; host previews always
+   `OPENSESSION_BOOT_MODE` (`fresh` | `snapshot-restore`; host previews always
    say `fresh`) in its env. It should bring the dev server up on
    `$WEBAPP_PORT` (exec your server so stop's process-group kill reaches it).
 2. else the repo's configured `previewCommand` (an instance-config `repos`
@@ -176,7 +176,7 @@ S3-backed prebuilt-artifact install).
 
 `<worktree>/.opensession/setup.sh` is the sibling one-shot hook: it runs once
 per workspace materialization (first ensure of the sandbox, cwd = workspace,
-same `BACKSTAGE_BOOT_MODE` env), is **skipped on snapshot restore** (the
+same `OPENSESSION_BOOT_MODE` env), is **skipped on snapshot restore** (the
 restored container layer already carries its effects), is never retried once
 settled (log: `~/.opensession-chats/sandbox-runs/<session>/workspace-setup.log`),
 and never blocks the session on failure. Keep both scripts convention-level:

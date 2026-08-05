@@ -366,7 +366,7 @@ export async function externalRefsOpeningContext(
   let out = `This chat belongs to a workspace linked to external object(s):\n${lines}`;
   if (opts.scratch)
     out +=
-      "\n\nYour working directory is a scratch space (not a git repo) — download media, run ffmpeg, write files there freely. Use the available MCP tools for the linked service when the task concerns the object itself. IMPORTANT — showing media: when your work produces a video or image, make sure its ABSOLUTE local path (or a direct media URL) appears in your output — recognized media paths/URLs render inline in the chat automatically (local files must exist on disk). To force it explicitly, print `BACKSTAGE_VIDEO: /abs/path.mp4` or `BACKSTAGE_IMAGE: /abs/path.png` on its own line. Media that never appears as a path/URL/marker in output is invisible to the user.";
+      "\n\nYour working directory is a scratch space (not a git repo) — download media, run ffmpeg, write files there freely. Use the available MCP tools for the linked service when the task concerns the object itself. IMPORTANT — showing media: when your work produces a video or image, make sure its ABSOLUTE local path (or a direct media URL) appears in your output — recognized media paths/URLs render inline in the chat automatically (local files must exist on disk). To force it explicitly, print `BACKSTAGE_VIDEO: /abs/path.mp4` or `OPENSESSION_IMAGE: /abs/path.png` on its own line. Media that never appears as a path/URL/marker in output is invisible to the user.";
   for (const r of refs.filter((x) => x.kind === "tella")) {
     try {
       const { getVideo, formatVideoContext } = await import(
@@ -468,7 +468,7 @@ const SCRATCH_ORPHAN_GRACE_MS = 14 * 24 * 60 * 60 * 1000;
 
 async function sweepOrphanScratchDirs(): Promise<void> {
   const { readdirSync, rmSync, statSync, existsSync } = await import("fs");
-  const { stateDir } = await import("./rename-compat");
+  const { stateDir } = await import("./paths");
   const { getWorkspace } = await import("./workspaces");
   const root = stateDir("scratch");
   if (!existsSync(root)) return;

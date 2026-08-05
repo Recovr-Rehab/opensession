@@ -4,7 +4,7 @@
  * normal backstage session so it shows up in the sessions list and UI.
  */
 import { randomUUIDv7 } from "bun";
-import { BACKSTAGE_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR } from "./paths";
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { parseCron, cronMatches, nextRun } from "./cron";
@@ -18,7 +18,7 @@ import { engineSessionPatch } from "./sessions";
 import { updateSessionFile } from "./session-cache";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import type { BackstageSessionFile } from "./types";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { linkThreadInIndex, createSlackPostScanner } from "./slack-links";
 import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
 import { createReportMcpServer } from "../agents/slack/report-tools";
@@ -33,7 +33,7 @@ import { configuredIntegration, personaName } from "./config";
 import { shouldPersistModelSwitch } from "./run-events";
 
 const AUTOMATIONS_DIR = stateDir("automations");
-const SESSIONS_DIR = BACKSTAGE_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
 
 /**
  * Config for an automation that is driven by polling a Grafana Loki failure

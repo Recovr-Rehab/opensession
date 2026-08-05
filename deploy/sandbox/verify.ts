@@ -82,7 +82,7 @@ const { getGitStatus } = await import("../../src/server/git-status");
 const { worktreePathFor } = await import("../../src/server/worktree");
 const { rpcSocketPath } = await import("../../src/runner-host/protocol");
 const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
-const { envAlias, statePath } = await import("../../src/server/rename-compat");
+const { statePath } = await import("../../src/server/paths");
 type RunHostSpec = import("../../src/runner-host/protocol").RunHostSpec;
 
 const SESSION_ID = `sbxtest-${Date.now().toString(36)}`;
@@ -293,8 +293,8 @@ try {
   // ── real agent run through launchRun ───────────────────────────────────────
   console.log("\n── agent run (launchRun) ──");
   const accountsPath =
-    envAlias("OPENSESSION_CLAUDE_ACCOUNTS_PATH", "BACKSTAGE_CLAUDE_ACCOUNTS_PATH") ||
-    statePath(".opensession-claude-accounts.json", ".backstage-claude-accounts.json");
+    process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH ||
+    statePath(".opensession-claude-accounts.json");
   let hasAccounts = false;
   let socketRunOk = false; // gates the WS-section agent runs (same cost rule)
   try {
@@ -730,12 +730,12 @@ try {
   mkdirSync(`${WT}/.opensession`, { recursive: true });
   await Bun.write(
     `${WT}/.opensession/setup.sh`,
-    `#!/usr/bin/env bash\necho "setup boot=$BACKSTAGE_BOOT_MODE" >> .opensession-setup-runs\n`,
+    `#!/usr/bin/env bash\necho "setup boot=$OPENSESSION_BOOT_MODE" >> .opensession-setup-runs\n`,
   );
   await Bun.write(
     `${WT}/.opensession/start.sh`,
     `#!/usr/bin/env bash
-echo "start boot=$BACKSTAGE_BOOT_MODE port=$WEBAPP_PORT url=$PREVIEW_URL" > .opensession-start-ran
+echo "start boot=$OPENSESSION_BOOT_MODE port=$WEBAPP_PORT url=$PREVIEW_URL" > .opensession-start-ran
 exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0.0", fetch: () => new Response("lifecycle-preview-ok") })'
 `,
   );
@@ -912,7 +912,7 @@ exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0
     (() => {
       try {
         return JSON.parse(
-          readFileSync(statePath(".opensession-sandbox.json", ".backstage-sandbox.json"), "utf-8"),
+          readFileSync(statePath(".opensession-sandbox.json"), "utf-8"),
         )?.daytona?.apiKey as string | undefined;
       } catch {
         return undefined;

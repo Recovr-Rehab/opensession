@@ -14,9 +14,7 @@
  * mid-flight rename.
  */
 
-import { existsSync } from "fs";
 import { homedir } from "os";
-import { envAlias, stateDir } from "./rename-compat";
 import { isLocalProfile, localProfileRoot } from "./profile";
 
 /** The current user's home directory ($HOME wins so tests can repoint it). */
@@ -24,14 +22,29 @@ export function homeDir(): string {
   return process.env.HOME || homedir();
 }
 
-const HOME = homeDir();
-const CHATS_LEGACY = `${HOME}/.backstage-sessions`;
+/**
+ * Resolve a state path relative to the state root. A non-empty
+ * OPENSESSION_STATE_DIR is an isolated namespace (dev/demo instances,
+ * src/server/dev-mode.ts) — every state name resolves strictly under it, so
+ * a second instance can never read or write the live instance's home-dir
+ * state. Unset ⇒ $HOME. Read at call time so tests can repoint either env.
+ */
+export function statePath(rel: string): string {
+  const root = process.env.OPENSESSION_STATE_DIR || process.env.HOME || homedir();
+  return `${root}/${rel}`;
+}
+
+/** Sugar for the standard state-dir naming: `stateDir("audit")` →
+ *  `~/.opensession-audit`. Works for files too (`stateDir("pins.json")`). */
+export function stateDir(base: string): string {
+  return statePath(`.opensession-${base}`);
+}
 
 function resolveChatsDir(): string {
   // Env override first (test/verify/conformance suites point it at a scratch
   // dir so sbxtest state files, run dirs and kill-switch checks never touch
   // the live store — set it BEFORE importing any src/server module).
-  const fromEnv = envAlias("OPENSESSION_CHATS_DIR", "BACKSTAGE_CHATS_DIR");
+  const fromEnv = process.env.OPENSESSION_CHATS_DIR;
   if (fromEnv) return fromEnv;
   // Isolated state namespace (dev/demo instances — see rename-compat
   // statePath): everything lives under OPENSESSION_STATE_DIR, fresh, with no
@@ -40,18 +53,11 @@ function resolveChatsDir(): string {
   const stateRoot = process.env.OPENSESSION_STATE_DIR;
   if (stateRoot) return `${stateRoot}/.opensession-chats`;
   if (isLocalProfile()) return `${localProfileRoot()}/sessions`;
-  // `~/.opensession-chats` → `~/.backstage-chats` dual-read, then the
-  // pre-workspaces legacy name, then create-new at the primary name.
-  const resolved = stateDir("chats");
-  if (existsSync(resolved) || !existsSync(CHATS_LEGACY)) return resolved;
-  return CHATS_LEGACY;
+  return stateDir("chats");
 }
 
 /** The active chat-store dir. */
 export let OPENSESSION_CHATS_DIR = resolveChatsDir();
-
-/** Deprecated alias (same live binding) — new code imports OPENSESSION_CHATS_DIR. */
-export { OPENSESSION_CHATS_DIR as BACKSTAGE_CHATS_DIR };
 
 /**
  * Test seam (bun tests only): repoint the chat store AFTER this module has

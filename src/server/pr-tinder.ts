@@ -12,7 +12,7 @@ import { readFileSync, existsSync } from "fs";
 import { audited } from "./audit";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { defaultRepo } from "./config";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "./github-limit";
 import { serviceGithubCredential, type GithubCredential } from "./github-auth";
 

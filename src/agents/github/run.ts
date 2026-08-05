@@ -4,9 +4,8 @@
  * PR review/fix/simplify shows up as a Michael session in the web UI, and resumes
  * the engine conversation across rounds via the deterministic per-PR session file.
  */
-import { envAlias } from "../../server/rename-compat";
 import { existsSync, readFileSync } from "fs";
-import { BACKSTAGE_CHATS_DIR } from "../../server/paths";
+import { OPENSESSION_CHATS_DIR } from "../../server/paths";
 import { recordRunOutcome, updateSessionFile } from "../../server/session-cache";
 import { runAgent } from "../../server/agent-runner";
 import { listAutomations } from "../../server/automations";
@@ -21,7 +20,7 @@ import type { BackstageSessionFile } from "../../server/types";
 import { configuredServer } from "../../server/config";
 import { shouldPersistModelSwitch } from "../../server/run-events";
 
-const SESSIONS_DIR = BACKSTAGE_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
 
 /**
  * Default external MCP servers for a PR flow, used when the review automation
@@ -102,7 +101,7 @@ export function bksIdFor(prNumber: number, kind: GithubRunKind, ghRepo?: string)
 }
 
 const UI_BASE =
-  envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") ||
+  process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
 /** Backstage UI link to any session id (also used for handoff "open session" links). */

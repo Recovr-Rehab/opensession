@@ -19,7 +19,7 @@
  * ~/.opensession-plain-router.json); the JSON output contract is appended by
  * code so prompt tweaks can't break parsing.
  */
-import { stateDir } from "../../server/rename-compat";
+import { stateDir } from "../../server/paths";
 import { existsSync, readFileSync } from "fs";
 import { opencodeOneShot } from "../../server/opencode-oneshot";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";

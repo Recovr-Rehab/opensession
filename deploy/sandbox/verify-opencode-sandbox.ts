@@ -44,7 +44,7 @@ const { OPENCODE_TRANSCRIPTS_DIR, getOpencodeTranscriptPath } = await import(
 );
 const { readOpencodeBridgeConfig } = await import("../../src/server/opencode-config");
 const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
-const { envAlias, stateDir, statePath } = await import("../../src/server/rename-compat");
+const { stateDir, statePath } = await import("../../src/server/paths");
 type RunHostSpec = import("../../src/runner-host/protocol").RunHostSpec;
 type StreamEvent = import("../../src/server/run-events").StreamEvent;
 
@@ -155,8 +155,8 @@ try {
 
   // ── live two-turn run (gated on accounts + bridge config) ─────────────────
   const accountsPath =
-    envAlias("OPENSESSION_CLAUDE_ACCOUNTS_PATH", "BACKSTAGE_CLAUDE_ACCOUNTS_PATH") ||
-    statePath(".opensession-claude-accounts.json", ".backstage-claude-accounts.json");
+    process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH ||
+    statePath(".opensession-claude-accounts.json");
   let hasAccounts = false;
   try {
     const store = JSON.parse(readFileSync(accountsPath, "utf-8"));

@@ -12,7 +12,7 @@
  * OPENSESSION_REVIEW_INVERSION=0.
  */
 import { readFileSync } from "fs";
-import { BACKSTAGE_CHATS_DIR } from "../../server/paths";
+import { OPENSESSION_CHATS_DIR } from "../../server/paths";
 import { defaultRepo } from "../../server/config";
 import { tryGetSessionControl } from "../../server/session-control";
 import { matchSessions, projectIdForRepo } from "./session-notify";
@@ -41,7 +41,7 @@ export function familyOf(model?: string): ModelFamily | null {
 
 function sessionFileModel(bksId: string): string | undefined {
   try {
-    const parsed = JSON.parse(readFileSync(`${BACKSTAGE_CHATS_DIR}/${bksId}.json`, "utf-8"));
+    const parsed = JSON.parse(readFileSync(`${OPENSESSION_CHATS_DIR}/${bksId}.json`, "utf-8"));
     return typeof parsed?.model === "string" ? parsed.model : undefined;
   } catch {
     return undefined;

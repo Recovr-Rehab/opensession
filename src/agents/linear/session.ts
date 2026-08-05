@@ -1,7 +1,6 @@
 /**
  * Linear agent session lifecycle and the headless agent runner.
  */
-import { envAlias } from "../../server/rename-compat";
 import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
 import { shouldPersistModelSwitch } from "../../server/run-events";
 import { runAgent, cancelAgentRun } from "../../server/agent-runner";
@@ -241,7 +240,7 @@ export function deleteWorktree(branch: string): void {
 
 /** Base URL of the OpenSession web UI, linked from Linear sessions. */
 export const OPENSESSION_UI_BASE =
-  envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") ||
+  process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
 export function opensessionSessionUrl(branch: string): string {

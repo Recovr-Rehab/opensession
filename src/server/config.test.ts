@@ -17,18 +17,14 @@ import {
 } from "./config";
 
 // Each case writes its config to a fresh path (the loader caches by
-// path+mtime) and points BACKSTAGE_CONFIG at it.
+// path+mtime) and points OPENSESSION_CONFIG at it.
 const ENV_KEYS = [
-  "BACKSTAGE_CONFIG",
-  "BACKSTAGE_WORKTREES_DIR",
-  "BACKSTAGE_CLAUDE_BIN",
-  "BACKSTAGE_OPENCODE_BIN",
-  "BACKSTAGE_MCP_CONFIG",
-  "OPENSESSION_CLAUDE_BIN",
-  "OPENSESSION_OPENCODE_BIN",
-  "OPENSESSION_PROFILE",
   "OPENSESSION_CONFIG",
   "OPENSESSION_WORKTREES_DIR",
+  "OPENSESSION_CLAUDE_BIN",
+  "OPENSESSION_OPENCODE_BIN",
+  "OPENSESSION_MCP_CONFIG",
+  "OPENSESSION_PROFILE",
   "OPENSESSION_CLOUD_UPSTREAM",
   "OPENSESSION_CLOUD_TOKEN",
 ] as const;
@@ -41,7 +37,7 @@ function withConfig(contents: string | null): void {
   dirs.push(dir);
   const path = join(dir, "config.json");
   if (contents !== null) writeFileSync(path, contents);
-  process.env.BACKSTAGE_CONFIG = path;
+  process.env.OPENSESSION_CONFIG = path;
 }
 
 afterEach(() => {
@@ -83,12 +79,12 @@ describe("config loader", () => {
   });
 
   test("local profile starts with an empty registry and local paths", () => {
-    delete process.env.BACKSTAGE_CONFIG;
+    delete process.env.OPENSESSION_CONFIG;
     delete process.env.OPENSESSION_CONFIG;
     delete process.env.OPENSESSION_WORKTREES_DIR;
-    delete process.env.BACKSTAGE_WORKTREES_DIR;
+    delete process.env.OPENSESSION_WORKTREES_DIR;
     delete process.env.OPENSESSION_CLAUDE_BIN;
-    delete process.env.BACKSTAGE_CLAUDE_BIN;
+    delete process.env.OPENSESSION_CLAUDE_BIN;
     process.env.OPENSESSION_PROFILE = "local";
 
     expect(configuredRepos()).toEqual({});
@@ -191,15 +187,15 @@ describe("config loader", () => {
         repos: { app: { repo: "/from-config/app" } },
       }),
     );
-    process.env.BACKSTAGE_WORKTREES_DIR = "/from-env/worktrees";
-    process.env.BACKSTAGE_CLAUDE_BIN = "/from-env/claude";
+    process.env.OPENSESSION_WORKTREES_DIR = "/from-env/worktrees";
+    process.env.OPENSESSION_CLAUDE_BIN = "/from-env/claude";
 
     expect(configuredPaths().worktreesDir).toBe("/from-env/worktrees");
     expect(configuredPaths().claudeBin).toBe("/from-env/claude");
     expect(configuredRepos().app.repo).toBe("/from-config/app");
 
     // …and the config value applies once the env var is gone.
-    delete process.env.BACKSTAGE_WORKTREES_DIR;
+    delete process.env.OPENSESSION_WORKTREES_DIR;
     expect(configuredPaths().worktreesDir).toBe("/from-config/worktrees");
     expect(configuredRepos().app.repo).toBe("/from-config/app");
   });

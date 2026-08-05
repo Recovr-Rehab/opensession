@@ -6,11 +6,11 @@
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { plainApiUrl } from "./config";
-import { homeDir, BACKSTAGE_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
 import type { BackstageSessionFile } from "./types";
 
 const HOME = homeDir();
-const SESSIONS_DIR = BACKSTAGE_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
 
 function activePlainSessions(): Array<{ path: string; data: BackstageSessionFile }> {
   if (!existsSync(SESSIONS_DIR)) return [];

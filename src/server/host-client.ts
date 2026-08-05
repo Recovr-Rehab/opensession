@@ -37,7 +37,7 @@ import { shouldPersistModelSwitch, type ImageInput } from "./run-events";
 import type { GitIdentity } from "./shared/user-mappings";
 import { providerFor } from "./models";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias, statePath, withLegacySessionId } from "./rename-compat";
+import { statePath, } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   registerHostRun,
@@ -66,7 +66,7 @@ import {
 
 const HOSTS_DIR = runHostsDir(OPENSESSION_CHATS_DIR);
 const DISABLE_FILE = `${OPENSESSION_CHATS_DIR}/disable-run-hosts`;
-const ENV_FILE = statePath(".opensession.env", ".backstage.env");
+const ENV_FILE = statePath(".opensession.env");
 
 export function runHostsEnabled(): boolean {
   return !existsSync(DISABLE_FILE);
@@ -224,21 +224,21 @@ async function launchHostUnit(hostId: string, dir: string): Promise<void> {
     ...env("NODE_ENV=production"),
     // New env names primary; the deprecated old names ride along so an
     // un-migrated runner-host build (or external script) keeps working.
-    ...(envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")
+    ...(process.env.OPENSESSION_MODEL
       ? [
-          ...env(`OPENSESSION_MODEL=${envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")}`),
-          ...env(`MICHAEL_MODEL=${envAlias("OPENSESSION_MODEL", "MICHAEL_MODEL")}`),
+          ...env(`OPENSESSION_MODEL=${process.env.OPENSESSION_MODEL}`),
+          ...env(`MICHAEL_MODEL=${process.env.OPENSESSION_MODEL}`),
         ]
       : []),
-    ...(envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE")
+    ...(process.env.OPENSESSION_UI_BASE
       ? [
-          ...env(`OPENSESSION_UI_BASE=${envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE")}`),
-          ...env(`MICHAEL_UI_BASE=${envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE")}`),
+          ...env(`OPENSESSION_UI_BASE=${process.env.OPENSESSION_UI_BASE}`),
+          ...env(`MICHAEL_UI_BASE=${process.env.OPENSESSION_UI_BASE}`),
         ]
       : []),
     // Per-host journal — never read-modify-write the shared active-runs.json.
     ...env(`OPENSESSION_RUN_JOURNAL=${dir}/${HOST_JOURNAL_NAME}`),
-    ...env(`BACKSTAGE_RUN_JOURNAL=${dir}/${HOST_JOURNAL_NAME}`),
+    ...env(`OPENSESSION_RUN_JOURNAL=${dir}/${HOST_JOURNAL_NAME}`),
     // Mirror backstage.service: agent runs must not reach EC2 instance creds.
     "-p", "IPAddressDeny=169.254.169.254/32",
     "-p", `StandardOutput=append:${dir}/${HOST_LOG_NAME}`,
@@ -373,7 +373,7 @@ export function unixSocketConnector(sockPath: string): HostConnector {
 /** Default launcher: transient systemd units on this host. */
 const systemdHostLauncher: HostLauncher = {
   alive(dir) {
-    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`));
+    const meta = readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
     if (!meta?.pid) return false;
     try {
       process.kill(meta.pid, 0);
@@ -658,7 +658,7 @@ export class HostHandle {
   }
 
   private async hostAlive(): Promise<boolean> {
-    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`));
+    const meta = readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`);
     return this.launcher.alive(this.dir, meta);
   }
 
@@ -676,7 +676,7 @@ export class HostHandle {
     }
     if (this.endedClean) return;
 
-    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`));
+    const meta = readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`);
     if (meta?.done) {
       // Host finished and exited between our polls — take the terminal state.
       if (!this.sawTerminal) {
@@ -793,7 +793,7 @@ export function discoverRunHosts(): DiscoveredHost[] {
   const out: DiscoveredHost[] = [];
   for (const name of readdirSync(HOSTS_DIR)) {
     const dir = `${HOSTS_DIR}/${name}`;
-    const spec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`));
+    const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
     if (!spec) {
       // Torn dir from a crash mid-create — nothing to recover.
       try {
@@ -801,7 +801,7 @@ export function discoverRunHosts(): DiscoveredHost[] {
       } catch {}
       continue;
     }
-    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`));
+    const meta = readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
     let alive = false;
     if (meta?.pid) {
       try {

@@ -54,7 +54,7 @@ const { getSandboxProvider } = await import("../../src/server/sandbox/index");
 const runWs = await import("../../src/server/run-ws");
 const { hostRunBusy } = await import("../../src/server/host-registry");
 const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
-const { envAlias, statePath } = await import("../../src/server/rename-compat");
+const { statePath } = await import("../../src/server/paths");
 // The orphan-snapshot sweep (docker.ts, piggybacked on the idle sweep) reads
 // session/state files through the — now scratch-redirected — chats dir, so it
 // would see every LIVE session as gone. Arm its once-an-hour throttle up
@@ -134,8 +134,8 @@ let hasAccounts = false;
 try {
   const store = JSON.parse(
     readFileSync(
-      envAlias("OPENSESSION_CLAUDE_ACCOUNTS_PATH", "BACKSTAGE_CLAUDE_ACCOUNTS_PATH") ||
-        statePath(".opensession-claude-accounts.json", ".backstage-claude-accounts.json"),
+      process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH ||
+        statePath(".opensession-claude-accounts.json"),
       "utf-8",
     ),
   );
@@ -554,7 +554,7 @@ async function runEntry(entry: Entry): Promise<void> {
         const boot = await sandbox.exec([
           "sh", "-c",
           `mkdir -p ${smokeDir} && cat > ${smokeDir}/${HOST_SPEC_NAME} <<'EOF'\n${JSON.stringify(smokeSpec)}\nEOF\n` +
-            `env HOME=/home/ubuntu BKS_RUN_WS_URL=ws://127.0.0.1:9/dead BKS_RUN_WS_TOKEN=smoke ` +
+            `env HOME=/home/ubuntu OPENSESSION_RUN_WS_URL=ws://127.0.0.1:9/dead OPENSESSION_RUN_WS_TOKEN=smoke ` +
             `OPENSESSION_RUN_JOURNAL=${smokeDir}/journal.json nohup /home/ubuntu/.bun/bin/bun run ${HOST_ENTRY} ` +
             `${smokeDir}/${HOST_SPEC_NAME} > ${smokeDir}/host.log 2>&1 & echo started`,
         ]);

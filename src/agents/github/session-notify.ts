@@ -10,7 +10,7 @@
  * are NOT announced here — the session header's Preview environment button already surfaces
  * the preview URL + Ready state, so a chat notification would just be redundant.)
  */
-import { stateDir } from "../../server/rename-compat";
+import { stateDir } from "../../server/paths";
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { tryGetSessionControl, type SessionControl, type SessionSummary } from "../../server/session-control";

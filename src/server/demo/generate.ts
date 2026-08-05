@@ -18,7 +18,7 @@
 import { mkdirSync, existsSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { OPENSESSION_CHATS_DIR } from "../paths";
-import { stateDir, statePath } from "../rename-compat";
+import { stateDir, statePath } from "../paths";
 import { OPENCODE_TRANSCRIPTS_DIR, getOpencodeTranscriptPath } from "../opencode-transcript";
 import { defaultRepo } from "../config";
 import {
@@ -187,14 +187,14 @@ export function generateDemoData(
       repoId = repo.id;
       ghRepo = repo.ghRepo || "";
     } catch {}
-    writeJson(statePath(".opensession-pr-cache.json", ".backstage-pr-cache.json"), {
+    writeJson(statePath(".opensession-pr-cache.json"), {
       version: 4,
       repos: { [repoId]: { [DEMO_BRANCH]: demoPrInfo(now, ghRepo, "bks-demo-pr") } },
       recentLimits: { [repoId]: 500 },
       probeEtags: {},
       lastFullRefresh: {},
     });
-    writeJson(statePath(".opensession-pr-details-cache.json", ".backstage-pr-details-cache.json"), {
+    writeJson(statePath(".opensession-pr-details-cache.json"), {
       [`${ghRepo}\u0000${DEMO_BRANCH}`]: {
         data: demoPrDetails(now, ghRepo),
         ts: now,

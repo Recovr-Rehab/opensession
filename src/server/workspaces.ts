@@ -26,7 +26,7 @@ import {
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { randomUUID } from "crypto";
 import type { AttachedRepo, ExternalRef } from "./types";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 const HOME = homeDir();
 const WORKSPACES_DIR_LEGACY = `${HOME}/.backstage-projects`;

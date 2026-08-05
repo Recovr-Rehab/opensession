@@ -141,9 +141,9 @@ function attachUploads(
 // marker into a /backstage/media URL the frontend streams.
 const VIDEO_MARKER = /^[\t ]*BACKSTAGE_VIDEO:[\t ]*(\/\S+)[\t ]*$/gm;
 // Sibling marker for stills (thumbnails, extracted frames, downloaded
-// images): `BACKSTAGE_IMAGE: <abs-path>` renders inline via the same
+// images): `OPENSESSION_IMAGE: <abs-path>` renders inline via the same
 // authenticated media route, landing in the entry's existing `images` field.
-const IMAGE_MARKER = /^[\t ]*BACKSTAGE_IMAGE:[\t ]*(\/\S+)[\t ]*$/gm;
+const IMAGE_MARKER = /^[\t ]*OPENSESSION_IMAGE:[\t ]*(\/\S+)[\t ]*$/gm;
 
 function extractMarker(text: string, marker: RegExp): string[] {
   if (!text) return [];

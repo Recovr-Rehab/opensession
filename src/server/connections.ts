@@ -10,7 +10,7 @@ import { configuredPaths } from "./config";
 import { mcpOauthStatus, mcpSharedGrantHeader, mcpUserGrantHeader, mcpUserGrantToken, oauthPresetFor } from "./mcp-oauth";
 
 const HOME = homeDir();
-// mcp-config.json location. BACKSTAGE_MCP_CONFIG env → config
+// mcp-config.json location. OPENSESSION_MCP_CONFIG env → config
 // `paths.mcpConfig` → this repo's checkout — unchanged when neither is set.
 const CONFIG_PATH = configuredPaths().mcpConfig;
 

@@ -26,7 +26,7 @@ import {
 	unlinkSync,
 } from "fs";
 import * as Y from "yjs";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 const NOTES_DIR = stateDir("notes");
 

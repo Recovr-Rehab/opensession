@@ -1,7 +1,7 @@
 #!/bin/bash
 # Refresh the microvm golden snapshot from the docker golden image.
 # Usage: refresh-golden.sh <repo-id> [store-dir]
-# Env: BKS_AWS_B64 (base64 of an ~/.aws/credentials to seed), WARM_ROUTES
+# Env: OPENSESSION_AWS_B64 (base64 of an ~/.aws/credentials to seed), WARM_ROUTES
 #      (space-separated, default "/ /home /videos /api/session /api/flags").
 #
 # Pipeline (each step proven live 2026-07-24): docker export the golden →
@@ -53,9 +53,9 @@ for i in $(seq 1 60); do
 done
 [ -n "$up" ] || { log "dev never came up"; sudo pkill -f 'fc-goldenbuild.sock' || true; exit 1; }
 
-if [ -n "${BKS_AWS_B64:-}" ]; then
+if [ -n "${OPENSESSION_AWS_B64:-}" ]; then
   curl -s -m 10 -X POST "http://$GIP:8080/exec" -H 'Content-Type: application/json' \
-    -d "{\"command\":\"mkdir -p ~/.aws && echo $BKS_AWS_B64 | base64 -d > ~/.aws/credentials && echo ${BKS_AWS_CONFIG_B64:-} | base64 -d > ~/.aws/config && chmod 600 ~/.aws/credentials\",\"timeoutMs\":8000}" >/dev/null
+    -d "{\"command\":\"mkdir -p ~/.aws && echo $OPENSESSION_AWS_B64 | base64 -d > ~/.aws/credentials && echo ${OPENSESSION_AWS_CONFIG_B64:-} | base64 -d > ~/.aws/config && chmod 600 ~/.aws/credentials\",\"timeoutMs\":8000}" >/dev/null
   log "creds seeded"
 fi
 

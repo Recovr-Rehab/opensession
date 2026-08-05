@@ -1,6 +1,6 @@
 import { chmodSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
-import { statePath } from "./rename-compat";
+import { statePath } from "./paths";
 import { existsSync } from "fs";
 import {
 	slackIdToFirstName,
@@ -981,7 +981,7 @@ function reviewMutationKey(
 // rate-limit window boots with an empty cache that no refresh can fill, and the
 // sidebar's PR queue silently vanishes (2026-07-22). ts stays 0 so the first
 // access still refreshes immediately; the snapshot only serves as stale data.
-const PR_CACHE_FILE = statePath(".opensession-pr-cache.json", ".backstage-pr-cache.json");
+const PR_CACHE_FILE = statePath(".opensession-pr-cache.json");
 const PR_CACHE_VERSION = 4;
 const probeEtags = new Map<string, string>(); // ghRepo → last seen ETag
 const lastFullRefresh = new Map<string, number>(); // repo id → epoch ms

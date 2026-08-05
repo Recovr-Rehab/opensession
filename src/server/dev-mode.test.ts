@@ -3,14 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { devInstanceBootError, isDevInstance } from "./dev-mode";
-import { __resetRenameCompatForTest, stateDir, statePath } from "./rename-compat";
+import { stateDir, statePath } from "./paths";
 
 const SAVED_KEYS = [
 	"OPENSESSION_DEV",
-	"BACKSTAGE_DEV",
+	"OPENSESSION_DEV",
 	"OPENSESSION_STATE_DIR",
 	"OPENSESSION_CHATS_DIR",
-	"BACKSTAGE_CHATS_DIR",
+	"OPENSESSION_CHATS_DIR",
 	"OPENSESSION_PROFILE",
 	"HOME",
 ] as const;
@@ -26,7 +26,6 @@ beforeEach(() => {
 	scratch = mkdtempSync(join(tmpdir(), "os-dev-mode-"));
 	process.env.HOME = join(scratch, "home");
 	mkdirSync(process.env.HOME, { recursive: true });
-	__resetRenameCompatForTest();
 });
 
 afterEach(() => {
@@ -34,7 +33,6 @@ afterEach(() => {
 		if (saved[k] === undefined) delete process.env[k];
 		else process.env[k] = saved[k];
 	}
-	__resetRenameCompatForTest();
 	rmSync(scratch, { recursive: true, force: true });
 });
 
@@ -52,8 +50,8 @@ describe("isDevInstance", () => {
 		}
 	});
 
-	test("legacy BACKSTAGE_DEV alias still works", () => {
-		process.env.BACKSTAGE_DEV = "1";
+	test("legacy OPENSESSION_DEV alias still works", () => {
+		process.env.OPENSESSION_DEV = "1";
 		expect(isDevInstance()).toBe(true);
 	});
 });
@@ -68,7 +66,7 @@ describe("devInstanceBootError", () => {
 		expect(devInstanceBootError({ OPENSESSION_DEV: "1" })).toContain(
 			"OPENSESSION_STATE_DIR",
 		);
-		expect(devInstanceBootError({ BACKSTAGE_DEV: "1" })).not.toBeNull();
+		expect(devInstanceBootError({ OPENSESSION_DEV: "1" })).not.toBeNull();
 		// Empty strings are not isolation.
 		expect(
 			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_STATE_DIR: "" }),
@@ -83,7 +81,7 @@ describe("devInstanceBootError", () => {
 			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_CHATS_DIR: "/x" }),
 		).toBeNull();
 		expect(
-			devInstanceBootError({ OPENSESSION_DEV: "1", BACKSTAGE_CHATS_DIR: "/x" }),
+			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_CHATS_DIR: "/x" }),
 		).toBeNull();
 	});
 
@@ -96,29 +94,23 @@ describe("devInstanceBootError", () => {
 });
 
 describe("statePath with OPENSESSION_STATE_DIR", () => {
-	test("resolves strictly under the state root, no legacy dual-read", () => {
+	test("resolves strictly under the state root", () => {
 		const home = process.env.HOME!;
 		const stateRoot = join(scratch, "state");
 		mkdirSync(stateRoot, { recursive: true });
-		// Legacy name exists under HOME: without the knob, dual-read picks it…
-		mkdirSync(join(home, ".backstage-foo"), { recursive: true });
-		expect(statePath(".opensession-foo", ".backstage-foo")).toBe(
-			join(home, ".backstage-foo"),
+		// Without the knob, names resolve under HOME.
+		expect(statePath(".opensession-foo")).toBe(
+			join(home, ".opensession-foo"),
 		);
-		// …with the knob set, the same name resolves under the root (fresh
-		// namespace — the cache is keyed on the root, so no reset needed).
+		// With the knob set, the same name resolves under the root (fresh
+		// namespace — a second instance never touches the live one's state).
 		process.env.OPENSESSION_STATE_DIR = stateRoot;
-		expect(statePath(".opensession-foo", ".backstage-foo")).toBe(
+		expect(statePath(".opensession-foo")).toBe(
 			join(stateRoot, ".opensession-foo"),
-		);
-		// Even a legacy name INSIDE the root is ignored: strictly the new name.
-		mkdirSync(join(stateRoot, ".backstage-bar"), { recursive: true });
-		expect(statePath(".opensession-bar", ".backstage-bar")).toBe(
-			join(stateRoot, ".opensession-bar"),
 		);
 	});
 
-	test("unsetting the knob returns to HOME resolution (cache keyed on root)", () => {
+	test("unsetting the knob returns to HOME resolution", () => {
 		const stateRoot = join(scratch, "state");
 		process.env.OPENSESSION_STATE_DIR = stateRoot;
 		expect(stateDir("baz")).toBe(join(stateRoot, ".opensession-baz"));

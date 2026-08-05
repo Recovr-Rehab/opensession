@@ -16,7 +16,7 @@ import { homeDir } from "./paths";
 import { chmodSync, existsSync, readFileSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { userMatchesAny } from "./shared/user-mappings";
-import { envAlias, stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 const HOME = homeDir();
 // The env override is a test seam — bun tests point it at a temp store so they
@@ -24,7 +24,7 @@ const HOME = homeDir();
 // module load, so the override works regardless of import order.
 function storePath(): string {
   return (
-    envAlias("OPENSESSION_CLAUDE_ACCOUNTS_PATH", "BACKSTAGE_CLAUDE_ACCOUNTS_PATH") ||
+    process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH ||
     stateDir("claude-accounts.json")
   );
 }

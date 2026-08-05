@@ -18,7 +18,6 @@
  * transcript read can never take a prompt path down.
  */
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias } from "./rename-compat";
 import {
   existsSync,
   mkdirSync,
@@ -45,7 +44,7 @@ const HOME = homeDir();
 
 /** The opencode SQLite store for the HOME opencode-runner passes through. */
 export let OPENCODE_DB_PATH =
-  envAlias("OPENSESSION_OPENCODE_DB", "BACKSTAGE_OPENCODE_DB") ||
+  process.env.OPENSESSION_OPENCODE_DB ||
   `${HOME}/.local/share/opencode/opencode.db`;
 
 /**
@@ -75,7 +74,7 @@ export function __setOpencodeDbPathForTest(path: string): string {
 
 /** ocSessionId → absolute DB path, written by the runner, read by resolvers. */
 const OPENCODE_DB_MAP_PATH =
-  envAlias("OPENSESSION_OPENCODE_DB_MAP", "BACKSTAGE_OPENCODE_DB_MAP") ||
+  process.env.OPENSESSION_OPENCODE_DB_MAP ||
   `${OPENSESSION_CHATS_DIR}/opencode/db-map.json`;
 
 const OPENAI_DATA_ROOT = `${HOME}/.opensession-opencode/openai-data`;
@@ -185,9 +184,9 @@ export function resolveOpencodeDbFor(ocSessionId: string | null | undefined): st
 // failure ever throws into a runner append.
 
 /** ocSessionId → unified session id, written by the runner call sites. */
-let OPENCODE_BKS_MAP_PATH =
-  envAlias("OPENSESSION_OPENCODE_BKS_MAP", "BACKSTAGE_OPENCODE_BKS_MAP") ||
-  `${OPENSESSION_CHATS_DIR}/opencode/bks-map.json`;
+let OPENCODE_SESSION_MAP_PATH =
+  process.env.OPENSESSION_OPENCODE_SESSION_MAP ||
+  `${OPENSESSION_CHATS_DIR}/opencode/session-map.json`;
 
 /**
  * Test seam (bun tests only): same contract as __setOpencodeDbPathForTest —
@@ -196,8 +195,8 @@ let OPENCODE_BKS_MAP_PATH =
  * the previous value so afterAll can restore it.
  */
 export function __setOpencodeBksMapPathForTest(path: string): string {
-  const prev = OPENCODE_BKS_MAP_PATH;
-  OPENCODE_BKS_MAP_PATH = path;
+  const prev = OPENCODE_SESSION_MAP_PATH;
+  OPENCODE_SESSION_MAP_PATH = path;
   return prev;
 }
 
@@ -254,8 +253,8 @@ function bksMap(): Map<string, string> {
   if (!bksMapState.loaded) {
     bksMapState.loaded = true;
     try {
-      if (existsSync(OPENCODE_BKS_MAP_PATH)) {
-        const parsed = JSON.parse(readFileSync(OPENCODE_BKS_MAP_PATH, "utf-8"));
+      if (existsSync(OPENCODE_SESSION_MAP_PATH)) {
+        const parsed = JSON.parse(readFileSync(OPENCODE_SESSION_MAP_PATH, "utf-8"));
         if (parsed && typeof parsed === "object") {
           for (const [k, v] of Object.entries(parsed)) {
             if (typeof v === "string" && v) bksMapState.map.set(k, v);
@@ -274,17 +273,17 @@ function bksMap(): Map<string, string> {
  *  forever). Above the cap, mappings whose mirror file is gone are dropped
  *  first (nothing readable left to attribute), then oldest-inserted (Map /
  *  JSON object insertion order). The entry being recorded is never dropped. */
-const BKS_MAP_MAX_ENTRIES = 2000;
+const OPENSESSION_MAP_MAX_ENTRIES = 2000;
 
 function pruneBksMap(map: Map<string, string>, keep: string): void {
-  if (map.size <= BKS_MAP_MAX_ENTRIES) return;
+  if (map.size <= OPENSESSION_MAP_MAX_ENTRIES) return;
   for (const id of [...map.keys()]) {
-    if (map.size <= BKS_MAP_MAX_ENTRIES) return;
+    if (map.size <= OPENSESSION_MAP_MAX_ENTRIES) return;
     if (id === keep) continue;
     if (!existsSync(getOpencodeTranscriptPath(id))) map.delete(id);
   }
   for (const id of [...map.keys()]) {
-    if (map.size <= BKS_MAP_MAX_ENTRIES) return;
+    if (map.size <= OPENSESSION_MAP_MAX_ENTRIES) return;
     if (id !== keep) map.delete(id);
   }
 }
@@ -299,12 +298,12 @@ export function recordBksSessionFor(ocSessionId: string, unifiedId: string): voi
     if (map.get(ocSessionId) === unifiedId) return;
     map.set(ocSessionId, unifiedId);
     pruneBksMap(map, ocSessionId);
-    mkdirSync(OPENCODE_BKS_MAP_PATH.slice(0, OPENCODE_BKS_MAP_PATH.lastIndexOf("/")), {
+    mkdirSync(OPENCODE_SESSION_MAP_PATH.slice(0, OPENCODE_SESSION_MAP_PATH.lastIndexOf("/")), {
       recursive: true,
     });
-    const tmp = `${OPENCODE_BKS_MAP_PATH}.tmp`;
+    const tmp = `${OPENCODE_SESSION_MAP_PATH}.tmp`;
     writeFileSync(tmp, JSON.stringify(Object.fromEntries(map)));
-    renameSync(tmp, OPENCODE_BKS_MAP_PATH);
+    renameSync(tmp, OPENCODE_SESSION_MAP_PATH);
   } catch (e) {
     console.warn("[opencode-transcript] bks-map write failed:", e);
   }
@@ -537,10 +536,7 @@ export function storeAppendUserLineEarly(
  * follows the hashed -cwd- convention and corresponds to no real checkout path.
  */
 export let OPENCODE_TRANSCRIPTS_DIR =
-  envAlias(
-    "OPENSESSION_OPENCODE_TRANSCRIPTS_DIR",
-    "BACKSTAGE_OPENCODE_TRANSCRIPTS_DIR",
-  ) || `${HOME}/.claude/projects/-opencode-engine`;
+  process.env.OPENSESSION_OPENCODE_TRANSCRIPTS_DIR || `${HOME}/.claude/projects/-opencode-engine`;
 
 /** Test seam (bun tests only): see __setOpencodeDbPathForTest above — same
  *  live-binding repoint, for the transcript mirror dir. */
@@ -927,13 +923,13 @@ const LOCAL_IMAGE_MIMES = new Set([
 
 /**
  * True when this runner is a SANDBOXED run host. Such a host dials back to
- * backstage over the WS transport (BKS_RUN_WS_URL); a local host serves a unix
+ * backstage over the WS transport (OPENSESSION_RUN_WS_URL); a local host serves a unix
  * socket and shares backstage's filesystem. The distinction matters for any
  * path we hand to the browser: only a local host's paths are reachable by the
  * media route. Read per call rather than at module load so tests can flip it.
  */
 function inSandboxedRunHost(): boolean {
-  return !!process.env.BKS_RUN_WS_URL;
+  return !!process.env.OPENSESSION_RUN_WS_URL;
 }
 
 // Leave ample room under public-ingress's 64 MiB WS ceiling for the event

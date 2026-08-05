@@ -195,7 +195,7 @@ enables (not `1`). The env flag wins when set, otherwise
 `integrations.<id>.enabled` decides — see
 [integrations-misc.md](integrations-misc.md#boot-guards).
 
-Not for operators: `BKS_RPC_*` / `BKS_RUN_WS_*` / `BKS_MCP_SERVER` (set by
+Not for operators: `OPENSESSION_RPC_*` / `OPENSESSION_RUN_WS_*` / `OPENSESSION_MCP_SERVER` (set by
 OpenSession for its own runner-host/MCP-proxy subprocesses), and
 `OPENSESSION_FORCE_LIMIT` / `OPENSESSION_RUN_JOURNAL` (dev/test seams).
 

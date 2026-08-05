@@ -33,7 +33,7 @@
  *                      "publicBaseUrl": "wss://sessions.example.com"}}
  * The listener binds 127.0.0.1 by default — front it with a TLS terminator
  * (Caddy path routes / cloudflared tunnel); publicBaseUrl is what remote
- * launches embed as BKS_RUN_WS_URL/BKS_RPC_WS_URL (config.ts
+ * launches embed as OPENSESSION_RUN_WS_URL/OPENSESSION_RPC_WS_URL (config.ts
  * remoteSandboxCallbackBaseUrl). The main server keeps serving the same
  * routes for the tailnet path (docker-ws) — this listener is additive.
  *

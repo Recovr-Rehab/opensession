@@ -8,7 +8,7 @@
  * test seam, and its fake RemoteDriver answers the two exec probes the real
  * bootstrap path makes (dial-back curl check → "no curl" skip; bootstrap
  * marker read → the current signature, short-circuiting the install).
- * Config goes through a scratch BACKSTAGE_SANDBOX_CONFIG; state files land
+ * Config goes through a scratch OPENSESSION_SANDBOX_CONFIG; state files land
  * under a scratch chats dir via __setChatsDirForTest.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
@@ -55,9 +55,9 @@ beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), "bks-prewarm-"));
   mkdirSync(join(scratch, "chats"), { recursive: true });
   prevChatsDir = __setChatsDirForTest(join(scratch, "chats"));
-  prevEnvConfig = process.env.BACKSTAGE_SANDBOX_CONFIG;
+  prevEnvConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   prevDaytonaKey = process.env.DAYTONA_API_KEY;
-  process.env.BACKSTAGE_SANDBOX_CONFIG = cfgPath();
+  process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
   delete process.env.DAYTONA_API_KEY;
 });
 
@@ -65,8 +65,8 @@ afterAll(() => {
   _stopPrewarmSweepForTest();
   _resetPrewarmForTest();
   __setChatsDirForTest(prevChatsDir);
-  if (prevEnvConfig === undefined) delete process.env.BACKSTAGE_SANDBOX_CONFIG;
-  else process.env.BACKSTAGE_SANDBOX_CONFIG = prevEnvConfig;
+  if (prevEnvConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
+  else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
   if (prevDaytonaKey !== undefined) process.env.DAYTONA_API_KEY = prevDaytonaKey;
   rmSync(scratch, { recursive: true, force: true });
 });
@@ -114,7 +114,7 @@ function makeFakeAdapter(opts: { markerAnswer?: string; gate?: Promise<void> } =
             if (cmd.includes(".bks-bootstrapped")) {
               return { exitCode: 0, stdout: opts.markerAnswer ?? "sha-A", stderr: "" };
             }
-            return { exitCode: 0, stdout: "__BKS_NO_CURL__", stderr: "" };
+            return { exitCode: 0, stdout: "__OPENSESSION_NO_CURL__", stderr: "" };
           },
           async execBackground() {},
           async writeFile() {},

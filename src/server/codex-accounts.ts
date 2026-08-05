@@ -19,7 +19,7 @@
 import { homeDir } from "./paths";
 import { chmodSync, existsSync, readFileSync, readdirSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { userMatchesAny } from "./shared/user-mappings";
 
 let HOME = homeDir();

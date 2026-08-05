@@ -50,7 +50,7 @@ import {
   statSync,
   unlinkSync,
 } from "fs";
-import { BACKSTAGE_CHATS_DIR } from "../paths";
+import { OPENSESSION_CHATS_DIR } from "../paths";
 import { isDevInstance } from "../dev-mode";
 import { isLocalProfile } from "../profile";
 import { REPOS } from "../worktree";
@@ -148,7 +148,7 @@ function bootstrapDone(): Map<string, Promise<void>> {
 }
 
 function prewarmDir(): string {
-  return `${BACKSTAGE_CHATS_DIR}/sandbox-prewarm`;
+  return `${OPENSESSION_CHATS_DIR}/sandbox-prewarm`;
 }
 
 function sanitize(s: string): string {

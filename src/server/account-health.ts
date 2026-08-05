@@ -25,7 +25,7 @@
 import { existsSync, readFileSync } from "fs";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { openDirectMessage, sendSlackMessage } from "../agents/slack/slack-api";

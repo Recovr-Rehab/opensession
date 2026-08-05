@@ -14,7 +14,7 @@
  * wait until a client reattaches, and the terminal state lands in meta.json so
  * a rebooting backstage can finish the bookkeeping even if this process is gone.
  *
- * The run journal is redirected to a per-host file (BACKSTAGE_RUN_JOURNAL) so
+ * The run journal is redirected to a per-host file (OPENSESSION_RUN_JOURNAL) so
  * concurrent hosts never read-modify-write the shared active-runs.json.
  */
 
@@ -34,8 +34,8 @@ const hostDir = dirname(resolve(specPath));
 // New name primary; keep the deprecated alias in sync for anything that
 // still reads it (both point at this host's private journal).
 process.env.OPENSESSION_RUN_JOURNAL ||=
-  process.env.BACKSTAGE_RUN_JOURNAL || `${hostDir}/journal.json`;
-process.env.BACKSTAGE_RUN_JOURNAL = process.env.OPENSESSION_RUN_JOURNAL;
+  process.env.OPENSESSION_RUN_JOURNAL || `${hostDir}/journal.json`;
+process.env.OPENSESSION_RUN_JOURNAL = process.env.OPENSESSION_RUN_JOURNAL;
 
 const { runAgent, cancelAgentRun, steerAgentRun, interruptAndSteerAgentRun } =
   await import("../server/agent-runner");
@@ -50,7 +50,7 @@ const {
   rpcSocketPath,
 } = await import("./protocol");
 const { WsFrameBuffer, replayStartFor } = await import("./ws-buffer");
-const { BACKSTAGE_CHATS_DIR } = await import("../server/paths");
+const { OPENSESSION_CHATS_DIR } = await import("../server/paths");
 
 type RunHostSpec = import("./protocol").RunHostSpec;
 type RunHostMeta = import("./protocol").RunHostMeta;
@@ -60,9 +60,6 @@ type AskResult = import("./protocol").AskResult;
 type StreamEvent = import("../server/run-events").StreamEvent;
 
 const spec: RunHostSpec = JSON.parse(readFileSync(specPath, "utf-8"));
-// bksSessionId → osSessionId rename compat: a spec written by a pre-rename
-// server (pull-before-restart window) carries the old field.
-spec.osSessionId ??= (spec as { bksSessionId?: string }).bksSessionId ?? "";
 const sockPath = `${hostDir}/${HOST_SOCK_NAME}`;
 const metaPath = `${hostDir}/${HOST_META_NAME}`;
 
@@ -70,11 +67,6 @@ const meta: RunHostMeta = {
   hostId: spec.hostId,
   pid: process.pid,
   osSessionId: spec.osSessionId,
-  // Dual-write during the bksSessionId → osSessionId transition: a pre-rename
-  // server process (pull-before-restart window) reads the old field from
-  // meta.json and the hello frame. Drop after the rename has been deployed
-  // everywhere for a while.
-  ...({ bksSessionId: spec.osSessionId } as object),
   startedAt: new Date().toISOString(),
   selectedModel: spec.selectedModel ?? spec.model,
   effectiveModel: spec.model,
@@ -89,7 +81,7 @@ const log = (...args: unknown[]) =>
 // ── Transport (single client: the backstage process) ─────────────────────────
 // Two modes, same protocol:
 //  - default: serve a unix socket in the run dir; backstage dials in (NDJSON).
-//  - BKS_RUN_WS_URL set: DIAL OUT to backstage's /backstage/run-ws/<hostId>
+//  - OPENSESSION_RUN_WS_URL set: DIAL OUT to backstage's /backstage/run-ws/<hostId>
 //    WebSocket route (one JSON message per text frame) — for sandboxes that
 //    can't share a unix socket with the host (remote providers; docker
 //    dogfoods it). Reconnects with backoff on drop, mirroring the socket
@@ -115,8 +107,8 @@ const log = (...args: unknown[]) =>
 //    frames are not replayed (they may already have been applied) — the old
 //    hello/meta.done/journal catch-up covers that case, exactly as before.
 
-const RUN_WS_URL = process.env.BKS_RUN_WS_URL || "";
-const RUN_WS_TOKEN = process.env.BKS_RUN_WS_TOKEN || "";
+const RUN_WS_URL = process.env.OPENSESSION_RUN_WS_URL || "";
+const RUN_WS_TOKEN = process.env.OPENSESSION_RUN_WS_TOKEN || "";
 
 /** The currently attached backstage, whichever transport carried it. */
 let client: { write: (line: string) => void; raw: unknown } | null = null;
@@ -154,8 +146,6 @@ function sendHello(): void {
     hostId: spec.hostId,
     pid: process.pid,
     osSessionId: spec.osSessionId,
-    // Rename transition dual-write (see the meta.json comment above).
-    ...({ bksSessionId: spec.osSessionId } as object),
     engineSessionId: meta.engineSessionId,
     state: ended ? "ended" : "running",
     pendingAsks: [...pendingAsks.entries()].map(([askId, a]) => ({
@@ -383,14 +373,14 @@ function proxyMcpConfigs(): Record<string, unknown> | undefined {
   // The upgrade there authenticates with THIS run's hostId + wsToken (only
   // ws-transport launches register one server-side); the per-frame rpc token
   // stays what dispatchRunRpc resolves to the run's session/user.
-  const rpcWsUrl = process.env.BKS_RPC_WS_URL || "";
+  const rpcWsUrl = process.env.OPENSESSION_RPC_WS_URL || "";
   const transportEnv = rpcWsUrl
     ? {
-        BKS_RPC_WS_URL: rpcWsUrl,
-        BKS_RPC_WS_HOST: spec.hostId,
-        BKS_RPC_WS_AUTH: RUN_WS_TOKEN,
+        OPENSESSION_RPC_WS_URL: rpcWsUrl,
+        OPENSESSION_RPC_WS_HOST: spec.hostId,
+        OPENSESSION_RPC_WS_AUTH: RUN_WS_TOKEN,
       }
-    : { BKS_RPC_SOCKET: rpcSocketPath(BACKSTAGE_CHATS_DIR) };
+    : { OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_CHATS_DIR) };
   const out: Record<string, unknown> = {};
   for (const name of names) {
     out[name] = {
@@ -401,8 +391,8 @@ function proxyMcpConfigs(): Record<string, unknown> | undefined {
       args: ["run", MCP_PROXY_ENTRY],
       env: {
         ...transportEnv,
-        BKS_RPC_TOKEN: spec.rpcToken,
-        BKS_MCP_SERVER: name,
+        OPENSESSION_RPC_TOKEN: spec.rpcToken,
+        OPENSESSION_MCP_SERVER: name,
       },
     };
   }

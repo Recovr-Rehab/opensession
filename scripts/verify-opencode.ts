@@ -15,12 +15,12 @@
  *   1. argv model, if given.
  *   2. opencode/anthropic/claude-haiku-4-5 when the Anthropic bridge is
  *      enabled (~/.backstage-opencode.json, or a test config via
- *      BACKSTAGE_OPENCODE_CONFIG) — this exercises the full bridge path.
+ *      OPENSESSION_OPENCODE_CONFIG) — this exercises the full bridge path.
  *   3. Otherwise exits with instructions (an API-key provider needs
  *      `opencode auth login` first).
  *
  * To verify a bridge mode without enabling it globally:
- *   BACKSTAGE_OPENCODE_CONFIG=/tmp/oc.json bun scripts/verify-opencode.ts
+ *   OPENSESSION_OPENCODE_CONFIG=/tmp/oc.json bun scripts/verify-opencode.ts
  *   with /tmp/oc.json = {"enabled":true}                       // meridian (default)
  *                  or = {"enabled":true,"bridge":{"mode":"native"},
  *                        "bridgeAccountIds":["<account id>"]}  // native bridge

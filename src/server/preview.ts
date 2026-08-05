@@ -513,7 +513,7 @@ function setupStampPath(worktreeDir: string): string {
  * command in the background and return immediately with `starting: true`;
  * callers poll `getPreviewStatus` to see it flip to `running`.
  *
- * Environment contract (same as sandbox boots): `BACKSTAGE_BOOT_MODE=fresh`
+ * Environment contract (same as sandbox boots): `OPENSESSION_BOOT_MODE=fresh`
  * always; repo-script boots additionally get `WEBAPP_PORT` (allocated here and
  * seeded into .ports.conf so status can see it) and `PREVIEW_URL`. The legacy
  * rungs (previewCommand/tella-local) own their .ports.conf themselves.
@@ -553,7 +553,7 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
   const env: Record<string, string | undefined> = {
     ...process.env,
     ...(await getAgentAwsEnv()),
-    BACKSTAGE_BOOT_MODE: "fresh",
+    OPENSESSION_BOOT_MODE: "fresh",
   };
 
   let cmd = boot.cmd;
@@ -902,7 +902,7 @@ async function writeSandboxTunnelsEnv(
  *  2. Seed .ports.conf with that port and write the .tunnels.env contract
  *     (PREVIEW_URL against the allocated sandbox https port).
  *  3. Run the bring-up, detached in-container, with WEBAPP_PORT/PREVIEW_URL/
- *     BACKSTAGE_BOOT_MODE in its env. Command resolution (lifecycle
+ *     OPENSESSION_BOOT_MODE in its env. Command resolution (lifecycle
  *     convention): `<worktree>/.opensession/start.sh` (or pre-rename
  *     `.backstage/`) when present, else the
  *     repo's configured `previewCommand`.
@@ -986,7 +986,7 @@ export async function startSandboxPreview(
   const r = await sandbox.exec([
     "sh", "-c",
     `mkdir -p .ports && nohup setsid env WEBAPP_PORT=${port} PREVIEW_URL=${shellQuoteWord(previewUrl)} ` +
-      `BACKSTAGE_BOOT_MODE=${shellQuoteWord(bootMode)} ` +
+      `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ` +
       `bash -c 'echo $$ > .ports/dev-pgid; exec ${cmd}' >> /tmp/backstage-preview.log 2>&1 &`,
   ]);
   if (r.exitCode !== 0) starting.delete(worktreeDir);

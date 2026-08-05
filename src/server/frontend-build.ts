@@ -8,7 +8,6 @@
 import { existsSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
 import { join, resolve } from "path";
 import { OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias } from "./rename-compat";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { broadcastToAll } from "./ws-hub";
@@ -17,7 +16,7 @@ import { configuredServer, defaultRepo, githubBotLogins, personaName, plainWorks
 
 const g = globalThis as any;
 
-export const IS_DEV = envAlias("OPENSESSION_DEV", "BACKSTAGE_DEV") === "1";
+export const IS_DEV = process.env.OPENSESSION_DEV === "1";
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 export const FRONTEND_DIST = join(REPO_ROOT, ".frontend-dist");
 export const FRONTEND_SRC = join(REPO_ROOT, "src", "frontend");

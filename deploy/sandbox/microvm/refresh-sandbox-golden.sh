@@ -53,7 +53,7 @@ docker create --name "$EXPORT_NAME" "$IMAGE" true >/dev/null
 docker export "$EXPORT_NAME" -o "$STORE/golden.next.tar"
 docker rm "$EXPORT_NAME" >/dev/null
 
-BKS_INIT="$HERE/bks-sandbox-init" \
+OPENSESSION_INIT="$HERE/bks-sandbox-init" \
   bash "$HERE/build-rootfs.sh" "$STORE/golden.next.tar" "$STORE/golden.next.ext4" 25
 rm -f "$STORE/golden.next.tar"
 
@@ -70,7 +70,7 @@ rm -f "$STORE/golden.previous.ext4" "$STORE/golden.previous.mem" "$STORE/golden.
 mv -f "$STORE/golden.next.ext4" "$STORE/golden.ext4"
 
 echo "[sandbox-golden] booting control-only VM…"
-BKS_FIRECRACKER_PID_FILE="$PID_FILE" \
+OPENSESSION_FIRECRACKER_PID_FILE="$PID_FILE" \
   bash "$HERE/boot-golden.sh" "$STORE/golden.ext4" "$API" >/dev/null
 ready=""
 for _ in $(seq 1 60); do

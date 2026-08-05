@@ -36,7 +36,6 @@ beforeAll(async () => {
   process.env.OPENSESSION_CONFIG = join(home, "config.json");
   // stateDir()/statePath() cache per (HOME, name) — forget resolutions made
   // for the real HOME by other test files.
-  (await import("../rename-compat")).__resetRenameCompatForTest();
   const paths = await import("../paths");
   priorChatsDir = paths.__setChatsDirForTest(join(home, "chats"));
   const oc = await import("../opencode-transcript");
@@ -66,7 +65,6 @@ afterAll(async () => {
       priorOcDir,
     );
   }
-  (await import("../rename-compat")).__resetRenameCompatForTest();
   // Drop the session cache built against the scratch dirs: bun test runs every
   // file in ONE process, and a later file's getAllSessions within the cache
   // TTL would otherwise serve the DEMO list against the restored real dirs —

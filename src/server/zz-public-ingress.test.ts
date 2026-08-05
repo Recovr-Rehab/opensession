@@ -15,7 +15,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 // Deferred imports: public-ingress → run-ws → run-rpc → paths resolves
-// BACKSTAGE_CHATS_DIR/HOME at module load (see zz-run-ws.test.ts).
+// OPENSESSION_CHATS_DIR/HOME at module load (see zz-run-ws.test.ts).
 let ingress: typeof import("./public-ingress");
 let runWs: typeof import("./run-ws");
 
@@ -32,8 +32,8 @@ function writeConfig(cfg: unknown): void {
 beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), "bks-ingress-"));
   configPath = join(scratch, "sandbox-config.json");
-  prevConfigEnv = process.env.BACKSTAGE_SANDBOX_CONFIG;
-  process.env.BACKSTAGE_SANDBOX_CONFIG = configPath;
+  prevConfigEnv = process.env.OPENSESSION_SANDBOX_CONFIG;
+  process.env.OPENSESSION_SANDBOX_CONFIG = configPath;
   writeConfig({ provider: "local", publicIngress: { enabled: true } });
   ingress = await import("./public-ingress");
   runWs = await import("./run-ws");
@@ -44,8 +44,8 @@ beforeAll(async () => {
 
 afterAll(() => {
   ingress?.stopPublicIngress();
-  if (prevConfigEnv === undefined) delete process.env.BACKSTAGE_SANDBOX_CONFIG;
-  else process.env.BACKSTAGE_SANDBOX_CONFIG = prevConfigEnv;
+  if (prevConfigEnv === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
+  else process.env.OPENSESSION_SANDBOX_CONFIG = prevConfigEnv;
   rmSync(scratch, { recursive: true, force: true });
 });
 

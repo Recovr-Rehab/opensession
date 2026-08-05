@@ -11,7 +11,7 @@
 import { randomUUIDv7 } from "bun";
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 const STORE_PATH = stateDir("scheduled-prompts.json");
 

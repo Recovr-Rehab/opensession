@@ -190,7 +190,7 @@ import { audit, summarizeText } from "./audit";
 import { gitIdentityEnv, githubLoginFor, userMatchesAny, type GitIdentity } from "./shared/user-mappings";
 import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias, stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
 import {
@@ -279,7 +279,7 @@ import {
 
 const HOME = homeDir();
 const UI_BASE =
-  envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") ||
+  process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
 /** Last resort when PATH has no opencode (systemd's trimmed env): scan the
@@ -304,7 +304,7 @@ function nvmOpencodeScan(): string | undefined {
 
 function resolveOpencodeBin(): string {
   return (
-    envAlias("OPENSESSION_OPENCODE_BIN", "BACKSTAGE_OPENCODE_BIN") ||
+    process.env.OPENSESSION_OPENCODE_BIN ||
     Bun.which("opencode") ||
     nvmOpencodeScan() ||
     // Where opencode.ai's own installer puts it. The previous last-resort was a
@@ -422,7 +422,7 @@ export const OPENCODE_STATE_DIR = `${OPENSESSION_CHATS_DIR}/opencode`;
 const SHARD_DB_DIR = `${OPENCODE_STATE_DIR}/db`;
 
 export function opencodeDbShardActive(): boolean {
-  const v = (envAlias("OPENSESSION_OC_DB_SHARD", "BACKSTAGE_OC_DB_SHARD") || "").trim().toLowerCase();
+  const v = (process.env.OPENSESSION_OC_DB_SHARD || "").trim().toLowerCase();
   return v !== "0" && v !== "false";
 }
 
@@ -512,7 +512,7 @@ function isUnattendedKind(base: string): boolean {
  *  free. Interactive runs keep failing fast into agent-runner's
  *  model-fallback graph — a queued wait there just looks like a hang. */
 const POOL_WAIT_UNATTENDED_MS = Number(
-  envAlias("OPENSESSION_POOL_WAIT_MS", "BACKSTAGE_POOL_WAIT_MS") || 10 * 60_000
+  process.env.OPENSESSION_POOL_WAIT_MS || 10 * 60_000
 );
 
 function poolWaitMsFor(kind?: string): number {
@@ -1367,10 +1367,10 @@ export function proxyOpencodeMcpConfigs(
       // 42GB RSS on 2026-07-27).
       command: [BUN_BIN, "--smol", "run", MCP_PROXY_ENTRY],
       environment: {
-        BKS_RPC_SOCKET: rpcSocketPath(OPENSESSION_CHATS_DIR),
-        BKS_RPC_TOKEN: rpcToken,
-        BKS_MCP_SERVER: name,
-        BKS_MCP_CATALOG: catalog,
+        OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_CHATS_DIR),
+        OPENSESSION_RPC_TOKEN: rpcToken,
+        OPENSESSION_MCP_SERVER: name,
+        OPENSESSION_MCP_CATALOG: catalog,
       },
       enabled: true,
       timeout: PROXY_MCP_TIMEOUT_MS,
@@ -2172,7 +2172,7 @@ async function spawnOpencodeServer(
   if (!existsSync(bin)) {
     throw new Error(
       `opencode binary not found at ${bin} — install it with \`npm i -g opencode-ai\` ` +
-        "(or set BACKSTAGE_OPENCODE_BIN)."
+        "(or set OPENSESSION_OPENCODE_BIN)."
     );
   }
   if (shared) mkdirSync(cwd, { recursive: true });
@@ -3396,7 +3396,7 @@ async function* runOpencodeAttempt(
   // Test hook: pretend usage limits are exhausted on every model, so the
   // fallback chain can be verified without burning real limits. Set
   // MICHAEL_FORCE_LIMIT=1 on a dev process only — never the service env.
-  if (envAlias("OPENSESSION_FORCE_LIMIT", "MICHAEL_FORCE_LIMIT") === "1") {
+  if (process.env.OPENSESSION_FORCE_LIMIT === "1") {
     yield {
       type: "done",
       result: "Claude AI usage limit reached|forced-by-MICHAEL_FORCE_LIMIT",
@@ -3852,7 +3852,7 @@ async function* runOpencodeAttempt(
             );
             const exp = seeded?.openai?.expires;
             if (typeof exp === "number") {
-              serverExtraEnv.BKS_OPENAI_SEED_EXPIRES = String(exp);
+              serverExtraEnv.OPENSESSION_OPENAI_SEED_EXPIRES = String(exp);
             }
           } catch {}
         }

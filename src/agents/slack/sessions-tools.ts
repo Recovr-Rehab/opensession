@@ -23,7 +23,6 @@ import {
   personaName,
   productName,
 } from "../../server/config";
-import { envAlias } from "../../server/rename-compat";
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
 import { existsSync, readFileSync } from "fs";
@@ -33,7 +32,7 @@ import {
   type SessionState,
   type SessionSummary,
 } from "../../server/session-control";
-import { BACKSTAGE_CHATS_DIR } from "../../server/paths";
+import { OPENSESSION_CHATS_DIR } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { migrateSessionEngine } from "../../server/migrate-engine";
 import { resolveSessionRepoContext } from "../../server/session-repos";
@@ -271,7 +270,7 @@ export interface SpawnTaskDeps {
 
 function defaultReadSessionFile(id: string): Partial<BackstageSessionFile> | null {
   try {
-    const path = `${BACKSTAGE_CHATS_DIR}/${id}.json`;
+    const path = `${OPENSESSION_CHATS_DIR}/${id}.json`;
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   } catch {
@@ -288,7 +287,7 @@ function defaultReadSessionFile(id: string): Partial<BackstageSessionFile> | nul
  * (below) covers the guard in the meantime.
  */
 async function defaultStampSpawnDepth(id: string, depth: number): Promise<void> {
-  const path = `${BACKSTAGE_CHATS_DIR}/${id}.json`;
+  const path = `${OPENSESSION_CHATS_DIR}/${id}.json`;
   for (let i = 0; i < 240; i++) {
     if (existsSync(path)) {
       try {
@@ -435,7 +434,7 @@ export async function spawnTaskImpl(
     console.warn(`[spawn_task] stamping spawnDepth on ${id} failed:`, e),
   );
   const base =
-    envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") ||
+    process.env.OPENSESSION_UI_BASE ||
     configuredServer().publicBaseUrl;
   return { ok: true, taskId: id, url: `${base}/session/${id}` };
 }

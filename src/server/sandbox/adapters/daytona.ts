@@ -71,7 +71,7 @@ import {
 const SESSION_LABEL = "backstage.session";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
 /** Delimits stdout from stderr inside the merged executeCommand output. */
-const ERR_DELIM = "__BKS_STDERR_7f3a__";
+const ERR_DELIM = "__OS_STDERR_7f3a__";
 
 async function daytonaClient(): Promise<Daytona> {
   const cfg = sandboxConfig().daytona || {};

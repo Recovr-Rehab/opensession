@@ -3,7 +3,7 @@
  *
  * Single `~/.opensession/config.json` (dual-read fallback to `~/.backstage/
  * config.json`; path overridable via OPENSESSION_CONFIG, or the deprecated
- * BACKSTAGE_CONFIG),
+ * OPENSESSION_CONFIG),
  * read fresh per call with the sandbox/config.ts pattern: tolerant parse,
  * missing/invalid file → portable built-in defaults.
  *
@@ -17,7 +17,7 @@
 import { homeDir } from "./paths";
 import { readFileSync, statSync } from "fs";
 import { resolve as resolvePath } from "path";
-import { envAlias, statePath } from "./rename-compat";
+import { statePath } from "./paths";
 import { isLocalProfile, localProfileRoot } from "./profile";
 
 const HOME = homeDir();
@@ -25,9 +25,9 @@ const OPENSESSION_ROOT = resolvePath(import.meta.dir, "../..");
 
 export function configPath(): string {
   return (
-    envAlias("OPENSESSION_CONFIG", "BACKSTAGE_CONFIG") ||
+    process.env.OPENSESSION_CONFIG ||
     (isLocalProfile() ? `${localProfileRoot()}/config.json` : undefined) ||
-    statePath(".opensession/config.json", ".backstage/config.json")
+    statePath(".opensession/config.json")
   );
 }
 
@@ -497,7 +497,7 @@ export function configuredServer(): ResolvedServer {
     port,
     webhookPort: Number.isFinite(envWebhookPort) ? envWebhookPort : s.webhookPort ?? 3848,
     publicBaseUrl:
-      envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") ||
+      process.env.OPENSESSION_UI_BASE ||
       s.publicBaseUrl ||
       `http://127.0.0.1:${port}`,
     previewHost: process.env.PREVIEW_HOST || s.previewHost || "127.0.0.1",
@@ -510,17 +510,17 @@ export function configuredPaths(): ResolvedPaths {
   const localRoot = localProfileRoot();
   return {
     claudeBin:
-      envAlias("OPENSESSION_CLAUDE_BIN", "BACKSTAGE_CLAUDE_BIN") ||
+      process.env.OPENSESSION_CLAUDE_BIN ||
       p.claudeBin ||
       Bun.which("claude") ||
       "claude",
-    opencodeBin: envAlias("OPENSESSION_OPENCODE_BIN", "BACKSTAGE_OPENCODE_BIN") || p.opencodeBin || null,
+    opencodeBin: process.env.OPENSESSION_OPENCODE_BIN || p.opencodeBin || null,
     worktreesDir:
-      envAlias("OPENSESSION_WORKTREES_DIR", "BACKSTAGE_WORKTREES_DIR") ||
+      process.env.OPENSESSION_WORKTREES_DIR ||
       p.worktreesDir ||
       (isLocalProfile() ? `${localRoot}/worktrees` : `${HOME}/.opensession/worktrees`),
     mcpConfig:
-      envAlias("OPENSESSION_MCP_CONFIG", "BACKSTAGE_MCP_CONFIG") ||
+      process.env.OPENSESSION_MCP_CONFIG ||
       p.mcpConfig ||
       (isLocalProfile() ? `${localRoot}/mcp-config.json` : `${OPENSESSION_ROOT}/mcp-config.json`),
   };

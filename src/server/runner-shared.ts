@@ -15,7 +15,7 @@ import { userMatchesAny } from "./shared/user-mappings";
 import { configuredPaths } from "./config";
 
 /** Claude Code CLI binary the Meridian bridge / anthropic-bridge spawn.
- *  BACKSTAGE_CLAUDE_BIN env → config `paths.claudeBin` → this VPS's path. */
+ *  OPENSESSION_CLAUDE_BIN env → config `paths.claudeBin` → this VPS's path. */
 export const CLAUDE_CODE_BIN = configuredPaths().claudeBin;
 
 /** Moved to the protocol package; re-exported for existing import sites. */

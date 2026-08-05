@@ -48,7 +48,7 @@ beforeAll(async () => {
 	// The HOME override only reaches paths.ts / codex-accounts.ts if nothing
 	// evaluated them yet — and bun test file order guarantees nothing
 	// (another test file importing the server graph poisons the cached
-	// BACKSTAGE_CHATS_DIR / codex-accounts' HOME with the real store, which
+	// OPENSESSION_CHATS_DIR / codex-accounts' HOME with the real store, which
 	// then leaks live sessions/rollouts into these assertions). The live-
 	// binding seams repoint them regardless of who loaded the module first;
 	// the cache-busted sessions.ts imports below re-read OPENSESSION_CHATS_DIR

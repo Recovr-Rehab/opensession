@@ -23,7 +23,7 @@ import { engineSessionPatch } from "./sessions";
 import { updateSessionFile } from "./session-cache";
 import type { BackstageSessionFile } from "./types";
 import { configuredIntegration, configuredRepos, defaultRepo } from "./config";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { shouldPersistModelSwitch } from "./run-events";
 
 const ACTIONS_DIR = stateDir("actions");

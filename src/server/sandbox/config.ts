@@ -18,7 +18,7 @@
 import { existsSync, readFileSync } from "fs";
 import { getDefaultModel, providerFor, resolveModel } from "../models";
 import { homeDir, OPENSESSION_CHATS_DIR } from "../paths";
-import { envAlias, stateDir } from "../rename-compat";
+import { stateDir } from "../paths";
 import type { SandboxProviderId } from "./provider";
 
 const HOME = homeDir();
@@ -28,7 +28,7 @@ const HOME = homeDir();
 // the env var without re-importing this module.
 function configPath(): string {
   return (
-    envAlias("OPENSESSION_SANDBOX_CONFIG", "BACKSTAGE_SANDBOX_CONFIG") ||
+    process.env.OPENSESSION_SANDBOX_CONFIG ||
     stateDir("sandbox.json")
   );
 }

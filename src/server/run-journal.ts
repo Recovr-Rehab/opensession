@@ -7,7 +7,7 @@
 import type { McpScope } from "./runner-shared";
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias, withLegacySessionId } from "./rename-compat";
+import { } from "./paths";
 import { transitionRunState } from "./run-state";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
@@ -15,7 +15,7 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 // own per-host file instead of read-modify-writing the shared journal from
 // multiple processes concurrently.
 let ACTIVE_RUNS_PATH =
-  envAlias("OPENSESSION_RUN_JOURNAL", "BACKSTAGE_RUN_JOURNAL") ||
+  process.env.OPENSESSION_RUN_JOURNAL ||
   `${OPENSESSION_CHATS_DIR}/active-runs.json`;
 
 /**
@@ -76,12 +76,9 @@ export interface ActiveRunRecord {
 
 function readRunJournal(): Record<string, ActiveRunRecord> {
   try {
-    if (!existsSync(ACTIVE_RUNS_PATH)) return {};
-    const journal: Record<string, ActiveRunRecord> = JSON.parse(
-      readFileSync(ACTIVE_RUNS_PATH, "utf-8"),
-    );
-    for (const record of Object.values(journal)) withLegacySessionId(record);
-    return journal;
+    return existsSync(ACTIVE_RUNS_PATH)
+      ? JSON.parse(readFileSync(ACTIVE_RUNS_PATH, "utf-8"))
+      : {};
   } catch {
     return {};
   }

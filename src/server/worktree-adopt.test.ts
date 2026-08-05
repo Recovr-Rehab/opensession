@@ -12,11 +12,11 @@ import { $ } from "bun";
  * commits and no registered worktree is adopted; a branch with real commits
  * still fails loudly.
  *
- * Runs against a scratch repo via the BACKSTAGE_CONFIG / BACKSTAGE_WORKTREES_DIR
+ * Runs against a scratch repo via the OPENSESSION_CONFIG / OPENSESSION_WORKTREES_DIR
  * seams (config loader caches by path+mtime, env read per call).
  */
 
-const ENV_KEYS = ["BACKSTAGE_CONFIG", "BACKSTAGE_WORKTREES_DIR"] as const;
+const ENV_KEYS = ["OPENSESSION_CONFIG", "OPENSESSION_WORKTREES_DIR"] as const;
 const saved: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) saved[k] = process.env[k];
 
@@ -55,8 +55,8 @@ beforeAll(async () => {
       },
     }),
   );
-  process.env.BACKSTAGE_CONFIG = join(root, "config.json");
-  process.env.BACKSTAGE_WORKTREES_DIR = join(root, "worktrees");
+  process.env.OPENSESSION_CONFIG = join(root, "config.json");
+  process.env.OPENSESSION_WORKTREES_DIR = join(root, "worktrees");
 });
 
 afterAll(() => {

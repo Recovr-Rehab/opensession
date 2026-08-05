@@ -26,11 +26,23 @@ import { dirname } from "path";
 import { timingSafeEqual } from "crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { BACKSTAGE_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR } from "./paths";
 import { audit } from "./audit";
 import { devInstanceBootError, isDevInstance } from "./dev-mode";
-import { canonicalMcpServerId } from "./rename-compat";
 import { MCP_HTTP_PORT, rpcSocketPath } from "./run-rpc-protocol";
+
+/**
+ * In-process MCP server ids renamed michael-* → opensession-* (2026-07-09).
+ * Legacy ids still arrive at runtime from persisted state: journaled runs
+ * resumed after a restart (RunHostSpec.proxyMcpServers, per-run proxy env)
+ * and engine sessions whose context still names old tool ids. Normalize at
+ * lookup points; never at definition sites (those use the new ids only).
+ */
+export function canonicalMcpServerId(name: string): string {
+	return name.startsWith("michael-")
+		? `opensession-${name.slice("michael-".length)}`
+		: name;
+}
 
 const g = globalThis as any;
 
@@ -338,7 +350,7 @@ export function startRunRpcServer(): void {
     startRunRpcSocketHeal();
     return;
   }
-  const sock = rpcSocketPath(BACKSTAGE_CHATS_DIR);
+  const sock = rpcSocketPath(OPENSESSION_CHATS_DIR);
   mkdirSync(dirname(sock), { recursive: true });
   try {
     if (existsSync(sock)) unlinkSync(sock);
@@ -582,7 +594,7 @@ function startRunRpcSocketHeal(): void {
   g.__runRpcHealTicker = setInterval(() => {
     void (async () => {
       if (!g.__runRpcServer) return;
-      const sock = rpcSocketPath(BACKSTAGE_CHATS_DIR);
+      const sock = rpcSocketPath(OPENSESSION_CHATS_DIR);
       if (await rpcSocketPathAlive(sock)) return;
       console.warn(`[run-rpc] socket path dead or stolen — rebinding ${sock}`);
       audit({ msg: "run_rpc_socket_heal", socket: sock });

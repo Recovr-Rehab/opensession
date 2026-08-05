@@ -6,7 +6,7 @@
  * throttled quota serves stale snapshots instead of errors.
  */
 import { homeDir } from "./paths";
-import { statePath } from "./rename-compat";
+import { statePath } from "./paths";
 import { configuredIntegration, configuredRepos, configuredServer, defaultRepo } from "./config";
 import { $ } from "bun";
 import { readFileSync, writeFileSync } from "fs";
@@ -308,10 +308,7 @@ const TTL = 5 * 60_000;
 // Entries keep their original ts, so everything seeds as stale: served
 // immediately while a background refresh runs. The diff cache is NOT
 // persisted — patches are big and cheap to refetch.
-const DETAILS_CACHE_FILE = statePath(
-  ".opensession-pr-details-cache.json",
-  ".backstage-pr-details-cache.json",
-);
+const DETAILS_CACHE_FILE = statePath(".opensession-pr-details-cache.json");
 try {
   const raw: Record<string, { data: PrDetails | null; ts: number }> = JSON.parse(
     readFileSync(DETAILS_CACHE_FILE, "utf8"),

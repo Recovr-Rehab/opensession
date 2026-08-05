@@ -32,7 +32,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias } from "./rename-compat";
 import { audit } from "./audit";
 import { tryGetSessionControl } from "./session-control";
 import { findSession } from "./session-cache";
@@ -49,7 +48,7 @@ import { configuredServer, personaName, productName } from "./config";
 const HOME = homeDir();
 const STORE = `${OPENSESSION_CHATS_DIR}/human-asks.json`;
 const UI_BASE =
-  envAlias("OPENSESSION_UI_BASE", "MICHAEL_UI_BASE") ||
+  process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
 /** How long a "block" ask holds the agent's turn before degrading to async. */

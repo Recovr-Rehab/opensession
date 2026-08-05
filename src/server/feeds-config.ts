@@ -26,12 +26,9 @@
  * }
  */
 import { readFileSync, writeFileSync, existsSync } from "fs";
-import { statePath } from "./rename-compat";
+import { statePath } from "./paths";
 
-const STORE_PATH = statePath(
-  ".opensession-feeds.json",
-  ".backstage-feeds.json",
-);
+const STORE_PATH = statePath(".opensession-feeds.json");
 
 export interface FeedPanelSpec {
   /** Tab label ("Video", "Conversation", …). */

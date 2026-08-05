@@ -14,7 +14,7 @@
  * Pure decision logic (validation, due-check) lives in learned-rules-gates.ts.
  */
 import { existsSync, readFileSync } from "fs";
-import { stateDir } from "../../server/rename-compat";
+import { stateDir } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { audit } from "../../server/audit";
 import { configuredRepos, defaultRepo } from "../../server/config";

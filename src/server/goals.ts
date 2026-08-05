@@ -26,7 +26,7 @@ import {
   unlinkSync,
   existsSync,
 } from "fs";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 
 const GOALS_DIR = stateDir("goals");
 

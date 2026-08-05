@@ -6,7 +6,7 @@
  * the other way around.
  *
  *  - `/backstage/run-ws/<hostId>` — the run host's event stream. The host
- *    entry (src/runner-host/host.ts, BKS_RUN_WS_URL) dials it and speaks the
+ *    entry (src/runner-host/host.ts, OPENSESSION_RUN_WS_URL) dials it and speaks the
  *    exact NDJSON protocol, one JSON message per text frame. Accepted sockets
  *    are bridged into the SAME HostHandle machinery as the unix-socket path:
  *    `runWsConnector(hostId)` implements host-client's HostConnector, so
@@ -17,7 +17,7 @@
  *    without double-applying (see ws-buffer.ts; the unix-socket path stays
  *    live-only).
  *  - `/backstage/rpc-ws?host=<hostId>` — the opensession-* MCP proxy channel.
- *    mcp-proxy.ts (BKS_RPC_WS_URL) dials it; each request frame
+ *    mcp-proxy.ts (OPENSESSION_RPC_WS_URL) dials it; each request frame
  *    `{id, path, token, server, tool?, args?}` goes through the same
  *    dispatchRunRpc core as the unix RPC socket and answers with
  *    `{id, status, body}`.

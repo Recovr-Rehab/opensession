@@ -5,11 +5,11 @@
  */
 import { readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { BACKSTAGE_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR } from "./paths";
 import { unpinEverywhere } from "./pins";
 import type { UnifiedSession } from "./types";
 
-const REGISTRY_PATH = `${BACKSTAGE_CHATS_DIR}/archive-registry.json`;
+const REGISTRY_PATH = `${OPENSESSION_CHATS_DIR}/archive-registry.json`;
 
 /** Why a session ended up archived — drives the "Auto-archived" filter. */
 export type ArchiveReason = "manual" | "idle" | "auto";

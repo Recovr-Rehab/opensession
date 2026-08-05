@@ -72,7 +72,7 @@
  */
 
 import { homeDir } from "./paths";
-import { envAlias, stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { chmodSync, existsSync, readFileSync } from "fs";
 import { isLocalProfile } from "./profile";
@@ -82,7 +82,7 @@ const HOME = homeDir();
 /** Bridge-config file path (exported for the state-path regression test). */
 export function configPath(): string {
   return (
-    envAlias("OPENSESSION_OPENCODE_CONFIG", "BACKSTAGE_OPENCODE_CONFIG") ||
+    process.env.OPENSESSION_OPENCODE_CONFIG ||
     stateDir("opencode.json")
   );
 }

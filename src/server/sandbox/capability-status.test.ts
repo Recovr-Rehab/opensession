@@ -4,9 +4,9 @@
  * so this IS the endpoint's behavior) and for resolveRequestedSandbox, the
  * create-path validator behind the per-session provider picker.
  *
- * Config is pointed at a scratch file via BACKSTAGE_SANDBOX_CONFIG (read fresh
+ * Config is pointed at a scratch file via OPENSESSION_SANDBOX_CONFIG (read fresh
  * per call), saved/restored so the rest of the suite never sees it. The
- * kill-switch file lives under BACKSTAGE_CHATS_DIR; expectations read the live
+ * kill-switch file lives under OPENSESSION_CHATS_DIR; expectations read the live
  * sandboxesEnabled() instead of assuming it, so a dev box with the switch on
  * still passes.
  */
@@ -37,13 +37,13 @@ const cfgPath = () => join(scratch, "sandbox.json");
 
 beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), "bks-sandbox-status-"));
-  prevEnvConfig = process.env.BACKSTAGE_SANDBOX_CONFIG;
+  prevEnvConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   prevDaytonaKey = process.env.DAYTONA_API_KEY;
   prevE2bKey = process.env.E2B_API_KEY;
   prevModalTokenId = process.env.MODAL_TOKEN_ID;
   prevModalTokenSecret = process.env.MODAL_TOKEN_SECRET;
   prevModalConfigPath = process.env.MODAL_CONFIG_PATH;
-  process.env.BACKSTAGE_SANDBOX_CONFIG = cfgPath();
+  process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
   delete process.env.DAYTONA_API_KEY;
   delete process.env.E2B_API_KEY;
   delete process.env.MODAL_TOKEN_ID;
@@ -58,8 +58,8 @@ afterEach(() => {
 });
 
 afterAll(() => {
-  if (prevEnvConfig === undefined) delete process.env.BACKSTAGE_SANDBOX_CONFIG;
-  else process.env.BACKSTAGE_SANDBOX_CONFIG = prevEnvConfig;
+  if (prevEnvConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
+  else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
   if (prevDaytonaKey !== undefined) process.env.DAYTONA_API_KEY = prevDaytonaKey;
   if (prevE2bKey !== undefined) process.env.E2B_API_KEY = prevE2bKey;
   if (prevModalTokenId !== undefined) process.env.MODAL_TOKEN_ID = prevModalTokenId;

@@ -14,7 +14,7 @@
 
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./rename-compat";
+import { stateDir } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 
 const DIR = stateDir("personal-prompts");
