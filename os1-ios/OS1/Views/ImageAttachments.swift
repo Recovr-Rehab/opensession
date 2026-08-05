@@ -431,9 +431,11 @@ extension View {
     /// Long-press → Paste on the composer accepts images. SwiftUI text
     /// fields on iOS reject image pastes outright, so a background probe
     /// finds the UIKit text input backing the field, gives it a paste
-    /// configuration that accepts images, and a paste delegate that routes
+    /// configuration that accepts images, a paste delegate that routes
     /// image flavors into the attachments — text pastes flow through
-    /// untouched. No extra button; the system edit menu is the affordance.
+    /// untouched — and, via `ImagePasteMenu`, the Paste item the edit menu
+    /// otherwise withholds. No extra button; the system edit menu is the
+    /// affordance.
     func pastesImages(
         into images: Binding<[AttachedImage]>, maxCount: Int = 6
     ) -> some View {
@@ -514,6 +516,7 @@ private struct TextInputPasteAugmenter: UIViewRepresentable {
                         forAccepting: UIImage.self
                     )
                     input.pasteDelegate = coordinator
+                    ImagePasteMenu.enable(on: input)
                     return
                 }
             }
@@ -530,6 +533,71 @@ private struct TextInputPasteAugmenter: UIViewRepresentable {
             }
             return nil
         }
+    }
+}
+
+/// Puts Paste back in the edit menu when the clipboard holds only an image.
+///
+/// SwiftUI's text views answer the menu's "does Paste apply here?" from the
+/// text flavors alone and ignore the paste configuration set above, so an
+/// image-only clipboard offers no Paste at all — even though the paste
+/// pipeline underneath works (measured on iOS 26: configuration and delegate
+/// both installed, `paste(nil)` attaches the image, `canPerformAction(paste:)`
+/// false, long-press shows only AutoFill).
+///
+/// So the one broken link gets patched and nothing else: the augmented view
+/// moves to a subclass that overrides `canPerformAction` alone, additively —
+/// whatever the original answered yes to still wins, so no text paste can
+/// regress — and adds Paste while an image is on the clipboard. Choosing it
+/// runs the view's own paste, through the delegate installed above.
+private enum ImagePasteMenu {
+    private static let namePrefix = "OS1ImagePaste_"
+    private static var subclasses: [ObjectIdentifier: AnyClass] = [:]
+
+    static func enable(on input: UIView & UITextPasteConfigurationSupporting) {
+        guard let current = object_getClass(input),
+              !NSStringFromClass(current).hasPrefix(namePrefix),
+              let patched = subclass(of: current)
+        else { return }
+        object_setClass(input, patched)
+    }
+
+    /// One subclass per base class, derived from the class the instance is
+    /// actually wearing rather than one looked up by name: KVO plays the same
+    /// trick, and layering on top of whatever is there keeps its behavior.
+    private static func subclass(of base: AnyClass) -> AnyClass? {
+        if let made = subclasses[ObjectIdentifier(base)] { return made }
+        let selector = #selector(UIResponder.canPerformAction(_:withSender:))
+        guard let method = class_getInstanceMethod(base, selector),
+              let made = objc_allocateClassPair(
+                  base, namePrefix + NSStringFromClass(base), 0
+              )
+        else { return nil }
+        typealias Original =
+            @convention(c) (AnyObject, Selector, Selector, AnyObject?) -> Bool
+        let original = unsafeBitCast(
+            method_getImplementation(method), to: Original.self
+        )
+        let override: @convention(block) (AnyObject, Selector, AnyObject?) -> Bool = {
+            view, action, sender in
+            if original(view, selector, action, sender) { return true }
+            guard action == #selector(UIResponder.paste(_:)),
+                  let input = view as? UITextPasteConfigurationSupporting,
+                  input.pasteDelegate != nil
+            else { return false }
+            // Metadata only: asking whether the clipboard holds images never
+            // trips the paste-permission alert, where reading them would.
+            return UIPasteboard.general.hasImages
+        }
+        class_addMethod(
+            made,
+            selector,
+            imp_implementationWithBlock(override),
+            method_getTypeEncoding(method)
+        )
+        objc_registerClassPair(made)
+        subclasses[ObjectIdentifier(base)] = made
+        return made
     }
 }
 #endif

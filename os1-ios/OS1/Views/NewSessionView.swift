@@ -1,9 +1,13 @@
 import SwiftUI
 
-/// Compose a new session: a full-height prompt editor over a compact chip row
-/// for repo / mode / model / effort / fast mode, plus image attachments —
-/// the web palette's essentials in a native shape. Screenshots paste straight
-/// into the attachments (Cmd+V on the Mac; long-press Paste on iOS).
+/// Compose a new session, laid out like the palette on the desktop: what the
+/// session IS — the repo, and what it's created from — reads across the top,
+/// the prompt fills the middle, and how it runs sits in the footer with the
+/// attach button. Only the controls this app actually carries appear; the rest
+/// of the palette's row (plan mode, connected services, run environment) has
+/// no native equivalent yet, so it stays absent rather than half-present.
+/// Screenshots paste straight into the attachments (Cmd+V on the Mac,
+/// long-press Paste on iOS).
 ///
 /// The prompt lives in a plain `TextEditor` inside a custom layout (not a
 /// grouped Form): Form re-diffs every row on each keystroke, which is what
@@ -41,6 +45,8 @@ struct NewSessionView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                header
+                Divider()
                 editor
                 if !images.isEmpty {
                     AttachedImagesRow(images: images) { image in
@@ -159,7 +165,86 @@ struct NewSessionView: View {
         #endif
     }
 
-    // ── Chip row ──────────────────────────────────────────────────────────
+    // ── Header: what the session is ───────────────────────────────────────
+
+    /// Repo left, what-it's-created-from right, as on the desktop. These two
+    /// decide what the session can touch, so they sit above the prompt rather
+    /// than among the run settings below it.
+    private var header: some View {
+        HStack(spacing: 8) {
+            repoChip
+            Spacer(minLength: 8)
+            modeChip
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private var repoLabel: String {
+        if let match = repos.first(where: { $0.id == repo }) {
+            return match.label ?? match.id
+        }
+        return repo.isEmpty ? "No repository" : repo
+    }
+
+    private var repoChip: some View {
+        Menu {
+            ForEach(repos) { repoInfo in
+                Button {
+                    repo = repoInfo.id
+                } label: {
+                    if repo == repoInfo.id {
+                        Label(repoInfo.label ?? repoInfo.id, systemImage: "checkmark")
+                    } else {
+                        Text(repoInfo.label ?? repoInfo.id)
+                    }
+                }
+            }
+        } label: {
+            chipLabel(icon: "folder", text: repoLabel, strong: true)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .disabled(repos.isEmpty)
+    }
+
+    /// The palette calls this "what to create from", and its two entries that
+    /// exist here are a fresh branch (code) and Ask; the same words are used so
+    /// the two screens describe one choice. Worktrees and scratch sessions have
+    /// no native equivalent, so they aren't offered.
+    private var modeChip: some View {
+        Menu {
+            Button {
+                mode = "code"
+            } label: {
+                Label {
+                    Text("New branch")
+                    Text("Isolated worktree, can open a PR")
+                } icon: {
+                    if mode == "code" { Image(systemName: "checkmark") }
+                }
+            }
+            Button {
+                mode = "ask"
+            } label: {
+                Label {
+                    Text("Ask")
+                    Text("Read-only on the main checkout")
+                } icon: {
+                    if mode == "ask" { Image(systemName: "checkmark") }
+                }
+            }
+        } label: {
+            chipLabel(
+                icon: mode == "code" ? "arrow.branch" : "text.magnifyingglass",
+                text: mode == "code" ? "New branch" : "Ask"
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+    }
+
+    // ── Footer: how it runs ───────────────────────────────────────────────
 
     private var selectedModelOption: ModelOption? {
         catalog?.option(for: model)
@@ -181,89 +266,32 @@ struct NewSessionView: View {
         return catalog?.label(for: id) ?? "Model"
     }
 
+    /// Attach on the left, model on the right — the palette's footer. iOS folds
+    /// reasoning effort and fast mode into the model menu, so the row stays two
+    /// controls wide and needs no sideways scrolling; the Mac has the width to
+    /// show them as their own chips.
     private var controls: some View {
-        #if os(iOS)
-        ScrollView(.horizontal) {
-            HStack(spacing: 6) {
-                AttachImagesButton(images: $images)
-                repoChip
-                modeChip
-                modelChip
-            }
-            .padding(.horizontal, 12)
-        }
-        .scrollIndicators(.hidden)
-        .padding(.vertical, 8)
-        #else
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                AttachImagesButton(images: $images)
-                repoChip
-                modeChip
-                Spacer(minLength: 0)
-            }
-            HStack(spacing: 8) {
-                modelChip
-                if !availableEfforts.isEmpty { effortChip }
-                if fastSupported { fastChip }
-                Spacer(minLength: 0)
-            }
+        HStack(spacing: 8) {
+            AttachImagesButton(images: $images)
+            Spacer(minLength: 8)
+            #if os(macOS)
+            if !availableEfforts.isEmpty { effortChip }
+            if fastSupported { fastChip }
+            #endif
+            modelChip
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, controlsVerticalPadding)
+    }
+
+    /// The iOS attach button carries its own 44pt tap target, so the row only
+    /// needs air on the Mac.
+    private var controlsVerticalPadding: CGFloat {
+        #if os(macOS)
+        10
+        #else
+        4
         #endif
-    }
-
-    private var repoChip: some View {
-        Menu {
-            ForEach(repos) { repoInfo in
-                Button {
-                    repo = repoInfo.id
-                } label: {
-                    if repo == repoInfo.id {
-                        Label(repoInfo.label ?? repoInfo.id, systemImage: "checkmark")
-                    } else {
-                        Text(repoInfo.label ?? repoInfo.id)
-                    }
-                }
-            }
-        } label: {
-            chipLabel(icon: "folder", text: repo.isEmpty ? "repo" : repo)
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-    }
-
-    private var modeChip: some View {
-        Menu {
-            Button {
-                mode = "code"
-            } label: {
-                Label {
-                    Text("Code")
-                    Text("Isolated worktree, can open a PR")
-                } icon: {
-                    if mode == "code" { Image(systemName: "checkmark") }
-                }
-            }
-            Button {
-                mode = "ask"
-            } label: {
-                Label {
-                    Text("Ask")
-                    Text("Read-only on the main checkout")
-                } icon: {
-                    if mode == "ask" { Image(systemName: "checkmark") }
-                }
-            }
-        } label: {
-            chipLabel(
-                icon: mode == "code" ? "hammer" : "text.magnifyingglass",
-                text: mode == "code" ? "Code" : "Ask"
-            )
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
     }
 
     private var modelChip: some View {
@@ -372,8 +400,11 @@ struct NewSessionView: View {
         .buttonStyle(.plain)
     }
 
+    /// `strong` is the repo's treatment: full-strength ink, as the desktop
+    /// palette gives its repository trigger — the one choice on the screen you
+    /// should be able to read without looking for it.
     private func chipLabel(
-        icon: String, text: String, highlighted: Bool = false
+        icon: String, text: String, highlighted: Bool = false, strong: Bool = false
     ) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
@@ -384,13 +415,17 @@ struct NewSessionView: View {
                 #endif
             Text(text)
                 #if os(iOS)
-                .font(.caption)
+                .font(.caption.weight(strong ? .medium : .regular))
                 #else
-                .font(.callout)
+                .font(.callout.weight(strong ? .medium : .regular))
                 #endif
                 .lineLimit(1)
         }
-        .foregroundStyle(highlighted ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+        .foregroundStyle(
+            highlighted
+                ? AnyShapeStyle(.tint)
+                : (strong ? AnyShapeStyle(OS1VisualStyle.text) : AnyShapeStyle(.secondary))
+        )
         #if os(iOS)
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
