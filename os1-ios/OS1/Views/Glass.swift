@@ -45,33 +45,42 @@ extension View {
     ///   - ramp: how far up from the bar's bottom edge the dissolve runs. It
     ///     has to stay inside the bar's own height (a taller value overflows
     ///     upward and dims content well above the composer).
-    ///   - tail: solid page colour hung BELOW the bar. `ignoresSafeArea` does
-    ///     not extend a `safeAreaBar` background into the home-indicator strip
-    ///     — measured: rows there stayed ~50% legible — so the tail is what
+    ///   - tail: page colour hung BELOW the bar. `ignoresSafeArea` does not
+    ///     extend a `safeAreaBar` background into the home-indicator strip —
+    ///     measured: rows there stayed ~50% legible — so the tail is what
     ///     covers it, and the negative padding is what lets it hang out.
-    func composerBottomWash(ramp: CGFloat = 56, tail: CGFloat = 72) -> some View {
+    ///   - veil: the wash's MAXIMUM opacity. Deliberately short of 1: the chat
+    ///     should still be faintly there under the pill, the way it is behind
+    ///     the glass, rather than stopping at a hard edge. At 0.62 a glyph that
+    ///     the scroll edge effect has already lightened reads around 236 of 255
+    ///     — present, not legible.
+    func composerBottomWash(
+        ramp: CGFloat = 56,
+        tail: CGFloat = 72,
+        veil: Double = 0.62
+    ) -> some View {
         background(alignment: .bottom) {
             VStack(spacing: 0) {
                 // Clear down to where the ramp begins — roughly the middle of
                 // the resting pill, so nothing above the composer is touched.
                 Color.clear
                 // Weighted stops, not a plain two-colour ramp: opacity climbs
-                // faster than linear and reaches the page colour before the
-                // bar's bottom edge, so the chat is already gone by the time it
-                // meets the tail. A linear ramp only hits solid on its very
-                // last row, which left rows readable right down to the strip.
+                // faster than linear and is at full veil before the bar's
+                // bottom edge, so the chat has already gone quiet by the time
+                // it meets the tail. A linear ramp only peaks on its very last
+                // row, which left rows readable right down to the strip.
                 LinearGradient(
                     stops: [
                         .init(color: OS1VisualStyle.background.opacity(0), location: 0),
-                        .init(color: OS1VisualStyle.background.opacity(0.55), location: 0.4),
-                        .init(color: OS1VisualStyle.background, location: 0.8),
-                        .init(color: OS1VisualStyle.background, location: 1),
+                        .init(color: OS1VisualStyle.background.opacity(veil * 0.55), location: 0.4),
+                        .init(color: OS1VisualStyle.background.opacity(veil), location: 0.8),
+                        .init(color: OS1VisualStyle.background.opacity(veil), location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .frame(height: ramp)
-                OS1VisualStyle.background
+                OS1VisualStyle.background.opacity(veil)
                     .frame(height: tail)
             }
             .padding(.bottom, -tail)
