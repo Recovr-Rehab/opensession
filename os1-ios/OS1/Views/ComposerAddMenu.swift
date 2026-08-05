@@ -260,6 +260,18 @@ struct ReferenceFileSheet: View {
     @State private var failed = false
     @Environment(\.dismiss) private var dismiss
 
+    /// `.navigationBarDrawer` doesn't exist on macOS — keeping the placement
+    /// here rather than in the modifier chain keeps that one platform
+    /// difference to a single `#if` (and kept the Mac target from building
+    /// at all when it was inline).
+    private static var searchPlacement: SearchFieldPlacement {
+        #if os(iOS)
+        .navigationBarDrawer(displayMode: .always)
+        #else
+        .automatic
+        #endif
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -292,11 +304,7 @@ struct ReferenceFileSheet: View {
                 }
             }
             .listStyle(.plain)
-            .searchable(
-                text: $query,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search files"
-            )
+            .searchable(text: $query, placement: Self.searchPlacement, prompt: "Search files")
             .navigationTitle("Reference a file")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

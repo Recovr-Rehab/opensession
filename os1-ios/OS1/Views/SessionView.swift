@@ -1241,6 +1241,16 @@ private struct SessionInputBar: View {
     /// In-flight promote — the row says so rather than looking inert, since
     /// cutting a worktree isn't always instant.
     @State private var promoting = false
+    /// Latched once the draft has wrapped past one line, cleared when the
+    /// draft empties. It has to latch: expanding hands the field the whole
+    /// row (the round buttons move to their own line), so text that just
+    /// wrapped in the pill often fits on one line again once expanded — a
+    /// direct height test would oscillate between the two layouts.
+    @State private var draftWrapped = false
+    /// Roughly the height of a one-line `.body` field, scaled with Dynamic
+    /// Type. The wrap test compares against 1.6× this, comfortably between
+    /// one line and two whatever internal padding the field carries.
+    @ScaledMetric(relativeTo: .body) private var oneLineFieldHeight: CGFloat = 22
 
     /// Air above the topmost element in the bar — and where the composer
     /// scrim's dissolve has to finish, so it ends level with that element.
@@ -1425,13 +1435,15 @@ private struct SessionInputBar: View {
     /// The message composer mirrors the web input: draft above, controls on a
     /// bottom row, including stop while a turn is active.
     /// Phone resting state: the web's minimized pill — one capsule row of
-    /// [+] [field] [send] — which opens into the full two-row layout on focus
-    /// or as soon as there is something to send. The field itself keeps its
-    /// place in the row across both states, so focus and the keyboard survive
-    /// the morph.
+    /// [+] [field] [send]. Focus alone does NOT open it, and neither does
+    /// typing: a one-line draft stays in the pill, which is the whole point of
+    /// a single-row input. It opens into the full two-row layout only once the
+    /// draft has more than one line, or an image is staged. The field itself
+    /// keeps its place in the row across both states, so focus and the
+    /// keyboard survive the morph.
     private var isCollapsed: Bool {
         #if os(iOS)
-        !inputFocused && viewModel.draft.isEmpty && viewModel.attachedImages.isEmpty
+        !draftWrapped && viewModel.attachedImages.isEmpty
         #else
         false
         #endif
@@ -1451,6 +1463,15 @@ private struct SessionInputBar: View {
                 )
                 .textFieldStyle(.plain)
                 .lineLimit(1...10)
+                // Measured on the field itself, BEFORE the composer's own
+                // padding below — so the reading is the text's height and
+                // doesn't move when the surrounding layout does.
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    if height > oneLineFieldHeight * 1.6 { draftWrapped = true }
+                }
+                .onChange(of: viewModel.draft) { _, draft in
+                    if draft.isEmpty { draftWrapped = false }
+                }
                 // A vertical-axis TextField is greedy: without an explicit
                 // fill it claims the row's whole width in the collapsed pill
                 // and pushes the send button off the right edge.
@@ -1541,23 +1562,18 @@ private struct SessionInputBar: View {
             in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
         )
         #if os(iOS)
-        .overlay {
-            RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
-                .stroke(
-                    inputFocused ? Color.accentColor.opacity(0.45) : .clear,
-                    lineWidth: 1
-                )
-                .allowsHitTesting(false)
-        }
+        // No focus ring: an accent-coloured border around the input read as a
+        // validation/error outline rather than "you can type here". The glass
+        // surface and the caret are affordance enough — same call the web
+        // composer made.
         .contentShape(
             RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
         )
         .simultaneousGesture(
             TapGesture().onEnded { inputFocused = true }
         )
-        .animation(.easeOut(duration: 0.15), value: inputFocused)
-        // Sending empties the draft, which collapses the pill without the
-        // focus change that drives the animation above.
+        // The pill/full-layout morph is the only thing that animates here —
+        // focus changes nothing visually now that the ring is gone.
         .animation(.snappy(duration: 0.2), value: isCollapsed)
         #endif
     }
