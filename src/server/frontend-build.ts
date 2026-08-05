@@ -5,8 +5,8 @@
  * (globalThis-parked, mutated in place) and the debounced rebuild.
  */
 
-import { existsSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
-import { join, resolve } from "path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "path";
 import { OPENSESSION_CHATS_DIR } from "./paths";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -26,6 +26,52 @@ export type FrontendBundle = {
 	gzip: Map<string, Blob>;
 	version: string;
 };
+
+/**
+ * Compile src/frontend/styles/tailwind.css with the real Tailwind CLI. Bun
+ * cannot compile Tailwind, so this subprocess (~100ms) is the only way to get
+ * the utilities layer — in the prod bundle AND in dev, where the UI is served
+ * by Bun's HMR server and therefore had NO utilities at all until 2026-08-05
+ * (Home, the composer and every Tailwind-styled component rendered unstyled,
+ * which reads as a broken app rather than a missing stylesheet).
+ * Throws on a failed compile; callers decide how to fail soft.
+ */
+async function compileTailwind(outPath: string): Promise<string> {
+	mkdirSync(dirname(outPath), { recursive: true });
+	const proc = Bun.spawn(
+		[
+			`${REPO_ROOT}/node_modules/.bin/tailwindcss`,
+			"-i",
+			`${FRONTEND_SRC}/styles/tailwind.css`,
+			"-o",
+			outPath,
+			"--minify",
+		],
+		{ cwd: REPO_ROOT, stdout: "pipe", stderr: "pipe" },
+	);
+	if ((await proc.exited) !== 0) {
+		throw new Error(await new Response(proc.stderr).text());
+	}
+	return await Bun.file(outPath).text();
+}
+
+// Dev-mode utilities sheet, compiled on first request and cached until a
+// frontend edit invalidates it (scheduleFrontendRebuild). Prod never uses
+// this path — there the hashed sheet is part of the built bundle.
+let devTailwind: string | null = null;
+
+/** The dev-mode Tailwind sheet, or null in prod / on a failed compile. */
+export async function devTailwindCss(): Promise<string | null> {
+	if (!IS_DEV || isLocalProfile()) return null;
+	if (devTailwind !== null) return devTailwind;
+	try {
+		devTailwind = await compileTailwind(`${FRONTEND_DIST}/.tailwind-dev.css`);
+		return devTailwind;
+	} catch (e) {
+		console.error("[frontend] Tailwind (dev) build FAILED:", e);
+		return null;
+	}
+}
 
 // Build (or rebuild) the prod SPA bundle in-process. The result object on
 // globalThis is MUTATED in place (never reassigned) so the long-lived `frontend`
@@ -112,22 +158,7 @@ export async function buildFrontend(): Promise<string> {
 	// whole server (this build also runs at boot, before Bun.serve).
 	let twName: string | null = null;
 	try {
-		const twTmp = `${FRONTEND_DIST}/.tailwind-build.css`;
-		const twProc = Bun.spawn(
-			[
-				`${REPO_ROOT}/node_modules/.bin/tailwindcss`,
-				"-i",
-				`${FRONTEND_SRC}/styles/tailwind.css`,
-				"-o",
-				twTmp,
-				"--minify",
-			],
-			{ cwd: REPO_ROOT, stdout: "pipe", stderr: "pipe" },
-		);
-		if ((await twProc.exited) !== 0) {
-			throw new Error(await new Response(twProc.stderr).text());
-		}
-		const twCss = await Bun.file(twTmp).text();
+		const twCss = await compileTailwind(`${FRONTEND_DIST}/.tailwind-build.css`);
 		twName = `tailwind-${Bun.hash(twCss).toString(36)}.css`;
 		writeFileAtomic(`${FRONTEND_DIST}/${twName}`, twCss);
 	} catch (e) {
@@ -166,10 +197,14 @@ export async function buildFrontend(): Promise<string> {
 	const twLink = twName
 		? `\n  <link rel="stylesheet" href="/${twName}">`
 		: "";
-	indexHtml = indexHtml.replace(
-		"</head>",
-		`  <link rel="stylesheet" href="/${cssName}">${twLink}\n</head>`,
-	);
+	// Inject before the LAST head close: the first "</head>" in the source can
+	// legitimately appear inside inline-script comment text (2026-08-05: a
+	// comment literal ate the stylesheet links and broke the boot script).
+	const headClose = indexHtml.lastIndexOf("</head>");
+	indexHtml =
+		indexHtml.slice(0, headClose) +
+		`  <link rel="stylesheet" href="/${cssName}">${twLink}\n` +
+		indexHtml.slice(headClose);
 	const version = `${entryName}|${cssName}|${twName ?? "no-tw"}`;
 
 	const store: FrontendBundle = (g.__opensessionFrontend ??= {
@@ -396,7 +431,13 @@ async function autoInstallAndRetry(): Promise<void> {
 }
 
 export function scheduleFrontendRebuild(reason: string, debounceMs = 300): void {
-	if (IS_DEV || !frontend) return;
+	if (IS_DEV) {
+		// Dev serves JS/CSS through Bun's HMR server; only the Tailwind sheet is
+		// ours to keep fresh, so drop it and let the next request recompile.
+		devTailwind = null;
+		return;
+	}
+	if (!frontend) return;
 	if (rebuildTimer) clearTimeout(rebuildTimer);
 	rebuildTimer = setTimeout(async () => {
 		rebuildTimer = null;
