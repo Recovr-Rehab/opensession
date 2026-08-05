@@ -1647,11 +1647,13 @@ private struct SessionInputBar: View {
                 // to begin with, and the dimming SwiftUI applies to a disabled
                 // button on top of that left the disc invisible against the
                 // near-white composer (measured: 242 vs a 252 background).
-                .foregroundStyle(viewModel.canSend ? Color.white : OS1VisualStyle.textDim)
+                .foregroundStyle(
+                    viewModel.canSend ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
+                )
                 .frame(width: 32, height: 32)
                 .background(
                     viewModel.canSend
-                        ? AnyShapeStyle(.tint)
+                        ? AnyShapeStyle(OS1VisualStyle.accent)
                         : AnyShapeStyle(OS1VisualStyle.hover),
                     in: Circle()
                 )

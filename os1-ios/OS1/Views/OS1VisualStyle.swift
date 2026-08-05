@@ -40,7 +40,31 @@ enum OS1VisualStyle {
             : NSColor(white: 0.949, alpha: 1)
     })
     #endif
-    static let accent = Color(red: 1.0, green: 0.231, blue: 0.231)
+    /// The brand mark: black on light, white on dark. It is a FILL colour —
+    /// the send disc, the app tint, an active icon — and deliberately not a
+    /// text colour: at label contrast, words wearing it are indistinguishable
+    /// from body copy, so inline affordances (links, fold toggles) take
+    /// `link` instead.
+    #if os(iOS)
+    static let accent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .white : .black
+    })
+    /// What sits on top of an `accent` fill — its inverse, so the glyph in the
+    /// send disc stays legible in either appearance.
+    static let onAccent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .black : .white
+    })
+    /// Links and other tappable words in running text.
+    static let link = Color(uiColor: .link)
+    #else
+    static let accent = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .white : .black
+    })
+    static let onAccent = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .black : .white
+    })
+    static let link = Color(nsColor: .linkColor)
+    #endif
     // One status palette on both platforms — the Mac previously used stock
     // Color.green/.yellow/… which rendered different hues than iOS.
     static let green = Color(red: 0.247, green: 0.725, blue: 0.314)

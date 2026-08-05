@@ -203,7 +203,7 @@ private extension MarkdownRenderConfig {
             inlineStyle: .init(
                 boldTextColor: OS1VisualStyle.text,
                 linkTextFont: base.inlineStyle.linkTextFont,
-                linkTextColor: OS1VisualStyle.accent,
+                linkTextColor: OS1VisualStyle.link,
                 codeTextFont: base.inlineStyle.codeTextFont,
                 codeTextColor: OS1VisualStyle.text,
                 codeBackgroundColor: OS1VisualStyle.panel,
@@ -241,7 +241,7 @@ private extension MarkdownRenderConfig {
             inlineStyle: .init(
                 boldTextColor: OS1VisualStyle.text,
                 linkTextFont: .systemFont(ofSize: 13),
-                linkTextColor: OS1VisualStyle.accent,
+                linkTextColor: OS1VisualStyle.link,
                 codeTextFont: .monospacedSystemFont(ofSize: 12, weight: .regular),
                 codeTextColor: OS1VisualStyle.text,
                 codeBackgroundColor: OS1VisualStyle.panel,

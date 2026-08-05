@@ -92,7 +92,7 @@ private struct NoteText: View {
                 result[attributedRange].font = .callout.weight(.semibold)
             } else if let url = URL(string: token) {
                 result[attributedRange].link = url
-                result[attributedRange].foregroundColor = OS1VisualStyle.accent
+                result[attributedRange].foregroundColor = OS1VisualStyle.link
                 result[attributedRange].underlineStyle = .single
             }
         }

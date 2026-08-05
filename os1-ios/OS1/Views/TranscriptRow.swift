@@ -141,7 +141,7 @@ struct AssistantMessage: View {
                     .font(.footnote.weight(.medium))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(OS1VisualStyle.accent)
+                .foregroundStyle(OS1VisualStyle.link)
                 .padding(.top, 2)
             }
         }
@@ -288,7 +288,7 @@ struct SystemNoticeRow: View {
                     .lineLimit(isFoldable && !state.expanded ? 2 : nil)
                 if isFoldable {
                     Text(state.expanded ? "hide" : "show")
-                        .foregroundStyle(OS1VisualStyle.accent)
+                        .foregroundStyle(OS1VisualStyle.link)
                 }
             }
             .font(.footnote)

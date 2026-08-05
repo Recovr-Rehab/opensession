@@ -59,23 +59,66 @@ struct NewSessionView: View {
             .frame(minWidth: 560, minHeight: 440)
             #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Start") { create() }
-                        .keyboardShortcut(.return, modifiers: .command)
-                        .disabled(
-                            prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                && images.isEmpty
-                        )
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+                ToolbarItem(placement: .confirmationAction) { startButton }
+                ToolbarItem(placement: .cancellationAction) { cancelButton }
             }
             .task { await load() }
         }
     }
 
     // ── Prompt editor ─────────────────────────────────────────────────────
+
+    private var startDisabled: Bool {
+        prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty
+    }
+
+    /// Starting a session is the same gesture as sending a message, so on iOS
+    /// it wears the composer's send disc rather than the word "Start", with the
+    /// ✕ that dismisses the sheet as its pair. The Mac keeps text buttons — a
+    /// bare glyph in a sheet toolbar reads as unfinished there.
+    @ViewBuilder
+    private var startButton: some View {
+        #if os(iOS)
+        Button { create() } label: {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(
+                    startDisabled ? OS1VisualStyle.textDim : OS1VisualStyle.onAccent
+                )
+                .frame(width: 32, height: 32)
+                .background(
+                    startDisabled
+                        ? AnyShapeStyle(OS1VisualStyle.hover)
+                        : AnyShapeStyle(OS1VisualStyle.accent),
+                    in: Circle()
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(startDisabled)
+        .keyboardShortcut(.return, modifiers: .command)
+        .accessibilityLabel("Start session")
+        #else
+        Button("Start") { create() }
+            .keyboardShortcut(.return, modifiers: .command)
+            .disabled(startDisabled)
+        #endif
+    }
+
+    @ViewBuilder
+    private var cancelButton: some View {
+        #if os(iOS)
+        // Bare glyph, like the sessions list's "+": the toolbar supplies its
+        // own glass background, and a second fill inside it reads as a chip.
+        Button { dismiss() } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(OS1VisualStyle.text)
+        }
+        .accessibilityLabel("Cancel")
+        #else
+        Button("Cancel") { dismiss() }
+        #endif
+    }
 
     private var editor: some View {
         ZStack(alignment: .topLeading) {
