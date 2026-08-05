@@ -176,7 +176,7 @@ private extension MarkdownRenderConfig {
             // Agent answers lean on h2/h3, so those levels stay close to body
             // size — the emphasis carries the structure, not the scale.
             headingStyle: .init(
-                h1Font: .ios(size: 22, weight: .bold, lineHeight: 28, letterSpacing: -0.35),
+                h1Font: .ios(size: 22, lineHeight: 28, letterSpacing: -0.35),
                 h2Font: .ios(size: 20, lineHeight: 26, letterSpacing: -0.3),
                 h3Font: .ios(size: 18, lineHeight: 24, letterSpacing: -0.25),
                 h4Font: .ios(size: 17, lineHeight: 23, letterSpacing: -0.2),
