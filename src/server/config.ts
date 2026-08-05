@@ -518,7 +518,9 @@ export function configuredPaths(): ResolvedPaths {
     worktreesDir:
       process.env.OPENSESSION_WORKTREES_DIR ||
       p.worktreesDir ||
-      (isLocalProfile() ? `${localRoot}/worktrees` : `${HOME}/.opensession/worktrees`),
+      // statePath, so a dev/demo instance's worktrees land in its own state
+      // root instead of the operator's home. Unset ⇒ $HOME (unchanged).
+      (isLocalProfile() ? `${localRoot}/worktrees` : statePath(".opensession/worktrees")),
     mcpConfig:
       process.env.OPENSESSION_MCP_CONFIG ||
       p.mcpConfig ||

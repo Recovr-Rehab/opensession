@@ -15,17 +15,20 @@
  * standalone CLI must not drag in modules with tickers or socket binds.
  */
 
-import { mkdirSync, existsSync, writeFileSync } from "fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { OPENSESSION_CHATS_DIR } from "../paths";
 import { stateDir, statePath } from "../paths";
 import { OPENCODE_TRANSCRIPTS_DIR, getOpencodeTranscriptPath } from "../opencode-transcript";
-import { defaultRepo } from "../config";
+import { configPath } from "../config";
 import {
   DEMO_BRANCH,
   DEMO_COMMITTED_CHANGE,
+  DEMO_GH_REPO,
   DEMO_MARKER_FILE,
   DEMO_REPO_FILES,
+  DEMO_REPO_ID,
+  DEMO_REPO_WT_PREFIX,
   DEMO_UNCOMMITTED_CHANGE,
   DEMO_UNTRACKED_FILE,
   demoAuditLines,
@@ -105,6 +108,7 @@ function git(cwd: string, ...args: string[]): void {
  *  dirty edit and an untracked file — what the Diff panel needs to render. */
 function buildDemoRepo(repoDir: string, worktreeDir: string): void {
   mkdirSync(repoDir, { recursive: true });
+  mkdirSync(dirname(worktreeDir), { recursive: true });
   git(repoDir, "init", "-b", "main");
   for (const [rel, content] of Object.entries(DEMO_REPO_FILES)) {
     writeText(join(repoDir, rel), content);
@@ -134,6 +138,47 @@ export function demoMarkerPath(): string {
   return join(OPENSESSION_CHATS_DIR, DEMO_MARKER_FILE);
 }
 
+/**
+ * Register the demo repo in the instance config so the repo registry actually
+ * owns the generated checkout: `repoForPath()` resolves a path either by
+ * equality with `repo.repo` or by the `<worktreesDir>/<wtPrefix>-` prefix, so
+ * BOTH have to point into the demo dataset. Without this the seeded PR cache
+ * was unreachable, the Changes tab 500'd ("No registered repo owns path …")
+ * and Home's PR-worktree list stayed empty.
+ *
+ * Merges into an existing config rather than replacing it, and is only called
+ * for demo instances that own their state root (never the standalone CLI with
+ * `homeStores: false`, which would write the invoking user's real config).
+ */
+function registerDemoRepo(repoDir: string, worktreesDir: string): void {
+  const path = configPath();
+  let config: Record<string, unknown> = {};
+  try {
+    config = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+  } catch {}
+  const repos = (config.repos as Record<string, unknown>) || {};
+  const paths = (config.paths as Record<string, unknown>) || {};
+  writeJson(path, {
+    ...config,
+    repos: {
+      ...repos,
+      [DEMO_REPO_ID]: {
+        label: DEMO_REPO_ID,
+        description: "Synthetic demo repo — nothing here is real.",
+        repo: repoDir,
+        wtPrefix: DEMO_REPO_WT_PREFIX,
+        defaultBranch: "main",
+        ghRepo: DEMO_GH_REPO,
+        default: true,
+        // Never let a demo instance try to refresh PRs against a repo that
+        // does not exist on GitHub.
+        prCache: false,
+      },
+    },
+    paths: { ...paths, worktreesDir },
+  });
+}
+
 export function generateDemoData(
   opts: DemoGenerateOpts = {},
 ): DemoGenerateResult {
@@ -143,7 +188,11 @@ export function generateDemoData(
   const markerPath = demoMarkerPath();
   const demoRoot = join(chatsDir, "demo");
   const repoDir = join(demoRoot, "repo");
-  const worktreeDir = join(demoRoot, "worktree");
+  // Worktrees live under a demo-owned worktrees dir named the way the registry
+  // expects (`<worktreesDir>/<wtPrefix>-<branch>`), which is what lets
+  // repoForPath() attribute this checkout to the demo repo.
+  const worktreesDir = join(demoRoot, "worktrees");
+  const worktreeDir = join(worktreesDir, `${DEMO_REPO_WT_PREFIX}-${DEMO_BRANCH}`);
   const now = Date.now();
 
   if (existsSync(markerPath)) {
@@ -176,27 +225,26 @@ export function generateDemoData(
   }
 
   if (homeStores) {
+    // Repo registry first: everything below (and every repo-derived UI
+    // surface) keys off the demo repo being a real registered repo.
+    registerDemoRepo(repoDir, worktreesDir);
+
     // PR snapshot caches (v4 bulk + detail; both boot-seeded, served stale —
-    // sessions.ts / pr-info.ts). Keyed under the instance's default repo so
-    // the hero session's branch matches at read time; the built-in registry
-    // always has a default, but a demo instance must survive an empty one.
-    let repoId = "opensession";
-    let ghRepo = "";
-    try {
-      const repo = defaultRepo();
-      repoId = repo.id;
-      ghRepo = repo.ghRepo || "";
-    } catch {}
+    // sessions.ts / pr-info.ts), keyed under the demo repo just registered.
     writeJson(statePath(".opensession-pr-cache.json"), {
       version: 4,
-      repos: { [repoId]: { [DEMO_BRANCH]: demoPrInfo(now, ghRepo, "bks-demo-pr") } },
-      recentLimits: { [repoId]: 500 },
+      repos: {
+        [DEMO_REPO_ID]: {
+          [DEMO_BRANCH]: demoPrInfo(now, DEMO_GH_REPO, "bks-demo-pr"),
+        },
+      },
+      recentLimits: { [DEMO_REPO_ID]: 500 },
       probeEtags: {},
       lastFullRefresh: {},
     });
     writeJson(statePath(".opensession-pr-details-cache.json"), {
-      [`${ghRepo}\u0000${DEMO_BRANCH}`]: {
-        data: demoPrDetails(now, ghRepo),
+      [`${DEMO_GH_REPO}\u0000${DEMO_BRANCH}`]: {
+        data: demoPrDetails(now, DEMO_GH_REPO),
         ts: now,
       },
     });

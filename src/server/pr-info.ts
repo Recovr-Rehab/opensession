@@ -309,12 +309,17 @@ const TTL = 5 * 60_000;
 // immediately while a background refresh runs. The diff cache is NOT
 // persisted — patches are big and cheap to refetch.
 const DETAILS_CACHE_FILE = statePath(".opensession-pr-details-cache.json");
-try {
-  const raw: Record<string, { data: PrDetails | null; ts: number }> = JSON.parse(
-    readFileSync(DETAILS_CACHE_FILE, "utf8"),
-  );
-  for (const [k, v] of Object.entries(raw)) cache.set(k, v);
-} catch {}
+/** Seed the details cache from disk. Also exported for demo instances, whose
+ *  snapshot is written at the end of boot — see loadPrCacheSnapshot(). */
+export function loadPrDetailsSnapshot(): void {
+  try {
+    const raw: Record<string, { data: PrDetails | null; ts: number }> = JSON.parse(
+      readFileSync(DETAILS_CACHE_FILE, "utf8"),
+    );
+    for (const [k, v] of Object.entries(raw)) cache.set(k, v);
+  } catch {}
+}
+loadPrDetailsSnapshot();
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePersist() {

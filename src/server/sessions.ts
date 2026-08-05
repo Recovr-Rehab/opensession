@@ -1,5 +1,5 @@
 import { chmodSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR } from "./paths";
 import { statePath } from "./paths";
 import { existsSync } from "fs";
 import {
@@ -47,12 +47,17 @@ import type {
   OsReviewSummary,
 } from "./types";
 
-const HOME = homeDir();
-const SLACK_SESSIONS_DIR = `${HOME}/.slack-sessions`;
-const LINEAR_SESSIONS_DIR = `${HOME}/.linear-sessions`;
-const CLI_SESSIONS_DIR = `${HOME}/.claude/sessions`;
+// Agent-owned session stores. Resolved through statePath so they follow the
+// SAME isolation knob as every other store: unset OPENSESSION_STATE_DIR ⇒
+// $HOME (production, unchanged), set ⇒ under that root. Without this a
+// dev/demo instance listed the operator's real Slack/Linear history next to
+// its own — 159 live threads showed up in a demo instance meant to hold 9
+// synthetic sessions (2026-08-05).
+const SLACK_SESSIONS_DIR = statePath(".slack-sessions");
+const LINEAR_SESSIONS_DIR = statePath(".linear-sessions");
+const CLI_SESSIONS_DIR = statePath(".claude/sessions");
 const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
-const CLAUDE_PROJECTS_DIR = `${HOME}/.claude/projects`;
+const CLAUDE_PROJECTS_DIR = statePath(".claude/projects");
 
 const SKIP_FILES = new Set([
   "worktree-channels.json",
@@ -985,6 +990,14 @@ const PR_CACHE_FILE = statePath(".opensession-pr-cache.json");
 const PR_CACHE_VERSION = 4;
 const probeEtags = new Map<string, string>(); // ghRepo → last seen ETag
 const lastFullRefresh = new Map<string, number>(); // repo id → epoch ms
+/**
+ * Seed the bulk cache from its on-disk snapshot. Runs once at module load;
+ * also exported because a demo instance writes its snapshot at the END of
+ * boot (startDemo), long after this module was evaluated — without a reseed
+ * the demo PR exists on disk but never in memory, so the PR panel and Home's
+ * PR rows stay empty (2026-08-05).
+ */
+export function loadPrCacheSnapshot(): void {
 try {
   const parsed = JSON.parse(readFileSync(PR_CACHE_FILE, "utf8"));
   const raw: Record<string, Record<string, PrInfo>> =
@@ -1019,6 +1032,8 @@ try {
     }
   }
 } catch {}
+}
+loadPrCacheSnapshot();
 
 function persistPrCache(data: Map<string, Map<string, PrInfo>>) {
   try {
@@ -1520,6 +1535,14 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
     //   - `--state all` window → recently merged/closed (Reviews "merged" view +
     //     sessions whose PR just landed)
     const next = new Map<string, Map<string, PrInfo>>();
+    // The sweep only owns the repos it polls (prRepos: a ghRepo, prCache not
+    // disabled). Rows for any OTHER repo — a repo opted out of the bulk cache,
+    // or a demo instance's synthetic repo whose PR snapshot was seeded from
+    // disk — are carried forward untouched; rebuilding from the polled repos
+    // alone silently dropped them on the first refresh after boot.
+    const polled = new Set(prRepos().map((repo) => repo.id));
+    for (const [repoId, byBranch] of prCache.data)
+      if (!polled.has(repoId)) next.set(repoId, byBranch);
     // Keep repos and their two queries sequential. Besides lowering burst cost,
     // this lets a rate-limit response stop the remaining sweep immediately.
     for (const repo of prRepos()) {

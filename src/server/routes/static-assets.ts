@@ -9,7 +9,7 @@
 import { existsSync } from "fs";
 import type { RouteContext } from "./context";
 import { configuredIntegration, configuredRepos, productName } from "../config";
-import { FRONTEND_DIST, FRONTEND_SRC, frontend } from "../frontend-build";
+import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend } from "../frontend-build";
 import { isLocalProfile } from "../profile";
 
 // GitHub owner avatars for the repo-icon route, fetched once and kept warm for
@@ -53,6 +53,24 @@ export async function handleStaticAssetsRoutes(
 	if (isLocalProfile()) return undefined;
 
 	const { req, url, path, publicPrefix } = ctx;
+
+	// Dev-mode Tailwind sheet. In prod the utilities ride in the built bundle
+	// as a hashed asset and index.html links it directly; under
+	// OPENSESSION_DEV=1 the UI comes from Bun's HMR server, which can't compile
+	// Tailwind — index.html's bootstrap script requests this instead when it
+	// finds no hashed sheet. 404 in prod, so the request never happens twice.
+	if (path === "/tailwind.css" && req.method === "GET") {
+		const css = await devTailwindCss();
+		if (!css) return new Response("Not found", { status: 404 });
+		return new Response(css, {
+			headers: {
+				"Content-Type": "text/css; charset=utf-8",
+				// Recompiled on every frontend edit — never let a reload keep an
+				// old sheet.
+				"Cache-Control": "no-store",
+			},
+		});
+	}
 
 	// App icons (red yin-yang, gen by scripts/gen-icons.py) — real PNGs so iOS home-screen and PWA installs
 	// pick them up; data-URI apple-touch-icons don't work on iOS. Short cache

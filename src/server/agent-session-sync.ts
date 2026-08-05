@@ -23,6 +23,7 @@
 
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
+import { statePath } from "./paths";
 import {
 	activeSessions as slackActiveSessions,
 	getSessionKey as slackSessionKey,
@@ -30,7 +31,9 @@ import {
 } from "../agents/slack/state";
 import type { UnifiedSession } from "./types";
 
-const LINEAR_SESSION_DIR = `${process.env.HOME}/.linear-sessions`;
+// statePath: isolated under OPENSESSION_STATE_DIR for dev/demo instances,
+// $HOME when unset (production, unchanged) — see sessions.ts's store block.
+const LINEAR_SESSION_DIR = statePath(".linear-sessions");
 
 export interface EngineSessionPatch {
 	engineSessionId?: string;

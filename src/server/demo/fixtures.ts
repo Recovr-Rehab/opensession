@@ -28,6 +28,14 @@ type JsonlLine = Record<string, unknown>;
 
 export const DEMO_MARKER_FILE = ".demo-marker.json";
 export const DEMO_BRANCH = "demo/fix-flaky-upload";
+/** The repo the demo dataset pretends to work in. The generator registers it
+ *  in the instance config (repo path + worktrees dir both inside the demo
+ *  state), which is what makes the PR panel, the Home PR list and the Changes
+ *  diff resolve — before that, repoForPath() threw on the demo worktree and
+ *  every repo-derived surface came up empty (2026-08-05). */
+export const DEMO_REPO_ID = "acme-todo";
+export const DEMO_REPO_WT_PREFIX = "acme";
+export const DEMO_GH_REPO = "acme/acme-todo";
 export const DEMO_LIVE_SESSION_ID = "bks-demo-live";
 export const DEMO_LIVE_OC_SESSION_ID = "ses_demolive";
 export const DEMO_ASK_SESSION_ID = "bks-demo-ask";
@@ -203,6 +211,10 @@ export function demoSessions(opts: {
       lastActivity: iso(now - lastAgoMin * min),
       mode: "code",
       model: MODEL_FABLE,
+      // Every demo session works in the registered demo repo; without this the
+      // UI has to infer the repo from worktreeDir and everything repo-derived
+      // (PR panel, diff, Home's PR rows) falls back to empty.
+      repo: DEMO_REPO_ID,
       ...file,
     }) as NativeSessionFile;
 

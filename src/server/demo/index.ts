@@ -125,6 +125,22 @@ export async function startDemo(): Promise<void> {
     console.error("[demo] dataset generation failed:", e);
   }
 
+  // The PR snapshot caches are seeded on disk by the generator, but both
+  // modules read their snapshot at module load — i.e. before this runs. Reseed
+  // so the demo PR is actually in memory: without it the dataset's PR exists
+  // on disk and nowhere else, and every PR surface (session PR panel, Home's
+  // PR-worktree list) renders empty.
+  try {
+    const [{ loadPrCacheSnapshot }, { loadPrDetailsSnapshot }] = await Promise.all([
+      import("../sessions"),
+      import("../pr-info"),
+    ]);
+    loadPrCacheSnapshot();
+    loadPrDetailsSnapshot();
+  } catch (e) {
+    console.error("[demo] PR cache reseed failed:", e);
+  }
+
   try {
     offerDemoAsk(state);
   } catch (e) {

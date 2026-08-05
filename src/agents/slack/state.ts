@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { configuredPaths, defaultRepo } from "../../server/config";
 import { isLocalProfile } from "../../server/profile";
+import { statePath } from "../../server/paths";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,7 +52,10 @@ export const CANCELLED_ANSWER = "__CANCELLED__";
 // Constants
 // ---------------------------------------------------------------------------
 
-export const SESSION_DIR = `${process.env.HOME}/.slack-sessions`;
+// statePath, not $HOME directly: with OPENSESSION_STATE_DIR set (dev/demo
+// instances) this store isolates like every other one, so a second instance
+// can neither read nor patch the live loop's session files. Unset ⇒ $HOME.
+export const SESSION_DIR = statePath(".slack-sessions");
 // Config-driven (repos registry / paths in ~/.backstage/config.json); the
 // zero-config values are the historical tella-fusion literals.
 export const DEFAULT_CWD = isLocalProfile() ? "" : defaultRepo().repo;
