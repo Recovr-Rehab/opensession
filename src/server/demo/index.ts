@@ -131,12 +131,14 @@ export async function startDemo(): Promise<void> {
   // on disk and nowhere else, and every PR surface (session PR panel, Home's
   // PR-worktree list) renders empty.
   try {
-    const [{ loadPrCacheSnapshot }, { loadPrDetailsSnapshot }] = await Promise.all([
-      import("../sessions"),
-      import("../pr-info"),
-    ]);
+    const [{ loadPrCacheSnapshot }, { loadPrDetailsSnapshot, seedPrDiff }] =
+      await Promise.all([import("../sessions"), import("../pr-info")]);
     loadPrCacheSnapshot();
     loadPrDetailsSnapshot();
+    // The Review page's Files-changed tab renders GitHub's patch, which no
+    // amount of local git can stand in for — pin the synthetic one.
+    const { demoPrDiff, DEMO_BRANCH, DEMO_GH_REPO } = await import("./fixtures");
+    seedPrDiff(DEMO_GH_REPO, DEMO_BRANCH, demoPrDiff(Date.now(), DEMO_GH_REPO));
   } catch (e) {
     console.error("[demo] PR cache reseed failed:", e);
   }

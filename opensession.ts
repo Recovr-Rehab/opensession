@@ -189,6 +189,12 @@ const server: import("bun").Server<WSClientData> = hotServe({
 		// The SPA shell is served at the bare domain root only (os.tella.dev,
 		// 2026-07-10) — no path prefix. Old /opensession + /backstage page URLs
 		// 301 onto the root form in the fetch preamble below.
+		//
+		// Keep this list complete for every client-side route: the SPA fallback
+		// further down is gated on the PROD bundle (`frontend` is null under
+		// OPENSESSION_DEV=1), so on a dev/demo instance anything missing here
+		// 404s instead of deep-linking — /workspace/<id>/review did exactly
+		// that (2026-08-05).
 		routes: isLocalProfile() ? {} : Object.fromEntries(
 			[
 				"/",
@@ -196,9 +202,19 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				// Client-side routes must serve the SPA shell, not the raw file
 				"/new",
 				"/session/*",
+				"/workspace/*",
+				"/pr/*",
 				"/automations",
+				"/automations/*",
 				"/security",
 				"/goals",
+				"/goals/*",
+				"/tasks",
+				"/analytics",
+				"/reports",
+				"/reports/*",
+				"/pr-tinder",
+				"/support-tinder",
 				"/wiki",
 				"/wiki/*",
 				"/notes",
@@ -207,7 +223,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				"/docs/*",
 				"/connections",
 				"/settings",
+				"/settings/*",
 				"/actions",
+				"/actions/*",
 				"/archived",
 				"/catchup",
 				"/reviews",

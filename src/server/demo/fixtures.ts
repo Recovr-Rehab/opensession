@@ -1083,3 +1083,56 @@ export function demoPrDetails(now: number, ghRepo: string) {
     staging: null,
   };
 }
+
+/**
+ * The PR's unified patch, exactly as `gh pr diff` would return it — the Review
+ * page's "Files changed" tab renders GitHub's patch, not the local worktree
+ * diff, so without this the demo review page shows "GitHub's pull request API
+ * is unavailable right now". Line numbers match DEMO_REPO_FILES, and the
+ * +9/-3 across two files matches demoPrInfo's counts.
+ */
+export function demoPrPatch(): string {
+  return [
+    "diff --git a/src/upload.ts b/src/upload.ts",
+    "index 7c0f1a2..9b3d4e5 100644",
+    "--- a/src/upload.ts",
+    "+++ b/src/upload.ts",
+    "@@ -7,8 +7,7 @@ export async function uploadChunk(",
+    "   opts: UploadOpts = {},",
+    " ): Promise<void> {",
+    "   const max = opts.retries ?? 3;",
+    "-  // BUG: `<` skips the final attempt — flaky under packet loss.",
+    "-  for (let attempt = 0; attempt < max - 1; attempt++) {",
+    "+  for (let attempt = 0; attempt < max; attempt++) {",
+    "     if (await tryPut(chunk)) return;",
+    "   }",
+    "   throw new Error(`upload failed after ${max} attempts`);",
+    "diff --git a/src/upload.test.ts b/src/upload.test.ts",
+    "index 2a1b3c4..5d6e7f8 100644",
+    "--- a/src/upload.test.ts",
+    "+++ b/src/upload.test.ts",
+    "@@ -3,4 +3,11 @@ import { uploadChunk } from \"./upload\";",
+    " ",
+    ' it("retries up to the configured limit", async () => {',
+    "   await uploadChunk(new Uint8Array(8), { retries: 3 });",
+    "-});",
+    "+});",
+    "+",
+    '+it("uses the full retry budget (regression: off-by-one)", async () => {',
+    "+  let calls = 0;",
+    "+  fakePut(() => ++calls === 3);",
+    "+  await uploadChunk(new Uint8Array(8), { retries: 3 });",
+    "+  expect(calls).toBe(3);",
+    "+});",
+    "",
+  ].join("\n");
+}
+
+/** Shape of pr-info's diff cache entry for the demo PR. */
+export function demoPrDiff(now: number, ghRepo: string) {
+  return {
+    number: DEMO_PR_NUMBER,
+    headRefOid: demoPrInfo(now, ghRepo, "bks-demo-pr").headRefOid,
+    patch: demoPrPatch(),
+  };
+}

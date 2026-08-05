@@ -346,6 +346,20 @@ export interface PrDiffData {
 }
 
 const diffCache = new Map<string, { data: PrDiffData | null; ts: number }>();
+
+/**
+ * Pin a PR patch into the diff cache. For the demo dataset only: its PR does
+ * not exist on GitHub, and unlike the details cache the diff cache is never
+ * snapshotted to disk, so the Review page's "Files changed" tab would always
+ * fail its live fetch. The entry is stamped far in the future so the TTL never
+ * expires it into a doomed `gh` call.
+ */
+export function seedPrDiff(repo: string, branch: string, data: PrDiffData): void {
+  diffCache.set(cacheKey(repo, branch), {
+    data,
+    ts: Number.MAX_SAFE_INTEGER,
+  });
+}
 const diffInflight: Map<string, Promise<PrDiffData | null>> =
   ((globalThis as any).__prDiffInflight ??= new Map());
 
