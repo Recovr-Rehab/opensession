@@ -1271,16 +1271,6 @@ private struct SessionInputBar: View {
     /// In-flight promote — the row says so rather than looking inert, since
     /// cutting a worktree isn't always instant.
     @State private var promoting = false
-    /// Latched once the draft has wrapped past one line, cleared when the
-    /// draft empties. It has to latch: expanding hands the field the whole
-    /// row (the round buttons move to their own line), so text that just
-    /// wrapped in the pill often fits on one line again once expanded — a
-    /// direct height test would oscillate between the two layouts.
-    @State private var draftWrapped = false
-    /// Roughly the height of a one-line `.body` field, scaled with Dynamic
-    /// Type. The wrap test compares against 1.6× this, comfortably between
-    /// one line and two whatever internal padding the field carries.
-    @ScaledMetric(relativeTo: .body) private var oneLineFieldHeight: CGFloat = 22
 
     /// Air above the topmost element in the bar — and where the composer
     /// scrim's dissolve has to finish, so it ends level with that element.
@@ -1487,18 +1477,15 @@ private struct SessionInputBar: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The message composer mirrors the web input: draft above, controls on a
-    /// bottom row, including stop while a turn is active.
-    /// Phone resting state: the web's minimized pill — one capsule row of
-    /// [+] [field] [send]. Focus alone does NOT open it, and neither does
-    /// typing: a one-line draft stays in the pill, which is the whole point of
-    /// a single-row input. It opens into the full two-row layout only once the
-    /// draft has more than one line, or an image is staged. The field itself
-    /// keeps its place in the row across both states, so focus and the
-    /// keyboard survive the morph.
-    private var isCollapsed: Bool {
+    /// Phone layout: ONE row, always — [+] [field] [send], the way Slack and
+    /// Messages do it. A long draft grows the field taller and the row's
+    /// controls stay pinned to its bottom edge; nothing ever reflows onto a
+    /// second row, which is what made the old wrap-triggered morph feel like
+    /// the composer was changing shape under your hands mid-sentence.
+    /// Mac keeps the wider two-row form: draft above, controls beneath.
+    private var isSingleRow: Bool {
         #if os(iOS)
-        !draftWrapped && viewModel.attachedImages.isEmpty
+        true
         #else
         false
         #endif
@@ -1506,8 +1493,20 @@ private struct SessionInputBar: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                if isCollapsed {
+            // Note mode tints nothing on its own, so it names itself — and the
+            // marker is the way back out of it. With no toolbar row to carry
+            // it, the single-row layout floats it above the field.
+            if isSingleRow, viewModel.noteMode {
+                noteModeChip
+                    .padding(.leading, 10)
+                    .padding(.top, 8)
+            }
+
+            // Bottom-aligned: as the draft grows the field rises and the round
+            // buttons stay seated on the pill's bottom edge, rather than
+            // drifting to the middle of a tall row.
+            HStack(alignment: .bottom, spacing: 4) {
+                if isSingleRow {
                     addMenu
                 }
 
@@ -1518,25 +1517,18 @@ private struct SessionInputBar: View {
                 )
                 .textFieldStyle(.plain)
                 .lineLimit(1...10)
-                // Measured on the field itself, BEFORE the composer's own
-                // padding below — so the reading is the text's height and
-                // doesn't move when the surrounding layout does.
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                    if height > oneLineFieldHeight * 1.6 { draftWrapped = true }
-                }
-                .onChange(of: viewModel.draft) { _, draft in
-                    if draft.isEmpty { draftWrapped = false }
-                }
                 // A vertical-axis TextField is greedy: without an explicit
-                // fill it claims the row's whole width in the collapsed pill
-                // and pushes the send button off the right edge.
-                .frame(maxWidth: .infinity)
-                // Collapsed, the round buttons set the pill's height and the
-                // field just sits between them; expanded, it carries its own
-                // air above the toolbar row.
-                .padding(.horizontal, isCollapsed ? 4 : 10)
-                .padding(.top, isCollapsed ? 0 : 9)
-                .padding(.bottom, isCollapsed ? 0 : 5)
+                // fill it claims the row's whole width in the pill and pushes
+                // the send button off the right edge. The minimum height is
+                // the round buttons' own, so a one-line draft sits centred
+                // between them instead of hugging the bottom alignment.
+                .frame(maxWidth: .infinity, minHeight: isSingleRow ? 44 : nil)
+                // In the single row the buttons set the pill's height and the
+                // field just sits between them; on Mac it carries its own air
+                // above the toolbar row.
+                .padding(.horizontal, isSingleRow ? 4 : 10)
+                .padding(.top, isSingleRow ? 0 : 9)
+                .padding(.bottom, isSingleRow ? 0 : 5)
                 .focused($inputFocused)
                 // Mac: Return sends; Shift/Option-Return insert a newline. On
                 // iOS the software keyboard's return key just wraps, as before.
@@ -1552,39 +1544,27 @@ private struct SessionInputBar: View {
                 // through to the field untouched.
                 .pastesImages(into: $viewModel.attachedImages)
 
-                if isCollapsed {
+                if isSingleRow {
+                    // Stop is the only meaningful action while a turn runs
+                    // with nothing typed; once there IS a draft, send joins
+                    // it rather than replacing it — queueing the next message
+                    // mid-run is the common case, and the two-row layout has
+                    // always shown both.
                     if viewModel.isRunning {
                         stopButton
-                    } else {
+                    }
+                    if !viewModel.isRunning || viewModel.canSend {
                         sendButton
                     }
                 }
             }
-            .padding(isCollapsed ? 4 : 0)
+            .padding(isSingleRow ? 4 : 0)
 
-            if !isCollapsed {
+            if !isSingleRow {
                 HStack(spacing: 6) {
                     addMenu
-                    // Note mode tints nothing on its own, so it names itself
-                    // here — and the marker is the way back out of it.
                     if viewModel.noteMode {
-                        Button {
-                            viewModel.noteMode = false
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "note.text")
-                                Text("Team note")
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 9, weight: .semibold))
-                            }
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5)
-                            .background(OS1VisualStyle.hover, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Stop writing a team note")
+                        noteModeChip
                     }
                     Spacer(minLength: 8)
 
@@ -1627,10 +1607,33 @@ private struct SessionInputBar: View {
         .simultaneousGesture(
             TapGesture().onEnded { inputFocused = true }
         )
-        // The pill/full-layout morph is the only thing that animates here —
-        // focus changes nothing visually now that the ring is gone.
-        .animation(.snappy(duration: 0.2), value: isCollapsed)
+        // The field's growth is the only shape change left, and it wants to
+        // track the text rather than ease behind it — a snappy, short spring
+        // so a fast typist never sees the pill lagging the caret.
+        .animation(.snappy(duration: 0.18), value: viewModel.draft)
         #endif
+    }
+
+    /// Marker for note mode, which tints nothing on its own — and the way back
+    /// out of it. Shared by both composer layouts.
+    private var noteModeChip: some View {
+        Button {
+            viewModel.noteMode = false
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "note.text")
+                Text("Team note")
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(OS1VisualStyle.hover, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Stop writing a team note")
     }
 
     /// The composer's "+": attachments plus the chat-level actions (mentions,
