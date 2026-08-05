@@ -986,6 +986,14 @@ struct SessionTabsView: View {
                 )
             }
         }
+        // Reading a chat clears its unread mark, and keeps clearing it while
+        // you stay in it: `activeSession` is re-read from the sessions poll,
+        // so each new `lastActivity` re-marks the open chat instead of bolding
+        // its row behind you. Same rule as the web viewer's markRead tick.
+        .onChange(of: activeSession, initial: true) { _, session in
+            ReadsStore.shared.open(session)
+        }
+        .onDisappear { ReadsStore.shared.close(activeSession.id) }
         .onChange(of: visibleTabs) { _, updatedTabs in
             guard !updatedTabs.contains(where: { $0.id == activeId }),
                   let fallback = updatedTabs.first

@@ -140,6 +140,22 @@ enum SettingsAPI {
         return response.hides ?? hides
     }
 
+    /// Per-user read marks, shared with the web sidebar (session id → the ISO
+    /// `lastActivity` it carried when last read). PUT replaces the whole map.
+    static func reads(user: String) async throws -> [String: String] {
+        struct Response: Decodable, Sendable { var reads: [String: String]? }
+        let response: Response = try await request("/api/reads", query: ["user": user])
+        return response.reads ?? [:]
+    }
+
+    @discardableResult
+    static func saveReads(user: String, reads: [String: String]) async throws -> [String: String] {
+        struct Response: Decodable, Sendable { var reads: [String: String]? }
+        let body: [String: Any] = ["user": user, "reads": reads]
+        let response: Response = try await request("/api/reads", method: "PUT", body: body)
+        return response.reads ?? reads
+    }
+
     static func personalPrompt(user: String) async throws -> String {
         struct Response: Decodable, Sendable { var prompt: String? }
         let response: Response = try await request("/api/personal-prompt", query: ["user": user])

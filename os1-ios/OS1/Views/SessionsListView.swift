@@ -229,6 +229,13 @@ struct SessionsListView: View {
                 SessionView(session: session, seed: optimisticSeeds[session.id])
                     // Fresh view (and socket) per session, not a reused one.
                     .id(selectedSessionID)
+                    // The selected chat reads as read, and keeps re-marking as
+                    // the poll hands it fresher activity — see SessionTabsView
+                    // for the same rule on the iOS stack.
+                    .onChange(of: session, initial: true) { _, open in
+                        ReadsStore.shared.open(open)
+                    }
+                    .onDisappear { ReadsStore.shared.close(session.id) }
             } else {
                 ContentUnavailableView(
                     "Select a session",
@@ -853,6 +860,7 @@ struct SessionsListView: View {
         SessionRow(
             session: workspace.statusSession,
             title: workspace.title,
+            chats: workspace.sessions,
             onArchive: canArchive ? { archive(workspace) } : nil
         )
         .tag(session.id)
@@ -862,7 +870,11 @@ struct SessionsListView: View {
         Button {
             path.append(session)
         } label: {
-            SessionRow(session: workspace.statusSession, title: workspace.title)
+            SessionRow(
+                session: workspace.statusSession,
+                title: workspace.title,
+                chats: workspace.sessions
+            )
         }
         .buttonStyle(.plain)
         .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
@@ -1072,7 +1084,9 @@ struct SessionsListView: View {
                             #endif
                             Text("Archived")
                                 #if os(iOS)
-                                .font(.body.weight(.medium))
+                                // Same type as a repo band: it's a row that
+                                // leads somewhere, not a caption.
+                                .font(.callout.weight(.medium))
                                 #else
                                 .font(.body)
                                 #endif
@@ -1153,7 +1167,10 @@ struct SessionsListView: View {
                     }
                     Text(repo.map { RepoTile.label(for: $0) } ?? title)
                         #if os(iOS)
-                        .font(.subheadline.weight(.semibold))
+                        // A repo band leads somewhere, so it's typed like the
+                        // rows under it (web phone: 16px medium), not like the
+                        // captions that only label them.
+                        .font(.callout.weight(.medium))
                         #else
                         .font(.caption.weight(.semibold))
                         #endif
@@ -1214,10 +1231,13 @@ struct SessionsListView: View {
             toggleCollapsed(group.id)
         } label: {
             HStack(spacing: 5) {
+                // Captions, a size below the rows — the web's
+                // `.sidebar-lane-group` pair at its phone step (13px semibold
+                // label, 12px count).
                 Text(group.title)
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                 Text("\(group.workspaces.count)")
-                    .font(.caption2.monospacedDigit())
+                    .font(.caption.monospacedDigit())
             }
             .foregroundStyle(OS1VisualStyle.textDim)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1333,6 +1353,10 @@ extension Session.Lane {
 struct SessionRow: View {
     let session: Session
     var title: String? = nil
+    /// Every chat the row stands for. Unread emphasis is per ROW, like the web
+    /// sidebar's `.sidebar-item-unread`: one chat with activity past your read
+    /// mark bolds the whole workspace. Empty falls back to `session` alone.
+    var chats: [Session] = []
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mac: hover-revealed archive button (nil hides it).
     var onArchive: (() -> Void)? = nil
@@ -1373,10 +1397,14 @@ struct SessionRow: View {
                 .frame(width: markSize, height: markSize)
             Text(rowTitle)
                 #if os(iOS)
-                .font(.body.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.textDim)
+                // The web sidebar's phone type, exactly: 16px titles (callout)
+                // in medium, dimmed — and, when the row has activity you
+                // haven't read, semibold at full strength. Same Slack-style
+                // pair as `.sidebar-item-title` / `.sidebar-item-unread`.
+                .font(.callout.weight(unread ? .semibold : .medium))
+                .foregroundStyle(unread ? OS1VisualStyle.text : OS1VisualStyle.textDim)
                 #else
-                .font(.body)
+                .font(.body.weight(unread ? .semibold : .regular))
                 .foregroundStyle(.primary)
                 #endif
                 .lineLimit(1)
@@ -1407,6 +1435,13 @@ struct SessionRow: View {
         #if os(macOS)
         .help(rowTitle)
         #endif
+    }
+
+    /// Read here rather than at the call site on purpose: `ReadsStore` is
+    /// `@Observable`, so a mark landing invalidates the rows that read it
+    /// instead of the whole list body.
+    private var unread: Bool {
+        ReadsStore.shared.isUnread(chats.isEmpty ? [session] : chats)
     }
 
     private var markSize: CGFloat {
@@ -1460,6 +1495,8 @@ struct SessionRow: View {
 
     private var accessibilityStatus: String {
         var parts = [session.lane.label, RepoTile.label(for: session.effectiveRepo)]
+        // The bold title is the only sighted cue for unread; say it out loud.
+        if unread { parts.insert("unread", at: 0) }
         if let prState = session.prState?.lowercased() {
             parts.append("pull request \(prState)")
         }
@@ -1483,7 +1520,8 @@ private struct WorkspaceRunElapsedLabel: View {
             }
         }
         #if os(iOS)
-        .font(.footnote.weight(.medium).monospacedDigit())
+        // 12px, like the web's `.sidebar-ws-ticker` on a phone.
+        .font(.caption.weight(.medium).monospacedDigit())
         #else
         .font(.caption.monospacedDigit())
         #endif

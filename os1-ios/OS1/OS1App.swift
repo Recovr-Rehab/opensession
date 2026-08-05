@@ -102,6 +102,7 @@ struct RootView: View {
                 while !Task.isCancelled {
                     await NativePreferences.hydrate()
                     await HideStore.shared.hydrate()
+                    await ReadsStore.shared.hydrate()
                     try? await Task.sleep(for: .seconds(30))
                 }
             }
