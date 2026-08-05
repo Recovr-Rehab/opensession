@@ -18,20 +18,9 @@ import { configuredPaths } from "./config";
  *  BACKSTAGE_CLAUDE_BIN env → config `paths.claudeBin` → this VPS's path. */
 export const CLAUDE_CODE_BIN = configuredPaths().claudeBin;
 
-/**
- * What MCP surface a run gets. There is no implicit default: `"all"` is a
- * decision a caller has to write down, exactly like an allowlist is.
- *
- * This used to be `string[] | undefined`, where omitting the field meant every
- * configured connector. That default is how the github PR flows silently
- * mounted ~430 external tool schemas on 1,410 sessions to serve the ~20 that
- * ever called one (2026-08-03) — nobody chose it, they just didn't pass the
- * argument. Spelling `"all"` out costs a caller five characters and makes the
- * wide grant reviewable in a diff.
- *
- * `[]` is a third, distinct meaning: no external servers at all.
- */
-export type McpScope = "all" | string[];
+/** Moved to the protocol package; re-exported for existing import sites. */
+export type { McpScope } from "@tellahq/opensession-protocol/runner";
+import type { McpScope } from "@tellahq/opensession-protocol/runner";
 
 /**
  * Resolve the MCP servers for a run: all configured, or just the allowlist,

@@ -9,6 +9,7 @@
     "url": "git+https://github.com/tellahq/opensession.git"
   },
   "homepage": "https://opensession.com",
+  "workspaces": ["packages/*"],
   "bin": {
     "opensession": "scripts/cli.ts"
   },
@@ -25,9 +26,11 @@
     "website:dev": "bun --hot scripts/website-dev.ts"
   },
   "dependencies": {
+    "@tellahq/opensession-protocol": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.2.104",
     "@aws-sdk/client-lambda-microvms": "3.1090.0",
     "@base-ui/react": "^1.6.0",
+    "@lezer/highlight": "^1.2.3",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.0",

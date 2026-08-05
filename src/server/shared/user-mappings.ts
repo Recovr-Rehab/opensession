@@ -8,11 +8,9 @@
  */
 import { configuredIdentity, type TeamMember } from "../config";
 
-/** A git author/committer identity. */
-export interface GitIdentity {
-  name: string;
-  email: string;
-}
+/** Moved to the protocol package; re-exported for existing import sites. */
+export type { GitIdentity } from "@tellahq/opensession-protocol/identity";
+import type { GitIdentity } from "@tellahq/opensession-protocol/identity";
 
 type TeamGitIdentityEntry = GitIdentity & {
   aliases: string[];

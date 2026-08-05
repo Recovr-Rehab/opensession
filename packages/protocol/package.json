@@ -1,0 +1,19 @@
+{
+  "name": "@tellahq/opensession-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenSession protocol — the wire and record contracts for cloud agent sessions: bring your own runner, bring your own UI",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./events": "./src/events.ts",
+    "./runner": "./src/runner.ts",
+    "./identity": "./src/identity.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tellahq/opensession.git",
+    "directory": "packages/protocol"
+  }
+}
