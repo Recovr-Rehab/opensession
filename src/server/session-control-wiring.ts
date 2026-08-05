@@ -28,7 +28,7 @@ import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
 import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
-import { type Workspace, createWorkspace, getWorkspace } from "./workspaces";
+import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
 import { ownedWorktree } from "./chat-workspace";
 import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, worktreeHeadBranch } from "./worktree";
 import { broadcastToAll, broadcastToSession } from "./ws-hub";
@@ -342,6 +342,12 @@ registerSessionControl({
 		const bksId = newSessionId();
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
 		let projectId = parentSession?.projectId || null;
+		// A workspace minted below from THIS chat's provisional first line is
+		// renamed once the generated summary lands, exactly like the web create
+		// path — the sidebar rows (web and native) are titled by the workspace,
+		// so without this a session started from the native apps wears its raw
+		// 80-character prompt for life while its own title is a short summary.
+		let autoNamedWorkspace: Workspace | null = null;
 		if (!projectId) {
 			// Adopt the workspace that already owns the (parent's or this child's)
 			// worktree before minting a duplicate one over it. Failing that, mint —
@@ -360,23 +366,38 @@ registerSessionControl({
 				// checkout, which every other chat there uses too.
 				const dir =
 					ownedWorktree(parentSession?.worktreeDir) ?? ownedWorktree(wtPath);
+				const wsName =
+					parentSession?.title || parentSession?.branch || title || "Workspace";
 				const ws = createWorkspace({
-					name:
-						parentSession?.title || parentSession?.branch || title || "Workspace",
+					name: wsName,
 					...(isScratch ? {} : { repo: parentSession?.repo || repo.id }),
 					createdBy: user || parentSession?.startedBy || "Anonymous",
 					...(branchForWs ? { branch: branchForWs } : {}),
 					...(dir ? { worktreeDir: dir } : {}),
 				});
 				projectId = ws.id;
+				// Only when the name was seeded from this chat's own first line
+				// (compared before createWorkspace trims it): a workspace named
+				// after the parent's identity belongs to the parent's work, and
+				// this child's summary must not rename it.
+				if (wsName === title) autoNamedWorkspace = ws;
 			}
 			if (projectId && parentSession?.source === "opensession")
 				touchNativeSession(parentSession.id, { projectId });
 		}
 		// Replace the raw first-line title with a short summary in the background;
-		// the next sessions poll (≤5s) picks it up.
+		// the next sessions poll (≤5s) picks it up. A workspace minted for this
+		// chat is named ONCE from that same summary and keeps the name for life —
+		// later chats never rename it.
 		void ensureGeneratedTitle(bksId, prompt, user, model).then((t) => {
-			if (t) invalidateSessionsCache();
+			if (!t) return;
+			invalidateSessionsCache();
+			if (!autoNamedWorkspace) return;
+			const cur = getWorkspace(autoNamedWorkspace.id);
+			// Only while it still wears the provisional name — a manual rename in
+			// the meantime wins.
+			if (cur && cur.name === autoNamedWorkspace.name)
+				updateWorkspace(autoNamedWorkspace.id, { name: t });
 		});
 
 		let engineSessionId = "";

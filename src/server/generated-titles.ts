@@ -157,7 +157,7 @@ const SWEEP_BATCH = 10; // one-shots serialize on a shared server; stay polite
  * Sessions still wearing a raw first-line title that we could summarize.
  *
  * Eligibility mirrors the create-path gating, erring towards skipping: only
- * interactive `bks-<uuid>` chats (so `bks-ghpr-*` review/auto-fix sessions
+ * interactive `os-`/`bks-<uuid>` chats (so `bks-ghpr-*` review/auto-fix sessions
  * keep their deliberate names), never desk/goal/automation sessions, never a
  * manual rename, and never a title carrying the " · " prefix convention that
  * marks a deliberately-composed name.
@@ -172,7 +172,10 @@ function sweepCandidates(): Array<{ id: string; title: string }> {
 		return [];
 	}
 	for (const f of files) {
-		if (!f.endsWith(".json") || !/^bks-[0-9a-f]{8}-/.test(f)) continue;
+		// Both id prefixes: `os-` is what every session minted since the rename
+		// carries, `bks-` what the older ones kept. Matching only `bks-` left the
+		// retry net dead for every new chat.
+		if (!f.endsWith(".json") || !/^(os|bks)-[0-9a-f]{8}-/.test(f)) continue;
 		const id = f.slice(0, -5);
 		if (getGeneratedTitle(id) || getTitleOverride(id)) continue;
 		let d: any;
