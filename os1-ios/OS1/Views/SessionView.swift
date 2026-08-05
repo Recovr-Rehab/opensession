@@ -976,7 +976,12 @@ struct SessionTabsView: View {
         // bounds — an opaque-looking nav bar and a dead strip above the home
         // indicator. Tab-switch slides may draw offscreen; that's invisible
         // on a full-screen push.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        // A BAR, not a plain inset — the same reason the composer is one (see
+        // SessionView.body): `safeAreaBar` is what tells the scroll view its
+        // content travels behind the strip, which is what makes the tabs float
+        // over the transcript and draws the soft scroll edge effect there. With
+        // a plain inset the transcript simply started below an opaque band.
+        .safeAreaBar(edge: .top, spacing: 0) {
             if visibleTabs.count > 1 {
                 SessionTabBar(
                     tabs: visibleTabs,
@@ -1054,9 +1059,14 @@ struct SessionTabsView: View {
     }
 }
 
-/// Compact workspace chat tabs below the navigation bar. The active tab is
-/// centered when the strip opens, while horizontal overflow remains native
-/// touch scrolling.
+/// Workspace chat tabs, as a floating glass bar under the navigation bar —
+/// the top counterpart of the composer pill, spanning the width with the same
+/// inset, radius and near-solid surface. The transcript passes BEHIND it (the
+/// strip is attached as a `safeAreaBar`) and dissolves into it through the
+/// soft scroll edge effect plus `tabStripTopWash`.
+///
+/// The active tab is centered when the strip opens, while horizontal overflow
+/// remains native touch scrolling.
 private struct SessionTabBar: View {
     let tabs: [Session]
     let activeId: String
@@ -1067,6 +1077,14 @@ private struct SessionTabBar: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Namespace private var activeTabIndicator
 
+    /// Matches the composer's iOS radius: at the strip's 52pt height the ends
+    /// read as a capsule, so the two floating bars bracket the chat.
+    private static let cornerRadius: CGFloat = 26
+
+    private var surface: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
@@ -1075,17 +1093,29 @@ private struct SessionTabBar: View {
                         tab(session)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 4)
             }
             .scrollIndicators(.hidden)
-            // Frosted over the page colour, not bare ultra-thin glass: on its
-            // own the strip took on the luminance of whatever scrolled beneath
-            // it, so a dark code block passing under dragged the whole band
-            // dark. The wash holds it at a stable brightness; the material
-            // keeps a hint of what's behind.
-            .background(OS1VisualStyle.background.opacity(0.55))
-            .background(.regularMaterial)
+            // Clipped to the surface, not just to the scroll view's rect: a
+            // pill scrolled against either end would otherwise paint into the
+            // rounded corners, outside the glass.
+            .clipShape(surface)
+            // Near-solid, exactly like the composer: the transcript passes
+            // behind the strip, and bare glass took on the luminance of
+            // whatever scrolled under it — a dark code block dragged the whole
+            // band dark. The page colour over a thick material holds it at a
+            // stable brightness; the chat still shows around it, not through
+            // it.
+            .background(OS1VisualStyle.background.opacity(0.7), in: surface)
+            .background(.thickMaterial, in: surface)
+            .glassSurface(in: surface)
+            // The composer's rail (SessionInputBar's `horizontalInset` at
+            // compact width), so the two floating bars line up edge to edge.
+            .padding(.horizontal, 12)
+            .padding(.top, 2)
+            .padding(.bottom, 4)
+            .tabStripTopWash()
             .onAppear {
                 proxy.scrollTo(activeId, anchor: .center)
             }
@@ -1190,11 +1220,12 @@ private struct SessionTabBar: View {
         }
         .background {
             if isActive {
-                let indicator = RoundedRectangle(
-                    cornerRadius: 9,
-                    style: .continuous
-                )
-                .fill(OS1VisualStyle.hover)
+                // A capsule, not a rounded rectangle: the strip is a capsule
+                // itself now, and the indicator sits 4pt inside it — the two
+                // curves nest instead of the indicator's corner being clipped
+                // by the strip's end.
+                let indicator = Capsule(style: .continuous)
+                    .fill(OS1VisualStyle.hover)
 
                 if reduceMotion {
                     indicator

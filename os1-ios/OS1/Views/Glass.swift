@@ -87,5 +87,52 @@ extension View {
             .allowsHitTesting(false)
         }
     }
+
+    /// The top counterpart of `composerBottomWash`, under the floating tab
+    /// strip. The strip is a bar (`safeAreaBar`), so the transcript travels
+    /// behind it; the soft scroll edge effect fades what passes under the
+    /// navigation bar, but rows emerging just below the strip — and the ones
+    /// in the rails beside it — stayed crisp against the floating glass.
+    ///
+    /// It hangs off the STRIP for the same layout reason the bottom wash hangs
+    /// off the composer: an overlay on the scroll view is laid out inside the
+    /// safe area the bar has already inset, so it would paint below the strip
+    /// instead of across it.
+    ///
+    /// - Parameters:
+    ///   - ramp: how far BELOW the strip the dissolve runs. Negative bottom
+    ///     padding is what lets it hang out over the transcript; the strip's
+    ///     own height above it is held at full veil, so the chat has already
+    ///     gone quiet by the time it reaches the glass.
+    ///   - veil: the wash's MAXIMUM opacity. Deliberately short of 1, matching
+    ///     the composer: the chat should still be faintly there behind the
+    ///     strip rather than stopping at a hard edge.
+    func tabStripTopWash(
+        ramp: CGFloat = 48,
+        veil: Double = 0.62
+    ) -> some View {
+        background(alignment: .top) {
+            VStack(spacing: 0) {
+                // Fills the strip's own height — the flexible element, so this
+                // adapts if the strip grows with Dynamic Type.
+                OS1VisualStyle.background.opacity(veil)
+                // Weighted stops for the same reason as the composer's: a
+                // linear ramp only reaches full veil on its very last row,
+                // which left rows legible right up against the glass.
+                LinearGradient(
+                    stops: [
+                        .init(color: OS1VisualStyle.background.opacity(veil), location: 0),
+                        .init(color: OS1VisualStyle.background.opacity(veil * 0.55), location: 0.35),
+                        .init(color: OS1VisualStyle.background.opacity(0), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: ramp)
+            }
+            .padding(.bottom, -ramp)
+            .allowsHitTesting(false)
+        }
+    }
     #endif
 }
