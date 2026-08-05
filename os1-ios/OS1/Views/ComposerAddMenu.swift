@@ -21,6 +21,15 @@ struct ComposerAddMenu: View {
     /// slash command, so Slack/Linear-sourced chats don't get the row.
     var onSetGoal: (() -> Void)?
     var onToggleNoteMode: () -> Void
+    /// Opens the `@`-mention picker. Nil where mention search isn't available.
+    var onReferenceFile: (() -> Void)?
+    /// Scheduling needs something to schedule, so the row dims on an empty
+    /// draft rather than opening a picker that can't submit.
+    var hasDraft: Bool = false
+    var onSchedule: (() -> Void)?
+    /// Set only for an ask-mode chat that the server would let promote.
+    var onSwitchToCode: (() -> Void)?
+    var promoting: Bool = false
     var maxCount: Int = 6
 
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -57,6 +66,12 @@ struct ComposerAddMenu: View {
                     .disabled(remaining == 0)
                 }
                 #endif
+
+                if let onReferenceFile {
+                    Button(action: onReferenceFile) {
+                        Label("Reference a file", systemImage: "at")
+                    }
+                }
             }
 
             if let onSetGoal {
@@ -71,11 +86,28 @@ struct ComposerAddMenu: View {
                     systemImage: "note.text"
                 )
             }
+
+            if let onSwitchToCode {
+                Button(action: onSwitchToCode) {
+                    Label(
+                        promoting ? "Switching to code…" : "Switch to code",
+                        systemImage: "eye"
+                    )
+                }
+                .disabled(promoting)
+            }
+
+            if let onSchedule {
+                Button(action: onSchedule) {
+                    Label("Send later", systemImage: "clock")
+                }
+                .disabled(!hasDraft)
+            }
         } label: {
             icon
         }
         .menuIndicator(.hidden)
-        // A Menu tints its own label, which paints the "+" accent-red over the
+        // A Menu tints its own label, which paints the "+" in the brand fill over the
         // secondary mic beside it — the glyph is a quiet affordance, not a
         // call to action. Tinting the menu (not just the label) is what sticks.
         .tint(OS1VisualStyle.textDim)
@@ -211,6 +243,209 @@ struct GoalSheet: View {
         #if os(iOS)
         .presentationDetents([.medium])
         #endif
+    }
+}
+
+/// The `@`-mention picker: search the session's repos (plus any attached ones)
+/// and drop a reference into the draft. The web composer does this inline from
+/// a typed "@"; a phone keyboard has no room for an inline popup, so it gets a
+/// sheet with the same search behind it.
+struct ReferenceFileSheet: View {
+    let sessionId: String
+    let onPick: (FileMention) -> Void
+
+    @State private var query = ""
+    @State private var results: [FileMention] = []
+    @State private var searching = false
+    @State private var failed = false
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if results.isEmpty, !query.isEmpty, !searching {
+                    Text(failed ? "Couldn't search this session's files." : "No matches.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(results) { match in
+                    Button {
+                        onPick(match)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: match.symbol)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(match.display)
+                                    .lineLimit(1)
+                                    .truncationMode(.head)
+                                if let repo = match.repo, !repo.isEmpty {
+                                    Text(repo)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .listStyle(.plain)
+            .searchable(
+                text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search files"
+            )
+            .navigationTitle("Reference a file")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .overlay {
+                if searching, results.isEmpty { ProgressView() }
+            }
+        }
+        // Re-runs on every keystroke, cancelling the in-flight task — the
+        // sleep is the debounce, so only a settled query reaches the server.
+        .task(id: query) {
+            let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !term.isEmpty else {
+                results = []
+                failed = false
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            searching = true
+            defer { searching = false }
+            do {
+                let found = try await OS1API.fileMentions(query: term, sessionId: sessionId)
+                guard !Task.isCancelled else { return }
+                results = found
+                failed = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                results = []
+                failed = true
+            }
+        }
+    }
+}
+
+/// "Send later": the draft is held server-side and sent at the chosen time,
+/// app running or not. Quick picks mirror the web composer's — later today,
+/// tomorrow morning, next week — with a full picker behind "Pick a time".
+struct SchedulePromptSheet: View {
+    let onSchedule: (Date) async -> String?
+
+    @State private var custom = Date().addingTimeInterval(3600)
+    @State private var showingCustom = false
+    @State private var saving = false
+    @State private var error: String?
+    @Environment(\.dismiss) private var dismiss
+
+    /// Contextual, always in the future, at sensible hours — the same three
+    /// the web offers.
+    private var quickPicks: [(label: String, at: Date)] {
+        let calendar = Calendar.current
+        let now = Date()
+        var out: [(String, Date)] = []
+
+        func add(_ label: String, _ date: Date?) {
+            guard let date, date.timeIntervalSince(now) > 30 else { return }
+            out.append((label, date))
+        }
+
+        add("Later today", calendar.date(bySettingHour: 18, minute: 0, second: 0, of: now))
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) {
+            add(
+                "Tomorrow morning",
+                calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow)
+            )
+        }
+        // Next Monday, 9am — "next week" in the only sense a workday has.
+        let weekday = calendar.component(.weekday, from: now)
+        let toMonday = ((9 - weekday) % 7 == 0) ? 7 : (9 - weekday) % 7
+        if let monday = calendar.date(byAdding: .day, value: toMonday, to: now) {
+            add("Monday morning", calendar.date(bySettingHour: 9, minute: 0, second: 0, of: monday))
+        }
+        return Array(out.prefix(3))
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(quickPicks, id: \.label) { pick in
+                        Button {
+                            submit(pick.at)
+                        } label: {
+                            HStack {
+                                Text(pick.label)
+                                Spacer()
+                                Text(pick.at, format: .dateTime.weekday().hour().minute())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button("Pick a time…") { showingCustom = true }
+                        .buttonStyle(.plain)
+                } footer: {
+                    Text("The draft is held on the server and sent then — this app doesn't have to be open.")
+                }
+
+                if showingCustom {
+                    Section {
+                        DatePicker(
+                            "Send at",
+                            selection: $custom,
+                            in: Date()...,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        Button("Schedule") { submit(custom) }
+                            .disabled(saving)
+                    }
+                }
+
+                if let error {
+                    Section { Text(error).foregroundStyle(OS1VisualStyle.red) }
+                }
+            }
+            .navigationTitle("Send later")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .disabled(saving)
+        }
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        #endif
+    }
+
+    private func submit(_ at: Date) {
+        guard !saving else { return }
+        saving = true
+        error = nil
+        Task {
+            let failure = await onSchedule(at)
+            saving = false
+            if let failure {
+                error = failure
+            } else {
+                dismiss()
+            }
+        }
     }
 }
 

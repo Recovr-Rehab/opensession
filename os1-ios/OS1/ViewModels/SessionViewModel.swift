@@ -543,6 +543,42 @@ final class SessionViewModel {
         )
     }
 
+    /// Append an `@`-mention to the draft. SwiftUI hands out no cursor
+    /// position for a TextField, so mentions land at the end rather than at
+    /// the caret — where a reference reads naturally anyway.
+    func insertMention(_ insert: String) {
+        if !draft.isEmpty, !draft.hasSuffix(" "), !draft.hasSuffix("\n") { draft += " " }
+        draft += "@\(insert) "
+    }
+
+    /// Hold the draft until `at` — the server sends it then, whether or not
+    /// the app is running. Clears the draft only once the server has it.
+    func schedulePrompt(at: Date) async throws {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        try await OS1API.schedulePrompt(sessionId: session.id, prompt: text, at: at)
+        draft = ""
+        sendSeq += 1
+    }
+
+    /// Promote an ask-mode chat to code mode. One-way: the server cuts a
+    /// worktree, and the local snapshot follows so the row disappears without
+    /// waiting for the next sessions refresh. The branch it returns is for
+    /// callers that want to say so; the notice covers the rest.
+    @discardableResult
+    func promoteToCode() async -> String? {
+        do {
+            let branch = try await OS1API.promoteToCode(sessionId: session.id)
+            session.mode = "code"
+            if let branch { session.branch = branch }
+            notice = "Switched to code mode"
+            return branch
+        } catch {
+            notice = "Couldn't switch to code mode"
+            return nil
+        }
+    }
+
     /// Switch this session's model via the `/model` slash command — handled
     /// server-side (persists, notices, broadcasts) without reaching the engine.
     func changeModel(to id: String) {

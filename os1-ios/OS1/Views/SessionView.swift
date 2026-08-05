@@ -1070,8 +1070,17 @@ private struct SessionInputBar: View {
     let contentMaxWidth: CGFloat
     let horizontalInset: CGFloat
     @FocusState private var inputFocused: Bool
-    /// The "+" menu's goal row opens this; the menu itself owns no state.
-    @State private var editingGoal = false
+    /// What the "+" menu opened, if anything. One `@State` and one `.sheet`
+    /// on purpose: stacking sheet modifiers on a single view leaves only the
+    /// last one working.
+    private enum ComposerSheet: String, Identifiable {
+        case goal, reference, schedule
+        var id: String { rawValue }
+    }
+    @State private var sheet: ComposerSheet?
+    /// In-flight promote — the row says so rather than looking inert, since
+    /// cutting a worktree isn't always instant.
+    @State private var promoting = false
 
     /// Air above the topmost element in the bar — and where the composer
     /// scrim's dissolve has to finish, so it ends level with that element.
@@ -1137,12 +1146,29 @@ private struct SessionInputBar: View {
         // Presented from the bar, not from the "+" itself: the button moves
         // between the collapsed pill and the expanded toolbar, and a sheet
         // anchored to a view that goes away closes with it.
-        .sheet(isPresented: $editingGoal) {
-            GoalSheet(
-                initial: viewModel.goal ?? "",
-                hadGoal: viewModel.goal != nil
-            ) { goal in
-                viewModel.setGoal(goal)
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .goal:
+                GoalSheet(
+                    initial: viewModel.goal ?? "",
+                    hadGoal: viewModel.goal != nil
+                ) { goal in
+                    viewModel.setGoal(goal)
+                }
+            case .reference:
+                ReferenceFileSheet(sessionId: viewModel.session.id) { match in
+                    viewModel.insertMention(match.insert)
+                    inputFocused = true
+                }
+            case .schedule:
+                SchedulePromptSheet { at in
+                    do {
+                        try await viewModel.schedulePrompt(at: at)
+                        return nil
+                    } catch {
+                        return "Couldn't schedule that message."
+                    }
+                }
             }
         }
         // No background: the composer and chips are individual glass elements
@@ -1376,24 +1402,46 @@ private struct SessionInputBar: View {
         #endif
     }
 
-    /// The composer's "+": attachments plus the chat-level actions (goal,
-    /// team note) the web input has always carried behind the same button.
+    /// The composer's "+": attachments plus the chat-level actions (mentions,
+    /// goal, team note, promote, scheduling) the web input has always carried
+    /// behind the same button.
     private var addMenu: some View {
         ComposerAddMenu(
             images: $viewModel.attachedImages,
             noteMode: viewModel.noteMode,
             hasGoal: viewModel.goal != nil,
             // `/goal` is a native slash command; a Slack- or Linear-sourced
-            // chat would just post the text at the agent. "backstage" is the
-            // pre-rename source value older servers still send.
-            onSetGoal: (viewModel.session.source == "opensession" || viewModel.session.source == "backstage")
-                ? { editingGoal = true }
-                : nil,
+            // chat would just post the text at the agent.
+            onSetGoal: isNativeSession ? { sheet = .goal } : nil,
             onToggleNoteMode: {
                 viewModel.noteMode.toggle()
                 inputFocused = true
-            }
+            },
+            onReferenceFile: { sheet = .reference },
+            hasDraft: !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            // Scheduling is a server-side hold on a native chat's own queue;
+            // an agent-owned session has no such queue to put it on.
+            onSchedule: isNativeSession ? { sheet = .schedule } : nil,
+            // Ask mode reads the code but can't change it. Promoting cuts a
+            // worktree, so it's one-way — and the server only allows it here.
+            onSwitchToCode: (isNativeSession && viewModel.session.mode == "ask")
+                ? {
+                    promoting = true
+                    Task {
+                        await viewModel.promoteToCode()
+                        promoting = false
+                    }
+                }
+                : nil,
+            promoting: promoting
         )
+    }
+
+    /// A chat this app owns end to end, rather than one mirrored from Slack or
+    /// Linear. "backstage" is the pre-rename value older servers still send.
+    private var isNativeSession: Bool {
+        viewModel.session.source == "opensession"
+            || viewModel.session.source == "backstage"
     }
 
     private var composerPlaceholder: String {

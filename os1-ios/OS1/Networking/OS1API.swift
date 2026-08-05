@@ -114,6 +114,45 @@ enum OS1API {
         )
     }
 
+    /// `@`-mention targets matching a query, for the composer's "Reference a
+    /// file" picker. Scoped to the session, so an attached repo's files come
+    /// back too (labelled with their repo).
+    static func fileMentions(query: String, sessionId: String) async throws -> [FileMention] {
+        struct MentionsResponse: Decodable, Sendable { let files: [FileMention]? }
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+"))
+        let q = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        let response: MentionsResponse = try await get(
+            "/api/files?q=\(q)&session=\(sessionId)"
+        )
+        return response.files ?? []
+    }
+
+    /// Promote an ask-mode chat to code mode. The server cuts the worktree —
+    /// which is why this is one-way, and why the row says so.
+    @discardableResult
+    static func promoteToCode(sessionId: String) async throws -> String? {
+        struct PromoteResponse: Decodable, Sendable { let branch: String? }
+        let response: PromoteResponse = try await post(
+            "/api/sessions/\(sessionId)/promote",
+            body: [:]
+        )
+        return response.branch
+    }
+
+    /// Hold a prompt until `at`, when the server sends it for you.
+    static func schedulePrompt(sessionId: String, prompt: String, at: Date) async throws {
+        struct ScheduledPrompt: Decodable, Sendable { let id: String? }
+        let formatter = ISO8601DateFormatter()
+        let _: ScheduledPrompt = try await post(
+            "/api/sessions/\(sessionId)/scheduled-prompts",
+            body: [
+                "prompt": prompt,
+                "at": formatter.string(from: at),
+                "user": ServerConfig.shared.userName,
+            ]
+        )
+    }
+
     /// Bytes of an image attached to a note. Chat images live in their own
     /// permanent per-image storage, keyed by uuid.
     static func chatImage(id: String) async throws -> Data {
