@@ -321,7 +321,7 @@ You ARE responsible for completing the implementation: for every accepted, actio
 
 When done, if you made changes, commit them with a clear message and push to the PR branch: \`git push origin HEAD:${pr.headRefName}\`. If nothing actionable was found, make no commits and say so.
 
-When finished, output the compatibility marker \`===MICHAEL-SUMMARY===\` on its own line, then your concise summary as ${personaName()}: the key adjudicated findings (severity + \`file:line\`) and exactly what you changed and pushed (or that nothing needed fixing). ONLY the text after that marker is posted to the PR — everything before it is working notes that stay private.`;
+When finished, output the compatibility marker \`===OPENSESSION-SUMMARY===\` on its own line, then your concise summary as ${personaName()}: the key adjudicated findings (severity + \`file:line\`) and exactly what you changed and pushed (or that nothing needed fixing). ONLY the text after that marker is posted to the PR — everything before it is working notes that stay private.`;
 }
 
 export function buildMentionPrompt(opts: {
@@ -354,7 +354,7 @@ Decide what they need:
 
 Then write a concise reply as ${personaName()}: answer the question, show what you ran and found, or describe exactly what you changed and pushed. Only claim results/changes you actually produced; if you couldn't do something, say so.
 
-When finished, output the marker \`===MICHAEL-SUMMARY===\` on its own line, then your reply as GitHub markdown. ONLY the text after that marker is posted as the reply — everything before it is working notes that stay private. Do not post anything yourself.`;
+When finished, output the marker \`===OPENSESSION-SUMMARY===\` on its own line, then your reply as GitHub markdown. ONLY the text after that marker is posted as the reply — everything before it is working notes that stay private. Do not post anything yourself.`;
 }
 
 /**
@@ -401,7 +401,7 @@ If you made changes, commit them with a clear message (\`git add\` specific path
 \`gh pr create --repo ${opts.ghRepo || defaultRepo().ghRepo} --base ${opts.baseRef} --head ${opts.branch} --title "<concise title>" --body "<what and why, including 'Follow-up to #${opts.prNumber}'>"\`.
 NEVER push to PR #${opts.prNumber}'s branch and NEVER run \`gh pr merge\`.
 
-When finished, output the marker \`===MICHAEL-SUMMARY===\` on its own line, then your reply as GitHub markdown — link the new PR you opened, or explain why none was needed. ONLY the text after that marker is posted as the reply — everything before it is working notes that stay private. Do not post anything yourself.`;
+When finished, output the marker \`===OPENSESSION-SUMMARY===\` on its own line, then your reply as GitHub markdown — link the new PR you opened, or explain why none was needed. ONLY the text after that marker is posted as the reply — everything before it is working notes that stay private. Do not post anything yourself.`;
 }
 
 export function buildSimplifyPrompt(pr: PrDetails, steer?: string): string {
@@ -412,5 +412,5 @@ ${steerBlock(steer)}
 
 Then commit the cleanups with a clear message and push to the PR branch: \`git push origin HEAD:${pr.headRefName}\`. If there was nothing worth simplifying, make no commits and say so. NEVER merge the PR (\`gh pr merge\` is forbidden).
 
-When finished, output the marker \`===MICHAEL-SUMMARY===\` on its own line, then a one-line summary of what you simplified (or "Nothing to simplify"). ONLY the text after that marker is posted to the PR — everything before it is working notes that stay private.`;
+When finished, output the marker \`===OPENSESSION-SUMMARY===\` on its own line, then a one-line summary of what you simplified (or "Nothing to simplify"). ONLY the text after that marker is posted to the PR — everything before it is working notes that stay private.`;
 }

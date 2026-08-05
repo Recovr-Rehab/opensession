@@ -16,7 +16,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { $ } from "bun";
-import { stateDir } from "./paths";
+import { stateDir , isNativeSessionId} from "./paths";
 import { OPENSESSION_CHATS_DIR } from "./paths";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "./github-limit";
@@ -295,7 +295,7 @@ function loadSessionMeta(): Map<string, SessionMeta> {
 	const map = new Map<string, SessionMeta>();
 	try {
 		for (const file of readdirSync(OPENSESSION_CHATS_DIR)) {
-			if (!file.startsWith("bks-") || !file.endsWith(".json")) continue;
+			if (!isNativeSessionId(file) || !file.endsWith(".json")) continue;
 			try {
 				const s = JSON.parse(readFileSync(`${OPENSESSION_CHATS_DIR}/${file}`, "utf-8"));
 				const id = String(s.id || file.slice(0, -5));

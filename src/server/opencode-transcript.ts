@@ -1291,7 +1291,7 @@ export function readOpencodeTranscript(
               state.status === "completed"
                 ? state.output || ""
                 : `Error: ${state.error || "tool failed"}`;
-            // BACKSTAGE_VIDEO/IMAGE markers printed by tools (echo after
+            // OPENSESSION_VIDEO/IMAGE markers printed by tools (echo after
             // ffmpeg etc.) must survive the refresh re-parse exactly like
             // they do on the live stream (jsonl-parser does the same for
             // the claude engine's tool results).

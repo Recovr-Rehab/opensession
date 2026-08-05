@@ -25,7 +25,7 @@ FC=/opt/firecracker/firecracker
 destroy() {
   # The scope is the process handle — no pkill patterns (a -f pattern once
   # matched the INVOKER's own command text and killed the calling shell).
-  systemctl stop "bks-fc-clone$IDX" 2>/dev/null || true
+  systemctl stop "os-fc-clone$IDX" 2>/dev/null || true
   sleep 0.3
   ip netns del "$NS" 2>/dev/null || true
   ip link del "$VETH_H" 2>/dev/null || true
@@ -43,7 +43,7 @@ flock -s 9
 # Never destroy-first: a concurrent caller re-using a live index must FAIL,
 # not silently kill the running VM (a claim's VM died mid-converge to a
 # racing sweep spawn before this guard).
-if systemctl is-active --quiet "bks-fc-clone$IDX" 2>/dev/null; then
+if systemctl is-active --quiet "os-fc-clone$IDX" 2>/dev/null; then
   echo "index $IDX already has a live VM — pick another" >&2
   exit 3
 fi
@@ -91,7 +91,7 @@ cat "$POOL/golden.mem" > /dev/null 2>&1 || true
 # OUTLIVE whoever spawned them (previews died on every opensession restart
 # while FCs were children of the service cgroup; same fix as the detached
 # opencode servers).
-systemd-run --collect --unit "bks-fc-clone$IDX" \
+systemd-run --collect --unit "os-fc-clone$IDX" \
   bash -c "exec ip netns exec '$NS' unshare -m bash -c \"mount --bind '$DISK' '$POOL/golden.ext4' && exec '$FC' --api-sock '$API'\" > '$LOG' 2>&1"
 for i in $(seq 1 80); do [ -S "$API" ] && break; sleep 0.1; done
 [ -S "$API" ] || { echo "firecracker api socket never appeared" >&2; destroy; exit 1; }

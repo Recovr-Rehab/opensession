@@ -32,11 +32,12 @@ import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } f
 import { REPOS, createWorktree, createWorktreeForExistingBranch, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, worktreeHasWork, worktreeHeadBranch } from "../worktree";
 import { randomUUIDv7 } from "bun";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { isNativeSessionId } from "../paths";
 
 function findBackstageSessionForFileMentions(
 	sessionId: string | null,
 ): BackstageSessionFile | undefined {
-	if (!sessionId?.startsWith("bks-") || !/^[a-z0-9-]+$/i.test(sessionId))
+	if (!(sessionId && isNativeSessionId(sessionId)) || !/^[a-z0-9-]+$/i.test(sessionId))
 		return undefined;
 	try {
 		const session = JSON.parse(

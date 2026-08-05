@@ -19,7 +19,7 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import { runAgent } from "./agent-runner";
 import { createWorktree, listWorktrees, REPOS, getRepo, type Repo } from "./worktree";
 import { personaName, productName } from "./config";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR , newSessionId} from "./paths";
 import { providerFor, modelLabel } from "./models";
 import { engineSessionPatch } from "./sessions";
 import type { BackstageSessionFile } from "./types";
@@ -278,7 +278,7 @@ export async function executeScan(
 
   for (const repoId of scan.repos) {
     const repo = getRepo(repoId);
-    const bksId = `bks-${randomUUIDv7()}`;
+    const bksId = newSessionId();
     let errorMsg = "";
     try {
       const branch = `deepsec-scan-${slug(repo.id)}-${stamp}`;

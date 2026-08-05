@@ -27,6 +27,7 @@ import { workspaceOwningWorktree } from "./session-repos";
 import { getRepo, listWorktrees } from "./worktree";
 import { prKey } from "../agents/github/constants";
 import type { ExternalRef, UnifiedSession } from "./types";
+import { isNativeSessionId } from "./paths";
 
 /** Does this session carry the PR (primary branch, attached repo, or link)? */
 function sessionMatchesPr(
@@ -64,7 +65,7 @@ function adoptSiblingSessions(
   predicate: (s: UnifiedSession) => boolean,
 ): void {
   for (const s of getCachedSessions()) {
-    if (!s.id.startsWith("bks-") || s.projectId || s.archived) continue;
+    if (!isNativeSessionId(s.id) || s.projectId || s.archived) continue;
     if (!predicate(s)) continue;
     void updateSessionFile(s.id, (data) =>
       data.projectId || data.workspaceId

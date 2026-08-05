@@ -63,6 +63,7 @@ import {
 	verifiedCloudIdentity,
 } from "./cloud-proxy";
 import { isLocalProfile, setLocalProfileIdentity } from "./profile";
+import { newSessionId } from "./paths";
 import {
 	closeCloudProxyProtocol,
 	handleCloudProxyProtocolMessage,
@@ -1530,7 +1531,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 										? workspace.branch || branch
 										: branch;
 
-					const bksId = `bks-${randomUUIDv7()}`;
+					const bksId = newSessionId();
 					const title = prompt.trim().split("\n")[0].slice(0, 80);
 					// Every chat lives in a workspace (chat-workspace.ts). A create
 					// that resolved none — no picker choice, no fork parent, no

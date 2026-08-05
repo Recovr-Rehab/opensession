@@ -23,7 +23,7 @@ import { engineSessionPatch } from "./sessions";
 import { updateSessionFile } from "./session-cache";
 import type { BackstageSessionFile } from "./types";
 import { configuredIntegration, configuredRepos, defaultRepo } from "./config";
-import { stateDir } from "./paths";
+import { stateDir , newSessionId} from "./paths";
 import { shouldPersistModelSwitch } from "./run-events";
 
 const ACTIONS_DIR = stateDir("actions");
@@ -352,7 +352,7 @@ export function runAction(
     useAws = true; // scripts may shell out to aws (limited to the instance role)
   }
 
-  const bksId = `bks-${randomUUIDv7()}`;
+  const bksId = newSessionId();
   const startedAt = new Date();
   const model = action.model || ACTION_MODEL;
 

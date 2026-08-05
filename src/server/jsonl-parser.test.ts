@@ -527,6 +527,23 @@ describe("Codex rollout parsing", () => {
     });
   });
 
+  it("still reads the pre-rename BACKSTAGE_VIDEO marker (old transcripts)", () => {
+    const path = writeCodexFixture([
+      JSON.stringify({
+        timestamp: TS,
+        type: "response_item",
+        payload: {
+          type: "local_shell_call_output",
+          call_id: "call_shell_0",
+          output: "recorded\nBACKSTAGE_VIDEO: /tmp/legacy-demo.mp4\n",
+        },
+      }),
+    ]);
+    const entries = parseTranscript(path);
+    expect(entries[0].videos).toHaveLength(1);
+    expect(entries[0].videos![0]).toContain(encodeURIComponent("/tmp/legacy-demo.mp4"));
+  });
+
   it("extracts videos from Codex shell tool output markers", () => {
     const path = writeCodexFixture([
       JSON.stringify({
@@ -535,7 +552,7 @@ describe("Codex rollout parsing", () => {
         payload: {
           type: "local_shell_call_output",
           call_id: "call_shell_1",
-          output: "recorded\nBACKSTAGE_VIDEO: /tmp/backstage-demo.mp4\n",
+          output: "recorded\nOPENSESSION_VIDEO: /tmp/backstage-demo.mp4\n",
         },
       }),
     ]);
@@ -558,7 +575,7 @@ describe("Codex rollout parsing", () => {
         payload: {
           type: "function_call_output",
           call_id: "call_mcp_1",
-          output: { output: "ok\nBACKSTAGE_VIDEO: /var/tmp/mcp-recording.webm\n" },
+          output: { output: "ok\nOPENSESSION_VIDEO: /var/tmp/mcp-recording.webm\n" },
         },
       }),
     ]);
@@ -580,7 +597,7 @@ describe("Codex rollout parsing", () => {
         type: "event_msg",
         payload: {
           type: "agent_message",
-          message: "Captured the production flow.\n\nBACKSTAGE_VIDEO: /tmp/codex-demo.mov",
+          message: "Captured the production flow.\n\nOPENSESSION_VIDEO: /tmp/codex-demo.mov",
         },
       }),
     ]);
@@ -602,7 +619,7 @@ describe("assistant video markers", () => {
     const path = writeFixture([
       assistantLine(
         "a-video",
-        `Captured the production flow.\n\nBACKSTAGE_VIDEO: ${assetPath}`,
+        `Captured the production flow.\n\nOPENSESSION_VIDEO: ${assetPath}`,
       ),
     ]);
 
@@ -617,9 +634,9 @@ describe("assistant video markers", () => {
 });
 
 describe("extractBackstageVideos", () => {
-  it("returns media URLs for absolute BACKSTAGE_VIDEO markers", () => {
+  it("returns media URLs for absolute OPENSESSION_VIDEO markers", () => {
     expect(
-      extractBackstageVideos("before\nBACKSTAGE_VIDEO: /tmp/capture-one.mp4\nBACKSTAGE_VIDEO: /tmp/second.webm")
+      extractBackstageVideos("before\nOPENSESSION_VIDEO: /tmp/capture-one.mp4\nOPENSESSION_VIDEO: /tmp/second.webm")
     ).toEqual([
       "/backstage/media?path=%2Ftmp%2Fcapture-one.mp4",
       "/backstage/media?path=%2Ftmp%2Fsecond.webm",

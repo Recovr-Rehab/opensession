@@ -214,7 +214,8 @@ export function transcriptJsonlForTransfer(entries: TranscriptEntry[]): string {
 }
 
 function importEngineId(sessionId: string): string {
-  return `ses_import_${sessionId.slice("bks-".length).replaceAll("-", "")}`;
+  const bare = sessionId.replace(/^(os|bks)-/, "");
+  return `ses_import_${bare.replaceAll("-", "")}`;
 }
 
 function transferredSession(

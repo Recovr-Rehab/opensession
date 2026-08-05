@@ -141,7 +141,7 @@ export function createWorkspace(input: {
 }): Workspace {
   ensureDir();
   const workspace: Workspace = {
-    id: input.id || `prj-${randomUUID()}`,
+    id: input.id || `ws-${randomUUID()}`,
     name: (input.name || "Untitled workspace").trim().slice(0, 120) || "Untitled workspace",
     repo: input.repo,
     color: input.color,

@@ -26,6 +26,7 @@ import { updateSessionFile } from "./session-cache";
 import { attachSessionWatchersToEngineTranscript } from "./run-session";
 import type { BackstageSessionFile } from "./types";
 import { shouldPersistModelSwitch } from "./run-events";
+import { newSessionId } from "./paths";
 
 const g = globalThis as any;
 
@@ -96,7 +97,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 	runningGoals.add(goal.id);
 	const startedAt = new Date();
 	const wake = goal.wakeCount + 1;
-	const bksId = goal.osSessionId || `bks-${randomUUIDv7()}`;
+	const bksId = goal.osSessionId || newSessionId();
 	try {
 		// Code goals keep ONE persistent worktree so the engine session (keyed on
 		// cwd) resumes cleanly across wakes; ask goals read the main checkout.

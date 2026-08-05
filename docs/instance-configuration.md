@@ -66,6 +66,6 @@ those files without changing application behavior.
 
 Several old names are protocol or persisted-data compatibility, not instance
 branding. Do not rename the `bks-`/`prj-` id prefixes,
-`===MICHAEL-SUMMARY===`, `BACKSTAGE_VIDEO:`, legacy `michael-*` MCP aliases,
+`===MICHAEL-SUMMARY===`, `OPENSESSION_VIDEO:`, legacy `michael-*` MCP aliases,
 old environment aliases, or old state-directory fallbacks. Running and
 historical sessions depend on them.

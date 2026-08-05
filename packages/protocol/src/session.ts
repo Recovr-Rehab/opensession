@@ -45,7 +45,7 @@ export interface TranscriptEntry {
   // URLs) extracted from image blocks — e.g. a Read or a pasted image.
   images?: string[];
   // Ready-to-render video srcs (served via the media endpoint) parsed from
-  // `BACKSTAGE_VIDEO: <path>` markers a tool printed.
+  // `OPENSESSION_VIDEO: <path>` markers a tool printed.
   videos?: string[];
   // Non-media composer attachments (staged to disk server-side) — rendered as
   // downloadable chips on the user bubble.

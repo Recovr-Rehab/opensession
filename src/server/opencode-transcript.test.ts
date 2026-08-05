@@ -342,7 +342,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
       createdAt,
       JSON.stringify({
         type: "text",
-        text: "Captured the production flow.\n\nBACKSTAGE_VIDEO: /tmp/opencode-demo.mov",
+        text: "Captured the production flow.\n\nOPENSESSION_VIDEO: /tmp/opencode-demo.mov",
       }),
     );
     db.close();

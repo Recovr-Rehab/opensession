@@ -35,6 +35,7 @@ import { broadcastToAll, broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import { existsSync, watch } from "fs";
 import { shouldPersistModelSwitch } from "./run-events";
+import { newSessionId } from "./paths";
 
 /** Derive the at-a-glance state + control surface for a session (for the MCP). */
 function buildSummary(s: UnifiedSession): SessionSummary {
@@ -338,7 +339,7 @@ registerSessionControl({
 			}
 		}
 
-		const bksId = `bks-${randomUUIDv7()}`;
+		const bksId = newSessionId();
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
 		let projectId = parentSession?.projectId || null;
 		if (!projectId) {

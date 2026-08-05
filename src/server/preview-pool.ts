@@ -4,7 +4,7 @@
  * boot (~1 min on tella-fusion).
  *
  * Shape (per pool-enabled repo):
- *  - One GOLDEN IMAGE (`bks-preview-golden-<repo>:latest`): the repo cloned
+ *  - One GOLDEN IMAGE (`os-preview-golden-<repo>:latest`): the repo cloned
  *    INSIDE the container FS (never a host worktree — the closed-worktree
  *    cleanup cron reaps host worktrees parked at origin/main), deps installed,
  *    dev server booted once and route-warmed, then committed. Rebuilt on a
@@ -154,7 +154,7 @@ function clampInt(v: unknown, min: number, max: number, dflt: number): number {
  *  are built with the same home layout as the host, see bootstrap.ts). */
 const WORKSPACE = `${homeDir()}/preview-workspace`;
 const CONTAINER_PORT = 3300;
-const POOL_LABEL = "bks-preview-pool";
+const POOL_LABEL = "os-preview-pool";
 /** Untracked marker a claim drops in the workspace — tells the container's
  *  boot cmd to keep the converged branch instead of resetting to default. */
 const CLAIMED_MARKER = ".bks-claimed";
@@ -238,7 +238,7 @@ const busy: Map<string, Promise<unknown>> = (g.__previewPoolBusy ??= new Map());
 const syncs = (g.__previewPoolSyncs ??= new Map());
 
 function goldenImage(repoId: string): string {
-  return `bks-preview-golden-${repoId}`;
+  return `os-preview-golden-${repoId}`;
 }
 
 /**
@@ -584,7 +584,7 @@ async function poolWriteFile(c: PoolContainer, path: string, content: string): P
 async function poolRuntimeStatus(c: PoolContainer): Promise<"running" | "paused" | "gone"> {
   if (isMicrovm(c)) {
     // The transient scope is the authoritative process handle.
-    const r = await $`systemctl is-active --quiet bks-fc-clone${c.mvmIdx}`.quiet().nothrow();
+    const r = await $`systemctl is-active --quiet os-fc-clone${c.mvmIdx}`.quiet().nothrow();
     if (r.exitCode === 0) return "running";
     // A transient check hiccup must not delete a live claim — the agent
     // answering proves the VM is alive.
@@ -689,7 +689,7 @@ async function launchDaytonaDev(c: PoolContainer): Promise<void> {
   const script = `export PATH="/usr/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH" && ${BOOT_PREP} && ${env} bash .opensession/start.sh < /dev/null > /tmp/boot.log 2>&1`;
   const b64 = Buffer.from(script, "utf-8").toString("base64");
   const sbx = await daytonaSbx(c.name);
-  const sid = `bks-preview-dev-${Date.now().toString(36)}`;
+  const sid = `os-preview-dev-${Date.now().toString(36)}`;
   await sbx.process.createSession(sid);
   await sbx.process.executeSessionCommand(sid, {
     command: `bash -c 'echo ${b64} | base64 -d | bash'`,
@@ -934,7 +934,7 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
   const sbx = await client.create(
     {
       ...(scfg.daytona?.snapshot ? { snapshot: scfg.daytona.snapshot } : {}),
-      labels: { [POOL_LABEL]: repo.id, "bks-preview-pool-kind": "warm" },
+      labels: { [POOL_LABEL]: repo.id, "os-preview-pool-kind": "warm" },
       // Preview links are token-gated by Daytona's proxy (401 for browsers);
       // public:true makes the per-sandbox URL open — access control is the
       // unguessable sandbox uuid, same trade-off as Modal publicPreviews.
@@ -1115,7 +1115,7 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<void> {
     return;
   }
   const started = Date.now();
-  const name = `bks-preview-goldenbuild-${repoId}`;
+  const name = `os-preview-goldenbuild-${repoId}`;
   const cloneUrl = cloneUrlFor(repo);
   console.log(`[preview-pool] ${repoId}: building golden image at ${sha.slice(0, 10)}`);
   const fail = async (msg: string) => {
@@ -1256,7 +1256,7 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
   const cfg = previewPoolConfig(repo.id);
   const hostPort = await allocateHostPort();
   if (!hostPort) return console.warn(`[preview-pool] ${repo.id}: no free host port`);
-  const name = `bks-preview-warm-${repo.id}-${Math.random().toString(36).slice(2, 8)}`;
+  const name = `os-preview-warm-${repo.id}-${Math.random().toString(36).slice(2, 8)}`;
   const { previewHost, httpsPortFor } = await import("./preview");
   const host = await previewHost();
   const previewUrl = `https://${host}:${httpsPortFor(hostPort)}`;
@@ -1847,7 +1847,7 @@ export function resumePoolSyncIfNeeded(worktreeDir: string): void {
 // ── Scheduler + status ───────────────────────────────────────────────────────
 
 /**
- * Reap microvm leftovers nothing tracks anymore: live bks-fc-clone scopes,
+ * Reap microvm leftovers nothing tracks anymore: live os-fc-clone scopes,
  * netns, COW disks and Caddy routes whose index no repo's state knows.
  * Crash-safe cleanup — spawn/destroy failures at any step can strand these.
  */
@@ -1858,8 +1858,8 @@ async function gcMicrovmOrphans(): Promise<void> {
       if (c.mvmIdx != null) known.add(c.mvmIdx);
     }
   }
-  const units = await $`systemctl list-units --plain --no-legend 'bks-fc-clone*'`.quiet().nothrow().text();
-  for (const m of units.matchAll(/bks-fc-clone(\d+)/g)) {
+  const units = await $`systemctl list-units --plain --no-legend 'os-fc-clone*'`.quiet().nothrow().text();
+  for (const m of units.matchAll(/os-fc-clone(\d+)/g)) {
     const idx = parseInt(m[1], 10);
     if (!known.has(idx)) {
       console.log(`[preview-pool] gc: reaping orphaned clone ${idx}`);
@@ -1873,7 +1873,7 @@ async function gcMicrovmOrphans(): Promise<void> {
   for (const m of disks.matchAll(/clone(\d+)\.ext4/g)) {
     const idx = parseInt(m[1], 10);
     if (known.has(idx)) continue;
-    const live = await $`systemctl is-active --quiet bks-fc-clone${idx}`.quiet().nothrow();
+    const live = await $`systemctl is-active --quiet os-fc-clone${idx}`.quiet().nothrow();
     if (live.exitCode !== 0) {
       console.log(`[preview-pool] gc: sweeping dead clone ${idx} leftovers`);
       await sudoRun(["bash", `${MVM_SCRIPTS}/clone.sh`, "destroy", String(idx), MVM_STORE]).catch(() => {});
@@ -1939,8 +1939,8 @@ async function reapOrphanGoldenbuilds(): Promise<void> {
   if (!ls.ok) return;
   for (const line of ls.out.split("\n")) {
     const [name, createdAt] = line.split("\t");
-    if (!name?.startsWith("bks-preview-goldenbuild-")) continue;
-    const repoId = name.slice("bks-preview-goldenbuild-".length);
+    if (!name?.startsWith("os-preview-goldenbuild-")) continue;
+    const repoId = name.slice("os-preview-goldenbuild-".length);
     if (busy.has(`golden-${repoId}`)) continue;
     // docker CreatedAt: "2026-07-24 13:20:01 +0000 UTC"
     const created = Date.parse((createdAt ?? "").replace(" UTC", "").trim());
@@ -1951,7 +1951,7 @@ async function reapOrphanGoldenbuilds(): Promise<void> {
 }
 
 export function ensurePreviewPoolScheduler(): void {
-  // Dev instances: the sweep docker-rm's bks-preview-*/golden containers on
+  // Dev instances: the sweep docker-rm's os-preview-*/golden containers on
   // the shared docker daemon — it would reap production's warm pool.
   if (isLocalProfile() || isDevInstance()) return;
   if (g.__previewPoolTimer) return;

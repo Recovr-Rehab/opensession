@@ -93,7 +93,7 @@ async function run(
 async function unitRunning(idx: number): Promise<boolean> {
   return (
     await run(
-      ["systemctl", "is-active", "--quiet", `bks-fc-clone${idx}`],
+      ["systemctl", "is-active", "--quiet", `os-fc-clone${idx}`],
       5_000,
     )
   ).exitCode === 0;

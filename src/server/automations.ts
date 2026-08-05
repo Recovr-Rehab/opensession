@@ -4,7 +4,7 @@
  * normal backstage session so it shows up in the sessions list and UI.
  */
 import { randomUUIDv7 } from "bun";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_CHATS_DIR , newSessionId} from "./paths";
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { parseCron, cronMatches, nextRun } from "./cron";
@@ -797,7 +797,7 @@ export async function runAutomation(
 
   const startedAt = new Date();
   const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
-  const bksId = options?.osSessionId || `bks-${randomUUIDv7()}`;
+  const bksId = options?.osSessionId || newSessionId();
 
   try {
     // The automation's repo (instance default when omitted). Ask mode reads the repo's

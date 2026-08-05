@@ -15,6 +15,7 @@
  */
 
 import { homedir } from "os";
+import { randomUUIDv7 } from "bun";
 import { isLocalProfile, localProfileRoot } from "./profile";
 
 /** The current user's home directory ($HOME wins so tests can repoint it). */
@@ -73,4 +74,20 @@ export function __setChatsDirForTest(dir: string): string {
   const prev = OPENSESSION_CHATS_DIR;
   OPENSESSION_CHATS_DIR = dir;
   return prev;
+}
+
+/**
+ * Native OpenSession session ids are minted as `os-<uuidv7>`. Sessions
+ * created before the 2026-08-05 rename carry the original `bks-` prefix —
+ * ids are opaque keys into persisted state and external links, so they are
+ * never rewritten. This is the ONLY place code may care about the prefix;
+ * everything else treats session ids as opaque strings.
+ */
+export function isNativeSessionId(id: string): boolean {
+  return id.startsWith("os-") || id.startsWith("bks-");
+}
+
+/** Mint a native session id. */
+export function newSessionId(): string {
+  return `os-${randomUUIDv7()}`;
 }

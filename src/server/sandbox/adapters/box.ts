@@ -255,7 +255,7 @@ function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
    *  status & co, which reach this path because Sandbox.exec has no timeout
    *  knob and defaults over the sync cap) cost ONE round-trip, not a poll. */
   const execPolled = async (shell: string, timeoutMs: number) => {
-    const id = `bks-${crypto.randomUUID().slice(0, 8)}`;
+    const id = `os-${crypto.randomUUID().slice(0, 8)}`;
     const dir = `/tmp/.bks-exec/${id}`;
     const script = `{ ${shell}\n} >${dir}/out 2>${dir}/err; echo $? >${dir}/code`;
     const emit =

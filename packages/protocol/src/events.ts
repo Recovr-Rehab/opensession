@@ -120,7 +120,7 @@ export interface StreamEvent {
    */
   images?: string[];
   /**
-   * Renderable video sources on a tool_result, parsed from `BACKSTAGE_VIDEO:`
+   * Renderable video sources on a tool_result, parsed from `OPENSESSION_VIDEO:`
    * markers in the (full, pre-truncation) tool output. Forwarded so recordings
    * play the moment the tool returns, no reload needed.
    */

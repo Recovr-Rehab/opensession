@@ -12,7 +12,7 @@
  *  - Hard flag gate: every turn refuses unless
  *    `OPENSESSION_ENGINE_CLAUDE_DIRECT=1` (envAlias — old OPENSESSION_ name
  *    honored). NEVER wired into model pickers or defaults; callers are
- *    scripted throwaway test sessions (`bks-test-claude-direct-*`) only.
+ *    scripted throwaway test sessions (`os-test-claude-direct-*`) only.
  *  - Auth: a subscription account from claude-accounts (pickAccount /
  *    getUsableAccountById; markExhausted on usage-limit death) via
  *    CLAUDE_CODE_OAUTH_TOKEN, plus an ISOLATED per-account CLAUDE_CONFIG_DIR
@@ -594,7 +594,7 @@ export interface ClaudeDirectSmokeResult {
   dryRun: boolean;
   /** Human-readable explanation whenever ok is false or no turn ran. */
   reason?: string;
-  /** Throwaway unified session id (`bks-test-claude-direct-*`) — its prefix
+  /** Throwaway unified session id (`os-test-claude-direct-*`) — its prefix
    *  is the "this is a test session" marker; it never gets a session file,
    *  so it can't appear in the UI session list. Store rows are purgeable
    *  later via deleteSessionTranscript(sessionId). */
@@ -615,7 +615,7 @@ export interface ClaudeDirectSmokeResult {
 
 /**
  * One tiny scripted turn against a throwaway session id
- * (`bks-test-claude-direct-*`), for post-restart verification (design §7
+ * (`os-test-claude-direct-*`), for post-restart verification (design §7
  * acceptance: SDK turn → rows in transcripts.db → bus → v2 WS viewer). With
  * the flag OFF this is a pure dry-run: runClaudeDirect yields its gate error
  * before touching accounts or the SDK, so no quota is ever consumed. Safe to
@@ -628,7 +628,7 @@ export async function runClaudeDirectSmokeTurn(
   const prompt = opts.prompt || "Reply with exactly the single word: ok";
   const timeoutMs = Math.max(5_000, Math.min(opts.timeoutMs ?? 120_000, 600_000));
   const enabled = claudeDirectEnabled();
-  const sessionId = `bks-test-claude-direct-${Date.now().toString(36)}`;
+  const sessionId = `os-test-claude-direct-${Date.now().toString(36)}`;
   const started = Date.now();
   const storeRowsFor = (id: string): number => {
     try {

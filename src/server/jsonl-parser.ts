@@ -137,9 +137,11 @@ function attachUploads(
 }
 
 // Transcript messages can't return video blocks (unlike Read-of-image), so a
-// tool or assistant can print `BACKSTAGE_VIDEO: <abs-path>` and we turn each
+// tool or assistant can print `OPENSESSION_VIDEO: <abs-path>` and we turn each
 // marker into a /backstage/media URL the frontend streams.
-const VIDEO_MARKER = /^[\t ]*BACKSTAGE_VIDEO:[\t ]*(\/\S+)[\t ]*$/gm;
+// (BACKSTAGE_VIDEO is the pre-rename marker — it lives forever in old
+// transcripts and in scripts that haven't updated yet, so keep reading it.)
+const VIDEO_MARKER = /^[\t ]*(?:OPENSESSION|BACKSTAGE)_VIDEO:[\t ]*(\/\S+)[\t ]*$/gm;
 // Sibling marker for stills (thumbnails, extracted frames, downloaded
 // images): `OPENSESSION_IMAGE: <abs-path>` renders inline via the same
 // authenticated media route, landing in the entry's existing `images` field.

@@ -1,5 +1,5 @@
 /**
- * Inline media streaming for BACKSTAGE_VIDEO markers + composer-upload downloads.
+ * Inline media streaming for OPENSESSION_VIDEO markers + composer-upload downloads.
  *
  * Extracted verbatim from the opensession.ts fetch chain. Every handler
  * returns a Response for a matched route or undefined to fall through to the
@@ -15,7 +15,7 @@ export async function handleMediaRoutes(
 ): Promise<Response | undefined> {
 	const { req, url, path, publicPrefix } = ctx;
 
-	// Stream a local media file referenced by a `BACKSTAGE_VIDEO:` marker in a
+	// Stream a local media file referenced by a `OPENSESSION_VIDEO:` marker in a
 	// tool's output, so the session viewer can play it inline (tools can't return
 	// video blocks the way Read returns images). Path-scoped: absolute path under
 	// /tmp or the service user's home, no traversal, known media extension. Range-enabled
