@@ -153,6 +153,24 @@ struct SessionView: View {
                                 }
                                 .id("ask-\(ask.id)")
                             }
+                            // A small child at the very end, and the reason is
+                            // not spacing: a `LazyVStack` realizes the children
+                            // that intersect the visible window, and a session
+                            // opened mid-work groups its whole loaded transcript
+                            // into ONE block (a single long turn, whose opening
+                            // prompt has scrolled out of the loaded window). That
+                            // giant child is then the only thing in the stack,
+                            // and landing on the bottom anchor leaves it
+                            // unrealized: the scroll geometry is right —
+                            // measured on an iPhone 17 Pro, content 3022pt,
+                            // offset 2239, 9pt from the end — while the screen
+                            // stays BLANK until a touch forces a layout pass.
+                            // Something small down here always intersects the
+                            // window at the bottom, which keeps the stack
+                            // realizing its neighbour.
+                            Color.clear
+                                .frame(height: 1)
+                                .id("transcript-end")
                         }
                         .padding(.horizontal, contentInset)
                         .padding(.vertical, 8)
@@ -168,10 +186,13 @@ struct SessionView: View {
                     .scrollDismissesKeyboardCompat()
                     // Pin state from real scroll geometry: pinned while the
                     // visible bottom edge is within pinTolerance of the
-                    // content's end. Precise on release (unlike a lazy-stack
-                    // sentinel, whose realization window lags actual
-                    // visibility) and it costs a state write only when the
-                    // Bool flips, not per scroll tick.
+                    // content's end. Precise on release (unlike deriving it
+                    // from a sentinel row's `onAppear`, whose realization
+                    // window lags actual visibility — that's a different thing
+                    // from the `transcript-end` child above, which exists to
+                    // keep the lazy stack realizing and is never read here) and
+                    // it costs a state write only when the Bool flips, not per
+                    // scroll tick.
                     .onScrollGeometryChange(for: Bool.self) { geometry in
                         // The predicate itself lives in TranscriptScroll, which
                         // documents why it reads `visibleRect` rather than
