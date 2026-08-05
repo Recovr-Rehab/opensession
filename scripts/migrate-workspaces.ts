@@ -3,8 +3,8 @@
  *
  * What it does (idempotent, reversible):
  *   1. Renames the on-disk dirs:
- *        ~/.backstage-projects  → ~/.backstage-workspaces
- *        ~/.backstage-sessions  → ~/.backstage-chats
+ *        ~/.opensession-projects  → ~/.opensession-workspaces
+ *        ~/.opensession-sessions  → ~/.opensession-chats
  *      Moving the whole dir carries all aux files (archive-registry.json,
  *      title-overrides.json, generated-titles.json, human-asks.json,
  *      prompt-queues.json, active-runs.json, active-at-shutdown.json, uploads/…)
@@ -42,10 +42,10 @@ const homeIdx = args.indexOf("--home");
 const HOME =
   homeIdx >= 0 ? args[homeIdx + 1] : process.env.HOME || homedir();
 
-const PROJECTS_OLD = `${HOME}/.backstage-projects`;
-const WORKSPACES_NEW = `${HOME}/.backstage-workspaces`;
-const SESSIONS_OLD = `${HOME}/.backstage-sessions`;
-const CHATS_NEW = `${HOME}/.backstage-chats`;
+const PROJECTS_OLD = `${HOME}/.opensession-projects`;
+const WORKSPACES_NEW = `${HOME}/.opensession-workspaces`;
+const SESSIONS_OLD = `${HOME}/.opensession-sessions`;
+const CHATS_NEW = `${HOME}/.opensession-chats`;
 const MARKER = "migration-v1-workspaces.json";
 
 function log(...a: unknown[]) {

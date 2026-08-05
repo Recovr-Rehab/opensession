@@ -24,7 +24,7 @@ export interface WatchState {
 const watches: Map<string, WatchState> = ((globalThis as any).__transcriptWatches ??=
   new Map());
 
-// Server-side hook: backstage registers a listener so appended entries can
+// Server-side hook: opensession registers a listener so appended entries can
 // reconcile state that mirrors the transcript (steer receipts — a receipt
 // whose message has landed must clear NOW, not at run end, or it shows as
 // still-queued and a mid-run restart would re-deliver it). On globalThis so

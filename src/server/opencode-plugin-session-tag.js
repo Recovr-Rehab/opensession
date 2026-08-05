@@ -1,7 +1,7 @@
 /**
  * OpenCode plugin: tag in-process (michael-* / opensession-*) MCP tool calls
  * with the opencode session id, so the run-rpc layer can route each call to
- * the RIGHT backstage session on a SHARED opencode server (one `opencode
+ * the RIGHT opensession session on a SHARED opencode server (one `opencode
  * serve` hosting many sessions — see opencode-runner.ts "Server lifecycle").
  *
  * Why: the stdio proxies (src/runner-host/mcp-proxy.ts) carry ONE rpc token

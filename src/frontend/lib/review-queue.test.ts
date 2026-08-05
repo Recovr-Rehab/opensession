@@ -39,7 +39,7 @@ function session(
 ): UnifiedSession {
 	return {
 		claudeSessionId: null,
-		source: "backstage",
+		source: "opensession",
 		worktreeDir: "/tmp/worktree",
 		startedBy: "Michiel",
 		title: patch.id,

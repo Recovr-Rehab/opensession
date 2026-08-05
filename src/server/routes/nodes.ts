@@ -30,7 +30,7 @@ import {
 /** Socket peer address, with the proxy hop preferred when fronted locally. */
 function peerAddress(ctx: RouteContext): string {
   // hotServe parks the live server here so it survives hot reloads.
-  const server = (globalThis as any).__backstageServer as
+  const server = (globalThis as any).__opensessionServer as
     | { requestIP?(req: Request): { address: string } | null }
     | undefined;
   const direct = server?.requestIP?.(ctx.req)?.address ?? "";

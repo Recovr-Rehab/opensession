@@ -1,6 +1,6 @@
 /**
  * Scheduled prompts: "send this to this session at 5pm". A tiny store +
- * due-taker; backstage.ts's boot loop polls takeDuePrompts() every 30s and
+ * due-taker; opensession.ts's boot loop polls takeDuePrompts() every 30s and
  * delivers each one through the SessionControl registry (steer if the session
  * is mid-run, queue behind an external run, or start a fresh turn) — exactly
  * as if the user had typed it at that moment.

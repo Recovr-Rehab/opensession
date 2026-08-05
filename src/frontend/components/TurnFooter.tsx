@@ -517,7 +517,7 @@ function formatDuration(ms: number): string | null {
   return `${Math.floor(mins / 60)}h, ${mins % 60}m`;
 }
 
-// navigator.clipboard needs a secure context — backstage is served over plain
+// navigator.clipboard needs a secure context — opensession is served over plain
 // http on the tailnet, so fall back to a hidden-textarea copy.
 function copyText(text: string, onDone: () => void) {
   if (navigator.clipboard?.writeText) {

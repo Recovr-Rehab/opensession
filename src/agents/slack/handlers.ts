@@ -139,7 +139,7 @@ async function postOpenSessionCard(
               emoji: true,
             },
             url: `${UI_BASE}/session/${encodeURIComponent(sessionId)}`,
-            action_id: `backstage:${sessionId}`,
+            action_id: `opensession:${sessionId}`,
           },
         ],
       },
@@ -223,7 +223,7 @@ function mergeFileRefs(
 }
 
 // Save the session and mirror claudeSessionId/lastActivity into the
-// branch-named session file (written by `wt new-slack`), so backstage can
+// branch-named session file (written by `wt new-slack`), so opensession can
 // dedupe the two into one session as soon as the id exists.
 async function persistSession(session: SlackSession): Promise<void> {
   await saveSession(session);
@@ -657,7 +657,7 @@ export async function processMessage(
     };
     activeSessions.set(sessionKey, session);
     createdSession = true;
-    // Persist immediately — the "Open in Backstage" link posted below points
+    // Persist immediately — the "Open in OpenSession" link posted below points
     // at slack-<channel>-<ts>, which only resolves once this file exists.
     await saveSession(session);
   }
@@ -689,7 +689,7 @@ export async function processMessage(
   // chat. Without this a Slack session wears its session key as a title
   // (scanSlackSessions falls back to `branch`, which for a thread/DM session is
   // the raw <channel>-<threadTs>), because the two other ensureGeneratedTitle
-  // callers are UI-only: run-session.ts gates on source === "backstage" and
+  // callers are UI-only: run-session.ts gates on source === "opensession" and
   // ws-handlers/session-control only fire on create_session.
   if (createdSession) {
     void ensureGeneratedTitle(
@@ -717,24 +717,24 @@ export async function processMessage(
   const streamer = new SlackStreamer(channel, threadTs, msg.userId);
   await streamer.setStatus("is thinking...");
 
-  // Post a status message with the live Backstage session link and a Stop
+  // Post a status message with the live OpenSession session link and a Stop
   // button, so the run can be followed/cancelled even if Slack's assistant DM
   // disables the input field while we're working.
-  const backstageUrl = `${configuredServer().publicBaseUrl}/session/slack-${encodeURIComponent(sessionKey)}`;
-  const backstageButton = {
+  const opensessionUrl = `${configuredServer().publicBaseUrl}/session/slack-${encodeURIComponent(sessionKey)}`;
+  const opensessionButton = {
     type: "button",
     text: { type: "plain_text", text: `:desktop_computer: Open in ${productName()}`, emoji: true },
-    url: backstageUrl,
-    action_id: `backstage:${sessionKey}`,
+    url: opensessionUrl,
+    action_id: `opensession:${sessionKey}`,
   };
 
-  // Action rows for the live progress card: Stop+Backstage while running,
-  // Backstage-only once finished.
+  // Action rows for the live progress card: Stop+OpenSession while running,
+  // OpenSession-only once finished.
   const runningActions = {
     type: "actions",
     block_id: `stop-actions-${sessionKey}`,
     elements: [
-      backstageButton,
+      opensessionButton,
       {
         type: "button",
         text: { type: "plain_text", text: ":octagonal_sign: Stop", emoji: true },
@@ -747,7 +747,7 @@ export async function processMessage(
   const finalActions = {
     type: "actions",
     block_id: `backstage-link-${sessionKey}`,
-    elements: [backstageButton],
+    elements: [opensessionButton],
   };
 
   let stopButtonTs: string | null = null;
@@ -785,7 +785,7 @@ export async function processMessage(
   );
 
   // Backwards-compatible alias: every exit path already calls this to collapse
-  // the Stop button into the Backstage link. Now it also renders the terminal
+  // the Stop button into the OpenSession link. Now it also renders the terminal
   // checklist state.
   const dismissStopButton = (label: string): Promise<void> =>
     progress.finish(label);
@@ -1054,7 +1054,7 @@ export async function processMessage(
       if (event.type === "init") {
         resultSessionId = event.sessionId || resultSessionId;
         console.log(`[slack] engine session initialized: ${resultSessionId}`);
-        // Persist the id right away — the backstage UI resolves the live
+        // Persist the id right away — the opensession UI resolves the live
         // transcript (and dedupes the branch-named session) through it, so
         // waiting until the run ends leaves the session page empty.
         if (resultSessionId && resultSessionId !== session.claudeSessionId) {
@@ -1210,7 +1210,7 @@ export async function handleMessageEvent(event: any): Promise<void> {
     `[slack] Message from ${user} in ${channel}: ${text.substring(0, 50)}...`
   );
 
-  // A DM reply under a message a backstage session posted (automation DMs like
+  // A DM reply under a message a opensession session posted (automation DMs like
   // the daily recap) drives that session, answered back in the same thread —
   // same rule as channel threads. Before the allow-list gate for the same
   // reason as the human-ask path above: the DM'd person must be able to follow
@@ -1353,15 +1353,15 @@ const UI_BASE =
   configuredServer().publicBaseUrl;
 
 /**
- * Slack card for a triggered PR action. While running: Open-in-Backstage + Stop.
+ * Slack card for a triggered PR action. While running: Open-in-OpenSession + Stop.
  * Once done: Stop is dropped (it's useless) and a "finished" note is added.
  */
 function prActionCardBlocks(message: string, bksId: string, running: boolean): any[] {
-  const backstageButton = {
+  const opensessionButton = {
     type: "button",
     text: { type: "plain_text", text: `:desktop_computer: Open in ${productName()}`, emoji: true },
     url: `${UI_BASE}/session/${bksId}`,
-    action_id: `backstage:${bksId}`,
+    action_id: `opensession:${bksId}`,
   };
   const stopButton = {
     type: "button",
@@ -1377,7 +1377,7 @@ function prActionCardBlocks(message: string, bksId: string, running: boolean): a
     {
       type: "actions",
       block_id: `pr-action-${bksId}`,
-      elements: running ? [backstageButton, stopButton] : [backstageButton],
+      elements: running ? [opensessionButton, stopButton] : [opensessionButton],
     },
   ];
 }
@@ -1440,7 +1440,7 @@ export async function handleMentionEvent(event: any): Promise<void> {
   // Worktree channels bypass the ALLOWED_USER_ID check so the whole team can
   // drive the work from the channel.
   const inWorktreeChannel = isWorktreeChannel(channel);
-  // A mention in a thread anchored by a message some backstage session posted
+  // A mention in a thread anchored by a message some opensession session posted
   // (automation summaries etc.) drives THAT session instead of starting a new
   // one. Same team-wide bypass as worktree channels: anyone in the thread can
   // follow up.
@@ -1629,7 +1629,7 @@ Please help with this request. Start by exploring the codebase to understand wha
 
   // Ask mode: a question/discussion — answer in-thread in the repo's checkout,
   // no worktree or dedicated channel. Non-default repos run in their pinned
-  // ask checkout (backstage → its live shared checkout).
+  // ask checkout (opensession → its live shared checkout).
   if (intent?.mode === "ask") {
     let askSession: SlackSession | undefined =
       activeSessions.get(sessionKey) ?? (await loadSession(sessionKey)) ?? undefined;

@@ -1,5 +1,5 @@
 /**
- * Auto-archive backstage sessions when their Plain ticket reaches DONE.
+ * Auto-archive opensession sessions when their Plain ticket reaches DONE.
  * Two paths: the Plain webhook (status transition events) and a periodic
  * sweep as a safety net in case the webhook subscription misses them.
  */
@@ -7,19 +7,19 @@ import { readdirSync, readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { plainApiUrl } from "./config";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
-import type { BackstageSessionFile } from "./types";
+import type { NativeSessionFile } from "./types";
 
 const HOME = homeDir();
 const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
 
-function activePlainSessions(): Array<{ path: string; data: BackstageSessionFile }> {
+function activePlainSessions(): Array<{ path: string; data: NativeSessionFile }> {
   if (!existsSync(SESSIONS_DIR)) return [];
-  const out: Array<{ path: string; data: BackstageSessionFile }> = [];
+  const out: Array<{ path: string; data: NativeSessionFile }> = [];
   for (const file of readdirSync(SESSIONS_DIR)) {
     if (!file.endsWith(".json")) continue;
     const path = `${SESSIONS_DIR}/${file}`;
     try {
-      const data = JSON.parse(readFileSync(path, "utf-8")) as BackstageSessionFile;
+      const data = JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
       if (data.plainThreadId && !data.archived) out.push({ path, data });
     } catch {}
   }
@@ -27,17 +27,17 @@ function activePlainSessions(): Array<{ path: string; data: BackstageSessionFile
 }
 
 /**
- * Clear the file-level `archived` flag on a backstage session (set by the Plain
+ * Clear the file-level `archived` flag on a opensession session (set by the Plain
  * done-ticket path above). Manual unarchive only clears the archive registry, so
  * without this a Plain-archived session would stay archived and never return to
- * "My sessions". No-op for non-backstage sessions (no session file). Returns true
+ * "My sessions". No-op for non-opensession sessions (no session file). Returns true
  * if a flag was cleared.
  */
 export function clearSessionFileArchive(id: string): boolean {
   const path = `${SESSIONS_DIR}/${id}.json`;
   if (!existsSync(path)) return false;
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8")) as BackstageSessionFile;
+    const data = JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
     if (!data.archived && !data.archivedAt) return false;
     const { archived, archivedAt, archivedReason, ...rest } = data;
     writeJsonAtomic(path, rest);

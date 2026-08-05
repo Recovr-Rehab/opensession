@@ -25,7 +25,7 @@ export function parseHumanReply(content?: string): { name: string; body: string 
 /**
  * Detect the plain "[Name] " attribution prefix the server prepends when a
  * *named* teammate drives someone else's session — a steer, interrupt,
- * batch-queued prompt, or a cross-session `send_to_session` (backstage.ts).
+ * batch-queued prompt, or a cross-session `send_to_session` (opensession.ts).
  * Unlike a human-in-the-loop ask answer (parseHumanReply), this turn IS the
  * session driver, so it gets a normal bubble — but credited to whoever sent it,
  * not the viewer ("You"). Returns the sender + the prefix-stripped message.

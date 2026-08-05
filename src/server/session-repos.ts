@@ -32,7 +32,7 @@ import { personalPromptNoteFor } from "./personal-prompts";
 import {
 	findSession,
 	getCachedSessions,
-	touchBackstageSession,
+	touchNativeSession,
 } from "./session-cache";
 import type { AttachedRepo, LinkedPr, StackedOn, UnifiedSession } from "./types";
 import { defaultRepo } from "./config";
@@ -116,7 +116,7 @@ export function buildBranchNote(session: {
 	if (session.mode === "ask" || !session.branch || !session.worktreeDir)
 		return undefined;
 	const repo = repoForPath(session.worktreeDir);
-	// Shared-checkout repos (backstage) and main-checkout cwds have their own
+	// Shared-checkout repos (opensession) and main-checkout cwds have their own
 	// rules; this note is for isolated per-branch worktrees only.
 	if (sharedCheckoutForNewSessions(repo) || session.worktreeDir === repo.repo)
 		return undefined;
@@ -330,7 +330,7 @@ export function resolvePrTarget(
  * every create path that's about to wrap a chat in a fresh workspace checks here
  * first, so landing on an already-owned worktree joins the existing workspace
  * instead of minting a second one over it. Repo main checkouts never match —
- * they're shared by every backstage/ask chat, so ownership is meaningless there.
+ * they're shared by every native/ask chat, so ownership is meaningless there.
  */
 export function workspaceOwningWorktree(
 	worktreeDir: string | null | undefined,
@@ -375,7 +375,7 @@ export async function attachRepo(
 		(r) => r.repo !== repoId,
 	);
 	const all = [...existing, attached];
-	touchBackstageSession(sessionId, { attachedRepos: all });
+	touchNativeSession(sessionId, { attachedRepos: all });
 	return { attached, all };
 }
 
@@ -419,7 +419,7 @@ export async function switchPrimaryRepo(
 	let wtPath: string;
 	let branch: string;
 	if (sharedCheckoutForNewSessions(target)) {
-		// Backstage: sessions edit the live main checkout on its default branch.
+		// OpenSession: sessions edit the live main checkout on its default branch.
 		wtPath = target.repo;
 		branch = target.defaultBranch;
 	} else {
@@ -435,7 +435,7 @@ export async function switchPrimaryRepo(
 	const attachedRepos = (session.attachedRepos || []).filter(
 		(r) => r.repo !== repoId,
 	);
-	touchBackstageSession(sessionId, {
+	touchNativeSession(sessionId, {
 		repo: target.id,
 		worktreeDir: wtPath,
 		branch,
@@ -581,7 +581,7 @@ export async function linkPr(
 		),
 		linked,
 	];
-	touchBackstageSession(sessionId, { linkedPrs: all });
+	touchNativeSession(sessionId, { linkedPrs: all });
 	return { linked, all };
 }
 
@@ -596,6 +596,6 @@ export function unlinkPr(
 	const all = (session.linkedPrs || []).filter(
 		(r) => !(r.repo === repoId && r.branch === branch),
 	);
-	touchBackstageSession(sessionId, { linkedPrs: all });
+	touchNativeSession(sessionId, { linkedPrs: all });
 	return all;
 }

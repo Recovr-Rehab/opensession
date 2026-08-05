@@ -10,7 +10,7 @@
  *   needs a build on base — skipped).
  * - Only PASS on base is flagged. A failure OR a broken import both exit
  *   non-zero and count as "exercises the change" — conservative by design.
- * - Shared-checkout repos (backstage) are excluded: running their tests on
+ * - Shared-checkout repos (opensession) are excluded: running their tests on
  *   this host can rebind live server sockets (the bun-test/run-rpc trap).
  *
  * Runs concurrently with the model review in a throwaway detached worktree

@@ -35,7 +35,7 @@ import {
   type RemoteExecOpts,
 } from "./bootstrap";
 
-const SESSION_TAG = "backstage.session";
+const SESSION_TAG = "opensession.session";
 const DEFAULT_APP = "opensession-sandboxes";
 const DEFAULT_IMAGE = "daytonaio/sandbox:0.8.0";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
@@ -212,7 +212,7 @@ export class ModalProvider implements SandboxProvider {
       console.log(`[sandbox:modal] creating sandbox for ${spec.sessionId}`);
       const image = client.images.fromRegistry(cfg.modal?.image || DEFAULT_IMAGE);
       sandbox = await client.sandboxes.create(app, image, {
-        tags: { [SESSION_TAG]: spec.sessionId, "backstage.sandbox": "1" },
+        tags: { [SESSION_TAG]: spec.sessionId, "opensession.sandbox": "1" },
         timeoutMs: MAX_LIFETIME_MS,
         idleTimeoutMs:
           (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000,

@@ -27,10 +27,10 @@ Type=oneshot
 # precedent).
 User=ubuntu
 Environment=OPENSESSION_DEPLOY_STATE=/home/ubuntu/.opensession-deploy
-Environment=OPENSESSION_DEPLOY_CHECKOUT=/home/ubuntu/projects/tella-backstage
+Environment=OPENSESSION_DEPLOY_CHECKOUT=/home/ubuntu/projects/opensession
 # bun must be on PATH for a rollback's best-effort dependency sync (mirrors
 # opensession.service's explicit PATH).
 Environment="PATH=/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/usr/bin/env bash /home/ubuntu/projects/tella-backstage/deploy/self-deploy.sh --watchdog-probe
+ExecStart=/usr/bin/env bash /home/ubuntu/projects/opensession/deploy/self-deploy.sh --watchdog-probe
 # A rollback restart + 60s health gate must fit comfortably.
 TimeoutStartSec=300

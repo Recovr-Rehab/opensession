@@ -17,7 +17,7 @@ import {
 	invalidateSessionsCache,
 	isLegacySideChat,
 	peekCachedSessions,
-	touchBackstageSession,
+	touchNativeSession,
 } from "../session-cache";
 import { attachRepo, switchPrimaryRepo, workspaceOwningWorktree } from "../session-repos";
 import { getAllSessions, getTranscriptPath } from "../sessions";
@@ -26,7 +26,7 @@ import { configuredIdentity, defaultRepo } from "../config";
 import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
 import { suggestBranchName } from "../suggest-branch";
-import { type BackstageSessionFile, type StackedOn } from "../types";
+import { type NativeSessionFile, type StackedOn } from "../types";
 import { type Workspace, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
 import { REPOS, createWorktree, createWorktreeForExistingBranch, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, worktreeHasWork, worktreeHeadBranch } from "../worktree";
@@ -34,15 +34,15 @@ import { randomUUIDv7 } from "bun";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { isNativeSessionId } from "../paths";
 
-function findBackstageSessionForFileMentions(
+function findNativeSessionForFileMentions(
 	sessionId: string | null,
-): BackstageSessionFile | undefined {
+): NativeSessionFile | undefined {
 	if (!(sessionId && isNativeSessionId(sessionId)) || !/^[a-z0-9-]+$/i.test(sessionId))
 		return undefined;
 	try {
 		const session = JSON.parse(
 			readFileSync(`${SESSIONS_DIR}/${sessionId}.json`, "utf8"),
-		) as BackstageSessionFile;
+		) as NativeSessionFile;
 		return session.id === sessionId ? session : undefined;
 	} catch {
 		return undefined;
@@ -72,10 +72,10 @@ export async function handleWorkspaceRoutes(
 		const sessionId = url.searchParams.get("session");
 		const repos: Array<{ repo: string; dir: string; primary: boolean }> =
 			[];
-		// Backstage sessions have an owned JSON file, so read their small record
+		// OpenSession sessions have an owned JSON file, so read their small record
 		// directly instead of refreshing the entire cross-source session catalog.
 		const session =
-			findBackstageSessionForFileMentions(sessionId) ??
+			findNativeSessionForFileMentions(sessionId) ??
 			(sessionId ? findSession(sessionId) : undefined);
 		// Volume-mode sandbox workspaces have no host dir — the primary
 		// repo's `git ls-files` runs through the sandbox exec below.
@@ -221,10 +221,10 @@ export async function handleWorkspaceRoutes(
 			const proj = getRepo(url.searchParams.get("repo") || undefined);
 			if (existsSync(proj.repo)) dir = proj.repo;
 		}
-		// Backstage's own slash commands (/compact, /model, /goal, …) only
-		// work on existing backstage sessions — handleSlashCommand runs in
+		// OpenSession's own slash commands (/compact, /model, /goal, …) only
+		// work on existing opensession sessions — handleSlashCommand runs in
 		// the prompt path, not on new-session opening prompts.
-		const includeBuiltins = session?.source === "backstage";
+		const includeBuiltins = session?.source === "opensession";
 		return Response.json({
 			skills: searchSkills(dir, q, undefined, includeBuiltins),
 		});
@@ -345,7 +345,7 @@ export async function handleWorkspaceRoutes(
 		// chats fall back to standalone rather than pointing at a dead folder.
 		for (const s of getAllSessions()) {
 			if (s.projectId === id)
-				touchBackstageSession(s.id, { projectId: null });
+				touchNativeSession(s.id, { projectId: null });
 		}
 		const ok = deleteWorkspace(id);
 		return Response.json({ ok });
@@ -409,7 +409,7 @@ export async function handleWorkspaceRoutes(
 		// be parked in that live tree (bks-019f97ec, 2026-07-25: a "+" chat in a
 		// PR workspace landed on the main checkout's parked branch instead of
 		// the PR's). Treat it as bare so share siblings resolve through the
-		// workspace below. Shared-checkout repos (backstage) are exempt — their
+		// workspace below. Shared-checkout repos (opensession) are exempt — their
 		// code chats live on the main checkout by design.
 		if (
 			!srcScratch &&
@@ -441,7 +441,7 @@ export async function handleWorkspaceRoutes(
 				stackedOn = {
 					repo: repo.id,
 					branch: src.branch,
-					...(src.source === "backstage" ? { sessionId: src.id } : {}),
+					...(src.source === "opensession" ? { sessionId: src.id } : {}),
 				};
 			}
 		} else if (chatMode === "share" && !worktreeDir && src.projectId) {
@@ -479,9 +479,9 @@ export async function handleWorkspaceRoutes(
 			const owned = workspaceOwningWorktree(src.worktreeDir);
 			if (owned) {
 				workspaceId = owned.id;
-				if (src.source === "backstage")
-					touchBackstageSession(src.id, { projectId: owned.id });
-			} else if (src.source === "backstage") {
+				if (src.source === "opensession")
+					touchNativeSession(src.id, { projectId: owned.id });
+			} else if (src.source === "opensession") {
 				const ws = createWorkspace({
 					name: src.title || src.branch || "Workspace",
 					repo: src.repo,
@@ -489,7 +489,7 @@ export async function handleWorkspaceRoutes(
 					...(src.branch ? { branch: src.branch } : {}),
 					...(src.worktreeDir ? { worktreeDir: src.worktreeDir } : {}),
 				});
-				touchBackstageSession(src.id, { projectId: ws.id });
+				touchNativeSession(src.id, { projectId: ws.id });
 				workspaceId = ws.id;
 			}
 		}
@@ -509,7 +509,7 @@ export async function handleWorkspaceRoutes(
 		const siblingRefs =
 			src.externalRefs ||
 			(workspaceId ? getWorkspace(workspaceId)?.externalRefs : undefined);
-		const data: BackstageSessionFile = {
+		const data: NativeSessionFile = {
 			id: bksId,
 			claudeSessionId: "",
 			branch,
@@ -552,7 +552,7 @@ export async function handleWorkspaceRoutes(
 	//   - it already owns a real worktree (a review spin-off shares its
 	//     parent's tree so it can read the diff) ⇒ ADOPT that tree. Cutting a
 	//     second worktree would move the chat off the very branch it's about.
-	//   - shared-checkout repo (backstage) ⇒ no worktree exists for either
+	//   - shared-checkout repo (opensession) ⇒ no worktree exists for either
 	//     mode; code chats edit the live checkout, so only `mode` changes.
 	//   - parked on a repo's pinned ask checkout ⇒ cut a worktree, the
 	//     original behavior. That moves the cwd, so the ask transcript is
@@ -565,9 +565,9 @@ export async function handleWorkspaceRoutes(
 		const session = findSession(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
-		if (session.source !== "backstage")
+		if (session.source !== "opensession")
 			return Response.json(
-				{ error: "Only backstage chats can be promoted" },
+				{ error: "Only opensession chats can be promoted" },
 				{ status: 400 },
 			);
 		const body = (await req.json().catch(() => ({}))) as {
@@ -618,7 +618,7 @@ export async function handleWorkspaceRoutes(
 				console.warn(`[promote] transcript copy failed for ${sessionId}:`, e);
 			}
 		}
-		touchBackstageSession(sessionId, {
+		touchNativeSession(sessionId, {
 			mode: "code",
 			branch,
 			worktreeDir,
@@ -626,7 +626,7 @@ export async function handleWorkspaceRoutes(
 		});
 		// Materialize the workspace's worktree if it doesn't own one yet. A
 		// shared checkout is owned by nobody, so it never becomes a
-		// workspace's tree (that's what keeps every backstage chat from
+		// workspace's tree (that's what keeps every opensession chat from
 		// collapsing into one workspace — see chat-workspace.ts).
 		if (session.projectId && worktreeDir && !isSharedCheckoutDir(worktreeDir)) {
 			const ws = getWorkspace(session.projectId);
@@ -651,7 +651,7 @@ export async function handleWorkspaceRoutes(
 		const projectId = body.projectId ?? null;
 		if (projectId && !getWorkspace(projectId))
 			return Response.json({ error: "Project not found" }, { status: 404 });
-		touchBackstageSession(sessionId, { projectId });
+		touchNativeSession(sessionId, { projectId });
 		return Response.json({ ok: true, projectId });
 	}
 
@@ -757,7 +757,7 @@ export async function handleWorkspaceRoutes(
 		const all = (session.attachedRepos || []).filter(
 			(r) => r.repo !== body.repo,
 		);
-		touchBackstageSession(sessionId, { attachedRepos: all });
+		touchNativeSession(sessionId, { attachedRepos: all });
 		return Response.json({ ok: true, attachedRepos: all });
 	}
 

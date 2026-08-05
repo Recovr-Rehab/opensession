@@ -358,7 +358,7 @@ export interface BeaconDeps {
 }
 
 async function defaultBeaconDeps(): Promise<BeaconDeps> {
-	const [{ OPENSESSION_CHATS_DIR }, { getSessionControl }, { touchBackstageSession }, fs] =
+	const [{ OPENSESSION_CHATS_DIR }, { getSessionControl }, { touchNativeSession }, fs] =
 		await Promise.all([
 			import("./paths"),
 			import("./session-control"),
@@ -375,7 +375,7 @@ async function defaultBeaconDeps(): Promise<BeaconDeps> {
 				return null;
 			}
 		},
-		stamp: (id, at) => touchBackstageSession(id, { parentNotifiedAt: at }),
+		stamp: (id, at) => touchNativeSession(id, { parentNotifiedAt: at }),
 		deliver: (parentId, content) =>
 			// No user → deliverToSession leaves off the "[name]" prefix: this is
 			// the server speaking, not a person and not the worker.

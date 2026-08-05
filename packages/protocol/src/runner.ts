@@ -64,7 +64,7 @@ export interface RunHostSpec {
   mcpServers?: McpScope;
   /**
    * opensession-* in-process servers to expose via the RPC proxy (mcp-proxy.ts →
-   * backstage-rpc.sock). Names must match what the server-side builder
+   * opensession-rpc.sock). Names must match what the server-side builder
    * produces for this session. Empty/omitted for automation-owned sessions.
    */
   proxyMcpServers?: string[];
@@ -260,5 +260,5 @@ export const HOST_LOG_NAME = "host.log";
 /** The server-side RPC socket the mcp-proxy talks to. Stable path (the
  *  literal filename is historical — a wire constant, not branding). */
 export function rpcSocketPath(chatsDir: string): string {
-  return `${chatsDir}/backstage-rpc.sock`;
+  return `${chatsDir}/opensession-rpc.sock`;
 }

@@ -128,7 +128,7 @@ mkdirSync(SESSIONS_DIR, { recursive: true });
 // (watchers, pending questions, queues) is parked on globalThis so the fresh
 // module binding reuses the same instances, the HTTP/WS server is reloaded in
 // place rather than rebound, and all one-time setup (agents, schedulers, timers,
-// signal handlers) is guarded behind `__backstageBooted` so it never stacks.
+// signal handlers) is guarded behind `__opensessionBooted` so it never stacks.
 // Long-lived agent *loop code* still needs a real restart — but that's now
 // graceful (see SIGTERM handler below). A plain `bun run` (no --hot) just runs
 // each branch once, exactly as before.
@@ -163,10 +163,10 @@ console.log(`Starting OpenSession server on ${HOST}:${PORT}...`);
 function hotServe(
 	options: Parameters<typeof Bun.serve<WSClientData>>[0],
 ): import("bun").Server<WSClientData> {
-	const live = g.__backstageServer as
+	const live = g.__opensessionServer as
 		| import("bun").Server<WSClientData>
 		| undefined;
-	if (!live) return (g.__backstageServer = Bun.serve<WSClientData>(options));
+	if (!live) return (g.__opensessionServer = Bun.serve<WSClientData>(options));
 	try {
 		// reload's declared type is narrower than the full serve options, but it
 		// accepts (and swaps) routes/fetch/websocket at runtime.
@@ -357,7 +357,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 						// otherwise left open so the sign-in screen can render — a
 						// published app must get OpenSession's audience, not a
 						// wider one.
-						/^\/(?:backstage\/)?d\//.test(path))
+						/^\/(?:opensession\/)?d\//.test(path))
 				) {
 					return Response.json({ error: "Sign in required" }, { status: 401 });
 				}
@@ -474,10 +474,10 @@ async function loadAgents(): Promise<AgentModule[]> {
 }
 
 // One-time startup: agents, schedulers, recurring timers, and signal handlers.
-// Guarded behind __backstageBooted so a `bun --hot` reload never double-starts
+// Guarded behind __opensessionBooted so a `bun --hot` reload never double-starts
 // any of it — the already-running agents/timers keep going untouched (only a
 // real restart reloads their code, and that restart is now graceful, below).
-if (!g.__backstageBooted) {
+if (!g.__opensessionBooted) {
 	const localProfile = isLocalProfile();
 	// Dev instances (src/server/dev-mode.ts) boot like the local profile here:
 	// no agents, no webhook intake, no schedulers/sweeps, no detached-server
@@ -667,13 +667,13 @@ if (!g.__backstageBooted) {
 			// of dead-ending headless. Automations stay headless by design.
 			(bksSessionId) => {
 				const session = findSession(bksSessionId);
-				if (!session || session.source !== "backstage" || session.automation)
+				if (!session || session.source !== "opensession" || session.automation)
 					return undefined;
 				return makeAskHandler(bksSessionId);
 			},
 			(bksSessionId, user) => {
 				const session = findSession(bksSessionId);
-				if (!session || session.source !== "backstage" || session.automation)
+				if (!session || session.source !== "opensession" || session.automation)
 					return undefined;
 				return session.goalId
 					? {
@@ -684,7 +684,7 @@ if (!g.__backstageBooted) {
 			},
 			(bksSessionId) => {
 				const session = findSession(bksSessionId);
-				if (!session || session.source !== "backstage" || session.automation)
+				if (!session || session.source !== "opensession" || session.automation)
 					return undefined;
 				return buildReposNote(session);
 			},
@@ -873,7 +873,7 @@ if (!g.__backstageBooted) {
 	// Frontend live-reload: rebuild the SPA bundle in-process when its source
 	// changes, so a CSS/frontend tweak no longer needs a `systemctl restart` that
 	// interrupts every running session. `kill -USR2 <pid>` forces it too (drop-in
-	// for restart in a deploy script). Guarded by __backstageBooted so a hot
+	// for restart in a deploy script). Guarded by __opensessionBooted so a hot
 	// reload doesn't stack watchers/handlers. recursive watch needs Linux ≥ 6.x
 	// (we're on 6.17) — fine here.
 	if (!IS_DEV && frontend) {
@@ -915,5 +915,5 @@ if (!g.__backstageBooted) {
 			.catch((e) => console.error("[demo] startDemo failed:", e));
 	}
 
-	g.__backstageBooted = true;
+	g.__opensessionBooted = true;
 }

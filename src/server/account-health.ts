@@ -306,7 +306,7 @@ export async function sweepAccountHealth(): Promise<Issue[]> {
 
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
-/** Start the hourly sweep. Call once from the __backstageBooted block. */
+/** Start the hourly sweep. Call once from the __opensessionBooted block. */
 export function startAccountHealthMonitor(): void {
   if (sweepTimer) return;
   setTimeout(() => {

@@ -1,5 +1,5 @@
 /**
- * human-asks — the "human in the loop" registry. Lets a Backstage session ask a
+ * human-asks — the "human in the loop" registry. Lets a OpenSession session ask a
  * *teammate* a question over Slack and fold the answer back into the session,
  * the way the AskUserQuestion machinery asks the session's own driver.
  *
@@ -18,14 +18,14 @@
  * parallel once the DM goes out; whoever answers first wins.
  *
  * This module owns the ask *data* (the map + disk persistence + reply matching +
- * audit). The two things only the main backstage process can do — steer an answer
+ * audit). The two things only the main opensession process can do — steer an answer
  * into a live session and broadcast — it reaches through the session-control
  * registry (tryGetSessionControl), exactly like the opensession-sessions MCP does.
  * The Slack transport (DM send + option cards) is imported directly from the
  * Slack agent's slack-api helpers; nothing there imports back into the server, so
  * there's no import cycle.
  *
- * Wired into interactive runs only (Slack + Backstage sessions), never automation
+ * Wired into interactive runs only (Slack + OpenSession sessions), never automation
  * runs — same privilege boundary as opensession-sessions/opensession-admin: untrusted
  * ticket text must not be able to DM the team as Michael.
  */
@@ -71,7 +71,7 @@ export type DeliverWhen = "now" | "when_done" | "on_pr" | { atIso: string };
 
 export interface HumanAsk {
   id: string;
-  /** Backstage session that raised the ask (answers route back here). */
+  /** OpenSession session that raised the ask (answers route back here). */
   sessionId: string;
   /** Display name of whoever drove the session when it asked. */
   createdBy: string;
@@ -298,7 +298,7 @@ function shouldAskInUiFirst(input: CreateAskInput): boolean {
     const session = findSession(input.sessionId);
     // Slack/Linear/CLI-driven sessions: their driver lives in that channel, so
     // a DM *is* the in-context answer surface.
-    if (session?.source !== "backstage") return false;
+    if (session?.source !== "opensession") return false;
     const owner = resolveTeammate(session.startedBy ?? null);
     return !!owner && owner.slackId === input.person.slackId;
   } catch {
@@ -612,7 +612,7 @@ function resolveAsk(
     console.error(`[human-asks] no session control to deliver answer for ${a.id}`);
     return;
   }
-  // Unicode emoji (the Backstage markdown renderer doesn't expand :shortcodes:)
+  // Unicode emoji (the OpenSession markdown renderer doesn't expand :shortcodes:)
   // and a structured header the web UI keys on to render this as a distinct
   // "human reply" bubble rather than one of the session driver's own messages.
   const who = via === "ui" ? answeredBy || a.person.name : a.person.name;

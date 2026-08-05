@@ -15,7 +15,7 @@ beforeAll(async () => {
 	priorHome = process.env.HOME;
 	home = join(tmpdir(), `backstage-sessions-test-${crypto.randomUUID()}`);
 	process.env.HOME = home;
-	mkdirSync(join(home, ".backstage-chats"), { recursive: true });
+	mkdirSync(join(home, ".opensession-chats"), { recursive: true });
 	mkdirSync(join(home, ".slack-sessions"), { recursive: true });
 	// The PR-cache assertions need a repo that actually carries a ghRepo:
 	// prRepos() filters those out, and the only BUILT-IN repo is `opensession`
@@ -28,10 +28,10 @@ beforeAll(async () => {
 		join(home, "config.json"),
 		JSON.stringify({
 			repos: {
-				backstage: {
-					repo: "/home/ubuntu/projects/tella-backstage",
+				opensession: {
+					repo: "/home/ubuntu/projects/opensession",
 					ghRepo: "tellahq/backstage",
-					label: "Backstage",
+					label: "OpenSession",
 				},
 			},
 		}),
@@ -55,7 +55,7 @@ beforeAll(async () => {
 	// at their load (findCodexRollout is reached through a bare import of
 	// ./codex-accounts either way, so it needs the same live-binding seam).
 	const paths = await import("./paths");
-	priorChatsDir = paths.__setChatsDirForTest(join(home, ".backstage-chats"));
+	priorChatsDir = paths.__setChatsDirForTest(join(home, ".opensession-chats"));
 	const codexAccounts = await import("./codex-accounts");
 	priorCodexHome = codexAccounts.__setCodexHomeForTest(home);
 });
@@ -79,18 +79,18 @@ afterAll(async () => {
 
 function writeSession(id: string, data: Record<string, unknown>): void {
 	writeFileSync(
-		join(home, ".backstage-chats", `${id}.json`),
+		join(home, ".opensession-chats", `${id}.json`),
 		JSON.stringify(
 			{
 				id,
 				claudeSessionId: "",
 				branch: "",
-				worktreeDir: "/home/ubuntu/projects/tella-backstage",
+				worktreeDir: "/home/ubuntu/projects/opensession",
 				createdBy: "Michael",
 				createdAt: "2026-07-02T18:00:00.000Z",
 				lastActivity: "2026-07-02T18:00:00.000Z",
 				mode: "ask",
-				source: "backstage",
+				source: "opensession",
 				...data,
 			},
 			null,
@@ -115,7 +115,7 @@ describe("getAllSessions", () => {
 	it("keeps Codex worker sessions visible even when they have no workspace", async () => {
 		writeSession("bks-codex-worker", {
 			title: "Codex worker with no workspace",
-			repo: "backstage",
+			repo: "opensession",
 			model: "gpt-5.5",
 			codexThreadId: "codex-thread-1",
 			projectId: null,
@@ -124,7 +124,7 @@ describe("getAllSessions", () => {
 		});
 		writeSession("bks-fable-orchestrator", {
 			title: "Fable orchestrator with workspace",
-			repo: "backstage",
+			repo: "opensession",
 			model: "claude-fable-5",
 			claudeSessionId: "claude-session-1",
 			workspaceId: "prj-demo",
@@ -137,8 +137,8 @@ describe("getAllSessions", () => {
 		const codex = sessions.find((s: UnifiedSession) => s.id === "bks-codex-worker");
 		expect(codex).toMatchObject({
 			id: "bks-codex-worker",
-			source: "backstage",
-			repo: "backstage",
+			source: "opensession",
+			repo: "opensession",
 			model: "gpt-5.5",
 			codexThreadId: "codex-thread-1",
 			projectId: null,
@@ -149,7 +149,7 @@ describe("getAllSessions", () => {
 		const fable = sessions.find((s: UnifiedSession) => s.id === "bks-fable-orchestrator");
 		expect(fable).toMatchObject({
 			id: "bks-fable-orchestrator",
-			repo: "backstage",
+			repo: "opensession",
 			model: "claude-fable-5",
 			projectId: "prj-demo",
 		});
@@ -157,15 +157,15 @@ describe("getAllSessions", () => {
 
 	it("deduplicates Codex sessions by thread id and keeps dropped ids as aliases", async () => {
 		writeSession("bks-codex-shared-thread", {
-			title: "Backstage Codex thread",
-			repo: "backstage",
+			title: "OpenSession Codex thread",
+			repo: "opensession",
 			model: "gpt-5.5",
 			codexThreadId: "codex-thread-shared",
 		});
 		writeSlackSession("C123-1719860000.000000", {
 			branch: "codex-thread-branch",
 			userId: "Michael",
-			worktreeDir: "/home/ubuntu/projects/tella-backstage",
+			worktreeDir: "/home/ubuntu/projects/opensession",
 			claudeSessionId: null,
 			codexThreadId: "codex-thread-shared",
 			model: "gpt-5.5",
@@ -184,7 +184,7 @@ describe("getAllSessions", () => {
 		expect(matches).toHaveLength(1);
 		expect(matches[0]).toMatchObject({
 			id: "bks-codex-shared-thread",
-			source: "backstage",
+			source: "opensession",
 			aliasIds: ["slack-C123-1719860000.000000"],
 		});
 	});
@@ -194,7 +194,7 @@ describe("getAllSessions", () => {
 			`./sessions.ts?test=${crypto.randomUUID()}`
 		);
 
-		const cwd = "/home/ubuntu/projects/tella-backstage";
+		const cwd = "/home/ubuntu/projects/opensession";
 		expect(getEngineTranscriptPath(cwd, "claude-session-1", "claude")).toBe(
 			getTranscriptPath(cwd, "claude-session-1"),
 		);
@@ -244,7 +244,7 @@ describe("getAllSessions", () => {
 			home,
 			".claude",
 			"projects",
-			"-home-ubuntu-projects-tella-backstage",
+			"-home-ubuntu-projects-opensession",
 		);
 		mkdirSync(claudeDir, { recursive: true });
 		const claudePath = join(claudeDir, "claude-only-transcript.jsonl");
@@ -275,7 +275,7 @@ describe("getAllSessions", () => {
 			JSON.stringify({
 				version: 3,
 				repos: {
-					backstage: {
+					opensession: {
 						"review-cache": {
 							url: "https://github.com/tellahq/backstage/pull/123",
 							state: "OPEN",
@@ -297,14 +297,14 @@ describe("getAllSessions", () => {
 						},
 					},
 				},
-				recentLimits: { backstage: 500 },
+				recentLimits: { opensession: 500 },
 				probeEtags: {},
 				lastFullRefresh: {},
 			}),
 		);
 		writeSession("bks-review-cache", {
 			title: "Review cache test",
-			repo: "backstage",
+			repo: "opensession",
 			branch: "review-cache",
 			startedBy: "Jaap",
 		});

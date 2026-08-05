@@ -111,7 +111,7 @@ export interface KeychainGrant {
   id: string;
   credentialId: string;
   owner: string;
-  /** Audience: only this backstage session was granted anything. */
+  /** Audience: only this opensession session was granted anything. */
   sessionId: string;
   requestedBy: string;
   purpose: string;

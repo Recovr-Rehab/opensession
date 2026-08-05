@@ -298,7 +298,7 @@ export function refreshWarmTemplate(repoId: string, opts?: { force?: boolean }):
 async function doRefresh(repoId: string, force: boolean): Promise<void> {
   const repo = configuredRepos()[repoId];
   if (!repo) return;
-  if (repo.sharedCheckout) return; // backstage self-hosts; nothing to warm
+  if (repo.sharedCheckout) return; // opensession self-hosts; nothing to warm
   const cfg = warmTemplateConfig(repoId);
   if (!cfg.enabled && !force) return;
   const dir = warmTemplateDir(repo);

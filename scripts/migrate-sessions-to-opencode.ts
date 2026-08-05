@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Fleet migration of backstage sessions onto the OpenCode engine.
+ * Fleet migration of opensession sessions onto the OpenCode engine.
  *
- * Dry-run by default: lists every candidate backstage session with its current
+ * Dry-run by default: lists every candidate opensession session with its current
  * engine, model, last activity, and whether a transcript exists to build the
  * cross-engine handoff from — plus everything that is skipped and why.
  * Nothing is written without --execute.
@@ -20,7 +20,7 @@
  * handoff. HARD-SKIPPED, never migrated: automation-owned sessions (the
  * opencode runner deny-by-default gate refuses automation runs) and sessions
  * with an in-flight run in the shared run journal. Slack/Linear-store sessions
- * aren't touched either — this script only operates on the backstage store.
+ * aren't touched either — this script only operates on the opensession store.
  */
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { OPENSESSION_CHATS_DIR } from "../src/server/paths";
@@ -32,7 +32,7 @@ import {
   isAutomationOwnedSession,
   sessionHasJournaledRun,
 } from "../src/server/migrate-engine";
-import type { BackstageSessionFile } from "../src/server/types";
+import type { NativeSessionFile } from "../src/server/types";
 
 const argv = process.argv.slice(2);
 const execute = argv.includes("--execute");
@@ -85,7 +85,7 @@ const SKIP_FILES = new Set([
 const rows: Row[] = [];
 for (const file of readdirSync(OPENSESSION_CHATS_DIR)) {
   if (!file.endsWith(".json") || SKIP_FILES.has(file)) continue;
-  let data: BackstageSessionFile;
+  let data: NativeSessionFile;
   try {
     data = JSON.parse(readFileSync(`${OPENSESSION_CHATS_DIR}/${file}`, "utf-8"));
   } catch {
@@ -146,7 +146,7 @@ const fmt = (r: Row) =>
   (r.skip ? `  (SKIP: ${r.skip})` : "") +
   (r.title ? `\n      ${r.title}` : "");
 
-console.log(`Backstage session store: ${OPENSESSION_CHATS_DIR}`);
+console.log(`OpenSession session store: ${OPENSESSION_CHATS_DIR}`);
 console.log(`\n${candidates.length} session(s) would migrate:\n`);
 for (const r of candidates) console.log(fmt(r));
 console.log(`\n${skipped.length} skipped:\n`);

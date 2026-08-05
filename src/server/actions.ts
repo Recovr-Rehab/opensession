@@ -4,7 +4,7 @@
  * An Action = (1) an input form + (2) a way to execute a script. v1 registers
  * existing scripts that live in a repo (e.g. scripts/run-maintenance.sh)
  * and maps the form fields to the script's arguments. A run is NOT a bespoke
- * output panel — it spins up a real backstage session on a fast/cheap model
+ * output panel — it spins up a real opensession session on a fast/cheap model
  * (Haiku) that executes the command and reports the output, so it shows up in
  * the sessions list with a transcript and can be forked into a full session to
  * dig in. (Inline js/bash scripts authored in the UI come in a later version.)
@@ -21,7 +21,7 @@ import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { providerFor, resolveModel, DEFAULT_FALLBACK_MODEL, modelLabel } from "./models";
 import { engineSessionPatch } from "./sessions";
 import { updateSessionFile } from "./session-cache";
-import type { BackstageSessionFile } from "./types";
+import type { NativeSessionFile } from "./types";
 import { configuredIntegration, configuredRepos, defaultRepo } from "./config";
 import { stateDir , newSessionId} from "./paths";
 import { shouldPersistModelSwitch } from "./run-events";
@@ -318,7 +318,7 @@ function buildRunPrompt(action: Action, command: string): string {
 // ── Running ──────────────────────────────────────────────────
 
 /**
- * Fire an action run. Creates a real backstage session (fast model, code mode,
+ * Fire an action run. Creates a real opensession session (fast model, code mode,
  * default repository checkout) that executes the script and reports the output.
  * Returns the new session id immediately; the run streams via the session's
  * transcript like any other session. Mirrors the automations runner.
@@ -360,14 +360,14 @@ export function runAction(
     let effectiveModel = model;
     let selectedModel = model;
     let effectiveProvider = providerFor(model);
-    const modelHistory: NonNullable<BackstageSessionFile["modelHistory"]> = [];
+    const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
     // Field-scoped write: creation fields are create-if-absent defaults (an
     // existing file wins); this run only ever owns the engine-id/model
     // tracking fields it actually changes. Serialized via updateSessionFile.
     const persist = (engineSessionId: string) =>
       updateSessionFile(bksId, (data) => {
         // Widen to Partial: the file may not exist yet (create-if-absent).
-        const existing: Partial<BackstageSessionFile> = data;
+        const existing: Partial<NativeSessionFile> = data;
         return {
           id: bksId,
           claudeSessionId: "",

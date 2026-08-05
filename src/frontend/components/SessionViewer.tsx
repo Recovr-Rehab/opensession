@@ -2737,20 +2737,20 @@ export function SessionViewer({
 	// sessions need an existing claude session id to resume.
 	const effectiveModel = model || defaultModel;
 	const isCodexModel = modelIsCodex(effectiveModel, models);
-	// A backstage chat with no engine ids is a *fresh* chat (e.g. a new sibling
+	// A opensession chat with no engine ids is a *fresh* chat (e.g. a new sibling
 	// from the tab strip's +): the composer stays enabled — its first prompt
 	// starts a new engine conversation server-side (see runSessionPrompt). Only
-	// non-backstage sources with no engine to resume stay read-only.
+	// non-opensession sources with no engine to resume stay read-only.
 	const noEngine =
 		!isCodexModel &&
 		!session.claudeSessionId &&
 		!session.codexThreadId &&
-		session.source !== "backstage";
+		session.source !== "opensession";
 	const busySendLabel = `Queue — ${AGENT_NAME} sees it after fully finishing this run`;
 	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
 	// still fork as a new sibling with a transcript handoff.
 	const canForkSession =
-		session.source === "backstage" &&
+		session.source === "opensession" &&
 		!!(session.claudeSessionId || session.codexThreadId || session.transcriptPath);
 
 	const handleFork = useCallback((messageId: string) => {
@@ -3493,9 +3493,9 @@ export function SessionViewer({
 				}
 				return !open;
 			});
-		window.addEventListener("backstage:toggle-session-settings", toggle);
+		window.addEventListener("opensession:toggle-session-settings", toggle);
 		return () =>
-			window.removeEventListener("backstage:toggle-session-settings", toggle);
+			window.removeEventListener("opensession:toggle-session-settings", toggle);
 	}, [session.id]);
 	// Closing the menu disarms a half-finished delete confirm — reopening it
 	// later shouldn't present the destructive choices without a fresh click.
@@ -4074,11 +4074,11 @@ export function SessionViewer({
 					{/* This slot says where a chat came FROM. Ask mode isn't an
 					    origin — it's a mode you can change — so it rides the composer
 					    toolbar next to the model pill instead, where the switch is one
-					    click from where you're typing. "backstage" is the default
+					    click from where you're typing. "opensession" is the default
 					    origin (web UI): as a chip it's noise, and for backstage-repo
 					    sessions it read as the repo said twice. Only the unusual
 					    origins (slack/linear/cli) surface here. */}
-					{session.source !== "backstage" && (
+					{session.source !== "opensession" && (
 						<span className={`source-chip source-${session.source}`}>
 							{session.source}
 						</span>
@@ -4452,7 +4452,7 @@ export function SessionViewer({
 												variant="menu-row"
 											/>
 										)}
-										{session.source === "backstage" && models.length > 0 && (
+										{session.source === "opensession" && models.length > 0 && (
 											<ModelMenuRow
 												models={models}
 												model={model}
@@ -4600,7 +4600,7 @@ export function SessionViewer({
 							// through this component's tree — not App's title button. Fire
 							// the same event so tapping repo/model/cost opens the info page.
 							window.dispatchEvent(
-								new Event("backstage:toggle-session-settings"),
+								new Event("opensession:toggle-session-settings"),
 							)
 						}
 					>
@@ -5192,10 +5192,10 @@ export function SessionViewer({
 									// the composer's "+" with the rest of them rather than as its
 									// own chip. The row stays open reading "Switching to code…"
 									// until the server answers — cutting a worktree isn't always
-									// instant. Only backstage chats can promote (the server owns
+									// instant. Only opensession chats can promote (the server owns
 									// that rule); elsewhere the row would be a dead end.
 									menuExtra={
-										isAsk && session.source === "backstage"
+										isAsk && session.source === "opensession"
 											? ({ close }) => (
 													<button
 														type="button"
@@ -5221,11 +5221,11 @@ export function SessionViewer({
 									model={model}
 									onModelChange={handleModelChange}
 									modelDisabled={
-										session.source !== "backstage" &&
+										session.source !== "opensession" &&
 										session.source !== "slack"
 									}
 									modelTitle={
-										session.source === "backstage" ||
+										session.source === "opensession" ||
 										session.source === "slack"
 											? "Switch the model for this session"
 											: "Set the model from the owning agent (its session file is agent-owned)"
@@ -5237,19 +5237,19 @@ export function SessionViewer({
 									// Account pinning is a backstage-session affordance. The
 									// picker filters the combined pool by the active model.
 									accounts={
-										session.source === "backstage"
+										session.source === "opensession"
 											? accounts
 											: undefined
 									}
 									accountId={accountId}
 									onAccountChange={
-										session.source === "backstage"
+										session.source === "opensession"
 											? handleAccountChange
 											: undefined
 									}
 									goal={currentGoal}
 									onSetGoal={
-										session.source === "backstage" ? handleSetGoal : undefined
+										session.source === "opensession" ? handleSetGoal : undefined
 									}
 									usage={usage}
 									mentionFetch={async (q) => [
@@ -5259,7 +5259,7 @@ export function SessionViewer({
 									skillsFetch={(q) => fetchSkillMentions(q, session.id)}
 									textareaRef={composerRef}
 									sendMenu={
-										session.source === "backstage"
+										session.source === "opensession"
 											? ({ text, disabled, onScheduled }) => (
 													<SchedulePromptButton
 														sessionId={session.id}
@@ -5533,7 +5533,7 @@ export function SessionViewer({
 
 // Placeholder for regions that need the session's worktree while the create
 // run is still preparing it (new-workspace creates announce the session before
-// the slow git work — see create_session in backstage.ts).
+// the slow git work — see create_session in opensession.ts).
 function WorkspaceWaiting({ detail }: { detail: string }) {
 	return (
 		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">

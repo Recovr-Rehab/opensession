@@ -30,7 +30,7 @@
  *    run DETACHED (setsid, exit code + output tails to /tmp/.bks-exec/<id>)
  *    and are polled with short commands until done or deadline.
  *  - execBackground(): setsid on the persistent VM — the process survives the
- *    API call and this backstage process.
+ *    API call and this opensession process.
  *  - ports(): the in-box `host <port>` CLI registers a public HTTPS route
  *    (https://<subdomain>-<port>.on.ascii.dev, `_token`-protected by default)
  *    and prints the URL — parsed into PortMap `{url}` entries.
@@ -315,7 +315,7 @@ function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
 
     async execBackground(cmd: string, opts?: RemoteExecOpts) {
       // setsid on a persistent VM detaches from the command's process tree —
-      // the process survives this API call and this backstage process.
+      // the process survives this API call and this opensession process.
       const shell = composeShell(cmd, opts);
       const r = await execSync(
         `setsid sh -c ${shellQuoteWord(shell)} </dev/null >/dev/null 2>&1 & echo OPENSESSION_BG`,

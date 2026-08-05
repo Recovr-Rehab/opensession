@@ -1,17 +1,17 @@
 /**
  * run-rpc — a local unix-socket RPC that lets detached run hosts reach the
  * in-process opensession-* MCP servers (opensession-sessions / -admin / -goals /
- * -humans / -repos / -goal-self), which can only execute inside the backstage
+ * -humans / -repos / -goal-self), which can only execute inside the opensession
  * process (they close over live state: SessionControl, pendingAsks, attachRepo…).
  *
  * A run host injects a stdio proxy (src/runner-host/mcp-proxy.ts) per server
  * into its run's MCP config; the proxy forwards tools/list + tools/call here.
- * Because the proxy reconnects with retry, these tools now SURVIVE a backstage
+ * Because the proxy reconnects with retry, these tools now SURVIVE a opensession
  * restart mid-run — with the old in-process wiring they died with the process.
  *
  * Auth: same-uid is the trust boundary on this box, but automation runs are
  * deliberately fail-closed — every request needs a per-run bearer token that
- * backstage minted when it spawned the host (and re-registers on reattach).
+ * opensession minted when it spawned the host (and re-registers on reattach).
  * Automation-owned runs never get a token, so untrusted ticket text can't
  * reach session-control/self-admin tools through this socket.
  *
@@ -81,7 +81,7 @@ export function unregisterRunToken(token: string | undefined): void {
   else existing.refs -= 1;
 }
 
-// opencode session id → the backstage session driving it, registered by
+// opencode session id → the opensession session driving it, registered by
 // opencode-runner for the duration of each run on a SHARED server. Tool calls
 // proxied from such a server carry the opencode session id (injected by
 // opencode-plugin-session-tag.js, stripped back out of the args by
@@ -120,7 +120,7 @@ export function timingSafeEqStr(a: string, b: string): boolean {
 
 /**
  * Builds the interactive MCP server set for a session — the same set the old
- * inProcessMcp wiring passed to runClaude. Registered by backstage.ts on every
+ * inProcessMcp wiring passed to runClaude. Registered by opensession.ts on every
  * (re)load; parked on globalThis so the long-lived socket handler always calls
  * the freshest implementation.
  */
@@ -188,7 +188,7 @@ export async function dispatchRunRpc(path: string, body: any): Promise<RunRpcDis
   if (!ctx) return imm(403, { error: "unauthorized (unknown run token)" });
 
   // Per-call session refinement (shared opencode servers): the proxied call
-  // names the opencode session it came from; resolve it to the backstage
+  // names the opencode session it came from; resolve it to the opensession
   // session that owns it — but only when that mapping was registered under
   // the SAME token (a spoofed/stale id falls back to the token's own ctx).
   const ocSession = String(body?.ocSession || "");
@@ -377,7 +377,7 @@ export function startRunRpcServer(): void {
 // `type:"remote"` MCP entries against this listener instead of spawning a
 // `bun run mcp-proxy.ts` stdio subprocess per server per instance — which
 // reached 664 processes / ~42GB RSS on 2026-07-27. Sandbox/runner-host runs
-// keep the stdio proxy (inside a container 127.0.0.1 isn't backstage).
+// keep the stdio proxy (inside a container 127.0.0.1 isn't opensession).
 //
 // Deliberately hand-rolled rather than the SDK's HTTP server transport:
 // session routing must pull `__bks_oc_session` out of the raw arguments

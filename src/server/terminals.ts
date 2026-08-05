@@ -27,7 +27,7 @@
  *    pty-req on exec channels, so the previous `ssh <token>@ssh.app.daytona.io
  *    "… exec bash -l"` transport came up with no remote tty — no prompt, no
  *    echo, a dead-looking tab (bit us 2026-07-09). No published port, no
- *    extra HTTPS surface — the SDK socket terminates at backstage and the
+ *    extra HTTPS surface — the SDK socket terminates at opensession and the
  *    browser only ever speaks the existing tailnet-gated session WS.
  *
  * Trust model: the web UI is Tailscale- + team-gated and interactive users are
@@ -36,7 +36,7 @@
  * MAX_TERMINALS_PER_SOCKET only bounds accidental PTY pile-up, not trust.
  * Nothing here is reachable from automation runs.
  *
- * NOTE: reached only through backstage.ts's WS handlers, which do NOT
+ * NOTE: reached only through opensession.ts's WS handlers, which do NOT
  * hot-apply — changes here need a real restart to take effect.
  */
 
@@ -54,13 +54,13 @@ interface TermEntry {
 
 const g = globalThis as any;
 /** ws → termId → live shell. (New globalThis key since the multi-tab change:
- *  the old __backstageTerminals map was flat ws → entry.) */
-const terms: Map<unknown, Map<string, TermEntry>> = (g.__backstageTerminalsById ??=
+ *  the old __opensessionTerminals map was flat ws → entry.) */
+const terms: Map<unknown, Map<string, TermEntry>> = (g.__opensessionTerminalsById ??=
   new Map());
 /** In-flight async starts (ws → termId → generation token): a stop or
  *  re-start that lands while a sandbox target is still resolving cancels the
  *  stale one. */
-const pendingStarts: Map<unknown, Map<string, object>> = (g.__backstageTermPendingById ??=
+const pendingStarts: Map<unknown, Map<string, object>> = (g.__opensessionTermPendingById ??=
   new Map());
 
 /** Bound accidental PTY pile-up per client (each shell tab is one PTY). */
@@ -144,12 +144,12 @@ function clampRows(rows: number | undefined): number {
  * daemonizes past its shell — so every Shell tab leaked one into the service
  * cgroup until shutdown SIGKILLed the pile (journal 2026-07-09 13:51:41).
  * Handing each PTY a live SSH_AUTH_SOCK makes the profile guard skip the
- * spawn entirely: at most one agent per backstage process, reused across
+ * spawn entirely: at most one agent per opensession process, reused across
  * shells, and reaped with the cgroup on service stop.
  */
 async function sharedSshAgentEnv(): Promise<Record<string, string>> {
   if (process.env.SSH_AUTH_SOCK) return {}; // service already has one — inherit
-  const cur: { sock: string; pid: number } | undefined = g.__backstageTermSshAgent;
+  const cur: { sock: string; pid: number } | undefined = g.__opensessionTermSshAgent;
   if (cur && existsSync(cur.sock)) {
     try {
       process.kill(cur.pid, 0);
@@ -162,7 +162,7 @@ async function sharedSshAgentEnv(): Promise<Record<string, string>> {
   const sock = out.match(/SSH_AUTH_SOCK=([^;\s]+)/)?.[1];
   const pid = Number(out.match(/SSH_AGENT_PID=(\d+)/)?.[1]);
   if (!sock || !pid) return {}; // no agent — the profile spawns its own (old behavior)
-  g.__backstageTermSshAgent = { sock, pid };
+  g.__opensessionTermSshAgent = { sock, pid };
   return { SSH_AUTH_SOCK: sock, SSH_AGENT_PID: String(pid) };
 }
 

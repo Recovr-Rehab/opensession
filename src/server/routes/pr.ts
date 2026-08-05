@@ -83,7 +83,7 @@ export async function handlePrRoutes(
 
 	// Every open PR in the repo, attributed to teammates via the GitHub
 	// identity table — the sidebar's Open PRs section (which must include
-	// PRs that have no Backstage session).
+	// PRs that have no OpenSession session).
 	if (path === "/api/open-prs" && req.method === "GET") {
 		return Response.json({ prs: getOpenPrs() });
 	}

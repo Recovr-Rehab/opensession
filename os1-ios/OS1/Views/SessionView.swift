@@ -1362,9 +1362,10 @@ private struct SessionInputBar: View {
             images: $viewModel.attachedImages,
             noteMode: viewModel.noteMode,
             hasGoal: viewModel.goal != nil,
-            // `/goal` is a backstage-native slash command; a Slack- or
-            // Linear-sourced chat would just post the text at the agent.
-            onSetGoal: viewModel.session.source == "backstage"
+            // `/goal` is a native slash command; a Slack- or Linear-sourced
+            // chat would just post the text at the agent. "backstage" is the
+            // pre-rename source value older servers still send.
+            onSetGoal: (viewModel.session.source == "opensession" || viewModel.session.source == "backstage")
                 ? { editingGoal = true }
                 : nil,
             onToggleNoteMode: {

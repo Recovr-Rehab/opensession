@@ -141,7 +141,7 @@ describe("mergeWorkflowAgents", () => {
 			remove: async () => {},
 			isLiveSharedCheckout: () => true,
 		});
-		const res = await mergeWorkflowAgents(ctx(dir, { repo: "backstage" }), [
+		const res = await mergeWorkflowAgents(ctx(dir, { repo: "opensession" }), [
 			{ seq: 0, branch: "wf-a" },
 		]);
 		expect(res.error).toMatch(/live shared checkout/);

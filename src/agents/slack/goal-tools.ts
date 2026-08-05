@@ -7,7 +7,7 @@
  *
  * - opensession-goal-self — the *running goal's own* control surface, bound to one
  *   goal id. Attached only to that goal's session run (see goalMcpServers in
- *   backstage.ts). It lets the mission pace itself (set_next_wake), pause for a
+ *   opensession.ts). It lets the mission pace itself (set_next_wake), pause for a
  *   human decision (mark_paused), declare success (mark_done), and write to its
  *   durable ledger. It only ever mutates its own goal record — low blast radius,
  *   which is why it's safe on an otherwise-headless run.
@@ -229,7 +229,7 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
       ),
       tool(
         "delete_goal",
-        "Delete a goal and its ledger. Permanent. The backstage session it created is left as-is.",
+        "Delete a goal and its ledger. Permanent. The opensession session it created is left as-is.",
         { id: z.string() },
         async (args: { id: string }) => {
           const g = getGoal(args.id);

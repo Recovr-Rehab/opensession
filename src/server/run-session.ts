@@ -102,7 +102,7 @@ import {
 	getCachedSessions,
 	invalidateSessionsCache,
 	recordRunOutcome,
-	touchBackstageSession,
+	touchNativeSession,
 	SESSIONS_DIR,
 } from "./session-cache";
 import { markRecapPendingIfUnwatched } from "./recap";
@@ -516,9 +516,9 @@ export function resumeDrainedSessions(alreadyResumed: Set<string>): void {
 		if (!id || alreadyResumed.has(id)) continue; // journal already resumed it
 		if (r.kind?.startsWith("github-")) continue; // github agent owns its recovery
 		const session = findSession(id);
-		// Only interactive backstage sessions — never re-trigger automations/loops,
+		// Only interactive opensession sessions — never re-trigger automations/loops,
 		// which are one-shot and would re-run their whole task.
-		if (!session || session.source !== "backstage" || session.automation)
+		if (!session || session.source !== "opensession" || session.automation)
 			continue;
 		if (
 			isAgentSessionBusy(
@@ -556,7 +556,7 @@ const recoveredSlackScanners = new Map<
 export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent): void {
 	const session = findSession(osSessionId);
 	if (!session) return;
-	if (session.source !== "backstage") {
+	if (session.source !== "opensession") {
 		// Slack/linear-source sessions: a recovered run's engine-id/model flips
 		// persist into the owning agent's store, same rationale as the init/
 		// model_switch handlers in runSessionPromptInner — a reattached run that
@@ -609,7 +609,7 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 					(t) => t.channel === post.channel && t.threadTs === post.threadTs,
 				)
 			) {
-				touchBackstageSession(osSessionId, {
+				touchNativeSession(osSessionId, {
 					slackThreads: [...threads, { channel: post.channel, threadTs: post.threadTs }],
 				});
 				linkThreadInIndex(osSessionId, post.channel, post.threadTs);
@@ -626,7 +626,7 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 		if (!shouldPersistModelSwitch(event)) return;
 		if (session.model === to) return;
 		const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
-		touchBackstageSession(osSessionId, {
+		touchNativeSession(osSessionId, {
 			model: to,
 			modelHistory: [
 				...(session.modelHistory || []),
@@ -656,7 +656,7 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 	const engineSessionId = event.sessionId || "";
 	const model = event.model || session.model;
 	const provider = event.provider || providerFor(model);
-	touchBackstageSession(osSessionId, {
+	touchNativeSession(osSessionId, {
 		...(engineSessionId ? engineSessionPatch(provider, engineSessionId) : {}),
 		...(engineSessionId && event.provider
 			? { lastEngineProvider: event.provider }
@@ -949,7 +949,7 @@ export function foldSessionUsage(
  * commits landed outside a turn), leaving the status header parked on a stale
  * "Ahead by N commits". We only touch a branch that:
  *   - is NOT the repo's default branch — never auto-push main/master (this also
- *     excludes the backstage shared checkout, which pushes master by hand), and
+ *     excludes the opensession shared checkout, which pushes master by hand), and
  *   - already has an upstream (published once, so pushing follow-up commits is
  *     the expected sync; an un-pushed branch with no PR goes via Create PR), and
  *   - is strictly ahead (behind === 0) — a diverged branch needs a human/agent
@@ -989,7 +989,7 @@ export async function autoPushSessionBranches(session: UnifiedSession): Promise<
 		} catch {
 			continue;
 		}
-		// Never auto-push the repo's mainline (covers the backstage shared master).
+		// Never auto-push the repo's mainline (covers the opensession shared master).
 		if (branch === repo.defaultBranch) continue;
 		const exec = isPrimary ? await workspaceExecFor(session, dir) : undefined;
 		let git;
@@ -1094,13 +1094,13 @@ export async function maybeLaunchSandboxedRun(
 			isRemoteSandboxProvider(sbProvider) &&
 			session.sandbox?.sandboxId !== sandbox.id;
 		if (
-			session.source === "backstage" &&
+			session.source === "opensession" &&
 			(session.sandbox?.sandboxId !== sandbox.id ||
 				session.sandbox?.workspace !== sandbox.workspace ||
 				session.sandbox?.engine !==
 					(engineOutsideSandbox ? "host" : "sandbox"))
 		) {
-			touchBackstageSession(session.id, {
+			touchNativeSession(session.id, {
 				sandbox: {
 					provider: sbProvider,
 					sandboxId: sandbox.id,
@@ -1333,13 +1333,13 @@ export function maybeQueueAutoContinue(opts: {
 		// read — never over a user Stop, never for automations, and a repeat
 		// failure on the same tail doesn't loop.
 		if (
-			session.source === "backstage" &&
+			session.source === "opensession" &&
 			!session.automation &&
 			!stoppedSessions.has(sessionId)
 		) {
 			const trailing = trailingUserTexts(session).filter(
 				(t) =>
-					!t.includes("<backstage:context>") &&
+					!t.includes("<opensession:context>") &&
 					!t.startsWith(`[${AUTO_CONTINUE_USER}]`),
 			);
 			const tailKey = trailing.join("\n").trim().slice(-500);
@@ -1404,7 +1404,7 @@ export function maybeQueueAutoContinue(opts: {
 	orphanRedeliveredTails.delete(sessionId);
 	wedgeRetriedFailures.delete(sessionId);
 	if (runFailure) return suppressed("run_failure");
-	if (session.source !== "backstage") return suppressed(`source_${session.source}`);
+	if (session.source !== "opensession") return suppressed(`source_${session.source}`);
 	if (session.automation) return suppressed("automation_session");
 	if (stoppedSessions.has(sessionId)) return suppressed("user_stop");
 	if (autoContinueNudged.has(sessionId)) return suppressed("already_nudged");
@@ -1426,7 +1426,7 @@ export function maybeQueueAutoContinue(opts: {
 				: "Turn ended on an announced next step without doing it — auto-continuing.",
 	});
 	// Fenced so the transcript never shows it as a user bubble: the parsers
-	// strip <backstage:context> from user text and skip the then-empty entry,
+	// strip <opensession:context> from user text and skip the then-empty entry,
 	// while the engine still sees the full instruction. The notice above (and
 	// the audit event) are the human-visible trace.
 	enqueuePrompt(
@@ -1810,7 +1810,7 @@ async function runSessionPromptInner(
 	// mid-conversation "yes, do it" never becomes the title source. Automation
 	// and goal sessions carry deliberate titles; a manual rename wins anyway.
 	if (
-		session.source === "backstage" &&
+		session.source === "opensession" &&
 		!isAutomationSession &&
 		!session.goalId &&
 		!getTitleOverride(session.id)
@@ -1818,7 +1818,7 @@ async function runSessionPromptInner(
 		const provisional = !session.title || session.title === "New chat";
 		const firstLine = content.trim().split("\n")[0].slice(0, 80);
 		if (provisional && firstLine)
-			touchBackstageSession(session.id, { title: firstLine });
+			touchNativeSession(session.id, { title: firstLine });
 		void ensureGeneratedTitle(
 			session.id,
 			provisional ? content : session.title,
@@ -1966,8 +1966,8 @@ async function runSessionPromptInner(
 					// a rotation fork): the run writes to a transcript file nobody is
 					// watching yet. Persist + attach NOW — waiting for the run to end
 					// (the old behavior) left the entire turn invisible to viewers.
-					if (session.source === "backstage") {
-						touchBackstageSession(session.id, {
+					if (session.source === "opensession") {
+						touchNativeSession(session.id, {
 							...engineSessionPatch(effectiveProvider, finalSessionId),
 							lastEngineProvider: effectiveProvider,
 							...(effectiveModel
@@ -2023,14 +2023,14 @@ async function runSessionPromptInner(
 						message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
 					});
 				}
-				if (persistSwitch && session.source === "backstage") {
+				if (persistSwitch && session.source === "opensession") {
 					modelHistory.push({
 						model: to,
 						from: event.fromModel,
 						at: new Date().toISOString(),
 						by: reason,
 					});
-					touchBackstageSession(session.id, {
+					touchNativeSession(session.id, {
 						model: to,
 						modelHistory,
 					});
@@ -2181,7 +2181,7 @@ async function runSessionPromptInner(
 	// owning agent's property, with one surgical exception: engine-id/model
 	// flips sync through agent-session-sync so the file never points at a dead
 	// engine session (see that module's doc).
-	if (session.source === "backstage") {
+	if (session.source === "opensession") {
 		// The agent may have switched branches in its worktree during the turn
 		// (e.g. renaming an auto-generated branch before opening a PR). Keep the
 		// record on the actual HEAD so PR lookups, the PR tab, and the review
@@ -2193,7 +2193,7 @@ async function runSessionPromptInner(
 			session.branch && !isSharedCheckoutDir(session.worktreeDir)
 				? worktreeHeadBranch(session.worktreeDir)
 				: null;
-		touchBackstageSession(
+		touchNativeSession(
 			session.id,
 			{
 				...engineSessionPatch(effectiveProvider, finalSessionId),
@@ -2284,7 +2284,7 @@ export function sessionMentionsNote(
 	content: string,
 	excludeIds?: Iterable<string>,
 ): string | null {
-	// Only the human's visible message counts: fenced <backstage:context> blocks
+	// Only the human's visible message counts: fenced <opensession:context> blocks
 	// (attached chat transcripts, handoffs) name sessions as @session:<id> too,
 	// and those must not grow a redundant — and unfenced, so user-visible —
 	// mentions footer. `|| ""` because a non-string reaching here crashed the
@@ -2311,9 +2311,9 @@ export function sessionMentionsNote(
 		return `- @session:${id} — ${bits.join(" · ")}`;
 	});
 	return (
-		`[The @session mentions above refer to other Backstage sessions:\n${lines.join("\n")}\n` +
+		`[The @session mentions above refer to other OpenSession sessions:\n${lines.join("\n")}\n` +
 		`Use the opensession-sessions MCP tools with these ids: get_session (state, pending question, ` +
-		`transcript tail), send_to_session (a message — or a slash command handled by backstage ` +
+		`transcript tail), send_to_session (a message — or a slash command handled by opensession ` +
 		`itself, e.g. "/loop 15m <prompt>" to set a recurring self-prompt on the target that fires ` +
 		`only while it is idle, "/loop stop" to clear it; this works on your own session id too), ` +
 		`answer_session_question, cancel_session.]`
@@ -2323,11 +2323,11 @@ export function sessionMentionsNote(
 // Loop ticker: fire due session loops (skips busy/archived sessions).
 // Guarded so a hot reload doesn't stack a second interval. Dev instances
 // never fire loops (real engine runs — see src/server/dev-mode.ts).
-if (!g.__backstageBooted && !isLocalProfile() && !isDevInstance()) {
+if (!g.__opensessionBooted && !isLocalProfile() && !isDevInstance()) {
 	setInterval(() => {
 		for (const session of getCachedSessions()) {
 			const loop = session.loop;
-			if (!loop || session.archived || session.source !== "backstage") continue;
+			if (!loop || session.archived || session.source !== "opensession") continue;
 			if (!session.claudeSessionId && !session.codexThreadId) continue;
 			if (
 				isAgentSessionBusy(
@@ -2339,7 +2339,7 @@ if (!g.__backstageBooted && !isLocalProfile() && !isDevInstance()) {
 				continue;
 			const last = loop.lastRunAt ? new Date(loop.lastRunAt).getTime() : 0;
 			if (Date.now() - last < loop.intervalMinutes * 60_000) continue;
-			touchBackstageSession(session.id, {
+			touchNativeSession(session.id, {
 				loop: { ...loop, lastRunAt: new Date().toISOString() },
 			});
 			console.log(

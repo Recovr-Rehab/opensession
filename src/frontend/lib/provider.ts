@@ -1,5 +1,5 @@
 /**
- * Provider-agnostic naming for the code-review UI. Backstage talks to GitHub
+ * Provider-agnostic naming for the code-review UI. OpenSession talks to GitHub
  * today (the `gh` CLI is the only backend), but the UI copy shouldn't hardcode
  * "GitHub" — it derives the provider from a PR's URL host so the same
  * components read correctly if a repo ever lives on GitLab or Bitbucket, and so

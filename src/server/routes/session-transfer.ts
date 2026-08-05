@@ -20,7 +20,7 @@ import { writeJsonAtomic } from "../shared/atomic-write";
 import { mergedSessionTranscriptAsync } from "../sessions";
 import { transcriptStore } from "../transcript-store";
 import type {
-  BackstageSessionFile,
+  NativeSessionFile,
   TranscriptEntry,
   UnifiedSession,
 } from "../types";
@@ -58,8 +58,8 @@ export interface TransferSessionSubset {
   model?: string;
   effort?: string;
   fastMode?: boolean;
-  modelHistory?: BackstageSessionFile["modelHistory"];
-  usage?: BackstageSessionFile["usage"];
+  modelHistory?: NativeSessionFile["modelHistory"];
+  usage?: NativeSessionFile["usage"];
 }
 
 export interface SessionImportRequest {
@@ -78,7 +78,7 @@ interface ImportDependencies {
   verifyWorktree(repo: Repo, branch: string, worktreeDir: string): Promise<void>;
   importTranscript(sessionId: string, entries: TranscriptEntry[]): void;
   removeTranscript(sessionId: string): void;
-  writeSession(id: string, session: BackstageSessionFile & ImportedFromLocalMarker): void;
+  writeSession(id: string, session: NativeSessionFile & ImportedFromLocalMarker): void;
   sessionUrl(id: string): string;
 }
 
@@ -90,8 +90,8 @@ interface GitState {
 interface UpgradeDependencies {
   repos(): Record<string, Repo>;
   findSession(id: string): UnifiedSession | undefined;
-  readSession(id: string): BackstageSessionFile | null;
-  isBusy(session: UnifiedSession, data: BackstageSessionFile): boolean;
+  readSession(id: string): NativeSessionFile | null;
+  isBusy(session: UnifiedSession, data: NativeSessionFile): boolean;
   hasQueuedPrompts(id: string): boolean;
   reserve(id: string): void;
   release(id: string): void;
@@ -99,13 +99,13 @@ interface UpgradeDependencies {
   push(dir: string, branch: string): Promise<{ ok: true } | { error: string }>;
   readTranscript(
     session: UnifiedSession,
-    data: BackstageSessionFile,
+    data: NativeSessionFile,
   ): string | Promise<string>;
   cloud(): { upstream: string; token: string | null };
   fetch: typeof fetch;
   archive(
     id: string,
-    data: BackstageSessionFile,
+    data: NativeSessionFile,
     upgradedTo: { id: string; url: string },
   ): void;
 }
@@ -255,17 +255,17 @@ function transferredSession(
       ...(text("effort", 40) ? { effort: text("effort", 40) } : {}),
       ...(input.fastMode === true ? { fastMode: true } : {}),
       ...(Array.isArray(input.modelHistory)
-        ? { modelHistory: input.modelHistory as BackstageSessionFile["modelHistory"] }
+        ? { modelHistory: input.modelHistory as NativeSessionFile["modelHistory"] }
         : {}),
       ...(input.usage && typeof input.usage === "object" && !Array.isArray(input.usage)
-        ? { usage: input.usage as BackstageSessionFile["usage"] }
+        ? { usage: input.usage as NativeSessionFile["usage"] }
         : {}),
     },
   };
 }
 
 export function sessionSubsetForTransfer(
-  data: BackstageSessionFile,
+  data: NativeSessionFile,
 ): TransferSessionSubset {
   return {
     id: data.id,
@@ -332,7 +332,7 @@ export async function importCloudSession(
     const worktreeDir = await deps.createWorktree(branch, repoId);
     await deps.verifyWorktree(repo, branch, worktreeDir);
     const now = new Date().toISOString();
-    const session: BackstageSessionFile & ImportedFromLocalMarker = {
+    const session: NativeSessionFile & ImportedFromLocalMarker = {
       id,
       claudeSessionId: engineId,
       opencodeSessionId: engineId,
@@ -443,7 +443,7 @@ export async function upgradeLocalSession(
   deps: UpgradeDependencies,
 ): Promise<Response> {
   const session = deps.findSession(id);
-  if (!session || session.source !== "backstage") {
+  if (!session || session.source !== "opensession") {
     return errorResponse("Local session not found", 404);
   }
   const data = deps.readSession(id);
@@ -491,7 +491,7 @@ export async function upgradeLocalSession(
 async function finishLocalUpgrade(
   id: string,
   session: UnifiedSession,
-  data: BackstageSessionFile,
+  data: NativeSessionFile,
   deps: UpgradeDependencies,
 ): Promise<Response> {
   if (!session.worktreeDir || !session.branch || session.mode !== "code") {
@@ -798,7 +798,7 @@ const productionUpgradeDependencies: UpgradeDependencies = {
       archivedReason: "manual",
       lastActivity: now,
       upgradedTo,
-    } satisfies BackstageSessionFile & UpgradedToCloudMarker);
+    } satisfies NativeSessionFile & UpgradedToCloudMarker);
     invalidateSessionsCache();
   },
 };

@@ -1,6 +1,6 @@
 /**
  * Registry of agent runs living in detached run-host processes (see
- * src/runner-host/host.ts). The backstage process registers a control handle
+ * src/runner-host/host.ts). The opensession process registers a control handle
  * here for every host it spawned or reattached to; agent-runner's busy/steer/
  * interrupt/cancel helpers consult this alongside their own in-process maps,
  * so callers (WS handlers, session-control MCP, queues) treat hosted runs

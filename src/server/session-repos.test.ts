@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { resolveSessionRepoContext } from "./session-repos";
 
 const session = {
-	repo: "backstage",
-	worktreeDir: "/home/ubuntu/projects/tella-backstage",
+	repo: "opensession",
+	worktreeDir: "/home/ubuntu/projects/opensession",
 	branch: "master",
 	attachedRepos: [
 		{
@@ -21,7 +21,7 @@ const session = {
 
 describe("resolveSessionRepoContext", () => {
 	test("defaults to the primary repo", () => {
-		expect(resolveSessionRepoContext(session)?.repo).toBe("backstage");
+		expect(resolveSessionRepoContext(session)?.repo).toBe("opensession");
 	});
 
 	test("selects an attached repo explicitly", () => {
@@ -48,7 +48,7 @@ describe("resolveSessionRepoContext", () => {
 			undefined,
 			"Compare /home/ubuntu/worktrees/tella-fusion-task with /home/ubuntu/worktrees/infra-task.",
 		);
-		expect(resolved?.repo).toBe("backstage");
+		expect(resolved?.repo).toBe("opensession");
 	});
 
 	test("rejects an explicit repo the parent does not carry", () => {

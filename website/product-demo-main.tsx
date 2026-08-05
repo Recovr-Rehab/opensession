@@ -10,7 +10,7 @@ const sessions: UnifiedSession[] = [
 	{
 		id: activeSessionId,
 		claudeSessionId: "demo-presence",
-		source: "backstage",
+		source: "opensession",
 		branch: "michael/workspace-presence",
 		worktreeDir: "/workspace/opensession",
 		startedBy: "Michiel",
@@ -39,7 +39,7 @@ const sessions: UnifiedSession[] = [
 	{
 		id: "bks-demo-checkout",
 		claudeSessionId: "demo-checkout",
-		source: "backstage",
+		source: "opensession",
 		branch: "michael/checkout-recovery",
 		worktreeDir: "/workspace/checkout",
 		startedBy: "Michiel",
@@ -57,7 +57,7 @@ const sessions: UnifiedSession[] = [
 	{
 		id: "bks-demo-mobile",
 		claudeSessionId: "demo-mobile",
-		source: "backstage",
+		source: "opensession",
 		branch: "michael/mobile-navigation",
 		worktreeDir: "/workspace/mobile",
 		startedBy: "Kent",
@@ -75,7 +75,7 @@ const sessions: UnifiedSession[] = [
 	{
 		id: "bks-demo-shortcuts",
 		claudeSessionId: "demo-shortcuts",
-		source: "backstage",
+		source: "opensession",
 		branch: "michael/keyboard-shortcuts",
 		worktreeDir: "/workspace/shortcuts",
 		startedBy: "Jaap",
@@ -98,7 +98,7 @@ const sessions: UnifiedSession[] = [
 	{
 		id: "bks-demo-search",
 		claudeSessionId: "demo-search",
-		source: "backstage",
+		source: "opensession",
 		branch: "michael/faster-session-search",
 		worktreeDir: "/workspace/search",
 		startedBy: "Michiel",
@@ -115,7 +115,7 @@ const sessions: UnifiedSession[] = [
 	{
 		id: "bks-demo-release",
 		claudeSessionId: "demo-release",
-		source: "backstage",
+		source: "opensession",
 		branch: "michael/release-notes",
 		worktreeDir: "/workspace/release",
 		startedBy: "Michiel",

@@ -342,7 +342,7 @@ async function handleAgentMention(
               `Created Linear issue: [${issue.identifier}](${issue.url})`
             );
           } else {
-            await postNote(threadId, customerId, `Failed to create Linear issue. Check Linear auth (OAuth token store / LINEAR_API_KEY) in the backstage logs.`);
+            await postNote(threadId, customerId, `Failed to create Linear issue. Check Linear auth (OAuth token store / LINEAR_API_KEY) in the opensession logs.`);
           }
           return;
         }
@@ -381,7 +381,7 @@ async function handleAgentMention(
             `Started worktree for code work.\n\n- **Branch:** \`${branchName}\`\n- **Linear:** [${issue.identifier}](${issue.url})\n- **Directory:** \`${worktreeDir}\`\n\n*${PLAIN_MENTION} work on \\<description\\>* - to have me work on something in this worktree`
           );
         } else {
-          await postNote(threadId, customerId, "Failed to create Linear issue for worktree. Check Linear auth (OAuth token store / LINEAR_API_KEY) in the backstage logs.");
+          await postNote(threadId, customerId, "Failed to create Linear issue for worktree. Check Linear auth (OAuth token store / LINEAR_API_KEY) in the opensession logs.");
         }
       } catch (e) {
         console.error("Error creating worktree:", e);

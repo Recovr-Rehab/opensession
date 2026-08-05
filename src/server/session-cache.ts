@@ -13,7 +13,7 @@ import { isAgentSessionBusy } from "./agent-runner";
 import { audit } from "./audit";
 import { SESSION_EFFORTS as MODEL_EFFORTS } from "./models";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import type { UnifiedSession, BackstageSessionFile } from "./types";
+import type { UnifiedSession, NativeSessionFile } from "./types";
 
 export const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
 
@@ -202,8 +202,8 @@ export function sessionIdsFor(
  *  doesn't exist yet — create-if-absent) and returns the object to write.
  *  Sites overlay ONLY the fields they own; unknown/foreign fields survive. */
 export type SessionFileMutator = (
-	data: BackstageSessionFile,
-) => BackstageSessionFile;
+	data: NativeSessionFile,
+) => NativeSessionFile;
 
 const sessionFileLocks: Map<string, Promise<void>> = (g.__osSessionFileLocks ??=
 	new Map());
@@ -214,9 +214,9 @@ export function updateSessionFile(
 ): Promise<void> {
 	const write = () => {
 		const path = `${SESSIONS_DIR}/${sessionId}.json`;
-		const current: BackstageSessionFile = existsSync(path)
+		const current: NativeSessionFile = existsSync(path)
 			? JSON.parse(readFileSync(path, "utf-8"))
-			: ({} as BackstageSessionFile);
+			: ({} as NativeSessionFile);
 		const next = mutator(current) ?? current;
 		const rev = (current as { rev?: unknown }).rev;
 		(next as { rev?: number }).rev = (typeof rev === "number" ? rev : 0) + 1;
@@ -248,16 +248,16 @@ export function updateSessionFile(
 	return done;
 }
 
-export function touchBackstageSession(
+export function touchNativeSession(
 	bksId: string,
-	patch: Partial<BackstageSessionFile>,
+	patch: Partial<NativeSessionFile>,
 ): void {
 	updateSessionFile(bksId, (data) => ({
 		...data,
 		...patch,
 		lastActivity: new Date().toISOString(),
 	})).catch((e) => {
-		console.error(`Failed to update backstage session ${bksId}:`, e);
+		console.error(`Failed to update opensession session ${bksId}:`, e);
 	});
 }
 
@@ -265,31 +265,31 @@ export function touchBackstageSession(
 // support is exposed by /api/models and normalized by the runner before dispatch.
 export const SESSION_EFFORTS = new Set<string>(MODEL_EFFORTS);
 
-/** Persist a composer-sent effort change on a backstage session (no-op otherwise). */
+/** Persist a composer-sent effort change on a opensession session (no-op otherwise). */
 export function maybePersistEffort(
 	session: UnifiedSession | undefined,
 	effort?: string,
 ): void {
-	if (!session || session.source !== "backstage" || !effort) return;
+	if (!session || session.source !== "opensession" || !effort) return;
 	const e = effort.trim().toLowerCase();
 	if (!SESSION_EFFORTS.has(e) || session.effort === e) return;
-	touchBackstageSession(session.id, { effort: e });
+	touchNativeSession(session.id, { effort: e });
 	session.effort = e; // keep the in-hand snapshot current for this turn
 }
 
-/** Persist a composer-sent OpenAI priority-tier change on a backstage session. */
+/** Persist a composer-sent OpenAI priority-tier change on a opensession session. */
 export function maybePersistFastMode(
 	session: UnifiedSession | undefined,
 	fastMode?: boolean,
 ): void {
 	if (
 		!session ||
-		session.source !== "backstage" ||
+		session.source !== "opensession" ||
 		typeof fastMode !== "boolean" ||
 		session.fastMode === fastMode
 	)
 		return;
-	touchBackstageSession(session.id, { fastMode });
+	touchNativeSession(session.id, { fastMode });
 	session.fastMode = fastMode;
 }
 
@@ -297,7 +297,7 @@ export function maybePersistFastMode(
 // every account, credit/API errors). Those need a human to act — the sidebar
 // surfaces them as "Needs input" instead of letting them sink into the Backlog.
 // Keyed by canonical session id; parked on globalThis for hot reloads.
-// Backstage-owned sessions also persist the error on their session file (via
+// OpenSession-owned sessions also persist the error on their session file (via
 // recordRunOutcome) so the flag survives a real restart.
 export const runErrors: Map<string, { message: string; at: string }> =
 	(g.__runErrors ??= new Map());
@@ -359,8 +359,8 @@ export function recordRunOutcome(
 			at: new Date().toISOString(),
 		};
 		runErrors.set(id, entry);
-		if (session?.source === "backstage")
-			touchBackstageSession(id, { lastRunError: entry });
+		if (session?.source === "opensession")
+			touchNativeSession(id, { lastRunError: entry });
 		if (!opts?.noticePersisted)
 			persistRunFailureNotice(
 				opts?.engineSessionId || session?.claudeSessionId,
@@ -378,7 +378,7 @@ export function recordRunOutcome(
 		// Only rewrite the session file when there's actually a flag to clear
 		// (the in-memory map, or one persisted by a previous process).
 		const had = runErrors.delete(id) || !!session?.lastRunError;
-		if (had && session?.source === "backstage")
-			touchBackstageSession(id, { lastRunError: undefined });
+		if (had && session?.source === "opensession")
+			touchNativeSession(id, { lastRunError: undefined });
 	}
 }

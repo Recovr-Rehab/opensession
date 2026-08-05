@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# migrate-opensession-state.sh — one-shot Backstage → OpenSession state rename
+# migrate-opensession-state.sh — one-shot OpenSession → OpenSession state rename
 # (docs/rename-opensession-plan.md, Tier B).
 #
-# Renames every `~/.backstage-*` state dir/file (plus `~/.backstage` and
+# Renames every `~/.opensession-*` state dir/file (plus `~/.backstage` and
 # `~/.backstage.env`) to its `~/.opensession*` equivalent and leaves a symlink
 # at the old name, so anything still holding the old path — un-migrated code,
 # other tooling, cron scripts, the systemd EnvironmentFile — keeps working.
@@ -11,7 +11,7 @@
 # Run it ONLY in a restart window with the server STOPPED (a long-running
 # process resolves paths once at boot and must not see the rename mid-flight):
 #
-#   sudo systemctl stop backstage.service   # or opensession.service
+#   sudo systemctl stop opensession.service   # or opensession.service
 #   bash scripts/migrate-opensession-state.sh
 #   sudo systemctl start opensession.service
 #
@@ -25,7 +25,7 @@ FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
 # Refuse to run while the server is up unless forced.
-for unit in backstage.service opensession.service; do
+for unit in opensession.service opensession.service; do
   if systemctl is-active --quiet "$unit" 2>/dev/null; then
     if [ "$FORCE" = "1" ]; then
       echo "[migrate] WARNING: $unit is active — continuing because of --force" >&2
@@ -61,11 +61,11 @@ migrate_one() {
   migrated=$((migrated + 1))
 }
 
-# All ~/.backstage-* state (dirs AND files, e.g. .backstage-pins.json,
-# .backstage-opencode.json, .backstage-codex-transport.json), then the config
+# All ~/.opensession-* state (dirs AND files, e.g. .opensession-pins.json,
+# .opensession-opencode.json, .opensession-codex-transport.json), then the config
 # home and the systemd env file.
 shopt -s nullglob dotglob
-for p in "$HOME_DIR"/.backstage-*; do
+for p in "$HOME_DIR"/.opensession-*; do
   migrate_one "$p"
 done
 migrate_one "$HOME_DIR/.backstage"

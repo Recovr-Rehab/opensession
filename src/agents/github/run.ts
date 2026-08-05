@@ -1,6 +1,6 @@
 /**
  * Shared headless-run helper for the github agent. Composes `runAgent` like
- * automations.ts does, but persists its own visible BackstageSessionFile so each
+ * automations.ts does, but persists its own visible NativeSessionFile so each
  * PR review/fix/simplify shows up as a Michael session in the web UI, and resumes
  * the engine conversation across rounds via the deterministic per-PR session file.
  */
@@ -16,7 +16,7 @@ import { gitIdentityFor, type GitIdentity } from "../../server/shared/user-mappi
 import { resolvePrWorkspace } from "../../server/workspace-resolve";
 import { repoForPath } from "../../server/worktree";
 import { PR_EVENT_KEY, prKey } from "./constants";
-import type { BackstageSessionFile } from "../../server/types";
+import type { NativeSessionFile } from "../../server/types";
 import { configuredServer } from "../../server/config";
 import { shouldPersistModelSwitch } from "../../server/run-events";
 
@@ -95,7 +95,7 @@ export type GithubRunKind =
   | "adversarial"
   | "followup";
 
-/** Stable, deterministic backstage session id per PR + behavior (one resumable session each). */
+/** Stable, deterministic opensession session id per PR + behavior (one resumable session each). */
 export function bksIdFor(prNumber: number, kind: GithubRunKind, ghRepo?: string): string {
   return `bks-ghpr-${prKey(prNumber, ghRepo)}-${kind}`;
 }
@@ -104,12 +104,12 @@ const UI_BASE =
   process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
-/** Backstage UI link to any session id (also used for handoff "open session" links). */
+/** OpenSession UI link to any session id (also used for handoff "open session" links). */
 export function uiSessionUrl(sessionId: string): string {
   return `${UI_BASE}/session/${sessionId}`;
 }
 
-/** Backstage UI link to a run's session, for "open to monitor" links in PR comments. */
+/** OpenSession UI link to a run's session, for "open to monitor" links in PR comments. */
 export function sessionUrl(prNumber: number, kind: GithubRunKind, ghRepo?: string): string {
   return uiSessionUrl(bksIdFor(prNumber, kind, ghRepo));
 }
@@ -139,17 +139,17 @@ export function finalSummary(text: string): string {
   return text.trim();
 }
 
-function readSessionFile(bksId: string): BackstageSessionFile | null {
+function readSessionFile(bksId: string): NativeSessionFile | null {
   const path = `${SESSIONS_DIR}/${bksId}.json`;
   if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, "utf-8")) as BackstageSessionFile;
+    return JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
   } catch {}
   return null;
 }
 
 function readEngineSessionId(
-  file: BackstageSessionFile | null,
+  file: NativeSessionFile | null,
   model?: string
 ): string {
   if (!file) return "";
@@ -205,7 +205,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   let effectiveModel = opts.model || existingSessionFile?.model;
   let selectedModel = effectiveModel;
   let effectiveProvider = providerFor(effectiveModel);
-  const modelHistory: NonNullable<BackstageSessionFile["modelHistory"]> = [
+  const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [
     ...(existingSessionFile?.modelHistory || []),
   ];
   // Field-scoped write via the session-file mutex (transcript-v2 §6, same
@@ -218,7 +218,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   const persist = (engineSessionId: string) =>
     updateSessionFile(bksId, (data) => {
       // Widen to Partial: the file may not exist yet (create-if-absent).
-      const existing: Partial<BackstageSessionFile> = data;
+      const existing: Partial<NativeSessionFile> = data;
       return {
         id: bksId,
         claudeSessionId: "",

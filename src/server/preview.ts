@@ -103,7 +103,7 @@ export function externalPreviewCommandDirs(): string[] {
 }
 
 // ── Bring-up resolution (ONE chain, shared by host + sandbox previews) ────────
-// The boot command should live IN the target repo, not in backstage: a
+// The boot command should live IN the target repo, not in opensession: a
 // committed `.opensession/start.sh` (with `.backstage/` as the pre-rename
 // fallback, matching docker.ts's workspace-setup hook) beats instance config
 // (`previewCommand` on the repos registry entry). Docs:
@@ -308,7 +308,7 @@ async function ensurePreviewRoute(httpsPort: number, webappPort: number, host: s
     });
   try {
     // PUT creates the key; if it already exists (e.g. Caddy kept the server
-    // across a backstage restart, so our cache is cold) it 409s — drop it and
+    // across a opensession restart, so our cache is cold) it 409s — drop it and
     // recreate so the route always ends up pointing at the current webapp port.
     let res = await put();
     if (res.status === 409) {
@@ -449,7 +449,7 @@ function freshPortsConfText(webappPort: number, comment: string): string {
   const rand = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
   return [
     "# Port configuration for development services",
-    `# Seeded by backstage (${comment}): WEBAPP_PORT is the port the preview`,
+    `# Seeded by opensession (${comment}): WEBAPP_PORT is the port the preview`,
     "# is fronted at — do not hand-edit it.",
     `WEBAPP_PORT=${webappPort}`,
     `INSTANT_PORT=${rand(5100, 5999)}`,
@@ -518,8 +518,8 @@ function setupStampPath(worktreeDir: string): string {
  * seeded into .ports.conf so status can see it) and `PREVIEW_URL`. The legacy
  * rungs (previewCommand/tella-local) own their .ports.conf themselves.
  *
- * AWS: the backstage service cgroup denies IMDS (IPAddressDeny in
- * backstage.service), so children spawned here can never mint instance-role
+ * AWS: the opensession service cgroup denies IMDS (IPAddressDeny in
+ * opensession.service), so children spawned here can never mint instance-role
  * creds on their own — that's what silently broke the tella-fusion bring-up
  * (its `aws` preflight and prebuilt-WASM S3 install both need creds). Inject
  * the same short-lived credentials agent runs get (aws-creds.ts).
@@ -650,7 +650,7 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
  * (so it doesn't respawn) without touching anything outside the worktree.
  *
  * Safety: a PID is only eligible if its cwd is inside `worktreeDir`, so the
- * backstage server (and unrelated worktrees) can never be a target.
+ * opensession server (and unrelated worktrees) can never be a target.
  */
 export async function stopPreview(worktreeDir: string): Promise<PreviewStatus> {
   starting.delete(worktreeDir); // a stop cancels any in-flight "starting" state
@@ -683,7 +683,7 @@ export async function stopPreview(worktreeDir: string): Promise<PreviewStatus> {
   const startPgid = startPgids.get(worktreeDir);
   if (startPgid && startPgid > 1) pgids.add(startPgid);
   // Also pick up any PGID written to disk by ensure-up.sh — covers the agent-
-  // invoked path (where startPgids has no entry) and restarted backstage
+  // invoked path (where startPgids has no entry) and restarted opensession
   // (in-memory map is empty after restart).
   const pgidFile = join(worktreeDir, ".ports", "dev-pgid");
   if (existsSync(pgidFile)) {
@@ -855,7 +855,7 @@ async function seedSandboxPortsConf(
 
 /**
  * `.tunnels.env` contract (adopted from background-agents): when a sandbox
- * preview starts, backstage writes `<worktree>/.tunnels.env` — a dotenv file
+ * preview starts, opensession writes `<worktree>/.tunnels.env` — a dotenv file
  * in-container dev processes can source/read to learn their public URLs:
  *
  *   PREVIEW_URL=https://<host>:<httpsPort>          # the primary (webapp) URL
@@ -897,7 +897,7 @@ async function writeSandboxTunnelsEnv(
  *     preferring the worktree's existing .ports.conf entry when it's one of
  *     them, else the first published port nothing listens on. All busy =
  *     range exhausted; we refuse with a warning (fallback: raise
- *     `previewPorts` in ~/.backstage-sandbox.json and let the container be
+ *     `previewPorts` in ~/.opensession-sandbox.json and let the container be
  *     recreated — mounts/ports are create-time).
  *  2. Seed .ports.conf with that port and write the .tunnels.env contract
  *     (PREVIEW_URL against the allocated sandbox https port).
@@ -944,7 +944,7 @@ export async function startSandboxPreview(
   if (port == null) {
     console.warn(
       `[preview] ${sandbox.id}: preview port range exhausted (${publishedPorts.join(",")} all busy) — ` +
-        `stop one, or widen previewPorts in ~/.backstage-sandbox.json and recreate the container`,
+        `stop one, or widen previewPorts in ~/.opensession-sandbox.json and recreate the container`,
     );
     return status;
   }

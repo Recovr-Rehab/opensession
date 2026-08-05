@@ -239,7 +239,7 @@ try {
   ok("ensure() is idempotent (reuse)", again.id === sandbox.id && Date.now() - t1 < 5000, `${Date.now() - t1}ms`);
 
   const inspect = await sh(["docker", "inspect", "-f",
-    "{{index .Config.Labels \"backstage.session\"}} cpus={{.HostConfig.NanoCpus}} mem={{.HostConfig.Memory}} init={{.HostConfig.Init}}",
+    "{{index .Config.Labels \"opensession.session\"}} cpus={{.HostConfig.NanoCpus}} mem={{.HostConfig.Memory}} init={{.HostConfig.Init}}",
     CONTAINER]);
   ok("labels + limits + --init applied",
     inspect.out.includes(SESSION_ID) && inspect.out.includes("init=true"),
@@ -530,7 +530,7 @@ try {
   ok("ensure() created a ws-transport container", wsSbx.id === WS_CONTAINER, wsSbx.id);
   const wsMounts = await sh(["docker", "inspect", "-f", "{{range .Mounts}}{{.Destination}}\n{{end}}", WS_CONTAINER]);
   ok("rpc socket NOT mounted (ws transport)",
-    !wsMounts.out.includes("backstage-rpc.sock"),
+    !wsMounts.out.includes("opensession-rpc.sock"),
     "mounts: " + wsMounts.out.trim().split("\n").length + " entries");
 
   // Upgrade auth: an unknown host id / bad token must be refused pre-upgrade.
@@ -926,7 +926,7 @@ exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0
     const dclient = new Daytona({ apiKey: daytonaKey });
     console.log("  creating bare daytona sandbox (terminal needs no runner payload)…");
     const dsbx = await dclient.create(
-      { labels: { "backstage.sandbox": "1", "backstage.probe": "terminal-verify" } } as any,
+      { labels: { "opensession.sandbox": "1", "opensession.probe": "terminal-verify" } } as any,
       { timeout: 300 },
     );
     try {

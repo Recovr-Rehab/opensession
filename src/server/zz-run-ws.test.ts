@@ -1,6 +1,6 @@
 /**
  * run-ws transport tests: seq/ack replay (ws-buffer.ts + run-ws.ts) and the
- * upgrade auth rules. Drives a real Bun.serve wired exactly like backstage.ts
+ * upgrade auth rules. Drives a real Bun.serve wired exactly like opensession.ts
  * (fetch → handleSandboxWsUpgrade, websocket → sandboxWs* hooks) with scripted
  * WS clients playing the host side — no model runs, no sandboxes.
  *
@@ -23,7 +23,7 @@ let registerRunToken: typeof import("./run-rpc").registerRunToken;
 let unregisterRunToken: typeof import("./run-rpc").unregisterRunToken;
 let registerInteractiveMcpBuilder: typeof import("./run-rpc").registerInteractiveMcpBuilder;
 
-// ── scratch server (same wiring as backstage.ts / the verify suites) ─────────
+// ── scratch server (same wiring as opensession.ts / the verify suites) ─────────
 
 let srv: ReturnType<typeof Bun.serve>;
 let BASE = "";

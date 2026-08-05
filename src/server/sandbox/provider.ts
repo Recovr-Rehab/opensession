@@ -12,7 +12,7 @@
  *  - `RunHandle`'s control surface mirrors host-registry's `HostRunControl`
  *    (steer / interruptSteer / cancel returning booleans, `steerable` flag).
  *
- * Phase 0 is zero behavior change: nothing in backstage.ts threads a Sandbox
+ * Phase 0 is zero behavior change: nothing in opensession.ts threads a Sandbox
  * handle yet — `runSessionPromptInner` still computes a bare `cwd` itself.
  * Threading the handle through the prompt/create paths is the documented
  * Phase 1 TODO (see the sandbox rollout plan §5 Phase 1).
@@ -40,7 +40,7 @@ export type SandboxProviderId =
  * container/volume names off `sessionId`.
  */
 export interface SandboxSessionSpec {
-  /** Backstage session id (bks-…). Container providers name resources by it. */
+  /** OpenSession session id (bks-…). Container providers name resources by it. */
   sessionId: string;
   /** Registered repo id (worktree.ts REPOS). Defaults to tella-fusion. */
   repo?: string;
@@ -139,7 +139,7 @@ export interface RunHandle {
 
 /**
  * One session's execution environment. `id` is journaled on ActiveRunRecord
- * (`sandboxId`) and the session file so a restarted backstage can reattach via
+ * (`sandboxId`) and the session file so a restarted opensession can reattach via
  * `SandboxProvider.get()`.
  */
 export interface Sandbox {

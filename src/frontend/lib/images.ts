@@ -28,7 +28,7 @@ export interface FileAttachment {
   dataUrl?: string;
 }
 
-// Mirror of the server's MAX_UPLOAD_BYTES (backstage.ts). Enforced client-side too
+// Mirror of the server's MAX_UPLOAD_BYTES (opensession.ts). Enforced client-side too
 // so an oversized file fails loudly at pick time instead of silently vanishing.
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 

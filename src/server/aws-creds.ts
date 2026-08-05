@@ -1,8 +1,8 @@
 /**
  * Short-lived AWS credentials for agent runs.
  *
- * The backstage service cgroup denies the EC2 metadata endpoint
- * (IPAddressDeny in backstage.service), so neither the main process nor any
+ * The opensession service cgroup denies the EC2 metadata endpoint
+ * (IPAddressDeny in opensession.service), so neither the main process nor any
  * agent child can reach IMDS directly — that's the per-child isolation that
  * keeps untrusted ticket text from minting the instance role itself.
  *
@@ -64,7 +64,7 @@ interface ImdsCreds {
   Expiration: string; // ISO 8601
 }
 
-// IMDSv2 dance, run inside a transient unit that is NOT in the backstage cgroup
+// IMDSv2 dance, run inside a transient unit that is NOT in the opensession cgroup
 // (so the IMDS deny doesn't apply). Emits only the credentials JSON on stdout.
 const FETCH_SCRIPT = [
   'TOKEN=$(curl -s -m 3 -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")',

@@ -20,7 +20,7 @@
  *  - TTL (default 10 min) from the last touch; the sweep destroys expired
  *    prewarms PROVIDER-side (adapter.destroy), never just locally
  *  - provider-side backstop: prewarms are created with autoStop/autoDelete
- *    intervals so even a crashed backstage can't leak one forever, and the
+ *    intervals so even a crashed opensession can't leak one forever, and the
  *    sweep periodically audits the provider BY LABEL for orphans this
  *    process doesn't know about
  *  - state lives on globalThis (hot-reload safe) plus one JSON file per
@@ -73,8 +73,8 @@ import {
  *  whole label map with the session labels, so an adopted sandbox stops
  *  matching this immediately — the orphan audit only ever sees unclaimed
  *  pool sandboxes. */
-export const PREWARM_LABEL = "backstage.prewarm";
-export const PREWARM_KEY_LABEL = "backstage.prewarm.key";
+export const PREWARM_LABEL = "opensession.prewarm";
+export const PREWARM_KEY_LABEL = "opensession.prewarm.key";
 
 export type PrewarmEntryState = "bootstrapping" | "ready" | "claimed" | "failed";
 
@@ -101,7 +101,7 @@ export interface PrewarmEntry {
  *  would cycle (daytona.ts imports claimPrewarm from this module). */
 export interface PrewarmAdapter {
   /** Create a remote sandbox carrying `labels`, with provider-side
-   *  autoStop/autoDelete backstops so a crashed backstage can't leak it. */
+   *  autoStop/autoDelete backstops so a crashed opensession can't leak it. */
   create(
     labels: Record<string, string>,
     opts: { autoStopMinutes: number; autoDeleteMinutes: number },
@@ -310,7 +310,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
     const ttl = sandboxPrewarmConfig().ttlMinutes;
     console.log(`[sandbox-prewarm] starting ${entry.key} prewarm (user ${entry.user || "?"})`);
     const { sandboxId, driver } = await adapter.create(
-      { [PREWARM_LABEL]: "1", [PREWARM_KEY_LABEL]: entry.key, "backstage.sandbox": "1" },
+      { [PREWARM_LABEL]: "1", [PREWARM_KEY_LABEL]: entry.key, "opensession.sandbox": "1" },
       {
         autoStopMinutes: ttl + BACKSTOP_STOP_EXTRA_MIN,
         autoDeleteMinutes: BACKSTOP_DELETE_MIN,

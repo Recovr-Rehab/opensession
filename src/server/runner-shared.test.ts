@@ -5,7 +5,7 @@ describe("isClaudeBridgeLaunchError", () => {
   test("matches the two shapes the agent SDK emits", () => {
     expect(
       isClaudeBridgeLaunchError(
-        "Claude Code native binary at /home/ubuntu/projects/tella-backstage/node_modules/.bin/claude exists but failed to launch.",
+        "Claude Code native binary at /home/ubuntu/projects/opensession/node_modules/.bin/claude exists but failed to launch.",
       ),
     ).toBe(true);
     expect(

@@ -22,7 +22,7 @@ import {
   transcriptLineToolUse,
   transcriptLineUser,
 } from "../opencode-transcript";
-import type { BackstageSessionFile } from "../types";
+import type { NativeSessionFile } from "../types";
 
 type JsonlLine = Record<string, unknown>;
 
@@ -42,7 +42,7 @@ export interface DemoSessionFixture {
   id: string;
   /** Engine session id; also the transcript jsonl basename. Empty = no jsonl. */
   ocSessionId: string;
-  file: BackstageSessionFile;
+  file: NativeSessionFile;
   lines: JsonlLine[];
 }
 
@@ -191,8 +191,8 @@ export function demoSessions(opts: {
     ocId: string,
     startedAgoMin: number,
     lastAgoMin: number,
-    file: Partial<BackstageSessionFile>,
-  ): BackstageSessionFile =>
+    file: Partial<NativeSessionFile>,
+  ): NativeSessionFile =>
     ({
       id,
       claudeSessionId: ocId,
@@ -204,7 +204,7 @@ export function demoSessions(opts: {
       mode: "code",
       model: MODEL_FABLE,
       ...file,
-    }) as BackstageSessionFile;
+    }) as NativeSessionFile;
 
   // 1. The hero session: completed bug-fix with a real diff + seeded PR.
   {
@@ -915,7 +915,7 @@ export function demoAuditLines(now: number): Array<Record<string, unknown>> {
     extra: Record<string, unknown>,
   ) => ({
     time: at(agoMin),
-    service: "backstage",
+    service: "opensession",
     msg: "claude_turn_event",
     provider: "opencode",
     turn_id: "demo-turn-1",
@@ -931,7 +931,7 @@ export function demoAuditLines(now: number): Array<Record<string, unknown>> {
   return [
     {
       time: at(180),
-      service: "backstage",
+      service: "opensession",
       msg: "user_prompt",
       bks_session_id: "bks-demo-pr",
       user: "Alex",
@@ -954,7 +954,7 @@ export function demoAuditLines(now: number): Array<Record<string, unknown>> {
     }),
     {
       time: at(176),
-      service: "backstage",
+      service: "opensession",
       msg: "assistant_text",
       bks_session_id: "bks-demo-pr",
       model: MODEL_FABLE,
@@ -962,7 +962,7 @@ export function demoAuditLines(now: number): Array<Record<string, unknown>> {
     },
     {
       time: at(175),
-      service: "backstage",
+      service: "opensession",
       msg: "permission_decision",
       bks_session_id: "bks-demo-pr",
       tool_name: "Edit",
@@ -971,7 +971,7 @@ export function demoAuditLines(now: number): Array<Record<string, unknown>> {
     },
     {
       time: at(172),
-      service: "backstage",
+      service: "opensession",
       msg: "result",
       bks_session_id: "bks-demo-pr",
       outcome: "success",
@@ -980,7 +980,7 @@ export function demoAuditLines(now: number): Array<Record<string, unknown>> {
     },
     {
       time: at(60),
-      service: "backstage",
+      service: "opensession",
       msg: "run_state_transition",
       bks_session_id: "bks-demo-scratch",
       from: "running",

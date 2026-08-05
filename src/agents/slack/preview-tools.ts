@@ -5,10 +5,10 @@
  * links in the session viewer, so a human clicks one button and lands directly
  * on the feature under test (e.g. the tag editor) instead of the app root.
  *
- * Wired the same way as opensession-repos: interactive runs only (Backstage web
+ * Wired the same way as opensession-repos: interactive runs only (OpenSession web
  * sessions + Slack), never automations, and only when a sessionId is in scope.
  * The handler runs in the parent process and persists via the injected
- * setPreviewPath callback (touchBackstageSession), so the buttons update live.
+ * setPreviewPath callback (touchNativeSession), so the buttons update live.
  */
 
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";

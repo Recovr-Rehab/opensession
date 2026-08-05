@@ -409,7 +409,7 @@ describe("automation runs and per-user MCP servers (fail closed)", () => {
     try {
       mcpConfig = JSON.parse(
         require("fs").readFileSync(
-          `${process.env.HOME}/projects/tella-backstage/mcp-config.json`,
+          `${process.env.HOME}/projects/opensession/mcp-config.json`,
           "utf-8"
         )
       ).mcpServers;
@@ -449,7 +449,7 @@ describe("opencodeDeniedToolIds", () => {
 });
 
 describe("opencodeAutomationModel (automations dispatch on opencode)", () => {
-  // The live ~/.backstage-opencode.json has the bridge enabled; these
+  // The live ~/.opensession-opencode.json has the bridge enabled; these
   // assertions describe the bridged mapping (the fail-safe path is exercised
   // only when the bridge is off, which would flip claude tiers to passthrough).
   test("tier-preserving mapping", () => {
@@ -632,11 +632,11 @@ describe("buildOpencodeInstructions", () => {
   test("shared-pool runs are told their real cwd; per-session runs aren't", () => {
     const shared = buildOpencodeInstructions({
       isAsk: false,
-      cwd: "/home/ubuntu/projects/tella-backstage",
+      cwd: "/home/ubuntu/projects/opensession",
     });
     expect(shared).toContain("## Working directory");
-    expect(shared).toContain("`/home/ubuntu/projects/tella-backstage` — you are already there");
-    expect(shared).toContain("cd /home/ubuntu/projects/tella-backstage &&");
+    expect(shared).toContain("`/home/ubuntu/projects/opensession` — you are already there");
+    expect(shared).toContain("cd /home/ubuntu/projects/opensession &&");
     expect(buildOpencodeInstructions({ isAsk: false })).not.toContain("## Working directory");
   });
   test("ask mode gets the read-only guardrail", () => {

@@ -100,7 +100,7 @@ async function sh(cmd: string[], cwd?: string): Promise<{ code: number; out: str
 // ── credentials (never logged) ────────────────────────────────────────────────
 
 function liveSandboxFileConfig(): any {
-  for (const path of [`${HOME}/.opensession-sandbox.json`, `${HOME}/.backstage-sandbox.json`]) {
+  for (const path of [`${HOME}/.opensession-sandbox.json`, `${HOME}/.opensession-sandbox.json`]) {
     try {
       return JSON.parse(readFileSync(path, "utf-8"));
     } catch {}
@@ -722,21 +722,21 @@ async function auditDaytonaLeftovers(): Promise<void> {
     const client = new Daytona({ apiKey: daytonaKey });
     const listLeftovers = async (): Promise<Array<{ id: string; state: string }>> => {
       const out: Array<{ id: string; state: string }> = [];
-      for await (const s of client.list({ labels: { "backstage.sandbox": "1" } } as any)) {
+      for await (const s of client.list({ labels: { "opensession.sandbox": "1" } } as any)) {
         // Deletion is async server-side — a sandbox mid-teardown still lists
         // with its labels (and even state "started") for a few seconds.
         const state = String((s as any).state || "");
         if (/destroy|delet/i.test(state)) continue;
         // ONLY sbxtest-labeled sandboxes count as suite leftovers. The API
         // key may be the LIVE org's: real sessions' sandboxes carry the same
-        // backstage.sandbox=1 label, and reaping those here would destroy a
+        // opensession.sandbox=1 label, and reaping those here would destroy a
         // live session's workspace out from under it. Prewarm sandboxes
-        // (backstage.prewarm=1) have no session label — the suite's carry a
+        // (opensession.prewarm=1) have no session label — the suite's carry a
         // prewarm key whose repo id is sbx-prefixed (sbxpub); the live
         // pool's (daytona:tella-fusion, …) are equally off-limits here.
         const labels = (s as any).labels || {};
-        const session = String(labels["backstage.session"] || "");
-        const prewarmRepo = String(labels["backstage.prewarm.key"] || "").split(":")[1] || "";
+        const session = String(labels["opensession.session"] || "");
+        const prewarmRepo = String(labels["opensession.prewarm.key"] || "").split(":")[1] || "";
         if (!session.startsWith("sbxtest-") && !prewarmRepo.startsWith("sbx")) continue;
         out.push({ id: (s as any).id, state });
       }
@@ -777,7 +777,7 @@ async function auditE2bLeftovers(): Promise<void> {
       // return shape varies across versions.
       const paginator: any = (Sandbox as any).list({
         apiKey: e2bKey,
-        query: { metadata: { backstageSandbox: "1" } },
+        query: { metadata: { opensessionSandbox: "1" } },
       });
       const infos: any[] = Array.isArray(paginator)
         ? paginator
@@ -879,10 +879,10 @@ async function auditModalLeftovers(): Promise<void> {
       const out: Array<{ id: string; session: string }> = [];
       for await (const sandbox of client.sandboxes.list({
         appId: app.appId,
-        tags: { "backstage.sandbox": "1" },
+        tags: { "opensession.sandbox": "1" },
       })) {
         const tags = await sandbox.getTags();
-        const session = String(tags["backstage.session"] || "");
+        const session = String(tags["opensession.session"] || "");
         if (session.startsWith("sbxtest-")) out.push({ id: sandbox.sandboxId, session });
       }
       return out;

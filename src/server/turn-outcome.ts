@@ -124,12 +124,12 @@ export interface TurnLedger {
 const ledgers = new Map<string, TurnLedger>();
 
 /**
- * Ledger key: the backstage session id, and only that.
+ * Ledger key: the opensession session id, and only that.
  *
  * Deliberately no fallback to the engine session id. The key has to be
  * something the MCP tool context can also name, or a run gets judged on a
  * ledger it had no way to write a declaration into — which is how you
- * manufacture false papercuts. Runs with no backstage session (Plain's direct
+ * manufacture false papercuts. Runs with no opensession session (Plain's direct
  * mention flow, which posts its result as a note unconditionally) get no
  * ledger and no verdict, which is the honest answer for them.
  */

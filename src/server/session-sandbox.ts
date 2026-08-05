@@ -7,7 +7,7 @@
 import { getSandboxProvider, type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, sandboxesEnabled, sandboxProviderConfigured } from "./sandbox/config";
 import { dockerContainerStatus } from "./sandbox/docker";
-import { touchBackstageSession } from "./session-cache";
+import { touchNativeSession } from "./session-cache";
 import type { UnifiedSession } from "./types";
 
 /**
@@ -31,8 +31,8 @@ export function destroySessionSandbox(
 			console.log(
 				`[sandbox] destroyed ${sb.sandboxId} for ${session.id} (${why})`,
 			);
-			if (clearSandboxId && session.source === "backstage")
-				touchBackstageSession(session.id, {
+			if (clearSandboxId && session.source === "opensession")
+				touchNativeSession(session.id, {
 					sandbox: { ...sb, sandboxId: undefined },
 				});
 		} catch (e) {

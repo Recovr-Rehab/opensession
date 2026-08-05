@@ -198,7 +198,7 @@ export function updateTodo(
 // ── Reminders ────────────────────────────────────────────────────────────────
 // A 30s sweep fires each open todo's remindAt exactly once: Web Push to the
 // owner's devices + a Slack DM (prefixed as Michael, per the messaging rule).
-// Started once from opensession.ts's __backstageBooted block.
+// Started once from opensession.ts's __opensessionBooted block.
 
 const SWEEP_MS = 30_000;
 
@@ -246,7 +246,7 @@ async function sweepReminders(): Promise<void> {
 
 let reminderTimer: ReturnType<typeof setInterval> | null = null;
 
-/** Start the reminder sweep. Call once from the __backstageBooted block. */
+/** Start the reminder sweep. Call once from the __opensessionBooted block. */
 export function startTodoReminderTicker(): void {
 	if (reminderTimer) return;
 	reminderTimer = setInterval(() => {

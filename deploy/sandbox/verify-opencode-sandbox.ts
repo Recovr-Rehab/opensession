@@ -10,7 +10,7 @@
  *
  *  1. Container mounts: the host ~/.claude/projects/-opencode-engine dir
  *     (persisted opencode transcripts, host-visible) and the ro
- *     ~/.backstage-opencode.json bridge config are mounted.
+ *     ~/.opensession-opencode.json bridge config are mounted.
  *  2. Binary resolution: `opencode` resolves in-container (baked at
  *     /usr/bin/opencode; resolveOpencodeBin's Bun.which finds it via PATH).
  *  3. A REAL two-turn opencode/anthropic run (meridian bridge, haiku) through
@@ -147,7 +147,7 @@ try {
     mounts.out.includes(`${OPENCODE_TRANSCRIPTS_DIR} -> ${OPENCODE_TRANSCRIPTS_DIR} rw=true`),
     OPENCODE_TRANSCRIPTS_DIR);
   ok("opencode bridge config mounted ro",
-    mounts.out.includes(`-> ${HOME}/.backstage-opencode.json rw=false`));
+    mounts.out.includes(`-> ${HOME}/.opensession-opencode.json rw=false`));
 
   // ── binary resolution in-container ────────────────────────────────────────
   const ver = await sandbox.exec(["opencode", "--version"]);

@@ -1,5 +1,5 @@
 /**
- * Native Backstage team chat — nothing to do with Slack. Two kinds of rooms
+ * Native OpenSession team chat — nothing to do with Slack. Two kinds of rooms
  * share one implementation, keyed by channel id:
  *
  *   - "watercooler"      the team-wide room (left-sidebar entry)
@@ -7,7 +7,7 @@
  *
  * Messages persist per channel in `~/.opensession-chat/<channel>.json` (the
  * flat-file pattern of pins.ts/push.ts); realtime delivery and typing
- * indicators ride the app WebSocket (wired in backstage.ts). An `@Name`
+ * indicators ride the app WebSocket (wired in opensession.ts). An `@Name`
  * mention web-pushes the tagged teammate's devices via src/server/push.ts.
  * `@session:<id>` tokens tag a session — rendered as a clickable chip by the
  * frontend, ignored by mention pushes.

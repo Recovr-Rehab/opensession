@@ -7,7 +7,7 @@ test("keeps GitHub merged state authoritative over stale archived session data",
   const url = "https://github.com/tellahq/backstage/pull/59";
   const recentPr = {
     url,
-    repo: "backstage",
+    repo: "opensession",
     branch: "os1-review-sidebar-open",
     state: "MERGED",
     number: 59,
@@ -21,7 +21,7 @@ test("keeps GitHub merged state authoritative over stale archived session data",
   const session = {
     id: "bks-review",
     title: "Review view-tab",
-    repo: "backstage",
+    repo: "opensession",
     branch: "os1-review-sidebar-open",
     prUrl: url,
     prState: "OPEN",

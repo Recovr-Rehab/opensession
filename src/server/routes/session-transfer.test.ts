@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Repo } from "../config";
-import type { BackstageSessionFile, UnifiedSession } from "../types";
+import type { NativeSessionFile, UnifiedSession } from "../types";
 import type { RouteContext } from "./context";
 import {
   handleSessionTransferRoutes,
@@ -27,7 +27,7 @@ function session(): UnifiedSession {
     id: SESSION_ID,
     claudeSessionId: "ses_local",
     opencodeSessionId: "ses_local",
-    source: "backstage",
+    source: "opensession",
     branch: "feature/local-work",
     worktreeDir: "/worktrees/local-work",
     startedBy: "Ada",
@@ -42,7 +42,7 @@ function session(): UnifiedSession {
   };
 }
 
-function sessionFile(): BackstageSessionFile {
+function sessionFile(): NativeSessionFile {
   return {
     id: SESSION_ID,
     claudeSessionId: "ses_local",

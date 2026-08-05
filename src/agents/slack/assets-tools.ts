@@ -11,7 +11,7 @@
  * checkout — the assets folder is deliberately exempt scratch space) and for
  * sandboxed sessions (whose worktree isn't even on this host).
  *
- * Wired like the other siblings: interactive runs only (Backstage web
+ * Wired like the other siblings: interactive runs only (OpenSession web
  * sessions + Slack), never automations.
  */
 

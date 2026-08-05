@@ -28,7 +28,7 @@
  * front that terminates TLS for it — the last X-Forwarded-For hop (the one
  * the proxy itself appended; earlier hops are client-controlled).
  *
- * Config (~/.backstage-sandbox.json → sandbox/config.ts publicIngress block):
+ * Config (~/.opensession-sandbox.json → sandbox/config.ts publicIngress block):
  *   {"publicIngress": {"enabled": true, "port": 3860,
  *                      "publicBaseUrl": "wss://sessions.example.com"}}
  * The listener binds 127.0.0.1 by default — front it with a TLS terminator
@@ -37,7 +37,7 @@
  * remoteSandboxCallbackBaseUrl). The main server keeps serving the same
  * routes for the tailnet path (docker-ws) — this listener is additive.
  *
- * Lifecycle: started once from backstage.ts boot (needs a real restart to
+ * Lifecycle: started once from opensession.ts boot (needs a real restart to
  * start/stop or change port/host — listeners are runner-adjacent internals).
  * The server object is parked on globalThis and reused across `bun --hot`
  * reloads (same pattern as the main serve); route logic goes through an impl

@@ -55,7 +55,7 @@ interface Props {
 
 /**
  * The session's worktree roots, so absolute paths in tool rows can render
- * repo-relative ("src/server/chat.ts", not "~/projects/tella-backstage/src/
+ * repo-relative ("src/server/chat.ts", not "~/projects/opensession/src/
  * server/chat.ts"). Attached repos carry their project id as a label and keep
  * a "<project>:" prefix, the same form @-mentions use. Context rather than a
  * prop so the preview rows inside TurnBlock/WorkBlock get it for free.

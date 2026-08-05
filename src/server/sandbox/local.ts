@@ -13,7 +13,7 @@
  *    removeWorktree/sweepArchivedWorktrees — a sandbox teardown must never
  *    delete a worktree that outlives the session concept today.
  *
- * NOT yet threaded through backstage.ts (`runSessionPromptInner` still
+ * NOT yet threaded through opensession.ts (`runSessionPromptInner` still
  * computes its own cwd) — that threading is the Phase 1 TODO.
  */
 

@@ -1,6 +1,6 @@
 /**
  * Archive state for sessions of ALL sources. Slack/Linear session files are
- * owned by their agents (read-only for backstage), so archived-ness lives in
+ * owned by their agents (read-only for opensession), so archived-ness lives in
  * a backstage-owned registry keyed by unified session id.
  */
 import { readFileSync, existsSync } from "fs";

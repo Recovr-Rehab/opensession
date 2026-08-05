@@ -22,10 +22,10 @@
  *    collisions are impossible because the allocator never hands out a port
  *    twice.
  *  - Allocations persist in <chats-dir>/sandbox-preview-ports.json so
- *    the preview URL is stable across backstage restarts and container
+ *    the preview URL is stable across opensession restarts and container
  *    recreations; they're released by DockerProvider.destroy().
  *
- * Single-writer by design (the one backstage process); the verify suite's
+ * Single-writer by design (the one opensession process); the verify suite's
  * separate process cleans its own sbxtest-* entries.
  */
 

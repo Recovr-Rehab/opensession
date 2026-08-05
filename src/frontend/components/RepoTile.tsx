@@ -35,7 +35,7 @@ export { repoLabel } from "../lib/repo-label";
 
 // A repo's icon tile (sidebar Repo dropdown, session-header breadcrumb, repo
 // menus): the server's /repo-icon/<id>.png — the repo's GitHub org avatar,
-// with backstage wearing the OS1 mac app icon — falling back to the colored
+// with opensession wearing the OS1 mac app icon — falling back to the colored
 // letter tile when no icon resolves (unregistered/local repos). `size` (px)
 // shrinks it for tight spots like the phone header's model line; omitted =
 // the 18px default. `round` makes it a full circle (e.g. the phone title
@@ -63,7 +63,7 @@ export function RepoTile({
 	if (failedFor !== name) {
 		return (
 			<span
-				className={`repo-tile repo-tile--img${name === "backstage" ? " repo-tile--app-icon" : ""}`}
+				className={`repo-tile repo-tile--img${name === "opensession" ? " repo-tile--app-icon" : ""}`}
 				style={style}
 			>
 				<img

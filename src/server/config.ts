@@ -164,14 +164,14 @@ export interface PersonaSection {
  *  (distinct from persona: `persona.name` is the agent, `persona.product`
  *  is the company's product the agent supports). */
 export interface BrandingSection {
-  /** Product name rendered in titles/headers, e.g. "Backstage". */
+  /** Product name rendered in titles/headers, e.g. "OpenSession". */
   productName?: string;
   /** Short visual monogram for brand-mark contexts (logo chip, favicon);
    *  defaults to productName. */
   productMark?: string;
 }
 
-export interface BackstageConfig {
+export interface OpenSessionConfig {
   server?: ServerSection;
   paths?: PathsSection;
   cloud?: CloudSection;
@@ -207,7 +207,7 @@ export interface Repo {
   /** GitHub `owner/name` for PR operations (gh CLI). */
   ghRepo: string;
   // When true, code sessions run directly in the main checkout on the default
-  // branch instead of an isolated worktree. Backstage is self-hosting from its
+  // branch instead of an isolated worktree. OpenSession is self-hosting from its
   // main checkout; sessions share one tree and commit straight to the default
   // branch (see "OpenSession dev workflow" in AGENTS.md: add → commit → push,
   // never reset/discard the shared repo).
@@ -349,11 +349,11 @@ export function parseTeamMember(v: unknown): TeamMember | undefined {
   };
 }
 
-function parseConfig(text: string): BackstageConfig {
+function parseConfig(text: string): OpenSessionConfig {
   try {
     const raw = JSON.parse(text);
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-    const cfg: BackstageConfig = {};
+    const cfg: OpenSessionConfig = {};
 
     const server = obj(raw.server);
     if (server) {
@@ -464,10 +464,10 @@ function parseConfig(text: string): BackstageConfig {
 // Read fresh per call, with an mtime/size guard so hot paths (the REPOS proxy
 // in worktree.ts hits this on every property access) don't re-parse an
 // unchanged file. Missing/unreadable/invalid file = {} = built-in defaults.
-let cache: { path: string; mtimeMs: number; size: number; value: BackstageConfig } | null = null;
+let cache: { path: string; mtimeMs: number; size: number; value: OpenSessionConfig } | null = null;
 
 /** Raw config.json contents (typed, tolerant). Never throws. */
-export function getConfig(): BackstageConfig {
+export function getConfig(): OpenSessionConfig {
   const path = configPath();
   try {
     const st = statSync(path);

@@ -1,8 +1,11 @@
 Default to using Bun instead of Node.js.
 
-OpenSession was born as Tella's internal agent server, code-named "backstage" —
-that history explains the `bks-`/`prj-` id prefixes, the internal `/backstage/*`
-route literals, and other protocol-compat residue you'll see below.
+OpenSession was born as Tella's internal agent server, code-named "backstage".
+The code is fully renamed (2026-08-05); what remains of that history is
+READ-side tolerance for persisted data — old `bks-`/`prj-` ids in session
+files and links, legacy markers in old transcripts, and historical
+`/backstage`/`/opensession` URL prefixes accepted-and-stripped at the edges.
+New code emits only the new names; never remove the read-side acceptance.
 
 Instance-private operator instructions (deployment hostnames, org access
 grants, incident history) belong in an untracked `AGENTS.local.md` or
@@ -76,7 +79,7 @@ the wrong app wastes a round-trip and can mask the real bug.
 `opensession.ts` is a thin entry (~900 lines): env, `hotServe` (reuse the live
 server across hot reloads), the `Bun.serve` composition (SPA routes map + fetch
 preamble → route dispatch → WS-upgrade/SPA-fallback/404 tail), `loadAgents`,
-the `__backstageBooted` boot block, and graceful shutdown. Everything else
+the `__opensessionBooted` boot block, and graceful shutdown. Everything else
 lives in focused modules — work in the module that owns your feature, not the
 entry file (that's what keeps parallel sessions from colliding):
 
@@ -104,7 +107,7 @@ entry file (that's what keeps parallel sessions from colliding):
   `session-sandbox.ts`.
 
 Modules with module-scope side effects (listener/ticker registration guarded
-by `__backstageBooted`) are explicitly side-effect-imported at the top of
+by `__opensessionBooted`) are explicitly side-effect-imported at the top of
 opensession.ts — if you add such a module, add it to that import list.
 
 ## OpenSession dev workflow (self-hosting — read this first)
@@ -112,15 +115,17 @@ opensession.ts — if you add such a module, add it to that import list.
 Naming: OPENSESSION_* env vars, `~/.opensession-*` state. URLs are prefix-less
 since 2026-07-10: the app serves at the bare domain root (your instance URL),
 old `/opensession` + `/backstage` page URLs 301 there, and prefixed non-page
-traffic (WS upgrades incl. sandbox dial-back run-ws/rpc-ws, API calls) still
-normalizes silently onto the internal `/backstage/*` route literals — keep that
-normalization; running sandboxes have the old literals baked in.
-`src/server/rename-compat.ts` keeps legacy aliases for env/state working — never
-remove it, and never rename protocol ids (`bks-`/`prj-` prefixes,
-`===MICHAEL-SUMMARY===`/`BACKSTAGE_VIDEO:` markers, repo ids). The in-process
-MCP servers are named `opensession-*` (renamed from `michael-*` 2026-07-09;
-`canonicalMcpServerId` in rename-compat normalizes legacy ids from persisted
-runs — keep using the new names at definition sites).
+traffic (WS upgrades incl. sandbox dial-back run-ws/rpc-ws, API calls) is
+stripped onto the BARE internal route literals in the fetch preamble — keep
+that acceptance; running sandboxes and old tabs still send prefixed forms.
+Rename read-side tolerance is deliberately tiny and lives next to its use:
+`isNativeSessionId` (paths.ts — old `bks-` ids stay valid forever), the
+legacy fence pair in prompt-context.ts, the pre-rename marker alternation in
+jsonl-parser.ts, the legacy summary sentinel in agents/github/run.ts, and
+`canonicalMcpServerId` (run-rpc.ts — persisted runs still name `michael-*`
+in-process MCP ids). Emit sites use only the new names (`os-`/`ws-` id
+prefixes, `OPENSESSION_VIDEO:`, `===OPENSESSION-SUMMARY===`,
+`<opensession:context>`); never rename what persisted data still carries.
 
 OpenSession runs itself from its main checkout. OpenSession code sessions do
 **not** get their own worktree

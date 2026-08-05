@@ -3,7 +3,7 @@
  * workspace commands run (the sandbox rollout plan §5 Phase 2).
  *
  * The four host-filesystem-coupled surfaces (file-index.ts @-mention search,
- * git-diff.ts, git-status.ts push/pull/status, and their backstage.ts routes)
+ * git-diff.ts, git-status.ts push/pull/status, and their opensession.ts routes)
  * take an optional `WorkspaceExec`; callers derive it per request via
  * `workspaceExecFor(session, dir)`:
  *
@@ -49,7 +49,7 @@ export type WorkspaceExec = ((cmd: string[], opts?: ExecOpts) => Promise<ExecRes
 };
 
 /** The minimal session shape the routing decision needs (UnifiedSession and
- *  BackstageSessionFile both satisfy it). */
+ *  NativeSessionFile both satisfy it). */
 export interface WorkspaceExecSession {
   sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
   worktreeDir?: string | null;

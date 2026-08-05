@@ -1,5 +1,5 @@
 /**
- * Claude account pool for backstage runs.
+ * Claude account pool for opensession runs.
  *
  * Each account is a long-lived OAuth token from `claude setup-token` (valid
  * ~1 year, tied to a Max subscription). Runs get the token injected as
@@ -7,7 +7,7 @@
  * touches ~/.claude/.credentials.json — interactive CLI sessions on the VPS
  * keep whatever account they logged in with.
  *
- * Tokens live in ~/.backstage-claude-accounts.json (mode 0600). Usage per
+ * Tokens live in ~/.opensession-claude-accounts.json (mode 0600). Usage per
  * account is polled from the OAuth usage endpoint every POLL_INTERVAL_MS and
  * kept in memory; the UI reads it via the /api/claude-accounts routes.
  */
@@ -708,7 +708,7 @@ export function listAccountsPublic(): ClaudeAccountPublic[] {
 }
 
 /**
- * A session can pin a specific subscription (see BackstageSessionFile.accountId).
+ * A session can pin a specific subscription (see NativeSessionFile.accountId).
  * Return it when it exists and is currently usable for `model`; undefined when
  * it's gone or exhausted, so the caller falls back to the normal pool pick
  * (a pin is a preference, never a hard requirement that could wedge a run).

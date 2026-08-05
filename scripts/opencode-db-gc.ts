@@ -17,7 +17,7 @@
  *      the same server key reuse the same shard path, so recent files stay
  *      even without a live registry entry.
  *
- * Emits audit events (opencode_db_gc) into the backstage audit log and
+ * Emits audit events (opencode_db_gc) into the opensession audit log and
  * warns to a Slack DM when a DB is still over the size alert threshold
  * after GC. `--dry-run` reports what would happen without touching data.
  *
@@ -54,7 +54,7 @@ function audit(fields: Record<string, unknown>): void {
     const day = new Date().toISOString().slice(0, 10);
     appendFileSync(
       `${AUDIT_DIR}/audit-${day}.jsonl`,
-      JSON.stringify({ time: new Date().toISOString(), service: "backstage", msg: "opencode_db_gc", ...fields }) + "\n"
+      JSON.stringify({ time: new Date().toISOString(), service: "opensession", msg: "opencode_db_gc", ...fields }) + "\n"
     );
   } catch {}
 }

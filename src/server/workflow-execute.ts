@@ -10,7 +10,7 @@
  * Read agents (the default) run in mode "ask", which already withholds write
  * tools. A `write: true` agent instead gets its OWN isolated git worktree
  * (createWorktree(branch, repo, {isolated: true, base: sessionBranch}) —
- * `isolated` is what keeps a shared-checkout repo like backstage out of the
+ * `isolated` is what keeps a shared-checkout repo like opensession out of the
  * LIVE main checkout) and runs in mode "code" there, so N write agents edit
  * code in parallel with zero collisions. Its work is auto-committed on its own
  * branch; an agent that changed nothing has its worktree removed again.
@@ -61,7 +61,7 @@ export interface WorkflowWorktreeOps {
 		opts: { base?: string; isolated: true },
 	): Promise<string>;
 	remove(branch: string, repoId?: string): Promise<void>;
-	/** Is this repo the live shared main checkout (backstage), and is the
+	/** Is this repo the live shared main checkout (opensession), and is the
 	 *  session working IN it? Then merging into it is forbidden. */
 	isLiveSharedCheckout(repoId: string | undefined, sessionCwd: string): boolean;
 }
@@ -461,7 +461,7 @@ export const workflowExecutor: WorkflowExecutor = {
 			if (write) {
 				const branch = workflowBranchName(ctx.runId, req.seq);
 				// `isolated: true` is load-bearing: without it a shared-checkout repo
-				// (backstage) would hand back the LIVE main checkout and every write
+				// (opensession) would hand back the LIVE main checkout and every write
 				// agent would edit the running server's tree.
 				const dir = await worktreeOps.create(branch, ctx.repo, {
 					isolated: true,
@@ -651,7 +651,7 @@ export const workflowExecutor: WorkflowExecutor = {
  *
  * SAFETY (this touches a checkout a human and the live server may be using):
  *  - REFUSES when the session works in a shared-checkout repo's LIVE main
- *    checkout (backstage on master) — merging into the tree the server runs
+ *    checkout (opensession on master) — merging into the tree the server runs
  *    from, while every other session is editing it, is exactly the "never reset
  *    or switch the shared tree" trap in AGENTS.md. The script gets the branch
  *    names back and can report them for manual handling.

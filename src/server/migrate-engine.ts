@@ -1,5 +1,5 @@
 /**
- * Migrate a backstage session onto the OpenCode engine — the "flip the model,
+ * Migrate a opensession session onto the OpenCode engine — the "flip the model,
  * let the next turn hand off" affordance behind the opensession-sessions
  * `migrate_session_engine` tool and scripts/migrate-sessions-to-opencode.ts.
  *
@@ -24,7 +24,7 @@ import { OPENSESSION_CHATS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { resolveModel } from "./models";
 import type { ActiveRunRecord } from "./run-journal";
-import type { BackstageSessionFile } from "./types";
+import type { NativeSessionFile } from "./types";
 
 export type MigrateEngineResult =
   | { ok: true; sessionId: string; from?: string; to: string }
@@ -49,7 +49,7 @@ function journaledRuns(): ActiveRunRecord[] {
 }
 
 export function isAutomationOwnedSession(
-  data: Pick<BackstageSessionFile, "automation" | "createdBy">
+  data: Pick<NativeSessionFile, "automation" | "createdBy">
 ): boolean {
   return !!data.automation || !!data.createdBy?.endsWith(" (automation)");
 }
@@ -57,7 +57,7 @@ export function isAutomationOwnedSession(
 /** Whether the shared run journal shows an in-flight run for this session. */
 export function sessionHasJournaledRun(
   sessionId: string,
-  data?: Pick<BackstageSessionFile, "claudeSessionId" | "codexThreadId" | "opencodeSessionId">
+  data?: Pick<NativeSessionFile, "claudeSessionId" | "codexThreadId" | "opencodeSessionId">
 ): boolean {
   const engineIds = new Set(
     [
@@ -76,7 +76,7 @@ export function sessionHasJournaledRun(
 }
 
 /**
- * Flip a backstage session's model to an opencode/* id so its next turn
+ * Flip a opensession session's model to an opencode/* id so its next turn
  * migrates onto the OpenCode engine via the transcript handoff. Pure
  * session-file operation — see module doc for what it deliberately doesn't do.
  */
@@ -86,9 +86,9 @@ export function migrateSessionEngine(
   by = "engine-migration"
 ): MigrateEngineResult {
   const path = `${OPENSESSION_CHATS_DIR}/${sessionId}.json`;
-  const data = readJson<BackstageSessionFile>(path);
+  const data = readJson<NativeSessionFile>(path);
   if (!data?.id) {
-    return { ok: false, error: `No backstage session file for "${sessionId}".` };
+    return { ok: false, error: `No opensession session file for "${sessionId}".` };
   }
 
   const resolved = resolveModel(targetModel);

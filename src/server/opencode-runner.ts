@@ -13,7 +13,7 @@
  * ChatGPT-subscription auth (the codex accounts pool, seeded per-account — see
  * opencode-openai-auth.ts), and `opencode/anthropic/*`, which runs on
  * Claude-subscription capacity via one of two bridges selected by `bridge.mode`
- * in ~/.backstage-opencode.json (see opencode-config.ts):
+ * in ~/.opensession-opencode.json (see opencode-config.ts):
  *
  *  - "meridian" (the default when enabled; Michiel's 2026-07-08 directive):
  *    the literal opencode-with-claude + @rynfar/meridian stack, bundled as
@@ -72,7 +72,7 @@
  *
  * Both pools: bound to 127.0.0.1 on an ephemeral port with a per-server
  * Basic-auth password, minimal env (PATH/HOME/LANG + git identity — mirrors
- * codexEnv; no backstage tokens). Parked on globalThis so `bun --hot` reloads
+ * codexEnv; no opensession tokens). Parked on globalThis so `bun --hot` reloads
  * keep servers alive. Config (permissions, MCP servers, bridge provider
  * override, meridian plugin) is injected via OPENCODE_CONFIG_CONTENT at
  * spawn; a config OR per-server-env change (e.g. a different meridian
@@ -116,7 +116,7 @@
  * wedging the drain loop on `wake` forever and holding the session busy),
  * removes the dead server from the pool, and lets normal cleanup run. Each
  * turn also carries a hard wall-clock deadline (default 60 min,
- * `turnTimeoutMinutes` in ~/.backstage-opencode.json) that aborts the turn
+ * `turnTimeoutMinutes` in ~/.opensession-opencode.json) that aborts the turn
  * with a clear error.
  *
  * Steering/interrupt: mid-turn steers land in-band via steerOpencodeRun
@@ -126,7 +126,7 @@
  * falls back to abort + queue until opencode v2's delivery:"steer"; cancel
  * maps to `POST /session/:id/abort` + process-level abort.
  *
- * Resume after a backstage restart: the journal records the OpenCode session
+ * Resume after a opensession restart: the journal records the OpenCode session
  * id (in ActiveRunRecord.claudeSessionId, like Codex thread ids) and the full
  * `opencode/...` model id, so the dispatcher routes the resume back here and
  * we re-prompt the same OpenCode session (a fresh `opencode serve` finds it in
@@ -455,7 +455,7 @@ const SHARED_IDLE_KILL_MS = 2 * 60 * 60 * 1000;
  *  directory, events + status are scoped to it). Never a worktree. */
 const SHARED_CWD = `${OPENCODE_STATE_DIR}/shared-cwd`;
 /** Plugin that tags michael-* / opensession-* tool calls with the opencode
- *  session id so run-rpc can route them to the right backstage session on a
+ *  session id so run-rpc can route them to the right opensession session on a
  *  shared server (see opencode-plugin-session-tag.js). */
 const SESSION_TAG_PLUGIN_PATH = join(import.meta.dir, "opencode-plugin-session-tag.js");
 /** Repairs model-stringified object args on MCP tool calls (see the plugin's
@@ -480,7 +480,7 @@ export function parseOpencodeModel(
 
 // ── Run gate + unattended least-privilege policy ─────────────────────────────
 
-/** Journal kinds minted by trusted interactive paths (backstage.ts:
+/** Journal kinds minted by trusted interactive paths (opensession.ts:
  *  runSessionPromptInner "prompt", goal wakes "goal", both create paths
  *  "create"; host/sandbox run specs default `journalKind || "prompt"`).
  *  "linear" and "slack" are the team-driven agent loops — trusted humans on
@@ -878,7 +878,7 @@ export function meridianStackInfo(): MeridianStackInfo {
   } catch (e: any) {
     throw new Error(
       "The meridian bridge packages are not installed (opencode-with-claude / @rynfar/meridian) — " +
-        `run \`bun install\` in the backstage checkout. (${e?.message || e})`
+        `run \`bun install\` in the opensession checkout. (${e?.message || e})`
     );
   }
   cachedMeridianStack = {
@@ -1347,7 +1347,7 @@ export function buildOpencodeMcpConfig(
 const PROXY_MCP_TIMEOUT_MS = 33 * 60_000;
 
 /** In-process michael-* servers, exposed as stdio proxies that forward to the
- *  backstage process over the run-rpc socket — the exact pattern Codex uses
+ *  opensession process over the run-rpc socket — the exact pattern Codex uses
  *  (codex-runner proxyMcpConfigs), in OpenCode's config shape. */
 export function proxyOpencodeMcpConfigs(
   inProcessMcp: Record<string, unknown> | undefined,
@@ -1385,7 +1385,7 @@ export function proxyOpencodeMcpConfigs(
  *  session-tag plugin's arg injection is transport-agnostic, so shared-server
  *  routing is unchanged. Sandbox/runner-host runs never reach this (their
  *  prebuilt stdio proxies pass through above — inside a container
- *  127.0.0.1 isn't backstage). */
+ *  127.0.0.1 isn't opensession). */
 export function remoteOpencodeMcpConfigs(
   inProcessMcp: Record<string, unknown> | undefined,
   rpcToken: string | undefined
@@ -1424,7 +1424,7 @@ export function inProcessOpencodeMcpConfigs(
  *  arrives as ALREADY-BUILT stdio proxy configs (host.ts proxyMcpConfigs —
  *  command/args/env carrying the spec's HOST-registered rpc token and the
  *  right transport env, unix socket or rpc-ws). Pass those through verbatim:
- *  rebuilding them here would mint a fresh token the backstage process never
+ *  rebuilding them here would mint a fresh token the opensession process never
  *  registered (run-rpc auth lives there, not in this process) and point at
  *  BUN_BIN, a host path that doesn't exist inside a sandbox container.
  *  Returns null when the values are in-process SDK server instances (the
@@ -1964,7 +1964,7 @@ export function steerOpencodeRun(id: string, text: string, images?: ImageInput[]
 
 /** Minimal env for the opencode server process (mirrors codexEnv). Provider
  * auth is bound explicitly before spawn; OpenCode's native auth store is not
- * part of the local-profile contract. Backstage tokens never are.
+ * part of the local-profile contract. OpenSession tokens never are.
  *
  * Public-repo containment note (2026-07-26): the gh-guard PATH shims that
  * used to front this env are gone — GitHub writes outside tellahq are now
@@ -3604,7 +3604,7 @@ async function* runOpencodeAttempt(
 
   try {
     // Bridge for Anthropic models — dispatched on bridge.mode in
-    // ~/.backstage-opencode.json; throws a clear config error when off.
+    // ~/.opensession-opencode.json; throws a clear config error when off.
     let providerOverride: Record<string, unknown> | undefined;
     let serverExtraEnv: Record<string, string> | undefined;
     let meridianPlugin: string[] | undefined;
@@ -4040,7 +4040,7 @@ async function* runOpencodeAttempt(
     const rpcToken = preEntry?.rpcToken || crypto.randomUUID();
     const hasInProcess = !!(opts.inProcessMcp && Object.keys(opts.inProcessMcp).length);
     // Prebuilt stdio proxies (runner-host context) pass through as-is — their
-    // rpc token is already registered in the backstage process. See
+    // rpc token is already registered in the opensession process. See
     // opencodeMcpFromPrebuiltProxies.
     const prebuiltProxies = opencodeMcpFromPrebuiltProxies(opts.inProcessMcp);
 
@@ -4115,7 +4115,7 @@ async function* runOpencodeAttempt(
           agent: {
             ask: {
               mode: "primary",
-              description: "Read-only ask mode (backstage)",
+              description: "Read-only ask mode (opensession)",
               permission: {
                 edit: "deny",
                 bash: ASK_BASH_PERMISSIONS,
@@ -4271,7 +4271,7 @@ async function* runOpencodeAttempt(
     }
     if (!ocSessionId) {
       const created = await client.session.create({
-        body: { title: journal?.osSessionId ? `backstage ${journal.osSessionId}` : "backstage run" },
+        body: { title: journal?.osSessionId ? `opensession ${journal.osSessionId}` : "opensession run" },
         ...q,
       });
       if (!created.data) throw new Error(`Failed to create opencode session: ${JSON.stringify(created.error ?? "")}`);
@@ -4332,7 +4332,7 @@ async function* runOpencodeAttempt(
         });
     };
     for (const key of registeredKeys) activeOpencodeSteers.set(key, steerFn);
-    // Shared servers: map this opencode session to its backstage session for
+    // Shared servers: map this opencode session to its opensession session for
     // the run's duration, so proxied michael-* tool calls (tagged with the
     // opencode session id by the session-tag plugin) route to THIS session's
     // in-process tools rather than whichever run registered the token last.
@@ -5056,7 +5056,7 @@ async function* runOpencodeAttempt(
     const sentAt = Date.now();
 
     // Hard per-turn wall-clock deadline (default 60 min, turnTimeoutMinutes in
-    // ~/.backstage-opencode.json): a turn that never goes idle — model loop,
+    // ~/.opensession-opencode.json): a turn that never goes idle — model loop,
     // server wedge the exit watcher can't see — ends with a clear error
     // instead of holding the session busy forever.
     const turnTimeout = opencodeTurnTimeoutMs();

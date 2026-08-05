@@ -33,7 +33,7 @@ import { nodeWsClose, nodeWsMessage, nodeWsOpen } from "./node-ws";
 import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { type Sandbox, hasRemoteWorkspace } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox, sandboxConfig, sandboxesEnabled } from "./sandbox/config";
-import { SESSION_EFFORTS, findSession, invalidateSessionsCache, maybePersistEffort, maybePersistFastMode, recordRunOutcome, touchBackstageSession, updateSessionFile } from "./session-cache";
+import { SESSION_EFFORTS, findSession, invalidateSessionsCache, maybePersistEffort, maybePersistFastMode, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
 import { buildBranchNote, buildPlanFirstNote, memoryNoteFor, workspaceOwningWorktree } from "./session-repos";
 import { engineSessionPatch, engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift } from "./sessions";
 import { handleSlashCommand } from "./slash-commands";
@@ -43,7 +43,7 @@ import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
 import { startTranscriptWatch } from "./transcript-watch";
-import { type BackstageSessionFile, type SessionUsage } from "./types";
+import { type NativeSessionFile, type SessionUsage } from "./types";
 import { shouldPersistModelSwitch } from "./run-events";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
@@ -817,7 +817,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				maybePersistEffort(session, msg.effort);
 				maybePersistFastMode(session, msg.fastMode);
 
-				// Slash commands are handled by backstage itself
+				// Slash commands are handled by opensession itself
 				const notice = handleSlashCommand(
 					session,
 					String(content || "").trim(),
@@ -844,7 +844,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 								title: `${user || "Someone"} mentioned you in ${session.title || "a session"}`,
 								body: preview,
 								url: `/session/${encodeURIComponent(sessionId)}`,
-								tag: `backstage-mention-${sessionId}`,
+								tag: `opensession-mention-${sessionId}`,
 							});
 						}
 					}
@@ -907,14 +907,14 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					break;
 				}
 
-				// Codex sessions start a fresh thread on first prompt. Backstage
+				// Codex sessions start a fresh thread on first prompt. OpenSession
 				// chats with no engine id are *fresh* chats (a new sibling from the
 				// tab strip's +): runSessionPrompt starts a new conversation. Only
-				// non-backstage sources genuinely need an id to resume.
+				// non-opensession sources genuinely need an id to resume.
 				if (
 					providerFor(session.model) === "claude" &&
 					!session.claudeSessionId &&
-					session.source !== "backstage"
+					session.source !== "opensession"
 				) {
 					ws.send(
 						JSON.stringify({
@@ -1444,7 +1444,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// add (ensureAskCheckout).
 						wtPath = await ensureAskCheckout(repo.id);
 					} else if (sharedCheckoutForNewSessions(repo)) {
-						// Backstage: code sessions edit the live main checkout on the
+						// OpenSession: code sessions edit the live main checkout on the
 						// default branch (hot-reloads in the running server). No worktree.
 						wtPath = repo.repo;
 					} else if (workspace?.worktreeDir && chatMode === "share") {
@@ -1503,7 +1503,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// base to stack on and is really the workspace's first worktree.
 					// fromPr is exempt from the shared-checkout exclusion: PR-branch
 					// worktrees are isolated even for shared-checkout repos, so a PR
-					// workspace on e.g. backstage still materializes.
+					// workspace on e.g. opensession still materializes.
 					if (
 						workspace &&
 						!workspace.worktreeDir &&
@@ -1664,7 +1664,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					let selectedModel = model;
 					let effectiveProvider = providerFor(effectiveModel);
 					const modelHistory: NonNullable<
-						BackstageSessionFile["modelHistory"]
+						NativeSessionFile["modelHistory"]
 					> = [];
 					let persisted = false;
 					// Cumulative token/cost for this new session's opening run.
@@ -1688,7 +1688,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					const persist = () =>
 						updateSessionFile(bksId, (data) => {
 							// Widen to Partial: the file may not exist yet.
-							const existing: Partial<BackstageSessionFile> = data;
+							const existing: Partial<NativeSessionFile> = data;
 							return {
 								id: bksId,
 								claudeSessionId: "",
@@ -1899,7 +1899,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							if (event.model) effectiveModel = event.model;
 							// Session was persisted/announced before setup — just record
 							// the engine id so the run is resumable while it streams.
-							touchBackstageSession(
+							touchNativeSession(
 								bksId,
 								{
 									...engineSessionPatch(
@@ -1938,7 +1938,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 										at: new Date().toISOString(),
 										by: reason,
 									});
-									touchBackstageSession(bksId, {
+									touchNativeSession(bksId, {
 										model: selectedModel,
 										modelHistory,
 									});
@@ -2030,7 +2030,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
 					if (!persisted) await persist();
 					else
-						touchBackstageSession(
+						touchNativeSession(
 							bksId,
 							{
 								...engineSessionPatch(
@@ -2051,7 +2051,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// Persist opening-run usage regardless of which branch ran
 						// above (persist() writes the base file without it).
 						if (latestUsage)
-							touchBackstageSession(bksId, { usage: latestUsage });
+							touchNativeSession(bksId, { usage: latestUsage });
 					recordRunOutcome(bksId, runFailure, {
 						engineSessionId,
 						noticePersisted: failureNoticePersisted,

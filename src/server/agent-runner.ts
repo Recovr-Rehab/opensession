@@ -88,7 +88,7 @@ export interface RunAgentOpts {
    * In-process SDK MCP servers (opensession-sessions / opensession-admin) for trusted
    * interactive runs only — never automations. Claude receives them directly;
    * Codex receives stdio proxy configs that forward to the same in-process
-   * servers through Backstage's run RPC socket.
+   * servers through OpenSession's run RPC socket.
    */
   inProcessMcp?: Record<string, unknown>;
   /**
@@ -678,7 +678,7 @@ export function resumeInterruptedRuns(
       continue;
     }
     // Sandboxed runs (the sandbox rollout plan Phases 1+3): the sandbox — and
-    // often the in-sandbox run host itself — outlives a backstage restart.
+    // often the in-sandbox run host itself — outlives a opensession restart.
     // Reattach/relaunch through the provider instead of running in-process;
     // the sandbox modules are imported lazily so these paths stay completely
     // out of processes that never touch them.

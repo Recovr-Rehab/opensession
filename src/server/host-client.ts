@@ -1,15 +1,15 @@
 /**
- * host-client — backstage's side of detached run hosts (src/runner-host/host.ts).
+ * host-client — opensession's side of detached run hosts (src/runner-host/host.ts).
  *
- * Why: the SDK run driver used to live inside the backstage process, so ANY
+ * Why: the SDK run driver used to live inside the opensession process, so ANY
  * real restart (route changes, runner changes, deploys) killed every in-flight
  * run mid-turn. A run host is a separate bun process in its own transient
- * systemd unit — outside the backstage.service cgroup — so backstage can
+ * systemd unit — outside the opensession.service cgroup — so opensession can
  * restart freely while runs keep streaming; on boot we reattach to the live
  * hosts' sockets and pick up exactly where we left off.
  *
  * This module:
- *  - spawns hosts (sudo systemd-run, mirroring backstage.service's IMDS deny),
+ *  - spawns hosts (sudo systemd-run, mirroring opensession.service's IMDS deny),
  *  - adapts a host's socket into the same AsyncGenerator<StreamEvent> shape as
  *    runAgent, so call sites don't care where the run lives,
  *  - proxies asks (AskUserQuestion / Stripe confirms) to the caller's handler,
@@ -20,7 +20,7 @@
  *    resume its engine session, and falls back to an in-process runAgent when
  *    spawning is impossible (or the kill-switch file is present).
  *
- * Kill switch: `touch ~/.backstage-chats/disable-run-hosts` — checked per run,
+ * Kill switch: `touch ~/.opensession-chats/disable-run-hosts` — checked per run,
  * no restart needed; new runs go back in-process (old hosts finish normally).
  */
 
@@ -206,7 +206,7 @@ async function spawnHostRun(opts: HostedRunOpts): Promise<HostHandle> {
  * aws-creds precedent). A user-manager unit won't do: it dies with the user
  * session unless linger is on, and — verified — user units silently ignore
  * IPAddressDeny, which would hand agent children the IMDS endpoint that
- * backstage.service deliberately denies.
+ * opensession.service deliberately denies.
  */
 async function launchHostUnit(hostId: string, dir: string): Promise<void> {
   const env = (kv: string) => ["-p", `Environment=${kv}`];
@@ -216,7 +216,7 @@ async function launchHostUnit(hostId: string, dir: string): Promise<void> {
     `--description=OpenSession run host ${hostId}`,
     "--uid=ubuntu", "--gid=ubuntu",
     "-p", `WorkingDirectory=${REPO_ROOT}`,
-    // Same env the backstage service runs with; MCP servers and account pools
+    // Same env the opensession service runs with; MCP servers and account pools
     // load their own credentials the same way they do for in-process runs.
     "-p", `EnvironmentFile=${ENV_FILE}`,
     ...env(`HOME=${homeDir()}`),
@@ -239,7 +239,7 @@ async function launchHostUnit(hostId: string, dir: string): Promise<void> {
     // Per-host journal — never read-modify-write the shared active-runs.json.
     ...env(`OPENSESSION_RUN_JOURNAL=${dir}/${HOST_JOURNAL_NAME}`),
     ...env(`OPENSESSION_RUN_JOURNAL=${dir}/${HOST_JOURNAL_NAME}`),
-    // Mirror backstage.service: agent runs must not reach EC2 instance creds.
+    // Mirror opensession.service: agent runs must not reach EC2 instance creds.
     "-p", "IPAddressDeny=169.254.169.254/32",
     "-p", `StandardOutput=append:${dir}/${HOST_LOG_NAME}`,
     "-p", `StandardError=append:${dir}/${HOST_LOG_NAME}`,
@@ -312,7 +312,7 @@ export interface HostConnector {
   dispose?(): void;
 }
 
-/** The default transport: backstage dials the host's unix socket. Behavior is
+/** The default transport: opensession dials the host's unix socket. Behavior is
  *  identical to the pre-seam inline code — the existsSync guard preserves the
  *  old "poll for the socket file" cadence, and open/close/error map 1:1. */
 export function unixSocketConnector(sockPath: string): HostConnector {
@@ -542,7 +542,7 @@ export class HostHandle {
         }
         // Unix sockets are live-only, so every reconnect must reconcile from
         // the host snapshot. WS reconnects replay sequenced event frames; only
-        // a fresh handle after a backstage restart needs snapshot catch-up.
+        // a fresh handle after a opensession restart needs snapshot catch-up.
         if (
           (!this.spec.wsToken || !this.connectedBefore) &&
           msg.selectedModel &&
@@ -815,7 +815,7 @@ export function discoverRunHosts(): DiscoveredHost[] {
 }
 
 /**
- * Reattach to a live host after a backstage restart. Returns the same
+ * Reattach to a live host after a opensession restart. Returns the same
  * generator shape as runAgentHosted; the caller runs the normal consumption
  * bookkeeping over it. Re-registers the run's RPC token so its opensession-*
  * proxies keep working.

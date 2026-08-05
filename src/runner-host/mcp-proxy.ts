@@ -1,15 +1,15 @@
 /**
  * mcp-proxy — a stdio MCP server that forwards tools/list and tools/call to
- * the backstage process over its run-rpc unix socket (src/server/run-rpc.ts).
+ * the opensession process over its run-rpc unix socket (src/server/run-rpc.ts).
  *
  * Spawned by Codex as a stdio MCP server, one instance per opensession-* server
  * (OPENSESSION_MCP_SERVER names which one). The actual tool implementations close
- * over live backstage state and must execute there, while Codex can only
+ * over live opensession state and must execute there, while Codex can only
  * consume external stdio MCP servers.
  *
  * Env (set in the injected MCP config by codex-runner.ts / host.ts):
- *   OPENSESSION_RPC_SOCKET  — backstage's run-rpc unix socket path, OR
- *   OPENSESSION_RPC_WS_URL  — backstage's /rpc-ws WebSocket route (remote
+ *   OPENSESSION_RPC_SOCKET  — opensession's run-rpc unix socket path, OR
+ *   OPENSESSION_RPC_WS_URL  — opensession's /rpc-ws WebSocket route (remote
  *                     sandboxes, where a unix socket can't cross the boundary)
  *   OPENSESSION_RPC_WS_HOST — WS mode: this run's hostId (the rpc-ws upgrade is
  *                     authenticated per ws-transport run, not per rpc token)
@@ -44,7 +44,7 @@ const WS_DIAL_URL = WS_URL
   ? `${WS_URL}${WS_URL.includes("?") ? "&" : "?"}host=${encodeURIComponent(WS_HOST)}`
   : "";
 
-/** An error the backstage side answered with — retrying won't change it. */
+/** An error the opensession side answered with — retrying won't change it. */
 class RpcError extends Error {}
 
 // ── WS transport: one persistent connection, request/response frames by id ───
@@ -117,7 +117,7 @@ function ensureWs(): Promise<WebSocket> {
 }
 
 // Keepalive: quiet minutes-long tool calls must not look idle to Bun.serve's
-// per-socket timer on the backstage side.
+// per-socket timer on the opensession side.
 if (WS_URL) {
   setInterval(() => {
     try {
@@ -139,7 +139,7 @@ async function rpcOnceWs(path: string, body: Record<string, unknown>): Promise<a
     }
   });
   const data = res.body;
-  if (res.status !== 200) throw new RpcError(data?.error || `backstage RPC ${res.status}`);
+  if (res.status !== 200) throw new RpcError(data?.error || `opensession RPC ${res.status}`);
   if (data && typeof data === "object" && typeof data.error === "string" && data.error) {
     throw new RpcError(data.error);
   }
@@ -158,7 +158,7 @@ async function rpcOnceSocket(path: string, body: Record<string, unknown>): Promi
   try {
     data = await res.json();
   } catch {}
-  if (!res.ok) throw new RpcError(data?.error || `backstage RPC ${res.status}`);
+  if (!res.ok) throw new RpcError(data?.error || `opensession RPC ${res.status}`);
   // Long tool calls stream a 200 with heartbeat padding and report failures
   // in the body instead of the status — treat those as answered errors too.
   if (data && typeof data === "object" && typeof data.error === "string" && data.error) {
@@ -168,9 +168,9 @@ async function rpcOnceSocket(path: string, body: Record<string, unknown>): Promi
 }
 
 /**
- * One RPC to backstage over whichever transport is configured. Connection-
- * level failures (socket gone / WS dropped — backstage restarting) retry
- * until the deadline; anything backstage actually answered surfaces
+ * One RPC to opensession over whichever transport is configured. Connection-
+ * level failures (socket gone / WS dropped — opensession restarting) retry
+ * until the deadline; anything opensession actually answered surfaces
  * immediately.
  */
 async function rpc(path: string, body: Record<string, unknown>, timeoutMs = 120_000): Promise<any> {
@@ -181,11 +181,11 @@ async function rpc(path: string, body: Record<string, unknown>, timeoutMs = 120_
       return await (WS_URL ? rpcOnceWs(path, body) : rpcOnceSocket(path, body));
     } catch (e) {
       if (e instanceof RpcError) throw e;
-      lastErr = e; // connect failure — backstage likely restarting
+      lastErr = e; // connect failure — opensession likely restarting
     }
     if (Date.now() >= deadline) {
       throw new Error(
-        `backstage unreachable at ${WS_URL || SOCK} for ${Math.round(timeoutMs / 1000)}s: ${lastErr}`
+        `opensession unreachable at ${WS_URL || SOCK} for ${Math.round(timeoutMs / 1000)}s: ${lastErr}`
       );
     }
     await new Promise((r) => setTimeout(r, 1500));
@@ -200,7 +200,7 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   // tools/list happens during the engine's MCP init, BEFORE the turn's first
   // output — so its retry budget must stay well under the runner's 90s
-  // liveness guard. With the old 120s default, a dead rpc socket (backstage
+  // liveness guard. With the old 120s default, a dead rpc socket (opensession
   // down, or the stolen-socket incident 2026-07-17) wedged every interactive
   // turn into a liveness kill; at 20s the server just comes up with this
   // proxy marked failed and the run proceeds without opensession-* tools.
@@ -212,14 +212,14 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   try {
     // On SHARED opencode servers, opencode-plugin-session-tag.js injects the
     // opencode session id into the tool arguments so calls can be routed to
-    // the right backstage session. Strip it back out of the args (the tools'
+    // the right opensession session. Strip it back out of the args (the tools'
     // schemas don't know it) and forward it as a sibling field for run-rpc's
     // per-call session resolution.
     const args: Record<string, unknown> = { ...(req.params.arguments ?? {}) };
     const ocSession = args.__bks_oc_session;
     delete args.__bks_oc_session;
     // Tool calls may block for many minutes (e.g. ask_human/ask_user waiting on
-    // a teammate) — allow reconnect retries well past the backstage side's
+    // a teammate) — allow reconnect retries well past the opensession side's
     // 30-minute per-call ceiling (run-rpc.ts) instead of the default 2 minutes.
     const data = await rpc(
       "/mcp/call",

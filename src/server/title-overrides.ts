@@ -1,8 +1,8 @@
 /**
  * Manual display titles for sessions of ALL sources. Slack/Linear session files
- * are owned by their agents (read-only for backstage) and backstage titles are
+ * are owned by their agents (read-only for opensession) and opensession titles are
  * derived at scan time, so a user rename can't live in the session file. It
- * lives in a backstage-owned registry keyed by unified session id, applied over
+ * lives in a server-owned registry keyed by unified session id, applied over
  * the derived title in getAllSessions — exactly like the archive registry.
  */
 import { readFileSync, existsSync } from "fs";

@@ -39,7 +39,7 @@ const DEFAULT_SERVER = "http://127.0.0.1:3850";
 // Keep the default on a model that reliably emits OpenCode tool calls; use
 // --model when deliberately certifying another provider/model combination.
 const DEFAULT_MODEL = "opencode/openai/gpt-5.6-sol";
-const DEFAULT_REPO = "backstage";
+const DEFAULT_REPO = "opensession";
 const REQUIRED_TOOLS = [
   "opensession-workspace_execute",
   "opensession-workspace_write_file",
@@ -475,7 +475,7 @@ async function assertSandboxState(args: {
   const authFiles = await sandbox.exec([
     "sh",
     "-lc",
-    "for p in ~/.backstage-claude-accounts.json ~/.opensession-claude-accounts.json ~/.backstage-codex-accounts.json ~/.opensession-codex-accounts.json ~/.codex/auth.json; do test ! -e \"$p\" || echo \"$p\"; done",
+    "for p in ~/.opensession-claude-accounts.json ~/.opensession-claude-accounts.json ~/.opensession-codex-accounts.json ~/.opensession-codex-accounts.json ~/.codex/auth.json; do test ! -e \"$p\" || echo \"$p\"; done",
   ]);
   assert(
     !authFiles.stdout.trim(),
@@ -495,7 +495,7 @@ async function assertSandboxState(args: {
     const forbiddenPayload = await sandbox.exec([
       "sh",
       "-lc",
-      "for p in \"$(command -v opencode 2>/dev/null)\" \"$(command -v claude 2>/dev/null)\" /home/ubuntu/projects/tella-backstage/package.json /home/ubuntu/projects/tella-backstage/src/runner-host/host.ts; do test -z \"$p\" || test ! -e \"$p\" || echo \"$p\"; done",
+      "for p in \"$(command -v opencode 2>/dev/null)\" \"$(command -v claude 2>/dev/null)\" /home/ubuntu/projects/opensession/package.json /home/ubuntu/projects/opensession/src/runner-host/host.ts; do test -z \"$p\" || test ! -e \"$p\" || echo \"$p\"; done",
     ]);
     assert(
       !forbiddenPayload.stdout.trim(),

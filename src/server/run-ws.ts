@@ -1,8 +1,8 @@
 /**
  * run-ws — the WebSocket transport for sandboxed runs (the sandbox rollout plan
  * §5 Phase 3). Remote sandboxes can't share unix sockets with this host, so
- * both host-to-backstage channels get an outbound-dial WS mode: the sandbox
- * dials OUT to backstage (which already listens on the Tailscale bind), never
+ * both host-to-opensession channels get an outbound-dial WS mode: the sandbox
+ * dials OUT to opensession (which already listens on the Tailscale bind), never
  * the other way around.
  *
  *  - `/run-ws/<hostId>` — the run host's event stream. The host
@@ -35,7 +35,7 @@
  * run's {sessionId, user}. `{t:"ping"}` keepalive frames are answered here
  * with `{t:"pong"}` so quiet connections survive idle timers.
  *
- * Wired into the EXISTING Bun.serve in backstage.ts (fetch route + early
+ * Wired into the EXISTING Bun.serve in opensession.ts (fetch route + early
  * dispatch in the websocket open/message/close handlers). Those handlers are
  * captured at first server creation and survive hot reloads, so everything
  * here routes through a globalThis-parked impl table — an edit to this module
@@ -52,7 +52,7 @@ import type { HostConnection, HostConnectionHandlers, HostConnector } from "./ho
 const g = globalThis as any;
 
 /** The one Bun.serve capability this module needs; keeps the signature
- *  compatible with any Server<T> instantiation (backstage.ts's WSClientData
+ *  compatible with any Server<T> instantiation (opensession.ts's WSClientData
  *  server AND the verify suites' scratch servers). */
 type UpgradableServer = {
   upgrade(req: Request, opts?: { data?: unknown }): boolean;
@@ -69,7 +69,7 @@ const wsTokens: Map<string, string> = (g.__runWsTokens ??= new Map());
 // replays it on reconnect; anything at/under it is a duplicate and dropped.
 // `epoch` identifies this registration's watermark across sockets — it
 // survives `bun --hot` (globalThis) but not a real restart, so a restarted
-// backstage (whose consumers may have already applied pre-restart frames)
+// opensession (whose consumers may have already applied pre-restart frames)
 // presents a fresh epoch and the host skips the replay (old live-only
 // semantics; hello/meta.done/journal cover catch-up).
 
@@ -162,7 +162,7 @@ function fireDialWaiters(hostId: string, err?: Error): void {
   for (const w of [...set]) w(err);
 }
 
-/** WS client data marker; backstage.ts's handlers early-return on it. */
+/** WS client data marker; opensession.ts's handlers early-return on it. */
 export interface SandboxWsData {
   sandboxWs: "run-host" | "rpc";
   hostId?: string;
@@ -188,7 +188,7 @@ export function unregisterRunWsHost(hostId: string): void {
   }
 }
 
-// ── Upgrade handling (called from backstage.ts's fetch, and verify suites) ───
+// ── Upgrade handling (called from opensession.ts's fetch, and verify suites) ───
 
 function bearerFrom(req: Request): string {
   const h = req.headers.get("authorization") || "";
@@ -242,7 +242,7 @@ function handleUpgrade(
   return undefined;
 }
 
-// ── WS event dispatch (early-return hooks for backstage.ts's handlers) ───────
+// ── WS event dispatch (early-return hooks for opensession.ts's handlers) ───────
 
 function wsOpen(ws: any): boolean {
   const data = ws.data as Partial<SandboxWsData> | undefined;
@@ -291,7 +291,7 @@ function wsMessage(ws: any, message: string | Buffer): boolean {
     }
     if (msg?.t === "ping") {
       // Answer keepalives here — they must work even while no HostHandle is
-      // attached (backstage mid-reattach). Piggyback an ack: on a quiet link
+      // attached (opensession mid-reattach). Piggyback an ack: on a quiet link
       // this is the periodic watermark refresh that lets the host trim its
       // replay buffer.
       try {
@@ -452,7 +452,7 @@ function makeRunWsConnector(hostId: string): HostConnector {
 }
 
 // ── Hot-reload indirection ────────────────────────────────────────────────────
-// backstage.ts's Bun.serve handlers are captured once (the server object is
+// opensession.ts's Bun.serve handlers are captured once (the server object is
 // reused across --hot reloads); they call the exported wrappers below, which
 // resolve the freshest impl through globalThis on every call.
 

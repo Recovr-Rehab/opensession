@@ -14,7 +14,7 @@
  *    zero demo-specific serve code. Each loop restarts with
  *    replaceTranscriptEvents (an authoritative reset frame), keeping the
  *    stored transcript bounded.
- *  - touchBackstageSession bumps lastActivity once per step so list pollers
+ *  - touchNativeSession bumps lastActivity once per step so list pollers
  *    (and clients without a live WS) keep sorting the session to the top.
  *
  * In-memory only, parked on globalThis: never persisted, restart-fresh, safe
@@ -32,7 +32,7 @@ import {
 } from "../opencode-transcript";
 import { parseJsonlLines } from "../jsonl-parser";
 import { transcriptStore } from "../transcript-store";
-import { touchBackstageSession } from "../session-cache";
+import { touchNativeSession } from "../session-cache";
 import {
   DEMO_LIVE_OC_SESSION_ID,
   DEMO_LIVE_SESSION_ID,
@@ -95,7 +95,7 @@ export function startDemoReplayer(): void {
       } else {
         appendOpencodeTranscript(ocId, lines);
       }
-      touchBackstageSession(sessionId, {});
+      touchNativeSession(sessionId, {});
       step++;
     } catch (e) {
       console.error("[demo] replay step failed:", e);

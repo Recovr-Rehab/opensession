@@ -10,7 +10,7 @@ export function fakeSession(over: Partial<Session> = {}): Session {
 	return {
 		id: "bks-1",
 		title: "wire the socket",
-		repo: "backstage",
+		repo: "opensession",
 		branch: "tui",
 		projectId: "prj-1",
 		mode: "code",
@@ -36,7 +36,7 @@ export type FakeServer = {
 export function fakeServer(init?: Partial<Pick<FakeServer, "sessions" | "projects">>): FakeServer {
 	const server: FakeServer = {
 		sessions: init?.sessions ?? [fakeSession()],
-		projects: init?.projects ?? [{ id: "prj-1", name: "backstage" }],
+		projects: init?.projects ?? [{ id: "prj-1", name: "opensession" }],
 		calls: [],
 		fetch: (async (input: RequestInfo | URL) => {
 			const url = typeof input === "string" ? input : input.toString();

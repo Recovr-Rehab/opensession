@@ -4,7 +4,7 @@
  * threat model. Devin-DeepSec-style, wrapped around vercel-labs/deepsec.
  *
  * Records live in ~/.opensession-security/{scans,profiles}/<id>.json. Each
- * headless scan creates one normal backstage session per target repo (so runs
+ * headless scan creates one normal opensession session per target repo (so runs
  * show up in the sessions list with live transcripts); interactive scans are
  * a single collaborative session created through the SessionControl registry.
  *
@@ -22,7 +22,7 @@ import { personaName, productName } from "./config";
 import { OPENSESSION_CHATS_DIR , newSessionId} from "./paths";
 import { providerFor, modelLabel } from "./models";
 import { engineSessionPatch } from "./sessions";
-import type { BackstageSessionFile } from "./types";
+import type { NativeSessionFile } from "./types";
 import { stateDir } from "./paths";
 import { shouldPersistModelSwitch } from "./run-events";
 
@@ -169,7 +169,7 @@ export function deleteProfile(id: string): boolean {
 
 // ── Scan targets ─────────────────────────────────────────────
 
-/** Repos a headless scan can target. Backstage is excluded: it's the shared
+/** Repos a headless scan can target. OpenSession is excluded: it's the shared
  *  self-hosting checkout, so a code-mode scan would write branches under the
  *  live server (see worktree.ts sharedCheckout). */
 export function scannableRepos(): Repo[] {
@@ -293,9 +293,9 @@ export async function executeScan(
       let effectiveModel = opts?.model;
       let selectedModel = opts?.model;
       let effectiveProvider = providerFor(effectiveModel);
-      const modelHistory: NonNullable<BackstageSessionFile["modelHistory"]> = [];
+      const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
       const persistSession = () => {
-        const data: BackstageSessionFile = {
+        const data: NativeSessionFile = {
           id: bksId,
           claudeSessionId: "",
           ...(engineSessionId

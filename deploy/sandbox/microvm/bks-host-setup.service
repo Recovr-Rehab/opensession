@@ -12,7 +12,7 @@ Wants=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/bash /home/ubuntu/projects/tella-backstage/deploy/sandbox/setup-host.sh
+ExecStart=/usr/bin/bash /home/ubuntu/projects/opensession/deploy/sandbox/setup-host.sh
 RemainAfterExit=yes
 
 [Install]

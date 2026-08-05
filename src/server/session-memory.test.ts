@@ -27,11 +27,11 @@ describe("sessionMemoryScopes", () => {
   test("repo scopes first (deduped), then user, then team", () => {
     const scopes = sessionMemoryScopes({
       user: "definitely-not-a-teammate-xyz",
-      repos: ["tella-fusion", "backstage", "tella-fusion"],
+      repos: ["tella-fusion", "opensession", "tella-fusion"],
     });
     expect(scopes.map((s) => s.key)).toEqual([
       "repo-tella-fusion",
-      "repo-backstage",
+      "repo-opensession",
       "user-definitely-not-a-teammate-xyz",
       "workspace",
     ]);

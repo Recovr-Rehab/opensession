@@ -62,3 +62,8 @@ describe("prompt-context", () => {
     expect(isContextOnly(wrapContext("only plumbing"))).toBe(true);
   });
 });
+
+it("strips the pre-rename backstage fence pair (old transcripts)", () => {
+	const text = "<backstage:context>\nplumbing\n</backstage:context>\nreal message";
+	expect(stripContext(text)).toBe("real message");
+});

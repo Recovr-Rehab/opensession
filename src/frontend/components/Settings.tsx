@@ -2375,7 +2375,7 @@ function auditSummary(e: Record<string, unknown>): string {
 	return parts.join(" · ");
 }
 
-/** Read-only viewer over ~/.backstage-audit daily JSONL (agent flight recorder). */
+/** Read-only viewer over ~/.opensession-audit daily JSONL (agent flight recorder). */
 function AuditPanel() {
 	const [dates, setDates] = useState<string[]>([]);
 	const [date, setDate] = useState("");
@@ -2425,7 +2425,7 @@ function AuditPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Audit log"
-				description="Every agent run's structured events — prompts, tool decisions, account switches, human confirmations. Read-only; files live under ~/.backstage-audit (400-day retention)."
+				description="Every agent run's structured events — prompts, tool decisions, account switches, human confirmations. Read-only; files live under ~/.opensession-audit (400-day retention)."
 			/>
 
 			<div className="mb-3 flex flex-wrap items-center gap-2 px-4">

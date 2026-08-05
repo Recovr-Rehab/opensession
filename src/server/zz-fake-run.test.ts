@@ -6,7 +6,7 @@
  * zz- prefix + dynamic imports in beforeAll (the zz-run-ws pattern): the
  * dangerous modules (run-session → interactive-mcp → startRunRpcServer) load
  * only after NODE_ENV=test is in effect and the chats dir is redirected.
- * __backstageBooted is set BEFORE those imports so module-scope tickers (the
+ * __opensessionBooted is set BEFORE those imports so module-scope tickers (the
  * /loop ticker etc.) never arm in the test process.
  *
  * Full-suite caveat: earlier test files may have already loaded sessions.ts /
@@ -51,7 +51,7 @@ function writeSessionFile(id: string, extra: Record<string, unknown> = {}) {
 }
 
 beforeAll(async () => {
-	(globalThis as any).__backstageBooted = true;
+	(globalThis as any).__opensessionBooted = true;
 	const paths = await import("./paths");
 	const prevDir = paths.__setChatsDirForTest(tmp);
 	restoreChatsDir = () => paths.__setChatsDirForTest(prevDir);

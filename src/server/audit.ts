@@ -11,8 +11,8 @@ import { stateDir } from "./paths";
 
 // Structured audit log, modeled on tellahq/incident-agent's src/audit.ts.
 // One JSON line per event into a daily file under ~/.opensession-audit/.
-// incident-agent ships stdout via Docker's awslogs driver; backstage runs as
-// a systemd unit that hard-denies IMDS (backstage.service), so it can never
+// incident-agent ships stdout via Docker's awslogs driver; opensession runs as
+// a systemd unit that hard-denies IMDS (opensession.service), so it can never
 // hold AWS credentials itself — a separate amazon-cloudwatch-agent service
 // tails these files into CloudWatch Logs instead (see deploy/README-audit.md).
 
@@ -59,7 +59,7 @@ export function audit(event: Record<string, unknown>): void {
     const now = new Date();
     const line = JSON.stringify({
       time: now.toISOString(),
-      service: "backstage",
+      service: "opensession",
       ...event,
     });
     appendFileSync(`${AUDIT_DIR}/audit-${now.toISOString().slice(0, 10)}.jsonl`, line + "\n");

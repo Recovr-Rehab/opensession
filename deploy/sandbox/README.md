@@ -17,7 +17,7 @@ session's git worktree **bind-mounted at its identical host path**.
 | `just`, `direnv`, `lsof` | common repo dev-server bring-up chains (in-sandbox previews) | apt / pinned release |
 | Claude Code CLI | baked at the identical host CLI path for session-resume parity | `2.1.218` (host); build FAILS on version mismatch |
 | `opencode` | the engine — runs in-sandbox | `1.17.15` (host), npm -g, build asserts version |
-| runner bundle | `/home/ubuntu/projects/tella-backstage` (`src/`, `backstage.ts`, `tsconfig.json`) + `node_modules` | from lockfile |
+| runner bundle | `/home/ubuntu/projects/opensession` (`src/`, `opensession.ts`, `tsconfig.json`) + `node_modules` | from lockfile |
 | minimal `~/.claude/settings.json` | so `settingSources:["user"]` doesn't error | `{}` |
 
 Runs as uid **1000** user `ubuntu` (matches the host uid) so bind-mounted
@@ -29,7 +29,7 @@ baked ENTRYPOINT.
 
 The runner config points at host absolute paths: the claude CLI at
 `/home/ubuntu/.local/bin/claude`, the runner bundle at
-`/home/ubuntu/projects/tella-backstage`, and the session worktree
+`/home/ubuntu/projects/opensession`, and the session worktree
 bind-mounted at its **same** host path. The image reproduces every one of those
 absolute paths exactly. If any drifts, the in-container runner can't find the
 CLI, its dependencies, or the worktree. Do not "tidy" these paths — and if your
@@ -52,8 +52,8 @@ needed.
 ## Runtime design (Phase 1 — DockerProvider)
 
 `src/server/sandbox/docker.ts` runs one container per session
-(`bks-sbx-<sessionId>`, labels `backstage.sandbox=1` +
-`backstage.session=<id>`, `--init`, `--restart no`, `--cpus`/`--memory` from
+(`bks-sbx-<sessionId>`, labels `opensession.sandbox=1` +
+`opensession.session=<id>`, `--init`, `--restart no`, `--cpus`/`--memory` from
 `~/.opensession-sandbox.json`, defaults 4 / 8g). A run is the same runner-host
 entry the systemd path uses (`src/runner-host/host.ts`), `docker exec -d`'d
 into the container; its unix socket + spec/meta/journal/log live in a
@@ -70,7 +70,7 @@ Mounts (rationale in the docker.ts header):
 | session worktree at identical path | rw | diff/files/status/push/preview unchanged host-side |
 | main checkout `.git` at identical path | rw | worktrees aren't self-contained (`rev-parse --git-common-dir`); accepted Phase 1 tradeoff |
 | host `~/.claude/projects/<munged-cwd>` | rw | engine transcripts stay host-visible (viewer tail, resume continuity) |
-| `~/.opensession-chats/backstage-rpc.sock` | rw | opensession-* stdio proxies (socket filename kept for protocol compat); goes stale across a server restart until the container restarts |
+| `~/.opensession-chats/opensession-rpc.sock` | rw | opensession-* stdio proxies (socket filename kept for protocol compat); goes stale across a server restart until the container restarts |
 | `~/.ssh`, `~/.gitconfig`, `~/.config/gh` | ro | git push / PR parity — interactive-level ambient trust, same as host runs today; automations are refused in Phase 1 |
 | `mcp-config.json`, `~/.opensession-claude-accounts.json` | ro | external MCP servers + in-container account-pool selection |
 | `~/.opensession-audit` | rw | one audit jsonl stream for host + sandboxed runs |
@@ -354,7 +354,7 @@ needed after changing it.
 - **Lockfile change** (`bun.lock`) — any dependency add/upgrade → rebuild
   (the deps layer re-installs).
 - **Bun bump** on the host → bump `BUN_VERSION` to keep parity.
-- Source changes to `src/` / `backstage.ts` that the runner-host path uses →
+- Source changes to `src/` / `opensession.ts` that the runner-host path uses →
   rebuild (fast: only the final COPY layers change). In particular ANY change
   under `src/runner-host/` (protocol/entry) must be rebuilt before the next
   sandboxed run — the container executes the image's copy, not the checkout.

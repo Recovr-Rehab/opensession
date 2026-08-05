@@ -91,7 +91,7 @@ describe("SessionSearchStore", () => {
 
 	test("repo filter and days filter", () => {
 		const s = new SessionSearchStore(":memory:");
-		s.upsert(rec({ id: "session:bs", question: "fix diff panel", repo: "backstage" }));
+		s.upsert(rec({ id: "session:bs", question: "fix diff panel", repo: "opensession" }));
 		s.upsert(
 			rec({
 				id: "session:tf",
@@ -100,7 +100,7 @@ describe("SessionSearchStore", () => {
 				ts: NOW - 40 * DAY,
 			}),
 		);
-		expect(s.search("diff panel", { repo: "backstage", now: NOW }).map((h) => h.id)).toEqual([
+		expect(s.search("diff panel", { repo: "opensession", now: NOW }).map((h) => h.id)).toEqual([
 			"session:bs",
 		]);
 		expect(

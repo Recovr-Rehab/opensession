@@ -1,6 +1,6 @@
 /**
  * Product + agent branding for the frontend — the single place the UI gets
- * its names from, so the Backstage → OpenSession rename is a one-line flip
+ * its names from, so the OpenSession → OpenSession rename is a one-line flip
  * here (see docs/rename-opensession-plan.md).
  *
  * Server-side equivalents live in src/server/config.ts (productName(),
@@ -60,16 +60,16 @@ export const DEFAULT_REPO_ID = INSTANCE.defaultRepoId || "opensession";
 export const PLAIN_WORKSPACE_ID = INSTANCE.plainWorkspaceId || null;
 
 /**
- * A session's origin as shown in the UI. The `backstage` source id predates
+ * A session's origin as shown in the UI. The `opensession` source id predates
  * the rename and means "started in this product's own UI", so it displays as
  * the product name; every other origin (slack/linear/cli) shows as-is. The id
  * itself stays literal on the wire.
  */
 export const sessionSourceLabel = (source: string) =>
-	source === "backstage" ? PRODUCT_NAME.toLowerCase() : source;
+	source === "opensession" ? PRODUCT_NAME.toLowerCase() : source;
 
 /** Default document.title when no view-specific title applies. */
 export const DEFAULT_DOC_TITLE = PRODUCT_NAME;
 
-/** "<view> — Backstage" document titles. */
+/** "<view> — OpenSession" document titles. */
 export const docTitle = (view: string) => `${view} — ${PRODUCT_NAME}`;

@@ -1,5 +1,5 @@
 /**
- * Backstage-native slash commands (/goal /loop /model /account /compact /help) —
+ * OpenSession-native slash commands (/goal /loop /model /account /compact /help) —
  * consumed by the WS prompt path, the opensession-sessions send_to_session tool,
  * and interactive resumes. Returns a notice string when the message was handled
  * as a command, or null to send it to the engine as a normal prompt.
@@ -21,12 +21,12 @@ import {
 import { engineFamily, isAgentSessionBusy } from "./agent-runner";
 import { userMatchesAny } from "./shared/user-mappings";
 import { syncAgentSessionEngine } from "./agent-session-sync";
-import { touchBackstageSession } from "./session-cache";
+import { touchNativeSession } from "./session-cache";
 import { broadcastToSession } from "./ws-hub";
 import type { UnifiedSession } from "./types";
 
 /**
- * Backstage-native slash commands. Returns a notice string when the message
+ * OpenSession-native slash commands. Returns a notice string when the message
  * was consumed as a command, or null to send it to Claude as a normal prompt.
  */
 export function handleSlashCommand(
@@ -50,7 +50,7 @@ export function handleSlashCommand(
 	) {
 		return null;
 	}
-	if (session.source !== "backstage") {
+	if (session.source !== "opensession") {
 		// /model works on slack-source sessions too: persistence goes through
 		// syncAgentSessionEngine — the one sanctioned writer into
 		// ~/.slack-sessions (patches the file AND the loop's in-memory copy) —
@@ -116,7 +116,7 @@ export function handleSlashCommand(
 		} else {
 			const switchedProvider =
 				accountProviderForModel(prevModel) !== accountProviderForModel(resolved.id);
-			touchBackstageSession(session.id, {
+			touchNativeSession(session.id, {
 				model: resolved.id,
 				...(switchedProvider ? { accountId: undefined } : {}),
 				modelHistory: [
@@ -190,7 +190,7 @@ export function handleSlashCommand(
 		accountCommand &&
 		["auto", "clear", "none", "default"].includes(accountInput.toLowerCase())
 	) {
-		touchBackstageSession(session.id, { accountId: undefined });
+		touchNativeSession(session.id, { accountId: undefined });
 		broadcastToSession(session.id, {
 			type: "subscription_changed",
 			sessionId: session.id,
@@ -211,7 +211,7 @@ export function handleSlashCommand(
 				...accounts.map((a) => `  ${a.name}${a.owner ? ` (personal — ${a.owner})` : " (pool)"}`),
 			].join("\n");
 		}
-		touchBackstageSession(session.id, { accountId: match.id });
+		touchNativeSession(session.id, { accountId: match.id });
 		broadcastToSession(session.id, {
 			type: "subscription_changed",
 			sessionId: session.id,
@@ -225,7 +225,7 @@ export function handleSlashCommand(
 		return `${providerLabel} account pinned to ${match.name}. Applies from the next prompt.${exhaustedNote}`;
 	}
 
-	// /compact is a built-in command of the Claude Agent SDK, not a backstage
+	// /compact is a built-in command of the Claude Agent SDK, not a opensession
 	// config change: we return null so the "/compact" text flows through to the
 	// runner, where the SDK summarizes the live context and continues from that
 	// summary (emitting a compact_boundary). We intercept only to (a) block it on
@@ -253,13 +253,13 @@ export function handleSlashCommand(
 			: "No goal set. Use /goal <text>.";
 	}
 	if (text === "/goal clear") {
-		touchBackstageSession(session.id, { goal: undefined });
+		touchNativeSession(session.id, { goal: undefined });
 		return "Goal cleared.";
 	}
 	if (text.startsWith("/goal ")) {
 		const goal = text.slice("/goal ".length).trim();
 		if (!goal) return "Usage: /goal <text>";
-		touchBackstageSession(session.id, { goal });
+		touchNativeSession(session.id, { goal });
 		return `Goal pinned: ${goal} — it will ride along with every prompt until /goal clear.`;
 	}
 
@@ -269,7 +269,7 @@ export function handleSlashCommand(
 			: "No loop set. Use /loop <interval> <prompt> (e.g. /loop 30m check CI).";
 	}
 	if (text === "/loop stop" || text === "/loop off" || text === "/loop clear") {
-		touchBackstageSession(session.id, { loop: undefined });
+		touchNativeSession(session.id, { loop: undefined });
 		return "Loop stopped.";
 	}
 	if (text.startsWith("/loop ")) {
@@ -281,7 +281,7 @@ export function handleSlashCommand(
 		if (match[2] === "h" || match[2] === "hr") minutes *= 60;
 		minutes = Math.max(5, minutes);
 		const prompt = match[3].trim();
-		touchBackstageSession(session.id, {
+		touchNativeSession(session.id, {
 			loop: {
 				prompt,
 				intervalMinutes: minutes,

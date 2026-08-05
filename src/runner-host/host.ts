@@ -1,18 +1,18 @@
 /**
  * Run host — a standalone bun process that owns ONE agent run, so the run (and
- * its Claude/Codex CLI child) survives backstage restarts.
+ * its Claude/Codex CLI child) survives opensession restarts.
  *
  * Spawned by src/server/host-client.ts as a transient systemd unit (escaping
- * the backstage.service cgroup — see spawn there for the IMDS deny and env).
+ * the opensession.service cgroup — see spawn there for the IMDS deny and env).
  * Usage: bun run src/runner-host/host.ts <host-dir>/spec.json
  *
- * The host serves a unix socket in its dir; backstage connects as a client and
+ * The host serves a unix socket in its dir; opensession connects as a client and
  * gets live StreamEvents, ask requests (AskUserQuestion / Stripe confirms), and
  * the end signal. Steer/interrupt/cancel come back over the same socket. If no
- * client is attached (backstage restarting), the run keeps going: events are
+ * client is attached (opensession restarting), the run keeps going: events are
  * simply not observed live (the transcript jsonl is the durable copy), asks
  * wait until a client reattaches, and the terminal state lands in meta.json so
- * a rebooting backstage can finish the bookkeeping even if this process is gone.
+ * a rebooting opensession can finish the bookkeeping even if this process is gone.
  *
  * The run journal is redirected to a per-host file (OPENSESSION_RUN_JOURNAL) so
  * concurrent hosts never read-modify-write the shared active-runs.json.
@@ -78,15 +78,15 @@ saveMeta();
 const log = (...args: unknown[]) =>
   console.log(`[host ${spec.hostId.slice(0, 11)}]`, ...args);
 
-// ── Transport (single client: the backstage process) ─────────────────────────
+// ── Transport (single client: the opensession process) ─────────────────────────
 // Two modes, same protocol:
-//  - default: serve a unix socket in the run dir; backstage dials in (NDJSON).
-//  - OPENSESSION_RUN_WS_URL set: DIAL OUT to backstage's /run-ws/<hostId>
+//  - default: serve a unix socket in the run dir; opensession dials in (NDJSON).
+//  - OPENSESSION_RUN_WS_URL set: DIAL OUT to opensession's /run-ws/<hostId>
 //    WebSocket route (one JSON message per text frame) — for sandboxes that
 //    can't share a unix socket with the host (remote providers; docker
 //    dogfoods it). Reconnects with backoff on drop, mirroring the socket
 //    path's tolerance: the run never stops, events are simply unobserved
-//    until backstage (re)attaches.
+//    until opensession (re)attaches.
 //
 // FRAME-LOSS WINDOW:
 //  - unix-socket mode (deliberately unchanged): the stream is live-only — no
@@ -97,20 +97,20 @@ const log = (...args: unknown[]) =>
 //    cover a run that FINISHES while disconnected. Fine there: for docker
 //    bind-mode the transcript is host-visible anyway.
 //  - WS mode: outbound frames now carry a monotonic seq and sit in a bounded
-//    ring buffer (ws-buffer.ts: 5k frames / 5MB) until backstage acks its
+//    ring buffer (ws-buffer.ts: 5k frames / 5MB) until opensession acks its
 //    consumed watermark; a reconnect replays everything after the ack, and
 //    the server dedupes by seq — so frames emitted during a disconnect DO
 //    reach the live viewer once the link is back. Remaining edges: (a) ring
 //    overflow while disconnected drops the oldest frames — the replay then
 //    reports a `gap` and the server logs it (transcript still has it all);
-//    (b) a full backstage RESTART mints a new server epoch, so pre-restart
+//    (b) a full opensession RESTART mints a new server epoch, so pre-restart
 //    frames are not replayed (they may already have been applied) — the old
 //    hello/meta.done/journal catch-up covers that case, exactly as before.
 
 const RUN_WS_URL = process.env.OPENSESSION_RUN_WS_URL || "";
 const RUN_WS_TOKEN = process.env.OPENSESSION_RUN_WS_TOKEN || "";
 
-/** The currently attached backstage, whichever transport carried it. */
+/** The currently attached opensession, whichever transport carried it. */
 let client: { write: (line: string) => void; raw: unknown } | null = null;
 let ended = false;
 let exiting = false; // stops the WS redial loop once we're done
@@ -172,7 +172,7 @@ function handleClientMsg(msg: ClientToHostMsg): void {
     case "steer": {
       if (!steerAgentRun([spec.osSessionId, meta.engineSessionId], msg.text)) {
         // Too late (run finishing) or backend can't steer — bounce it back so
-        // backstage queues it instead of the message evaporating.
+        // opensession queues it instead of the message evaporating.
         send({ t: "steer_failed", text: msg.text });
       }
       break;
@@ -205,7 +205,7 @@ function handleClientMsg(msg: ClientToHostMsg): void {
 }
 
 if (RUN_WS_URL) {
-  // ── WS mode: dial out to backstage and keep redialing until we exit ────────
+  // ── WS mode: dial out to opensession and keep redialing until we exit ────────
   // Outbound frames are sequenced + ring-buffered (ws-buffer.ts) and replayed
   // after the server's consumed-watermark ack on every (re)connect — see the
   // FRAME-LOSS WINDOW note above for the exact semantics and remaining edges.
@@ -267,10 +267,10 @@ if (RUN_WS_URL) {
       liveSock = sock;
       streaming = false;
       client = { write: (line) => sock.send(line), raw: sock };
-      log("backstage attached (ws)");
+      log("opensession attached (ws)");
       sendHello();
       openSeq = buf.lastSeq;
-      // A pre-ack backstage never acks: fall back to live-only streaming from
+      // A pre-ack opensession never acks: fall back to live-only streaming from
       // this connection onward (the old semantics) so mixed versions still run.
       ackTimer = setTimeout(() => beginStream(openSeq), 3_000);
     };
@@ -304,7 +304,7 @@ if (RUN_WS_URL) {
       }
       if (client?.raw === sock) {
         client = null;
-        log("backstage detached (ws)");
+        log("opensession detached (ws)");
       }
       redial();
     };
@@ -329,7 +329,7 @@ if (RUN_WS_URL) {
         }
         client = { write: (line) => socket.write(line), raw: socket };
         (socket as any).__read = ndjsonReader(handleClientMsg, "host");
-        log("backstage attached");
+        log("opensession attached");
         sendHello();
       },
       data(socket, data) {
@@ -338,7 +338,7 @@ if (RUN_WS_URL) {
       close(socket) {
         if (client?.raw === socket) {
           client = null;
-          log("backstage detached");
+          log("opensession detached");
         }
       },
       error(socket, error) {
@@ -350,8 +350,8 @@ if (RUN_WS_URL) {
 }
 
 // ── Ask proxy: block the run on a human answer delivered over the socket ─────
-// No timeout here — the timeout/Slack-escalation policy lives in backstage's
-// makeAskHandler. If backstage restarts mid-ask, the fresh process gets the
+// No timeout here — the timeout/Slack-escalation policy lives in opensession's
+// makeAskHandler. If opensession restarts mid-ask, the fresh process gets the
 // pending asks in `hello` and re-runs its handler for each.
 function onAskUser(input: Record<string, unknown>): Promise<AskResult> {
   const askId = crypto.randomUUID();
@@ -363,12 +363,12 @@ function onAskUser(input: Record<string, unknown>): Promise<AskResult> {
 
 // ── mcp-proxy config for the opensession-* servers ───────────────────────────────
 // Each named server becomes a stdio MCP proxy that forwards tools/list +
-// tools/call to backstage over its RPC socket — so session-control/self-admin
-// tools keep working across backstage restarts (calls retry while it's down).
+// tools/call to opensession over its RPC socket — so session-control/self-admin
+// tools keep working across opensession restarts (calls retry while it's down).
 function proxyMcpConfigs(): Record<string, unknown> | undefined {
   const names = spec.proxyMcpServers || [];
   if (!names.length || !spec.rpcToken) return undefined;
-  // WS transport: the proxies dial backstage's /rpc-ws route instead
+  // WS transport: the proxies dial opensession's /rpc-ws route instead
   // of the unix RPC socket (which isn't shareable across a remote boundary).
   // The upgrade there authenticates with THIS run's hostId + wsToken (only
   // ws-transport launches register one server-side); the per-frame rpc token
@@ -403,7 +403,7 @@ function proxyMcpConfigs(): Record<string, unknown> | undefined {
 
 process.on("SIGTERM", () => {
   // A deliberate `systemctl stop` of this unit: the child dies with us; the
-  // journal file survives, so backstage's boot sweep resumes the run.
+  // journal file survives, so opensession's boot sweep resumes the run.
   log("SIGTERM — exiting (journal remains for resume)");
   process.exit(143);
 });

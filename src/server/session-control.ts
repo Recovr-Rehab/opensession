@@ -1,14 +1,14 @@
 /**
  * session-control — a tiny registry that decouples the opensession-sessions MCP
  * (src/agents/slack/sessions-tools.ts) from the live in-process state that only
- * exists inside the main backstage.ts process: the running-run map, the pending
+ * exists inside the main opensession.ts process: the running-run map, the pending
  * AskUserQuestion map, the prompt queues, and the WebSocket broadcast fan-out.
  *
- * backstage.ts owns all of that and calls registerSessionControl() at startup
+ * opensession.ts owns all of that and calls registerSessionControl() at startup
  * with an implementation that wires into its own helpers (runSessionPromptAndDrain,
  * steerAgentRun, makeAskHandler, …). The MCP — which is constructed in the Slack
- * handler module, NOT in backstage.ts — reaches it through getSessionControl()
- * without importing backstage.ts (that would re-run the server bootstrap and
+ * handler module, NOT in opensession.ts — reaches it through getSessionControl()
+ * without importing opensession.ts (that would re-run the server bootstrap and
  * create a circular import).
  *
  * A future autonomous monitor (src/agents/loops) can call the same
@@ -84,7 +84,7 @@ export interface CreateSessionOpts {
 
 /**
  * The control surface the MCP (and future loops) use. Every method operates on
- * the live backstage process state.
+ * the live opensession process state.
  */
 export interface SessionControl {
   /** All sessions with a derived state, queue depth and controllability. */
@@ -128,16 +128,16 @@ export interface SessionControl {
 
 let impl: SessionControl | null = null;
 
-/** Called once by backstage.ts at startup. */
+/** Called once by opensession.ts at startup. */
 export function registerSessionControl(c: SessionControl): void {
   impl = c;
 }
 
-/** Throws if called before backstage.ts has registered (i.e. outside the server). */
+/** Throws if called before opensession.ts has registered (i.e. outside the server). */
 export function getSessionControl(): SessionControl {
   if (!impl) {
     throw new Error(
-      "session control not registered — opensession-sessions tools only work inside the backstage server process"
+      "session control not registered — opensession-sessions tools only work inside the opensession server process"
     );
   }
   return impl;

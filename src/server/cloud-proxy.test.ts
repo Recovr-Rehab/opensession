@@ -37,7 +37,7 @@ function session(id: string, lastActivity: string): UnifiedSession {
 	return {
 		id,
 		claudeSessionId: null,
-		source: "backstage",
+		source: "opensession",
 		branch: null,
 		worktreeDir: null,
 		startedBy: null,

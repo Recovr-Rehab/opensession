@@ -229,7 +229,7 @@ export async function getAttachmentDownloadUrl(
 /**
  * A file the customer (or we) attached to a message. Plain only hands out
  * short-lived signed URLs, so the id is all we carry — the UI loads the bytes
- * through backstage's own `/plain/attachments/:id` proxy.
+ * through opensession's own `/plain/attachments/:id` proxy.
  */
 export interface PlainEntryAttachment {
   id: string;
@@ -282,7 +282,7 @@ function customEntryText(entry: any): string {
   return parts.join("\n\n");
 }
 
-/** A Plain thread flattened to the shape the backstage sidebar renders. */
+/** A Plain thread flattened to the shape the opensession sidebar renders. */
 export interface NormalizedPlainThread {
   id: string;
   title: string | null;
@@ -443,7 +443,7 @@ function threadWaitingState(thread: any): {
   };
 }
 
-/** A TODO-queue thread summary for the Backstage Support sidebar. */
+/** A TODO-queue thread summary for the OpenSession Support sidebar. */
 export interface SupportThreadSummary {
   id: string;
   title: string | null;

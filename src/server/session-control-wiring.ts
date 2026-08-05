@@ -20,14 +20,14 @@ import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { parseImageDataUrls } from "./uploads";
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
-import { findSession, getCachedSessions, invalidateSessionsCache, isLegacySideChat, recordRunOutcome, touchBackstageSession, updateSessionFile } from "./session-cache";
+import { findSession, getCachedSessions, invalidateSessionsCache, isLegacySideChat, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
 import { type SessionState, type SessionSummary, registerSessionControl } from "./session-control";
 import { buildBranchNote, memoryNoteFor, resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
 import { engineSessionPatch, engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sessions";
 import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
-import { type BackstageSessionFile, type SessionUsage, type UnifiedSession } from "./types";
+import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
 import { type Workspace, createWorkspace, getWorkspace } from "./workspaces";
 import { ownedWorktree } from "./chat-workspace";
 import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, worktreeHeadBranch } from "./worktree";
@@ -117,7 +117,7 @@ registerSessionControl({
 			};
 		}
 
-		// Slash commands (/loop, /goal, /model, /help) are handled by backstage
+		// Slash commands (/loop, /goal, /model, /help) are handled by opensession
 		// itself, exactly like the WebSocket prompt path — checked BEFORE the
 		// busy branch so "/loop stop" configures the session instead of being
 		// steered into its running turn as literal prompt text. This is what
@@ -165,12 +165,12 @@ registerSessionControl({
 				message: "Queued behind the current run.",
 			};
 		}
-		// Backstage chats with no engine id are fresh chats — the first prompt
+		// OpenSession chats with no engine id are fresh chats — the first prompt
 		// starts a new conversation (see runSessionPrompt).
 		if (
 			providerFor(session.model) === "claude" &&
 			!session.claudeSessionId &&
-			session.source !== "backstage"
+			session.source !== "opensession"
 		) {
 			return {
 				status: "error" as const,
@@ -370,8 +370,8 @@ registerSessionControl({
 				});
 				projectId = ws.id;
 			}
-			if (projectId && parentSession?.source === "backstage")
-				touchBackstageSession(parentSession.id, { projectId });
+			if (projectId && parentSession?.source === "opensession")
+				touchNativeSession(parentSession.id, { projectId });
 		}
 		// Replace the raw first-line title with a short summary in the background;
 		// the next sessions poll (≤5s) picks it up.
@@ -383,7 +383,7 @@ registerSessionControl({
 		let effectiveModel = model;
 		let selectedModel = model;
 		let effectiveProvider = providerFor(effectiveModel);
-		const modelHistory: NonNullable<BackstageSessionFile["modelHistory"]> = [];
+		const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
 		let persisted = false;
 		let latestUsage: SessionUsage | undefined;
 		// Terminal failure the opening run died on — recorded after the loop so
@@ -411,7 +411,7 @@ registerSessionControl({
 		const persist = () =>
 			updateSessionFile(bksId, (data) => {
 				// Widen to Partial: the file may not exist yet (create-if-absent).
-				const existing: Partial<BackstageSessionFile> = data;
+				const existing: Partial<NativeSessionFile> = data;
 				return {
 					id: bksId,
 					claudeSessionId: "",
@@ -561,7 +561,7 @@ registerSessionControl({
 						// is field-scoped now, but the narrower touch stays the clearer
 						// statement of what init actually changes.
 						if (persisted)
-							touchBackstageSession(bksId, {
+							touchNativeSession(bksId, {
 								...engineSessionPatch(effectiveProvider, engineSessionId),
 								...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
 							});
@@ -592,7 +592,7 @@ registerSessionControl({
 									at: new Date().toISOString(),
 									by: reason,
 								});
-								touchBackstageSession(bksId, {
+								touchNativeSession(bksId, {
 									model: selectedModel,
 									modelHistory,
 								});
@@ -709,7 +709,7 @@ registerSessionControl({
 				}
 				if (!persisted) await persist();
 				else
-					touchBackstageSession(
+					touchNativeSession(
 						bksId,
 						{
 							...engineSessionPatch(effectiveProvider, engineSessionId),
@@ -721,7 +721,7 @@ registerSessionControl({
 						},
 					);
 				if (latestUsage)
-					touchBackstageSession(bksId, { usage: latestUsage });
+					touchNativeSession(bksId, { usage: latestUsage });
 				recordRunOutcome(bksId, runFailure, {
 					engineSessionId,
 					noticePersisted: failureNoticePersisted,

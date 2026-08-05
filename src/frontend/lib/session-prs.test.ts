@@ -10,7 +10,7 @@ function session(overrides: Partial<UnifiedSession>): UnifiedSession {
 	return {
 		id: "bks-test",
 		claudeSessionId: null,
-		source: "backstage",
+		source: "opensession",
 		branch: "feature",
 		worktreeDir: "/tmp/feature",
 		startedBy: "test",

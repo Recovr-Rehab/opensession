@@ -2,7 +2,7 @@
  * Slack Agent Module — handles Slack DMs, @mentions, GitHub PR reviews,
  * worktree channel management, and Block Kit interactions.
  *
- * Implements the AgentModule interface for the backstage webhook server.
+ * Implements the AgentModule interface for the opensession webhook server.
  */
 
 import { defaultRepo } from "../../server/config";
@@ -572,7 +572,7 @@ export class SlackAgent implements AgentModule {
         }
 
         // Stop button on a Grafana-poller investigation card — cancel the
-        // automation-run session by its backstage id (registered in activeRuns
+        // automation-run session by its opensession id (registered in activeRuns
         // under the bks id, so cancelAgentRun reaches it). `investigate-stop:`
         // is the current prefix; `export-stop:`/`upload-stop:` are kept for any
         // cards posted before the generic poller landed.

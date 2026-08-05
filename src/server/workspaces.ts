@@ -29,10 +29,10 @@ import type { AttachedRepo, ExternalRef } from "./types";
 import { stateDir } from "./paths";
 
 const HOME = homeDir();
-const WORKSPACES_DIR_LEGACY = `${HOME}/.backstage-projects`;
+const WORKSPACES_DIR_LEGACY = `${HOME}/.opensession-projects`;
 /**
- * Dual-read chain: `~/.opensession-workspaces` (primary) → `~/.backstage-workspaces`
- * (pre-rename) → legacy `~/.backstage-projects` — until the one-time migrations
+ * Dual-read chain: `~/.opensession-workspaces` (primary) → `~/.opensession-workspaces`
+ * (pre-rename) → legacy `~/.opensession-projects` — until the one-time migrations
  * rename them. Resolving once at module load keeps reads and writes on the same
  * dir (no split-brain) whether or not a migration has run. Keeps the `prj-` id
  * prefix opaque — see scripts/migrate-workspaces.ts.
@@ -168,7 +168,7 @@ export function createWorkspace(input: {
  * create paths minted a second workspace over an already-owned worktree), the
  * oldest wins — it's the one the user thinks of as "the" workspace. Callers
  * must not pass a repo's main checkout: those are legitimately shared by many
- * workspaces (every backstage chat, every ask chat), so "ownership" is
+ * workspaces (every opensession chat, every ask chat), so "ownership" is
  * meaningless there.
  */
 export function findWorkspaceByWorktree(worktreeDir: string): Workspace | null {

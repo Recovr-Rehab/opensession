@@ -47,14 +47,14 @@ describe("normalizeDiffGroups", () => {
 	test("fingerprint changes with file metadata", () => {
 		const changed = files.map((file) => ({ ...file }));
 		changed[0]!.additions++;
-		expect(diffGroupsFingerprint("backstage", files)).not.toBe(
-			diffGroupsFingerprint("backstage", changed),
+		expect(diffGroupsFingerprint("opensession", files)).not.toBe(
+			diffGroupsFingerprint("opensession", changed),
 		);
 	});
 
 	test("fingerprint changes with diff contents", () => {
-		expect(diffGroupsFingerprint("backstage", files, "+old")).not.toBe(
-			diffGroupsFingerprint("backstage", files, "+new"),
+		expect(diffGroupsFingerprint("opensession", files, "+old")).not.toBe(
+			diffGroupsFingerprint("opensession", files, "+new"),
 		);
 	});
 });

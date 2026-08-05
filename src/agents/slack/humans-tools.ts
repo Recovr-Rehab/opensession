@@ -1,10 +1,10 @@
 /**
- * opensession-humans — an in-process MCP server that lets a Backstage session pull a
+ * opensession-humans — an in-process MCP server that lets a OpenSession session pull a
  * *teammate* into the loop: ask them a question over Slack and fold their answer
  * back into the session. The "human in the loop" surface.
  *
  * Like opensession-sessions / opensession-admin, this is an in-process SDK MCP wired ONLY
- * into interactive runs (Slack processMessage + Backstage interactiveMcpServers),
+ * into interactive runs (Slack processMessage + OpenSession interactiveMcpServers),
  * never into automation runs — untrusted ticket text must not be able to DM the
  * team as Michael. Its tools go through src/server/human-asks.ts, which owns the
  * ask registry, the Slack delivery, reply matching, and routing the answer back
@@ -12,7 +12,7 @@
  *
  * Gating: creating/cancelling asks is gated to the trusted user via `isAdmin`
  * (sending DMs to the team as Michael is outward-facing); listing is open to any
- * whitelisted user. In Backstage sessions everyone is treated as admin (the UI is
+ * whitelisted user. In OpenSession sessions everyone is treated as admin (the UI is
  * Tailscale- and team-gated already), matching opensession-sessions.
  */
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
@@ -36,7 +36,7 @@ import { configuredIdentity, personaName } from "../../server/config";
 import { parseWhen } from "./parse-when";
 
 export interface HumansToolContext {
-  /** Backstage session this MCP instance belongs to — answers route back here. */
+  /** OpenSession session this MCP instance belongs to — answers route back here. */
   sessionId: string;
   /** Display name credited as the asker in the teammate's DM. */
   createdBy: string;

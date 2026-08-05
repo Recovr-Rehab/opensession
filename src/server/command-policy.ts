@@ -52,7 +52,7 @@ export interface CommandPolicy {
 
 /**
  * The org floor. qm's five rules plus one of our own (`git reset --hard` /
- * `git checkout .` — backstage automations run in the SHARED checkout, where a
+ * `git checkout .` — opensession automations run in the SHARED checkout, where a
  * rollback yanks the tree out from under the live server and every other
  * session; see CLAUDE.md's shared-checkout rules). First match wins, so an
  * allow carve-out added ABOVE a rule can widen it deliberately.

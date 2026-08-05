@@ -23,7 +23,7 @@ import type {
 	AskQuestion,
 } from "@tellahq/opensession-protocol/session";
 
-export type SessionSource = "slack" | "linear" | "backstage" | "cli";
+export type SessionSource = "slack" | "linear" | "opensession" | "cli";
 
 /**
  * What the last automated (os-review) run concluded about a PR, as the UI needs

@@ -17,10 +17,10 @@ import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
 	findSession,
-	touchBackstageSession,
+	touchNativeSession,
 	updateSessionFile,
 } from "./session-cache";
-import type { BackstageSessionFile } from "./types";
+import type { NativeSessionFile } from "./types";
 
 interface DeskStore {
 	users: Record<string, { sessionId?: string; clearedAt?: string }>;
@@ -46,7 +46,7 @@ const DESK_MODEL = "opencode/anthropic/claude-sonnet-5";
 const DESK_EFFORT = "low";
 
 /** Get-or-create the user's Desk session (same direct-mint shape as side
- *  chats: ask mode, no worktree; repo backstage so it reads the OpenSession
+ *  chats: ask mode, no worktree; repo opensession so it reads the OpenSession
  *  checkout when it needs context). */
 export function ensureDeskSession(user: string): {
 	sessionId: string;
@@ -59,7 +59,7 @@ export function ensureDeskSession(user: string): {
 		// Backfill the fast-model default onto Desks minted before it existed —
 		// but never clobber a deliberate /model choice.
 		if (!existing.model)
-			touchBackstageSession(st.sessionId, {
+			touchNativeSession(st.sessionId, {
 				model: DESK_MODEL,
 				effort: DESK_EFFORT,
 			});
@@ -72,7 +72,7 @@ export function ensureDeskSession(user: string): {
 	// so the create-if-absent overlay is just belt-and-braces). Uncontended
 	// writes run synchronously, so the caller can open the session immediately.
 	updateSessionFile(bksId, (data) => {
-		const existing: Partial<BackstageSessionFile> = data;
+		const existing: Partial<NativeSessionFile> = data;
 		return {
 			id: bksId,
 			claudeSessionId: "",
@@ -80,7 +80,7 @@ export function ensureDeskSession(user: string): {
 			worktreeDir: "",
 			mode: "ask" as const,
 			desk: true,
-			repo: "backstage",
+			repo: "opensession",
 			createdBy: user,
 			createdAt: now,
 			lastActivity: now,

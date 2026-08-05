@@ -431,7 +431,7 @@ export class MicrovmProvider implements SandboxProvider {
 export const microvmPrewarmAdapter: PrewarmAdapter = {
   async create(labels) {
     const cfg = config();
-    const key = labels["backstage.prewarm.key"];
+    const key = labels["opensession.prewarm.key"];
     if (!key?.startsWith("microvm:")) {
       throw new Error(`invalid MicroVM prewarm key: ${key || "(missing)"}`);
     }

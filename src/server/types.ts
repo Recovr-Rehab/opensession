@@ -1,4 +1,4 @@
-export type SessionSource = "slack" | "linear" | "backstage" | "cli";
+export type SessionSource = "slack" | "linear" | "opensession" | "cli";
 
 /**
  * Generic linkage from a session/workspace to an external object surfaced by
@@ -281,7 +281,7 @@ export interface CLISessionFile {
   startedAt: number;
 }
 
-// Backstage session file format
+// OpenSession session file format
 /**
  * A secondary repo attached to a session for cross-repo work. Each gets its own
  * isolated worktree (never the shared main checkout), so the agent can branch,
@@ -370,7 +370,7 @@ export interface SessionWalkthrough {
   publishedBy?: string;
 }
 
-export interface BackstageSessionFile {
+export interface NativeSessionFile {
   id: string;
   claudeSessionId: string;
   branch: string;

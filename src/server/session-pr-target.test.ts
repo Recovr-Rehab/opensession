@@ -77,7 +77,7 @@ describe("sessionPrBranch", () => {
 	// A workspace can hold chats from several repos; the branch belongs to one.
 	test("never inherits a branch from another repo", () => {
 		expect(
-			sessionPrBranch({ id: "bks-ask", repo: "backstage" } as UnifiedSession, {
+			sessionPrBranch({ id: "bks-ask", repo: "opensession" } as UnifiedSession, {
 				...workspace,
 				repo: "tella-fusion",
 			}),

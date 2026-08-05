@@ -92,7 +92,7 @@ describe("first paint", () => {
 		active = app;
 		const frame = app.frame();
 
-		expect(frame).toContain("backstage"); // workspace group header
+		expect(frame).toContain("opensession"); // workspace group header
 		expect(frame).toContain("wire the socket");
 		expect(frame).toContain("fix the sidebar");
 		expect(frame).toContain("os.example.dev");
@@ -445,7 +445,7 @@ describe("degraded states", () => {
 	test("a narrow terminal drops the sidebar rather than squashing it", async () => {
 		const app = await mount({ width: 50, height: 20, sessions: [fakeSession({ id: "bks-1" })] });
 		active = app;
-		expect(app.frame()).not.toContain("backstage");
+		expect(app.frame()).not.toContain("opensession");
 	});
 
 	test("sign-in required is surfaced, not swallowed", async () => {

@@ -9,7 +9,7 @@
  * met. The mission is just a prompt string — nothing domain-specific lives here.
  *
  * This module is the pure data layer: the on-disk store + validation. The runner
- * (which drives the session) and the ticker live in backstage.ts next to the
+ * (which drives the session) and the ticker live in opensession.ts next to the
  * session loop ticker, because they need the interactive MCP wiring; the two MCP
  * surfaces (opensession-goals management + opensession-goal-self self-cadence) live in
  * src/agents/slack/goal-tools.ts. Records are one JSON file per goal at
@@ -42,7 +42,7 @@ export interface Goal {
   mode: "ask" | "code";
   /** Repo id for code-mode worktrees (key in worktree.ts REPOS). Default tella-fusion. */
   repo?: string;
-  /** Backstage session this goal drives (context continuity). Set on first wake. */
+  /** OpenSession session this goal drives (context continuity). Set on first wake. */
   osSessionId?: string;
   /** Engine (Claude/Codex) session id to resume each wake. Set on first wake. */
   engineSessionId?: string;

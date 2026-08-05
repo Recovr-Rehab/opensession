@@ -18,7 +18,7 @@ import { z } from "zod";
 import { recordDeclaration } from "../../server/turn-outcome";
 
 export interface TurnToolContext {
-  /** Ledger key for this run — the backstage session id where there is one. */
+  /** Ledger key for this run — the opensession session id where there is one. */
   turnKey: string;
   /**
    * A person is waiting on this turn's reply. `finish_silently` is a no-op on

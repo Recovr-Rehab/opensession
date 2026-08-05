@@ -24,7 +24,7 @@ import {
   transcriptLineAssistantText,
   transcriptLineUser,
 } from "../opencode-transcript";
-import { touchBackstageSession } from "../session-cache";
+import { touchNativeSession } from "../session-cache";
 import {
   DEMO_ASK_OC_SESSION_ID,
   DEMO_ASK_SESSION_ID,
@@ -59,7 +59,7 @@ function offerDemoAsk(state: DemoState): void {
             `Noted — going with **${picked}**. I'll draft the rollout plan on that basis. (Demo session: the card re-arms in a moment.)`,
           ),
         ]);
-        touchBackstageSession(sessionId, {});
+        touchNativeSession(sessionId, {});
       }
     } catch (e) {
       console.error("[demo] ask answer handling failed:", e);

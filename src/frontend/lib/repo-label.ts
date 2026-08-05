@@ -1,5 +1,5 @@
 // A few repos display under a different name than their internal id — the
-// Backstage → OpenSession rename lives here so id `backstage` reads
+// OpenSession → OpenSession rename lives here so id `opensession` reads
 // `opensession` everywhere its name is shown, with an `O` tile glyph.
 //
 // This is presentation only: ids stay canonical on the wire, in worktree
@@ -7,7 +7,7 @@
 // RepoTile) so lib-level formatters like pr-refs.ts can reach it without a
 // component import.
 const REPO_DISPLAY: Record<string, { label: string; letter: string }> = {
-	backstage: { label: "opensession", letter: "O" },
+	opensession: { label: "opensession", letter: "O" },
 };
 
 /** The name a repo shows in the UI (its id, except for the renamed ones). */

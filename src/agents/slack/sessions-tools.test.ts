@@ -262,8 +262,8 @@ describe("spawnTaskImpl", () => {
 		h.sessions.set(parent, {
 			id: parent,
 			mode: "code",
-			worktreeDir: "/home/ubuntu/projects/tella-backstage",
-			repo: "backstage",
+			worktreeDir: "/home/ubuntu/projects/opensession",
+			repo: "opensession",
 			attachedRepos: [
 				{
 					repo: "tella-fusion",

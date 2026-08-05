@@ -168,7 +168,7 @@ extension Session {
     ) -> Session {
         var session = Session(id: id)
         session.title = title
-        session.source = "backstage"
+        session.source = "opensession"
         session.repo = repo
         session.mode = mode
         session.model = model

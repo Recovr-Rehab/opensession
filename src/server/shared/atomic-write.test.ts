@@ -55,7 +55,7 @@ describe("writeFileAtomic", () => {
 describe("writeJsonAtomic", () => {
   it("writes pretty-printed JSON by default that round-trips", () => {
     const path = join(dir, "pretty.json");
-    const value = { name: "backstage", nested: { list: [1, 2, 3], ok: true } };
+    const value = { name: "opensession", nested: { list: [1, 2, 3], ok: true } };
     writeJsonAtomic(path, value);
     const raw = readFileSync(path, "utf-8");
     expect(JSON.parse(raw)).toEqual(value);

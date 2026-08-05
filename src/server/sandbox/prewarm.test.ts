@@ -189,12 +189,12 @@ describe("requestPrewarm", () => {
     makeFakeAdapter({ gate });
     expect((await requestPrewarm("daytona", "tella-fusion")).state).toBe("bootstrapping");
     // A different key while the first is still creating: at-capacity.
-    expect((await requestPrewarm("daytona", "backstage")).state).toBe("at-capacity");
+    expect((await requestPrewarm("daytona", "gitops")).state).toBe("at-capacity");
     open();
     await until(() => readyEntry()?.state === "ready");
     // maxLive=1: the ready one occupies the whole pool.
     writeConfig({ prewarm: { ttlMinutes: 10, maxLive: 1 } });
-    expect((await requestPrewarm("daytona", "backstage")).state).toBe("at-capacity");
+    expect((await requestPrewarm("daytona", "gitops")).state).toBe("at-capacity");
   });
 });
 

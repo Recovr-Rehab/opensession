@@ -13,24 +13,30 @@
  * conveys that the engine changed). Sentinels are inert tag-like text the model
  * simply reads as context.
  */
-export const CTX_OPEN = "<backstage:context>";
-export const CTX_CLOSE = "</backstage:context>";
+export const CTX_OPEN = "<opensession:context>";
+export const CTX_CLOSE = "</opensession:context>";
+// Pre-rename fence pair. Old transcripts (and attached-chat inlines of them)
+// carry these forever: stripping and neutralization must keep handling both.
+const LEGACY_CTX_OPEN = "<backstage:context>";
+const LEGACY_CTX_CLOSE = "</backstage:context>";
 
 /** Fence a block of injected context so it renders invisibly in the transcript. */
 export function wrapContext(body: string): string {
   // Neutralize any fence sentinels inside the body: a nested
-  // <backstage:context> marker in inlined content (e.g. an attached chat's
+  // <opensession:context> marker in inlined content (e.g. an attached chat's
   // transcript that literally contains the string) would otherwise let that
   // content break out of the fence and inject unfenced instructions into the
   // agent — a prompt-injection vector. A sentinel inside a fenced block is
   // never legitimate, so replacing the angle brackets is always safe.
   const safe = body
-    .replaceAll(CTX_OPEN, "‹backstage:context›")
-    .replaceAll(CTX_CLOSE, "‹/backstage:context›");
+    .replaceAll(CTX_OPEN, "‹opensession:context›")
+    .replaceAll(CTX_CLOSE, "‹/opensession:context›")
+    .replaceAll(LEGACY_CTX_OPEN, "‹backstage:context›")
+    .replaceAll(LEGACY_CTX_CLOSE, "‹/backstage:context›");
   return `${CTX_OPEN}\n${safe}\n${CTX_CLOSE}`;
 }
 
-const STRIP_RE = new RegExp(`${CTX_OPEN}[\\s\\S]*?${CTX_CLOSE}\\n*`, "g");
+const STRIP_RE = /<(?:opensession|backstage):context>[\s\S]*?<\/(?:opensession|backstage):context>\n*/g;
 // A delivery attribution ("[Name] ", added when a prompt is handed to the
 // engine) with nothing left after the fence is stripped: the whole turn was
 // plumbing, so the prefix is all the transcript would carry. Left in, it
@@ -40,7 +46,8 @@ const ATTRIBUTION_ONLY_RE = /^\[[^\]\n]{1,80}\]$/;
 
 /** Remove fenced context blocks (and any trailing blank lines) for display. */
 export function stripContext(text: string): string {
-  if (!text || !text.includes(CTX_OPEN)) return text;
+  if (!text || !(text.includes(CTX_OPEN) || text.includes(LEGACY_CTX_OPEN)))
+    return text;
   const shown = text.replace(STRIP_RE, "").trimStart();
   return ATTRIBUTION_ONLY_RE.test(shown.trim()) ? "" : shown;
 }

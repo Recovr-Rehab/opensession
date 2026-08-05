@@ -597,7 +597,7 @@ function CatchUpComposer({
 	const currentGoal =
 		goalOverride !== undefined ? goalOverride : target.goal ?? null;
 
-	const isBackstage = target.source === "backstage";
+	const isNative = target.source === "opensession";
 	// Send the reply into the target session (images fold in as content blocks;
 	// files route to the queue server-side), then advance the deck.
 	function handleSend(raw: string): boolean {
@@ -680,19 +680,19 @@ function CatchUpComposer({
 				defaultModel={defaultModel}
 				model={model}
 				onModelChange={handleModelChange}
-				modelDisabled={!isBackstage && target.source !== "slack"}
+				modelDisabled={!isNative && target.source !== "slack"}
 				modelTitle={
-					isBackstage || target.source === "slack"
+					isNative || target.source === "slack"
 						? "Switch the model for this session"
 						: "Set the model from the owning agent (its session file is agent-owned)"
 				}
 				effort={effort}
 				onEffortChange={setEffort}
-				accounts={isBackstage ? accounts : undefined}
+				accounts={isNative ? accounts : undefined}
 				accountId={accountId}
-				onAccountChange={isBackstage ? handleAccountChange : undefined}
+				onAccountChange={isNative ? handleAccountChange : undefined}
 				goal={currentGoal}
-				onSetGoal={isBackstage ? handleSetGoal : undefined}
+				onSetGoal={isNative ? handleSetGoal : undefined}
 				mentionFetch={(q) => fetchFileMentions(q, target.id)}
 				skillsFetch={(q) => fetchSkillMentions(q, target.id)}
 			/>

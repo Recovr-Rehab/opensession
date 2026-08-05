@@ -12,7 +12,7 @@
  * the per-oc-session JSONL mirror file this test used to read
  * (getOpencodeTranscriptPath + parseTranscript) is a frozen, never-written
  * archive — appendOpencodeTranscript now writes ONLY into the transcript
- * store (transcript-store.ts), keyed by the UNIFIED backstage session id
+ * store (transcript-store.ts), keyed by the UNIFIED opensession session id
  * (spec.osSessionId), not by the opencode engine session id. So these
  * assertions read the store by unified id instead of a per-oc-session file.
  * That also changes what "account rotation" means to assert: every oc id a

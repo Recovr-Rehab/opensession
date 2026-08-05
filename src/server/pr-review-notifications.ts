@@ -120,7 +120,7 @@ export function createPrReviewNotifier(
 
 let stopTicker: (() => void) | null = null;
 
-/** Start once from opensession.ts's __backstageBooted block. */
+/** Start once from opensession.ts's __opensessionBooted block. */
 export function startPrReviewNotificationTicker(): void {
 	if (stopTicker) return;
 	stopTicker = createPrReviewNotifier().start();

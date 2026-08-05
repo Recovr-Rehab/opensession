@@ -474,7 +474,7 @@ export async function getUserInfo(
 }
 
 // ---------------------------------------------------------------------------
-// Linked-channel chat (backstage Slack panel)
+// Linked-channel chat (opensession Slack panel)
 // ---------------------------------------------------------------------------
 
 import { SLACK_ID_TO_NAME } from "../../server/shared/user-mappings";

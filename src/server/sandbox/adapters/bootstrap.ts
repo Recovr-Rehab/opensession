@@ -6,7 +6,7 @@
  *
  *  - `bootstrapRemoteSandbox`: remote sandboxes don't run our prebaked
  *    opensession-runner image, so first ensure installs the runner payload
- *    in-sandbox — bun, the backstage repo bundle (config `runnerBundleUrl`
+ *    in-sandbox — bun, the opensession repo bundle (config `runnerBundleUrl`
  *    tarball, or a git clone of `runnerRepoUrl`/this checkout's origin at
  *    `runnerSha`), `bun install`, and the Claude Code CLI — all under
  *    /home/ubuntu so the runner's hardcoded absolute paths (claude CLI, repo
@@ -33,11 +33,11 @@
  *  - `resumeRemoteSandboxRun`: restart-resume mirroring the docker path —
  *    reattach to a still-alive in-sandbox host via its WS redial, or relaunch
  *    a continuation. One gap vs docker: meta.json isn't host-visible, so a
- *    run that ENDED while backstage was down is resumed as a continuation
+ *    run that ENDED while opensession was down is resumed as a continuation
  *    (engine session preserved) instead of having its terminal event
  *    consumed.
  *
- * Credential trust note: a SCOPED slice of `~/.backstage-claude-accounts.json`
+ * Credential trust note: a SCOPED slice of `~/.opensession-claude-accounts.json`
  * (Claude OAuth pool) is uploaded into the sandbox per LAUNCH (not at
  * bootstrap): only the run's pinned account when spec.accountId is set, else
  * the shared pool accounts plus the run user's own personal accounts — never
@@ -111,7 +111,7 @@ export const REMOTE_OPENCODE = `${REMOTE_HOME}/.bun/bin/opencode`;
  *  too) — bump BOTH together. Part of bootstrapSignature, so a bump
  *  invalidates existing sandboxes/prewarms and re-bootstraps them. */
 export const REMOTE_OPENCODE_VERSION = "1.17.15";
-export const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/tella-backstage
+export const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 const WORKSPACE_BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-workspace-runtime`;
 const WORKSPACE_BOOTSTRAP_SIGNATURE = "workspace-runtime-v1+bun";
@@ -137,7 +137,7 @@ export interface RemoteDriver {
    *  argv callers go through shellQuote). Never throws on non-zero exit. */
   exec(cmd: string, opts?: RemoteExecOpts): Promise<ExecResult>;
   /** Start a detached long-lived process that survives this call AND this
-   *  backstage process (provider background/session APIs). */
+   *  opensession process (provider background/session APIs). */
   execBackground(cmd: string, opts?: RemoteExecOpts): Promise<void>;
   /** Write a file into the sandbox (parent dir must exist). */
   writeFile(path: string, content: string): Promise<void>;
@@ -368,7 +368,7 @@ export async function assertDialbackReachable(
   if (probe.exitCode !== 0) {
     const detail = (probe.stderr || probe.stdout).trim().slice(0, 200);
     throw new Error(
-      `${label} sandboxes can't reach this Backstage server yet — ` +
+      `${label} sandboxes can't reach this OpenSession server yet — ` +
         `${redactUrl(httpBase)} is unreachable from inside the sandbox` +
         `${detail ? ` (${detail})` : ""}. Remote sandboxes must dial back to ` +
         `callbackBaseUrl/publicIngress, which needs the provider org's egress tier ` +
@@ -504,11 +504,11 @@ export async function bootstrapRemoteSandbox(
         "runner bundle download",
       );
     } else {
-      const backstageRepo = { id: "backstage", repo: REPO_ROOT, ghRepo: undefined };
+      const opensessionRepo = { id: "opensession", repo: REPO_ROOT, ghRepo: undefined };
       const url =
         cfg.runnerRepoUrl && toHttpsUrl(cfg.runnerRepoUrl)
           ? injectToken(toHttpsUrl(cfg.runnerRepoUrl)!)
-          : await remoteCloneUrl(backstageRepo);
+          : await remoteCloneUrl(opensessionRepo);
       log(`cloning runner repo ${redactUrl(url)}…`);
       need(
         await driver.exec(
@@ -807,10 +807,10 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
       // a previously-uploaded wider file never lingers.
       const accounts = accountsForRemoteUpload(spec.user, spec.accountId);
       await driver.writeFile(
-        `${REMOTE_HOME}/.backstage-claude-accounts.json`,
+        `${REMOTE_HOME}/.opensession-claude-accounts.json`,
         JSON.stringify({ accounts }, null, 2) + "\n",
       );
-      await driver.exec(`chmod 600 ${REMOTE_HOME}/.backstage-claude-accounts.json`);
+      await driver.exec(`chmod 600 ${REMOTE_HOME}/.opensession-claude-accounts.json`);
       // OpenCode bridge config: read IN-SANDBOX by the runner's opencode
       // dispatch (bridge mode, turn timeout). docker gets it as an ro mount;
       // without it every opencode/anthropic/* run in a remote sandbox dies
@@ -824,15 +824,15 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
       const ocCfgSrc =
         process.env.OPENSESSION_OPENCODE_CONFIG ||
         // Dual-read the host path (a new-name-only host has no
-        // ~/.backstage-opencode.json); the remote destination below stays the
+        // ~/.opensession-opencode.json); the remote destination below stays the
         // legacy name the in-sandbox build dual-reads.
         stateDir("opencode.json");
       if (existsSync(ocCfgSrc)) {
         await driver.writeFile(
-          `${REMOTE_HOME}/.backstage-opencode.json`,
+          `${REMOTE_HOME}/.opensession-opencode.json`,
           readFileSync(ocCfgSrc, "utf-8"),
         );
-        await driver.exec(`chmod 600 ${REMOTE_HOME}/.backstage-opencode.json`);
+        await driver.exec(`chmod 600 ${REMOTE_HOME}/.opensession-opencode.json`);
       }
       // OpenAI/ChatGPT-subscription material for opencode/openai/* dispatched
       // IN-SANDBOX. The raw CODEX_HOME/auth.json is NEVER uploaded — its
@@ -846,7 +846,7 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
       // so a mid-session switch to an openai model needs no relaunch.
       // Rewritten (or removed) per launch so restriction changes apply and a
       // previously-uploaded wider set never lingers. Destination filenames
-      // stay the legacy .backstage-* names the (dual-reading) in-sandbox
+      // stay the legacy .opensession-* names the (dual-reading) in-sandbox
       // build resolves — same convention as the bridge config above.
       const openaiUpload = buildOpenaiRemoteSeedUpload(
         listCodexAccounts(),
@@ -858,7 +858,7 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
           `[sandbox-remote] openai seed for ${maskOpenaiAccount(account)} skipped: ${reason}`,
         );
       }
-      const codexStorePath = `${REMOTE_HOME}/.backstage-codex-accounts.json`;
+      const codexStorePath = `${REMOTE_HOME}/.opensession-codex-accounts.json`;
       if (openaiUpload.accounts.length) {
         await driver.writeFile(
           codexStorePath,
@@ -955,7 +955,7 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
   };
 }
 
-// ── Journal bookkeeping (backstage side; mirrors docker's) ────────────────────
+// ── Journal bookkeeping (opensession side; mirrors docker's) ────────────────────
 
 function recordForSpec(
   spec: RunHostSpec,
@@ -1002,7 +1002,7 @@ export interface OcSessionRef {
  * The in-sandbox runner writes its JSONL inside the sandbox, where nothing
  * host-side can read it back (docker bind-mounts OPENCODE_TRANSCRIPTS_DIR;
  * remote sandboxes have no mount), so a daytona/e2b opencode session would
- * render "No transcript available" after a reload. Backstage already receives
+ * render "No transcript available" after a reload. OpenSession already receives
  * every stream event over the dial-back — rebuild the same claude-shape lines
  * from them here. Applied ONLY on the remote adapters (this module): docker's
  * bind mount already lands the in-sandbox writes on the host, and mirroring

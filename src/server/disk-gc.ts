@@ -410,7 +410,7 @@ export async function sweepDiskGc(opts: { dryRun?: boolean } = {}): Promise<Disk
 
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
-/** Start the hourly sweep. Call once from the __backstageBooted block. */
+/** Start the hourly sweep. Call once from the __opensessionBooted block. */
 export function startDiskGc(): void {
   if (sweepTimer) return;
   if (process.env.OPENSESSION_DISK_GC === "0") {

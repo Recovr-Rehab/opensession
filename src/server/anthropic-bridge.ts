@@ -26,7 +26,7 @@
  *    starts a fresh SDK session with a full flat-text replay.
  *
  * Containment (all enforced here, not in prompts):
- *  - Never starts unless ~/.backstage-opencode.json has `enabled: true`.
+ *  - Never starts unless ~/.opensession-opencode.json has `enabled: true`.
  *  - Only `bridgeAccountIds` accounts ever serve traffic — never the pool.
  *  - Binds 127.0.0.1 only, and every request must present the per-boot bridge
  *    key (x-api-key) that only the opencode-runner hands out — so another
@@ -38,7 +38,7 @@
  *    key — so local probing/hammering always leaves a trail.
  *  - Request hygiene: bodies over 10MB are refused (413), and a per-boot
  *    rolling per-account counter caps requests/hour (`bridgeMaxRequestsPerHour`
- *    in ~/.backstage-opencode.json, default 300 → 429 past it; estimated
+ *    in ~/.opensession-opencode.json, default 300 → 429 past it; estimated
  *    tokens are tracked alongside for the audit trail). The ultimate backstop
  *    is Anthropic's own per-account extra-usage credit ceiling: bridge traffic
  *    bills to the designated account's extra-usage credits (see below), so

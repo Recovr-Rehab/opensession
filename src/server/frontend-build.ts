@@ -172,7 +172,7 @@ export async function buildFrontend(): Promise<string> {
 	);
 	const version = `${entryName}|${cssName}|${twName ?? "no-tw"}`;
 
-	const store: FrontendBundle = (g.__backstageFrontend ??= {
+	const store: FrontendBundle = (g.__opensessionFrontend ??= {
 		indexHtml: "",
 		gzip: new Map<string, Blob>(),
 		version: "",
@@ -239,7 +239,7 @@ function tryReuseFrontendDist(): boolean {
 		for (const a of meta.assets ?? []) {
 			if (!existsSync(join(FRONTEND_DIST, a))) return false;
 		}
-		const store: FrontendBundle = (g.__backstageFrontend ??= {
+		const store: FrontendBundle = (g.__opensessionFrontend ??= {
 			indexHtml: "",
 			gzip: new Map<string, Blob>(),
 			version: "",
@@ -254,7 +254,7 @@ function tryReuseFrontendDist(): boolean {
 	}
 }
 
-if (!IS_DEV && !isLocalProfile() && !g.__backstageFrontend) {
+if (!IS_DEV && !isLocalProfile() && !g.__opensessionFrontend) {
 	if (!tryReuseFrontendDist()) {
 		console.log("Building frontend (split + minified)…");
 		await buildFrontend();
@@ -265,7 +265,7 @@ export const frontend: FrontendBundle | null = IS_DEV
 	? null
 	: isLocalProfile()
 		? null
-		: (g.__backstageFrontend as FrontendBundle);
+		: (g.__opensessionFrontend as FrontendBundle);
 
 export const SPA_HEADERS = {
 	"Content-Type": "text/html; charset=utf-8",
@@ -301,7 +301,7 @@ function sessionTitle(id: string | undefined): string | undefined {
 }
 
 /**
- * Best-effort "who caused this" label for update/restart notices. Backstage
+ * Best-effort "who caused this" label for update/restart notices. OpenSession
  * sessions all work in THIS shared checkout, so when the file-watch fires (or
  * a session runs `systemctl restart`), the culprit is an in-flight run whose
  * cwd is this checkout — the run journal knows those, with user + session id.

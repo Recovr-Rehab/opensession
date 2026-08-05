@@ -59,7 +59,7 @@
  *
  * ── ISOLATION ───────────────────────────────────────────────────────────────
  * Each account gets its own XDG_DATA_HOME
- * (~/.backstage-opencode/openai-data/<accountId>) so its auth.json — and
+ * (~/.opensession-opencode/openai-data/<accountId>) so its auth.json — and
  * opencode's own session db — never share mutable state across accounts. The
  * runner folds XDG_DATA_HOME into the server's config/env identity hash, so a
  * different account respawns the server (never reuses another account's auth).
@@ -184,7 +184,7 @@ export function maskOpenaiAccount(account: CodexAccount): string {
 /**
  * Pick a codex account to serve an opencode/openai/* run. Mirrors
  * pickMeridianAccount's structure: an explicit override id list
- * (bridge.openaiAccounts in ~/.backstage-opencode.json) restricts to designated
+ * (bridge.openaiAccounts in ~/.opensession-opencode.json) restricts to designated
  * accounts in list order; otherwise the normal codex pool pick
  * (least-recently-used, exhaustion-aware).
  *

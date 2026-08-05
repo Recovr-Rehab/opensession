@@ -1,8 +1,8 @@
 /**
- * Detached `opencode serve` processes — the piece that makes a backstage
+ * Detached `opencode serve` processes — the piece that makes a opensession
  * restart non-destructive for in-flight runs.
  *
- * Why: engine turns execute server-side inside `opencode serve`; the backstage
+ * Why: engine turns execute server-side inside `opencode serve`; the opensession
  * process is just an SSE client. Servers spawned as direct Bun children die
  * with the unit on `systemctl restart` (KillMode=mixed SIGTERMs only the bun
  * parent, but systemd SIGKILLs the remaining cgroup members once it exits),
@@ -21,7 +21,7 @@
  * servers — same trust domain as opencode's own auth store under $HOME.
  *
  * Detached stdio goes to a log file, never a pipe: a pipe's read end dies
- * with the backstage process and the next engine write would SIGPIPE-kill the
+ * with the opensession process and the next engine write would SIGPIPE-kill the
  * surviving server. That also means the port can't be parsed from stdout —
  * we pick a free port ourselves and health-poll the URL instead.
  *

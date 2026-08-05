@@ -156,11 +156,11 @@ function extractMarker(text: string, marker: RegExp): string[] {
   return out;
 }
 
-export function extractBackstageVideos(text: string): string[] {
+export function extractVideoMarkers(text: string): string[] {
   return extractMarker(text, VIDEO_MARKER);
 }
 
-export function extractBackstageImages(text: string): string[] {
+export function extractImageMarkers(text: string): string[] {
   return extractMarker(text, IMAGE_MARKER);
 }
 
@@ -212,8 +212,8 @@ export function extractAssistantVideos(text: string): {
   videos: string[];
   images: string[];
 } {
-  const videos = extractBackstageVideos(text);
-  const images = extractBackstageImages(text);
+  const videos = extractVideoMarkers(text);
+  const images = extractImageMarkers(text);
   let content = text;
   if (videos.length > 0) content = content.replace(VIDEO_MARKER, "");
   if (images.length > 0) content = content.replace(IMAGE_MARKER, "");
@@ -238,7 +238,7 @@ export function extractAssistantVideos(text: string): {
 // Steered messages released at the same turn boundary — and queued messages
 // drained as one batch — are joined into a SINGLE engine turn ("\n\n"-
 // separated, each part carrying its "[Name] " attribution; see claude-runner's
-// steer batching and backstage's drainQueue combine). Split those back into
+// steer batching and opensession's drainQueue combine). Split those back into
 // per-sender entries so the UI shows them as the separate messages they were
 // (and steer receipts reconcile by exact match instead of containment). Only
 // fires when the turn itself STARTS with an attribution, so an ordinary paste
@@ -377,13 +377,13 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
           const images = [
             ...new Set([
               ...extractImages(block.content),
-              ...extractBackstageImages(resultText),
+              ...extractImageMarkers(resultText),
               ...implicitTool.images,
             ]),
           ];
           const videos = [
             ...new Set([
-              ...extractBackstageVideos(resultText),
+              ...extractVideoMarkers(resultText),
               ...implicitTool.videos,
             ]),
           ];
@@ -657,7 +657,7 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
     }
     if (p.type === "function_call_output" || p.type === "custom_tool_call_output") {
       const content = outputText(p.output);
-      const videos = extractBackstageVideos(content);
+      const videos = extractVideoMarkers(content);
       return [{
         id: p.call_id ? `tr-${p.call_id}` : stableCodexId("tr-codex", raw, p, content),
         type: "tool_result",
@@ -695,7 +695,7 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
     }
     if (p.type === "local_shell_call_output") {
       const content = outputText(p.output);
-      const videos = extractBackstageVideos(content);
+      const videos = extractVideoMarkers(content);
       return [{
         id: p.call_id ? `tr-${p.call_id}` : stableCodexId("tr-codex", raw, p, content),
         type: "tool_result",

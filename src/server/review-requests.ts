@@ -7,7 +7,7 @@
  * Same shape as the archive / title / status-override registries: a
  * backstage-owned JSON store keyed by unified session id, applied over every
  * session in getAllSessions. Slack/Linear session files are read-only for
- * backstage, so the request can't live in the session file.
+ * opensession, so the request can't live in the session file.
  */
 import { readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";

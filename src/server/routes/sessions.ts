@@ -218,7 +218,7 @@ export async function handleSessionsRoutes(
 					? { workspacePreparing: true }
 					: {}),
 				// Terminal failure of the last run (credits/limits/API) — persisted
-				// on backstage session files, in-memory for slack/linear sessions.
+				// on opensession session files, in-memory for slack/linear sessions.
 				lastRunError: runErrors.get(s.id) || s.lastRunError,
 			}));
 		const { sessions, cloudUnreachable } = await mergedCloudSessions(enriched);

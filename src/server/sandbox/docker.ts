@@ -6,12 +6,12 @@
  * `opensession-runner:latest` — see deploy/sandbox/), kept alive across turns so
  * engine session state (~/.claude history, codex rollouts) and dev servers
  * survive. A run is the SAME runner-host entry the systemd path uses
- * (src/runner-host/host.ts), `docker exec`'d into the container; backstage
+ * (src/runner-host/host.ts), `docker exec`'d into the container; opensession
  * talks to it over the host's unix socket in a bind-mounted per-session run
  * dir, reusing host-client's HostHandle (NDJSON protocol, ask proxying,
  * reconnect, respawn-to-resume) with a Docker HostLauncher. Because the
  * socket + spec/meta/journal files live on a bind mount, a restarted
- * backstage reattaches to a still-running in-container run exactly like it
+ * opensession reattaches to a still-running in-container run exactly like it
  * would to a systemd host — that's what makes restart-resume work.
  *
  * Mount design (all deliberate, see also deploy/sandbox/README.md):
@@ -36,19 +36,19 @@
  *    viewer's transcript tail, parseTranscript handoffs, and resume-continuity
  *    with host runs of the same worktree all keep working. Narrow on purpose:
  *    only this worktree's transcript dir, not the host's whole ~/.claude.
- *  - The run-rpc socket (~/.backstage-chats/backstage-rpc.sock) is
+ *  - The run-rpc socket (~/.opensession-chats/opensession-rpc.sock) is
  *    bind-mounted (a socket can't be mounted ro) so the opensession-* stdio
- *    proxies work from inside. Caveat: if backstage rebinds the socket (real
+ *    proxies work from inside. Caveat: if opensession rebinds the socket (real
  *    restart), the bind still points at the old inode until the CONTAINER is
  *    restarted — the idle-stop/start cycle self-heals this, and mcp-proxy
  *    retries until then.
  *  - ~/.ssh, ~/.gitconfig, ~/.config/gh, mcp-config.json and
- *    ~/.backstage-claude-accounts.json are mounted read-only for git/gh/PR
+ *    ~/.opensession-claude-accounts.json are mounted read-only for git/gh/PR
  *    parity and in-container account-pool selection. Interactive sessions
  *    only — the same ambient trust those runs already have on the host today.
  *    Automations are NOT sandboxed in Phase 1 (the wiring refuses them), so
  *    none of this is reachable from untrusted prompt text.
- *  - ~/.backstage-audit is mounted rw so in-container runs land in the same
+ *  - ~/.opensession-audit is mounted rw so in-container runs land in the same
  *    audit log stream as host runs (appendFileSync, O_APPEND).
  *
  * Phase 2 additions (the sandbox rollout plan, Phase 2):
@@ -364,10 +364,10 @@ export async function snapshotSandboxImage(sandboxId: string): Promise<string | 
   const r = await docker(
     [
       "commit",
-      "-c", `LABEL backstage.snapshot="1"`,
-      "-c", `LABEL backstage.session="${state.sessionId}"`,
-      "-c", `LABEL backstage.snapshotAt="${new Date().toISOString()}"`,
-      "-m", `backstage sandbox snapshot of ${sandboxId}`,
+      "-c", `LABEL opensession.snapshot="1"`,
+      "-c", `LABEL opensession.session="${state.sessionId}"`,
+      "-c", `LABEL opensession.snapshotAt="${new Date().toISOString()}"`,
+      "-m", `opensession sandbox snapshot of ${sandboxId}`,
       sandboxId,
       `${repo}:${tag}`,
     ],
@@ -408,7 +408,7 @@ async function removeSnapshotImages(sandboxId: string): Promise<void> {
  * snapshots — that's the warm-restore path. Fail-safe: images whose session
  * label is unreadable are left alone. Throttled to once an hour (it lists
  * images); runs piggybacked on the idle sweep. NOTE: the 14-day archived-
- * session sweep lives in backstage.ts and funnels through destroy(), which
+ * session sweep lives in opensession.ts and funnels through destroy(), which
  * cleans snapshots itself — this covers only the already-gone-sandbox gap.
  */
 async function sweepOrphanSnapshots(): Promise<void> {
@@ -426,7 +426,7 @@ async function sweepOrphanSnapshots(): Promise<void> {
       const tags = await listSnapshotTags(repo);
       if (!tags.length) continue;
       const lbl = await docker([
-        "image", "inspect", "-f", `{{index .Config.Labels "backstage.session"}}`, `${repo}:${tags[0]}`,
+        "image", "inspect", "-f", `{{index .Config.Labels "opensession.session"}}`, `${repo}:${tags[0]}`,
       ]);
       const sessionId = lbl.exitCode === 0 ? lbl.stdout.trim() : "";
       if (!sessionId) continue; // unknown provenance — keep
@@ -635,7 +635,7 @@ async function createContainer(
   // IN-CONTAINER (pickOpenaiAccount reads the pool store; bindOpenaiAccount
   // reads each home-account's CODEX_HOME/auth.json and seeds an access-token-
   // only opencode auth.json under the container-local
-  // ~/.backstage-opencode/openai-data — never these mounts). Without them an
+  // ~/.opensession-opencode/openai-data — never these mounts). Without them an
   // openai model in a sandbox died as opencode's bare "model not found".
   // Mounted per-FILE and ro on purpose: the auth.json files carry the
   // rotation-sensitive refresh-token family (opencode-openai-auth.ts header)
@@ -647,7 +647,7 @@ async function createContainer(
   for (const acct of listCodexAccounts()) {
     if (acct.kind === "home") roIfExists(`${acct.value}/auth.json`, `codex auth (${acct.name})`);
   }
-  // OpenCode bridge config (~/.backstage-opencode.json): read IN-CONTAINER by
+  // OpenCode bridge config (~/.opensession-opencode.json): read IN-CONTAINER by
   // the runner-host's opencode dispatch (bridge mode, accounts restriction,
   // turn timeout) — without it every opencode/anthropic/* run in a sandbox
   // fails with "bridge disabled". ro like the account pool it selects from.
@@ -658,7 +658,7 @@ async function createContainer(
     const src =
       process.env.OPENSESSION_OPENCODE_CONFIG ||
       stateDir("opencode.json");
-    if (existsSync(src)) mounts.push(...vol(src, `${HOME}/.backstage-opencode.json`, true));
+    if (existsSync(src)) mounts.push(...vol(src, `${HOME}/.opensession-opencode.json`, true));
   }
   // External preview commands at identical paths, read-only. Repo-owned
   // lifecycle scripts already arrive with the workspace.
@@ -677,8 +677,8 @@ async function createContainer(
   const r = await docker([
     "create",
     "--name", name,
-    "--label", "backstage.sandbox=1",
-    "--label", `backstage.session=${sessionId}`,
+    "--label", "opensession.sandbox=1",
+    "--label", `opensession.session=${sessionId}`,
     "--init",
     "--restart", "no",
     "--cpus", String(cpus),
@@ -744,7 +744,7 @@ async function setupVolumeWorkspace(
  * docker materializes ROOT-owned when it creates missing parents of bind-mount
  * targets. The chats dir is the canonical case: the per-session run dir is
  * mounted at `<chats>/sandbox-runs/<id>`, and when the image doesn't pre-seed
- * `<chats>` under the CURRENT name (the rename moved it from ~/.backstage-chats
+ * `<chats>` under the CURRENT name (the rename moved it from ~/.opensession-chats
  * to ~/.opensession-chats — an image built before that only seeds the old
  * name), docker creates `<chats>` + `<chats>/sandbox-runs` as root and the
  * in-container opencode runner then EACCESes on `mkdir <chats>/opencode`
@@ -861,8 +861,8 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
       await ensureStarted(container);
       const specPath = assertSafePath(`${dir}/${HOST_SPEC_NAME}`);
       const logPath = assertSafePath(`${dir}/${HOST_LOG_NAME}`);
-      // Detached exec (-d): the in-container host must NOT die with backstage —
-      // its socket lives on the bind-mounted run dir, so a restarted backstage
+      // Detached exec (-d): the in-container host must NOT die with opensession —
+      // its socket lives on the bind-mounted run dir, so a restarted opensession
       // reconnects. All output goes to the run dir's host.log (host-visible).
       // Env mirrors what launchHostUnit provides, MINUS ~/.backstage.env:
       // the container gets no ambient credentials; MCP servers carry their own
@@ -917,7 +917,7 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
   };
 }
 
-// ── Run journal bookkeeping (backstage side) ──────────────────────────────────
+// ── Run journal bookkeeping (opensession side) ──────────────────────────────────
 
 function recordForSpec(spec: RunHostSpec, sandboxId: string): ActiveRunRecord {
   return {
@@ -1051,7 +1051,7 @@ function makeDockerSandbox(
       writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec);
       let handle: HostHandle | undefined;
       // Per-step marks: a stalled await in this chain is otherwise silent
-      // (2026-07-09: launches ran in-sandbox while backstage never attached).
+      // (2026-07-09: launches ran in-sandbox while opensession never attached).
       const t0 = Date.now();
       const mark = (step: string) =>
         console.log(`[sandbox] launch ${spec.hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`);
@@ -1281,7 +1281,7 @@ export class DockerProvider implements SandboxProvider {
       cwd = (await localResolver.ensure(spec)).cwd;
     }
     // A main checkout must never be bind-mounted rw into a sandbox as its
-    // workspace: shared checkouts (backstage self-hosting) and repo mainlines
+    // workspace: shared checkouts (opensession self-hosting) and repo mainlines
     // stay host-only forever (the sandbox rollout plan, §7.2). This also catches
     // the "falsy worktreeDir defaulted to the main checkout" session shape.
     if (isMainCheckout(cwd)) {
@@ -1422,7 +1422,7 @@ export class DockerProvider implements SandboxProvider {
     }
     if (!state) {
       // Container exists but state was lost — recover what we can from labels.
-      const r = await docker(["inspect", "-f", "{{index .Config.Labels \"backstage.session\"}}", sandboxId]);
+      const r = await docker(["inspect", "-f", "{{index .Config.Labels \"opensession.session\"}}", sandboxId]);
       const sessionId = r.exitCode === 0 ? r.stdout.trim() : "";
       if (!sessionId) return null;
       const runs = await docker(["inspect", "-f", "{{range .Mounts}}{{.Source}}\n{{end}}", sandboxId]);
@@ -1478,10 +1478,10 @@ function readJsonSafe<T>(path: string): T | null {
 }
 
 /**
- * Resume a journaled docker-sandbox run after a backstage restart.
+ * Resume a journaled docker-sandbox run after a opensession restart.
  *
  *  1. If the in-container run host is STILL ALIVE (containers outlive the
- *     backstage process), reattach to its socket — nothing is re-prompted.
+ *     opensession process), reattach to its socket — nothing is re-prompted.
  *  2. If it ended while we were down, deliver its terminal event.
  *  3. Otherwise relaunch in the same sandbox with the standard continuation
  *     prompt against the journaled engine session.
@@ -1504,7 +1504,7 @@ export async function resumeDockerSandboxRun(
   if (oldSpec) {
     const meta = readJsonSafe<RunHostMeta>(`${oldDir}/${HOST_META_NAME}`);
     if (meta?.done) {
-      // Ended while backstage was down: hand the terminal event to the normal
+      // Ended while opensession was down: hand the terminal event to the normal
       // consumption bookkeeping, then clean up.
       try {
         rmSync(oldDir, { recursive: true, force: true });

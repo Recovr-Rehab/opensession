@@ -83,7 +83,7 @@ export function RepoBar({
   const attachable = repos.filter(
     (p) => !p.sharedCheckout && p.id !== primary && !attachedIds.has(p.id),
   );
-  // Switching can target any other repo (incl. shared-checkout like backstage).
+  // Switching can target any other repo (incl. shared-checkout like opensession).
   const switchTargets = repos.filter((p) => p.id !== primary);
 
   async function attach(repo: string) {

@@ -10,14 +10,14 @@ import {
 } from "./ToolCallBlock";
 
 const roots = [
-  { dir: "/home/user/projects/tella-backstage" },
+  { dir: "/home/user/projects/opensession" },
   { dir: "/home/user/worktrees/fusion-x", label: "tella-fusion" },
 ];
 
 // The engine emits lowercase ids with camelCase inputs; transcripts from the
 // Claude-SDK era use "Read"/"file_path". Both have to render the same.
 test("opencode and Claude-SDK file reads summarize identically", () => {
-  const path = "/home/user/projects/tella-backstage/package.json";
+  const path = "/home/user/projects/opensession/package.json";
   expect(toolSummary("read", { filePath: path, limit: 40 }, "Using read", roots)).toBe(
     "package.json"
   );
@@ -47,7 +47,7 @@ test("bash, grep and glob summaries drop their plumbing", () => {
   expect(
     toolSummary(
       "grep",
-      { pattern: "foo", path: "/home/user/projects/tella-backstage/src", include: "*.ts" },
+      { pattern: "foo", path: "/home/user/projects/opensession/src", include: "*.ts" },
       "",
       roots
     )

@@ -1,16 +1,16 @@
 /**
  * Regression pins for the OpenCode engine's on-disk state paths after the
- * Backstage → OpenSession rename (docs/rename-opensession-plan.md).
+ * OpenSession → OpenSession rename (docs/rename-opensession-plan.md).
  *
  * The invariant under test: every state path the engine touches derives from
  * the SAME rename-compat dual-read resolution — never a hardcoded
- * `~/.backstage-*` or `~/.opensession-*` literal. When one module hardcodes a
+ * `~/.opensession-*` or `~/.opensession-*` literal. When one module hardcodes a
  * name while another resolves, the two disagree exactly when it hurts: the
  * docker adapter mounts `<chats>/sandbox-runs/<id>` by the resolved name, and
  * an in-container runner resolving differently (or the image only pre-seeding
  * the other name, leaving docker to create the mount parent ROOT-owned)
  * EACCESes on `mkdir <chats>/opencode` (live failure bks-019f4742-e65c,
- * 2026-07-09, right after the state migration renamed ~/.backstage-* to
+ * 2026-07-09, right after the state migration renamed ~/.opensession-* to
  * ~/.opensession-*).
  *
  * These assert cross-module CONSISTENCY at whatever resolution the current

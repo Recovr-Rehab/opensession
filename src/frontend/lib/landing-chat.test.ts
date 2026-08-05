@@ -12,7 +12,7 @@ function chat(over: Partial<UnifiedSession>): UnifiedSession {
 	return {
 		id: "bks-x",
 		claudeSessionId: null,
-		source: "backstage",
+		source: "opensession",
 		title: "New chat",
 		createdAt: "2026-07-01T00:00:00.000Z",
 		lastActivity: "2026-07-01T00:00:00.000Z",

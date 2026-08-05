@@ -101,7 +101,7 @@ function seedDb() {
     "prt_u1", "msg_1", SES, t0, t0,
     JSON.stringify({
       type: "text",
-      text: "<backstage:context>\nplumbing\n</backstage:context>\n\nRemember the codeword: PELICAN.",
+      text: "<opensession:context>\nplumbing\n</backstage:context>\n\nRemember the codeword: PELICAN.",
     })
   );
   insP.run("prt_syn", "msg_2", SES, t0 + 500, t0 + 500,

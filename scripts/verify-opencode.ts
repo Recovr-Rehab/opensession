@@ -14,7 +14,7 @@
  * Model resolution:
  *   1. argv model, if given.
  *   2. opencode/anthropic/claude-haiku-4-5 when the Anthropic bridge is
- *      enabled (~/.backstage-opencode.json, or a test config via
+ *      enabled (~/.opensession-opencode.json, or a test config via
  *      OPENSESSION_OPENCODE_CONFIG) — this exercises the full bridge path.
  *   3. Otherwise exits with instructions (an API-key provider needs
  *      `opencode auth login` first).
@@ -24,7 +24,7 @@
  *   with /tmp/oc.json = {"enabled":true}                       // meridian (default)
  *                  or = {"enabled":true,"bridge":{"mode":"native"},
  *                        "bridgeAccountIds":["<account id>"]}  // native bridge
- *   (account ids: jq '.accounts[]|{id,name}' ~/.backstage-claude-accounts.json)
+ *   (account ids: jq '.accounts[]|{id,name}' ~/.opensession-claude-accounts.json)
  *
  * Meridian runs get extra assertions: run-level audit events were emitted, no
  * stray opencode/meridian processes survive cleanup (killServer's SIGKILL
@@ -237,7 +237,7 @@ if (meridianMode) {
   console.log("\n── meridian assertions ──");
 
   // 1. Run-level audit events (start + end) landed in today's audit log.
-  const auditFile = `${HOME_DIR}/.backstage-audit/audit-${startedAt.toISOString().slice(0, 10)}.jsonl`;
+  const auditFile = `${HOME_DIR}/.opensession-audit/audit-${startedAt.toISOString().slice(0, 10)}.jsonl`;
   let events: any[] = [];
   try {
     events = readFileSync(auditFile, "utf-8")
@@ -269,7 +269,7 @@ if (meridianMode) {
   // 2. No stray processes: wait out killServer's SIGKILL escalation (the
   //    meridian plugin swallows SIGTERM), then look for opencode/claude
   //    processes younger than this script. Long-lived ones belong to real
-  //    backstage sessions and are not ours.
+  //    opensession sessions and are not ours.
   await new Promise((r) => setTimeout(r, 7_000));
   const elapsedS = Math.ceil((Date.now() - startedAt.getTime()) / 1000) + 5;
   const ps = Bun.spawnSync(["ps", "-eo", "pid,etimes,args"]).stdout.toString();
@@ -308,7 +308,7 @@ if (openaiMode) {
   console.log("\n── openai (ChatGPT subscription) assertions ──");
 
   // 1. Run-level audit events (opencode_openai_run start + end).
-  const auditFile = `${HOME_DIR}/.backstage-audit/audit-${startedAt.toISOString().slice(0, 10)}.jsonl`;
+  const auditFile = `${HOME_DIR}/.opensession-audit/audit-${startedAt.toISOString().slice(0, 10)}.jsonl`;
   let events: any[] = [];
   try {
     events = readFileSync(auditFile, "utf-8")

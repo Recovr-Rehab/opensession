@@ -1112,7 +1112,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					inject({
 						id: msg.id,
 						claudeSessionId: null,
-						source: "backstage",
+						source: "opensession",
 						branch: draft?.branch ?? null,
 						worktreeDir: null,
 						startedBy: user,
@@ -2222,7 +2222,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			session ?? {
 				...src,
 				id,
-				source: "backstage",
+				source: "opensession",
 				claudeSessionId: null,
 				codexThreadId: undefined,
 				title: "New chat",
@@ -2375,7 +2375,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// feels instant. Shared by the tab ×, the tab context menu, and ⌘W.
 	const closeChatNow = async (s: UnifiedSession) => {
 		const neverRan =
-			s.source === "backstage" &&
+			s.source === "opensession" &&
 			!s.claudeSessionId &&
 			!s.codexThreadId &&
 			!s.transcriptPath &&
@@ -3138,7 +3138,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 										tabIndex: 0,
 										onClick: () =>
 											window.dispatchEvent(
-												new Event("backstage:toggle-session-settings"),
+												new Event("opensession:toggle-session-settings"),
 											),
 									}
 									: {})}

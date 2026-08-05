@@ -7,7 +7,7 @@
  *
  * Same shape as the archive / title-override registries: a backstage-owned JSON
  * store keyed by unified session id, applied over the derived value in
- * getAllSessions. Slack/Linear session files are read-only for backstage and the
+ * getAllSessions. Slack/Linear session files are read-only for opensession and the
  * lane is computed at scan time, so the override can't live in the session file.
  */
 import { readFileSync, existsSync } from "fs";

@@ -69,7 +69,7 @@ function nameFor(chats: UnifiedSession[], grouped: boolean): string {
 /** Persist the chat → workspace link (create-if-absent; a concurrent filing wins). */
 function persist(chatId: string, workspaceId: string): void {
   // Lazy import: session-cache imports sessions.ts, which imports this module.
-  // Deliberately NOT touchBackstageSession — that bumps lastActivity, which
+  // Deliberately NOT touchNativeSession — that bumps lastActivity, which
   // would shoot every back-filled chat to the top of the sidebar.
   void import("./session-cache")
     .then(({ updateSessionFile }) =>

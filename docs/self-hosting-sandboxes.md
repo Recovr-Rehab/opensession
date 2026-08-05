@@ -70,7 +70,7 @@ uid-1000 user matching the host user, and the session worktree bind-mounted
 at its **identical host path**. That parity is what lets
 diff/status/push/preview/@-mentions and Claude session resume work unchanged
 (resume state is keyed by cwd). The concrete paths baked into the shipped
-`deploy/sandbox/Dockerfile` (`/home/ubuntu/projects/tella-backstage`,
+`deploy/sandbox/Dockerfile` (`/home/ubuntu/projects/opensession`,
 `/home/ubuntu/.local/bin/claude`, user `ubuntu`) are a **rebuild-time input
 that must match your host**, not a universal truth — if your host's `$HOME`,
 username, or checkout path differs, edit those paths in the Dockerfile and
@@ -216,9 +216,9 @@ to `provider: "local"` (today's host behavior). Env override for the path:
     "my-app": { "provider": "docker", "image": "opensession-runner:latest" }
   },
 
-  // ── Transport (how the in-sandbox run host talks to backstage) ─────
+  // ── Transport (how the in-sandbox run host talks to opensession) ─────
   //  "socket" (default): unix socket in a bind-mounted run dir. Docker only.
-  //  "ws": the sandbox DIALS OUT to backstage's /opensession/run-ws +
+  //  "ws": the sandbox DIALS OUT to opensession's /opensession/run-ws +
   //        /opensession/rpc-ws routes (token-authed, seq/ack replay on
   //        reconnect). Required for remote providers (they force it
   //        regardless of this value); docker can dogfood it.
@@ -360,7 +360,7 @@ not exposed yet.
 ## Public dial-back ingress (remote providers)
 
 Remote sandboxes (Daytona/E2B/Box/Modal/Lambda MicroVMs) run on remote compute and must dial back
-to backstage's `/opensession/run-ws/<hostId>` and `/opensession/rpc-ws`
+to opensession's `/opensession/run-ws/<hostId>` and `/opensession/rpc-ws`
 WebSocket routes from the **public internet**. The main server binds the
 tailnet and carries the whole app — never expose it. Instead,
 `src/server/public-ingress.ts` runs a **second, isolated Bun.serve** when

@@ -1,7 +1,7 @@
 /**
  * Automations: cron-scheduled Michael sessions, Devin-style.
  * Records live in ~/.opensession-automations/<id>.json; each run creates a
- * normal backstage session so it shows up in the sessions list and UI.
+ * normal opensession session so it shows up in the sessions list and UI.
  */
 import { randomUUIDv7 } from "bun";
 import { OPENSESSION_CHATS_DIR , newSessionId} from "./paths";
@@ -17,7 +17,7 @@ import { createWorktree, ensureAskCheckout, getRepo, listWorktrees, REPOS, workt
 import { engineSessionPatch } from "./sessions";
 import { updateSessionFile } from "./session-cache";
 import { resolvePlainWorkspace } from "./workspace-resolve";
-import type { BackstageSessionFile } from "./types";
+import type { NativeSessionFile } from "./types";
 import { stateDir } from "./paths";
 import { linkThreadInIndex, createSlackPostScanner } from "./slack-links";
 import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
@@ -103,7 +103,7 @@ export interface Automation {
    * Registered repo id (see worktree.ts REPOS) this automation works against.
    * Omitted = tella-fusion (the historical default). Ask mode reads the repo's
    * main checkout; code mode gets an isolated worktree — for shared-checkout
-   * repos (backstage) explicitly isolated, never the live checkout.
+   * repos (opensession) explicitly isolated, never the live checkout.
    */
   repo?: string;
   enabled: boolean;
@@ -739,7 +739,7 @@ export const DEFAULT_OPENCODE_AUTOMATION_MODEL = "opencode/openai/gpt-5.6-sol";
  * tier ids; the flip to opencode happens here at dispatch, so it covers every
  * automation (and future ones) uniformly.
  *
- * Fail-safe: when the Anthropic bridge is disabled (~/.backstage-opencode.json)
+ * Fail-safe: when the Anthropic bridge is disabled (~/.opensession-opencode.json)
  * claude tiers keep their original id and run on the claude engine as before —
  * a config toggle must degrade automations to the old engine, not break them.
  * The least-privilege deny-set is enforced on every engine either way
@@ -773,8 +773,8 @@ export async function runAutomation(
     trigger?: "cron" | "webhook" | "manual" | "event";
     eventContext?: string;
     /**
-     * Pre-generated backstage session id. Lets a caller post UI/Slack controls
-     * that reference the session (e.g. an Open-in-Backstage link and a Stop
+     * Pre-generated opensession session id. Lets a caller post UI/Slack controls
+     * that reference the session (e.g. an Open-in-OpenSession link and a Stop
      * button) before the run starts, instead of waiting for onSessionCreated.
      */
     osSessionId?: string;
@@ -803,7 +803,7 @@ export async function runAutomation(
     // The automation's repo (instance default when omitted). Ask mode reads the repo's
     // pinned ask checkout (default branch — never the mutable main checkout);
     // code mode gets an isolated worktree — `isolated` matters for
-    // shared-checkout repos (backstage), where an unattended run must never
+    // shared-checkout repos (opensession), where an unattended run must never
     // work in the live checkout: it ships a PR and a human merges.
     const repo = getRepo(automation.repo);
     let cwd = "";
@@ -923,7 +923,7 @@ export async function runAutomation(
     let effectiveModel = runModel;
     let selectedModel = runModel;
     let effectiveProvider = providerFor(effectiveModel);
-    const modelHistory: NonNullable<BackstageSessionFile["modelHistory"]> = [];
+    const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
     // Slack messages this run posts (via the slack MCP, or via bash+curl
     // announcing a SLACK_MSG_POSTED marker) — captured from the tool stream so
     // a human reply in one of those threads routes back to THIS session
@@ -957,7 +957,7 @@ export async function runAutomation(
     const persistSession = (engineSessionId: string) =>
       updateSessionFile(bksId, (data) => {
         // Widen to Partial: the file may not exist yet (create-if-absent).
-        const existing: Partial<BackstageSessionFile> = data;
+        const existing: Partial<NativeSessionFile> = data;
         return {
           id: bksId,
           claudeSessionId: "",
@@ -1177,7 +1177,7 @@ export function setEventSessionCallback(cb: (sessionId: string) => void): void {
 export function retriggerAutomationSession(
   sessionId: string,
 ): { ok: true; name: string } | { ok: false; reason: string } {
-  let session: BackstageSessionFile;
+  let session: NativeSessionFile;
   try {
     session = JSON.parse(
       readFileSync(`${SESSIONS_DIR}/${sessionId}.json`, "utf-8"),

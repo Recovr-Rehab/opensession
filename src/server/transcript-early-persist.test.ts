@@ -50,7 +50,7 @@ describe("intake-time user-line persist", () => {
       const second = store.appendTranscriptEvents(
         SESSION,
         userEntries(
-          "<backstage:context>\nhandoff\n</backstage:context>\n\nfix the mask selection",
+          "<opensession:context>\nhandoff\n</backstage:context>\n\nfix the mask selection",
           uuid
         )
       );

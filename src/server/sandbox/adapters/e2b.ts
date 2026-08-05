@@ -26,7 +26,7 @@
  *  - ports(): `https://` + getHost(port) → PortMap `{url}` entries (E2B's
  *    public-by-default preview domain).
  *
- * The SDK is imported lazily inside methods so backstage boot doesn't load it
+ * The SDK is imported lazily inside methods so opensession boot doesn't load it
  * unless the provider is used. Unconfigured (no apiKey in the config's `e2b`
  * block or E2B_API_KEY) fails loudly at ensure-time.
  */
@@ -163,7 +163,7 @@ export class E2bProvider implements SandboxProvider {
       console.log(`[sandbox:e2b] creating sandbox for ${spec.sessionId}`);
       sbx = await SandboxCls.create(sandboxConfig().e2b?.template || DEFAULT_TEMPLATE, {
         apiKey,
-        metadata: { [SESSION_META]: spec.sessionId, backstageSandbox: "1" },
+        metadata: { [SESSION_META]: spec.sessionId, opensessionSandbox: "1" },
         timeoutMs: idleMs(),
       });
     }

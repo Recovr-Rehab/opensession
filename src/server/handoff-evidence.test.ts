@@ -120,7 +120,7 @@ function session(over: Partial<UnifiedSession> = {}): UnifiedSession {
 		id: "bks-child",
 		mode: "code",
 		worktreeDir: "/wt/child",
-		repo: "backstage",
+		repo: "opensession",
 		branch: "feat/x",
 		isRunning: false,
 		...over,

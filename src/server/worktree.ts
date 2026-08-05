@@ -153,7 +153,7 @@ async function seedAndInstallWorktree(
 
 export async function installWorktreeDeps(repo: Repo, wtPath: string, branchLabel: string): Promise<void> {
   try {
-    const repoSetup = ["opensession", "backstage"]
+    const repoSetup = ["opensession", "opensession"]
       .map((dir) => `${wtPath}/.${dir}/setup.sh`)
       .find((path) => existsSync(path));
     if (repoSetup) {
@@ -226,7 +226,7 @@ export function ensureScratchDir(key: string): string {
  * non-shared-checkout repo instead gets one `<wtPrefix>-ask-checkout`
  * worktree, detached at origin/<defaultBranch>, that all its ask sessions
  * share (they carry no Write/Edit and a read-only bash allowlist, so
- * concurrent readers are safe). Shared-checkout repos (backstage) keep the
+ * concurrent readers are safe). Shared-checkout repos (opensession) keep the
  * live main checkout — self-hosting sessions must read the running code —
  * unless config `selfDev: "worktree"` opts the instance out of self-hosting
  * semantics, in which case they get the pinned ask checkout like everyone else.
@@ -283,7 +283,7 @@ export async function removeWorktree(branch: string, repoId?: string): Promise<v
     const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
     // Stop any running dev server before removing the directory — reads the
     // PGID from .ports/dev-pgid (written by ensure-up.sh) so it works even
-    // after a backstage restart or when the server was started by an agent.
+    // after a opensession restart or when the server was started by an agent.
     try { await stopPreview(wtPath); } catch {}
     await $`git -C ${repo.repo} worktree remove ${wtPath} --force`.quiet();
   } catch (e) {
@@ -578,7 +578,7 @@ export async function createWorktreeForFollowup(
  * `-os` copy), so commits/pushes land straight on the PR. Reuses an
  * existing worktree for the branch when one exists; prefers the local branch
  * (it may be ahead of origin), falling back to a fresh tracking branch off
- * `origin/<branch>`. Works for shared-checkout repos too (backstage): a PR
+ * `origin/<branch>`. Works for shared-checkout repos too (opensession): a PR
  * branch must never be checked out in the live main checkout, so it always
  * gets an isolated worktree.
  */
@@ -731,7 +731,7 @@ export async function createWorktree(
 ): Promise<string> {
   const repo = getRepo(repoId);
 
-  // Shared-checkout repos (backstage) don't get a per-session worktree: the
+  // Shared-checkout repos (opensession) don't get a per-session worktree: the
   // session works in the live main checkout on the default branch so its edits
   // hot-reload in the running server. No branch is created or switched — every
   // session stays on the default branch and commits there.
@@ -805,7 +805,7 @@ export async function createWorktree(
  * Resolve an isolated worktree for attaching a secondary repo to a session,
  * reusing an existing worktree for the branch when one is already checked out.
  * Returns the repo id, branch, and worktree dir. Shared-checkout repos
- * (backstage) can't be attached as an isolated worktree — they'd hand back the
+ * (opensession) can't be attached as an isolated worktree — they'd hand back the
  * live main checkout, so reject them. Under config `selfDev: "worktree"`,
  * createWorktree builds a real isolated tree for them, so the guard lifts.
  */

@@ -1,12 +1,12 @@
 /**
  * slack-links — the thread ↔ session index for Slack threads anchored by
- * messages backstage sessions posted (typically automation runs), so a human
+ * messages opensession sessions posted (typically automation runs), so a human
  * reply in one of those threads drives the posting session instead of
- * spawning a new one. Lives here rather than in the Slack agent so backstage
+ * spawning a new one. Lives here rather than in the Slack agent so opensession
  * modules can populate it without importing the agent (same reasoning as
  * session-control.ts).
  *
- * The session file (`BackstageSessionFile.slackThreads`) is the source of
+ * The session file (`NativeSessionFile.slackThreads`) is the source of
  * truth; this in-memory index is a fast reverse-lookup rebuilt on startup and
  * kept in sync as threads are linked. It's parked on globalThis so a
  * `bun --hot` reload keeps it.
@@ -22,7 +22,7 @@ const sessToThreads: Map<string, Set<string>> = (g.__slackLinkSessToThreads ??= 
 
 const threadKey = (channel: string, threadTs: string) => `${channel}:${threadTs}`;
 
-/** The backstage session that posted the message anchoring this thread, if any. */
+/** The opensession session that posted the message anchoring this thread, if any. */
 export function sessionForThread(
 	channel: string,
 	threadTs: string,

@@ -24,7 +24,7 @@ import { gitIdentityFor } from "./shared/user-mappings";
 import { createWorktree, getRepo, reviveWorktree, worktreeHeadBranch } from "./worktree";
 import { updateSessionFile } from "./session-cache";
 import { attachSessionWatchersToEngineTranscript } from "./run-session";
-import type { BackstageSessionFile } from "./types";
+import type { NativeSessionFile } from "./types";
 import { shouldPersistModelSwitch } from "./run-events";
 import { newSessionId } from "./paths";
 
@@ -74,7 +74,7 @@ function buildGoalWakePrompt(goal: Goal, wake: number, cwd: string): string {
 	if (goal.mode === "code") {
 		const repo = getRepo(goal.repo);
 		if (repo.sharedCheckout) {
-			// Shared-checkout repos (backstage) have NO isolated worktree — `cwd` is
+			// Shared-checkout repos (opensession) have NO isolated worktree — `cwd` is
 			// the live main checkout the running server and every other session share.
 			// A `git checkout -B`/`reset`/`pull` here yanks the working tree out from
 			// under everyone and orphans their un-pushed commits, so forbid it.
@@ -139,7 +139,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 		const persistSession = (engineSessionId: string) =>
 			updateSessionFile(bksId, (data) => {
 				// Widen to Partial: the file may not exist yet (create-if-absent).
-				const existing: Partial<BackstageSessionFile> = data;
+				const existing: Partial<NativeSessionFile> = data;
 				return {
 					id: bksId,
 					claudeSessionId: "",
@@ -285,7 +285,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 // Goals ticker: wake due goals (self-pacing, so this only fires them).
 // Guarded so a hot reload doesn't stack a second interval. Dev instances
 // never wake goals (real engine runs — see src/server/dev-mode.ts).
-if (!g.__backstageBooted && !isLocalProfile() && !isDevInstance()) {
+if (!g.__opensessionBooted && !isLocalProfile() && !isDevInstance()) {
 	setInterval(() => {
 		const now = Date.now();
 		for (const goal of listGoals()) {

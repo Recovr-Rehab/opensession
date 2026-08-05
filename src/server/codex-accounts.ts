@@ -1,5 +1,5 @@
 /**
- * Codex account pool for backstage runs — the OpenAI-side sibling of
+ * Codex account pool for opensession runs — the OpenAI-side sibling of
  * claude-accounts.ts.
  *
  * Two credential kinds:

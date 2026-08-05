@@ -18,7 +18,7 @@ export interface SkillEntry {
   name: string;
   /** One-line description from frontmatter (or first content line). */
   description: string;
-  /** Where it came from: the engine itself, user config, the session's checkout, or backstage. */
+  /** Where it came from: the engine itself, user config, the session's checkout, or opensession. */
   source: "system" | "user" | "project" | "builtin";
 }
 
@@ -41,7 +41,7 @@ const SYSTEM_SKILLS: SkillEntry[] = [
 ];
 
 /**
- * Backstage's own slash commands (handled by handleSlashCommand in backstage.ts
+ * OpenSession's own slash commands (handled by handleSlashCommand in opensession.ts
  * before anything reaches the runner). Listed here so they show up in the
  * composer's "/" autocomplete alongside file-based skills/commands — keep in
  * sync with the handler and its /help text.
@@ -78,7 +78,7 @@ const BUILTIN_COMMANDS: SkillEntry[] = [
   },
   {
     name: "help",
-    description: "List backstage slash commands",
+    description: "List opensession slash commands",
     source: "builtin",
   },
 ];
@@ -176,7 +176,7 @@ function loadSkills(worktreeDir?: string, includeBuiltins = false): SkillEntry[]
     // repos that symlink the two, a distinct one in repos that don't.
     ...(worktreeDir ? readSkillsDir(join(worktreeDir, ".agents", "skills"), "project") : []),
     ...(worktreeDir ? readCommandsDir(join(worktreeDir, ".agents", "commands"), "project") : []),
-    // Last so they win dedupe: backstage intercepts these names before any
+    // Last so they win dedupe: opensession intercepts these names before any
     // same-named file skill could run, so the menu should describe the builtin.
     // Only for existing-session composers (includeBuiltins) — an opening prompt
     // in the new-session palette never passes through handleSlashCommand.

@@ -35,7 +35,7 @@ export async function handleDeployRoutes(
   const { req, url, path } = ctx;
 
   // ── /d/<name>/… reverse proxy ────────────────────────────────────────────
-  const proxied = path.match(/^\/(?:backstage\/)?d\/([a-z0-9-]+)(\/.*)?$/);
+  const proxied = path.match(/^\/(?:opensession\/)?d\/([a-z0-9-]+)(\/.*)?$/);
   if (proxied) {
     const name = proxied[1]!;
     const rest = proxied[2] ?? "";

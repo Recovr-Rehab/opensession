@@ -41,7 +41,7 @@ import type {
   SlackSessionFile,
   LinearSessionFile,
   CLISessionFile,
-  BackstageSessionFile,
+  NativeSessionFile,
   SessionPrRef,
   TranscriptEntry,
   OsReviewSummary,
@@ -474,7 +474,7 @@ export function trailingUserTexts(session: {
 export function engineSessionPatch(
   provider: "claude" | "codex" | "opencode",
   engineSessionId: string
-): Partial<BackstageSessionFile> {
+): Partial<NativeSessionFile> {
   if (provider === "codex") return { codexThreadId: engineSessionId || undefined };
   // OpenCode ids get their own slot (readers prefer it) AND still mirror into
   // the claude slot, the historical ride every pre-existing code path — and
@@ -614,10 +614,10 @@ function getFileMtime(path: string): string {
 }
 
 /**
- * Overlay backstage-owned extras onto a slack/linear-scanned session.
- * touchBackstageSession writes fields like walkthrough/linkedPrs keyed by the
- * UNIFIED id into ~/.opensession-chats/<id>.json — for non-backstage sessions
- * that sidecar has no `id` field, so scanBackstageSessions skips it and the
+ * Overlay natively-owned extras onto a slack/linear-scanned session.
+ * touchNativeSession writes fields like walkthrough/linkedPrs keyed by the
+ * UNIFIED id into ~/.opensession-chats/<id>.json — for non-opensession sessions
+ * that sidecar has no `id` field, so scanNativeSessions skips it and the
  * fields silently vanished from the unified view (publish_walkthrough on a
  * Slack session kept answering "no walkthrough on session" right after
  * persisting one — tellahq/tella-mac#71, 2026-07-26).
@@ -625,7 +625,7 @@ function getFileMtime(path: string): string {
 function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
   const path = `${SESSIONS_DIR}/${session.id}.json`;
   if (!existsSync(path)) return session;
-  const data = readJsonSafe<BackstageSessionFile>(path);
+  const data = readJsonSafe<NativeSessionFile>(path);
   if (!data) return session;
   if (data.walkthrough) session.walkthrough = data.walkthrough;
   if (data.linkedPrs?.length) session.linkedPrs = data.linkedPrs;
@@ -755,13 +755,13 @@ function scanLinearSessions(): UnifiedSession[] {
   return sessions;
 }
 
-function scanBackstageSessions(): UnifiedSession[] {
+function scanNativeSessions(): UnifiedSession[] {
   if (!existsSync(SESSIONS_DIR)) return [];
   const sessions: UnifiedSession[] = [];
 
   for (const file of readdirSync(SESSIONS_DIR)) {
     if (!file.endsWith(".json") || SKIP_FILES.has(file)) continue;
-    const data = readJsonSafe<BackstageSessionFile>(
+    const data = readJsonSafe<NativeSessionFile>(
       `${SESSIONS_DIR}/${file}`
     );
     // Skip non-session bookkeeping files in this dir (active-runs.json,
@@ -772,7 +772,7 @@ function scanBackstageSessions(): UnifiedSession[] {
     sessions.push({
       id: data.id,
       claudeSessionId: data.claudeSessionId,
-      source: "backstage",
+      source: "opensession",
       branch: data.branch || null,
       worktreeDir: data.worktreeDir || null,
       startedBy: data.createdBy,
@@ -1717,7 +1717,7 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
  * first teammate assignee (sessions instruct the agent to `--assignee` the
  * requester); with neither, `person` is null and the frontend attributes
  * through the session that opened them. Powers the sidebar's Open PRs
- * section, which must show a person's PRs even when no Backstage session
+ * section, which must show a person's PRs even when no OpenSession session
  * exists for them — e.g. PRs opened from another tool (Conductor, local CLI)
  * under their own account.
  */
@@ -1931,17 +1931,17 @@ export function getOpenPrs(): OpenPrEntry[] {
 export function getAllSessions(): UnifiedSession[] {
   const slackSessions = scanSlackSessions();
   const linearSessions = scanLinearSessions();
-  const backstageSessions = scanBackstageSessions();
+  const nativeSessions = scanNativeSessions();
   const runningPids = getRunningPids();
 
   // Merge all sessions, deduplicating by engine id (Claude session or Codex
-  // thread). Keep the one with richer data (backstage > linear > slack), and
+  // thread). Keep the one with richer data (opensession > linear > slack), and
   // preserve dropped ids as aliases for deep links.
   const byEngineId = new Map<string, UnifiedSession>();
   const allSessions: UnifiedSession[] = [];
 
   for (const session of [
-    ...backstageSessions,
+    ...nativeSessions,
     ...linearSessions,
     ...slackSessions,
   ]) {
@@ -1956,7 +1956,7 @@ export function getAllSessions(): UnifiedSession[] {
         existing.isRunning = true;
       }
       // Keep the dropped ID as an alias so deep links to it (e.g. the
-      // Slack "Open in Backstage" button, which uses slack-<channel>-<ts>)
+      // Slack "Open in OpenSession" button, which uses slack-<channel>-<ts>)
       // still resolve to the surviving session.
       existing.aliasIds = [...(existing.aliasIds || []), session.id];
       for (const aliasKey of engineKeys) byEngineId.set(aliasKey, existing);
@@ -2187,7 +2187,7 @@ export function deleteSession(session: UnifiedSession): void {
       if (existsSync(path)) unlinkSync(path);
       break;
     }
-    case "backstage": {
+    case "opensession": {
       const path = `${SESSIONS_DIR}/${session.id}.json`;
       if (existsSync(path)) unlinkSync(path);
       break;

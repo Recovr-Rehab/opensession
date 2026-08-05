@@ -19,7 +19,7 @@
  * The ticker sweeps every 10 minutes (first sweep ~90s after boot), bounded to
  * MECH_PER_SWEEP sessions per pass so the initial backfill spreads out instead
  * of stalling the event loop. Hot reloads keep the interval singleton via the
- * __backstageBooted guard, same as goal-runner's ticker.
+ * __opensessionBooted guard, same as goal-runner's ticker.
  */
 
 import { homeDir } from "./paths";
@@ -334,7 +334,7 @@ export async function sweepSessionIndex(): Promise<{
 // Sweeper ticker — one interval process-wide; hot reloads must not stack a
 // second one (same guard as goal-runner's ticker). Dev instances skip it:
 // distillation runs engine one-shots and writes the search db.
-if (!g.__backstageBooted && !isLocalProfile() && !isDevInstance()) {
+if (!g.__opensessionBooted && !isLocalProfile() && !isDevInstance()) {
 	setTimeout(() => void sweepSessionIndex().catch(() => {}), FIRST_SWEEP_DELAY_MS);
 	setInterval(() => void sweepSessionIndex().catch(() => {}), SWEEP_MS);
 }

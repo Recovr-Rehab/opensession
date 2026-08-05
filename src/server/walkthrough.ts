@@ -26,7 +26,7 @@ import type {
   WalkthroughShot,
 } from "./types";
 import { UPLOADS_DIR } from "./uploads";
-import { findSession, touchBackstageSession } from "./session-cache";
+import { findSession, touchNativeSession } from "./session-cache";
 import { resolvePrTarget } from "./session-repos";
 import { getPrDetails, updatePrBody } from "./pr-info";
 import { configuredServer } from "./config";
@@ -124,7 +124,7 @@ export async function publishWalkthrough(
   }
   if (shots.length) walkthrough.shots = shots;
 
-  touchBackstageSession(sessionId, { walkthrough });
+  touchNativeSession(sessionId, { walkthrough });
   // Pass the walkthrough we just built: the unified-session re-read must not
   // be the thing that decides whether it exists (slack/linear sessions only
   // surface sidecar fields via the overlay in sessions.ts — belt and braces).

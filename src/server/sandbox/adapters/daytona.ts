@@ -10,11 +10,11 @@
  * or a self-hosted Helm/K8s install).
  *
  * Shape (shared machinery in ./bootstrap.ts):
- *  - ensure(): find the session's sandbox by label `backstage.session=<id>`
+ *  - ensure(): find the session's sandbox by label `opensession.session=<id>`
  *    (create with the config's resources otherwise), bootstrap the runner
  *    payload, clone the workspace INSIDE the sandbox (always volume-style —
  *    never a host mount; `cloneCredential` does the auth). Idle-stop uses
- *    Daytona's NATIVE autoStopInterval (minutes) — no backstage sweep needed.
+ *    Daytona's NATIVE autoStopInterval (minutes) — no opensession sweep needed.
  *  - launchRun(): HOST_ENTRY in-sandbox via a Daytona process session
  *    (runAsync — survives this call and this process), WS transport back to
  *    `callbackBaseUrl` (remote sandboxes have no socket option).
@@ -27,9 +27,9 @@
  *  - get()/destroy(): by sandbox id; destroy deletes the sandbox and with it
  *    the workspace — push your work (volume-mode contract).
  *
- * The SDK is imported lazily inside methods so backstage boot never pays its
+ * The SDK is imported lazily inside methods so opensession boot never pays its
  * dependency tree (otel/aws-sdk) unless the provider is actually used.
- * Unconfigured (no apiKey in ~/.backstage-sandbox.json `daytona` block or
+ * Unconfigured (no apiKey in ~/.opensession-sandbox.json `daytona` block or
  * DAYTONA_API_KEY) fails loudly at ensure-time.
  */
 
@@ -68,7 +68,7 @@ import {
   type PrewarmAdapter,
 } from "../prewarm";
 
-const SESSION_LABEL = "backstage.session";
+const SESSION_LABEL = "opensession.session";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
 /** Delimits stdout from stderr inside the merged executeCommand output. */
 const ERR_DELIM = "__OS_STDERR_7f3a__";
@@ -168,7 +168,7 @@ export interface RemotePtyHandle {
  * exec channels — so the shell had no prompt/echo and the tab looked dead
  * (2026-07-09). The SDK PTY is a real tty: prompt, echo, and resize all work,
  * and there's no per-shell token to mint/revoke. The socket terminates at
- * backstage; the browser still only speaks the tailnet-gated session WS.
+ * opensession; the browser still only speaks the tailnet-gated session WS.
  */
 export async function daytonaPtySession(
   sandboxId: string,
@@ -268,7 +268,7 @@ export class DaytonaProvider implements SandboxProvider {
           if (cand && stateOf(cand) !== "gone") {
             // setLabels REPLACES the label map — the prewarm labels vanish
             // here, which is what retires it from the pool's orphan audit.
-            await cand.setLabels({ [SESSION_LABEL]: spec.sessionId, "backstage.sandbox": "1" });
+            await cand.setLabels({ [SESSION_LABEL]: spec.sessionId, "opensession.sandbox": "1" });
             // Swap the pool's short-TTL backstops for the session lifecycle.
             await cand.setAutostopInterval(cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES);
             await cand.setAutoDeleteInterval(-1);
@@ -296,7 +296,7 @@ export class DaytonaProvider implements SandboxProvider {
       sbx = await client.create(
         {
           ...(cfg.daytona?.snapshot ? { snapshot: cfg.daytona.snapshot } : {}),
-          labels: { [SESSION_LABEL]: spec.sessionId, "backstage.sandbox": "1" },
+          labels: { [SESSION_LABEL]: spec.sessionId, "opensession.sandbox": "1" },
           autoStopInterval: cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES,
         } as any,
         { timeout: 300 },
@@ -402,7 +402,7 @@ export class DaytonaProvider implements SandboxProvider {
  * (same org snapshot — sizing is create-time, so an adopted sandbox must
  * already be the right size) but carry the PREWARM labels instead of a
  * session label, plus provider-side autoStop/autoDelete backstops so a
- * crashed backstage can't leak paid compute. Loaded lazily by prewarm.ts —
+ * crashed opensession can't leak paid compute. Loaded lazily by prewarm.ts —
  * this module statically imports claimPrewarm from there, so the reverse
  * edge must stay dynamic.
  */

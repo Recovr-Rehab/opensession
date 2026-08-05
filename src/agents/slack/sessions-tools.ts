@@ -1,11 +1,11 @@
 /**
  * opensession-sessions — an in-process MCP server that lets Michael see and steer
- * every other Backstage session from Slack: what's running, what's waiting on a
+ * every other OpenSession session from Slack: what's running, what's waiting on a
  * question, and the controls to answer / message / cancel / spin up sessions.
  *
  * Like opensession-admin and opensession-github, this is an in-process SDK MCP wired
  * ONLY into interactive Slack runs (handlers.ts processMessage). Its tools call
- * the session-control registry (src/server/session-control.ts), which backstage.ts
+ * the session-control registry (src/server/session-control.ts), which opensession.ts
  * populates at startup with the same live state + helpers the WebSocket handlers
  * use — so steering a run from here behaves exactly like a human typing in the
  * web UI. It is never wired into automation runs (untrusted ticket text must not
@@ -36,7 +36,7 @@ import { OPENSESSION_CHATS_DIR } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { migrateSessionEngine } from "../../server/migrate-engine";
 import { resolveSessionRepoContext } from "../../server/session-repos";
-import type { BackstageSessionFile, TranscriptEntry } from "../../server/types";
+import type { NativeSessionFile, TranscriptEntry } from "../../server/types";
 
 export interface SessionsToolContext {
   /** Display name credited when this session messages/creates others. */
@@ -224,8 +224,8 @@ export async function workerReportPayload(
       deps?.stampReported ??
       ((id: string) => {
         void import("../../server/session-cache")
-          .then(({ touchBackstageSession }) =>
-            touchBackstageSession(id, { lastReportToParentAt: new Date().toISOString() }),
+          .then(({ touchNativeSession }) =>
+            touchNativeSession(id, { lastReportToParentAt: new Date().toISOString() }),
           )
           .catch(() => {});
       });
@@ -249,7 +249,7 @@ export async function workerReportPayload(
 // implementation); what it adds is the task contract: return {taskId, url}
 // immediately, poll with task_status, stop with cancel_task — plus a spawn-
 // depth loop guard and an automation refusal (defense-in-depth: michael-
-// sessions is never wired into automation runs in the first place; backstage.ts
+// sessions is never wired into automation runs in the first place; opensession.ts
 // gates inProcessMcp on !isAutomationSession and admin-tools/handlers wire it
 // only for interactive Slack runs).
 // ---------------------------------------------------------------------------
@@ -262,13 +262,13 @@ export const MAX_SPAWN_DEPTH = 2;
  *  unit-testable without a live server or real session files. */
 export interface SpawnTaskDeps {
   control: SessionControl;
-  /** Read a backstage session file by id; null when absent/unreadable. */
-  readSessionFile: (id: string) => Partial<BackstageSessionFile> | null;
+  /** Read a opensession session file by id; null when absent/unreadable. */
+  readSessionFile: (id: string) => Partial<NativeSessionFile> | null;
   /** Persist spawnDepth onto the child's session file (async, best-effort). */
   stampSpawnDepth: (id: string, depth: number) => void | Promise<void>;
 }
 
-function defaultReadSessionFile(id: string): Partial<BackstageSessionFile> | null {
+function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
   try {
     const path = `${OPENSESSION_CHATS_DIR}/${id}.json`;
     if (!existsSync(path)) return null;
@@ -280,10 +280,10 @@ function defaultReadSessionFile(id: string): Partial<BackstageSessionFile> | nul
 
 /**
  * Persist spawnDepth on the child's session file. The file is first written at
- * the opening run's `init` event (backstage.ts persist(), which builds it from
+ * the opening run's `init` event (opensession.ts persist(), which builds it from
  * scratch — anything written earlier would be clobbered), so poll until it
  * exists and then MERGE the field; every later update goes through
- * touchBackstageSession-style merges, so it sticks. The in-memory depth map
+ * touchNativeSession-style merges, so it sticks. The in-memory depth map
  * (below) covers the guard in the meantime.
  */
 async function defaultStampSpawnDepth(id: string, depth: number): Promise<void> {
@@ -579,7 +579,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
       ),
       tool(
         "send_to_session",
-        "Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. Slash commands are handled by backstage itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.",
+        "Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.",
         {
           id: z.string().describe("The target session's id."),
           message: z.string().describe("The message to deliver."),
@@ -708,7 +708,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
         "migrate_session_engine",
         "Migrate an existing session onto the OpenCode engine by flipping its model to an opencode/* id (e.g. opencode/anthropic/claude-sonnet-5). Does NOT start a run: the session's NEXT prompt builds a transcript handoff from its claude/codex history and continues on a fresh OpenCode session — file, workspace, branch, title and UI history all stay. Refuses automation-owned sessions (the opencode engine hard-gates automations off) and sessions that are mid-run.",
         {
-          sessionId: z.string().describe("The backstage session id to migrate, e.g. 'bks-…'."),
+          sessionId: z.string().describe("The opensession session id to migrate, e.g. 'bks-…'."),
           model: z
             .string()
             .describe("Target opencode model id: opencode/<provider>/<model>, e.g. opencode/anthropic/claude-sonnet-5."),

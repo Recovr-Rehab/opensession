@@ -64,7 +64,7 @@ struct RepoTile: View {
     var round = false
 
     static func label(for name: String) -> String {
-        name == "backstage" ? "opensession" : name
+        name == "backstage" ? "opensession" : name  // legacy repo id on older instances
     }
 
     private var letter: String {

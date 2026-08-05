@@ -5,7 +5,7 @@
  * between ALL users — there is no per-user scoping. Each note is a Yjs CRDT
  * document so many people can edit it live without last-write-wins clobbering
  * (the editing/sync wiring mirrors session collaboration: see noteWatchers in
- * backstage.ts).
+ * opensession.ts).
  *
  * Each note persists as two files keyed by a slug id:
  *   <id>.ydoc — binary `Y.encodeStateAsUpdate` (the source of truth for collab)

@@ -3,9 +3,9 @@ import { PRODUCT_NAME, sessionSourceLabel } from "./brand";
 
 describe("sessionSourceLabel", () => {
 	test("shows the product's own UI under the product name", () => {
-		// `backstage` is the pre-rename id for "started here", and leaked into
+		// `opensession` is the pre-rename id for "started here", and leaked into
 		// the archived list as a literal chip.
-		expect(sessionSourceLabel("backstage")).toBe(PRODUCT_NAME.toLowerCase());
+		expect(sessionSourceLabel("opensession")).toBe(PRODUCT_NAME.toLowerCase());
 	});
 
 	test("leaves every other origin alone", () => {

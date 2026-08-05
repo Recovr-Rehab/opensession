@@ -33,8 +33,8 @@ import type { ImageInput } from "./run-events";
 import { stripContext } from "./prompt-context";
 import {
   extractAssistantVideos,
-  extractBackstageImages,
-  extractBackstageVideos,
+  extractImageMarkers,
+  extractVideoMarkers,
   extractImplicitMedia,
   parseJsonlLines,
 } from "./jsonl-parser";
@@ -809,7 +809,7 @@ export function opencodeTranscriptUuids(ocSessionId: string): Set<string> {
 /**
  * Append transcript lines for engine activity the live mirror missed — the
  * restart gap, where a turn kept executing inside a detached `opencode serve`
- * while no backstage process was around to pump its events (reattach path,
+ * while no opensession process was around to pump its events (reattach path,
  * opencode-runner.tryReattachOpencodeRun). Assistant text and tool lines
  * only: their uuids are stable opencode part ids in BOTH writers (the live
  * SSE mirror and the SQLite reader), so uuid-dedup is sound; user lines are
@@ -923,8 +923,8 @@ const LOCAL_IMAGE_MIMES = new Set([
 
 /**
  * True when this runner is a SANDBOXED run host. Such a host dials back to
- * backstage over the WS transport (OPENSESSION_RUN_WS_URL); a local host serves a unix
- * socket and shares backstage's filesystem. The distinction matters for any
+ * opensession over the WS transport (OPENSESSION_RUN_WS_URL); a local host serves a unix
+ * socket and shares opensession's filesystem. The distinction matters for any
  * path we hand to the browser: only a local host's paths are reachable by the
  * media route. Read per call rather than at module load so tests can flip it.
  */
@@ -1169,7 +1169,7 @@ export function opencodeTurnLooksCompleted(
 /**
  * The session's transcript as TranscriptEntry[] — user/assistant text plus
  * tool_use/tool_result pairs, in message order. Synthetic parts (opencode's
- * own injected text) are skipped, and `<backstage:context>` fences (engine
+ * own injected text) are skipped, and `<opensession:context>` fences (engine
  * handoffs, repos notes) are stripped from user text exactly like the claude
  * jsonl parser does, so the UI shows only what the human typed.
  */
@@ -1295,8 +1295,8 @@ export function readOpencodeTranscript(
             // ffmpeg etc.) must survive the refresh re-parse exactly like
             // they do on the live stream (jsonl-parser does the same for
             // the claude engine's tool results).
-            const markerVideos = extractBackstageVideos(resultText);
-            const markerImages = extractBackstageImages(resultText);
+            const markerVideos = extractVideoMarkers(resultText);
+            const markerImages = extractImageMarkers(resultText);
             const implicit = extractImplicitMedia(resultText);
             const allImages = [
               ...new Set([...images, ...markerImages, ...implicit.images]),

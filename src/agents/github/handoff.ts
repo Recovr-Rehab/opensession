@@ -1,7 +1,7 @@
 /**
  * Review → owning-session handoff. When an automatic PR review finishes
  * unsatisfied (blocking findings, or open findings at low confidence), the
- * findings are delivered straight into the live Backstage session working on
+ * findings are delivered straight into the live OpenSession session working on
  * that PR's branch — the agent that wrote the code fixes it with full context,
  * no `os-auto-fix` label needed. Its push re-triggers the normal review cycle,
  * closing the loop.

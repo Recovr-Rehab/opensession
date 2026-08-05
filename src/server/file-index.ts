@@ -58,7 +58,7 @@ async function loadFiles(dir: string, exec?: WorkspaceExec): Promise<void> {
       } else {
         out = await $`git -C ${dir} ${args}`.quiet().text();
       }
-      // Drop vendored dependency trees — they're tracked in some repos (backstage
+      // Drop vendored dependency trees — they're tracked in some repos (opensession
       // commits node_modules) but are never useful "@"-mention targets and only
       // crowd out source files in the results.
       const files = out

@@ -108,7 +108,7 @@ export function broadcastQueue(sessionId: string) {
 	const steered = queueWithIds(steeredReceipts.get(sessionId));
 	if (queued.length > 0) promptQueues.set(sessionId, queued);
 	if (steered.length > 0) steeredReceipts.set(sessionId, steered);
-	// Display copy only: fenced <backstage:context> blocks (e.g. the queued
+	// Display copy only: fenced <opensession:context> blocks (e.g. the queued
 	// auto-continue nudge) are model plumbing, not something the queue chip
 	// should render raw. The stored items keep the full content for delivery.
 	const forDisplay = (items: typeof queued) =>

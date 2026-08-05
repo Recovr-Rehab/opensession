@@ -1,11 +1,11 @@
 /**
- * In-process self-management MCP servers for INTERACTIVE Backstage sessions
+ * In-process self-management MCP servers for INTERACTIVE OpenSession sessions
  * (web UI + loops) — the same opensession-sessions / opensession-admin tools the Slack
  * agent gets, so you can list/steer sessions and manage automations/MCPs from a
  * Michael session. Built fresh per run from the prompt's author. NEVER pass
  * these to automation runs or to interactive resumes of automation-owned
  * sessions — untrusted ticket text must not reach session-control / config
- * tools. Backstage is Tailscale- and team-gated and already exposes all of this
+ * tools. OpenSession is Tailscale- and team-gated and already exposes all of this
  * through its UI, so interactive users are treated as admin.
  *
  * Sole exception: opensession-papercuts (append-only friction log, no reads of
@@ -38,7 +38,7 @@ import { defaultRepo, productName } from "./config";
 import { repoForPath, REPOS } from "./worktree";
 import { registerInteractiveMcpBuilder, startMcpHttpServer, startRunRpcServer } from "./run-rpc";
 import { automationRunMcpForSession, selfImproveMcpForSession } from "./automations";
-import { findSession, touchBackstageSession } from "./session-cache";
+import { findSession, touchNativeSession } from "./session-cache";
 import { attachRepo, linkPr, resolveSessionRepoContext, sessionRepoIds, switchPrimaryRepo } from "./session-repos";
 import { makeAskHandler } from "./asks";
 import { getSandboxProvider } from "./sandbox";
@@ -88,8 +88,8 @@ export function interactiveMcpServers(
 			currentSessionId: sessionId,
 		}),
 		"opensession-admin": createAdminMcpServer({
-			channel: "backstage",
-			userId: user || "backstage",
+			channel: "opensession",
+			userId: user || "opensession",
 			isDM: false,
 			isPrivate: false,
 			createdBy,
@@ -193,7 +193,7 @@ export function interactiveMcpServers(
 					"opensession-preview": createPreviewMcpServer({
 						sessionId,
 						setPreviewPath: (path) =>
-							touchBackstageSession(sessionId, {
+							touchNativeSession(sessionId, {
 								previewPath: path || undefined,
 							}),
 						current: () => findSession(sessionId)?.previewPath ?? null,
@@ -284,7 +284,7 @@ export function interactiveMcpServers(
 
 // Codex cannot consume Claude SDK in-process MCP servers directly. Expose the
 // same interactive opensession-* tools through the run-rpc stdio proxy so Codex
-// sessions can inspect/create/steer Backstage sessions too. Goal-driven
+// sessions can inspect/create/steer OpenSession sessions too. Goal-driven
 // sessions additionally get opensession-goal-self (next-wake/ledger/pause tools),
 // matching what the in-process path hands them at the runAgent call sites.
 registerInteractiveMcpBuilder((sessionId, user) => {

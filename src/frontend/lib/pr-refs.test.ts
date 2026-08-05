@@ -88,7 +88,7 @@ describe("refChipText", () => {
 
 	test("shows a renamed repo under its display name", () => {
 		expect(
-			refChipText(ref({ repo: "backstage", number: 9 }), "tella-fusion"),
+			refChipText(ref({ repo: "opensession", number: 9 }), "tella-fusion"),
 		).toBe("opensession #9");
 	});
 });

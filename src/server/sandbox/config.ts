@@ -1,7 +1,7 @@
 /**
  * Sandbox configuration (sandbox rollout Phase 0).
  *
- * `~/.opensession-sandbox.json` (dual-read fallback to `~/.backstage-sandbox.json`)
+ * `~/.opensession-sandbox.json` (dual-read fallback to `~/.opensession-sandbox.json`)
  * picks the provider, e.g.
  *   {"provider": "docker", "image": "opensession-runner:latest",
  *    "idleStopMinutes": 30, "perRepo": {"app": {"provider": "docker"}}}
@@ -56,9 +56,9 @@ export interface SandboxRepoOverride {
  *  (that data loss is the mode's contract; push your work). */
 export type SandboxWorkspaceMode = "bind" | "volume";
 
-/** How a sandboxed run's host process talks to backstage (Phase 3):
+/** How a sandboxed run's host process talks to opensession (Phase 3):
  *  "socket" (default) = unix socket in a shared run dir (docker bind mounts
- *  it); "ws" = the host DIALS OUT to backstage's /run-ws route —
+ *  it); "ws" = the host DIALS OUT to opensession's /run-ws route —
  *  required for remote providers (daytona/e2b force it), dogfooded by docker. */
 export type SandboxTransport = "socket" | "ws";
 
@@ -263,10 +263,10 @@ export interface SandboxConfig {
   /** Warm-on-typing prewarm pool. Absent = defaults, with `enabled` true
    *  whenever a provider with a prewarm adapter is configured. */
   prewarm?: Partial<SandboxPrewarmConfig>;
-  /** Tarball URL of the backstage runner bundle for remote bootstrap (takes
+  /** Tarball URL of the opensession runner bundle for remote bootstrap (takes
    *  precedence over the git-clone fallback). */
   runnerBundleUrl?: string;
-  /** Git URL of the backstage repo for remote bootstrap (default: this
+  /** Git URL of the opensession repo for remote bootstrap (default: this
    *  checkout's origin). */
   runnerRepoUrl?: string;
   /** Pinned sha/ref the remote bootstrap checks out (default: origin default). */
@@ -928,7 +928,7 @@ export function resolveRequestedSandbox(
 /**
  * The base URL sandboxes dial back to (run-ws / rpc-ws routes). Config value
  * wins; the fallback derives from the server's bind env (HOST:PORT — the same
- * defaults backstage.ts uses). http(s) schemes are normalized to ws(s).
+ * defaults opensession.ts uses). http(s) schemes are normalized to ws(s).
  * NOTE: a 127.0.0.1 default is unreachable from any sandbox — ws-transport
  * setups should set callbackBaseUrl explicitly (Tailscale URL for remote
  * providers; the docker bridge can reach the host's tailnet/LAN bind).

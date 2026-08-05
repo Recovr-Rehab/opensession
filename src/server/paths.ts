@@ -1,7 +1,7 @@
 /**
  * Shared on-disk paths for the chat store, with a dual-read fallback chain.
  *
- * Naming history: `~/.backstage-sessions` → `~/.backstage-chats` (see
+ * Naming history: `~/.opensession-sessions` → `~/.opensession-chats` (see
  * scripts/migrate-workspaces.ts) → `~/.opensession-chats` (the product rename,
  * docs/rename-opensession-plan.md + scripts/migrate-opensession-state.sh).
  * This resolves the active dir once at load: prefer the newest name that

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  extractBackstageVideos,
+  extractVideoMarkers,
   parseJsonlLinesAsync,
   parseTranscript,
   parseTranscriptAsync,
@@ -477,7 +477,7 @@ describe("Codex rollout parsing", () => {
         type: "response_item",
         payload: {
           type: "web_search_call",
-          action: { query: "Backstage Codex support" },
+          action: { query: "OpenSession Codex support" },
         },
       }),
       JSON.stringify({
@@ -633,10 +633,10 @@ describe("assistant video markers", () => {
   });
 });
 
-describe("extractBackstageVideos", () => {
+describe("extractVideoMarkers", () => {
   it("returns media URLs for absolute OPENSESSION_VIDEO markers", () => {
     expect(
-      extractBackstageVideos("before\nOPENSESSION_VIDEO: /tmp/capture-one.mp4\nOPENSESSION_VIDEO: /tmp/second.webm")
+      extractVideoMarkers("before\nOPENSESSION_VIDEO: /tmp/capture-one.mp4\nOPENSESSION_VIDEO: /tmp/second.webm")
     ).toEqual([
       "/media?path=%2Ftmp%2Fcapture-one.mp4",
       "/media?path=%2Ftmp%2Fsecond.webm",

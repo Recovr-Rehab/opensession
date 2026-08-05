@@ -6,7 +6,7 @@
  * In WS mode (remote sandboxes / docker-ws), host.ts stamps every outbound
  * host→server frame (except transport-level `hello`/`ping`) with a monotonic
  * `seq` and keeps the serialized line in this bounded ring buffer. The
- * backstage side (src/server/run-ws.ts) acks the last CONSUMED seq — on
+ * opensession side (src/server/run-ws.ts) acks the last CONSUMED seq — on
  * socket open and then periodically — and the host replays everything after
  * the acked watermark on reconnect; the server drops any seq it has already
  * consumed, so a replay overlap never double-applies.
@@ -22,7 +22,7 @@
  * host's seq record is created server-side and kept for the registration's
  * lifetime (it survives `bun --hot` reloads, not full restarts). The host
  * only replays into a server whose epoch matches the one it last streamed to;
- * a fresh epoch (backstage fully restarted, so its consumed-watermark is
+ * a fresh epoch (opensession fully restarted, so its consumed-watermark is
  * gone) gets frames from the current connection onward only — exactly the old
  * live-only semantics, where hello/meta.done/journal cover correctness.
  */

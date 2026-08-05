@@ -1,6 +1,6 @@
 /**
  * The loaded agent modules (Plain/Linear/Slack/Stripe/…). Registered once at
- * boot (loadAgents runs behind the __backstageBooted guard) and read by the
+ * boot (loadAgents runs behind the __opensessionBooted guard) and read by the
  * health route; globalThis-backed so the set survives a hot reload.
  */
 

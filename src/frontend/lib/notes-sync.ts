@@ -1,10 +1,10 @@
 /**
- * A tiny Yjs network provider that rides Backstage's existing multiplexed
+ * A tiny Yjs network provider that rides OpenSession's existing multiplexed
  * WebSocket (the same socket sessions use) instead of a dedicated y-websocket
  * server. Binary Yjs document updates and awareness (cursor) updates are
  * base64-encoded inside the JSON envelope the socket already speaks.
  *
- * Mirrors the server side in backstage.ts (noteWatchers + watch_note /
+ * Mirrors the server side in opensession.ts (noteWatchers + watch_note /
  * note_update / note_awareness). Pass it the `send`/`addHandler` from
  * useWebSocket. Call `destroy()` on unmount.
  */

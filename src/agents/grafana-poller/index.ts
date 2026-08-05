@@ -9,7 +9,7 @@
  *   1. re-runs the configured Loki instant query,
  *   2. collapses the series to one row per distinct `dedupLabel` value,
  *   3. for each value not investigated within `dedupDays`, posts a control card
- *      to the configured Slack channel (Open-in-Backstage + Stop) and fires one
+ *      to the configured Slack channel (Open-in-OpenSession + Stop) and fires one
  *      run of that automation, handing it the matched Loki labels as the
  *      triggering event.
  *
@@ -196,11 +196,11 @@ function controlCardBlocks(
     `*${cfg.dedupLabel}:* \`${failure.dedupValue}\`${attempts}`,
   ].join("\n");
 
-  const backstageButton = {
+  const opensessionButton = {
     type: "button",
     text: { type: "plain_text", text: `:desktop_computer: Open in ${productName()}`, emoji: true },
     url: `${UI_BASE}/session/${bksId}`,
-    action_id: `backstage:${bksId}`,
+    action_id: `opensession:${bksId}`,
   };
   const stopButton = {
     type: "button",
@@ -215,7 +215,7 @@ function controlCardBlocks(
     {
       type: "actions",
       block_id: `investigation-${bksId}`,
-      elements: running ? [backstageButton, stopButton] : [backstageButton],
+      elements: running ? [opensessionButton, stopButton] : [opensessionButton],
     },
   ];
 }

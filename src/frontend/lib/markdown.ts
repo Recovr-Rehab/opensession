@@ -18,7 +18,7 @@ function attr(v: string | null | undefined): string {
     .replace(/>/g, "&gt;");
 }
 
-// Backstage session ids (`bks-<uuidv7>` and legacy `bks-<slug>`), as they appear
+// OpenSession session ids (`bks-<uuidv7>` and legacy `bks-<slug>`), as they appear
 // in agent output — usually in a codespan, e.g. a create_session result or an
 // orchestrator saying "delegated to `bks-…`". Rendered as a clickable link so you
 // can jump from an orchestrator into the worker it spawned (and back). A
@@ -132,7 +132,7 @@ function internalHref(href: string | null | undefined): {
   const sameOrigin =
     typeof location !== "undefined" && url.origin === location.origin;
   if (!sameOrigin && !INTERNAL_HOSTS.has(url.hostname)) return null;
-  const path = url.pathname.replace(/^\/(?:opensession|backstage)(?=\/)/, "");
+  const path = url.pathname.replace(/^\/(?:opensession|opensession)(?=\/)/, "");
   const m =
     path.match(/^\/session\/(bks-[a-z0-9][a-z0-9-]{5,})\/?$/i) ??
     path.match(/^\/workspace\/[^/]+\/chat\/(bks-[a-z0-9][a-z0-9-]{5,})\/?$/i);
