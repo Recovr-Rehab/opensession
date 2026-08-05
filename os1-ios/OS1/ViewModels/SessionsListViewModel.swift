@@ -58,10 +58,74 @@ final class SessionsListViewModel {
         sessionsRevision += 1
     }
 
-    private func setWorkspaceNames(_ next: [String: String]) {
-        workspaceNames = next
-        sidebarRowsCache = nil
-        sessionsRevision += 1
+    /// Cached rows with one chat spliced in as a row of its own, or nil when
+    /// the insert can't be proven row-local — the caller then invalidates and
+    /// the next read regroups.
+    ///
+    /// The local mutations below (create, resolve, restore) publish straight
+    /// into a body evaluation, and a body that finds the cache empty regroups
+    /// thousands of rows on the main actor: the pass `refresh` goes out of its
+    /// way to keep off-main. Creating a session did exactly that at the moment
+    /// the new conversation was being pushed, which is why the list sat there
+    /// for seconds before the chat appeared.
+    private func rowsInserting(
+        _ session: Session, into rows: [SidebarWorkspace]
+    ) -> [SidebarWorkspace]? {
+        #if !os(macOS)
+        // A chat started inside a workspace joins that workspace's row rather
+        // than opening one of its own: rebuild the one row from its chats plus
+        // this one, and move it to the front — where a full regroup puts it,
+        // since the new chat leads the list that pass walks.
+        if session.sideChatOf == nil, let projectId = session.projectId, !projectId.isEmpty {
+            guard let index = rows.firstIndex(where: { $0.projectId == projectId })
+            else { return nil }
+            let merged = Self.sidebarRows(
+                in: [session] + rows[index].sessions, workspaceNames: workspaceNames
+            )
+            guard merged.count == 1 else { return nil }
+            var next = rows
+            next.remove(at: index)
+            return merged + next
+        }
+        #endif
+        guard ownsItsRow(session),
+              let row = Self.sidebarRows(in: [session], workspaceNames: workspaceNames).first,
+              !rows.contains(where: { $0.id == row.id })
+        else { return nil }
+        return [row] + rows
+    }
+
+    /// Cached rows with one chat dropped, regrouping just the row that held
+    /// it. Nil when that regroup doesn't reproduce the same single row, i.e.
+    /// the removal moved the grouping and only a full pass can say how.
+    private func rowsRemoving(
+        sessionId id: String, from rows: [SidebarWorkspace]
+    ) -> [SidebarWorkspace]? {
+        guard let index = rows.firstIndex(where: { $0.sessions.contains { $0.id == id } })
+        else { return rows }
+        var next = rows
+        let remaining = rows[index].sessions.filter { $0.id != id }
+        if remaining.isEmpty {
+            next.remove(at: index)
+            return next
+        }
+        let regrouped = Self.sidebarRows(in: remaining, workspaceNames: workspaceNames)
+        guard regrouped.count == 1, regrouped[0].id == rows[index].id else { return nil }
+        next[index] = regrouped[0]
+        return next
+    }
+
+    /// A chat no existing row can absorb and that absorbs none: no workspace,
+    /// no isolated worktree, not a side chat. (Every Mac row is a single chat,
+    /// so there the question doesn't arise.)
+    private func ownsItsRow(_ session: Session) -> Bool {
+        guard session.sideChatOf == nil else { return false }
+        #if os(macOS)
+        return true
+        #else
+        return session.projectId?.isEmpty != false
+            && Self.isolatedWorktree(for: session) == nil
+        #endif
     }
 
     /// Group a list off the main actor, ready to publish with it. The session
@@ -297,9 +361,17 @@ final class SessionsListViewModel {
     private var optimistic: [String: (session: Session, added: Date)] = [:]
 
     /// Show a locally-built row for a just-created session immediately.
+    ///
+    /// The pending row is prepended rather than re-merged: `sessions` already
+    /// carries any earlier pending rows, and re-merging would see their ids in
+    /// the list and retire their overlay entries, dropping them on the next
+    /// poll until the server's own rows arrive.
     func addOptimistic(_ session: Session) {
         optimistic[session.id] = (session, Date())
-        setSessions(mergeOptimistic(into: sessions))
+        setSessions(
+            [session] + sessions,
+            rows: sidebarRowsCache.flatMap { rowsInserting(session, into: $0) }
+        )
     }
 
     /// The background create resolved: move a pending row onto the server's
@@ -316,16 +388,29 @@ final class SessionsListViewModel {
             model: old.model,
             effort: old.effort,
             fastMode: old.fastMode ?? false,
-            startedBy: old.startedBy ?? ""
+            startedBy: old.startedBy ?? "",
+            // Keep the workspace: a chat created into one stays in its row
+            // (and its tab strip) across the create resolving, instead of
+            // falling out until the server's own row arrives.
+            workspaceId: old.projectId
         )
         optimistic[realId] = (real, entry.added)
-        setSessions(sessions.map { $0.id == tempId ? real : $0 })
+        setSessions(
+            sessions.map { $0.id == tempId ? real : $0 },
+            rows: sidebarRowsCache.flatMap { cached in
+                rowsRemoving(sessionId: tempId, from: cached)
+                    .flatMap { rowsInserting(real, into: $0) }
+            }
+        )
     }
 
     /// Roll back a pending row whose create failed.
     func removeOptimistic(_ id: String) {
         optimistic.removeValue(forKey: id)
-        setSessions(sessions.filter { $0.id != id })
+        setSessions(
+            sessions.filter { $0.id != id },
+            rows: sidebarRowsCache.flatMap { rowsRemoving(sessionId: id, from: $0) }
+        )
     }
 
     /// Sessions archived locally that the server's (2s-cached) list may still
@@ -336,7 +421,10 @@ final class SessionsListViewModel {
     /// Swipe-to-archive: drop the row immediately, tell the server in the
     /// background, and roll back (surfacing the error) if that fails.
     func archive(_ session: Session) {
-        setSessions(sessions.filter { $0.id != session.id })
+        setSessions(
+            sessions.filter { $0.id != session.id },
+            rows: sidebarRowsCache.flatMap { rowsRemoving(sessionId: session.id, from: $0) }
+        )
         var archived = session
         archived.archived = true
         locallyArchived[session.id] = (archived, Date())
@@ -362,7 +450,10 @@ final class SessionsListViewModel {
         locallyUnarchived[session.id] = Date()
         var restored = session
         restored.archived = false
-        setSessions([restored] + sessions)
+        setSessions(
+            [restored] + sessions,
+            rows: sidebarRowsCache.flatMap { rowsInserting(restored, into: $0) }
+        )
         Task {
             do {
                 try await OS1API.setArchived(sessionId: session.id, archived: false)
@@ -457,9 +548,15 @@ final class SessionsListViewModel {
         do {
             async let workspaceRequest = try? OS1API.workspaces()
             let all = try await OS1API.sessions()
+            // Renames are held back rather than published on arrival: names
+            // feed every row's title, so publishing them on their own would
+            // strand the grouping cache and leave the next body to rebuild it
+            // on the main actor. They go out below, with rows already built
+            // from them.
+            var renamed: [String: String]?
             if let workspaces = await workspaceRequest {
                 let nextNames = Dictionary(uniqueKeysWithValues: workspaces.map { ($0.id, $0.name) })
-                if nextNames != workspaceNames { setWorkspaceNames(nextNames) }
+                if nextNames != workspaceNames { renamed = nextNames }
             }
             // Snapshot the main-actor state the filter needs, then do the
             // heavy pass (thousands of rows) off the main thread — inline it
@@ -491,14 +588,14 @@ final class SessionsListViewModel {
             // Most 5s polls change nothing — skip the assignment so the whole
             // list doesn't re-diff (grouping, sorting, row rebuilds) for a
             // byte-identical result.
-            if next != sessions {
+            if next != sessions || renamed != nil {
                 // Group before publishing, not after: the assignment wakes
                 // every observing view, so a grouping that starts afterwards
                 // always loses the race to the body that needs it.
-                let grouped = await Self.groupedOffMain(
-                    next, workspaceNames: workspaceNames
-                )
+                let names = renamed ?? workspaceNames
+                let grouped = await Self.groupedOffMain(next, workspaceNames: names)
                 SessionLinks.register(titles: grouped.titles)
+                if let renamed { workspaceNames = renamed }
                 setSessions(next, rows: grouped.rows)
             }
             if archivedNext != archivedSessions {
