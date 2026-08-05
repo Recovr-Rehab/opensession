@@ -291,6 +291,7 @@ interface PiEngineConfig {
 function PiEngineSection() {
 	const [cfg, setCfg] = useState<PiEngineConfig | null>(null);
 	const [claudeAccounts, setClaudeAccounts] = useState<ProviderAccountOption[] | null>(null);
+	const [accountsFetchFailed, setAccountsFetchFailed] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [testing, setTesting] = useState(false);
 	const [newModel, setNewModel] = useState("");
@@ -303,7 +304,9 @@ function PiEngineSection() {
 			.catch(() => {});
 		fetchProviderAccounts()
 			.then((list) => setClaudeAccounts(list.filter((a) => a.provider === "claude")))
-			.catch(() => setClaudeAccounts([]));
+			// Keep null on failure: [] means a genuinely empty pool and renders
+			// the "add one below" hint, which would mislead on a fetch error.
+			.catch(() => setAccountsFetchFailed(true));
 	}, []);
 
 	/** PUT a partial update (present field = wholesale replace), optimistically
@@ -506,6 +509,12 @@ function PiEngineSection() {
 						{claudeAccounts && claudeAccounts.length === 0 && (
 							<div className="mt-1 text-meta text-faint">
 								No Claude accounts in the pool yet — add one below first.
+							</div>
+						)}
+						{accountsFetchFailed && !claudeAccounts && (
+							<div className="mt-1 text-meta text-faint">
+								Couldn't load the Claude accounts list — reload the page to
+								pick bridge accounts.
 							</div>
 						)}
 					</SettingRowText>

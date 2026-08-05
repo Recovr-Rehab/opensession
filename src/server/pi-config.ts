@@ -185,6 +185,23 @@ export function removePiPickerModel(id: string): string[] {
   return list;
 }
 
+/** Replace pickerModels wholesale in one read-modify-write. Validates every
+ *  id up front (throws before touching the file), and — unlike a
+ *  remove-then-add loop over the NORMALIZED view — assigns the raw field
+ *  directly, so malformed entries hand-written into the file are swept out
+ *  by a save instead of surviving invisibly. */
+export function setPiPickerModels(ids: string[]): string[] {
+  for (const id of ids) {
+    if (!isPiModelId(id)) {
+      throw new Error(`Invalid pi model id "${id}" (expected pi/<provider>/<model>)`);
+    }
+  }
+  const raw = readRawPiConfig();
+  raw.pickerModels = [...new Set(ids)];
+  writeRawPiConfig(raw);
+  return raw.pickerModels as string[];
+}
+
 /** Replace the designated bridge accounts. An empty list deletes the field —
  *  normalization treats present-and-empty as absent anyway, so deleting keeps
  *  the file canonical (present always means "at least one designated id"). */
