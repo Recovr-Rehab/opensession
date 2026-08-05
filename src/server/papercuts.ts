@@ -54,7 +54,7 @@ export function logPapercut(entry: Omit<PapercutEntry, "ts">): PapercutEntry {
   // Dreaming automation) picks papercuts up alongside errors and tool stats.
   audit({
     kind: "papercut",
-    bks_session_id: entry.sessionId,
+    session_id: entry.sessionId,
     run_kind: entry.runKind,
     repo: entry.repo,
     model: entry.model,

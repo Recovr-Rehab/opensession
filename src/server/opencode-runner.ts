@@ -3452,7 +3452,7 @@ async function* runOpencodeAttempt(
     audit({
       msg: "opencode_gate_denied",
       run_kind: journal?.kind,
-      bks_session_id: journal?.osSessionId,
+      session_id: journal?.osSessionId,
       reason: gateReason,
     });
     yield { type: "error", content: gateReason, provider: PROVIDER, model };
@@ -3576,7 +3576,7 @@ async function* runOpencodeAttempt(
       provider: PROVIDER,
       turn_id: turnId,
       run_key: runKey,
-      bks_session_id: journal?.osSessionId,
+      session_id: journal?.osSessionId,
       run_kind: journal?.kind,
       mode: mode || "code",
       claude_session_id: ocSessionId || undefined,
@@ -3690,7 +3690,7 @@ async function* runOpencodeAttempt(
                 audit({
                   msg: "account_pool_wait",
                   run_kind: journal?.kind,
-                  bks_session_id: journal?.osSessionId,
+                  session_id: journal?.osSessionId,
                   model,
                   reason: cause,
                   earliest_reset: new Date(earliestReset).toISOString(),
@@ -3706,7 +3706,7 @@ async function* runOpencodeAttempt(
               audit({
                 msg: "account_pool_wait_resolved",
                 run_kind: journal?.kind,
-                bks_session_id: journal?.osSessionId,
+                session_id: journal?.osSessionId,
                 model,
                 account: waited.name,
               });
@@ -3740,7 +3740,7 @@ async function* runOpencodeAttempt(
             audit({
               msg: "account_near_limit_steer",
               run_kind: journal?.kind,
-              bks_session_id: journal?.osSessionId,
+              session_id: journal?.osSessionId,
               model,
               from_account: picked.name,
               to_account: fresh.name,
@@ -3792,7 +3792,7 @@ async function* runOpencodeAttempt(
           msg: "opencode_meridian_run",
           turn_id: turnId,
           run_key: runKey,
-          bks_session_id: journal?.osSessionId,
+          session_id: journal?.osSessionId,
           run_kind: journal?.kind,
           model,
           account: picked.name,
@@ -3891,7 +3891,7 @@ async function* runOpencodeAttempt(
           msg: "opencode_openai_run",
           turn_id: turnId,
           run_key: runKey,
-          bks_session_id: journal?.osSessionId,
+          session_id: journal?.osSessionId,
           run_kind: journal?.kind,
           model,
           account: maskOpenaiAccount(picked),
@@ -5309,7 +5309,7 @@ async function* runOpencodeAttempt(
                     audit({
                       msg: "account_pool_wait",
                       run_kind: journal?.kind,
-                      bks_session_id: journal?.osSessionId,
+                      session_id: journal?.osSessionId,
                       model,
                       reason: "mid-run usage limit; pool dry",
                       earliest_reset: new Date(earliestReset).toISOString(),
@@ -5883,7 +5883,7 @@ export async function tryReattachOpencodeRun(
         provider: PROVIDER,
         turn_id: turnId,
         run_key: runKey,
-        bks_session_id: run.osSessionId,
+        session_id: run.osSessionId,
         run_kind: `${run.kind || "run"}-reattach`,
         mode: run.mode || "code",
         claude_session_id: ocSessionId,

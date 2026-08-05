@@ -124,7 +124,7 @@ function rollupAuditDay(date: string): DayRollup {
 
 	const promptModel = new Map<string, string>();
 	const sessionOf = (e: Record<string, unknown>): SessionAgg | null => {
-		const id = String(e.bks_session_id || "");
+		const id = String(e.session_id || e.bks_session_id || "");
 		if (!id) return null;
 		return (rollup.bySession[id] ||= {
 			// A restart-reattached turn is still its base kind for analytics.
@@ -199,8 +199,8 @@ function rollupAuditDay(date: string): DayRollup {
 			// Some engines' result events carry no model — remember the turn's
 			// model from its user_prompt so those turns don't land in "unknown".
 			case "user_prompt":
-				if (e.model && e.bks_session_id) {
-					promptModel.set(String(e.bks_session_id), shortModel(String(e.model)));
+				if (e.model && (e.session_id || e.bks_session_id)) {
+					promptModel.set(String(e.session_id || e.bks_session_id), shortModel(String(e.model)));
 				}
 				break;
 			case "result": {
@@ -215,10 +215,10 @@ function rollupAuditDay(date: string): DayRollup {
 				rollup.tokens.cacheWrite += cacheWrite;
 				const model = e.model
 					? shortModel(String(e.model))
-					: promptModel.get(String(e.bks_session_id || "")) || "";
+					: promptModel.get(String(e.session_id || e.bks_session_id || "")) || "";
 				const m = model
 					? (rollup.byModel[model] ||= { turns: 0, ...emptyTokens() })
-					: (rollup.unknownModel[String(e.bks_session_id || "")] ||= { turns: 0, ...emptyTokens() });
+					: (rollup.unknownModel[String(e.session_id || e.bks_session_id || "")] ||= { turns: 0, ...emptyTokens() });
 				m.turns++;
 				m.input += input;
 				m.output += output;

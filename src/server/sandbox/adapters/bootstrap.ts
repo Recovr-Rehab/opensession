@@ -879,7 +879,7 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
         audit({
           msg: "sandbox_openai_seed_upload",
           host_id: spec.hostId,
-          bks_session_id: spec.osSessionId,
+          session_id: spec.osSessionId,
           mechanism: "oauth-subscription-seeded-remote",
           accounts: openaiUpload.accounts.map((a) => maskOpenaiAccount(a)),
           seeds: openaiUpload.seeds.length,

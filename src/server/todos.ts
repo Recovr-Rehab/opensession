@@ -111,7 +111,7 @@ export function addTodo(input: {
 	writeStore(store);
 	audit({
 		kind: "todo_added",
-		bks_session_id: input.source.sessionId,
+		session_id: input.source.sessionId,
 		by: input.source.by || user,
 		user,
 		message: text,

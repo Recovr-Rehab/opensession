@@ -606,7 +606,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
           if (ok) {
             audit({
               msg: "run_cancelled",
-              bks_session_id: args.id,
+              session_id: args.id,
               source: "sessions_mcp",
               user: ctx.createdBy,
               cancelled_from: ctx.currentSessionId,

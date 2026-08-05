@@ -171,7 +171,7 @@ export function readAuditEvents(opts: {
   q?: string;
   /** Exact event type (see eventType). */
   type?: string;
-  /** Substring match on bks_session_id. */
+  /** Substring match on session_id (old events: bks_session_id). */
   session?: string;
   /** Drop the per-turn firehose kinds (default true). */
   significantOnly?: boolean;
@@ -202,7 +202,7 @@ export function readAuditEvents(opts: {
     types.add(t);
     if (opts.type && t !== opts.type) continue;
     if (!opts.type && significantOnly && NOISY_KINDS.has(t)) continue;
-    if (opts.session && !String(e.bks_session_id || "").includes(opts.session)) continue;
+    if (opts.session && !String(e.session_id || e.bks_session_id || "").includes(opts.session)) continue;
     if (q && !line.toLowerCase().includes(q)) continue;
     matches.push(e);
   }
@@ -242,7 +242,7 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
   }
   const sessions = new Map<string, SessionAgg>();
   const sessionOf = (e: Record<string, unknown>): SessionAgg | null => {
-    const id = String(e.bks_session_id || "");
+    const id = String(e.session_id || e.bks_session_id || "");
     if (!id) return null;
     let s = sessions.get(id);
     if (!s) {
@@ -336,7 +336,7 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
           count: 0,
           runKinds: new Set<string>(),
           sample: raw.slice(0, 300),
-          sampleSession: String(e.bks_session_id || ""),
+          sampleSession: String(e.session_id || e.bks_session_id || ""),
         };
         g.count++;
         g.runKinds.add(String(e.run_kind || "?"));
@@ -367,7 +367,7 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
           count: 0,
           runKinds: new Set<string>(),
           sample: snippet.slice(0, 300),
-          sampleSession: String(e.bks_session_id || ""),
+          sampleSession: String(e.session_id || e.bks_session_id || ""),
         };
         g.count++;
         g.runKinds.add(String(e.run_kind || "?"));
@@ -392,7 +392,7 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
             repo: e.repo || undefined,
             runKind: e.run_kind || undefined,
             by: e.by || undefined,
-            session: e.bks_session_id || undefined,
+            session: e.session_id || e.bks_session_id || undefined,
           });
         }
         break;

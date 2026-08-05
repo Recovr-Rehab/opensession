@@ -549,7 +549,7 @@ export async function handleSessionsRoutes(
 			}
 			audit({
 				msg: "run_cancelled",
-				bks_session_id: session.id,
+				session_id: session.id,
 				source: "archive",
 				graceful: stopped,
 			});

@@ -234,7 +234,7 @@ export function transitionRunState(
 		);
 		emit({
 			msg: "run_state_rejected",
-			bks_session_id: sessionId,
+			session_id: sessionId,
 			state: from,
 			event,
 			...detail,
@@ -248,7 +248,7 @@ export function transitionRunState(
 	});
 	emit({
 		msg: "run_state_transition",
-		bks_session_id: sessionId,
+		session_id: sessionId,
 		from,
 		to,
 		event,
@@ -272,7 +272,7 @@ export function forceRunState(
 	runStates.set(sessionId, { state, since: new Date().toISOString() });
 	emit({
 		msg: "run_state_forced",
-		bks_session_id: sessionId,
+		session_id: sessionId,
 		from,
 		to: state,
 		reason,

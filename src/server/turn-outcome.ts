@@ -220,7 +220,7 @@ export function endTurn(
 
   audit({
     kind: "turn_outcome",
-    bks_session_id: ledger.sessionId,
+    session_id: ledger.sessionId,
     run_kind: ledger.kind,
     verdict,
     effects: outcome.effects.join(",") || undefined,

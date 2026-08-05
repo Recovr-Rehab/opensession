@@ -219,7 +219,7 @@ describe("transitionRunState (stateful wrapper)", () => {
 			expect(events).toHaveLength(1);
 			expect(events[0]).toMatchObject({
 				msg: "run_state_transition",
-				bks_session_id: id,
+				session_id: id,
 				from: "idle",
 				to: "starting",
 				event: "prompt",
@@ -243,7 +243,7 @@ describe("transitionRunState (stateful wrapper)", () => {
 			expect(events).toHaveLength(1);
 			expect(events[0]).toMatchObject({
 				msg: "run_state_rejected",
-				bks_session_id: id,
+				session_id: id,
 				state: "idle",
 				event: "turn_end",
 			});

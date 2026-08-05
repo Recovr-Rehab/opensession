@@ -70,7 +70,7 @@ filter msg = "claude_turn_event" and kind = "result"
 | stats count(*), sum(total_cost_usd) by run_kind
 
 # Every tool call in a session
-filter msg = "claude_turn_event" and kind = "tool_use" and bks_session_id = "..."
+filter msg = "claude_turn_event" and kind = "tool_use" and session_id = "..." (events before 2026-08-05 use bks_session_id)
 | sort @timestamp asc
 | display @timestamp, tool_name, text_snippet
 ```

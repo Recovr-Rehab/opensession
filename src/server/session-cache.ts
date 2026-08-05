@@ -164,7 +164,7 @@ function checkRunStateWedge(
 	);
 	audit({
 		msg: "run_state_wedge",
-		bks_session_id: sessionId,
+		session_id: sessionId,
 		run_state: state,
 		engine_busy: engineBusy,
 		diverged_for_ms: Date.now() - since,

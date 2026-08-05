@@ -1302,7 +1302,7 @@ export function maybeQueueAutoContinue(opts: {
 		if (announcesNextAction(assistantText))
 			audit({
 				msg: "auto_continue_suppressed",
-				bks_session_id: sessionId,
+				session_id: sessionId,
 				reason,
 				tail: assistantText.trim().slice(-200),
 			});
@@ -1348,7 +1348,7 @@ export function maybeQueueAutoContinue(opts: {
 				orphanRedeliveredTails.set(sessionId, tailKey);
 				audit({
 					msg: "orphaned_steer_redelivery",
-					bks_session_id: sessionId,
+					session_id: sessionId,
 					trailing_count: trailing.length,
 					tail: tailKey.slice(-200),
 				});
@@ -1378,7 +1378,7 @@ export function maybeQueueAutoContinue(opts: {
 					wedgeRetriedFailures.set(sessionId, failKey);
 					audit({
 						msg: "wedge_auto_retry",
-						bks_session_id: sessionId,
+						session_id: sessionId,
 						error: (runFailure || "").slice(0, 300),
 					});
 					broadcastToSession(sessionId, {
@@ -1413,7 +1413,7 @@ export function maybeQueueAutoContinue(opts: {
 	autoContinueNudged.add(sessionId);
 	audit({
 		msg: "auto_continue_nudge",
-		bks_session_id: sessionId,
+		session_id: sessionId,
 		tail: assistantText.trim().slice(-200),
 		...(queuedBehind > 0 ? { queued_held: queuedBehind } : {}),
 		...(endedOnFabricatedTranscript ? { fabricated_tail: true } : {}),

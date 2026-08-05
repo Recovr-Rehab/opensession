@@ -854,7 +854,7 @@ export function bashAskPolicyReply(
   if (verdict && verdict.decision !== "allow") {
     audit({
       kind: "command_policy",
-      bks_session_id: opts.sessionId,
+      session_id: opts.sessionId,
       run_kind: opts.runKind,
       decision: verdict.decision,
       reason: verdict.reason,

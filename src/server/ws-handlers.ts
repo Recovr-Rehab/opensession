@@ -1117,7 +1117,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						);
 						audit({
 							msg: "run_cancelled",
-							bks_session_id: sessionId,
+							session_id: sessionId,
 							source: "ui_stop",
 							user: data.user,
 							graceful: stopped,
