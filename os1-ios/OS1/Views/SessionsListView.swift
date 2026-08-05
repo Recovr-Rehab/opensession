@@ -1004,16 +1004,19 @@ struct SessionsListView: View {
             Button(role: viaSwipe ? .destructive : nil) {
                 archive(workspace, animated: !viaSwipe)
             } label: {
-                VStack(spacing: 2) {
-                    WebIcon(kind: .archive, size: 22, color: .white)
-                    Text("Archive")
-                }
+                // A Label, not our own icon+text stack: a swipe action lays
+                // out the system's label shape (glyph over caption, dropping
+                // to the glyph alone in a short swipe), and a custom view is
+                // rendered as its text only — which is why the archive glyph
+                // never appeared. `archivebox` is the metaphor the overflow
+                // menus here and in the chat already use.
+                Label("Archive", systemImage: "archivebox.fill")
             }
-            // Grey, not red: archiving files work away, it doesn't destroy it
-            // (the Archived section below the list opens it again). The role is
-            // still destructive so the List runs its native row-removal
-            // choreography — see above.
-            .tint(.gray)
+            // Red, matching the web sidebar's own swipe action at phone width
+            // (.sidebar-swipe-action--archive, var(--red)): the same gesture on
+            // the same row should not change colour between the two clients.
+            // Our own palette rather than stock .red — see OS1VisualStyle.
+            .tint(OS1VisualStyle.red)
         }
     }
 
