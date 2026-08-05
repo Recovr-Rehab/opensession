@@ -784,6 +784,11 @@ struct SessionsListView: View {
             listSections
         }
         .listStyle(.plain)
+        // The 44pt floor exists for rows that don't state their own height;
+        // ours all do, and all it did here was inflate the lane headings into
+        // full-height rows. Rows carry the touch metrics in their own padding
+        // (which is why SessionRow pads to 13 rather than 11).
+        .environment(\.defaultMinListRowHeight, 8)
         .scrollContentBackground(.hidden)
         .background(OS1VisualStyle.background)
         .listSectionSpacing(10)
@@ -1079,7 +1084,8 @@ struct SessionsListView: View {
                                 #endif
                         }
                         #if os(iOS)
-                        .padding(.vertical, 9)
+                        // Same reason as SessionRow's 13: no 44pt floor now.
+                        .padding(.vertical, 11)
                         #else
                         .padding(.vertical, 3)
                         #endif
@@ -1190,6 +1196,12 @@ struct SessionsListView: View {
         .padding(.top, 4)
     }
 
+    /// A lane heading labels the rows under it, so its own insets are
+    /// lopsided on purpose: air above to separate it from the previous lane,
+    /// almost none below so the label reads as attached to its rows. Those
+    /// insets only bite because the list drops its 44pt minimum row height
+    /// (see `list`) — that floor stretched the caption to a full row and left
+    /// the label marooned in the middle of it.
     private func statusLaneHeader(_ group: SessionGroup) -> some View {
         Button {
             toggleCollapsed(group.id)
@@ -1199,16 +1211,14 @@ struct SessionsListView: View {
                     .font(.caption.weight(.semibold))
                 Text("\(group.workspaces.count)")
                     .font(.caption2.monospacedDigit())
-                collapseChevron(group.id)
             }
             .foregroundStyle(OS1VisualStyle.textDim)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 4)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(collapseLabel(group.title, group.id))
-        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 1, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
@@ -1377,7 +1387,9 @@ struct SessionRow: View {
             }
         }
         #if os(iOS)
-        .padding(.vertical, 11)
+        // 13, not 11: the list no longer imposes a 44pt minimum row height,
+        // so the row's own padding is what keeps its touch target.
+        .padding(.vertical, 13)
         #else
         .padding(.vertical, 3)
         #endif
