@@ -1,19 +1,20 @@
 /**
  * Run-host protocol: the wire contract between a detached run-host process
- * (src/runner-host/host.ts) and the backstage server (src/server/host-client.ts).
+ * (the reference implementation: src/runner-host/host.ts) and the OpenSession
+ * server (src/server/host-client.ts).
  *
- * A run host is a small standalone bun process that owns ONE agent run (the
- * Claude/Codex SDK driver plus its CLI child). It is spawned as a transient
- * systemd unit OUTSIDE the backstage.service cgroup, so a backstage restart —
- * graceful or crash — never touches the run. Backstage connects to the host's
- * unix socket as a client; if backstage goes down mid-run, the host keeps
- * working and the new backstage process reattaches to the same socket.
+ * A run host is a small standalone process that owns ONE agent run (the
+ * engine driver plus its CLI child). It is spawned OUTSIDE the server's
+ * process group, so a server restart — graceful or crash — never touches the
+ * run. The server connects to the host's unix socket as a client; if the
+ * server goes down mid-run, the host keeps working and the new server
+ * process reattaches to the same socket.
  *
  * Framing: newline-delimited JSON, both directions. JSON.stringify never emits
  * raw newlines, so a line is always exactly one message.
  *
  * The UNIX-SOCKET stream is LIVE-ONLY by design — no event replay. A
- * reattaching backstage missed some stream events, but the transcript jsonl on
+ * reattaching server missed some stream events, but the transcript jsonl on
  * disk is the durable copy (viewers re-sync from it on watch), and everything
  * else a consumer needs to catch up is carried in `hello`: the engine session
  * id, any asks still blocked waiting for a human, and the terminal event if
@@ -43,8 +44,8 @@ export type McpScope = "all" | string[];
 /** Everything a host needs to drive one run — a serializable RunAgentOpts. */
 export interface RunHostSpec {
   hostId: string;
-  /** Backstage session this run belongs to (busy/steer/cancel key, journal). */
-  bksSessionId: string;
+  /** OpenSession session this run belongs to (busy/steer/cancel key, journal). */
+  osSessionId: string;
   prompt: string;
   /** Engine session id to resume (claude session id / codex thread id). */
   engineSessionId?: string;
@@ -63,18 +64,19 @@ export interface RunHostSpec {
   mcpServers?: McpScope;
   /**
    * opensession-* in-process servers to expose via the RPC proxy (mcp-proxy.ts →
-   * backstage-rpc.sock). Names must match what the backstage-side builder
+   * backstage-rpc.sock). Names must match what the server-side builder
    * produces for this session. Empty/omitted for automation-owned sessions.
    */
   proxyMcpServers?: string[];
-  /** Per-run bearer for the RPC socket; maps to {sessionId, user} on the backstage side. */
+  /** Per-run bearer for the RPC socket; maps to {sessionId, user} on the server side. */
   rpcToken?: string;
   /**
    * Per-run bearer for the WS transport (Phase 3). Present = this run's host
-   * dials backstage's /backstage/run-ws/<hostId> WS route instead of serving a
+   * dials the server's run-ws WS route (/opensession/run-ws/<hostId>; the
+   * /backstage/* form is the legacy alias) instead of serving a
    * unix socket in its run dir; the launcher passes it to the host process as
    * BKS_RUN_WS_TOKEN and registers it (keyed by hostId) so the route can
-   * validate the dial-back. Persisted in spec.json so a restarted backstage
+   * validate the dial-back. Persisted in spec.json so a restarted server
    * re-registers it on reattach (the host's WS reconnect must keep working).
    */
   wsToken?: string;
@@ -99,11 +101,11 @@ export interface RunHostSpec {
 }
 
 /** Mutable host state, persisted to meta.json in the host dir. This is what a
- *  rebooting backstage reads to decide reattach vs finish vs resume. */
+ *  rebooting server reads to decide reattach vs finish vs resume. */
 export interface RunHostMeta {
   hostId: string;
   pid: number;
-  bksSessionId: string;
+  osSessionId: string;
   startedAt: string;
   engineSessionId?: string;
   selectedModel?: string;
@@ -136,7 +138,7 @@ type HostToClientPayload =
       t: "hello";
       hostId: string;
       pid: number;
-      bksSessionId: string;
+      osSessionId: string;
       engineSessionId?: string;
       /** "ended" = run finished while nobody was attached; `done` has the terminal event. */
       state: "running" | "ended";
@@ -157,14 +159,14 @@ type HostToClientPayload =
   /** Run generator finished; meta.done is written. Client should ack with shutdown. */
   | { t: "end"; done?: StreamEvent }
   /**
-   * WS-transport keepalive (host → backstage every 30s). A unix socket never
+   * WS-transport keepalive (host → server every 30s). A unix socket never
    * idles out, but WS intermediaries (and Bun.serve's per-socket idle timer)
    * close quiet connections — e.g. during a minutes-long tool call with no
    * stream events. Answered with `pong`; the socket transport never sends it.
    */
   | { t: "ping" }
   /**
-   * WS transport only: the host's replay buffer overflowed while backstage
+   * WS transport only: the host's replay buffer overflowed while the server
    * was unreachable — frames `from..to` are gone from the stream (the
    * transcript jsonl still has everything). Sent once at replay time; the
    * server logs it.
@@ -255,7 +257,8 @@ export const HOST_META_NAME = "meta.json";
 export const HOST_JOURNAL_NAME = "journal.json";
 export const HOST_LOG_NAME = "host.log";
 
-/** The backstage-side RPC socket the mcp-proxy talks to. Stable path. */
+/** The server-side RPC socket the mcp-proxy talks to. Stable path (the
+ *  literal filename is historical — a wire constant, not branding). */
 export function rpcSocketPath(chatsDir: string): string {
   return `${chatsDir}/backstage-rpc.sock`;
 }

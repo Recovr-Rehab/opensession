@@ -178,7 +178,7 @@ try {
     ): Promise<{ result: StreamEvent | null; text: string; init: string }> => {
       const spec: RunHostSpec = {
         hostId: `rh-octest-${Date.now().toString(36)}`,
-        bksSessionId: SESSION_ID,
+        osSessionId: SESSION_ID,
         prompt,
         engineSessionId,
         cwd: WT,
@@ -199,7 +199,7 @@ try {
               let journaled: any;
               try {
                 const journal = JSON.parse(readFileSync(process.env.OPENSESSION_RUN_JOURNAL!, "utf-8"));
-                journaled = Object.values(journal).find((r: any) => r?.bksSessionId === SESSION_ID);
+                journaled = Object.values(journal).find((r: any) => r?.osSessionId === SESSION_ID);
               } catch {}
               ok("journal shows the run in bks-sbx-*",
                 journaled?.sandboxId === CONTAINER && journaled?.model === MODEL,

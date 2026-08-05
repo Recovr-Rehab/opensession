@@ -70,7 +70,7 @@ export function sessionHasJournaledRun(
   );
   return journaledRuns().some(
     (r) =>
-      (r.bksSessionId && engineIds.has(r.bksSessionId)) ||
+      (r.osSessionId && engineIds.has(r.osSessionId)) ||
       (r.claudeSessionId && engineIds.has(r.claudeSessionId)) ||
       engineIds.has(r.runKey)
   );

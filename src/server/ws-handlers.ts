@@ -1889,7 +1889,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						confirmTools: STRIPE_CONFIRM_TOOLS,
 						aws: true, // interactive sessions keep AWS read access (via injected creds)
 						user, // gate per-user MCP servers (allowedUsers) to the creator
-						journal: { bksSessionId: bksId, kind: "create" },
+						journal: { osSessionId: bksId, kind: "create" },
 						onAskUser: makeAskHandler(bksId),
 					})) {
 						if (event.type === "init") {

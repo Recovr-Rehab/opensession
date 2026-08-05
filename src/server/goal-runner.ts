@@ -44,13 +44,13 @@ export const runningGoals: Set<string> = (g.__runningGoals ??= new Set());
  *  weeks-long run gets least privilege (can't reconfigure Michael or steer other
  *  sessions); human sign-off goes through opensession-humans ask_human. */
 function goalMcpServers(
-	bksSessionId: string,
+	osSessionId: string,
 	goalId: string,
 	createdBy: string,
 ): Record<string, unknown> {
 	return {
 		"opensession-humans": createHumansMcpServer({
-			sessionId: bksSessionId,
+			sessionId: osSessionId,
 			createdBy,
 			isAdmin: true,
 		}),
@@ -96,7 +96,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 	runningGoals.add(goal.id);
 	const startedAt = new Date();
 	const wake = goal.wakeCount + 1;
-	const bksId = goal.bksSessionId || `bks-${randomUUIDv7()}`;
+	const bksId = goal.osSessionId || `bks-${randomUUIDv7()}`;
 	try {
 		// Code goals keep ONE persistent worktree so the engine session (keyed on
 		// cwd) resumes cleanly across wakes; ask goals read the main checkout.
@@ -118,7 +118,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 
 		saveGoal({
 			...goal,
-			bksSessionId: bksId,
+			osSessionId: bksId,
 			branch: branch || undefined,
 			worktreePath: goal.mode === "code" ? cwd : undefined,
 			lastRunAt: startedAt.toISOString(),
@@ -186,7 +186,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 				goal.fallbackModel === "none"
 					? undefined
 					: goal.fallbackModel || DEFAULT_FALLBACK_MODEL,
-			journal: { bksSessionId: bksId, kind: "goal" },
+			journal: { osSessionId: bksId, kind: "goal" },
 			// Headless: no onAskUser. Human gates go through opensession-humans ask_human
 			// (async) and hard blocks through opensession-goal-self mark_paused.
 		})) {
@@ -236,7 +236,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 		const fresh = getGoal(goal.id) || goal;
 		const next: Goal = {
 			...fresh,
-			bksSessionId: bksId,
+			osSessionId: bksId,
 			engineSessionId,
 			model: selectedModel || fresh.model,
 			branch: branch || fresh.branch,
@@ -293,7 +293,7 @@ if (!g.__backstageBooted && !isLocalProfile() && !isDevInstance()) {
 			if (runningGoals.has(goal.id)) continue;
 			// A prior process's run may still be resuming from the journal — don't
 			// double-drive the same engine session.
-			if (isAgentSessionBusy(goal.engineSessionId, goal.bksSessionId)) continue;
+			if (isAgentSessionBusy(goal.engineSessionId, goal.osSessionId)) continue;
 			// Safety cap: stop an out-of-control mission until a human resumes it.
 			if (goal.maxWakes && goal.wakeCount >= goal.maxWakes) {
 				saveGoal({

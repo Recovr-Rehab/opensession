@@ -12,7 +12,7 @@
 
 export interface HostRunControl {
   hostId: string;
-  bksSessionId: string;
+  osSessionId: string;
   /** Whether the run's backend supports mid-run steering (claude yes, codex no). */
   steerable: boolean;
   /** True while the socket to the host is up (steers need a live connection). */

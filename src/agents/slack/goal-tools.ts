@@ -86,7 +86,7 @@ export function createGoalsMcpServer(ctx: GoalsToolContext) {
           `*${g.name}* [\`${g.id}\`] — ${g.status}, ${g.mode}, wake #${g.wakeCount}\n` +
             `next wake: ${g.nextWakeAt} (floor ${g.minWakeMinutes}m${g.maxWakes ? `, cap ${g.maxWakes}` : ""})\n` +
             (g.phase ? `phase: ${g.phase}\n` : "") +
-            (g.bksSessionId ? `session: \`${g.bksSessionId}\`\n` : "") +
+            (g.osSessionId ? `session: \`${g.osSessionId}\`\n` : "") +
             `\n*Mission:*\n${g.mission}\n` +
             (ledgerTail ? `\n*Ledger (tail):*\n${ledgerTail}` : "")
         );

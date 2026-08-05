@@ -411,7 +411,7 @@ export function runAction(
         confirmTools: STRIPE_CONFIRM_TOOLS,
         aws: useAws,
         fallbackModel: DEFAULT_FALLBACK_MODEL,
-        journal: { bksSessionId: bksId, kind: "action" },
+        journal: { osSessionId: bksId, kind: "action" },
       })) {
         if (event.type === "init") {
           engineSessionId = event.sessionId || "";

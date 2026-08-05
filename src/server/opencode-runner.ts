@@ -578,7 +578,7 @@ export const SHARED_INPROCESS_SERVERS = [
  *    (goal wakes with opensession-goal-self, future additions).
  */
 export function sharedOpencodeEligible(opts: {
-  journal?: { kind?: string; bksSessionId?: string };
+  journal?: { kind?: string; osSessionId?: string };
   mcpServers?: McpScope;
   /** Session creator whose OAuth grants take precedence for MCP calls. */
   mcpGrantUser?: string;
@@ -1488,7 +1488,7 @@ export function buildOpencodeInstructions(input: {
    *  and prefix every bash call with a redundant `cd <worktree> &&`. */
   cwd?: string;
   inProcessMcp?: Record<string, unknown>;
-  bksSessionId?: string;
+  osSessionId?: string;
   /** Requester attribution for PRs: the turn's raw user label and the resolved
    *  git identity (same table as commit attribution). PRs open under the bot
    *  GitHub account, so the body line + assignee are how the human shows up. */
@@ -1707,8 +1707,8 @@ export function buildOpencodeInstructions(input: {
     );
   }
   if (input.reposNote) parts.push(input.reposNote);
-  if (!input.isAsk && !input.isScratch && input.bksSessionId) {
-    const link = `${UI_BASE}/session/${input.bksSessionId}`;
+  if (!input.isAsk && !input.isScratch && input.osSessionId) {
+    const link = `${UI_BASE}/session/${input.osSessionId}`;
     const requester = input.author?.name || null;
     const login = githubLoginFor(input.user || input.author?.name);
     const footer = requester
@@ -3421,7 +3421,7 @@ async function* runOpencodeAttempt(
     audit({
       msg: "opencode_gate_denied",
       run_kind: journal?.kind,
-      bks_session_id: journal?.bksSessionId,
+      bks_session_id: journal?.osSessionId,
       reason: gateReason,
     });
     yield { type: "error", content: gateReason, provider: PROVIDER, model };
@@ -3447,14 +3447,14 @@ async function* runOpencodeAttempt(
   }
   const meridianModels = meridianRequiredModels(parsed.modelID, dial?.oracleAgent);
 
-  const runKey = opts.sessionId || journal?.bksSessionId || crypto.randomUUID();
+  const runKey = opts.sessionId || journal?.osSessionId || crypto.randomUUID();
   if (activeOpencodeRuns.has(runKey)) {
     yield { type: "error", content: "Session is busy" };
     return;
   }
   const abortController = new AbortController();
   const registeredKeys = new Set<string>([runKey]);
-  if (journal?.bksSessionId) registeredKeys.add(journal.bksSessionId);
+  if (journal?.osSessionId) registeredKeys.add(journal.osSessionId);
   for (const key of registeredKeys) activeOpencodeRuns.set(key, abortController);
 
   // Durability BEFORE the engine exists (2026-07-24, bks-019f93ea: a restart
@@ -3469,7 +3469,7 @@ async function* runOpencodeAttempt(
   // be downgraded back to this early shape. In-process failures still clear
   // the record via the catch/finally below (reachedTerminal) — only a real
   // process death leaves it for boot to pick up.
-  if (journal?.bksSessionId && attemptIndex === 0) {
+  if (journal?.osSessionId && attemptIndex === 0) {
     turn.userLine ??= transcriptLineUser(
       prompt,
       opts.promptEntryId,
@@ -3478,7 +3478,7 @@ async function* runOpencodeAttempt(
     );
     journalSet({
       runKey,
-      bksSessionId: journal.bksSessionId,
+      osSessionId: journal.osSessionId,
       claudeSessionId: opts.sessionId || undefined,
       prompt,
       promptEntryId: String(turn.userLine.uuid),
@@ -3502,7 +3502,7 @@ async function* runOpencodeAttempt(
       startedAt: new Date().toISOString(),
     });
     storeAppendUserLineEarly(
-      journal.bksSessionId,
+      journal.osSessionId,
       turn.userLine,
       opts.sessionId
     );
@@ -3511,7 +3511,7 @@ async function* runOpencodeAttempt(
   // Session identity (sticky-account key, legacy per-session server key,
   // instructions-file name). The SHARED-server pool key is computed later,
   // once the bridge account is known.
-  const sessionKey = journal?.bksSessionId || cwd;
+  const sessionKey = journal?.osSessionId || cwd;
   // Cerebras' self-serve tier allows only 30k input tokens/minute. A shared
   // interactive server carries the complete external + OpenSession MCP catalog,
   // which exceeds that limit before generation starts. Keep Cerebras on a
@@ -3545,7 +3545,7 @@ async function* runOpencodeAttempt(
       provider: PROVIDER,
       turn_id: turnId,
       run_key: runKey,
-      bks_session_id: journal?.bksSessionId,
+      bks_session_id: journal?.osSessionId,
       run_kind: journal?.kind,
       mode: mode || "code",
       claude_session_id: ocSessionId || undefined,
@@ -3659,7 +3659,7 @@ async function* runOpencodeAttempt(
                 audit({
                   msg: "account_pool_wait",
                   run_kind: journal?.kind,
-                  bks_session_id: journal?.bksSessionId,
+                  bks_session_id: journal?.osSessionId,
                   model,
                   reason: cause,
                   earliest_reset: new Date(earliestReset).toISOString(),
@@ -3675,7 +3675,7 @@ async function* runOpencodeAttempt(
               audit({
                 msg: "account_pool_wait_resolved",
                 run_kind: journal?.kind,
-                bks_session_id: journal?.bksSessionId,
+                bks_session_id: journal?.osSessionId,
                 model,
                 account: waited.name,
               });
@@ -3709,7 +3709,7 @@ async function* runOpencodeAttempt(
             audit({
               msg: "account_near_limit_steer",
               run_kind: journal?.kind,
-              bks_session_id: journal?.bksSessionId,
+              bks_session_id: journal?.osSessionId,
               model,
               from_account: picked.name,
               to_account: fresh.name,
@@ -3761,7 +3761,7 @@ async function* runOpencodeAttempt(
           msg: "opencode_meridian_run",
           turn_id: turnId,
           run_key: runKey,
-          bks_session_id: journal?.bksSessionId,
+          bks_session_id: journal?.osSessionId,
           run_kind: journal?.kind,
           model,
           account: picked.name,
@@ -3860,7 +3860,7 @@ async function* runOpencodeAttempt(
           msg: "opencode_openai_run",
           turn_id: turnId,
           run_key: runKey,
-          bks_session_id: journal?.bksSessionId,
+          bks_session_id: journal?.osSessionId,
           run_kind: journal?.kind,
           model,
           account: maskOpenaiAccount(picked),
@@ -3989,7 +3989,7 @@ async function* runOpencodeAttempt(
       // shared per-prompt `system`), so it reaches every run either way.
       localInstructions: readLocalInstructions(cwd),
       inProcessMcp: opts.inProcessMcp,
-      bksSessionId: journal?.bksSessionId,
+      osSessionId: journal?.osSessionId,
       user,
       author,
       githubUserLogin,
@@ -4134,7 +4134,7 @@ async function* runOpencodeAttempt(
             : {
                 ...externalMcp,
                 ...(prebuiltProxies ??
-                  (hasInProcess && journal?.bksSessionId
+                  (hasInProcess && journal?.osSessionId
                     ? inProcessOpencodeMcpConfigs(opts.inProcessMcp, rpcToken)
                     : {})),
               },
@@ -4196,8 +4196,8 @@ async function* runOpencodeAttempt(
     // A fresh OpenCode server discovers MCP tools as part of startup. Make the
     // shared proxy token routable before spawning it; otherwise that first
     // tools/list fails and OpenCode caches every in-process server as failed.
-    if (!prebuiltProxies && hasInProcess && journal?.bksSessionId) {
-      registerRunToken(rpcToken, { sessionId: journal.bksSessionId, user });
+    if (!prebuiltProxies && hasInProcess && journal?.osSessionId) {
+      registerRunToken(rpcToken, { sessionId: journal.osSessionId, user });
       rpcTokenRegistered = true;
     }
 
@@ -4227,8 +4227,8 @@ async function* runOpencodeAttempt(
         drainingServers.delete(watched);
         if (runEnded) return;
         runFailure ??= `opencode serve exited mid-run (code ${code}) — the turn was lost; send the prompt again to restart on a fresh server`;
-        if (journal?.bksSessionId) {
-          transitionRunState(journal.bksSessionId, "engine_died", {
+        if (journal?.osSessionId) {
+          transitionRunState(journal.osSessionId, "engine_died", {
             source: "proc_exit",
             code,
           });
@@ -4271,7 +4271,7 @@ async function* runOpencodeAttempt(
     }
     if (!ocSessionId) {
       const created = await client.session.create({
-        body: { title: journal?.bksSessionId ? `backstage ${journal.bksSessionId}` : "backstage run" },
+        body: { title: journal?.osSessionId ? `backstage ${journal.osSessionId}` : "backstage run" },
         ...q,
       });
       if (!created.data) throw new Error(`Failed to create opencode session: ${JSON.stringify(created.error ?? "")}`);
@@ -4290,8 +4290,8 @@ async function* runOpencodeAttempt(
     // here with the freshly-minted oc id), so the flag-gated store writes in
     // opencode-transcript.ts can resolve it. transcriptSessionId is the
     // map-only carrier for kind-only-journal loop runs (Linear passes
-    // `linear-<branch>`); journaled runs keep using their bksSessionId.
-    const transcriptUnifiedId = journal?.bksSessionId || opts.transcriptSessionId;
+    // `linear-<branch>`); journaled runs keep using their osSessionId.
+    const transcriptUnifiedId = journal?.osSessionId || opts.transcriptSessionId;
     if (transcriptUnifiedId) recordBksSessionFor(ocSessionId, transcriptUnifiedId);
     // A resumed session may carry a transcript-mirror gap (e.g. a turn that
     // ran orphaned after a restart — 2026-07-17: an hour of work invisible
@@ -4336,9 +4336,9 @@ async function* runOpencodeAttempt(
     // the run's duration, so proxied michael-* tool calls (tagged with the
     // opencode session id by the session-tag plugin) route to THIS session's
     // in-process tools rather than whichever run registered the token last.
-    if (shared && rpcTokenRegistered && journal?.bksSessionId) {
+    if (shared && rpcTokenRegistered && journal?.osSessionId) {
       registerOcSessionContext(ocSessionId, {
-        sessionId: journal.bksSessionId,
+        sessionId: journal.osSessionId,
         user,
         token: rpcToken,
       });
@@ -4423,15 +4423,15 @@ async function* runOpencodeAttempt(
       turn.notes.length = 0;
     }
 
-    // Kind-only journals ({kind} with no bksSessionId — the Plain/Linear/Slack
+    // Kind-only journals ({kind} with no osSessionId — the Plain/Linear/Slack
     // agent loops) are a gate/policy marker, not a crash journal: those loops
     // track their own engine session ids and redeliver on their own triggers,
     // and a generic headless resume could DUPLICATE side effects they never
     // had (e.g. re-creating a Linear issue). Only UI-owned runs journal.
-    if (journal?.bksSessionId) {
+    if (journal?.osSessionId) {
       journalSet({
         runKey,
-        bksSessionId: journal.bksSessionId,
+        osSessionId: journal.osSessionId,
         claudeSessionId: ocSessionId,
         // Reattach needs the hosting server: detached servers survive the
         // restart, and resume looks the adopted entry up by this key.
@@ -4781,7 +4781,7 @@ async function* runOpencodeAttempt(
       const policyReply = bashAskPolicyReply(ask, {
         unattended: policy.unattended,
         gated: bashGated,
-        sessionId: journal?.bksSessionId,
+        sessionId: journal?.osSessionId,
         runKind: journal?.kind,
       });
       if (policyReply) return policyReply;
@@ -5166,8 +5166,8 @@ async function* runOpencodeAttempt(
             runFailure ??=
               "opencode server stopped answering status polls for 60s — ending the turn " +
               "(engine state preserved; send again to continue)";
-            if (journal?.bksSessionId) {
-              transitionRunState(journal.bksSessionId, "engine_died", {
+            if (journal?.osSessionId) {
+              transitionRunState(journal.osSessionId, "engine_died", {
                 source: "status_poll_zombie",
                 failures: statusPollFailures,
               });
@@ -5261,7 +5261,7 @@ async function* runOpencodeAttempt(
                     audit({
                       msg: "account_pool_wait",
                       run_kind: journal?.kind,
-                      bks_session_id: journal?.bksSessionId,
+                      bks_session_id: journal?.osSessionId,
                       model,
                       reason: "mid-run usage limit; pool dry",
                       earliest_reset: new Date(earliestReset).toISOString(),
@@ -5680,7 +5680,7 @@ async function* runOpencodeAttempt(
     // which aborts the engine turn). Consumer teardown mid-turn keeps the
     // record so the next boot reattaches the still-live engine turn.
     if (
-      journal?.bksSessionId &&
+      journal?.osSessionId &&
       !rotation?.rotate &&
       (reachedTerminal || abortController.signal.aborted)
     ) {
@@ -5724,7 +5724,7 @@ export async function tryReattachOpencodeRun(
   if (!ocSessionId || !serverKey) return null;
   const runKey = run.runKey;
   if (activeOpencodeRuns.has(runKey)) return null;
-  if (run.bksSessionId && activeOpencodeRuns.has(run.bksSessionId)) return null;
+  if (run.osSessionId && activeOpencodeRuns.has(run.osSessionId)) return null;
   // The pool holds one entry per key, but a drain-respawn (or the boot
   // adoption of one) can leave the run's live turn on a SUPERSEDED server
   // that no longer owns the key — shared shard DBs make the successor answer
@@ -5797,7 +5797,7 @@ export async function tryReattachOpencodeRun(
     // clear the journal (the engine turn lives on the detached server).
     let reachedTerminal = false;
     const registeredKeys = new Set<string>([runKey, ocSessionId!]);
-    if (run.bksSessionId) registeredKeys.add(run.bksSessionId);
+    if (run.osSessionId) registeredKeys.add(run.osSessionId);
     for (const key of registeredKeys) activeOpencodeRuns.set(key, abortController);
     detachedRunKeys.add(runKey);
     const server = entry!;
@@ -5812,16 +5812,16 @@ export async function tryReattachOpencodeRun(
     journalSet({ ...run });
     let rpcTokenRegistered = false;
     let ocSessionRegistered = "";
-    if (run.bksSessionId) {
+    if (run.osSessionId) {
       // Revive the in-process MCP path: the proxies baked into the server's
       // config reconnect to the run-rpc socket on their next call and
       // authenticate with this token (interactive-builder authz still applies
       // per session — automation-owned sessions stay fail-closed there).
-      registerRunToken(server.rpcToken, { sessionId: run.bksSessionId, user: run.user });
+      registerRunToken(server.rpcToken, { sessionId: run.osSessionId, user: run.user });
       rpcTokenRegistered = true;
       if (shared) {
         registerOcSessionContext(ocSessionId!, {
-          sessionId: run.bksSessionId,
+          sessionId: run.osSessionId,
           user: run.user,
           token: server.rpcToken,
         });
@@ -5835,7 +5835,7 @@ export async function tryReattachOpencodeRun(
         provider: PROVIDER,
         turn_id: turnId,
         run_key: runKey,
-        bks_session_id: run.bksSessionId,
+        bks_session_id: run.osSessionId,
         run_kind: `${run.kind || "run"}-reattach`,
         mode: run.mode || "code",
         claude_session_id: ocSessionId,
@@ -5887,7 +5887,7 @@ export async function tryReattachOpencodeRun(
       // Transcript v2: re-record the oc→unified mapping before the gap
       // backfill below runs the store's import-first gate — the reattach path
       // is the first writer for every in-flight run at activation.
-      if (run.bksSessionId) recordBksSessionFor(ocSessionId!, run.bksSessionId);
+      if (run.osSessionId) recordBksSessionFor(ocSessionId!, run.osSessionId);
       // Seed mirror dedup from what the file already has + backfill the gap.
       const seenUuids = backfillOpencodeTranscriptGap(ocSessionId!);
       const emittedText = new Set<string>();
@@ -5936,8 +5936,8 @@ export async function tryReattachOpencodeRun(
         if (runEnded) return;
         runFailure ??=
           "opencode serve exited mid-run (detached server died) — the turn was lost; send the prompt again to restart on a fresh server";
-        if (run.bksSessionId) {
-          transitionRunState(run.bksSessionId, "engine_died", {
+        if (run.osSessionId) {
+          transitionRunState(run.osSessionId, "engine_died", {
             source: "reattach_proc_exit",
           });
         }
@@ -5983,7 +5983,7 @@ export async function tryReattachOpencodeRun(
         const policyReply = bashAskPolicyReply(ask, {
           unattended: policy.unattended,
           gated: isUnattendedKind(baseJournalKind(run.kind)) && run.mode !== "ask",
-          sessionId: run.bksSessionId,
+          sessionId: run.osSessionId,
           runKind: run.kind,
         });
         if (policyReply) return policyReply;

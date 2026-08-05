@@ -319,7 +319,7 @@ export function sharedCheckoutEditors(writeCapableOnly = false): string | undefi
 			if (!run.cwd || resolve(run.cwd) !== checkout) continue;
 			if (writeCapableOnly && run.mode === "ask") continue;
 			const user = (run.user || "").trim();
-			const title = sessionTitle(run.bksSessionId);
+			const title = sessionTitle(run.osSessionId);
 			const label = user && title ? `${user} · ${title}` : user || title || "";
 			if (!label || seen.has(label)) continue;
 			seen.add(label);

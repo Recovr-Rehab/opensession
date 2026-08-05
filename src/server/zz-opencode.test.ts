@@ -656,7 +656,7 @@ describe("buildOpencodeInstructions", () => {
   test("code mode gets the session link; confirm-tool notes ride deniedToolNotes", () => {
     const s = buildOpencodeInstructions({
       isAsk: false,
-      bksSessionId: "abc-123",
+      osSessionId: "abc-123",
       deniedToolNotes: opencodeRunPolicy({
         journalKind: "prompt",
         confirmTools: STRIPE_CONFIRM_TOOLS,
@@ -670,7 +670,7 @@ describe("buildOpencodeInstructions", () => {
   test("a resolved requester gets named + assigned in the PR instruction", () => {
     const s = buildOpencodeInstructions({
       isAsk: false,
-      bksSessionId: "abc-123",
+      osSessionId: "abc-123",
       user: "michiel",
       author: { name: "Michiel Westerbeek", email: "alice@example.com" },
     });
@@ -681,7 +681,7 @@ describe("buildOpencodeInstructions", () => {
   test("an unresolved user keeps the generic footer", () => {
     const s = buildOpencodeInstructions({
       isAsk: false,
-      bksSessionId: "abc-123",
+      osSessionId: "abc-123",
       user: "Anonymous",
       author: null,
     });

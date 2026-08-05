@@ -100,7 +100,7 @@ function makeLocalSandbox(cwd: string): Sandbox {
         user: spec.user,
         fallbackModel: spec.fallbackModel,
         journal: {
-          bksSessionId: spec.bksSessionId,
+          osSessionId: spec.osSessionId,
           kind: spec.journalKind || "prompt",
         },
         onAskUser: cb?.onAskUser,
@@ -108,7 +108,7 @@ function makeLocalSandbox(cwd: string): Sandbox {
       // In-process runs register their own control handles keyed by session
       // ids — steer/cancel route through the same agent-runner helpers the WS
       // handlers use, so behavior matches a directly-started run.
-      const ids = [spec.bksSessionId, spec.engineSessionId];
+      const ids = [spec.osSessionId, spec.engineSessionId];
       return {
         events: () => gen,
         steerable: providerFor(spec.model) !== "codex",

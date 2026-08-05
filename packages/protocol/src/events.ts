@@ -50,7 +50,7 @@ export interface StepPromptUsage {
  * next step reads NOTHING from the prompt cache and writes a new prefix, after
  * the previous step read a large one. The model gets handed a rewritten
  * conversation mid-task, which is a decent way to end up re-orienting and
- * stopping (2026-08-03 bks-019fc695: 262k → 94k between step 5 and 6, then the
+ * stopping (2026-08-03 incident: 262k → 94k between step 5 and 6, then the
  * turn ended on "Let me examine that commit."; 32 rebuilds across 6.4k steps in
  * the three days before that).
  *

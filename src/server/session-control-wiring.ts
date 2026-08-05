@@ -548,7 +548,7 @@ registerSessionControl({
 					confirmTools: STRIPE_CONFIRM_TOOLS,
 					aws: true,
 					user, // gate per-user MCP servers (allowedUsers) to the creator
-					journal: { bksSessionId: bksId, kind: "create" },
+					journal: { osSessionId: bksId, kind: "create" },
 					onAskUser: makeAskHandler(bksId),
 				})) {
 					if (event.type === "init") {

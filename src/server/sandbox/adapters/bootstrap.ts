@@ -53,7 +53,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from "fs";
 import { dirname } from "path";
 import { OPENSESSION_CHATS_DIR } from "../../paths";
-import { envAlias, stateDir } from "../../rename-compat";
+import { envAlias, stateDir, withLegacySessionId } from "../../rename-compat";
 import { journalSet, journalClear, type ActiveRunRecord } from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
 import { RESUME_CONTINUATION_PROMPT } from "../../agent-runner";
@@ -790,7 +790,7 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
       await driver.writeFile(`${dir}/${HOST_SPEC_NAME}`, JSON.stringify(spec));
     },
     async launch(hostId, dir) {
-      const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
+      const spec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`));
       if (!spec?.wsToken) {
         throw new Error(`remote launch of ${hostId}: spec.json (with wsToken) missing from ${dir}`);
       }
@@ -879,7 +879,7 @@ export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): Hos
         audit({
           msg: "sandbox_openai_seed_upload",
           host_id: spec.hostId,
-          bks_session_id: spec.bksSessionId,
+          bks_session_id: spec.osSessionId,
           mechanism: "oauth-subscription-seeded-remote",
           accounts: openaiUpload.accounts.map((a) => maskOpenaiAccount(a)),
           seeds: openaiUpload.seeds.length,
@@ -970,7 +970,7 @@ function recordForSpec(
 ): ActiveRunRecord {
   return {
     runKey: spec.hostId,
-    bksSessionId: spec.bksSessionId,
+    osSessionId: spec.osSessionId,
     claudeSessionId: spec.engineSessionId,
     prompt: spec.prompt,
     cwd: spec.cwd,
@@ -1044,7 +1044,7 @@ export async function* withOpencodeTranscriptMirror(
   // Transcript v2: record the oc→unified mapping BEFORE any mirror write so
   // the flag-gated store path in opencode-transcript.ts can resolve it (the
   // sandbox host is the recording site here — the spec carries both ids).
-  if (oc && spec.bksSessionId) recordBksSessionFor(oc, spec.bksSessionId);
+  if (oc && spec.osSessionId) recordBksSessionFor(oc, spec.osSessionId);
   const syntheticContinuation = spec.prompt === RESUME_CONTINUATION_PROMPT;
   const promptUuid = `${spec.hostId}-prompt`;
   const promptWrittenTo = new Set<string>();
@@ -1077,7 +1077,7 @@ export async function* withOpencodeTranscriptMirror(
         if (ocRef) ocRef.id = oc;
         // Rotation-safe: every init that lands on a NEW engine session id
         // re-records the mapping before the mirror/store writes below.
-        if (spec.bksSessionId) recordBksSessionFor(oc, spec.bksSessionId);
+        if (spec.osSessionId) recordBksSessionFor(oc, spec.osSessionId);
         ensureOpencodeTranscriptFile(oc);
         writePrompt(oc);
       } else if (ev.type === "text_chunk" && ev.text) {
@@ -1217,10 +1217,10 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       return {
         events: () => gen,
         steerable: providerFor(spec.model) !== "codex",
-        steer: (text) => mirrorSteer(text, hostSteer(spec.bksSessionId, text)),
+        steer: (text) => mirrorSteer(text, hostSteer(spec.osSessionId, text)),
         interruptSteer: (text) =>
-          mirrorSteer(text, hostInterruptSteer(spec.bksSessionId, text)),
-        cancel: () => hostCancel(spec.bksSessionId),
+          mirrorSteer(text, hostInterruptSteer(spec.osSessionId, text)),
+        cancel: () => hostCancel(spec.osSessionId),
       };
     },
 
@@ -1241,9 +1241,9 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       return {
         events: () => gen,
         steerable: providerFor(spec.model) !== "codex",
-        steer: (text) => hostSteer(spec.bksSessionId, text),
-        interruptSteer: (text) => hostInterruptSteer(spec.bksSessionId, text),
-        cancel: () => hostCancel(spec.bksSessionId),
+        steer: (text) => hostSteer(spec.osSessionId, text),
+        interruptSteer: (text) => hostInterruptSteer(spec.osSessionId, text),
+        cancel: () => hostCancel(spec.osSessionId),
       };
     },
 
@@ -1261,7 +1261,7 @@ export async function resumeRemoteSandboxRun(
   run: ActiveRunRecord,
   cb: HandleCallbacks,
 ): Promise<AsyncGenerator<StreamEvent> | null> {
-  if (!run.sandboxId || !run.bksSessionId || !run.sandboxProvider) return null;
+  if (!run.sandboxId || !run.osSessionId || !run.sandboxProvider) return null;
   // Lazy to avoid a static import cycle (index → adapters → bootstrap).
   const { getSandboxProvider } = await import("../index");
   let sandbox: Sandbox | null = null;
@@ -1279,7 +1279,7 @@ export async function resumeRemoteSandboxRun(
   await driver.ensureStarted();
 
   const oldDir = launcher.newRunDir(run.runKey);
-  const oldSpec = readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`);
+  const oldSpec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`));
   if (oldSpec?.wsToken) {
     // Ended while we were down? meta.json lives in-sandbox only.
     const meta = await driver.exec(`cat ${shellQuoteWord(`${oldDir}/meta.json`)} 2>/dev/null`);
@@ -1311,7 +1311,7 @@ export async function resumeRemoteSandboxRun(
     }
     if (await launcher.alive(oldDir, null)) {
       if (oldSpec.rpcToken) {
-        registerRunToken(oldSpec.rpcToken, { sessionId: oldSpec.bksSessionId, user: oldSpec.user });
+        registerRunToken(oldSpec.rpcToken, { sessionId: oldSpec.osSessionId, user: oldSpec.user });
       }
       registerRunWsHost(oldSpec.hostId, oldSpec.wsToken);
       console.log(`[sandbox-remote] reattaching to live run ${run.runKey} in ${run.sandboxId}`);
@@ -1336,10 +1336,10 @@ export async function resumeRemoteSandboxRun(
   const prompt = run.claudeSessionId ? RESUME_CONTINUATION_PROMPT : run.prompt;
   if (!prompt) return null;
   const rpcToken = oldSpec?.proxyMcpServers?.length ? crypto.randomUUID() : undefined;
-  if (rpcToken) registerRunToken(rpcToken, { sessionId: run.bksSessionId, user: run.user });
+  if (rpcToken) registerRunToken(rpcToken, { sessionId: run.osSessionId, user: run.user });
   const spec: RunHostSpec = {
     hostId: `rh-${Bun.randomUUIDv7()}`,
-    bksSessionId: run.bksSessionId,
+    osSessionId: run.osSessionId,
     prompt,
     engineSessionId: run.claudeSessionId,
     cwd: run.cwd,

@@ -120,6 +120,23 @@ export function canonicalMcpServerId(name: string): string {
 		: name;
 }
 
+/**
+ * bksSessionId → osSessionId (2026-08-05). Persisted run-host specs/metas,
+ * hello frames and run-journal records written before the rename carry the
+ * old field; normalize wherever one is deserialized. Emit sites write
+ * osSessionId only (plus a temporary dual-write in host.ts so a pre-rename
+ * server process can still read hosts spawned during the deploy window).
+ */
+export function withLegacySessionId<T extends { osSessionId?: string }>(
+	obj: T | null,
+): T | null {
+	if (obj && !obj.osSessionId) {
+		const legacy = (obj as { bksSessionId?: string }).bksSessionId;
+		if (legacy) obj.osSessionId = legacy;
+	}
+	return obj;
+}
+
 /** Test hook: forget cached resolutions + one-time warns (suites point HOME
  *  at scratch dirs and create/remove state between cases). */
 export function __resetRenameCompatForTest(): void {

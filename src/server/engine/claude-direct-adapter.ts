@@ -251,7 +251,7 @@ export async function* runClaudeDirect(
     mkdirSync(configDir, { recursive: true });
   } catch {}
 
-  const unifiedSessionId = opts.journal?.bksSessionId;
+  const unifiedSessionId = opts.journal?.osSessionId;
   const requestId = crypto.randomUUID();
   const started = Date.now();
   const auditBase = {
@@ -683,7 +683,7 @@ export async function runClaudeDirectSmokeTurn(
         mode: "ask",
         // Smoke probe: no connectors needed to prove the engine answers.
         mcpServers: [],
-        journal: { bksSessionId: sessionId, kind: "claude-direct-smoke" },
+        journal: { osSessionId: sessionId, kind: "claude-direct-smoke" },
       },
       SMOKE_MODEL
     )) {

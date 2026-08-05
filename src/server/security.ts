@@ -328,7 +328,7 @@ export async function executeScan(
         mode: "code",
         model: opts?.model,
         mcpServers: [], // deepsec + gh CLI only; findings land as PRs + summary
-        journal: { bksSessionId: bksId, kind: "security-scan" },
+        journal: { osSessionId: bksId, kind: "security-scan" },
       })) {
         if (event.type === "init") {
           if (event.sessionId) {

@@ -13,7 +13,7 @@
  * succeeding. Calls are recorded on `calls` for assertions.
  *
  * Journal fidelity: like the real runOpencode, a turn with
- * `opts.journal.bksSessionId` registers in the run journal for its duration
+ * `opts.journal.osSessionId` registers in the run journal for its duration
  * (journalSet → run_registered → journalClear), so FSM/busy/journal consumers
  * see the same lifecycle a real run produces. Point the journal at a temp file
  * first (`__setActiveRunsPathForTest`) in tests that use this.
@@ -113,12 +113,12 @@ export function makeFakeEngine(turns: FakeTurn[]): FakeEngine {
 
     const engineSessionId =
       turn.engineSessionId || opts.sessionId || `fake-ses-${callIndex + 1}`;
-    const bks = opts.journal?.bksSessionId;
+    const bks = opts.journal?.osSessionId;
     const runKey = bks ? `fake-${bks}` : null;
     if (runKey) {
       journalSet({
         runKey,
-        bksSessionId: bks,
+        osSessionId: bks,
         claudeSessionId: engineSessionId,
         cwd: opts.cwd,
         kind: opts.journal?.kind,

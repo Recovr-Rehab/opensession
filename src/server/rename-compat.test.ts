@@ -102,3 +102,24 @@ describe("rename-compat", () => {
 		});
 	});
 });
+
+describe("withLegacySessionId (bksSessionId → osSessionId, 2026-08-05)", () => {
+	const { withLegacySessionId } = require("./rename-compat");
+
+	it("fills osSessionId from a legacy bksSessionId field", () => {
+		const spec = { hostId: "rh-1", bksSessionId: "bks-abc" } as {
+			osSessionId?: string;
+		};
+		expect(withLegacySessionId(spec)?.osSessionId).toBe("bks-abc");
+	});
+
+	it("prefers an existing osSessionId over the legacy field", () => {
+		const spec = { osSessionId: "bks-new", bksSessionId: "bks-old" };
+		expect(withLegacySessionId(spec)?.osSessionId).toBe("bks-new");
+	});
+
+	it("passes through null and objects with neither field", () => {
+		expect(withLegacySessionId(null)).toBeNull();
+		expect(withLegacySessionId({}).osSessionId).toBeUndefined();
+	});
+});

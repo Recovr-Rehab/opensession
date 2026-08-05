@@ -60,13 +60,21 @@ type AskResult = import("./protocol").AskResult;
 type StreamEvent = import("../server/run-events").StreamEvent;
 
 const spec: RunHostSpec = JSON.parse(readFileSync(specPath, "utf-8"));
+// bksSessionId → osSessionId rename compat: a spec written by a pre-rename
+// server (pull-before-restart window) carries the old field.
+spec.osSessionId ??= (spec as { bksSessionId?: string }).bksSessionId ?? "";
 const sockPath = `${hostDir}/${HOST_SOCK_NAME}`;
 const metaPath = `${hostDir}/${HOST_META_NAME}`;
 
 const meta: RunHostMeta = {
   hostId: spec.hostId,
   pid: process.pid,
-  bksSessionId: spec.bksSessionId,
+  osSessionId: spec.osSessionId,
+  // Dual-write during the bksSessionId → osSessionId transition: a pre-rename
+  // server process (pull-before-restart window) reads the old field from
+  // meta.json and the hello frame. Drop after the rename has been deployed
+  // everywhere for a while.
+  ...({ bksSessionId: spec.osSessionId } as object),
   startedAt: new Date().toISOString(),
   selectedModel: spec.selectedModel ?? spec.model,
   effectiveModel: spec.model,
@@ -145,7 +153,9 @@ function sendHello(): void {
     t: "hello",
     hostId: spec.hostId,
     pid: process.pid,
-    bksSessionId: spec.bksSessionId,
+    osSessionId: spec.osSessionId,
+    // Rename transition dual-write (see the meta.json comment above).
+    ...({ bksSessionId: spec.osSessionId } as object),
     engineSessionId: meta.engineSessionId,
     state: ended ? "ended" : "running",
     pendingAsks: [...pendingAsks.entries()].map(([askId, a]) => ({
@@ -170,7 +180,7 @@ function handleClientMsg(msg: ClientToHostMsg): void {
       break;
     }
     case "steer": {
-      if (!steerAgentRun([spec.bksSessionId, meta.engineSessionId], msg.text)) {
+      if (!steerAgentRun([spec.osSessionId, meta.engineSessionId], msg.text)) {
         // Too late (run finishing) or backend can't steer — bounce it back so
         // backstage queues it instead of the message evaporating.
         send({ t: "steer_failed", text: msg.text });
@@ -180,10 +190,10 @@ function handleClientMsg(msg: ClientToHostMsg): void {
     case "interrupt_steer": {
       if (
         !interruptAndSteerAgentRun(
-          [spec.bksSessionId, meta.engineSessionId],
+          [spec.osSessionId, meta.engineSessionId],
           msg.text
         ) &&
-        !steerAgentRun([spec.bksSessionId, meta.engineSessionId], msg.text)
+        !steerAgentRun([spec.osSessionId, meta.engineSessionId], msg.text)
       ) {
         send({ t: "steer_failed", text: msg.text });
       }
@@ -191,7 +201,7 @@ function handleClientMsg(msg: ClientToHostMsg): void {
     }
     case "cancel": {
       log("cancel requested");
-      cancelAgentRun(spec.bksSessionId, meta.engineSessionId);
+      cancelAgentRun(spec.osSessionId, meta.engineSessionId);
       break;
     }
     case "shutdown": {
@@ -435,7 +445,7 @@ try {
     accountId: spec.accountId,
     accountStrict: spec.accountStrict,
     usageCredits: spec.usageCredits,
-    journal: { bksSessionId: spec.bksSessionId, kind: spec.journalKind || "prompt" },
+    journal: { osSessionId: spec.osSessionId, kind: spec.journalKind || "prompt" },
     onAskUser,
   })) {
     if (event.type === "init" && event.sessionId) {

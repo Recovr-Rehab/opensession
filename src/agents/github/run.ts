@@ -255,7 +255,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
       author: opts.author,
       fallbackModel: DEFAULT_FALLBACK_MODEL,
       mcpServers: githubFlowMcpServers(),
-      journal: { bksSessionId: bksId, kind: `github-${opts.kind}` },
+      journal: { osSessionId: bksId, kind: `github-${opts.kind}` },
     })) {
       if (event.type === "init") {
         engineSessionId = event.sessionId || engineSessionId;

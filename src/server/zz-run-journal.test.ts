@@ -36,7 +36,7 @@ describe("run journal", () => {
 	it("preserves human-confirmed tool policy across restart drains", async () => {
 		mod.journalSet({
 			runKey: "run-1",
-			bksSessionId: "bks-1",
+			osSessionId: "bks-1",
 			claudeSessionId: "engine-1",
 			prompt: "continue",
 			cwd: "/tmp",
@@ -74,7 +74,7 @@ describe("run journal", () => {
 		process.env.OPENSESSION_FORCE_LIMIT = "1";
 		mod.journalSet({
 			runKey: "run-2",
-			bksSessionId: "bks-2",
+			osSessionId: "bks-2",
 			claudeSessionId: "engine-2",
 			prompt: "continue",
 			cwd: "/tmp",

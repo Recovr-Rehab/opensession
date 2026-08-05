@@ -29,7 +29,7 @@ function hello(spec: RunHostSpec, selectedModel: string) {
     t: "hello" as const,
     hostId: spec.hostId,
     pid: 1,
-    bksSessionId: spec.bksSessionId,
+    osSessionId: spec.osSessionId,
     state: "running" as const,
     pendingAsks: [],
     selectedModel,
@@ -42,7 +42,7 @@ describe("HostHandle model recovery", () => {
   test("reconciles unix reconnects without duplicating reported switches", async () => {
     const spec: RunHostSpec = {
       hostId: "rh-test",
-      bksSessionId: "bks-test",
+      osSessionId: "bks-test",
       prompt: "test",
       cwd: "/tmp",
       model: "model-a",
@@ -79,7 +79,7 @@ describe("HostHandle model recovery", () => {
     mkdirSync(oldDir);
     const spec: RunHostSpec = {
       hostId: "rh-old",
-      bksSessionId: "bks-test",
+      osSessionId: "bks-test",
       prompt: "test",
       cwd: "/tmp",
       model: "model-a",
@@ -104,7 +104,7 @@ describe("HostHandle model recovery", () => {
     const meta: RunHostMeta = {
       hostId: spec.hostId,
       pid: 1,
-      bksSessionId: spec.bksSessionId,
+      osSessionId: spec.osSessionId,
       startedAt: new Date().toISOString(),
       selectedModel: "model-b",
       effectiveModel: "model-c",

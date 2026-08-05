@@ -100,7 +100,7 @@ describe("fake engine through runAgent", () => {
 				mcpServers: [],
 				model: "claude-sonnet-5",
 				fallbackModel: "claude-opus-4-8",
-				journal: { bksSessionId: "bks-test-hop", kind: "prompt" },
+				journal: { osSessionId: "bks-test-hop", kind: "prompt" },
 			}),
 		);
 		// The partial attempt's init passes through, its exhausted done is
@@ -145,7 +145,7 @@ describe("fake engine through runAgent", () => {
 				mcpServers: [],
 				model: "claude-sonnet-5",
 				fallbackModel: "claude-opus-4-8",
-				journal: { bksSessionId: "bks-test-breaker", kind: "prompt" },
+				journal: { osSessionId: "bks-test-breaker", kind: "prompt" },
 			}),
 		);
 		const last = events.at(-1)!;
@@ -170,13 +170,13 @@ describe("fake engine through runAgent", () => {
 				mcpServers: [],
 				model: "dial/medium",
 				fallbackModel: "claude-opus-5",
-				journal: { bksSessionId: "bks-test-transient-journal", kind: "prompt" },
+				journal: { osSessionId: "bks-test-transient-journal", kind: "prompt" },
 			}),
 		);
 		while (fake.calls.length < 2) await Bun.sleep(5);
 
 		const run = activeRunRecords().find(
-			(record) => record.bksSessionId === "bks-test-transient-journal",
+			(record) => record.osSessionId === "bks-test-transient-journal",
 		);
 		release();
 		const events = await collecting;

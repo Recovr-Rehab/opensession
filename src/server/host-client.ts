@@ -37,7 +37,7 @@ import { shouldPersistModelSwitch, type ImageInput } from "./run-events";
 import type { GitIdentity } from "./shared/user-mappings";
 import { providerFor } from "./models";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias, statePath } from "./rename-compat";
+import { envAlias, statePath, withLegacySessionId } from "./rename-compat";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   registerHostRun,
@@ -75,7 +75,7 @@ export function runHostsEnabled(): boolean {
 /** Options for a hosted run: RunAgentOpts minus the non-serializable bits,
  *  plus the host/session context. */
 export interface HostedRunOpts {
-  bksSessionId: string;
+  osSessionId: string;
   prompt: string;
   /** Engine session id to resume (claude session id / codex thread id). */
   sessionId?: string;
@@ -141,7 +141,7 @@ export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<Strea
     author: opts.author,
     user: opts.user,
     fallbackModel: opts.fallbackModel,
-    journal: { bksSessionId: opts.bksSessionId, kind: opts.journalKind || "prompt" },
+    journal: { osSessionId: opts.osSessionId, kind: opts.journalKind || "prompt" },
     onAskUser: opts.onAskUser,
   });
 }
@@ -156,7 +156,7 @@ async function spawnHostRun(opts: HostedRunOpts): Promise<HostHandle> {
   const rpcToken = opts.proxyMcpServers?.length ? crypto.randomUUID() : undefined;
   const spec: RunHostSpec = {
     hostId,
-    bksSessionId: opts.bksSessionId,
+    osSessionId: opts.osSessionId,
     prompt: opts.prompt,
     engineSessionId: opts.sessionId,
     cwd: opts.cwd,
@@ -178,7 +178,7 @@ async function spawnHostRun(opts: HostedRunOpts): Promise<HostHandle> {
     journalKind: opts.journalKind,
   };
   writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec);
-  if (rpcToken) registerRunToken(rpcToken, { sessionId: opts.bksSessionId, user: opts.user });
+  if (rpcToken) registerRunToken(rpcToken, { sessionId: opts.osSessionId, user: opts.user });
 
   let handle: HostHandle | undefined;
   try {
@@ -373,7 +373,7 @@ export function unixSocketConnector(sockPath: string): HostConnector {
 /** Default launcher: transient systemd units on this host. */
 const systemdHostLauncher: HostLauncher = {
   alive(dir) {
-    const meta = readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
+    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`));
     if (!meta?.pid) return false;
     try {
       process.kill(meta.pid, 0);
@@ -456,14 +456,14 @@ export class HostHandle {
     this.transientFallback = spec.transientFallback === true;
     this.ctl = {
       hostId: spec.hostId,
-      bksSessionId: spec.bksSessionId,
+      osSessionId: spec.osSessionId,
       steerable: providerFor(spec.model) !== "codex",
       connected: () => this.up,
       steer: (text) => this.send({ t: "steer", text }),
       interruptSteer: (text) => this.send({ t: "interrupt_steer", text }),
       cancel: () => this.send({ t: "cancel" }),
     };
-    registerHostRun([spec.bksSessionId, spec.engineSessionId], this.ctl);
+    registerHostRun([spec.osSessionId, spec.engineSessionId], this.ctl);
     if (spec.engineSessionId) this.engineSessionId = spec.engineSessionId;
   }
 
@@ -658,7 +658,7 @@ export class HostHandle {
   }
 
   private async hostAlive(): Promise<boolean> {
-    const meta = readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`);
+    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`));
     return this.launcher.alive(this.dir, meta);
   }
 
@@ -676,7 +676,7 @@ export class HostHandle {
     }
     if (this.endedClean) return;
 
-    const meta = readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`);
+    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`));
     if (meta?.done) {
       // Host finished and exited between our polls — take the terminal state.
       if (!this.sawTerminal) {
@@ -695,7 +695,7 @@ export class HostHandle {
     if (engineId && this.respawns < 2) {
       this.respawns++;
       console.warn(
-        `[host-client] run host ${this.spec.hostId} died mid-run — respawning to resume ${this.spec.bksSessionId}`
+        `[host-client] run host ${this.spec.hostId} died mid-run — respawning to resume ${this.spec.osSessionId}`
       );
       try {
         await this.respawn(engineId, meta);
@@ -793,7 +793,7 @@ export function discoverRunHosts(): DiscoveredHost[] {
   const out: DiscoveredHost[] = [];
   for (const name of readdirSync(HOSTS_DIR)) {
     const dir = `${HOSTS_DIR}/${name}`;
-    const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
+    const spec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`));
     if (!spec) {
       // Torn dir from a crash mid-create — nothing to recover.
       try {
@@ -801,7 +801,7 @@ export function discoverRunHosts(): DiscoveredHost[] {
       } catch {}
       continue;
     }
-    const meta = readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
+    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`));
     let alive = false;
     if (meta?.pid) {
       try {
@@ -826,7 +826,7 @@ export async function attachRunHost(
 ): Promise<AsyncGenerator<StreamEvent>> {
   if (d.spec.rpcToken) {
     registerRunToken(d.spec.rpcToken, {
-      sessionId: d.spec.bksSessionId,
+      sessionId: d.spec.osSessionId,
       user: d.spec.user,
     });
   }

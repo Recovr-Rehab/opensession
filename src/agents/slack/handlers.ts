@@ -1035,9 +1035,9 @@ export async function processMessage(
       aws: true,
       inProcessMcp,
       reposNote: SLACK_SYSTEM_PROMPT_APPEND + ADMIN_TOOLS_PROMPT + memoryAppend,
-      // bksSessionId feeds the in-process MCP proxy path; resume-on-boot
+      // osSessionId feeds the in-process MCP proxy path; resume-on-boot
       // skips "slack" kinds (the queue re-delivers interrupted messages).
-      journal: { bksSessionId: bksId, kind: "slack" },
+      journal: { osSessionId: bksId, kind: "slack" },
       // Money-moving Stripe tools need the per-call human confirmation the
       // interactive runner provides; stripped from the tool list here.
       deniedTools: Object.fromEntries(

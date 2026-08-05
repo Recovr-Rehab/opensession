@@ -37,7 +37,7 @@ beforeAll(() => {
   writeFileSync(
     join(scratch, "active-runs.json"),
     JSON.stringify({
-      runkey1: { runKey: "runkey1", bksSessionId: "bks-mig-busy", cwd: "/tmp", startedAt: "now" },
+      runkey1: { runKey: "runkey1", osSessionId: "bks-mig-busy", cwd: "/tmp", startedAt: "now" },
     })
   );
 });

@@ -306,7 +306,7 @@ try {
   } else {
     const spec: RunHostSpec = {
       hostId: `rh-verify-${Date.now().toString(36)}`,
-      bksSessionId: SESSION_ID,
+      osSessionId: SESSION_ID,
       prompt: "Reply with exactly: OK",
       cwd: WT,
       mode: "ask",
@@ -354,7 +354,7 @@ try {
   mkdirSync(failDir, { recursive: true });
   const failHandle = new HostHandle(
     failDir,
-    { hostId: "rh-sbxtest-fail", bksSessionId: failSession, prompt: "x", cwd: WT,
+    { hostId: "rh-sbxtest-fail", osSessionId: failSession, prompt: "x", cwd: WT,
       mode: "ask", model: "claude-haiku-4-5", mcpServers: [], journalKind: "sandbox-verify" },
     {},
     // Launcher that "succeeds" but never brings up a socket = unreachable host.
@@ -580,7 +580,7 @@ try {
   } else {
     const wsSpec: RunHostSpec = {
       hostId: `rh-wsverify-${Date.now().toString(36)}`,
-      bksSessionId: WS_SESSION_ID,
+      osSessionId: WS_SESSION_ID,
       prompt: "Reply with exactly: OK",
       cwd: WT,
       mode: "ask",
@@ -616,7 +616,7 @@ try {
     const { hostRunBusy: wsBusy } = await import("../../src/server/host-registry");
     const cancelSpec: RunHostSpec = {
       hostId: `rh-wscancel-${Date.now().toString(36)}`,
-      bksSessionId: WS_SESSION_ID,
+      osSessionId: WS_SESSION_ID,
       prompt: "Count from 1 to 400, one number per line. Do not stop early.",
       cwd: WT,
       mode: "ask",

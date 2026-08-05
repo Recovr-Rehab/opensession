@@ -777,7 +777,7 @@ export async function runAutomation(
      * that reference the session (e.g. an Open-in-Backstage link and a Stop
      * button) before the run starts, instead of waiting for onSessionCreated.
      */
-    bksSessionId?: string;
+    osSessionId?: string;
     /**
      * Model for THIS run only, beating the automation's configured model —
      * e.g. the Plain ticket router downgrading a basic ticket to a cheaper
@@ -797,7 +797,7 @@ export async function runAutomation(
 
   const startedAt = new Date();
   const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
-  const bksId = options?.bksSessionId || `bks-${randomUUIDv7()}`;
+  const bksId = options?.osSessionId || `bks-${randomUUIDv7()}`;
 
   try {
     // The automation's repo (instance default when omitted). Ask mode reads the repo's
@@ -1091,7 +1091,7 @@ export async function runAutomation(
         const fb = automation.fallbackModel || DEFAULT_FALLBACK_MODEL;
         return fb ? opencodeAutomationModel(fb) : undefined;
       })(),
-      journal: { bksSessionId: bksId, kind: "automation" },
+      journal: { osSessionId: bksId, kind: "automation" },
     })) {
       if (event.type === "init") {
         engineSessionId = event.sessionId || "";

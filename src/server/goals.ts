@@ -43,7 +43,7 @@ export interface Goal {
   /** Repo id for code-mode worktrees (key in worktree.ts REPOS). Default tella-fusion. */
   repo?: string;
   /** Backstage session this goal drives (context continuity). Set on first wake. */
-  bksSessionId?: string;
+  osSessionId?: string;
   /** Engine (Claude/Codex) session id to resume each wake. Set on first wake. */
   engineSessionId?: string;
   /** Persistent worktree path for code mode — stable cwd so resume keeps working. */

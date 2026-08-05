@@ -162,14 +162,14 @@ export interface RunAgentOpts {
    * never intentionally spend paid credits. Claude only.
    */
   usageCredits?: boolean;
-  journal?: { bksSessionId?: string; kind?: string };
+  journal?: { osSessionId?: string; kind?: string };
   /**
    * Unified session id (e.g. `linear-<branch>`) for the transcript-v2 oc→
    * unified map ONLY (opencode-transcript.ts recordBksSessionFor) — lets loop
    * runs whose journal is deliberately kind-only (no crash journal; the loop
    * re-drives its own turns) still key their store appends on their unified
    * session. Never journaled, never used for resume/run-state/MCP identity —
-   * runs that journal a bksSessionId don't need this (it wins when both are
+   * runs that journal a osSessionId don't need this (it wins when both are
    * set, since they must agree anyway).
    */
   transcriptSessionId?: string;
@@ -215,7 +215,7 @@ function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncGenerat
  */
 export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const key = isCheckedKind(opts.journal?.kind)
-    ? turnKeyFor({ bksSessionId: opts.journal?.bksSessionId })
+    ? turnKeyFor({ osSessionId: opts.journal?.osSessionId })
     : undefined;
   if (!key) {
     yield* runAgentInner(opts);
@@ -224,7 +224,7 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent>
   beginTurn({
     key,
     kind: opts.journal?.kind || "unknown",
-    sessionId: opts.journal?.bksSessionId,
+    sessionId: opts.journal?.osSessionId,
   });
   try {
     for await (const event of runAgentInner(opts)) {
@@ -643,13 +643,13 @@ type AskHandler = NonNullable<RunAgentOpts["onAskUser"]>;
  */
 export function resumeInterruptedRuns(
   onResumed?: (
-    bksSessionId?: string,
+    osSessionId?: string,
     terminalEvent?: StreamEvent,
   ) => void,
-  askHandlerFor?: (bksSessionId: string) => AskHandler | undefined,
-  inProcessMcpFor?: (bksSessionId: string, user?: string) => Record<string, unknown> | undefined,
-  reposNoteFor?: (bksSessionId: string) => string | undefined,
-  onEvent?: (bksSessionId: string, event: StreamEvent) => void,
+  askHandlerFor?: (osSessionId: string) => AskHandler | undefined,
+  inProcessMcpFor?: (osSessionId: string, user?: string) => Record<string, unknown> | undefined,
+  reposNoteFor?: (osSessionId: string) => string | undefined,
+  onEvent?: (osSessionId: string, event: StreamEvent) => void,
 ): string[] {
   const interrupted = takeInterruptedRuns();
   const resumed: string[] = [];
@@ -693,27 +693,27 @@ export function resumeInterruptedRuns(
         run.sandboxProvider === "lambda-microvm")
     ) {
       const isDocker = run.sandboxProvider === "docker";
-      if (run.bksSessionId) resumed.push(run.bksSessionId);
+      if (run.osSessionId) resumed.push(run.osSessionId);
       void (async () => {
         try {
           const resume = isDocker
             ? (await import("./sandbox/docker")).resumeDockerSandboxRun
             : (await import("./sandbox/adapters/bootstrap")).resumeRemoteSandboxRun;
           const events = await resume(run, {
-            onAskUser: run.bksSessionId ? askHandlerFor?.(run.bksSessionId) : undefined,
+            onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           });
           if (!events) {
             console.warn(
               `[runner] Sandbox ${run.sandboxId} for interrupted run ${run.runKey} is gone — the session's next prompt recreates it`
             );
             journalClear(run.runKey);
-            onResumed?.(run.bksSessionId);
+            onResumed?.(run.osSessionId);
             return;
           }
           for await (const event of events) {
-            if (run.bksSessionId) onEvent?.(run.bksSessionId, event);
+            if (run.osSessionId) onEvent?.(run.osSessionId, event);
             if (event.type === "done" || event.type === "error") {
-              onResumed?.(run.bksSessionId, event);
+              onResumed?.(run.osSessionId, event);
             }
           }
         } catch (e) {
@@ -734,12 +734,12 @@ export function resumeInterruptedRuns(
         journalClear(run.runKey);
         continue;
       }
-      if (run.bksSessionId) {
-        resumed.push(run.bksSessionId);
-        transitionRunState(run.bksSessionId, "resume_reprompt", { run_key: run.runKey });
+      if (run.osSessionId) {
+        resumed.push(run.osSessionId);
+        transitionRunState(run.osSessionId, "resume_reprompt", { run_key: run.runKey });
       }
       console.log(
-        `[runner] Re-running interrupted ${run.kind || "run"} ${run.bksSessionId || run.runKey} from scratch (never got an engine session)`
+        `[runner] Re-running interrupted ${run.kind || "run"} ${run.osSessionId || run.runKey} from scratch (never got an engine session)`
       );
       void (async () => {
         try {
@@ -759,10 +759,10 @@ export function resumeInterruptedRuns(
             effort: run.effort,
             fastMode: run.fastMode,
             mcpServers: run.mcpServers ?? "all",
-            inProcessMcp: run.bksSessionId
-              ? inProcessMcpFor?.(run.bksSessionId, run.user)
+            inProcessMcp: run.osSessionId
+              ? inProcessMcpFor?.(run.osSessionId, run.user)
               : undefined,
-            reposNote: run.bksSessionId ? reposNoteFor?.(run.bksSessionId) : undefined,
+            reposNote: run.osSessionId ? reposNoteFor?.(run.osSessionId) : undefined,
             user: run.user,
             deniedTools: run.deniedTools,
             confirmTools: run.confirmTools,
@@ -771,12 +771,12 @@ export function resumeInterruptedRuns(
             accountId: run.accountId,
             accountStrict: run.accountStrict,
             usageCredits: run.usageCredits,
-            journal: { bksSessionId: run.bksSessionId, kind: `${run.kind || "run"}-rerun` },
-            onAskUser: run.bksSessionId ? askHandlerFor?.(run.bksSessionId) : undefined,
+            journal: { osSessionId: run.osSessionId, kind: `${run.kind || "run"}-rerun` },
+            onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           })) {
-            if (run.bksSessionId) onEvent?.(run.bksSessionId, event);
+            if (run.osSessionId) onEvent?.(run.osSessionId, event);
             if (event.type === "done" || event.type === "error") {
-              onResumed?.(run.bksSessionId, event);
+              onResumed?.(run.osSessionId, event);
             }
           }
         } catch (e) {
@@ -785,7 +785,7 @@ export function resumeInterruptedRuns(
       })();
       continue;
     }
-    if (run.bksSessionId) resumed.push(run.bksSessionId);
+    if (run.osSessionId) resumed.push(run.osSessionId);
     void (async () => {
       try {
         let repairingRecoveredResult = false;
@@ -795,23 +795,23 @@ export function resumeInterruptedRuns(
         // null means the server is gone (or was a direct child) and we fall
         // back to the classic continuation re-prompt below.
         if (run.serverKey) {
-          if (run.bksSessionId)
-            transitionRunState(run.bksSessionId, "reattach_start", { run_key: run.runKey });
+          if (run.osSessionId)
+            transitionRunState(run.osSessionId, "reattach_start", { run_key: run.runKey });
           const reattached = await tryReattachOpencodeRun(run, {
-            onAskUser: run.bksSessionId ? askHandlerFor?.(run.bksSessionId) : undefined,
+            onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           }).catch((e) => {
             console.warn(`[runner] Reattach probe failed for ${run.runKey}:`, e);
             return null;
           });
-          if (run.bksSessionId)
+          if (run.osSessionId)
             transitionRunState(
-              run.bksSessionId,
+              run.osSessionId,
               reattached ? "reattach_ok" : "reattach_fail",
               { run_key: run.runKey },
             );
           if (reattached) {
             console.log(
-              `[runner] Reattached ${run.kind || "run"} ${run.bksSessionId || run.runKey} to its live engine turn (server ${run.serverKey})`
+              `[runner] Reattached ${run.kind || "run"} ${run.osSessionId || run.runKey} to its live engine turn (server ${run.serverKey})`
             );
             for await (const event of reattached) {
               if (recoveredResultNeedsContinuation(event)) {
@@ -828,9 +828,9 @@ export function resumeInterruptedRuns(
                 );
                 continue;
               }
-              if (run.bksSessionId) onEvent?.(run.bksSessionId, event);
+              if (run.osSessionId) onEvent?.(run.osSessionId, event);
               if (event.type === "done" || event.type === "error") {
-                onResumed?.(run.bksSessionId, event);
+                onResumed?.(run.osSessionId, event);
               }
             }
             if (!repairingRecoveredResult) return;
@@ -838,11 +838,11 @@ export function resumeInterruptedRuns(
         }
         console.log(
           repairingRecoveredResult
-            ? `[runner] Repairing recovered result for ${run.bksSessionId || run.runKey}`
-            : `[runner] Resuming interrupted ${run.kind || "run"} ${run.bksSessionId || run.runKey} (started ${run.startedAt}, model ${run.model || "default"})`
+            ? `[runner] Repairing recovered result for ${run.osSessionId || run.runKey}`
+            : `[runner] Resuming interrupted ${run.kind || "run"} ${run.osSessionId || run.runKey} (started ${run.startedAt}, model ${run.model || "default"})`
         );
-        if (run.bksSessionId && !repairingRecoveredResult)
-          transitionRunState(run.bksSessionId, "resume_reprompt", { run_key: run.runKey });
+        if (run.osSessionId && !repairingRecoveredResult)
+          transitionRunState(run.osSessionId, "resume_reprompt", { run_key: run.runKey });
         // The continuation run journals under its own runKey — drop the
         // claimed record only now, AFTER the reattach probe settled: dying
         // mid-probe used to lose the run to the wipe-on-take (2026-07-27).
@@ -860,10 +860,10 @@ export function resumeInterruptedRuns(
           effort: run.effort,
           fastMode: run.fastMode,
           mcpServers: run.mcpServers ?? "all",
-          inProcessMcp: run.bksSessionId
-            ? inProcessMcpFor?.(run.bksSessionId, run.user)
+          inProcessMcp: run.osSessionId
+            ? inProcessMcpFor?.(run.osSessionId, run.user)
             : undefined,
-          reposNote: run.bksSessionId ? reposNoteFor?.(run.bksSessionId) : undefined,
+          reposNote: run.osSessionId ? reposNoteFor?.(run.osSessionId) : undefined,
           user: run.user,
           deniedTools: run.deniedTools,
           confirmTools: run.confirmTools,
@@ -872,12 +872,12 @@ export function resumeInterruptedRuns(
           accountId: run.accountId,
           accountStrict: run.accountStrict,
           usageCredits: run.usageCredits,
-          journal: { bksSessionId: run.bksSessionId, kind: `${run.kind || "run"}-resume` },
-          onAskUser: run.bksSessionId ? askHandlerFor?.(run.bksSessionId) : undefined,
+          journal: { osSessionId: run.osSessionId, kind: `${run.kind || "run"}-resume` },
+          onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
         })) {
-          if (run.bksSessionId) onEvent?.(run.bksSessionId, event);
+          if (run.osSessionId) onEvent?.(run.osSessionId, event);
           if (event.type === "done" || event.type === "error") {
-            onResumed?.(run.bksSessionId, event);
+            onResumed?.(run.osSessionId, event);
           }
         }
       } catch (e) {

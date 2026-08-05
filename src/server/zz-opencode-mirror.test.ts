@@ -13,13 +13,13 @@
  * (getOpencodeTranscriptPath + parseTranscript) is a frozen, never-written
  * archive — appendOpencodeTranscript now writes ONLY into the transcript
  * store (transcript-store.ts), keyed by the UNIFIED backstage session id
- * (spec.bksSessionId), not by the opencode engine session id. So these
+ * (spec.osSessionId), not by the opencode engine session id. So these
  * assertions read the store by unified id instead of a per-oc-session file.
  * That also changes what "account rotation" means to assert: every oc id a
- * rotation touches maps onto the SAME unified session (spec.bksSessionId
+ * rotation touches maps onto the SAME unified session (spec.osSessionId
  * never changes mid-turn), so there is one continuous transcript to check —
  * not two separate per-oc files — and each test below uses its own
- * bksSessionId to stay isolated from the others, the same way the old
+ * osSessionId to stay isolated from the others, the same way the old
  * per-oc-file tests were isolated by using distinct oc ids.
  */
 import { describe, test, expect, afterAll } from "bun:test";
@@ -102,7 +102,7 @@ afterAll(() => {
 function spec(overrides: Partial<RunHostSpec>): RunHostSpec {
   return {
     hostId: `rh-test-${Math.random().toString(36).slice(2, 10)}`,
-    bksSessionId: "bks-mirror-test",
+    osSessionId: "bks-mirror-test",
     prompt: "hello",
     cwd: "/tmp",
     mode: "code",
@@ -136,7 +136,7 @@ describe("withOpencodeTranscriptMirror", () => {
           { type: "text_chunk", text: "first answer" } as StreamEvent,
           { type: "done", sessionId: oc, result: "first answer" } as StreamEvent,
         ]),
-        spec({ bksSessionId: bks, prompt: "first question" }),
+        spec({ osSessionId: bks, prompt: "first question" }),
       ),
     );
     // Turn 2: resumed session — engine id known at dispatch; the user entry
@@ -147,7 +147,7 @@ describe("withOpencodeTranscriptMirror", () => {
         { type: "init", sessionId: oc } as StreamEvent,
         { type: "text_chunk", text: "second answer" } as StreamEvent,
       ]),
-      spec({ bksSessionId: bks, prompt: "second question", engineSessionId: oc }),
+      spec({ osSessionId: bks, prompt: "second question", engineSessionId: oc }),
     );
     // Pull nothing yet — the generator body runs on first next(); one tick in.
     const first = await turn2.next();
@@ -168,7 +168,7 @@ describe("withOpencodeTranscriptMirror", () => {
 
   test("account rotation: the prompt survives in the unified store, no dupes", async () => {
     const bks = "bks-rotation";
-    const s = spec({ bksSessionId: bks, prompt: "rotate me" });
+    const s = spec({ osSessionId: bks, prompt: "rotate me" });
     await drain(
       withOpencodeTranscriptMirror(
         stream([
@@ -180,7 +180,7 @@ describe("withOpencodeTranscriptMirror", () => {
         s,
       ),
     );
-    // Both engine sessions map onto the SAME unified session (spec.bksSessionId
+    // Both engine sessions map onto the SAME unified session (spec.osSessionId
     // never changes across a rotation), so there's one continuous transcript,
     // not two per-oc files. The prompt must open it and survive the rotation
     // intact: written at attempt 1's init, then upserted — not duplicated —
@@ -195,7 +195,7 @@ describe("withOpencodeTranscriptMirror", () => {
 
   test("runner_notice events persist as system entries across a rotation", async () => {
     const bks = "bks-notice";
-    const s = spec({ bksSessionId: bks, prompt: "notice me" });
+    const s = spec({ osSessionId: bks, prompt: "notice me" });
     await drain(
       withOpencodeTranscriptMirror(
         stream([
@@ -228,7 +228,7 @@ describe("withOpencodeTranscriptMirror", () => {
           { type: "text_chunk", text: "resumed output" } as StreamEvent,
         ]),
         spec({
-          bksSessionId: bks,
+          osSessionId: bks,
           prompt: RESUME_CONTINUATION_PROMPT,
           engineSessionId: oc,
           journalKind: "prompt-resume",
@@ -243,7 +243,7 @@ describe("withOpencodeTranscriptMirror", () => {
   test("re-delivery with the same hostId upserts instead of duplicating", async () => {
     const bks = "bks-redeliver";
     const oc = "ses_mirror_redeliver";
-    const s = spec({ bksSessionId: bks, prompt: "once only", engineSessionId: oc });
+    const s = spec({ osSessionId: bks, prompt: "once only", engineSessionId: oc });
     await drain(
       withOpencodeTranscriptMirror(
         stream([{ type: "init", sessionId: oc } as StreamEvent]),
@@ -277,7 +277,7 @@ describe("withOpencodeTranscriptMirror", () => {
           } as StreamEvent,
           { type: "tool_result", toolUseId: "prt_1", content: "file.txt" } as StreamEvent,
         ]),
-        spec({ bksSessionId: bks, prompt: "list files" }),
+        spec({ osSessionId: bks, prompt: "list files" }),
       ),
     );
     const entries = entriesFor(bks);
@@ -313,7 +313,7 @@ describe("withOpencodeTranscriptMirror", () => {
             images: [dataUrl],
           } as StreamEvent,
         ]),
-        spec({ bksSessionId: bks, prompt: "look at the screenshot" }),
+        spec({ osSessionId: bks, prompt: "look at the screenshot" }),
       ),
     );
     const result = entriesFor(bks).find((e) => e.type === "tool_result");
@@ -328,7 +328,7 @@ describe("withOpencodeTranscriptMirror", () => {
     const out = await drain(
       withOpencodeTranscriptMirror(
         stream(events),
-        spec({ bksSessionId: "bks-passthrough", model: "claude-sonnet-5", prompt: "x" }),
+        spec({ osSessionId: "bks-passthrough", model: "claude-sonnet-5", prompt: "x" }),
       ),
     );
     expect(out).toHaveLength(2);

@@ -112,7 +112,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync } from "fs";
 import { dirname, resolve as resolvePath } from "path";
 import { homeDir, OPENSESSION_CHATS_DIR } from "../paths";
-import { envAlias, stateDir } from "../rename-compat";
+import { envAlias, stateDir, withLegacySessionId } from "../rename-compat";
 import { journalSet, journalClear, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
 import { RESUME_CONTINUATION_PROMPT } from "../agent-runner";
@@ -871,7 +871,7 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
       // WS transport: register the run's dial-back token (spec.json was just
       // written to `dir` — respawns included) and point the host at the run-ws
       // + rpc-ws routes instead of socket paths.
-      const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
+      const spec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`));
       const wsEnv: string[] = [];
       if (spec?.wsToken) {
         const base = sandboxCallbackBaseUrl();
@@ -922,7 +922,7 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
 function recordForSpec(spec: RunHostSpec, sandboxId: string): ActiveRunRecord {
   return {
     runKey: spec.hostId,
-    bksSessionId: spec.bksSessionId,
+    osSessionId: spec.osSessionId,
     claudeSessionId: spec.engineSessionId,
     prompt: spec.prompt,
     cwd: spec.cwd,
@@ -1064,7 +1064,7 @@ function makeDockerSandbox(
       } catch (e) {
         // The HostHandle ctor registered its control in the host-registry —
         // drop it (and the caller-registered run token) on any launch failure,
-        // or hostRunBusy(bksSessionId) stays true forever: every future prompt
+        // or hostRunBusy(osSessionId) stays true forever: every future prompt
         // reads busy and the idle-stop sweep skips the container.
         handle?.abandon();
         unregisterRunToken(spec.rpcToken);
@@ -1082,9 +1082,9 @@ function makeDockerSandbox(
         steerable: providerFor(spec.model) !== "codex",
         // HostHandle registers its control in host-registry keyed by the bks
         // session id — route through the same helpers the WS handlers use.
-        steer: (text) => hostSteer(spec.bksSessionId, text),
-        interruptSteer: (text) => hostInterruptSteer(spec.bksSessionId, text),
-        cancel: () => hostCancel(spec.bksSessionId),
+        steer: (text) => hostSteer(spec.osSessionId, text),
+        interruptSteer: (text) => hostInterruptSteer(spec.osSessionId, text),
+        cancel: () => hostCancel(spec.osSessionId),
       };
     },
 
@@ -1109,9 +1109,9 @@ function makeDockerSandbox(
       return {
         events: () => gen,
         steerable: providerFor(spec.model) !== "codex",
-        steer: (text) => hostSteer(spec.bksSessionId, text),
-        interruptSteer: (text) => hostInterruptSteer(spec.bksSessionId, text),
-        cancel: () => hostCancel(spec.bksSessionId),
+        steer: (text) => hostSteer(spec.osSessionId, text),
+        interruptSteer: (text) => hostInterruptSteer(spec.osSessionId, text),
+        cancel: () => hostCancel(spec.osSessionId),
       };
     },
 
@@ -1493,16 +1493,16 @@ export async function resumeDockerSandboxRun(
   run: ActiveRunRecord,
   cb: HandleCallbacks,
 ): Promise<AsyncGenerator<StreamEvent> | null> {
-  if (!run.sandboxId || !run.bksSessionId) return null;
+  if (!run.sandboxId || !run.osSessionId) return null;
   const provider = new DockerProvider();
   const sandbox = await provider.get(run.sandboxId);
   if (!sandbox) return null;
 
-  const launcher = makeDockerLauncher(run.sandboxId, run.bksSessionId);
+  const launcher = makeDockerLauncher(run.sandboxId, run.osSessionId);
   const oldDir = launcher.newRunDir(run.runKey);
-  const oldSpec = readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`);
+  const oldSpec = withLegacySessionId(readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`));
   if (oldSpec) {
-    const meta = readJsonSafe<RunHostMeta>(`${oldDir}/${HOST_META_NAME}`);
+    const meta = withLegacySessionId(readJsonSafe<RunHostMeta>(`${oldDir}/${HOST_META_NAME}`));
     if (meta?.done) {
       // Ended while backstage was down: hand the terminal event to the normal
       // consumption bookkeeping, then clean up.
@@ -1527,7 +1527,7 @@ export async function resumeDockerSandboxRun(
     }
     if ((await containerStatus(run.sandboxId)) === "running" && (await launcher.alive(oldDir, meta))) {
       if (oldSpec.rpcToken) {
-        registerRunToken(oldSpec.rpcToken, { sessionId: oldSpec.bksSessionId, user: oldSpec.user });
+        registerRunToken(oldSpec.rpcToken, { sessionId: oldSpec.osSessionId, user: oldSpec.user });
       }
       // WS-transport run: re-register the dial-back token so the still-alive
       // host's reconnect loop can get back in (it's been retrying since the
@@ -1554,10 +1554,10 @@ export async function resumeDockerSandboxRun(
   const prompt = run.claudeSessionId ? RESUME_CONTINUATION_PROMPT : run.prompt;
   if (!prompt) return null;
   const rpcToken = oldSpec?.proxyMcpServers?.length ? crypto.randomUUID() : undefined;
-  if (rpcToken) registerRunToken(rpcToken, { sessionId: run.bksSessionId, user: run.user });
+  if (rpcToken) registerRunToken(rpcToken, { sessionId: run.osSessionId, user: run.user });
   const spec: RunHostSpec = {
     hostId: `rh-${Bun.randomUUIDv7()}`,
-    bksSessionId: run.bksSessionId,
+    osSessionId: run.osSessionId,
     prompt,
     engineSessionId: run.claudeSessionId,
     cwd: run.cwd,

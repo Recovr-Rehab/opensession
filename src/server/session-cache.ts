@@ -48,7 +48,7 @@ export function getCachedSessions(): UnifiedSession[] {
 	const runStarts = new Map<string, string>();
 	for (const r of activeRunRecords()) {
 		if (!r.startedAt) continue;
-		for (const key of [r.bksSessionId, r.claudeSessionId]) {
+		for (const key of [r.osSessionId, r.claudeSessionId]) {
 			if (!key) continue;
 			const prev = runStarts.get(key);
 			if (!prev || r.startedAt < prev) runStarts.set(key, r.startedAt);

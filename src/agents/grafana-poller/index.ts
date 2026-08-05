@@ -138,7 +138,7 @@ interface DedupRecord {
   dedupValue: string;
   firstSeen: string;
   lastInvestigatedAt: string;
-  bksSessionId: string;
+  osSessionId: string;
   slackTs?: string;
 }
 
@@ -238,7 +238,7 @@ async function investigate(
     dedupValue: failure.dedupValue,
     firstSeen: prior?.firstSeen || nowIso,
     lastInvestigatedAt: nowIso,
-    bksSessionId: bksId,
+    osSessionId: bksId,
   };
   writeDedup(automation.id, base);
 
@@ -278,7 +278,7 @@ async function investigate(
 
   void runAutomation(automation, onSessionInvalidate, {
     trigger: "event",
-    bksSessionId: bksId,
+    osSessionId: bksId,
     eventContext,
   })
     .catch((e) => {

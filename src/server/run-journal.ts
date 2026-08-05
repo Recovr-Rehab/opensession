@@ -7,7 +7,7 @@
 import type { McpScope } from "./runner-shared";
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_CHATS_DIR } from "./paths";
-import { envAlias } from "./rename-compat";
+import { envAlias, withLegacySessionId } from "./rename-compat";
 import { transitionRunState } from "./run-state";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
@@ -34,7 +34,7 @@ export function __setActiveRunsPathForTest(path: string): string {
 
 export interface ActiveRunRecord {
   runKey: string;
-  bksSessionId?: string;
+  osSessionId?: string;
   claudeSessionId?: string; // engine session id (name kept for on-disk compat)
   prompt?: string; // original prompt — lets a run interrupted before it got an engine session be re-run from scratch (safe: no session id ⇒ no model output ⇒ no side effects yet)
   promptEntryId?: string; // uuid of the prompt's user transcript line — a boot re-run reuses it so the store upserts instead of duplicating the bubble
@@ -76,9 +76,12 @@ export interface ActiveRunRecord {
 
 function readRunJournal(): Record<string, ActiveRunRecord> {
   try {
-    return existsSync(ACTIVE_RUNS_PATH)
-      ? JSON.parse(readFileSync(ACTIVE_RUNS_PATH, "utf-8"))
-      : {};
+    if (!existsSync(ACTIVE_RUNS_PATH)) return {};
+    const journal: Record<string, ActiveRunRecord> = JSON.parse(
+      readFileSync(ACTIVE_RUNS_PATH, "utf-8"),
+    );
+    for (const record of Object.values(journal)) withLegacySessionId(record);
+    return journal;
   } catch {
     return {};
   }
@@ -99,8 +102,8 @@ export function journalSet(record: ActiveRunRecord): void {
   writeRunJournal(journal);
   // A fallback hop re-journals the same runKey mid-run — that's the running
   // self-edge, not a new registration, so keep the event but tag it.
-  if (record.bksSessionId)
-    transitionRunState(record.bksSessionId, "run_registered", {
+  if (record.osSessionId)
+    transitionRunState(record.osSessionId, "run_registered", {
       run_key: record.runKey,
       kind: record.kind,
       rejournal: rejournal || undefined,
@@ -171,8 +174,8 @@ export function takeInterruptedRuns(): ActiveRunRecord[] {
     writeRunJournal(journal);
   }
   for (const r of entries) {
-    if (r.bksSessionId)
-      transitionRunState(r.bksSessionId, "boot_journal_found", {
+    if (r.osSessionId)
+      transitionRunState(r.osSessionId, "boot_journal_found", {
         run_key: r.runKey,
         kind: r.kind,
       });

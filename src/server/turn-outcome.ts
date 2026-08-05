@@ -133,8 +133,8 @@ const ledgers = new Map<string, TurnLedger>();
  * mention flow, which posts its result as a note unconditionally) get no
  * ledger and no verdict, which is the honest answer for them.
  */
-export function turnKeyFor(opts: { bksSessionId?: string }): string | undefined {
-  return opts.bksSessionId || undefined;
+export function turnKeyFor(opts: { osSessionId?: string }): string | undefined {
+  return opts.osSessionId || undefined;
 }
 
 export function beginTurn(opts: {

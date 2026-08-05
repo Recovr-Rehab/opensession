@@ -140,7 +140,7 @@ async function runWorkTurn(
       mcpServers: "all",
       // Kind "plain" = unattended on the opencode engine: untrusted customer
       // ticket text, so the deny-set below is stripped at the tool-list layer.
-      // Kind-only journal (no bksSessionId) — this loop tracks its own engine
+      // Kind-only journal (no osSessionId) — this loop tracks its own engine
       // session ids and must not be generically resumed after a restart.
       journal: { kind: "plain" },
       // Runner-layer MCP gate runs with NO user (runAgent passes user through

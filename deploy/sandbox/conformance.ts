@@ -544,7 +544,7 @@ async function runEntry(entry: Entry): Promise<void> {
         const smokeDir = `/home/ubuntu/.bks-runs/smoke-${RUN_TS}`;
         const smokeSpec = {
           hostId: `rh-smoke-${RUN_TS}`,
-          bksSessionId: sessionId,
+          osSessionId: sessionId,
           prompt: "smoke",
           // Deliberately nonexistent: the run itself must die instantly (no
           // model call happens without a valid workspace) — the check only
@@ -574,7 +574,7 @@ async function runEntry(entry: Entry): Promise<void> {
     } else {
       const runSpec: RunHostSpec = {
         hostId: `rh-conf-${entry.name}-${RUN_TS}`,
-        bksSessionId: sessionId,
+        osSessionId: sessionId,
         prompt: "Reply with exactly: OK",
         cwd: sandbox.cwd,
         mode: "ask",

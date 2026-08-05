@@ -495,7 +495,7 @@ export function snapshotActiveSessions(): void {
 
 /** Wake sessions that were active at the last graceful shutdown but finished
  *  their turn during the drain (so they weren't in the journal to resume).
- *  `alreadyResumed` are the bksSessionIds the journal resume already handled. */
+ *  `alreadyResumed` are the osSessionIds the journal resume already handled. */
 export function resumeDrainedSessions(alreadyResumed: Set<string>): void {
 	let records: ActiveRunRecord[] = [];
 	try {
@@ -512,7 +512,7 @@ export function resumeDrainedSessions(alreadyResumed: Set<string>): void {
 
 	let woken = 0;
 	for (const r of records) {
-		const id = r.bksSessionId;
+		const id = r.osSessionId;
 		if (!id || alreadyResumed.has(id)) continue; // journal already resumed it
 		if (r.kind?.startsWith("github-")) continue; // github agent owns its recovery
 		const session = findSession(id);
@@ -553,8 +553,8 @@ const recoveredSlackScanners = new Map<
 	ReturnType<typeof createSlackPostScanner>
 >();
 
-export function recordRecoveredRunEvent(bksSessionId: string, event: StreamEvent): void {
-	const session = findSession(bksSessionId);
+export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent): void {
+	const session = findSession(osSessionId);
 	if (!session) return;
 	if (session.source !== "backstage") {
 		// Slack/linear-source sessions: a recovered run's engine-id/model flips
@@ -581,7 +581,7 @@ export function recordRecoveredRunEvent(bksSessionId: string, event: StreamEvent
 				invalidateSessionsCache();
 			if (session.worktreeDir)
 				attachSessionWatchersToEngineTranscript(
-					bksSessionId,
+					osSessionId,
 					event.provider || providerFor(event.model || session.model),
 					session.worktreeDir,
 					event.sessionId,
@@ -596,10 +596,10 @@ export function recordRecoveredRunEvent(bksSessionId: string, event: StreamEvent
 	// events no longer flow through runAutomation's loop (that's how the
 	// 2026-07-16 dispute runs lost their thread links).
 	{
-		let scan = recoveredSlackScanners.get(bksSessionId);
+		let scan = recoveredSlackScanners.get(osSessionId);
 		if (!scan) {
 			scan = createSlackPostScanner();
-			recoveredSlackScanners.set(bksSessionId, scan);
+			recoveredSlackScanners.set(osSessionId, scan);
 		}
 		const post = scan(event);
 		if (post) {
@@ -609,15 +609,15 @@ export function recordRecoveredRunEvent(bksSessionId: string, event: StreamEvent
 					(t) => t.channel === post.channel && t.threadTs === post.threadTs,
 				)
 			) {
-				touchBackstageSession(bksSessionId, {
+				touchBackstageSession(osSessionId, {
 					slackThreads: [...threads, { channel: post.channel, threadTs: post.threadTs }],
 				});
-				linkThreadInIndex(bksSessionId, post.channel, post.threadTs);
+				linkThreadInIndex(osSessionId, post.channel, post.threadTs);
 				invalidateSessionsCache();
 			}
 		}
 		if (event.type === "done" || event.type === "error")
-			recoveredSlackScanners.delete(bksSessionId);
+			recoveredSlackScanners.delete(osSessionId);
 	}
 
 	if (event.type === "model_switch") {
@@ -626,7 +626,7 @@ export function recordRecoveredRunEvent(bksSessionId: string, event: StreamEvent
 		if (!shouldPersistModelSwitch(event)) return;
 		if (session.model === to) return;
 		const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
-		touchBackstageSession(bksSessionId, {
+		touchBackstageSession(osSessionId, {
 			model: to,
 			modelHistory: [
 				...(session.modelHistory || []),
@@ -638,17 +638,17 @@ export function recordRecoveredRunEvent(bksSessionId: string, event: StreamEvent
 	}
 
 	if (event.type === "done" || event.type === "error") {
-		if (event.type === "done") clearSteerReceipts(bksSessionId);
-		broadcastToSession(bksSessionId, {
+		if (event.type === "done") clearSteerReceipts(osSessionId);
+		broadcastToSession(osSessionId, {
 			type: "stream_done",
-			sessionId: bksSessionId,
+			sessionId: osSessionId,
 		});
-		broadcastToSession(bksSessionId, {
+		broadcastToSession(osSessionId, {
 			type: "session_status",
-			sessionId: bksSessionId,
+			sessionId: osSessionId,
 			isRunning: false,
 		});
-		onHumanAsksSessionIdle(bksSessionId);
+		onHumanAsksSessionIdle(osSessionId);
 		if (event.type === "error") return;
 	}
 
@@ -656,7 +656,7 @@ export function recordRecoveredRunEvent(bksSessionId: string, event: StreamEvent
 	const engineSessionId = event.sessionId || "";
 	const model = event.model || session.model;
 	const provider = event.provider || providerFor(model);
-	touchBackstageSession(bksSessionId, {
+	touchBackstageSession(osSessionId, {
 		...(engineSessionId ? engineSessionPatch(provider, engineSessionId) : {}),
 		...(engineSessionId && event.provider
 			? { lastEngineProvider: event.provider }
@@ -665,7 +665,7 @@ export function recordRecoveredRunEvent(bksSessionId: string, event: StreamEvent
 	});
 	if (engineSessionId && session.worktreeDir) {
 		attachSessionWatchersToEngineTranscript(
-			bksSessionId,
+			osSessionId,
 			provider,
 			session.worktreeDir,
 			engineSessionId,
@@ -1131,7 +1131,7 @@ export async function maybeLaunchSandboxedRun(
 		registerRunToken(rpcToken, { sessionId: session.id, user: opts.user });
 		const spec: RunHostSpec = {
 			hostId: `rh-${randomUUIDv7()}`,
-			bksSessionId: session.id,
+			osSessionId: session.id,
 			prompt: opts.prompt,
 			engineSessionId: remoteSandboxReplaced
 				? undefined
@@ -1202,7 +1202,7 @@ export async function maybeLaunchSandboxedRun(
 				mcpGrantUser: session.startedBy || undefined,
 				fallbackModel: interactiveFallbackModel(session.model),
 				accountId: session.accountId,
-				journal: { bksSessionId: session.id, kind: "prompt" },
+				journal: { osSessionId: session.id, kind: "prompt" },
 				onAskUser: makeAskHandler(session.id),
 			});
 		}
@@ -1953,7 +1953,7 @@ async function runSessionPromptInner(
 		// Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
 		// sessions pass no user, so they never see a user-restricted server.
 		user: isAutomationSession ? undefined : user,
-		journal: { bksSessionId: session.id, kind: "prompt" },
+		journal: { osSessionId: session.id, kind: "prompt" },
 		onAskUser: makeAskHandler(sessionId),
 	})) {
 		switch (event.type) {
