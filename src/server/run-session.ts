@@ -2331,7 +2331,7 @@ async function runSessionPromptInner(
 }
 
 /**
- * Expand `@session:bks-…` mentions in a prompt into a footer the agent can act
+ * Expand `@session:os-…` mentions in a prompt into a footer the agent can act
  * on with its opensession-sessions tools. The mention token itself stays in place
  * (it carries the id); the footer resolves each id to a title/state and points
  * at the tools — including slash commands over send_to_session (e.g. "/loop").
@@ -2352,7 +2352,11 @@ export function sessionMentionsNote(
 	const skip = new Set(excludeIds ?? []);
 	const ids = [
 		...new Set(
-			[...content.matchAll(/@session:(bks-[0-9a-f-]+)/g)].map((m) => m[1]),
+			// `os-` is the minted prefix; `bks-` is the pre-rename one, which
+			// every session started before 2026-08-05 still carries.
+			[...content.matchAll(/@session:((?:os|bks)-[0-9a-f-]+)/g)].map(
+				(m) => m[1],
+			),
 		),
 	].filter((id) => !skip.has(id));
 	if (!ids.length) return null;

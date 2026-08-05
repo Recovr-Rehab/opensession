@@ -30,7 +30,7 @@ import { randomBytes, timingSafeEqual } from "crypto";
 import { audit } from "./audit";
 import { configuredIdentity } from "./config";
 import { githubUserAuthActive } from "./github-auth";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, isNativeSessionId, OPENSESSION_CHATS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { githubLoginFor } from "./shared/user-mappings";
 import { isLocalProfile } from "./profile";
@@ -261,7 +261,8 @@ export function migrateSessionsToGithubUser(): void {
   let stamped = 0;
   try {
     for (const file of readdirSync(OPENSESSION_CHATS_DIR)) {
-      if (!/^bks-.*\.json$/.test(file)) continue;
+      // Both id prefixes: `os-` is minted today, `bks-` predates the rename.
+      if (!file.endsWith(".json") || !isNativeSessionId(file)) continue;
       const path = `${OPENSESSION_CHATS_DIR}/${file}`;
       scanned++;
       try {

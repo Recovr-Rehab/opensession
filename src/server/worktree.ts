@@ -170,7 +170,9 @@ async function seedAndInstallWorktree(
 
 export async function installWorktreeDeps(repo: Repo, wtPath: string, branchLabel: string): Promise<void> {
   try {
-    const repoSetup = ["opensession", "opensession"]
+    // `.opensession/setup.sh`, with `.backstage/` as the pre-rename name repos
+    // may still ship (same pair as preview.ts's LIFECYCLE_DIRS).
+    const repoSetup = ["opensession", "backstage"]
       .map((dir) => `${wtPath}/.${dir}/setup.sh`)
       .find((path) => existsSync(path));
     if (repoSetup) {

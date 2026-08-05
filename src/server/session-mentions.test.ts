@@ -14,6 +14,14 @@ describe("sessionMentionsNote exclusion (no double-context)", () => {
 		expect(note).toContain("bks-bbbb-1");
 	});
 
+	it("matches both id prefixes — `os-` (minted today) and `bks-`", () => {
+		const note = sessionMentionsNote(
+			"@session:os-019fd30a-785b-7000-ad89-9c2fb5b74a19 vs @session:bks-bbbb-1",
+		);
+		expect(note).toContain("os-019fd30a-785b-7000-ad89-9c2fb5b74a19");
+		expect(note).toContain("bks-bbbb-1");
+	});
+
 	it("returns null when every mention was inlined", () => {
 		const note = sessionMentionsNote(
 			"@session:bks-aaaa-1 @session:bks-aaaa-2",
