@@ -13,6 +13,7 @@ import { enableOpencodeServerDetach } from "./src/server/opencode-detach";
 import { adoptDetachedOpencodeServers } from "./src/server/opencode-runner";
 import { startAccountHealthMonitor } from "./src/server/account-health";
 import { startDiskGc } from "./src/server/disk-gc";
+import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
@@ -606,6 +607,10 @@ if (!g.__opensessionBooted) {
 
 	// Reclaim rust target/ build caches from idle worktrees we keep (disk-gc.ts)
 	startDiskGc();
+
+	// Remove worktrees whose work is merged / PR closed, sweep removal husks
+	// (worktree-reaper.ts — in-process port of the cleanup-closed-worktrees cron)
+	startWorktreeReaper();
 
 	// Desk todo reminders: push + Slack DM when a remindAt passes (todos.ts)
 	startTodoReminderTicker();
