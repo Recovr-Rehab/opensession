@@ -5,7 +5,10 @@
 #
 # Modes:
 #   self-deploy.sh [--sha <target>]   ff-only deploy to <target> (default
-#                                     origin/main) + restart + health gate
+#                  [--pin <sha>]      origin/main) + restart + health gate;
+#                                     --pin overrides the last-known-good pin
+#                                     (for callers that pre-merged, e.g.
+#                                     `opensession update`)
 #   self-deploy.sh --rollback-only    restart onto the last-known-good pin
 #                                     (used by the watchdog after a bad deploy)
 #   self-deploy.sh --watchdog-probe   one conservative health probe (run every
@@ -59,14 +62,21 @@ STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 STARTED_EPOCH="$(date +%s)"
 
 usage() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 MODE=deploy
 TARGET="origin/main"
+PIN_OVERRIDE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --sha) TARGET="${2:?--sha needs a value}"; shift 2 ;;
+    # Record this sha as last-known-good instead of the pre-merge HEAD. For
+    # callers that already moved the tree before invoking the deploy (e.g.
+    # `opensession update` merges upstream first, then deploys --sha HEAD):
+    # without the override the pin would equal the just-merged commit and a
+    # rollback would "restore" the very code that failed.
+    --pin) PIN_OVERRIDE="${2:?--pin needs a value}"; shift 2 ;;
     --rollback-only) MODE=rollback; shift ;;
     --watchdog-probe) MODE=probe; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -247,9 +257,19 @@ do_deploy() {
   current="$(git_repo rev-parse HEAD)"
 
   # Pin the pre-deploy HEAD as last-known-good BEFORE moving anything: this is
-  # what --rollback-only and the watchdog restore.
-  echo "$current" > "$PIN_FILE"
-  log "pinned last-known-good ${current:0:10}"
+  # what --rollback-only and the watchdog restore. --pin overrides it for
+  # callers that already advanced the tree (see the flag comment above).
+  local pin_sha
+  if [ -n "$PIN_OVERRIDE" ]; then
+    if ! pin_sha="$(git_repo rev-parse "${PIN_OVERRIDE}^{commit}" 2>/dev/null)"; then
+      log "ERROR: cannot resolve --pin '$PIN_OVERRIDE'"
+      exit 1
+    fi
+  else
+    pin_sha="$current"
+  fi
+  echo "$pin_sha" > "$PIN_FILE"
+  log "pinned last-known-good ${pin_sha:0:10}"
 
   # Fast-forward only — never reset --hard going forward. Exactly deploy.sh's
   # philosophy: the checkout may be shared and sessions edit/commit on it

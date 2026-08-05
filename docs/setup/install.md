@@ -67,6 +67,10 @@ git remote add upstream https://github.com/tellahq/opensession.git
 bun install && bun run setup
 ```
 
+With that in place, `opensession update` pulls upstream releases into your
+fork (merging over your own commits when needed) and restarts through the
+health-gated deploy path.
+
 Nothing depends on the checkout living in a particular place — the CLI derives
 paths from wherever it is running, and onboarding writes the rest into
 `~/.opensession/config.json`. If you skip onboarding, the default mcp-config

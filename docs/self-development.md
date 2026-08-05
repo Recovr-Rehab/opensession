@@ -90,7 +90,17 @@ deploys abort permanently because your history has diverged from ours. Clone
 your **fork** (keep `tellahq/opensession` as an `upstream` remote to pull our
 updates), and in worktree mode set the self repo's `ghRepo` in your config to
 the fork so the PR flow targets it. Beyond that, the service user needs
-passwordless sudo for `systemctl restart <service>` and `systemd-run`. The optional watchdog —
+passwordless sudo for `systemctl restart <service>` and `systemd-run`.
+
+Staying current is one command: **`opensession update`** detects the fork
+topology (origin = your fork + an upstream remote), fetches upstream, merges
+it into your branch (an honest merge commit — never a rebase; conflicts abort
+cleanly back to your tree), pushes the result to your fork, reinstalls deps,
+and restarts through the same health-gated deploy path as `deploy_self` — the
+pre-update commit becomes the rollback pin, so an upstream release that
+doesn't come up healthy on your instance rolls back under the same rules.
+`opensession update --check` previews what it would pull without changing
+anything. The optional watchdog —
 `deploy/systemd/opensession-watchdog.{service,timer}` — probes health every
 60s but only ever acts inside a 15-minute window after a self-deploy restart,
 after 3 consecutive failures, at most once per deploy. Install it with:

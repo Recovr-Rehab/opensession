@@ -61,8 +61,9 @@ ${bold("Client")}
   tui [--host <url>]       open the terminal client (the 'os' binary)
 
 ${bold("Maintenance")}
-  update [--channel <ref>] fast-forward, reinstall deps, restart
-         [--check]         show what an update would pull, change nothing
+  update [--channel <ref>] pull upstream (ff, or merge on a fork with local
+         [--check]         commits), reinstall deps, health-gated restart;
+                           --check shows what it would pull, changes nothing
          [--no-restart]    skip the restart
   integrations             list integrations and whether they are on
   integrations enable <id>
