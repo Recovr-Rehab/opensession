@@ -3,8 +3,13 @@ import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
 import { DeskConversation } from "./DeskConversation";
 import { ResponsiveDialog } from "../ui/sheet";
-import { IconDesk, IconExpand, IconX } from "./icons";
+import { IconDesk, IconExpand, IconMic, IconX } from "./icons";
 import { Button } from "../ui/button";
+import {
+	DeskVoiceClient,
+	type DeskVoiceState,
+} from "../lib/desk-voice-client";
+import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
 
 /**
  * The Desk — a summonable overlay (⌘J / the floating desk button) on top of
@@ -42,6 +47,47 @@ function DeskBody({
 	const [clearedAt, setClearedAt] = useState<string | undefined>(undefined);
 	const [ensureError, setEnsureError] = useState<string | null>(null);
 	const rootRef = useRef<HTMLDivElement | null>(null);
+
+	// Voice mode (Settings → Desk voice): a live GPT Realtime call layered on
+	// this same Desk session. The call mirrors its transcript into the session,
+	// so the conversation below updates live while you talk.
+	const [voiceEnabled, setVoiceEnabled] = useState(getDeskVoicePref);
+	const [voiceState, setVoiceState] = useState<DeskVoiceState>("idle");
+	const [voiceError, setVoiceError] = useState<string | null>(null);
+	const voiceRef = useRef<DeskVoiceClient | null>(null);
+	useEffect(
+		() => onDeskVoiceChanged(() => setVoiceEnabled(getDeskVoicePref())),
+		[],
+	);
+	// Never leave a mic running past the overlay body's lifetime.
+	useEffect(
+		() => () => {
+			voiceRef.current?.stop();
+		},
+		[],
+	);
+
+	const voiceActive = voiceState !== "idle" && voiceState !== "error";
+
+	function toggleVoice() {
+		if (voiceRef.current?.active) {
+			voiceRef.current.stop();
+			return;
+		}
+		setVoiceError(null);
+		const client = new DeskVoiceClient({
+			user,
+			onState: (s, detail) => {
+				setVoiceState(s);
+				if (s === "error") setVoiceError(detail || "Voice call failed");
+			},
+		});
+		voiceRef.current = client;
+		void client.start().catch((e: any) => {
+			setVoiceState("error");
+			setVoiceError(e?.message || String(e));
+		});
+	}
 
 	// One-time boot (the body stays mounted after the first summon): resolve
 	// the standing Desk session + the clear marker.
@@ -101,6 +147,31 @@ function DeskBody({
 				<span className="min-w-0 flex-1 truncate text-item-title font-semibold text-fg">
 					Desk
 				</span>
+				{voiceEnabled && voiceState !== "idle" && (
+					<span
+						className="max-w-[160px] shrink-0 truncate text-[11px] font-medium text-dim"
+						title={voiceError ?? undefined}
+					>
+						{voiceState === "error"
+							? (voiceError ?? "Voice call failed")
+							: { connecting: "Connecting…", listening: "Listening", thinking: "Thinking…", speaking: "Speaking", action: "Working…" }[voiceState]}
+					</span>
+				)}
+				{voiceEnabled && (
+					<Button
+						variant="ghost"
+						size="xs"
+						className={`shrink-0 ${voiceActive ? "text-fg" : "text-faint"}`}
+						icon={<IconMic size={20} />}
+						onClick={toggleVoice}
+						title={
+							voiceActive
+								? "End the voice call"
+								: "Talk to your Desk (GPT Realtime)"
+						}
+						aria-label={voiceActive ? "End voice call" : "Start voice call"}
+					/>
+				)}
 				<Button
 					variant="ghost"
 					size="xs"
@@ -145,6 +216,11 @@ function DeskBody({
 						sessionId={sessionId}
 						effort="low"
 						hideBefore={clearedAt}
+						voiceSend={(text) =>
+							voiceRef.current?.active
+								? voiceRef.current.sendText(text)
+								: false
+						}
 						placeholder="Ask your Desk…"
 						emptyState={
 							<>

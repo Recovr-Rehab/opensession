@@ -54,6 +54,7 @@ import {
 	transcriptLineUser,
 } from "./opencode-transcript";
 import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
+import { takeVoiceHandoff } from "./desk-voice";
 import { activeRunRecords, type ActiveRunRecord } from "./run-journal";
 import { registerRunToken, unregisterRunToken } from "./run-rpc";
 import { createSlackPostScanner, linkThreadInIndex } from "./slack-links";
@@ -1754,6 +1755,15 @@ async function runSessionPromptInner(
 	// transcript shows only the human's message — the model-switch divider already
 	// marks the engine change; the handoff itself is plumbing (see prompt-context).
 	if (switchHandoff) prompt = `${wrapContext(switchHandoff)}\n\n${prompt}`;
+	// Bridge a Desk voice call into this text turn: the GPT Realtime turns are
+	// mirrored into the visible transcript, but the text engine's own
+	// conversation state never saw them — without this note the first text
+	// message after a call gets a Desk that's amnesiac about the conversation
+	// it apparently just had (see desk-voice.ts).
+	if (session.desk) {
+		const voiceHandoff = takeVoiceHandoff(sessionId);
+		if (voiceHandoff) prompt = `${wrapContext(voiceHandoff)}\n\n${prompt}`;
+	}
 	// Sibling-session transcripts attached from the fresh-session "Add session
 	// transcripts" chips: inline a bounded digest of each, fenced so the rendered
 	// transcript shows only the human's message. Skip automation sessions because

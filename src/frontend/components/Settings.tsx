@@ -139,6 +139,7 @@ import {
 	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
+	IconMic,
 	IconPencil,
 	IconPlus,
 	IconTrash,
@@ -165,6 +166,11 @@ import {
 	readHiddenSidebarFeeds,
 	setSidebarFeedVisible,
 } from "../lib/sidebar-feeds";
+import {
+	getDeskVoicePref,
+	setDeskVoicePref,
+	onDeskVoiceChanged,
+} from "../lib/desk-voice-pref";
 
 // The full-window Settings surface: a left sub-nav + a scrolling body, reached
 // from the "Settings" item in the account menu. Designed to grow — each area is
@@ -191,6 +197,7 @@ export type SettingsSectionKey =
 	| "keychain"
 	| "personalPrompt"
 	| "notifications"
+	| "deskVoice"
 	| "composer"
 	| "appearance"
 	| "setup"
@@ -377,6 +384,12 @@ const SECTIONS: {
 				<path d="M6.7 12a1.4 1.4 0 0 0 2.6 0" strokeLinecap="round" />
 			</svg>
 		),
+	},
+	{
+		key: "deskVoice",
+		label: "Desk voice",
+		group: "Personal",
+		icon: <IconMic size={20} />,
 	},
 	{
 		key: "composer",
@@ -653,6 +666,7 @@ function SectionPanel({
 		<>
 			{TOOL_SECTIONS.has(section) && children}
 			{section === "notifications" && <NotificationsPanel />}
+			{section === "deskVoice" && <DeskVoicePanel />}
 			{section === "composer" && <ComposerPanel />}
 			{section === "appearance" && <AppearancePanel />}
 			{section === "setup" && <SetupPanel />}
@@ -1135,6 +1149,123 @@ function NotificationsPanel() {
 						/>
 					}
 				/>
+			</SettingCard>
+		</SettingsPanel>
+	);
+}
+
+// ── Desk voice ─────────────────────────────────────────────────────────────
+
+interface DeskVoiceStatus {
+	configured: boolean;
+	keyMasked?: string;
+}
+
+function DeskVoiceApiKeyRow() {
+	const [status, setStatus] = useState<DeskVoiceStatus | null>(null);
+	const [apiKey, setApiKey] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const load = useCallback(() => {
+		fetch(`${BASE_PATH}/api/desk/voice/status`)
+			.then((r) => r.json())
+			.then(setStatus)
+			.catch((e) => setError(e.message));
+	}, []);
+	useEffect(load, [load]);
+
+	async function put(value: string) {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await fetch(`${BASE_PATH}/api/desk/voice/key`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ apiKey: value }),
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			setStatus(body);
+			setApiKey("");
+		} catch (e: any) {
+			setError(e.message || "Failed to save the API key");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	return (
+		<>
+			{status?.configured && (
+				<SettingRow
+					title="OpenAI API key"
+					desc={status.keyMasked}
+					control={
+						<Button size="sm" disabled={busy} onClick={() => put("")}>
+							Remove
+						</Button>
+					}
+				/>
+			)}
+			<SettingRow
+				title={status?.configured ? "Replace key" : "OpenAI API key"}
+				desc={
+					error || (
+						<>
+							Stored on the server, used only for Desk voice calls. Any
+							signed-in user can start voice calls once set.
+						</>
+					)
+				}
+				control={
+					<div className="flex items-center gap-2">
+						<input
+							className={settingsInputClass}
+							type="password"
+							value={apiKey}
+							onChange={(e) => setApiKey(e.target.value)}
+							placeholder="sk-…"
+						/>
+						<Button
+							size="sm"
+							variant="primary"
+							disabled={busy || !apiKey.trim()}
+							onClick={() => put(apiKey.trim())}
+						>
+							{busy ? "Saving…" : "Save"}
+						</Button>
+					</div>
+				}
+			/>
+		</>
+	);
+}
+
+function DeskVoicePanel() {
+	const [on, setOn] = useState(getDeskVoicePref);
+	useEffect(() => onDeskVoiceChanged(() => setOn(getDeskVoicePref())), []);
+
+	return (
+		<SettingsPanel>
+			<SettingsHeader
+				title="Desk voice"
+				description="Talk to your Desk out loud. Voice mode uses OpenAI Realtime and adds a microphone button to the Desk overlay."
+			/>
+
+			<SettingCard>
+				<SettingRow
+					title="Voice mode"
+					desc="Show the voice toggle in your Desk. Off hides it for you only."
+					control={
+						<Toggle label="Voice mode" checked={on} onChange={setDeskVoicePref} />
+					}
+				/>
+			</SettingCard>
+
+			<SettingsGroupLabel>OpenAI API key</SettingsGroupLabel>
+			<SettingCard>
+				<DeskVoiceApiKeyRow />
 			</SettingCard>
 		</SettingsPanel>
 	);
