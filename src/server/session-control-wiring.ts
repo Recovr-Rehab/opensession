@@ -389,6 +389,8 @@ registerSessionControl({
 		}
 
 		const bksId = newSessionId();
+		const sessionCreatedBy = user || personaName();
+		const sessionCreatedAt = new Date().toISOString();
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
 		// A joined workspace is the session's workspace, which also skips the mint /
 		// adopt block below — and with it the auto-naming: a session that merely
@@ -423,7 +425,7 @@ registerSessionControl({
 				const ws = createWorkspace({
 					name: wsName,
 					...(isScratch ? {} : { repo: parentSession?.repo || repo.id }),
-					createdBy: user || parentSession?.startedBy || "Anonymous",
+					createdBy: user || parentSession?.createdBy || parentSession?.startedBy || "Anonymous",
 					...(branchForWs ? { branch: branchForWs } : {}),
 					...(dir ? { worktreeDir: dir } : {}),
 				});
@@ -512,8 +514,8 @@ registerSessionControl({
 					...(effectiveMcpServers?.length
 						? { mcpServers: effectiveMcpServers }
 						: {}),
-					createdBy: user || personaName(),
-					createdAt: new Date().toISOString(),
+					createdBy: sessionCreatedBy,
+					createdAt: sessionCreatedAt,
 					title,
 					mode: (isScratch ? "scratch" : isAsk ? "ask" : "code") as
 						| "ask"
@@ -869,6 +871,6 @@ registerSessionControl({
 			}
 		})();
 
-		return { id: bksId };
+		return { id: bksId, createdBy: sessionCreatedBy, createdAt: sessionCreatedAt };
 	},
 });

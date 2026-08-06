@@ -204,9 +204,9 @@ knows they exist.
 The `opensession-sessions` in-process MCP (src/agents/slack/sessions-tools.ts)
 is a sibling, wired the same way (interactive runs only — never automations).
 It lets the agent see and steer every *other* Open Session session: read tools
-`list_sessions` (with a `waiting` filter for sessions blocked on an
-AskUserQuestion) and `get_session` (state + pending question + transcript
-tail) are open to any whitelisted user; the control tools —
+`list_sessions` (with a `waiting` state filter and an exact `createdBy`
+identity filter) and `get_session` (explicit creator/creation timestamp, state,
+pending question, and transcript tail) are open to any whitelisted user; the control tools —
 `answer_session_question`, `send_to_session`, `cancel_session`,
 `create_session` — are gated to the trusted user via `isAdmin`. The tools
 don't touch in-process state directly; they go through the `SessionControl`

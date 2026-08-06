@@ -278,6 +278,10 @@ export interface UnifiedSession {
 	source: SessionSource;
 	branch: string | null;
 	worktreeDir: string | null;
+	/** Explicit creator identity from the session store. */
+	createdBy?: string | null;
+	/** Verified GitHub login when available. */
+	createdByLogin?: string;
 	startedBy: string | null;
 	title: string;
 	/** True when `title` is a manual rename rather than derived/generated. */

@@ -54,6 +54,13 @@ export interface UnifiedSession {
   source: SessionSource;
   branch: string | null;
   worktreeDir: string | null;
+  /** Creator identity persisted by Open Session, or derived from the owning
+   * agent session store for Slack/Linear sessions. Null when the origin does
+   * not record one. Prefer this over inferring identity from title/content. */
+  createdBy?: string | null;
+  /** Verified GitHub login when the native session store has one. */
+  createdByLogin?: string;
+  /** Legacy UI-facing alias for createdBy. */
   startedBy: string | null;
   title: string;
   lastActivity: string;

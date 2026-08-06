@@ -97,9 +97,9 @@ export interface CreateSessionOpts {
  * the live opensession process state.
  */
 export interface SessionControl {
-  /** All sessions with a derived state, queue depth and controllability. */
+  /** All sessions with creator identity, derived state, queue depth and controllability. */
   listSessions(): SessionSummary[];
-  /** One session's summary, or undefined if no such id. */
+  /** One session's summary including creator identity, or undefined if no such id. */
   getSession(id: string): SessionSummary | undefined;
   /** Last `n` transcript entries for a session (for the "what's it doing" view). */
   transcriptTail(id: string, n: number): TranscriptEntry[];
@@ -147,7 +147,11 @@ export interface SessionControl {
   /** Cancel a session's in-flight run (only runs this process owns). */
   cancelSession(id: string): boolean;
   /** Create a new session and start its first turn in the background. */
-  createSession(opts: CreateSessionOpts): Promise<{ id: string }>;
+  createSession(opts: CreateSessionOpts): Promise<{
+    id: string;
+    createdBy: string;
+    createdAt: string;
+  }>;
 }
 
 let impl: SessionControl | null = null;

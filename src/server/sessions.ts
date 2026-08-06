@@ -740,6 +740,7 @@ function scanSlackSessions(): UnifiedSession[] {
       source: "slack",
       branch,
       worktreeDir: data.worktreeDir || null,
+      createdBy: startedBy,
       startedBy,
       title: branch,
       lastActivity:
@@ -805,6 +806,7 @@ function scanLinearSessions(): UnifiedSession[] {
       source: "linear",
       branch: data.branch,
       worktreeDir: data.worktreeDir || null,
+      createdBy: startedBy,
       startedBy,
       title,
       lastActivity:
@@ -856,6 +858,8 @@ function scanNativeSessions(): UnifiedSession[] {
       source: "opensession",
       branch: data.branch || null,
       worktreeDir: data.worktreeDir || null,
+      createdBy: data.createdBy || null,
+      createdByLogin: data.createdByLogin,
       startedBy: data.createdBy,
       title: data.title || data.branch || "Ask session",
       mode: data.mode,

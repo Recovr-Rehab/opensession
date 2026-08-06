@@ -2,7 +2,9 @@ import { describe, expect, it } from "bun:test";
 import {
 	buildChildSessionPrompt,
 	cancelTaskImpl,
+	formatSessionLine,
 	resolveSpawnDepth,
+	sessionMatchesCreatedBy,
 	sessionNoticePayload,
 	spawnTaskImpl,
 	taskStateOf,
@@ -106,7 +108,11 @@ function makeHarness(childId?: string): Harness {
 		},
 		createSession: async (opts: Harness["created"][0]) => {
 			created.push(opts);
-			return { id };
+			return {
+				id,
+				createdBy: opts.user || "Open Session",
+				createdAt: "2026-08-06T10:00:00.000Z",
+			};
 		},
 	} satisfies SessionControl;
 	return {
@@ -161,6 +167,8 @@ describe("spawnTaskImpl", () => {
 		expect(h.created[0].parentSessionId).toBe(parent);
 		expect(h.created[0].user).toBe("Alex");
 		expect(h.created[0].mode).toBe("ask");
+		expect(res.createdBy).toBe("Alex");
+		expect(res.createdAt).toBe("2026-08-06T10:00:00.000Z");
 	});
 
 	it("tags the child with spawnDepth = parent depth + 1", async () => {
@@ -286,6 +294,50 @@ describe("spawnTaskImpl", () => {
 			h.deps,
 		);
 		expect(inferred.ok).toBe(true);
+	});
+});
+
+describe("session creator metadata", () => {
+	const session = {
+		id: "bks-test-session",
+		title: "Creator metadata",
+		state: "idle",
+		queuedCount: 0,
+		controllable: true,
+		createdBy: "Alex Rivera",
+		createdByLogin: "arivera",
+		startedBy: "legacy-alias",
+		createdAt: "2026-08-06T09:30:00.000Z",
+		lastActivity: new Date().toISOString(),
+	} as SessionSummary;
+
+	it("renders explicit persisted identity and creation timestamp fields", () => {
+		const line = formatSessionLine(session);
+		expect(line).toContain('createdBy="Alex Rivera"');
+		expect(line).toContain('createdByLogin="arivera"');
+		expect(line).toContain("createdAt=2026-08-06T09:30:00.000Z");
+		expect(line).not.toContain("legacy-alias");
+	});
+
+	it("matches display identity or verified login exactly and case-insensitively", () => {
+		expect(sessionMatchesCreatedBy(session, "alex rivera")).toBe(true);
+		expect(sessionMatchesCreatedBy(session, "ARIVERA")).toBe(true);
+		expect(sessionMatchesCreatedBy(session, "Alex")).toBe(false);
+	});
+
+	it("falls back to the legacy alias but never guesses from title", () => {
+		const legacy = {
+			...session,
+			createdBy: null,
+			createdByLogin: undefined,
+			startedBy: "Kent",
+			title: "Michiel's session",
+		} as SessionSummary;
+		expect(sessionMatchesCreatedBy(legacy, "Kent")).toBe(true);
+		expect(sessionMatchesCreatedBy(legacy, "Michiel")).toBe(false);
+		expect(formatSessionLine({ ...legacy, startedBy: null } as SessionSummary)).toContain(
+			"createdBy=null",
+		);
 	});
 });
 

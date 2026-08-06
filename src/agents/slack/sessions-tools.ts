@@ -91,7 +91,23 @@ function questionHeaders(questions: unknown[]): string {
     .join(", ");
 }
 
-function oneLine(s: SessionSummary): string {
+function normalizedCreator(s: SessionSummary): string | null {
+  return s.createdBy || s.startedBy || null;
+}
+
+/** Exact, case-insensitive creator match against persisted display identity or
+ * verified GitHub login. Exported for the MCP contract tests. */
+export function sessionMatchesCreatedBy(s: SessionSummary, query: string): boolean {
+  const wanted = query.trim().toLocaleLowerCase();
+  if (!wanted) return true;
+  return [normalizedCreator(s), s.createdByLogin]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => value.trim().toLocaleLowerCase() === wanted);
+}
+
+/** Stable, explicitly-labelled identity/timestamp fields keep callers from
+ * guessing either value from a title or relative activity text. */
+export function formatSessionLine(s: SessionSummary): string {
   const bits: string[] = [`${STATE_ICON[s.state]} *${s.title || "(untitled)"}*  \`${s.id}\``];
   const meta: string[] = [s.state];
   if (s.source) meta.push(s.source);
@@ -99,7 +115,9 @@ function oneLine(s: SessionSummary): string {
   if (s.model) meta.push(s.model);
   if (s.branch) meta.push(`branch ${s.branch}`);
   if (s.parentSessionId) meta.push(`child of ${s.parentSessionId}`);
-  if (s.startedBy) meta.push(`by ${s.startedBy}`);
+  meta.push(`createdBy=${JSON.stringify(normalizedCreator(s))}`);
+  if (s.createdByLogin) meta.push(`createdByLogin=${JSON.stringify(s.createdByLogin)}`);
+  if (s.createdAt) meta.push(`createdAt=${s.createdAt}`);
   meta.push(relTime(s.lastActivity));
   if (!s.controllable) meta.push("observe-only");
   bits.push(`   ${meta.join(" · ")}`);
@@ -362,7 +380,7 @@ export interface SpawnTaskArgs {
 }
 
 export type SpawnTaskResult =
-  | { ok: true; taskId: string; url: string }
+  | { ok: true; taskId: string; url: string; createdBy: string; createdAt: string }
   | { ok: false; error: string };
 
 export async function spawnTaskImpl(
@@ -415,7 +433,7 @@ export async function spawnTaskImpl(
     parentSessionId: caller,
     reportBack: Boolean(caller),
   });
-  const { id } = await deps.control.createSession({
+  const { id, createdBy, createdAt } = await deps.control.createSession({
     prompt,
     repo: args.repo,
     mode,
@@ -436,7 +454,7 @@ export async function spawnTaskImpl(
   const base =
     process.env.OPENSESSION_UI_BASE ||
     configuredServer().publicBaseUrl;
-  return { ok: true, taskId: id, url: `${base}/session/${id}` };
+  return { ok: true, taskId: id, url: `${base}/session/${id}`, createdBy, createdAt };
 }
 
 /** Task-facing state view: running / waiting (blocked on a question) / done /
@@ -454,7 +472,7 @@ export async function taskStatusImpl(
   const s = deps.control.getSession(args.taskId);
   if (!s) return `No task/session with id \`${args.taskId}\`.`;
   const state = taskStateOf(s);
-  const parts = [`Task \`${s.id}\` — *${state}* (${s.state})`, oneLine(s)];
+  const parts = [`Task \`${s.id}\` — *${state}* (${s.state})`, formatSessionLine(s)];
   if (state === "error" && s.lastRunError) parts.push(`*Error:* ${s.lastRunError.message}`);
   if (s.state === "waiting_question" && s.pendingQuestion) {
     parts.push(
@@ -499,14 +517,18 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
     // -----------------------------------------------------------------------
     tool(
       "list_sessions",
-      `List all ${productName()} sessions with their live state (running / waiting_question / queued / idle / archived). Use filter 'waiting' to see only sessions blocked on a question (the ones that need a human), 'active' for running+waiting+queued, or 'all' (default, hides archived). This is the 'what's going on across all my sessions' view.`,
+      `List ${productName()} sessions with their live state and explicit creator metadata. Every row includes createdBy (null when the origin did not record one) and createdAt, so callers can answer who created sessions in a time window without guessing from titles or transcripts. Use createdBy for an exact case-insensitive display-name or verified-login filter. Use filter 'waiting' to see only sessions blocked on a question (the ones that need a human), 'active' for running+waiting+queued, or 'all' (default, hides archived).`,
       {
         filter: z
           .enum(["all", "active", "waiting"])
           .optional()
           .describe("'all' (default, excludes archived), 'active' (running/waiting/queued), or 'waiting' (blocked on a question)."),
+        createdBy: z
+          .string()
+          .optional()
+          .describe("Exact case-insensitive creator display name or verified GitHub login. Uses persisted session identity; never title/content inference."),
       },
-      async (args: { filter?: "all" | "active" | "waiting" }) => {
+      async (args: { filter?: "all" | "active" | "waiting"; createdBy?: string }) => {
         const filter = args.filter || "all";
         let sessions = getSessionControl().listSessions();
         if (filter === "waiting") {
@@ -518,15 +540,18 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
         } else {
           sessions = sessions.filter((s) => s.state !== "archived");
         }
+        if (args.createdBy?.trim()) {
+          sessions = sessions.filter((s) => sessionMatchesCreatedBy(s, args.createdBy!));
+        }
         if (!sessions.length) return text(`No ${filter === "all" ? "" : filter + " "}sessions.`);
         const waiting = sessions.filter((s) => s.state === "waiting_question").length;
         const header = `${sessions.length} session(s)${waiting ? ` — ⚠️ ${waiting} waiting on input` : ""}:`;
-        return text([header, "", ...sessions.map(oneLine)].join("\n"));
+        return text([header, "", ...sessions.map(formatSessionLine)].join("\n"));
       }
     ),
     tool(
       "get_session",
-      "Get detail on one session by id: its state, any pending question (with the options to choose from), how many messages are queued, and the tail of its transcript so you can see what it's doing.",
+      "Get detail on one session by id, including explicit createdBy and createdAt metadata (createdBy is null when the origin did not record identity), state, any pending question, queue depth, and transcript tail.",
       {
         id: z.string().describe("The session id, e.g. 'bks-…' or 'slack-…' from list_sessions."),
         transcript_lines: z
@@ -538,7 +563,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
         const ctrl = getSessionControl();
         const s = ctrl.getSession(args.id);
         if (!s) return text(`No session with id \`${args.id}\`.`);
-        const parts = [oneLine(s)];
+        const parts = [formatSessionLine(s)];
         if (s.goal) parts.push(`\n*Pinned goal:* ${s.goal}`);
         if (s.pendingQuestion) {
           parts.push(
@@ -682,7 +707,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
                 reportBack: shouldReportBack,
               })
             : args.prompt;
-          const { id } = await getSessionControl().createSession({
+          const { id, createdBy, createdAt } = await getSessionControl().createSession({
             prompt,
             repo: args.repo,
             mode: args.mode,
@@ -696,7 +721,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
           });
           return text(
             [
-              `Started session \`${id}\` (${args.mode === "code" ? `code on ${args.branch}` : "ask"}). It'll appear in list_sessions as it boots.`,
+              `Started session \`${id}\` (${args.mode === "code" ? `code on ${args.branch}` : "ask"}). Metadata: createdBy=${JSON.stringify(createdBy)} · createdAt=${createdAt}. It'll appear in list_sessions as it boots.`,
               parentSessionId && shouldReportBack
                 ? `It is linked to \`${parentSessionId}\` and has instructions to report back there.`
                 : "",
@@ -761,7 +786,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
           const res = await spawnTaskImpl(args, ctx);
           if (!res.ok) return text(res.error);
           return text(
-            `Spawned task \`${res.taskId}\` — ${res.url}\nIt runs in the background; poll with task_status(taskId)${ctx.isAdmin ? ", answer questions with answer_session_question," : ""} and stop with cancel_task.`
+            `Spawned task \`${res.taskId}\` — ${res.url}\nMetadata: createdBy=${JSON.stringify(res.createdBy)} · createdAt=${res.createdAt}. It runs in the background; poll with task_status(taskId)${ctx.isAdmin ? ", answer questions with answer_session_question," : ""} and stop with cancel_task.`
           );
         }
       ),
