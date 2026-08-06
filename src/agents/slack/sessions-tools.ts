@@ -34,6 +34,7 @@ import {
 } from "../../server/session-control";
 import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { userMatchesAny } from "../../server/shared/user-mappings";
 import { migrateSessionEngine } from "../../server/migrate-engine";
 import { resolveSessionRepoContext } from "../../server/session-repos";
 import type { NativeSessionFile, TranscriptEntry } from "../../server/types";
@@ -95,14 +96,14 @@ function normalizedCreator(s: SessionSummary): string | null {
   return s.createdBy || s.startedBy || null;
 }
 
-/** Exact, case-insensitive creator match against persisted display identity or
- * verified GitHub login. Exported for the MCP contract tests. */
+/** Case-insensitive creator match against persisted display identity or
+ * verified GitHub login, resolving configured aliases through the shared
+ * identity table. Exported for the MCP contract tests. */
 export function sessionMatchesCreatedBy(s: SessionSummary, query: string): boolean {
-  const wanted = query.trim().toLocaleLowerCase();
-  if (!wanted) return true;
+  if (!query.trim()) return true;
   return [normalizedCreator(s), s.createdByLogin]
     .filter((value): value is string => Boolean(value))
-    .some((value) => value.trim().toLocaleLowerCase() === wanted);
+    .some((value) => userMatchesAny(value, [query]));
 }
 
 /** Stable, explicitly-labelled identity/timestamp fields keep callers from
@@ -517,7 +518,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
     // -----------------------------------------------------------------------
     tool(
       "list_sessions",
-      `List ${productName()} sessions with their live state and explicit creator metadata. Every row includes createdBy (null when the origin did not record one) and createdAt, so callers can answer who created sessions in a time window without guessing from titles or transcripts. Use createdBy for an exact case-insensitive display-name or verified-login filter. Use filter 'waiting' to see only sessions blocked on a question (the ones that need a human), 'active' for running+waiting+queued, or 'all' (default, hides archived).`,
+      `List ${productName()} sessions with their live state and explicit creator metadata. Every row includes createdBy (null when the origin did not record one) and createdAt, so callers can answer who created sessions in a time window without guessing from titles or transcripts. Use createdBy for a case-insensitive display-name, verified-login, or configured-alias filter. Use filter 'waiting' to see only sessions blocked on a question (the ones that need a human), 'active' for running+waiting+queued, or 'all' (default, hides archived).`,
       {
         filter: z
           .enum(["all", "active", "waiting"])
@@ -526,7 +527,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
         createdBy: z
           .string()
           .optional()
-          .describe("Exact case-insensitive creator display name or verified GitHub login. Uses persisted session identity; never title/content inference."),
+          .describe("Case-insensitive creator display name, verified GitHub login, or configured alias. Uses persisted session identity; never title/content inference."),
       },
       async (args: { filter?: "all" | "active" | "waiting"; createdBy?: string }) => {
         const filter = args.filter || "all";

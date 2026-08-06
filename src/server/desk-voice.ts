@@ -36,6 +36,15 @@ const HANDOFF_DIR = `${DIR}/voice-handoff`;
 /** Realtime model for Desk voice calls. */
 const DESK_VOICE_MODEL = "gpt-realtime";
 
+/** Semantic endpointing avoids treating a short mid-sentence pause as the end
+ * of the user's turn. Low eagerness is OpenAI's longest-waiting preset. */
+export const DESK_VOICE_TURN_DETECTION = {
+	type: "semantic_vad",
+	eagerness: "low",
+	create_response: true,
+	interrupt_response: true,
+} as const;
+
 // ---------------------------------------------------------------------------
 // API key store — instance-wide, set from Settings → Desk voice. Same contract
 // as the model-provider key store: 0600 file, only ever returned masked.
@@ -193,6 +202,25 @@ function recentDeskContext(sessionId: string): string {
 	}
 }
 
+/** Server-owned Realtime session policy. Exported for contract tests so a
+ * client cannot silently fall back to OpenAI's default endpointing. */
+export function buildVoiceSessionConfig(sessionId: string) {
+	return {
+		type: "realtime",
+		model: DESK_VOICE_MODEL,
+		instructions: VOICE_INSTRUCTIONS + recentDeskContext(sessionId),
+		tools: VOICE_TOOLS,
+		tool_choice: "auto",
+		audio: {
+			input: {
+				transcription: { model: "gpt-4o-mini-transcribe" },
+				turn_detection: DESK_VOICE_TURN_DETECTION,
+			},
+			output: { voice: "marin" },
+		},
+	};
+}
+
 export async function mintVoiceSecret(user: string): Promise<{
 	clientSecret: string;
 	expiresAt: number;
@@ -213,17 +241,7 @@ export async function mintVoiceSecret(user: string): Promise<{
 		},
 		body: JSON.stringify({
 			expires_after: { anchor: "created_at", seconds: 600 },
-			session: {
-				type: "realtime",
-				model: DESK_VOICE_MODEL,
-				instructions: VOICE_INSTRUCTIONS + recentDeskContext(sessionId),
-				tools: VOICE_TOOLS,
-				tool_choice: "auto",
-				audio: {
-					input: { transcription: { model: "gpt-4o-mini-transcribe" } },
-					output: { voice: "marin" },
-				},
-			},
+			session: buildVoiceSessionConfig(sessionId),
 		}),
 	});
 	if (!res.ok) {

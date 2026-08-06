@@ -1,7 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
 	buildChildSessionPrompt,
 	cancelTaskImpl,
+	createSessionsMcpServer,
 	formatSessionLine,
 	resolveSpawnDepth,
 	sessionMatchesCreatedBy,
@@ -14,7 +17,11 @@ import {
 	type SpawnTaskDeps,
 	type SessionsToolContext,
 } from "./sessions-tools";
-import type { SessionControl, SessionSummary } from "../../server/session-control";
+import {
+	registerSessionControl,
+	type SessionControl,
+	type SessionSummary,
+} from "../../server/session-control";
 
 describe("buildChildSessionPrompt", () => {
 	it("adds parent report-back instructions for visible worker sessions", () => {
@@ -97,7 +104,7 @@ function makeHarness(childId?: string): Harness {
 	const cancelled: string[] = [];
 	const id = childId ?? `bks-test-child-${++uniq}`;
 	const control = {
-		listSessions: () => [],
+		listSessions: () => [...sessions.values()] as SessionSummary[],
 		getSession: (sid: string) => sessions.get(sid) as SessionSummary | undefined,
 		transcriptTail: () => [],
 		answerQuestion: () => false,
@@ -338,6 +345,41 @@ describe("session creator metadata", () => {
 		expect(formatSessionLine({ ...legacy, startedBy: null } as SessionSummary)).toContain(
 			"createdBy=null",
 		);
+	});
+
+	it("exposes and applies createdBy on the shared interactive MCP surface", async () => {
+		const h = makeHarness();
+		h.sessions.set(session.id, session);
+		h.sessions.set("bks-other", {
+			...session,
+			id: "bks-other",
+			createdBy: "Other Person",
+			createdByLogin: "other",
+		});
+		registerSessionControl(h.deps.control);
+		const server = createSessionsMcpServer(ctx());
+		const client = new Client({ name: "sessions-tools-test", version: "1.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await server.instance.connect(serverTransport);
+		await client.connect(clientTransport);
+		try {
+			const listedTools = await client.listTools();
+			const listTool = listedTools.tools.find((tool) => tool.name === "list_sessions");
+			expect(listTool?.inputSchema.properties).toHaveProperty("createdBy");
+
+			const result = await client.callTool({
+				name: "list_sessions",
+				arguments: { createdBy: "ARIVERA" },
+			});
+			const output = (
+				result as { content: Array<{ type: string; text: string }> }
+			).content[0].text;
+			expect(output).toContain("bks-test-session");
+			expect(output).not.toContain("bks-other");
+		} finally {
+			await client.close();
+			await server.instance.close();
+		}
 	});
 });
 
