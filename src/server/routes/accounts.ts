@@ -11,6 +11,11 @@ import { addAccount, listAccountsPublic, refreshAllUsage, removeAccount, setAcco
 import { addCodexAccount, listCodexAccountsPublic, removeCodexAccount, setCodexAccountOwner } from "../codex-accounts";
 import { cancelDeviceLogin, getDeviceLogin, startDeviceLogin } from "../codex-device-login";
 import {
+	cancelCodexOauthLogin,
+	completeCodexOauthLogin,
+	startCodexOauthLogin,
+} from "../codex-oauth-login";
+import {
 	cancelClaudeLogin,
 	completeClaudeLogin,
 	startClaudeLogin,
@@ -134,8 +139,42 @@ export async function handleAccountsRoutes(
 		return Response.json(result);
 	}
 
-	// ── Device-code sign-in (browser-free `codex login --device-auth`) ──
+	// ── Paste-link ChatGPT sign-in (PKCE; for device-auth-disabled workspaces) ──
 	// Keep these ahead of the generic /codex-accounts/:id matchers.
+	if (path === "/api/codex-accounts/oauth-login" && req.method === "POST") {
+		const body = await req.json().catch(() => null);
+		if (!body?.name) {
+			return Response.json({ error: "name is required" }, { status: 400 });
+		}
+		const result = await startCodexOauthLogin(
+			String(body.name),
+			typeof body.owner === "string" ? body.owner : undefined,
+		);
+		if ("error" in result) return Response.json(result, { status: 400 });
+		return Response.json(result);
+	}
+	const codexOauthMatch = path.match(
+		/^\/api\/codex-accounts\/oauth-login\/([^/]+)$/,
+	);
+	if (codexOauthMatch && req.method === "POST") {
+		const body = await req.json().catch(() => null);
+		if (typeof body?.code !== "string" || !body.code.trim()) {
+			return Response.json({ error: "code is required" }, { status: 400 });
+		}
+		const result = await completeCodexOauthLogin(
+			decodeURIComponent(codexOauthMatch[1]),
+			body.code,
+		);
+		if ("error" in result) return Response.json(result, { status: 400 });
+		return Response.json(result);
+	}
+	if (codexOauthMatch && req.method === "DELETE") {
+		return cancelCodexOauthLogin(decodeURIComponent(codexOauthMatch[1]))
+			? Response.json({ ok: true })
+			: Response.json({ error: "Not found" }, { status: 404 });
+	}
+
+	// ── Device-code sign-in (browser-free `codex login --device-auth`) ──
 	if (
 		path === "/api/codex-accounts/device-login" &&
 		req.method === "POST"
