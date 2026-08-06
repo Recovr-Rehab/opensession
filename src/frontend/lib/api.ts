@@ -2213,6 +2213,29 @@ export async function savePersonalPrompt(
 	});
 }
 
+// ── Instance identity (Settings → General: agent + product name) ──
+
+export interface InstanceIdentityDto {
+	personaName: string;
+	productName: string;
+	productMark: string;
+	configPath: string;
+}
+
+export async function fetchInstanceIdentity(): Promise<InstanceIdentityDto> {
+	return request("/settings/identity", {
+		label: "Failed to fetch instance identity",
+	});
+}
+
+/** Empty string resets a field to its built-in default. */
+export async function saveInstanceIdentity(patch: {
+	personaName?: string;
+	productName?: string;
+}): Promise<InstanceIdentityDto> {
+	return request("/settings/identity", { method: "PUT", body: patch });
+}
+
 // ── Memory (Settings → Memory: repo/user/team/channel stores) ──
 
 export interface MemoryEntryDto {

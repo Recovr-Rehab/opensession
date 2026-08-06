@@ -92,6 +92,9 @@ import {
 	revokeKeychainGrant,
 	fetchPersonalPrompt,
 	savePersonalPrompt,
+	fetchInstanceIdentity,
+	saveInstanceIdentity,
+	type InstanceIdentityDto,
 	relativeTime,
 	fetchModels,
 	fetchFeeds,
@@ -142,7 +145,6 @@ import {
 	IconX,
 } from "./icons";
 import { toast } from "../ui/toast";
-import { Tooltip } from "../ui/tooltip";
 import { AGENT_NAME, PRODUCT_NAME } from "../lib/brand";
 import {
 	onSidebarToolsChanged,
@@ -2673,13 +2675,89 @@ function ComposerPanel() {
 
 const IDENTITY_INPUT_CLASS = cn(settingsInputClass, "w-[140px]");
 
+/** Text field that commits on blur/Enter (Esc reverts), for the identity
+ *  settings backed by the config file rather than local prefs. */
+function IdentityInput({
+	label,
+	value,
+	placeholder,
+	onSave,
+}: {
+	label: string;
+	value: string;
+	placeholder: string;
+	onSave: (next: string) => Promise<void>;
+}) {
+	const [draft, setDraft] = useState(value);
+	const [saving, setSaving] = useState(false);
+	useEffect(() => setDraft(value), [value]);
+	const commit = async () => {
+		const next = draft.trim();
+		if (saving) return;
+		if (next === value) {
+			setDraft(value);
+			return;
+		}
+		setSaving(true);
+		try {
+			await onSave(next);
+		} catch {
+			setDraft(value);
+		} finally {
+			setSaving(false);
+		}
+	};
+	return (
+		<input
+			className={IDENTITY_INPUT_CLASS}
+			value={draft}
+			disabled={saving}
+			onChange={(e) => setDraft(e.target.value)}
+			onBlur={commit}
+			onKeyDown={(e) => {
+				if (e.key === "Enter") e.currentTarget.blur();
+				else if (e.key === "Escape") setDraft(value);
+			}}
+			placeholder={placeholder}
+			aria-label={label}
+		/>
+	);
+}
+
 /**
  * Instance identity. The source of truth is ~/.opensession/config.json
- * (persona.name / branding.productName) on the server — there is no
- * settings-write API for the config file yet, so the fields render the
- * built-in defaults, disabled, until a read/write endpoint exists.
+ * (persona.name / branding.productName) on the server, read and written
+ * through /api/settings/identity. A save applies to new runs immediately and
+ * schedules a frontend rebuild, so open tabs get the update-pill nudge once
+ * the re-branded bundle is live.
  */
 function WorkspacePanel() {
+	const [identity, setIdentity] = useState<InstanceIdentityDto | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		fetchInstanceIdentity()
+			.then((dto) => {
+				if (!cancelled) setIdentity(dto);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+	const save = async (patch: {
+		personaName?: string;
+		productName?: string;
+	}) => {
+		try {
+			setIdentity(await saveInstanceIdentity(patch));
+			toast("Saved — open tabs update after the next rebuild", {
+				variant: "success",
+			});
+		} catch (e: any) {
+			toast(e?.message || "Failed to save", { variant: "error" });
+			throw e;
+		}
+	};
 	return (
 		<SettingsPanel>
 			<SettingsHeader
@@ -2693,52 +2771,40 @@ function WorkspacePanel() {
 					desc={
 						<>
 							What the agent calls itself in prompts, Slack messages, and the
-							UI. Configured via <code>persona.name</code> in{" "}
+							UI. Stored as <code>persona.name</code> in{" "}
 							<code>~/.opensession/config.json</code> on the server.
 						</>
 					}
 					control={
-						<Tooltip label="Wire-up pending. Edit ~/.opensession/config.json for now.">
-							{/* Disabled inputs swallow hover events, so the tooltip
-							    hangs off a wrapping span. */}
-							<span className="inline-flex">
-								<input
-									className={IDENTITY_INPUT_CLASS}
-									value={AGENT_NAME}
-									disabled
-									readOnly
-									aria-label="Agent name"
-								/>
-							</span>
-						</Tooltip>
+						<IdentityInput
+							label="Agent name"
+							value={identity?.personaName ?? AGENT_NAME}
+							placeholder="Assistant"
+							onSave={(next) => save({ personaName: next })}
+						/>
 					}
 				/>
 				<SettingRow
 					title="Product name"
 					desc={
 						<>
-							What this app calls itself in titles and headers. Configured via{" "}
+							What this app calls itself in titles and headers. Stored as{" "}
 							<code>branding.productName</code> in the same config file.
 						</>
 					}
 					control={
-						<Tooltip label="Wire-up pending. Edit ~/.opensession/config.json for now.">
-							<span className="inline-flex">
-								<input
-									className={IDENTITY_INPUT_CLASS}
-									value={PRODUCT_NAME}
-									disabled
-									readOnly
-									aria-label="Product name"
-								/>
-							</span>
-						</Tooltip>
+						<IdentityInput
+							label="Product name"
+							value={identity?.productName ?? PRODUCT_NAME}
+							placeholder="Open Session"
+							onSave={(next) => save({ productName: next })}
+						/>
 					}
 				/>
 			</SettingCard>
 			<SettingsHint>
-				Changes to the config file apply to new runs without a restart; a
-				settings-write API for these fields is pending.
+				Changes apply to new agent runs immediately. Clearing a field restores
+				the built-in default.
 			</SettingsHint>
 		</SettingsPanel>
 	);
