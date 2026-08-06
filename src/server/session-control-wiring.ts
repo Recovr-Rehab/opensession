@@ -30,12 +30,13 @@ import { handleSlashCommand } from "./slash-commands";
 import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
 import { ownedWorktree } from "./session-workspace";
-import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, worktreeHeadBranch } from "./worktree";
+import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch, worktreeHeadBranch } from "./worktree";
 import { broadcastToAll, broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import { existsSync, watch } from "fs";
 import { shouldPersistModelSwitch } from "./run-events";
 import { newSessionId } from "./paths";
+import { branchNameFromPrompt } from "./suggest-branch";
 
 /** Derive the at-a-glance state + control surface for a session (for the MCP). */
 function buildSummary(s: UnifiedSession): SessionSummary {
@@ -360,13 +361,12 @@ registerSessionControl({
 				sessionBranch = shared.branch || sessionBranch;
 			} else {
 				if (!sessionBranch.trim()) {
-					throw new Error(
-						"Code-mode session needs a branch because the workspace it joins has no sharable worktree.",
-					);
+					sessionBranch = await branchNameFromPrompt(prompt);
+					sessionBranch = await resolveUniqueBranch(sessionBranch, repo.id);
 				}
 				const worktrees = await listWorktrees(repo.id);
-				wtPath = worktrees.find((w) => w.branch === branch)?.path || "";
-				if (!wtPath) wtPath = await createWorktree(branch!, repo.id);
+				wtPath = worktrees.find((w) => w.branch === sessionBranch)?.path || "";
+				if (!wtPath) wtPath = await createWorktree(sessionBranch, repo.id);
 			}
 		}
 		// The first code session in a joined workspace that owns no worktree yet (an

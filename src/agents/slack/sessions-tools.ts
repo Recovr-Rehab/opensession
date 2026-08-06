@@ -37,6 +37,7 @@ import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { userMatchesAny } from "../../server/shared/user-mappings";
 import { migrateSessionEngine } from "../../server/migrate-engine";
 import { resolveSessionRepoContext } from "../../server/session-repos";
+import { branchNameFromPrompt } from "../../server/suggest-branch";
 import type { NativeSessionFile, TranscriptEntry } from "../../server/types";
 
 export interface SessionsToolContext {
@@ -511,7 +512,10 @@ export function cancelTaskImpl(
     : `Nothing to cancel on \`${args.taskId}\` (idle, done, or an external run this server doesn't own).`;
 }
 
-export function createSessionsMcpServer(ctx: SessionsToolContext) {
+export function createSessionsMcpServer(
+  ctx: SessionsToolContext,
+  deps: { branchNameFromPrompt?: (prompt: string) => Promise<string> } = {},
+) {
   const tools: any[] = [
     // -----------------------------------------------------------------------
     // Observe (any whitelisted user)
@@ -647,7 +651,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
       ),
       tool(
         "create_session",
-        `Spin up a visible ${productName()} session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. \`branch\` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry. Repo defaults to the parent session's repo (${defaultRepo().id} when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out.`,
+        `Spin up a visible ${productName()} session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. \`branch\` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry — and is generated from the prompt when omitted. Repo defaults to the parent session's repo (${defaultRepo().id} when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out.`,
         {
           prompt: z.string().describe("The task/prompt to start the session on."),
           repo: z
@@ -661,7 +665,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
           branch: z
             .string()
             .optional()
-            .describe("Fallback branch for code mode (required); only used when the worker can't share the parent workspace's worktree (standalone or different repo). Ignored for ask."),
+            .describe("Optional fallback branch for code mode. When the worker can't share the parent workspace's worktree, an omitted branch is generated from the prompt. Ignored for ask."),
           model: z.string().optional().describe("Optional model id (e.g. 'claude-opus-5')."),
           mcpServers: z
             .array(z.string())
@@ -708,11 +712,15 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
                 reportBack: shouldReportBack,
               })
             : args.prompt;
+          const branch =
+            args.mode === "code" && !args.branch?.trim()
+              ? await (deps.branchNameFromPrompt ?? branchNameFromPrompt)(args.prompt)
+              : args.branch;
           const { id, createdBy, createdAt } = await getSessionControl().createSession({
             prompt,
             repo: args.repo,
             mode: args.mode,
-            branch: args.branch,
+            branch,
             model: args.model,
             mcpServers: args.mcpServers,
             parentSessionId,
@@ -722,7 +730,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
           });
           return text(
             [
-              `Started session \`${id}\` (${args.mode === "code" ? `code on ${args.branch}` : "ask"}). Metadata: createdBy=${JSON.stringify(createdBy)} · createdAt=${createdAt}. It'll appear in list_sessions as it boots.`,
+              `Started session \`${id}\` (${args.mode === "code" ? `code on ${branch}` : "ask"}). Metadata: createdBy=${JSON.stringify(createdBy)} · createdAt=${createdAt}. It'll appear in list_sessions as it boots.`,
               parentSessionId && shouldReportBack
                 ? `It is linked to \`${parentSessionId}\` and has instructions to report back there.`
                 : "",

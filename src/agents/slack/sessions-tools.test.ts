@@ -375,7 +375,49 @@ describe("session creator metadata", () => {
 				result as { content: Array<{ type: string; text: string }> }
 			).content[0].text;
 			expect(output).toContain("bks-test-session");
+			expect(output).toContain('createdBy="Alex Rivera"');
+			expect(output).toContain('createdByLogin="arivera"');
+			expect(output).toContain("createdAt=2026-08-06T09:30:00.000Z");
 			expect(output).not.toContain("bks-other");
+		} finally {
+			await client.close();
+			await server.instance.close();
+		}
+	});
+
+	it("generates a branch when create_session code mode cannot inherit one", async () => {
+		const h = makeHarness();
+		registerSessionControl(h.deps.control);
+		const server = createSessionsMcpServer(ctx("bks-parent"), {
+			branchNameFromPrompt: async () => "fix-session-branch-ux",
+		});
+		const client = new Client({ name: "sessions-tools-test", version: "1.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await server.instance.connect(serverTransport);
+		await client.connect(clientTransport);
+		try {
+			const listedTools = await client.listTools();
+			const createTool = listedTools.tools.find((tool) => tool.name === "create_session");
+			const branchSchema = createTool?.inputSchema.properties?.branch as
+				| { description?: string }
+				| undefined;
+			expect(branchSchema?.description).toContain(
+				"generated from the prompt",
+			);
+
+			const result = await client.callTool({
+				name: "create_session",
+				arguments: {
+					prompt: "Fix branch generation for Desk child sessions",
+					mode: "code",
+					repo: "tella-fusion",
+				},
+			});
+			const output = (
+				result as { content: Array<{ type: string; text: string }> }
+			).content[0].text;
+			expect(h.created[0].branch).toBe("fix-session-branch-ux");
+			expect(output).toContain("code on fix-session-branch-ux");
 		} finally {
 			await client.close();
 			await server.instance.close();

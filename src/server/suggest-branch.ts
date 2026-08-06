@@ -61,3 +61,22 @@ export async function suggestBranchName(prompt: string): Promise<string | null> 
     return null;
   }
 }
+
+/** Always produce a safe branch slug for non-interactive create paths. The
+ * model suggestion keeps names descriptive; the deterministic first-line and
+ * timestamp fallbacks ensure callers never have to ask a human for one. */
+export async function branchNameFromPrompt(
+  prompt: string,
+  deps: {
+    suggest?: (prompt: string) => Promise<string | null>;
+    now?: () => number;
+  } = {},
+): Promise<string> {
+  const suggest = deps.suggest ?? suggestBranchName;
+  const suggested = await suggest(prompt).catch(() => null);
+  return (
+    suggested ||
+    sanitizeBranchSlug(prompt.trim().split("\n")[0] || "") ||
+    `session-${(deps.now?.() ?? Date.now()).toString(36)}`
+  );
+}
