@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import markUrl from "../os1-mac/build/icon-512.png";
 
-const desktopDemoWidth = 900;
+const desktopDemoWidth = 1200;
 
 export function ProductDemo({ feature }: { feature: number }) {
 	const previewRef = useRef<HTMLElement>(null);
