@@ -4844,6 +4844,7 @@ export function SessionViewer({
 									sessions={allSessions || workspaceSessions || []}
 									onOpenSessionById={onOpenSession}
 									reviewCanvas
+									editGate={connected && !isBusy && !noEngine}
 									onOpenSession={onOpenWorkspace}
 									onAddToInput={(text) =>
 										setComposerPrefill((p) => ({

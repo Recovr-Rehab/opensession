@@ -26,6 +26,8 @@ import {
   setPrFileViewed,
   fetchGitStatus,
   fetchReviewGuide,
+  fetchWorktreeFile,
+  saveWorktreeFile,
   gitPushApi,
   submitPrReviewApi,
   mergePrApi,
@@ -107,6 +109,14 @@ interface Props {
   walkthrough?: SessionWalkthrough;
   /** Diff-first review canvas used by the Pull requests sidebar inbox. */
   reviewCanvas?: boolean;
+  /**
+   * Allow in-place edit mode (@pierre/diffs edit) on the review canvas's diff.
+   * Only meaningful for callers whose session backs the shown PR with a live
+   * worktree; carries the same agent-idle gate as the Changes tab (edits and
+   * agent writes must not race). Linked/discovered PRs and session-less
+   * previews stay read-only regardless.
+   */
+  editGate?: boolean;
   /** Session-less PR target; uses the same canvas with repo+branch APIs. */
   previewTarget?: { repo: string; branch: string };
   /**
@@ -306,6 +316,7 @@ export function PrPanel({
   send,
   walkthrough,
   reviewCanvas,
+  editGate,
   previewTarget,
   sessions,
   onOpenSessionById,
@@ -900,6 +911,58 @@ export function PrPanel({
     [prBase, prHead, activeRepoId],
   );
 
+  // In-place edit mode on the review canvas. Only targets backed by one of the
+  // session's own worktrees qualify (primary/attached repos — their worktree is
+  // the PR's head branch); linked/discovered PRs live on branches this session
+  // doesn't have checked out, so they stay read-only. Saves only touch the
+  // worktree — the PR diff won't reflect them until they're committed and
+  // pushed — so saved files accumulate into a "tell the agent" note that asks
+  // it to commit them on this branch.
+  const [handEdited, setHandEdited] = useState<string[]>([]);
+  useEffect(() => setHandEdited([]), [sessionId, activeRepoId]);
+  const worktreeEditable =
+    !!editGate && !previewTarget && !!active && !active.branch;
+  const editFile = useMemo(
+    () =>
+      worktreeEditable
+        ? {
+            load: (file: FileDiffMetadata, side: "new" | "base") =>
+              fetchWorktreeFile(
+                sessionId,
+                side === "base" ? file.prevName || file.name : file.name,
+                activeRepoId,
+                side,
+              ),
+            save: async (path: string, content: string) => {
+              await saveWorktreeFile(sessionId, path, content, activeRepoId);
+              setHandEdited((prev) =>
+                prev.includes(path) ? prev : [...prev, path],
+              );
+              // The diff column is the PR's committed state, so it can't show
+              // the edit yet — but the divergence strip's dirty state can.
+              void fetchGitStatus(sessionId, activeRepoId)
+                .then((g) => setGit(g))
+                .catch(() => {});
+            },
+          }
+        : undefined,
+    [worktreeEditable, sessionId, activeRepoId],
+  );
+  const tellAgentAboutEdits = useCallback(() => {
+    if (!send || !handEdited.length) return;
+    const list = handEdited.map((p) => `- \`${p}\``).join("\n");
+    send({
+      type: "prompt",
+      sessionId,
+      user: getCurrentUser(),
+      content:
+        `${getCurrentUser()} hand-edited these files directly in the worktree via the review tab editor` +
+        `${activeRepoId ? ` (${activeRepoId} repo)` : ""}:\n\n${list}\n\n` +
+        `Review the edits, keep them (don't revert them unless they're clearly broken), and commit + push them on this branch so the pull request picks them up.`,
+    });
+    setHandEdited([]);
+  }, [send, handEdited, sessionId, activeRepoId]);
+
   // GitHub "Viewed" state: fetched per PR (and refetched when the head moves,
   // since a push flips changed files to DIRTY = unviewed on GitHub's side).
   const viewedKey = diff ? `${activeRepoId || "pr"}#${diff.number}` : null;
@@ -1228,6 +1291,18 @@ export function PrPanel({
                 </Button>
               </div>
               <div className="ml-auto flex items-center gap-3">
+                {handEdited.length > 0 && send && (
+                  <Button
+                    variant="default"
+                    size="xs"
+                    className="min-h-0 px-2 py-0.5 text-meta"
+                    onClick={tellAgentAboutEdits}
+                    title="Sends a note listing your hand-edits so they get committed and pushed"
+                  >
+                    Tell {AGENT_NAME} about {handEdited.length} edit
+                    {handEdited.length === 1 ? "" : "s"}
+                  </Button>
+                )}
                 {pending.length > 0 && (
                   <span className="text-meta text-faint">
                     {pending.length} pending comment{pending.length === 1 ? "" : "s"}
@@ -1309,6 +1384,7 @@ export function PrPanel({
                       onRemovePending={handleRemovePending}
                       onSubmit={handleAddPending}
                       imageSrcs={prImageSrcs}
+                      editFile={editFile}
                     />
                   </>
                 ) : guideFailed ? (
@@ -1366,6 +1442,7 @@ export function PrPanel({
                             onRemovePending={handleRemovePending}
                             onSubmit={handleAddPending}
                             imageSrcs={prImageSrcs}
+                            editFile={editFile}
                           />
                         )}
                       </section>
@@ -1385,6 +1462,7 @@ export function PrPanel({
                   onRemovePending={handleRemovePending}
                   onSubmit={handleAddPending}
                   imageSrcs={prImageSrcs}
+                  editFile={editFile}
                 />
               )}
           </div>
