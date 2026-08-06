@@ -206,11 +206,12 @@ function isToolView(view: string): view is ToolView {
 
 // Non-tool settings sections, addressable as <base>/settings/<section>.
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
+	"myAccounts",
+	"keychain",
+	"personalPrompt",
 	"notifications",
 	"composer",
 	"appearance",
-	"personalPrompt",
-	"myAccounts",
 	"setup",
 	"workspace",
 	"model",
@@ -219,6 +220,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"memory",
 	"warmPreviews",
 	"previewPool",
+	"deploys",
 	"papercuts",
 	"audit",
 ]);

@@ -171,9 +171,12 @@ import {
 // just another entry in SECTIONS and a matching panel below. The "Tools" group
 // holds the app's tool surfaces (Automations, Goals, …) — those render at their
 // own routes (<base>/automations, …) with this surface as chrome, so the
-// section is controlled by the router, not local state. The "Personal" group
-// holds per-browser preferences (notifications, theme); the "Workspace" group holds
-// shared setup that configures how every session runs (default model, connections).
+// section is controlled by the router, not local state. The rest are grouped by
+// who they belong to, most-personal first: "Personal" is yours alone (how
+// sessions act as you, then how the app behaves and looks on this device),
+// "Workspace" is shared setup that configures how every session runs (default
+// model, connections), "Infrastructure" is the pre-provisioned machinery behind
+// runs, and "Activity" is the read-only record agents leave behind.
 
 /** Tool surfaces hosted inside Settings — App renders their panel as children. */
 export type ToolSectionKey =
@@ -182,12 +185,14 @@ export type ToolSectionKey =
 	| "actions"
 	| "security";
 
+/** Listed in nav order (SECTIONS below). */
 export type SettingsSectionKey =
+	| "myAccounts"
+	| "keychain"
+	| "personalPrompt"
 	| "notifications"
 	| "composer"
 	| "appearance"
-	| "personalPrompt"
-	| "myAccounts"
 	| "setup"
 	| "workspace"
 	| "model"
@@ -196,9 +201,8 @@ export type SettingsSectionKey =
 	| "memory"
 	| "warmPreviews"
 	| "previewPool"
-	| "papercuts"
-	| "keychain"
 	| "deploys"
+	| "papercuts"
 	| "audit"
 	| ToolSectionKey;
 
@@ -294,6 +298,66 @@ const SECTIONS: {
 		),
 	},
 	{
+		key: "myAccounts",
+		label: "My accounts",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<circle cx="8" cy="5.2" r="2.7" />
+				<path d="M2.8 13.5a5.2 5.2 0 0 1 10.4 0" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
+		key: "keychain",
+		label: "Keychain",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<circle cx="5.4" cy="8" r="2.6" />
+				<path d="M8 8h6M12 8v2.2M10 8v1.6" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
+		key: "personalPrompt",
+		label: "Personal prompt",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M3 3.5h10M3 6.5h10M3 9.5h6"
+					strokeLinecap="round"
+				/>
+				<path
+					d="M12.9 9.1l-3.4 3.4-.5 1.5 1.5-.5 3.4-3.4a1 1 0 0 0-1-1z"
+					strokeLinejoin="round"
+				/>
+			</svg>
+		),
+	},
+	{
 		key: "notifications",
 		label: "Notifications",
 		group: "Personal",
@@ -350,48 +414,6 @@ const SECTIONS: {
 			>
 				<circle cx="8" cy="8" r="5.5" />
 				<path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" />
-			</svg>
-		),
-	},
-	{
-		key: "personalPrompt",
-		label: "Personal prompt",
-		group: "Personal",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M3 3.5h10M3 6.5h10M3 9.5h6"
-					strokeLinecap="round"
-				/>
-				<path
-					d="M12.9 9.1l-3.4 3.4-.5 1.5 1.5-.5 3.4-3.4a1 1 0 0 0-1-1z"
-					strokeLinejoin="round"
-				/>
-			</svg>
-		),
-	},
-	{
-		key: "myAccounts",
-		label: "My accounts",
-		group: "Personal",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="8" cy="5.2" r="2.7" />
-				<path d="M2.8 13.5a5.2 5.2 0 0 1 10.4 0" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -517,7 +539,7 @@ const SECTIONS: {
 	{
 		key: "warmPreviews",
 		label: "Warm deps",
-		group: "Workspace",
+		group: "Infrastructure",
 		icon: (
 			<svg
 				width="20"
@@ -537,7 +559,7 @@ const SECTIONS: {
 	{
 		key: "previewPool",
 		label: "Preview pool",
-		group: "Workspace",
+		group: "Infrastructure",
 		icon: (
 			<svg
 				width="20"
@@ -556,7 +578,7 @@ const SECTIONS: {
 	{
 		key: "deploys",
 		label: "Deploys",
-		group: "Workspace",
+		group: "Infrastructure",
 		icon: (
 			<svg
 				width="20"
@@ -573,27 +595,9 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "keychain",
-		label: "Keychain",
-		group: "Workspace",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="5.4" cy="8" r="2.6" />
-				<path d="M8 8h6M12 8v2.2M10 8v1.6" strokeLinecap="round" />
-			</svg>
-		),
-	},
-	{
 		key: "papercuts",
 		label: "Papercuts",
-		group: "Workspace",
+		group: "Activity",
 		icon: (
 			<svg
 				width="20"
@@ -619,7 +623,7 @@ const SECTIONS: {
 	{
 		key: "audit",
 		label: "Audit log",
-		group: "Workspace",
+		group: "Activity",
 		icon: (
 			<svg
 				width="20"
@@ -715,7 +719,10 @@ export function Settings({
 			</MobileSettings>
 		);
 
-	const active = section ?? "notifications";
+	// Default landing = the first non-tool row in the nav. Tool sections can't be
+	// the default: their panel arrives as `children`, which App only passes on a
+	// tool route, so a bare /settings would render an empty pane.
+	const active = section ?? "myAccounts";
 
 	return (
 		<div className="settings-page">
