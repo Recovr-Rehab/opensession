@@ -10,6 +10,11 @@ import type { RouteContext } from "./context";
 import { addAccount, listAccountsPublic, refreshAllUsage, removeAccount, setAccountOwner } from "../claude-accounts";
 import { addCodexAccount, listCodexAccountsPublic, removeCodexAccount, setCodexAccountOwner } from "../codex-accounts";
 import { cancelDeviceLogin, getDeviceLogin, startDeviceLogin } from "../codex-device-login";
+import {
+	cancelClaudeLogin,
+	completeClaudeLogin,
+	startClaudeLogin,
+} from "../claude-oauth-login";
 
 export async function handleAccountsRoutes(
 	ctx: RouteContext,
@@ -45,6 +50,38 @@ export async function handleAccountsRoutes(
 	) {
 		await refreshAllUsage();
 		return Response.json({ accounts: listAccountsPublic() });
+	}
+
+	// ── "Sign in with Claude" (PKCE) — attaches usage OAuth to an account ──
+	// Keep these ahead of the generic /claude-accounts/:id matchers.
+	if (path === "/api/claude-accounts/oauth-login" && req.method === "POST") {
+		const body = await req.json().catch(() => null);
+		if (!body?.accountId) {
+			return Response.json({ error: "accountId is required" }, { status: 400 });
+		}
+		const result = await startClaudeLogin(String(body.accountId));
+		if ("error" in result) return Response.json(result, { status: 400 });
+		return Response.json(result);
+	}
+	const oauthLoginMatch = path.match(
+		/^\/api\/claude-accounts\/oauth-login\/([^/]+)$/,
+	);
+	if (oauthLoginMatch && req.method === "POST") {
+		const body = await req.json().catch(() => null);
+		if (typeof body?.code !== "string" || !body.code.trim()) {
+			return Response.json({ error: "code is required" }, { status: 400 });
+		}
+		const result = await completeClaudeLogin(
+			decodeURIComponent(oauthLoginMatch[1]),
+			body.code,
+		);
+		if ("error" in result) return Response.json(result, { status: 400 });
+		return Response.json(result);
+	}
+	if (oauthLoginMatch && req.method === "DELETE") {
+		return cancelClaudeLogin(decodeURIComponent(oauthLoginMatch[1]))
+			? Response.json({ ok: true })
+			: Response.json({ error: "Not found" }, { status: 404 });
 	}
 
 	const accountDelMatch = path.match(

@@ -102,9 +102,11 @@ function claudeIssues(): Issue[] {
     const who = a.owner || FALLBACK_TEAMMATE;
     const label = a.owner ? `your personal Claude sub "${a.name}"` : `pool Claude account "${a.name}"`;
     const err = a.usage?.error || "";
-    const relogin = a.credentialsPath
-      ? `Re-login on the VPS: \`CLAUDE_CONFIG_DIR=${a.credentialsPath.replace(/\/credentials\.json$/, "")} claude login\`.`
-      : "Generate a fresh token with `claude setup-token` and update it in Settings → Models.";
+    const relogin = a.credentialsPath?.includes(".opensession-claude-oauth")
+      ? `Reconnect it in Settings → Models → account menu → "Sign in with Claude".`
+      : a.credentialsPath
+        ? `Re-login on the VPS: \`CLAUDE_CONFIG_DIR=${a.credentialsPath.replace(/\/credentials\.json$/, "")} claude login\` — or switch it to the web flow: Settings → Models → account menu → "Sign in with Claude".`
+        : "Generate a fresh token with `claude setup-token` and update it in Settings → Models.";
 
     if (a.usage?.errorStatus === 401) {
       issues.push({

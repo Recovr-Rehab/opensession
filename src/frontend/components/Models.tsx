@@ -28,7 +28,7 @@ import { Switch } from "../ui/switch";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
 import { fetchProviderAccounts, type ProviderAccountOption } from "../lib/api";
-import { IconDotsHorizontal, IconHistory, IconPlus, IconSliders, IconTrash, IconX } from "./icons";
+import { IconDotsHorizontal, IconHistory, IconPlug, IconPlus, IconSliders, IconTrash, IconX } from "./icons";
 
 // The Settings → Accounts panel: the Claude / Codex subscription accounts
 // session runs draw from, plus the default model new runs start on. Everything
@@ -740,6 +740,7 @@ function ClaudeStatusPill({ a }: { a: ClaudeAccountInfo }) {
 function ClaudeAccountsSection() {
 	const [accounts, setAccounts] = useState<ClaudeAccountInfo[] | null>(null);
 	const [showAdd, setShowAdd] = useState(false);
+	const [signIn, setSignIn] = useState<ClaudeAccountInfo | null>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -851,6 +852,17 @@ function ClaudeAccountsSection() {
 				/>
 			)}
 
+			{signIn && (
+				<ClaudeSignInForm
+					account={signIn}
+					onClose={() => setSignIn(null)}
+					onDone={() => {
+						setSignIn(null);
+						load();
+					}}
+				/>
+			)}
+
 			<SettingCard>
 				{!accounts ? (
 					<LoadingState placement="row">Loading accounts…</LoadingState>
@@ -876,8 +888,8 @@ function ClaudeAccountsSection() {
 								</SettingRowDescription>
 								{a.noUsageScope && !a.usage ? (
 									<div className="mt-1.5 text-meta text-faint">
-										Usage not visible — setup-tokens cannot read the usage endpoint. Add
-										a Claude OAuth credentials path for this account to show usage.
+										Usage not visible — setup-tokens cannot read the usage endpoint. Use
+										“Sign in with Claude” in this account's menu to connect usage.
 									</div>
 								) : (
 									<>
@@ -932,6 +944,10 @@ function ClaudeAccountsSection() {
 										<IconDotsHorizontal size={18} />
 									</Menu.Trigger>
 									<Menu.Popup align="end" sideOffset={4}>
+										<Menu.Item onClick={() => setSignIn(a)}>
+											<IconPlug size={16} className="text-faint" />
+											Sign in with Claude (usage)…
+										</Menu.Item>
 										<Menu.Item onClick={() => handleSetCredentialsPath(a)}>
 											<IconSliders size={16} className="text-faint" />
 											Usage credentials…
@@ -953,10 +969,9 @@ function ClaudeAccountsSection() {
 			<SettingsHint>
 				The usage pool for Claude session runs — each run picks the least-used usable account.
 				A personal account is used first by its owner's runs and never by anyone else's;
-				automations only use the shared pool. For usage bars, setup-tokens need a matching
-				OAuth snapshot such as <code>~/.claude/accounts/team/credentials.json</code>.
-				If that snapshot expires and cannot refresh, log into that account with <code>claude</code>
-				or <code>claude-plan auth</code> again and update the path.
+				automations only use the shared pool. For usage bars, use “Sign in with Claude” in an
+				account's menu: it stores its own auto-refreshing OAuth credentials, so usage tracking
+				doesn't share (and can't lose) the CLI's login.
 			</SettingsHint>
 		</>
 	);
@@ -1164,8 +1179,8 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 			<SettingRowDescription className="-mt-2">
 				On any machine, log into the Max account with <code>claude</code>, run{" "}
 				<code>claude setup-token</code>, and paste the one-year token here. It's stored on the
-				VPS (0600) and only ever shown masked. To show usage, also point at that account's
-				<code> credentials.json</code> snapshot from <code>~/.claude/accounts</code>.
+				VPS (0600) and only ever shown masked. To show usage afterwards, use “Sign in with
+				Claude” from the account's menu.
 			</SettingRowDescription>
 
 			<div className="flex gap-3.5 max-[700px]:flex-col">
@@ -1217,6 +1232,130 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 					disabled={saving || !name.trim() || !token.trim()}
 				>
 					{saving ? "Validating…" : "Add account"}
+				</Button>
+			</SettingsFormActions>
+		</SettingsForm>
+	);
+}
+
+/**
+ * "Sign in with Claude" — PKCE OAuth that attaches auto-refreshing usage
+ * credentials to an existing pool account. The server hands us an authorize
+ * URL; the user signs in on any device and pastes back the code Anthropic
+ * displays (`…#…`), which the server exchanges and stores.
+ */
+function ClaudeSignInForm({
+	account,
+	onClose,
+	onDone,
+}: {
+	account: ClaudeAccountInfo;
+	onClose: () => void;
+	onDone: () => void;
+}) {
+	const [login, setLogin] = useState<{ id: string; url: string } | null>(null);
+	const [code, setCode] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			try {
+				const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ accountId: account.id }),
+				});
+				const body = await res.json();
+				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+				if (!cancelled) setLogin(body);
+			} catch (e: any) {
+				if (!cancelled) setError(e.message);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [account.id]);
+
+	function handleClose() {
+		if (login) {
+			fetch(`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`, {
+				method: "DELETE",
+			}).catch(() => {});
+		}
+		onClose();
+	}
+
+	async function handleConnect() {
+		if (!login) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await fetch(
+				`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ code }),
+				},
+			);
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			toast(`Usage tracking connected for ${account.name}`);
+			onDone();
+		} catch (e: any) {
+			setError(e.message);
+			setBusy(false);
+		}
+	}
+
+	return (
+		<SettingsForm className="mb-3 flex flex-col gap-3.5">
+			<SettingsFormTitle className="mb-0">
+				Sign in with Claude — {account.name}
+			</SettingsFormTitle>
+			<SettingRowDescription className="-mt-2">
+				Connects usage tracking for this account with its own auto-refreshing login (runs keep
+				using the setup-token). Open the link, sign in as{" "}
+				{account.email ? <b>{account.email}</b> : "the Claude account behind this token"}, then
+				paste the code Anthropic shows you.
+			</SettingRowDescription>
+
+			{login ? (
+				<div className="flex gap-3.5 max-[700px]:flex-col">
+					<SettingsField className="mb-0 shrink-0 self-end">
+						<a href={login.url} target="_blank" rel="noreferrer">
+							<Button icon={<IconPlug size={16} />}>Open Claude sign-in</Button>
+						</a>
+					</SettingsField>
+					<SettingsField className="mb-0 flex-1">
+						Code
+						<input
+							className={settingsInputClass}
+							value={code}
+							onChange={(e) => setCode(e.target.value)}
+							placeholder="Paste the code from the sign-in page (…#…)"
+						/>
+					</SettingsField>
+				</div>
+			) : !error ? (
+				<LoadingState placement="row">Preparing sign-in…</LoadingState>
+			) : null}
+
+			{error && <InlineAlert>{error}</InlineAlert>}
+
+			<SettingsFormActions className="mt-0 gap-2.5">
+				<Button onClick={handleClose} disabled={busy}>
+					Cancel
+				</Button>
+				<Button
+					variant="primary"
+					onClick={handleConnect}
+					disabled={busy || !login || !code.trim()}
+				>
+					{busy ? "Connecting…" : "Connect usage"}
 				</Button>
 			</SettingsFormActions>
 		</SettingsForm>
