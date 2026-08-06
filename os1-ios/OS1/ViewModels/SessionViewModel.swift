@@ -525,7 +525,20 @@ final class SessionViewModel {
         switch delivery.status {
         case "queued", "steered":
             // Held server-side; it enters the transcript when the queue
-            // delivers it. Show the chip the queue_update will replace.
+            // delivers it. Show the chip the queue_update will replace —
+            // unless that update has already arrived. The socket routinely
+            // wins this race (the broadcast goes out while the HTTP response
+            // is still travelling, and on a slow link that's the common case,
+            // not the rare one), and appending anyway showed the message
+            // twice: the server's entry plus an optimistic copy that only
+            // cleared when the queue next changed.
+            let content = item.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let alreadyShown = (delivery.status == "steered" ? steeredItems : queuedItems)
+                .contains {
+                    !$0.isLocalEcho
+                        && $0.content.trimmingCharacters(in: .whitespacesAndNewlines) == content
+                }
+            guard !alreadyShown else { return }
             let chip = QueueItem(
                 id: "local-queued-\(item.id)",
                 content: item.content,
@@ -679,13 +692,85 @@ final class SessionViewModel {
         historyFirstSeq = cursor.firstSeq
     }
 
+    /// Deliberately NOT optimistic: a steer can be refused (nothing steerable
+    /// right now, files attached) and the message legitimately stays queued —
+    /// the server answers with a notice and the queue_update that follows is
+    /// the truth. Moving the chip first would show a steer that didn't happen.
     func steerQueued(_ item: QueueItem) {
         socket?.steerQueued(sessionId: session.id, queueId: item.id)
     }
 
     func deleteQueued(_ item: QueueItem) {
         socket?.deleteQueued(sessionId: session.id, queueId: item.id)
+        removeChip(item)
+    }
+
+    /// Drop a steer receipt from view. The run keeps going — the message is
+    /// already committed to it — this just stops the receipt from hanging
+    /// around until the turn ends.
+    func dismissSteered(_ item: QueueItem) {
+        socket?.deleteQueued(sessionId: session.id, queueId: item.id)
+        removeChip(item)
+    }
+
+    /// Removals have to be optimistic in BOTH lists: a chip that leaves the
+    /// server's queue without its message landing in the transcript is what
+    /// `queueUpdate` reads as "mid-delivery", so a discarded one we still hold
+    /// locally would come back as a ghost "Delivering…" row until it timed out.
+    private func removeChip(_ item: QueueItem) {
         queuedItems.removeAll { $0.id == item.id }
+        steeredItems.removeAll { $0.id == item.id }
+        deliveringItems.removeAll { $0.id == item.id }
+        queuedCount = queuedItems.count
+    }
+
+    /// Rewrite a queued message in place, keeping its position in the queue.
+    /// Only server-known entries can be addressed this way — a local echo has
+    /// an id the server has never seen.
+    func editQueued(_ item: QueueItem, content: String) {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !item.isLocalEcho else { return }
+        guard !text.isEmpty else {
+            deleteQueued(item)
+            return
+        }
+        socket?.updateQueued(sessionId: session.id, queueId: item.id, content: text)
+        if let index = queuedItems.firstIndex(where: { $0.id == item.id }) {
+            queuedItems[index] = queuedItems[index].withContent(text)
+        }
+    }
+
+    /// Move a queued message one place towards (-1) or away from (+1) the
+    /// front of the queue. The server takes the full id order and leaves
+    /// entries it doesn't recognise where they are, so local echoes ride
+    /// along without being named.
+    func moveQueued(_ item: QueueItem, by offset: Int) {
+        guard let from = queuedItems.firstIndex(where: { $0.id == item.id }) else { return }
+        let to = from + offset
+        guard queuedItems.indices.contains(to) else { return }
+        queuedItems.swapAt(from, to)
+        let order = queuedItems.filter { !$0.isLocalEcho }.map(\.id)
+        guard order.count > 1 else { return }
+        socket?.reorderQueued(sessionId: session.id, order: order)
+    }
+
+    /// Whether a queued message can be reordered at all — a one-item queue
+    /// has nothing to move, and a local echo isn't addressable yet.
+    func canReorder(_ item: QueueItem) -> Bool {
+        queuedItems.count > 1 && !item.isLocalEcho
+    }
+
+    /// Pull a message the server hasn't taken yet back into the composer.
+    /// Unlike a queued message (edited in place server-side), an outbox item
+    /// was never sent — taking it back is a pure local move, and the draft it
+    /// becomes is the only copy, so it's dropped from the outbox last.
+    func editUnsent(_ item: Outbox.Item) {
+        let images = outbox.images(for: item).compactMap {
+            AttachedImage(dataURL: $0)
+        }
+        draft = draft.isEmpty ? item.content : draft + "\n\n" + item.content
+        attachedImages.append(contentsOf: images)
+        outbox.delete(id: item.id)
     }
 
     // MARK: - Socket lifecycle

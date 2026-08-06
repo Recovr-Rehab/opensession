@@ -641,6 +641,28 @@ final class SendDraftTests: XCTestCase {
         XCTAssertTrue(viewModel.entries.isEmpty)
     }
 
+    /// The socket usually beats the HTTP response: the server broadcasts the
+    /// new queue while the delivery answer is still travelling. The optimistic
+    /// chip must not double the entry that's already on screen.
+    func testQueueUpdateArrivingBeforeTheDeliveryAnswerShowsOneChip() async {
+        markRunning()
+        outbox.transport = { [weak self] item, images in
+            guard let self else { return .unavailable("test torn down") }
+            self.deliveries.append((item, images))
+            let json = #"""
+            {"type":"queue_update","sessionId":"bks-1",
+             "queued":[{"id":"q1","content":"do this next","user":"ios"}],
+             "steered":[]}
+            """#
+            self.viewModel.handle(ServerEvent.parse(Data(json.utf8)))
+            return .delivered(status: "queued", message: "")
+        }
+        await send("do this next")
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1"])
+        XCTAssertEqual(viewModel.queuedCount, 1)
+        XCTAssertTrue(viewModel.entries.isEmpty)
+    }
+
     func testServerQueueUpdateReplacesLocalChip() async {
         markRunning()
         await send("do this next")
@@ -747,6 +769,81 @@ final class SendDraftTests: XCTestCase {
         viewModel.deleteQueued(viewModel.queuedItems[0])
         XCTAssertTrue(viewModel.queuedItems.isEmpty)
         XCTAssertEqual(socket.deletedQueueIds, ["q1"])
+    }
+
+    /// A dismissed steer receipt leaves the server queue without its message
+    /// ever landing in the transcript — the exact shape the delivering-hold
+    /// looks for. Without the optimistic removal it comes straight back as a
+    /// ghost "Delivering…" row.
+    func testDismissingSteerReceiptDoesNotResurrectItAsDelivering() {
+        let json = #"""
+        {"type":"queue_update","sessionId":"bks-1","queued":[],
+         "steered":[{"id":"s1","content":"while you're in there","user":"ios"}]}
+        """#
+        viewModel.handle(ServerEvent.parse(Data(json.utf8)))
+        viewModel.dismissSteered(viewModel.steeredItems[0])
+        XCTAssertTrue(viewModel.steeredItems.isEmpty)
+        XCTAssertEqual(socket.deletedQueueIds, ["s1"])
+
+        sendEmptyQueueUpdate()
+        XCTAssertTrue(viewModel.deliveringItems.isEmpty)
+    }
+
+    func testEditingQueuedMessageRewritesItInPlace() {
+        queueTwo()
+        viewModel.editQueued(viewModel.queuedItems[0], content: "  second thoughts  ")
+        XCTAssertEqual(socket.updatedQueued.map(\.id), ["q1"])
+        XCTAssertEqual(socket.updatedQueued.map(\.content), ["second thoughts"])
+        XCTAssertEqual(
+            viewModel.queuedItems.map(\.content), ["second thoughts", "then this"],
+            "an edit must keep the message where it was in the queue"
+        )
+    }
+
+    func testEditingQueuedMessageToNothingDiscardsIt() {
+        queueTwo()
+        viewModel.editQueued(viewModel.queuedItems[0], content: "   ")
+        XCTAssertTrue(socket.updatedQueued.isEmpty)
+        XCTAssertEqual(socket.deletedQueueIds, ["q1"])
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2"])
+    }
+
+    /// A chip minted by the composer has an id the server has never seen, so
+    /// the id-addressed actions have to wait for the real queue_update.
+    func testLocalEchoChipIsNotEditableOrReorderable() async {
+        markRunning()
+        await send("do this next")
+        let chip = viewModel.queuedItems[0]
+        XCTAssertTrue(chip.isLocalEcho)
+        XCTAssertFalse(viewModel.canReorder(chip))
+        viewModel.editQueued(chip, content: "changed my mind")
+        XCTAssertTrue(socket.updatedQueued.isEmpty)
+        XCTAssertEqual(viewModel.queuedItems[0].content, "do this next")
+    }
+
+    func testMovingQueuedMessageReordersLocallyAndOnTheServer() {
+        queueTwo()
+        viewModel.moveQueued(viewModel.queuedItems[1], by: -1)
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2", "q1"])
+        XCTAssertEqual(socket.reorders, [["q2", "q1"]])
+    }
+
+    func testMovingPastTheEndsOfTheQueueDoesNothing() {
+        queueTwo()
+        viewModel.moveQueued(viewModel.queuedItems[0], by: -1)
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1", "q2"])
+        XCTAssertTrue(socket.reorders.isEmpty)
+    }
+
+    /// Two server-known messages waiting behind a run.
+    private func queueTwo() {
+        let json = #"""
+        {"type":"queue_update","sessionId":"bks-1",
+         "queued":[{"id":"q1","content":"first","user":"ios"},
+                   {"id":"q2","content":"then this","user":"ios"}],
+         "steered":[]}
+        """#
+        viewModel.handle(ServerEvent.parse(Data(json.utf8)))
     }
 
     // MARK: - Delivering hold state (the vanish-then-reappear bug)
@@ -1054,6 +1151,8 @@ private final class MockSocket: SessionSocket {
     private(set) var prompts: [PromptCall] = []
     private(set) var steeredQueueIds: [String] = []
     private(set) var deletedQueueIds: [String] = []
+    private(set) var updatedQueued: [(id: String, content: String)] = []
+    private(set) var reorders: [[String]] = []
 
     func connect() { connectCount += 1 }
     func disconnect() { disconnectCount += 1 }
@@ -1071,6 +1170,10 @@ private final class MockSocket: SessionSocket {
     }
     func steerQueued(sessionId: String, queueId: String) { steeredQueueIds.append(queueId) }
     func deleteQueued(sessionId: String, queueId: String) { deletedQueueIds.append(queueId) }
+    func updateQueued(sessionId: String, queueId: String, content: String) {
+        updatedQueued.append((id: queueId, content: content))
+    }
+    func reorderQueued(sessionId: String, order: [String]) { reorders.append(order) }
     func cancelWatchedRun() {}
     func answer(sessionId: String, questionId: String, answers: [String: String]?) {}
 }

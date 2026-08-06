@@ -1271,9 +1271,19 @@ private struct SessionInputBar: View {
     /// What the "+" menu opened, if anything. One `@State` and one `.sheet`
     /// on purpose: stacking sheet modifiers on a single view leaves only the
     /// last one working.
-    private enum ComposerSheet: String, Identifiable {
+    private enum ComposerSheet: Identifiable {
         case goal, reference, schedule
-        var id: String { rawValue }
+        /// Rewriting a message that's still waiting in the server's queue.
+        case editQueued(QueueItem)
+
+        var id: String {
+            switch self {
+            case .goal: "goal"
+            case .reference: "reference"
+            case .schedule: "schedule"
+            case .editQueued(let item): "edit-\(item.id)"
+            }
+        }
     }
     @State private var sheet: ComposerSheet?
     /// In-flight promote — the row says so rather than looking inert, since
@@ -1340,11 +1350,22 @@ private struct SessionInputBar: View {
             VStack(spacing: 0) {
                 if hasQueueItems {
                     queueFlap
+                        // Slides out from behind the composer rather than
+                        // jump-cutting: the flap IS the composer's tucked-in
+                        // sibling, so it should look like it came from there.
+                        .transition(
+                            .move(edge: .bottom).combined(with: .opacity)
+                        )
                         .zIndex(0)
                 }
                 composer
                     .zIndex(1)
             }
+            // One animation for the whole flap: rows arriving, leaving, being
+            // steered from one section to the next, and the bar's own reflow
+            // all move together. Keyed on a signature rather than a count so
+            // an in-place edit animates too.
+            .animation(.smooth(duration: 0.26), value: queueSignature)
         }
         .frame(maxWidth: contentMaxWidth)
         .frame(maxWidth: .infinity)
@@ -1377,6 +1398,16 @@ private struct SessionInputBar: View {
                         return "Couldn't schedule that message."
                     }
                 }
+            case .editQueued(let item):
+                // The raw content, not the chip's cleaned-up body: editing is
+                // only offered for messages a person typed, where the two are
+                // the same, and saving the stripped form of anything else
+                // would quietly drop its routing prefix.
+                QueuedMessageEditor(
+                    initial: item.content,
+                    onSave: { viewModel.editQueued(item, content: $0) },
+                    onDelete: { viewModel.deleteQueued(item) }
+                )
             }
         }
         // No background: the composer and chips are individual glass elements
@@ -1423,17 +1454,28 @@ private struct SessionInputBar: View {
                 .foregroundStyle(OS1VisualStyle.textFaint)
 
             ForEach(viewModel.deliveringItems) { item in
-                QueuedMessageRow(content: item.content, phase: .delivering)
+                QueuedMessageRow(item: item, phase: .delivering)
             }
             ForEach(viewModel.steeredItems) { item in
-                QueuedMessageRow(content: item.content, phase: .steering)
+                QueuedMessageRow(
+                    item: item,
+                    phase: .steering,
+                    // The run keeps the message either way — this only
+                    // retires the receipt early.
+                    onDelete: { viewModel.dismissSteered(item) }
+                )
             }
             ForEach(viewModel.queuedItems) { item in
                 QueuedMessageRow(
-                    content: item.content,
+                    item: item,
                     phase: .queued,
-                    onSteer: viewModel.isRunning
+                    // Steering needs a run to fold into, and the server can't
+                    // fold a message that carries files.
+                    onSteer: (viewModel.isRunning && !item.hasFiles)
                         ? { viewModel.steerQueued(item) } : nil,
+                    onEdit: { sheet = .editQueued(item) },
+                    onMove: viewModel.canReorder(item)
+                        ? { offset in viewModel.moveQueued(item, by: offset) } : nil,
                     onDelete: { viewModel.deleteQueued(item) }
                 )
             }
@@ -1441,11 +1483,24 @@ private struct SessionInputBar: View {
             // These sit last because they're the furthest from the transcript.
             ForEach(unsentItems) { item in
                 QueuedMessageRow(
-                    content: item.content,
+                    // Images stay on disk as blobs — the row flags that the
+                    // message carries attachments rather than paying a read
+                    // per body evaluation to thumbnail them.
+                    item: QueueItem(
+                        id: item.id,
+                        content: item.content,
+                        user: item.user,
+                        hasFiles: !item.imageFiles.isEmpty
+                    ),
                     phase: item.failed ? .failed : .unsent,
                     detail: item.failed
                         ? item.lastError
                         : (viewModel.outbox.sendingId == item.id ? "Sending…" : nil),
+                    // Nothing has been sent yet, so "edit" is literally taking
+                    // the message back — it returns to the composer whole,
+                    // images included, and the outbox copy goes away.
+                    onEdit: viewModel.outbox.sendingId == item.id
+                        ? nil : { viewModel.editUnsent(item) },
                     onRetry: item.failed
                         ? { viewModel.outbox.retry(id: item.id) } : nil,
                     onDelete: { viewModel.outbox.delete(id: item.id) }
@@ -1490,9 +1545,24 @@ private struct SessionInputBar: View {
         }
         var parts: [String] = []
         if queued > 0 { parts.append("\(queued) queued") }
+        // Never folded into the "queued" count: these are already committed to
+        // the running turn, and calling them queued reads as "my message
+        // didn't go through" (the web learned this the hard way).
         if inFlight > 0 { parts.append("\(inFlight) in flight") }
         if unsent > 0 { parts.append("\(unsent) unsent") }
         return parts.joined(separator: " · ")
+    }
+
+    /// What the flap currently shows, as a value the animation can key on:
+    /// every row's identity and phase, plus queued text so an in-place edit
+    /// animates rather than snapping.
+    private var queueSignature: String {
+        var parts: [String] = []
+        parts.append(contentsOf: viewModel.deliveringItems.map { "d\($0.id)" })
+        parts.append(contentsOf: viewModel.steeredItems.map { "s\($0.id)" })
+        parts.append(contentsOf: viewModel.queuedItems.map { "q\($0.id):\($0.content.count)" })
+        parts.append(contentsOf: unsentItems.map { "u\($0.id)\($0.failed ? "!" : "")" })
+        return parts.joined(separator: "|")
     }
 
     /// Phone resting layout: ONE row — [+] [field] [send], the way Slack and
@@ -1740,33 +1810,82 @@ private struct SessionInputBar: View {
             : "Message — queues for after this run"
     }
 
+    /// Tapping sends the way the person's setting says (queue or steer);
+    /// holding offers the other one for this message only. Both verbs are
+    /// always one gesture away, the way ⌘/Ctrl+Enter makes them on the web —
+    /// before this, steering a fresh message meant sending it, finding its
+    /// chip, and tapping Steer. Only a running turn has anything to choose
+    /// between, so an idle composer keeps the plain button.
+    @ViewBuilder
     private var sendButton: some View {
-        Button {
-            viewModel.sendDraft()
-        } label: {
-            Image(systemName: "arrow.up")
-                .font(.system(size: 13, weight: .semibold))
-                // Explicit colours for the resting state, not the semantic
-                // `.fill.secondary` / `Color.secondary` pair: both are faint
-                // to begin with, and the dimming SwiftUI applies to a disabled
-                // button on top of that left the disc invisible against the
-                // near-white composer (measured: 242 vs a 252 background).
-                .foregroundStyle(
-                    viewModel.canSend ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
-                )
-                .frame(width: 32, height: 32)
-                .background(
-                    viewModel.canSend
-                        ? AnyShapeStyle(OS1VisualStyle.accent)
-                        : AnyShapeStyle(OS1VisualStyle.hover),
-                    in: Circle()
-                )
+        if viewModel.isRunning && !viewModel.noteMode {
+            Menu {
+                Button {
+                    viewModel.sendDraft(busyModeOverride: "steer")
+                } label: {
+                    Label(
+                        "Steer into this run",
+                        systemImage: busySend == "steer" ? "checkmark" : "arrow.turn.up.right"
+                    )
+                }
+                Button {
+                    viewModel.sendDraft(busyModeOverride: "queue")
+                } label: {
+                    Label(
+                        "Queue for after this run",
+                        systemImage: busySend == "steer" ? "clock" : "checkmark"
+                    )
+                }
+            } label: {
+                sendButtonFace
+            } primaryAction: {
+                viewModel.sendDraft()
+            }
+            .menuOrder(.fixed)
+            .buttonStyle(.plain)
+            .disabled(!viewModel.canSend)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+            .accessibilityLabel("Send")
+            .accessibilityHint(
+                busySend == "steer"
+                    ? "Steers this run. Touch and hold to queue instead."
+                    : "Queues for after this run. Touch and hold to steer instead."
+            )
+        } else {
+            Button {
+                viewModel.sendDraft()
+            } label: {
+                sendButtonFace
+            }
+            .buttonStyle(.plain)
+            .disabled(!viewModel.canSend)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .disabled(!viewModel.canSend)
-        .frame(width: 44, height: 44)
-        .contentShape(Circle())
-        .animation(.easeOut(duration: 0.15), value: viewModel.canSend)
+    }
+
+    /// The disc itself — identical in both forms, so gaining the hold menu
+    /// doesn't change how the button looks.
+    private var sendButtonFace: some View {
+        Image(systemName: "arrow.up")
+            .font(.system(size: 13, weight: .semibold))
+            // Explicit colours for the resting state, not the semantic
+            // `.fill.secondary` / `Color.secondary` pair: both are faint
+            // to begin with, and the dimming SwiftUI applies to a disabled
+            // button on top of that left the disc invisible against the
+            // near-white composer (measured: 242 vs a 252 background).
+            .foregroundStyle(
+                viewModel.canSend ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
+            )
+            .frame(width: 32, height: 32)
+            .background(
+                viewModel.canSend
+                    ? AnyShapeStyle(OS1VisualStyle.accent)
+                    : AnyShapeStyle(OS1VisualStyle.hover),
+                in: Circle()
+            )
+            .animation(.easeOut(duration: 0.15), value: viewModel.canSend)
     }
 
     @ViewBuilder
@@ -1866,12 +1985,23 @@ private struct SessionInputBar: View {
     private struct QueuedMessageRow: View {
         enum Phase { case queued, steering, delivering, unsent, failed }
 
-        let content: String
+        let item: QueueItem
         let phase: Phase
         var detail: String?
         var onSteer: (() -> Void)?
+        var onEdit: (() -> Void)?
+        /// -1 moves the message one place towards the front of the queue,
+        /// +1 one place back. Absent when there's nothing to reorder.
+        var onMove: ((Int) -> Void)?
         var onRetry: (() -> Void)?
         var onDelete: (() -> Void)?
+
+        /// Sentinels and routing prefixes stripped, plus the "who sent this"
+        /// tag — the queue carries agent-to-agent deliveries, not just what
+        /// the person typed.
+        private var message: QueueMessagePresentation {
+            QueueMessagePresentation(content: item.content, user: item.user)
+        }
 
         private var label: String {
             switch phase {
@@ -1891,8 +2021,31 @@ private struct SessionInputBar: View {
             }
         }
 
+        /// Only a message a person typed is editable in place: a worker
+        /// report or a GitHub FYI is routing, and rewriting one would strip
+        /// the prefix the server delivers it by.
+        private var canEdit: Bool {
+            onEdit != nil && message.label == nil && !item.isLocalEcho
+        }
+
         var body: some View {
             HStack(alignment: .center, spacing: 8) {
+                if let first = item.images.first,
+                   let thumb = DataImage(dataURL: first) {
+                    thumb
+                        .frame(width: 34, height: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(alignment: .bottomTrailing) {
+                            if item.images.count > 1 {
+                                Text("+\(item.images.count - 1)")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 3)
+                                    .background(.black.opacity(0.55), in: Capsule())
+                                    .padding(2)
+                            }
+                        }
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         if phase == .unsent {
@@ -1901,9 +2054,20 @@ private struct SessionInputBar: View {
                         }
                         Text(label)
                             .font(.caption2.weight(.semibold))
+                            .foregroundStyle(labelColor)
+                        if let from = message.label {
+                            Text(from)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
+                        if item.hasFiles {
+                            Image(systemName: "paperclip")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
-                    .foregroundStyle(labelColor)
-                    Text(content)
+                    Text(message.body)
                         .font(.footnote)
                         .lineLimit(2)
                         .foregroundStyle(.secondary)
@@ -1934,6 +2098,101 @@ private struct SessionInputBar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
+            // A whole-row tap opens the editor — the phone equivalent of the
+            // web's pencil, and the gesture people already expect from a
+            // pending item. The rest of the actions hang off a long press so
+            // the row keeps its two-button surface.
+            .contentShape(Rectangle())
+            .onTapGesture { if canEdit { onEdit?() } }
+            .contextMenu { rowActions }
         }
+
+        @ViewBuilder
+        private var rowActions: some View {
+            if canEdit, let onEdit {
+                Button("Edit", systemImage: "pencil", action: onEdit)
+            }
+            if let onSteer {
+                Button("Steer into this run", systemImage: "arrow.up", action: onSteer)
+            }
+            if let onMove {
+                Button("Move up", systemImage: "arrow.up.to.line") { onMove(-1) }
+                Button("Move down", systemImage: "arrow.down.to.line") { onMove(1) }
+            }
+            if let onRetry {
+                Button("Try again", systemImage: "arrow.clockwise", action: onRetry)
+            }
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Discard", systemImage: "trash")
+                }
+            }
+        }
+    }
+}
+
+/// Rewrite a message that's still waiting in the server's queue.
+///
+/// Edited in place rather than pulled back into the composer the way the web
+/// does it: the phone's composer usually holds a half-typed draft of its own,
+/// and a delete-then-resend would both lose the message's place in the queue
+/// and leave a window — one backgrounded app away — where it exists nowhere
+/// but a text field.
+private struct QueuedMessageEditor: View {
+    let onSave: (String) -> Void
+    let onDelete: () -> Void
+
+    @State private var text: String
+    @FocusState private var focused: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    init(
+        initial: String,
+        onSave: @escaping (String) -> Void,
+        onDelete: @escaping () -> Void
+    ) {
+        _text = State(initialValue: initial)
+        self.onSave = onSave
+        self.onDelete = onDelete
+    }
+
+    private var trimmed: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Edit queued message")
+                .font(.headline)
+            Text("It keeps its place in the queue.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            TextField("Message", text: $text, axis: .vertical)
+                .lineLimit(3...10)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+
+            HStack {
+                Button("Discard message", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Save") {
+                    onSave(trimmed)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(trimmed.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 320)
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
+        .onAppear { focused = true }
     }
 }
