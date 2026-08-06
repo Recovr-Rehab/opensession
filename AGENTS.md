@@ -21,7 +21,7 @@ applies only to your registered first-party repositories.
 Enforce this with credential scope, not just prompts — see
 docs/security-model.md for the token setup that makes any out-of-org GitHub
 write fail server-side. The rule itself is injected into every engine run via
-`buildOpencodeInstructions` (opencode-runner.ts).
+`buildRunInstructions` (run-instructions.ts).
 
 ## Data handling — never upload to public hosts
 
@@ -32,7 +32,7 @@ customer data. Deliver files only through channels you control: Slack file
 upload, the session UI, email via your own tooling, or a commit/PR in a
 private repo. If every controlled channel fails, stop and report the failure
 instead of escalating to a third-party host. The same rule is injected into
-every engine run via `buildOpencodeInstructions` (opencode-runner.ts).
+every engine run via `buildRunInstructions` (run-instructions.ts).
 
 ## The five client apps — resolve which one BEFORE working
 

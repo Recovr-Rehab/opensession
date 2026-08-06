@@ -70,7 +70,7 @@
  *  - Isolation from ~/.pi: in-memory credential store, `modelsPath: null`,
  *    server-owned agentDir under stateDir("pi"), SettingsManager.inMemory,
  *    DefaultResourceLoader with extensions/skills/templates/themes disabled
- *    and the run instructions (`buildOpencodeInstructions` — engine-neutral
+ *    and the run instructions (`buildRunInstructions` — engine-neutral
  *    policy text) appended via systemPromptOverride. Context-file discovery
  *    is bounded to the workspace via agentsFilesOverride: pi's default walks
  *    every ancestor up to / (plus the agentDir global) — an out-of-workspace
@@ -178,9 +178,9 @@ import {
   isUnattendedKind,
   baseJournalKind,
   opencodeRunPolicy,
-  buildOpencodeInstructions,
   readLocalInstructions,
 } from "./opencode-runner";
+import { buildRunInstructions } from "./run-instructions";
 import { bashAskPolicyReply } from "./command-policy";
 import {
   appendOpencodeTranscript,
@@ -1477,7 +1477,7 @@ export async function* runPi(
       }
     }
 
-    const instructions = buildOpencodeInstructions({
+    const instructions = buildRunInstructions({
       isAsk,
       isScratch,
       reposNote: opts.reposNote,
