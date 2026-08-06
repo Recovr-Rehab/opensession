@@ -131,14 +131,15 @@ struct SettingsView: View {
                     .foregroundStyle(OS1VisualStyle.text)
             } icon: {
                 // Without the tile the glyph carries the row on its own, so it
-                // takes the brand fill rather than secondary-label gray, and
-                // trades size for weight: smaller than the title beside it,
-                // heavier than it, which keeps the icon column reading as a
-                // column instead of as dimmer text.
+                // takes a colour of its own rather than secondary-label gray
+                // or the title's black-on-white, and trades size for weight:
+                // smaller than the title beside it, heavier than it, which
+                // keeps the icon column reading as a column instead of as
+                // dimmer text.
                 Image(systemName: icon)
                     .symbolRenderingMode(.monochrome)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(OS1VisualStyle.accent)
+                    .foregroundStyle(OS1VisualStyle.link)
                     .frame(width: 28, height: 28)
             }
         }
