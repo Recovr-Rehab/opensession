@@ -19,9 +19,8 @@ own worktree and verify its changes in a real browser (screenshots, DOM
 checks, CDP) without a human bootstrapping anything. See
 [Letting the agent test the app itself](#letting-the-agent-test-the-app-itself).
 
-`.backstage/` is honored as the pre-rename fallback for all three files. When
-both directories exist, `.opensession/` wins, and `setup.sh` is always taken
-from the same directory as the resolved `start.sh` — the pair ships together.
+`setup.sh` is always taken from the same directory as the resolved
+`start.sh` — the pair ships together.
 
 ## setup.sh — one-shot provisioning
 
@@ -75,7 +74,7 @@ step is missing (a gitignored `.env` that needs an interactive login to pull,
 say), exit non-zero with the exact commands to run; that error message is
 what both the session UI and the agent will act on.
 
-**Resolution chain.** `.opensession/start.sh` → `.backstage/start.sh` → the
+**Resolution chain.** `.opensession/start.sh` → the
 instance-config `previewCommand` (invoked with the worktree path as `$1` —
 for repos you can't commit to). One chain, shared by host and sandbox
 previews (`resolvePreviewBoot` in src/server/preview.ts); no rung resolves →

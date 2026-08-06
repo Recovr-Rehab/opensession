@@ -1,16 +1,5 @@
 Default to using Bun instead of Node.js.
 
-Open Session was born as Tella's internal agent server, code-named
-"backstage". The code is fully renamed; what remains of that history is
-READ-side tolerance for persisted data — old `bks-`/`prj-` ids in session
-files and links, legacy markers in old transcripts, and historical
-`/backstage`/`/opensession` URL prefixes accepted-and-stripped at the edges.
-New code emits only the new names; never remove the read-side acceptance. It
-is deliberately tiny and lives next to its use: `isNativeSessionId`
-(paths.ts), the legacy fence pair in prompt-context.ts, the pre-rename marker
-alternation in jsonl-parser.ts, the legacy summary sentinel in
-agents/github/run.ts, and `canonicalMcpServerId` (run-rpc.ts).
-
 Instance-private operator instructions (deployment hostnames, org access
 grants, incident history) belong in an untracked `AGENTS.local.md` or
 `CLAUDE.local.md` next to this file — the runner appends it to every engine
@@ -119,11 +108,7 @@ Basics:
 - Bun automatically loads .env, so don't use dotenv.
 - HTML imports for frontend bundling (no Vite).
 - Naming: OPENSESSION_* env vars, `~/.opensession-*` state. URLs are
-  prefix-less: the app serves at the bare domain root; old `/opensession` +
-  `/backstage` page URLs 301 there, and prefixed non-page traffic (WS upgrades
-  incl. sandbox dial-back run-ws/rpc-ws, API calls) is stripped onto the BARE
-  internal route literals in the fetch preamble — keep that acceptance;
-  running sandboxes and old tabs still send prefixed forms.
+  prefix-less: the app serves at the bare domain root.
 - Own session store at ~/.opensession-chats/. All other engines' session file
   access is read-only (never modify ~/.slack-sessions/ or ~/.linear-sessions/)
   — sole exception: `src/server/agent-session-sync.ts` (see that module's doc
