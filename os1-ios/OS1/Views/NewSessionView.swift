@@ -71,15 +71,20 @@ struct NewSessionView: View {
             #endif
             .toolbar {
                 #if os(iOS)
-                // The send disc carries its own filled circle, so the toolbar's
-                // glass capsule around it read as a white ring on the black
-                // accent. Cancel keeps the glass — it's a bare glyph.
+                // Both ends draw their own circle, so both hide the toolbar's
+                // glass: a capsule around the send disc read as a white ring on
+                // the black accent, and the ✕'s glass — white on a white sheet —
+                // was nearly invisible next to it. Hiding it on one side only
+                // also cost 4pt of symmetry: iOS insets a glass item and a bare
+                // one differently.
                 ToolbarItem(placement: .confirmationAction) { startButton }
+                    .sharedBackgroundVisibility(.hidden)
+                ToolbarItem(placement: .cancellationAction) { cancelButton }
                     .sharedBackgroundVisibility(.hidden)
                 #else
                 ToolbarItem(placement: .confirmationAction) { startButton }
-                #endif
                 ToolbarItem(placement: .cancellationAction) { cancelButton }
+                #endif
             }
             .task { await load() }
         }
@@ -119,6 +124,10 @@ struct NewSessionView: View {
         }
         .buttonStyle(.plain)
         .disabled(startDisabled)
+        // A bare toolbar item sits 20pt off the edge; the sheet's own column —
+        // the chips below, and the prompt under them — is 16. Pull both circles
+        // onto it so the header has one left and one right edge.
+        .padding(.trailing, -4)
         .keyboardShortcut(.return, modifiers: .command)
         .accessibilityLabel("Start session")
         #else
@@ -131,13 +140,19 @@ struct NewSessionView: View {
     @ViewBuilder
     private var cancelButton: some View {
         #if os(iOS)
-        // Bare glyph, like the sessions list's "+": the toolbar supplies its
-        // own glass background, and a second fill inside it reads as a chip.
+        // The send disc's twin: same 44pt circle, same glyph size, and the
+        // neutral fill the sheet's own chips wear. Only the role colour differs,
+        // so the bar reads as a pair — a bare glyph opposite a solid accent disc
+        // left the sheet lopsided.
         Button { dismiss() } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(OS1VisualStyle.text)
+                .frame(width: 44, height: 44)
+                .background(OS1VisualStyle.hover, in: Circle())
         }
+        .buttonStyle(.plain)
+        .padding(.leading, -4)
         .accessibilityLabel("Cancel")
         #else
         Button("Cancel") { dismiss() }
@@ -194,7 +209,9 @@ struct NewSessionView: View {
             Spacer(minLength: 8)
             modeChip
         }
-        .padding(.horizontal, 12)
+        // 16, the column the prompt below already uses (11 outer + the text
+        // view's own 5pt fragment padding) and the toolbar circles now sit on.
+        .padding(.horizontal, 16)
         .padding(.vertical, 8)
     }
 
