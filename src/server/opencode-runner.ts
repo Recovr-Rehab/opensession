@@ -266,6 +266,8 @@ import {
 } from "./codex-accounts";
 import {
   opencodeTurnTimeoutMs,
+  toolStallError,
+  toolStallNotice,
   turnTimeoutError,
   turnTimeoutNotice,
   readOpencodeBridgeConfig,
@@ -2870,12 +2872,44 @@ const PROVIDER_STALL_MS = (() => {
 })();
 const PROVIDER_STALL_MIN_RETRIES = 3;
 
+/**
+ * Open-tool stall guard (rides the same silence clock). A plain tool call can
+ * hang forever with no task child and no provider retries — os-019fd67b
+ * (2026-08-06) sat 2h52m on a bash call that launched a detached Chrome:
+ * opencode's own bash timeout killed the shell, but its output read waits for
+ * pipe EOF and the detached child inherits the pipe, so the call never
+ * resolved and nothing watched for it until the wall-clock deadline. Any open
+ * NON-task tool part with the whole family silent for TOOL_STALL_MS ends the
+ * turn cleanly (turn-abort lane — the account and server are healthy, so no
+ * sideline/respawn). The threshold sits above opencode's 10-min bash timeout
+ * ceiling: a healthy bash call cannot legitimately be older than that, and
+ * streamed output resets the clock anyway. The clock pauses while a
+ * permission ask waits on a human (that wait is not a hang).
+ * Kill switch / tuning: OPENSESSION_TOOL_STALL_MS (0 disables; floor 5 min).
+ */
+const TOOL_STALL_MS = (() => {
+  const raw = process.env.OPENSESSION_TOOL_STALL_MS;
+  if (raw === "0") return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.max(300_000, n) : 1_200_000;
+})();
+
+export type StallInfo = {
+  kind: "task" | "tool";
+  quietMs: number;
+  openTaskIds: string[];
+  /** Open non-task tool calls, e.g. `bash: setsid -f google-chrome …`. */
+  openToolLabels: string[];
+};
+
 export function makeSubagentStallGuard(
   ocSessionId: string,
-  onStall: (info: { quietMs: number; openTaskIds: string[] }) => void
+  onStall: (info: StallInfo) => void
 ) {
   const childSessions = new Set<string>();
   const openTasks = new Map<string, number>();
+  const openTools = new Map<string, string>();
+  let pendingAsks = 0;
   let lastFamilyEventAt = Date.now();
   let timer: ReturnType<typeof setInterval> | undefined;
   return {
@@ -2935,24 +2969,67 @@ export function makeSubagentStallGuard(
     quietFor(now = Date.now()): number {
       return now - lastFamilyEventAt;
     },
-    /** Call for every parent tool part update (tracks open task tools). */
+    /** Call for every parent tool part update (tracks open tool calls). */
     noteTool(part: any) {
-      if (part?.tool !== "task") return;
+      if (!part?.id) return;
       const status = part?.state?.status;
-      if (status === "pending" || status === "running") {
-        if (!openTasks.has(part.id)) openTasks.set(part.id, Date.now());
+      const open = status === "pending" || status === "running";
+      if (part?.tool === "task") {
+        if (open) {
+          if (!openTasks.has(part.id)) openTasks.set(part.id, Date.now());
+        } else if (status === "completed" || status === "error") {
+          openTasks.delete(part.id);
+        }
+        return;
+      }
+      if (open) {
+        // Label = tool name + input excerpt, best-effort: enough for the
+        // cutoff message to name what hung without dumping the whole input.
+        const input = part?.state?.input;
+        const excerpt = String(input?.command ?? input?.description ?? input?.filePath ?? "")
+          .replace(/\s+/g, " ")
+          .slice(0, 120);
+        openTools.set(part.id, `${part?.tool || "tool"}${excerpt ? `: ${excerpt}` : ""}`);
       } else if (status === "completed" || status === "error") {
-        openTasks.delete(part.id);
+        openTools.delete(part.id);
       }
     },
+    /** A permission ask awaiting a decision pauses the stall clock — a tool
+     *  sitting open on a human's answer is patience, not a hang. On the last
+     *  resolution the clock restarts from now so the wait never counts. */
+    noteAskPending(delta: 1 | -1) {
+      pendingAsks = Math.max(0, pendingAsks + delta);
+      if (pendingAsks === 0) lastFamilyEventAt = Date.now();
+    },
+    /** The interval body, extracted for tests: the stall verdict at `now`. */
+    evaluate(now = Date.now()): StallInfo | null {
+      if (pendingAsks > 0) return null;
+      const quietMs = now - lastFamilyEventAt;
+      if (SUBAGENT_STALL_MS && openTasks.size && quietMs >= SUBAGENT_STALL_MS) {
+        return {
+          kind: "task",
+          quietMs,
+          openTaskIds: [...openTasks.keys()],
+          openToolLabels: [],
+        };
+      }
+      if (TOOL_STALL_MS && openTools.size && quietMs >= TOOL_STALL_MS) {
+        return {
+          kind: "tool",
+          quietMs,
+          openTaskIds: [],
+          openToolLabels: [...openTools.values()],
+        };
+      }
+      return null;
+    },
     start() {
-      if (!SUBAGENT_STALL_MS || timer) return;
+      if ((!SUBAGENT_STALL_MS && !TOOL_STALL_MS) || timer) return;
       timer = setInterval(() => {
-        if (!openTasks.size) return;
-        const quietMs = Date.now() - lastFamilyEventAt;
-        if (quietMs < SUBAGENT_STALL_MS) return;
+        const verdict = this.evaluate();
+        if (!verdict) return;
         this.stop();
-        onStall({ quietMs, openTaskIds: [...openTasks.keys()] });
+        onStall(verdict);
       }, 30_000);
     },
     stop() {
@@ -4155,6 +4232,29 @@ async function* runOpencodeAttempt(
     let sawFirstOutput = false;
     const stallGuard = makeSubagentStallGuard(ocSessionId, (info) => {
       if (idle || runFailure || abortController.signal.aborted) return;
+      if (info.kind === "tool") {
+        // A hung tool call, not a wedged bridge: the account and server are
+        // healthy, so take the turn-deadline lane — clear error, durable
+        // notice, abort — with no account sideline and no respawn-retry
+        // (a retry would just re-run the same hang on a second account).
+        const label = info.openToolLabels.join("; ") || "unknown tool";
+        runFailure = toolStallError(label, info.quietMs);
+        appendOpencodeTranscript(ocSessionId, [
+          transcriptLineRunnerNotice(toolStallNotice(label, info.quietMs)),
+        ]);
+        failureNoticePersisted = true;
+        turnEvent({
+          direction: "out",
+          kind: "tool_stall",
+          tool_name: label.slice(0, 200),
+          quiet_ms: info.quietMs,
+        });
+        engineAbortInFlight = client.session
+          .abort({ path: { id: ocSessionId }, ...q })
+          .catch(() => {});
+        signalDone();
+        return;
+      }
       // Same recovery lane as the 90s guard: livenessWedged drives the shared
       // server drain-respawn + one automatic retry that re-prompts the session.
       livenessWedged = true;
@@ -4455,30 +4555,37 @@ async function* runOpencodeAttempt(
       repliedPermissionIds.add(permId);
       const kind = String(ask?.permission ?? ask?.action ?? "unknown");
       permissionAskChain = permissionAskChain.then(async () => {
-        let reply: "once" | "always" | "reject" = "reject";
+        // Pause the stall clock: a tool part sits open while its ask waits on
+        // a human, which can legitimately take longer than any stall window.
+        stallGuard.noteAskPending(1);
         try {
-          reply = await decidePermissionAsk(ask);
-        } catch (e) {
-          console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
+          let reply: "once" | "always" | "reject" = "reject";
+          try {
+            reply = await decidePermissionAsk(ask);
+          } catch (e) {
+            console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
+          }
+          console.warn(
+            `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
+          );
+          turnEvent({
+            direction: "out",
+            kind: "permission_decision",
+            tool_name: kind,
+            decision: reply === "reject" ? "deny" : "allow",
+            reason:
+              policy.unattended
+                ? "unattended_auto_reject"
+                : kind === "external_directory"
+                  ? "interactive_auto_approve"
+                  : opts.onAskUser
+                    ? "human_decision"
+                    : "no_ask_handler",
+          });
+          await replyPermissionAsk(permId, reply);
+        } finally {
+          stallGuard.noteAskPending(-1);
         }
-        console.warn(
-          `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
-        );
-        turnEvent({
-          direction: "out",
-          kind: "permission_decision",
-          tool_name: kind,
-          decision: reply === "reject" ? "deny" : "allow",
-          reason:
-            policy.unattended
-              ? "unattended_auto_reject"
-              : kind === "external_directory"
-                ? "interactive_auto_approve"
-                : opts.onAskUser
-                  ? "human_decision"
-                  : "no_ask_handler",
-        });
-        await replyPermissionAsk(permId, reply);
       });
     };
 
@@ -4739,7 +4846,11 @@ async function* runOpencodeAttempt(
     // Mid-turn sibling of the guard above: catches a task subagent whose
     // provider request wedged AFTER the parent stream came up (bridge runs
     // only, same as LIVENESS_MS — API-key runs don't ride a Meridian proxy).
-    if (bridgeLivenessGuard) stallGuard.start();
+    // Armed for every run, not just bridge runs: the tool-stall lane has
+    // nothing to do with bridge auth (os-019fd67b hung on a bash pipe), and
+    // the task lane's wedge recovery degrades gracefully without a picked
+    // bridge account (no sideline, still drain-respawn + one retry).
+    stallGuard.start();
 
     let statusPollFailures = 0;
     let statusPollStreakStart = 0;
@@ -5671,29 +5782,37 @@ export async function tryReattachOpencodeRun(
         repliedPermissionIds.add(permId);
         const kind = String(ask?.permission ?? ask?.action ?? "unknown");
         permissionAskChain = permissionAskChain.then(async () => {
-          let reply: "once" | "always" | "reject" = "reject";
+          // Pause the stall clock while the ask waits on a human — same
+          // reasoning as the primary path. (Called only after stallGuard
+          // below is initialized: asks arrive via events, not synchronously.)
+          stallGuard.noteAskPending(1);
           try {
-            reply = await decidePermissionAsk(ask);
-          } catch (e) {
-            console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
+            let reply: "once" | "always" | "reject" = "reject";
+            try {
+              reply = await decidePermissionAsk(ask);
+            } catch (e) {
+              console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
+            }
+            console.warn(
+              `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
+            );
+            turnEvent({
+              direction: "out",
+              kind: "permission_decision",
+              tool_name: kind,
+              decision: reply === "reject" ? "deny" : "allow",
+              reason: policy.unattended
+                ? "unattended_auto_reject"
+                : kind === "external_directory"
+                  ? "interactive_auto_approve"
+                  : handlers.onAskUser
+                    ? "human_decision"
+                    : "no_ask_handler",
+            });
+            await replyPermissionAsk(permId, reply);
+          } finally {
+            stallGuard.noteAskPending(-1);
           }
-          console.warn(
-            `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
-          );
-          turnEvent({
-            direction: "out",
-            kind: "permission_decision",
-            tool_name: kind,
-            decision: reply === "reject" ? "deny" : "allow",
-            reason: policy.unattended
-              ? "unattended_auto_reject"
-              : kind === "external_directory"
-                ? "interactive_auto_approve"
-                : handlers.onAskUser
-                  ? "human_decision"
-                  : "no_ask_handler",
-          });
-          await replyPermissionAsk(permId, reply);
         });
       };
 
@@ -5703,6 +5822,23 @@ export async function tryReattachOpencodeRun(
       // state preserved) instead of retrying.
       const stallGuard = makeSubagentStallGuard(ocSessionId!, (info) => {
         if (idle || runFailure) return;
+        if (info.kind === "tool") {
+          const label = info.openToolLabels.join("; ") || "unknown tool";
+          runFailure = toolStallError(label, info.quietMs);
+          appendOpencodeTranscript(ocSessionId!, [
+            transcriptLineRunnerNotice(toolStallNotice(label, info.quietMs)),
+          ]);
+          failureNoticePersisted = true;
+          turnEvent({
+            direction: "out",
+            kind: "tool_stall",
+            tool_name: label.slice(0, 200),
+            quiet_ms: info.quietMs,
+          });
+          void client.session.abort({ path: { id: ocSessionId! }, ...q }).catch(() => {});
+          signalDone();
+          return;
+        }
         runFailure =
           `opencode task subagent produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
           "— the engine bridge wedged mid-turn; ending the reattached turn " +

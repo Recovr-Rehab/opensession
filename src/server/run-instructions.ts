@@ -149,6 +149,20 @@ export function buildRunInstructions(input: {
       "turn is what the session UI presents as your answer; mid-turn narration does not " +
       "replace it."
   );
+  // Unconditional: a detached child that inherits the bash tool's
+  // stdout/stderr pipe keeps the call's output stream open after the shell
+  // exits, so the tool call never resolves — os-019fd67b (2026-08-06) hung
+  // 2h52m on `setsid -f google-chrome` until the turn deadline. The stall
+  // guard now cuts such turns off, but the redirect avoids the hang entirely.
+  parts.push(
+    "## Background processes need their output redirected\nWhen you start a long-lived " +
+      "background process from the shell (setsid, nohup, a trailing `&` — browsers, Xvfb, " +
+      "dev servers, daemons), ALWAYS detach its stdio: append " +
+      "`</dev/null >/tmp/<name>.log 2>&1` (or your session's scratch dir) to the command. " +
+      "A detached child that inherits the shell's stdout/stderr keeps the tool call open " +
+      "after the shell exits — the call hangs until it is forcibly cut off, wasting the " +
+      "turn. Check the log file afterwards instead of relying on launch output."
+  );
   // Capability note, not a mandate: the UI renders ```mermaid fences as
   // diagrams (MarkdownBody.tsx), but a model that doesn't know that will
   // never emit one — and one told too forcefully draws flowcharts for
