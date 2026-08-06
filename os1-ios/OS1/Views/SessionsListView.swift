@@ -1472,12 +1472,12 @@ struct SessionsListView: View {
             title: "No sessions",
             message: "Start one and it shows up here."
         ) {
-            // Starting a session is what you came for; Settings is only here
-            // for the case where the list is empty because it's the wrong
-            // server, so it takes the quieter half.
+            // The only thing worth offering here. Settings used to sit under
+            // it, but the app tile in the corner is already that door — a
+            // placeholder shouldn't spend its one moment of attention
+            // pointing at chrome that never left the screen.
             Button("New session") { newSessionRequest = NewSessionRequest() }
                 .buttonStyle(PlaceholderActionStyle())
-            settingsButton
         }
     }
 
@@ -1495,21 +1495,28 @@ struct SessionsListView: View {
             title: failure.title,
             message: failureMessage(failure)
         ) {
-            // The poll keeps trying underneath either way — this is for the
-            // person who just turned the VPN back on and doesn't want to
-            // wonder whether the app noticed.
-            Button(action: retryLoad) {
-                if isRetrying {
-                    // Same footprint as the label it replaces, so the capsule
-                    // doesn't resize when the retry starts.
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("Try again")
+            // One button, the one the diagnosis asks for. A wrong address
+            // doesn't heal by being retried, and a timeout isn't fixed in
+            // Settings — offering both would just make you pick.
+            switch failure.remedy {
+            case .retry:
+                // The poll keeps trying underneath either way; this is for
+                // the person who just turned the VPN back on and doesn't
+                // want to wonder whether the app noticed.
+                Button(action: retryLoad) {
+                    if isRetrying {
+                        // Same footprint as the label it replaces, so the
+                        // capsule doesn't resize when the retry starts.
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Try again")
+                    }
                 }
+                .buttonStyle(PlaceholderActionStyle())
+                .disabled(isRetrying)
+            case .settings:
+                settingsButton
             }
-            .buttonStyle(PlaceholderActionStyle())
-            .disabled(isRetrying)
-            settingsButton
         }
     }
 
@@ -1526,14 +1533,16 @@ struct SessionsListView: View {
         return "\(host) didn't answer."
     }
 
+    /// Only shown where Settings is the actual fix — a server that can't be
+    /// found, a token that isn't accepted — so it wears the full weight.
     @ViewBuilder
     private var settingsButton: some View {
         #if os(macOS)
-        SettingsLink { Text("Settings") }
-            .buttonStyle(PlaceholderActionStyle(prominent: false))
+        SettingsLink { Text("Open Settings") }
+            .buttonStyle(PlaceholderActionStyle())
         #else
-        Button("Settings") { showSettings = true }
-            .buttonStyle(PlaceholderActionStyle(prominent: false))
+        Button("Open Settings") { showSettings = true }
+            .buttonStyle(PlaceholderActionStyle())
         #endif
     }
 

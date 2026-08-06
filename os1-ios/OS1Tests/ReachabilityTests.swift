@@ -77,10 +77,31 @@ final class ReachabilityTests: XCTestCase {
 
     @MainActor
     func testAnAnsweredRequestIsNotAConnectionProblem() async {
-        let diagnosis = await Reachability.diagnose(OS1API.APIError.http(401))
+        let diagnosis = await Reachability.diagnose(OS1API.APIError.http(500))
         XCTAssertFalse(diagnosis.isConnection)
         // Nothing to advise: the screen falls back to the system's wording.
         XCTAssertNil(diagnosis.fix)
-        XCTAssertEqual(diagnosis.detail, OS1API.APIError.http(401).localizedDescription)
+        XCTAssertEqual(diagnosis.detail, OS1API.APIError.http(500).localizedDescription)
+    }
+
+    /// The placeholder shows exactly one button, so the diagnosis has to pick
+    /// it: nothing that a retry can't fix should offer one.
+    @MainActor
+    func testTheThingsSettingsCanFixAskForSettings() async {
+        for error in [OS1API.APIError.notConfigured, .http(401)] {
+            let diagnosis = await Reachability.diagnose(error)
+            XCTAssertEqual(diagnosis.remedy, .settings, "\(error)")
+            XCTAssertNotNil(diagnosis.fix, "\(error)")
+        }
+        // An http:// server on a remote host: stopped by App Transport
+        // Security before it leaves the device, and fixed by the scheme.
+        let insecure = await Reachability.diagnose(
+            URLError(.appTransportSecurityRequiresSecureConnection)
+        )
+        XCTAssertEqual(insecure.remedy, .settings)
+        XCTAssertNotNil(insecure.fix)
+        // A server that simply didn't answer is the retry case.
+        let offline = await Reachability.diagnose(URLError(.notConnectedToInternet))
+        XCTAssertEqual(offline.remedy, .retry)
     }
 }

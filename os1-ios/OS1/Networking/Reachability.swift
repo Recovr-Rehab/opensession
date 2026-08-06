@@ -61,10 +61,48 @@ enum Reachability {
         let fix: String?
         let detail: String
         let isConnection: Bool
+        /// The single thing worth offering. A screen that lists every door it
+        /// knows about — retry, settings, help — makes the reader choose
+        /// between them; the diagnosis already knows which one is the answer,
+        /// so it says so and the screen shows that one.
+        var remedy: Remedy = .retry
+    }
+
+    enum Remedy: Equatable, Sendable {
+        /// Wait it out: the connection is the problem, and the list polls
+        /// anyway — the button is for the person who just fixed their end.
+        case retry
+        /// The server address or the token is what's wrong, and neither
+        /// heals by being asked again.
+        case settings
     }
 
     static func diagnose(_ error: Error) async -> Diagnosis {
         let code = (error as? URLError)?.code
+        // Nothing was ever going to be reached: no server set, or one that
+        // won't have us. Retrying is theatre — the fix is in Settings.
+        if let api = error as? OS1API.APIError {
+            switch api {
+            case .notConfigured:
+                return Diagnosis(
+                    title: "No server yet",
+                    fix: "Add your OS1 server and token in Settings.",
+                    detail: api.localizedDescription,
+                    isConnection: false,
+                    remedy: .settings
+                )
+            case .http(401):
+                return Diagnosis(
+                    title: "Not signed in",
+                    fix: "Check your access token in Settings.",
+                    detail: api.localizedDescription,
+                    isConnection: false,
+                    remedy: .settings
+                )
+            default:
+                break
+            }
+        }
         // "Offline" is its own headline: no server is reachable, so naming
         // this one would be beside the point.
         if code == .notConnectedToInternet {
@@ -73,6 +111,18 @@ enum Reachability {
                 fix: "Reconnect, then try again.",
                 detail: error.localizedDescription,
                 isConnection: true
+            )
+        }
+        // A server set as http:// on a remote host never leaves the device:
+        // App Transport Security stops it, and says so in a sentence about
+        // policy that names neither the server nor the scheme that fixes it.
+        if code == .appTransportSecurityRequiresSecureConnection {
+            return Diagnosis(
+                title: "This server needs HTTPS",
+                fix: "It's set as http://. Change it to https:// in Settings.",
+                detail: error.localizedDescription,
+                isConnection: false,
+                remedy: .settings
             )
         }
         guard blamesTheNetwork(error) else {
@@ -92,7 +142,8 @@ enum Reachability {
                 title: "Can't find that server",
                 fix: "Check the server address in Settings.",
                 detail: error.localizedDescription,
-                isConnection: true
+                isConnection: true,
+                remedy: .settings
             )
         }
         return Diagnosis(
