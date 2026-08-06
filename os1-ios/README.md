@@ -112,7 +112,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   everything the session view already does — streaming, tool folds, questions
   — works there too. Voice mode is opt-in per device via the "Desk voice"
   toggle in Appearance settings (cross-device `desk-voice` ui-pref); when on,
-  a mic button in the Desk header starts a live call brokered by the
+  a mic in the Desk composer (left of send) or in the sheet header starts a
+  live call brokered by the
   server over a raw WebSocket to OpenAI's Realtime API (`DeskVoiceEngine`) —
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
@@ -122,8 +123,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   line as live captions under it, and mute / captions / hang-up controls.
   Barge-in is server-side VAD, so talking over the model just interrupts it.
   Minimizing (the chevron) leaves the call running and returns you to the Desk
-  transcript, which fills in as turns finalize; the header's lit mic button
-  comes back to the call, and hanging up is the only thing that ends it.
+  transcript, which fills in as turns finalize; either lit mic — composer or
+  header — comes back to the call, and hanging up is the only thing that ends
+  it. The composer mic (`ComposerVoiceButton`) renders only where the
+  environment carries a `DeskVoiceEngine`, which is the Desk alone, so no
+  other session's composer grows a control voice can't serve: the server
+  resolves every voice call to the Desk session.
   Mute is local — capture and metering continue, frames stop leaving the
   device. The orb's level is sampled off the realtime audio threads at ~15Hz
   rather than pushed per buffer, and honors Reduce Motion.
