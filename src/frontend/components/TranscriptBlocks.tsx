@@ -7,6 +7,7 @@ import { TurnFooter, collectTouchedFiles, type TouchedFile } from "./TurnFooter"
 import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
+import { workAnchorId } from "../../shared/transcript-landmarks";
 
 type RenderBlock =
 	| { kind: "entry"; entry: TranscriptEntry }
@@ -166,7 +167,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 									: block.entry.id;
 				const anchorId =
 					block.kind === "turn"
-						? `${block.items[block.items.length - 1].id}#turn`
+						? workAnchorId(block.items[block.items.length - 1].id)
 						: key;
 				// While streaming, flushTurn splits trailing assistant text out as
 				// its own block after the fold, so the live turn alternates between

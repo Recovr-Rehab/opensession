@@ -209,6 +209,17 @@ export async function deleteSessionAssetApi(
 	});
 }
 
+/** Generated titles for the transcript minimap's ticks, keyed by landmark id.
+ *  `pending` means a generation pass is running and a later call will have
+ *  more — the rail shows its derived labels until then. */
+export async function fetchTurnSummaries(
+	sessionId: string,
+): Promise<{ titles: Record<string, string>; pending: boolean }> {
+	return request(`/sessions/${encodeURIComponent(sessionId)}/turn-summaries`, {
+		label: "Failed to load turn summaries",
+	});
+}
+
 export async function fetchSessions(): Promise<UnifiedSession[]> {
 	return request<UnifiedSession[]>("/sessions", {
 		label: "Failed to fetch sessions",
