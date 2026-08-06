@@ -130,14 +130,17 @@ async function validateSetting(value: unknown): Promise<string | null> {
  * SIGTERM? Not "does this box have systemd" — a foreground `bun run
  * opensession.ts` on a systemd box is exactly the case that must say no.
  *
- * `INVOCATION_ID` is set by systemd for every unit it starts; a launchd agent
- * (and a systemd service, redundantly) is reparented to pid 1. Both checks err
- * toward "unsupervised", which is the safe direction: the cost of a false
- * negative is one manual restart, the cost of a false positive is killing the
- * operator's only instance from a button labelled Restart.
+ * Only positive, manager-set markers count: `INVOCATION_ID` (systemd sets it
+ * per unit start) and `XPC_SERVICE_NAME` (launchd sets it to the job label;
+ * plain shells get "0" or nothing). Parentage is deliberately NOT used — a
+ * `nohup … &` server is orphaned to pid 1 and would read as supervised, which
+ * is precisely the operator this guard exists to protect. Erring toward
+ * "unsupervised" costs one manual restart; erring the other way kills someone's
+ * only instance from a button labelled Restart.
  */
 function processIsSupervised(): boolean {
-  return !!process.env.INVOCATION_ID || process.ppid === 1;
+  const xpc = process.env.XPC_SERVICE_NAME;
+  return !!process.env.INVOCATION_ID || (!!xpc && xpc !== "0");
 }
 
 // Restart-pending flag on globalThis so a duplicate POST (or a hot reload
