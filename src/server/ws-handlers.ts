@@ -1375,7 +1375,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 									msg.createWorkspace.name) ||
 								prompt.trim().split("\n")[0].slice(0, 80) ||
 								"Workspace",
-							repo: repo.id,
+							...(isScratch ? {} : { repo: repo.id }),
 							createdBy: user || "Anonymous",
 						});
 					}
@@ -1547,7 +1547,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					) {
 						workspace = createWorkspace({
 							name: title || "Workspace",
-							repo: repo.id,
+							...(isScratch ? {} : { repo: repo.id }),
 							createdBy: user || "Anonymous",
 							...(sessionBranch ? { branch: sessionBranch } : {}),
 							// Only an isolated worktree is owned — a shared main/ask

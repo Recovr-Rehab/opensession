@@ -18,8 +18,9 @@ linked docs go deeper on each part.
 | **Session** | one conversation with an agent, with its own transcript | 1 workspace has many sessions |
 | **Turn** | one prompt → one agent response, with its tool calls | 1 session has many turns |
 
-That is the hierarchy you navigate: the sidebar is a list of projects, each
-holding workspaces, each holding sessions. The URL follows the bottom of it —
+That is the usual hierarchy you navigate: the sidebar is a list of projects,
+each holding workspaces, each holding sessions. Repo-less scratch workspaces sit
+alongside the projects instead. The URL follows the bottom of it —
 `/workspace/<workspaceId>/session/<sessionId>`.
 
 Alongside it sits a second, independent axis — *where* a session's work happens:
@@ -112,6 +113,9 @@ They share a checkout and add up to one pull request.
 A workspace with no worktree is fine too — that is what an ask-style workspace
 looks like, or a feed workspace for a ticket where there is nothing to check
 out, or a fresh one before any code session materializes it.
+
+A scratch workspace has no project at all. It sits outside the project bands in
+the sidebar and gives its sessions a shared scratch directory instead of a repo.
 
 Feed items resolve to a workspace through a generic external reference, which
 is what makes the linkage stable: the same ticket always reopens the same

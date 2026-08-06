@@ -4,7 +4,8 @@
  *
  * NOT a project. A *project* is the level above: a source of work with its own
  * sidebar band — a registered git repo (worktree.ts REPOS) or a feed (feeds.ts,
- * e.g. Plain). A project holds many workspaces; a workspace holds many sessions.
+ * e.g. Plain). A project holds many workspaces; repo-less scratch workspaces sit
+ * outside those project bands. A workspace holds many sessions.
  * The full model is in CONCEPTS.md.
  *
  * A workspace can *optionally own a worktree* (repo + branch + worktreeDir,

@@ -438,8 +438,9 @@ export interface UnifiedSession {
 /**
  * A Workspace — the container that groups the sessions about one piece of work
  * (a branch, a PR, a support ticket). Optionally owns a worktree, which new
- * sessions in it inherit. Sits *inside* a project (a repo band or a feed band);
- * do not confuse the two — see CONCEPTS.md.
+ * sessions in it inherit. Usually sits *inside* a project (a repo band or a feed
+ * band); scratch workspaces are repo-less and sit outside project bands. Do not
+ * confuse the two — see CONCEPTS.md.
  */
 export interface Workspace {
 	id: string;

@@ -15,6 +15,7 @@ import type {
 	FeedFilterSpec,
 	FeedItem,
 } from "../lib/types";
+import { isScratchWorkspace } from "../lib/sidebar-workspaces";
 import { sessionPrApproved, sessionPrMerged } from "../lib/session-prs";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import {
@@ -2203,7 +2204,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const discoveredRepos = useMemo(() => {
 		const counts = new Map<string, number>();
 		for (const s of sessions) {
-			if (s.archived) continue;
+			if (s.archived || s.mode === "scratch") continue;
 			const p = sessionRepo(s);
 			counts.set(p, (counts.get(p) || 0) + 1);
 		}
@@ -2274,8 +2275,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const wsRepo = new Map(workspaces.map((p) => [p.id, p.repo]));
 			visible = visible.filter(
 				(s) =>
-					sessionRepo(s) === filter.repo ||
-					(!!s.workspaceId && wsRepo.get(s.workspaceId) === filter.repo),
+					s.mode !== "scratch" &&
+					(sessionRepo(s) === filter.repo ||
+						(!!s.workspaceId && wsRepo.get(s.workspaceId) === filter.repo)),
 			);
 		}
 		// Only a specific teammate narrows the sessions themselves. "me" and
@@ -3902,7 +3904,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const snoozeIso = activeSnoozeKeys.has(row.key)
 			? (snoozes[row.key] ?? null)
 			: null;
-		const flatRepoGrouping = filter.groupBy === "repo";
+		const flatRepoGrouping = filter.groupBy === "repo" || rowIsScratch(row);
 		return (
 			<div
 				key={row.key}
@@ -4024,7 +4026,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{/* Inbox rows name their repo with the tile alone, in front of the
 				    title — the repo/branch meta line it replaces cost a second line
 				    per row for two words most of the list repeats. */}
-				{inbox && !editing && (
+				{inbox && !editing && !rowIsScratch(row) && (
 					<RepoTile name={wsRowRepo(row)} size={14} />
 				)}
 				{editing ? (
@@ -4284,6 +4286,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		sessionRepo(row.sessions[0] || ({} as UnifiedSession))
 	);
 	}
+	const rowIsScratch = (row: WsRow) => isScratchWorkspace(row.sessions);
 
 	// The Snoozed group — the quiet zone, shared by the status lanes (slotted
 	// just above Backlog) and the inbox bands (appended last, after Earlier).
@@ -4493,7 +4496,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	}
 
 	// The repo bands — one collapsible band per repo, shared by three "Group by"
-	// modes: "flat" holds a Conductor-style row list (status reads from
+	// modes. Scratch workspaces stay in one unlabelled group above them: they have
+	// no project, even when an older workspace record carries a stale repo. "flat"
+	// holds a Conductor-style row list (status reads from
 	// each row's own glyph, needs-input rows float to the top), while "status"
 	// nests the labeled status lanes under each band and "inbox" nests the
 	// activity bands (Needs action / Recent / Yesterday / Earlier) instead. In
@@ -4504,6 +4509,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	function renderRepoGroups(mode: "flat" | "status" | "inbox") {
 		const byRepo = new Map<string, WsRow[]>();
 		const snoozedByRepo = new Map<string, WsRow[]>();
+		const laneRank = (status: MineStatus) =>
+			MINE_STATUS_META.findIndex((meta) => meta.key === status);
+		const scratchRows = [
+			...focusWsRows.filter((row) => !rowIsFeedOnly(row) && rowIsScratch(row)),
+			...snoozedWsRows.filter((row) => !rowIsFeedOnly(row) && rowIsScratch(row)),
+		].sort((a, b) =>
+			mode === "inbox"
+				? (b.lastActivity || "").localeCompare(a.lastActivity || "")
+				: laneRank(a.status) - laneRank(b.status),
+		);
 		const bucket = (map: Map<string, WsRow[]>, repo: string) => {
 			let b = map.get(repo);
 			if (!b) {
@@ -4515,7 +4530,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// Feed workspaces are represented by their feed band's item rows —
 		// don't also mint a pseudo-repo band for them (rowIsFeedOnly above).
 		for (const r of focusWsRows)
-			if (!rowIsFeedOnly(r)) bucket(byRepo, wsRowRepo(r)).push(r);
+			if (!rowIsFeedOnly(r) && !rowIsScratch(r))
+				bucket(byRepo, wsRowRepo(r)).push(r);
 		// The grouped modes keep each repo's snoozed rows in that repo's own
 		// band, as a Snoozed group beside the other lanes/bands — a global
 		// Snoozed group would strand them away from their repo. Flat "Repo" mode
@@ -4523,7 +4539,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// group.
 		if (mode !== "flat")
 			for (const r of snoozedWsRows)
-				if (!rowIsFeedOnly(r)) bucket(snoozedByRepo, wsRowRepo(r)).push(r);
+				if (!rowIsFeedOnly(r) && !rowIsScratch(r))
+					bucket(snoozedByRepo, wsRowRepo(r)).push(r);
 		// Session-less PR rows file into their repo's band alongside the
 		// workspace rows (the dissolved Pull-requests band). Review requests
 		// pointed at you are excluded — they ride the notification band under
@@ -4593,7 +4610,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			if (commit && pending) setRepoOrder(pending);
 		};
 		return (
-			<div className="sidebar-repo-order-list">
+			<>
+				{scratchRows.length > 0 && (
+					<div className="mb-2" data-sidebar-scratch-workspaces>
+						{scratchRows.map((row) =>
+							renderWsRowImpl(row, mode === "inbox"),
+						)}
+					</div>
+				)}
+				<div className="sidebar-repo-order-list">
 				{order.map((repo) => {
 				const rows = byRepo.get(repo) || [];
 				const snoozedRows = snoozedByRepo.get(repo) || [];
@@ -4603,8 +4628,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// in progress, review, done, backlog) so a live run never sinks
 				// below idle rows; the sort is stable, so activity order holds
 				// within each bucket.
-				const laneRank = (s: MineStatus) =>
-					MINE_STATUS_META.findIndex((m) => m.key === s);
 				const ordered = [...rows].sort(
 					(a, b) => laneRank(a.status) - laneRank(b.status),
 				);
@@ -4738,7 +4761,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</div>
 				);
 				})}
-			</div>
+				</div>
+			</>
 		);
 	}
 
@@ -5974,7 +5998,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												: "flat",
 									)}
 									{filter.groupBy === "repo" &&
-										renderStatusLanes([], "", snoozedWsRows)}
+										renderStatusLanes(
+											[],
+											"",
+											snoozedWsRows.filter((row) => !rowIsScratch(row)),
+										)}
 									{visibleFeeds.map((d) =>
 										renderFeedBand(d, filter.groupBy !== "repo"),
 									)}
