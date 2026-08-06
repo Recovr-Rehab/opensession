@@ -1552,9 +1552,20 @@ body:is(.resizing-sidebar, .resizing-panel) {
 
 /* "Group by: Repo" — one band per repo (a RepoTile + name header) holding that
    repo's status lanes. The lanes indent slightly under the repo header so the
-   nesting reads at a glance. */
-.sidebar-repo-group + .sidebar-repo-group {
-	margin-top: 10px;
+   nesting reads at a glance.
+
+   Every band after the first opens with whitespace, whatever precedes it: a
+   sibling band, the drag-reorder list the repo bands live in, or the loose
+   workspace rows above it. The rule used to be `band + band`, which only
+   matched two bands with the same parent — so the feed projects (Plain,
+   Slack), which follow the reorder list rather than sit inside it, started
+   flush against the last workspace row of the repo band above them and read
+   as one more row of that project. The gap is wider than a band's own rows
+   (2px) and its lane headers (8px) by enough to be the thing that separates
+   one project from the next. */
+.sidebar-repo-group:not(:first-child),
+.sidebar-repo-order-list:not(:first-child) {
+	margin-top: 16px;
 }
 .sidebar-repo-head .repo-tile {
 	flex-shrink: 0;
