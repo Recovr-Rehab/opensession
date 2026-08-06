@@ -630,6 +630,13 @@ describe("buildOpencodeInstructions", () => {
       expect(s).toContain("stop and report the failure");
     }
   });
+  test("every run learns the UI renders mermaid fences as diagrams", () => {
+    for (const isAsk of [true, false]) {
+      const s = buildOpencodeInstructions({ isAsk });
+      expect(s).toContain("## Session UI rendering");
+      expect(s).toContain("```mermaid fenced code blocks render as actual diagrams");
+    }
+  });
   test("every run knows the private-key-backed GitHub checks command", () => {
     for (const isAsk of [true, false]) {
       const s = buildOpencodeInstructions({ isAsk });

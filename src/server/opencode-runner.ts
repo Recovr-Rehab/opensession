@@ -1603,6 +1603,17 @@ export function buildOpencodeInstructions(input: {
       "turn is what the session UI presents as your answer; mid-turn narration does not " +
       "replace it."
   );
+  // Capability note, not a mandate: the UI renders ```mermaid fences as
+  // diagrams (MarkdownBody.tsx), but a model that doesn't know that will
+  // never emit one — and one told too forcefully draws flowcharts for
+  // everything.
+  parts.push(
+    "## Session UI rendering\nYour messages render as GitHub-flavored markdown, and " +
+      "```mermaid fenced code blocks render as actual diagrams inline. When structure is " +
+      "genuinely clearer as a picture — architecture, data flow, state machines, sequences, " +
+      "dependency graphs — prefer a small mermaid diagram over ASCII art. Use plain prose " +
+      "for everything that doesn't need one."
+  );
   // Shared-pool runs only: opencode builds its environment block from the
   // server process cwd, which for a pool member is the neutral SHARED_CWD —
   // so the model is told it sits in a non-repo scratch dir while bash actually
