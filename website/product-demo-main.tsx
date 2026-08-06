@@ -11,7 +11,7 @@ const sessions: UnifiedSession[] = [
 		id: activeSessionId,
 		claudeSessionId: "demo-presence",
 		source: "opensession",
-		branch: "ada/workspace-presence",
+		branch: "alex/workspace-presence",
 		worktreeDir: "/workspace/opensession",
 		startedBy: "Alex",
 		title: "Add multiplayer workspace presence",
@@ -40,7 +40,7 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-checkout",
 		claudeSessionId: "demo-checkout",
 		source: "opensession",
-		branch: "ada/checkout-recovery",
+		branch: "alex/checkout-recovery",
 		worktreeDir: "/workspace/checkout",
 		startedBy: "Alex",
 		title: "Review checkout recovery",
@@ -58,7 +58,7 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-mobile",
 		claudeSessionId: "demo-mobile",
 		source: "opensession",
-		branch: "ada/mobile-navigation",
+		branch: "kent/mobile-navigation",
 		worktreeDir: "/workspace/mobile",
 		startedBy: "Kent",
 		title: "Improve mobile navigation",
@@ -76,7 +76,7 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-shortcuts",
 		claudeSessionId: "demo-shortcuts",
 		source: "opensession",
-		branch: "ada/keyboard-shortcuts",
+		branch: "jaap/keyboard-shortcuts",
 		worktreeDir: "/workspace/shortcuts",
 		startedBy: "Jaap",
 		title: "Ship keyboard shortcuts",
@@ -99,9 +99,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-search",
 		claudeSessionId: "demo-search",
 		source: "opensession",
-		branch: "ada/faster-session-search",
+		branch: "grant/faster-session-search",
 		worktreeDir: "/workspace/search",
-		startedBy: "Alex",
+		startedBy: "Grant",
 		title: "Make session search instant",
 		lastActivity: "2026-08-04T10:31:00.000Z",
 		createdAt: "2026-08-04T06:54:00.000Z",
@@ -116,9 +116,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-release",
 		claudeSessionId: "demo-release",
 		source: "opensession",
-		branch: "ada/release-notes",
+		branch: "louise/release-notes",
 		worktreeDir: "/workspace/release",
-		startedBy: "Alex",
+		startedBy: "Louise",
 		title: "Draft the weekly release notes",
 		lastActivity: "2026-08-04T09:42:00.000Z",
 		createdAt: "2026-08-04T06:10:00.000Z",
@@ -453,6 +453,10 @@ localStorage.setItem("opensession-last-session", activeSessionId);
 localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
+localStorage.setItem(
+	"opensession-sidebar-order:alex",
+	JSON.stringify(["people", "workspaces", "automations"]),
+);
 localStorage.setItem(
 	"opensession-sidebar-hidden-tools",
 	JSON.stringify([
