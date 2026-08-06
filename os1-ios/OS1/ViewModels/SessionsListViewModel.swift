@@ -545,6 +545,11 @@ final class SessionsListViewModel {
     }
 
     func refresh() async {
+        // A tailnet server with the tunnel down answers nothing at all, and
+        // URLSession takes a full minute to admit it. Ask why alongside the
+        // first request instead of after its timeout — the banner is up in
+        // milliseconds, and a request that lands clears it.
+        if !hasLoaded { diagnoseUnreachableServer() }
         do {
             async let workspaceRequest = try? OS1API.workspaces()
             let all = try await OS1API.sessions()
@@ -604,9 +609,21 @@ final class SessionsListViewModel {
             error = nil
         } catch {
             // Keep showing the last good list; surface the error alongside it.
-            self.error = error.localizedDescription
+            self.error = await Reachability.describe(error)
         }
         hasLoaded = true
+    }
+
+    /// Name the reason a first load can't land while it's still trying. Only
+    /// speaks up if the answer is still useful — a list that arrived in the
+    /// meantime has already said more than any diagnosis could.
+    private func diagnoseUnreachableServer() {
+        Task { [weak self] in
+            guard let hint = await Reachability.tailnetHint(),
+                  let self, !self.hasLoaded
+            else { return }
+            self.error = hint
+        }
     }
 
     /// Drop archived/desk/locally-hidden rows and sort by last activity, and

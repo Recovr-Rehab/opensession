@@ -326,7 +326,7 @@ struct SettingsView: View {
             _ = try await OS1API.sessions()
             checkResult = "Connected — auth OK."
         } catch {
-            checkResult = error.localizedDescription
+            checkResult = await Reachability.describe(error)
         }
     }
 }
