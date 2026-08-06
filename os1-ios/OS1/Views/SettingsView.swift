@@ -134,10 +134,6 @@ struct SettingsView: View {
                     .symbolRenderingMode(.monochrome)
                     .foregroundStyle(OS1VisualStyle.textDim)
                     .frame(width: 28, height: 28)
-                    .background(
-                        OS1VisualStyle.hover,
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    )
             }
         }
     }
