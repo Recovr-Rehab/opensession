@@ -209,21 +209,28 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"myAccounts",
 	"keychain",
 	"personalPrompt",
-	"notifications",
 	"composer",
+	"deskVoice",
+	"notifications",
 	"appearance",
 	"setup",
 	"workspace",
-	"model",
-	"modelProviders",
+	"models",
 	"connections",
 	"memory",
-	"warmPreviews",
-	"previewPool",
+	"prewarming",
 	"deploys",
 	"papercuts",
 	"audit",
 ]);
+
+// Sections that were merged into another one — old links keep working.
+const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
+	model: "models",
+	modelProviders: "models",
+	warmPreviews: "prewarming",
+	previewPool: "prewarming",
+};
 
 function parseRoute(pathname: string): Route {
 	// Accept both prefixes: /opensession (primary) and /backstage (legacy alias).
@@ -308,6 +315,8 @@ function parseRoute(pathname: string): Route {
 			return key === "notes" ? { view: "notes", sel: null } : { view: key };
 		if (key && SETTINGS_SECTIONS.has(key as SettingsSectionKey))
 			return { view: "settings", section: key as SettingsSectionKey };
+		if (key && LEGACY_SETTINGS_SECTIONS[key])
+			return { view: "settings", section: LEGACY_SETTINGS_SECTIONS[key] };
 		return { view: "settings" };
 	}
 	if (pathname === "/archived") return { view: "archived" };

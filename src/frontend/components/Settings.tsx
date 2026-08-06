@@ -177,12 +177,16 @@ import {
 // just another entry in SECTIONS and a matching panel below. The "Tools" group
 // holds the app's tool surfaces (Automations, Goals, …) — those render at their
 // own routes (<base>/automations, …) with this surface as chrome, so the
-// section is controlled by the router, not local state. The rest are grouped by
-// who they belong to, most-personal first: "Personal" is yours alone (how
-// sessions act as you, then how the app behaves and looks on this device),
-// "Workspace" is shared setup that configures how every session runs (default
-// model, connections), "Infrastructure" is the pre-provisioned machinery behind
-// runs, and "Activity" is the read-only record agents leave behind.
+// section is controlled by the router, not local state.
+//
+// Groups run from what one person owns to what the whole instance does:
+// "Personal" is yours alone — the per-user half first (who sessions act as,
+// your standing prompt, how you write) and the per-device half last
+// (notifications, theme); "Workspace" is shared config every session runs
+// under; "Automation" is the standing work the instance does on its own —
+// those are the tool surfaces, grouped by what they are rather than sold as
+// the headline; "Infrastructure" is the machinery prepared ahead of a run; and
+// "Activity" is the read-only record agents leave behind.
 
 /** Tool surfaces hosted inside Settings — App renders their panel as children. */
 export type ToolSectionKey =
@@ -196,18 +200,16 @@ export type SettingsSectionKey =
 	| "myAccounts"
 	| "keychain"
 	| "personalPrompt"
-	| "notifications"
-	| "deskVoice"
 	| "composer"
+	| "deskVoice"
+	| "notifications"
 	| "appearance"
 	| "setup"
 	| "workspace"
-	| "model"
-	| "modelProviders"
+	| "models"
 	| "connections"
 	| "memory"
-	| "warmPreviews"
-	| "previewPool"
+	| "prewarming"
 	| "deploys"
 	| "papercuts"
 	| "audit"
@@ -226,84 +228,6 @@ const SECTIONS: {
 	group: string;
 	icon: React.ReactNode;
 }[] = [
-	{
-		key: "automations",
-		label: "Automations",
-		group: "Tools",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="8" cy="8" r="5.5" />
-				<path d="M8 5v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" />
-			</svg>
-		),
-	},
-	{
-		key: "goals",
-		label: "Goals",
-		group: "Tools",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="8" cy="8" r="6" />
-				<circle cx="8" cy="8" r="3" />
-				<circle cx="8" cy="8" r="0.6" fill="currentColor" stroke="none" />
-			</svg>
-		),
-	},
-	{
-		key: "actions",
-		label: "Actions",
-		group: "Tools",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M8.5 1.5L3 9h4l-.5 5.5L13 7H9l-.5-5.5z"
-					strokeLinejoin="round"
-				/>
-			</svg>
-		),
-	},
-	{
-		key: "security",
-		label: "Security",
-		group: "Tools",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M8 1.8l4.6 1.7v3.8c0 3-1.9 5.2-4.6 6.5-2.7-1.3-4.6-3.5-4.6-6.5V3.5L8 1.8z"
-					strokeLinejoin="round"
-				/>
-				<path d="M6.1 8l1.3 1.3 2.5-2.6" strokeLinecap="round" strokeLinejoin="round" />
-			</svg>
-		),
-	},
 	{
 		key: "myAccounts",
 		label: "My accounts",
@@ -365,33 +289,6 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "notifications",
-		label: "Notifications",
-		group: "Personal",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M8 2.2a3.4 3.4 0 0 0-3.4 3.4c0 2.9-1.1 3.9-1.1 3.9h9A5.4 5.4 0 0 1 11.4 5.6 3.4 3.4 0 0 0 8 2.2z"
-					strokeLinejoin="round"
-				/>
-				<path d="M6.7 12a1.4 1.4 0 0 0 2.6 0" strokeLinecap="round" />
-			</svg>
-		),
-	},
-	{
-		key: "deskVoice",
-		label: "Desk voice",
-		group: "Personal",
-		icon: <IconMic size={20} />,
-	},
-	{
 		key: "composer",
 		label: "Composer",
 		group: "Personal",
@@ -409,6 +306,33 @@ const SECTIONS: {
 					d="M4 6.8h.01M6.7 6.8h.01M9.4 6.8h.01M12.1 6.8h.01M5 9.5h6"
 					strokeLinecap="round"
 				/>
+			</svg>
+		),
+	},
+	{
+		key: "deskVoice",
+		label: "Desk voice",
+		group: "Personal",
+		icon: <IconMic size={20} />,
+	},
+	{
+		key: "notifications",
+		label: "Notifications",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M8 2.2a3.4 3.4 0 0 0-3.4 3.4c0 2.9-1.1 3.9-1.1 3.9h9A5.4 5.4 0 0 1 11.4 5.6 3.4 3.4 0 0 0 8 2.2z"
+					strokeLinejoin="round"
+				/>
+				<path d="M6.7 12a1.4 1.4 0 0 0 2.6 0" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -471,28 +395,8 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "model",
-		label: "Accounts",
-		group: "Workspace",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<rect x="1.75" y="3.25" width="12.5" height="9.5" rx="1.5" />
-				<circle cx="5.75" cy="7" r="1.5" />
-				<path d="M3.75 10.75c.4-1.1 1.3-1.6 2-1.6s1.6.5 2 1.6" strokeLinecap="round" />
-				<path d="M9.75 6.5h2.75M9.75 9h2.75" strokeLinecap="round" />
-			</svg>
-		),
-	},
-	{
-		key: "modelProviders",
-		label: "Model providers",
+		key: "models",
+		label: "Models",
 		group: "Workspace",
 		icon: (
 			<svg
@@ -550,8 +454,86 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "warmPreviews",
-		label: "Warm deps",
+		key: "automations",
+		label: "Automations",
+		group: "Automation",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<circle cx="8" cy="8" r="5.5" />
+				<path d="M8 5v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" />
+			</svg>
+		),
+	},
+	{
+		key: "goals",
+		label: "Goals",
+		group: "Automation",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<circle cx="8" cy="8" r="6" />
+				<circle cx="8" cy="8" r="3" />
+				<circle cx="8" cy="8" r="0.6" fill="currentColor" stroke="none" />
+			</svg>
+		),
+	},
+	{
+		key: "actions",
+		label: "Actions",
+		group: "Automation",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M8.5 1.5L3 9h4l-.5 5.5L13 7H9l-.5-5.5z"
+					strokeLinejoin="round"
+				/>
+			</svg>
+		),
+	},
+	{
+		key: "security",
+		label: "Security",
+		group: "Automation",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M8 1.8l4.6 1.7v3.8c0 3-1.9 5.2-4.6 6.5-2.7-1.3-4.6-3.5-4.6-6.5V3.5L8 1.8z"
+					strokeLinejoin="round"
+				/>
+				<path d="M6.1 8l1.3 1.3 2.5-2.6" strokeLinecap="round" strokeLinejoin="round" />
+			</svg>
+		),
+	},
+	{
+		key: "prewarming",
+		label: "Prewarming",
 		group: "Infrastructure",
 		icon: (
 			<svg
@@ -566,25 +548,6 @@ const SECTIONS: {
 					d="M8 1.8c.4 2.2 3.7 3.4 3.7 6.7a3.7 3.7 0 0 1-7.4 0c0-1.4.6-2.4 1.4-3.4.2 1 .7 1.6 1.4 2 0-1.9.2-3.9.9-5.3z"
 					strokeLinejoin="round"
 				/>
-			</svg>
-		),
-	},
-	{
-		key: "previewPool",
-		label: "Preview pool",
-		group: "Infrastructure",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path d="M3 4.5l5-2.7 5 2.7v7l-5 2.7-5-2.7v-7z" strokeLinejoin="round" />
-				<path d="M3 4.5L8 7.2l5-2.7M8 7.2v7" strokeLinejoin="round" />
-				<path d="M6.6 9.4l1.9 1.1 1.9-1.1" strokeLinecap="round" strokeLinejoin="round" />
 			</svg>
 		),
 	},
@@ -672,14 +635,12 @@ function SectionPanel({
 			{section === "setup" && <SetupPanel />}
 			{section === "workspace" && <WorkspacePanel />}
 			{section === "audit" && <AuditPanel />}
-			{section === "model" && <AccountsPanel />}
-			{section === "modelProviders" && <ModelProvidersPanel />}
+			{section === "models" && <ModelsPanel />}
 			{section === "connections" && <Connections />}
 			{section === "personalPrompt" && <PersonalPromptPanel />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}
-			{section === "warmPreviews" && <WarmPreviewsPanel />}
-			{section === "previewPool" && <PreviewPoolPanel />}
+			{section === "prewarming" && <PrewarmingPanel />}
 			{section === "papercuts" && <PapercutsPanel />}
 			{section === "keychain" && <KeychainPanel />}
 			{section === "deploys" && <DeploysPanel />}
@@ -1751,28 +1712,25 @@ function WarmPreviewsPanel() {
 		p.then((r) => setRepos(r.repos)).catch((e) => setError(e.message));
 	}
 
-	const header = (
-		<SettingsHeader
-			title="Warm deps"
-			description="Keep a template worktree per repo with node_modules installed, refreshed from its default branch on a schedule. Prebuilt spares of those dep trees are adopted into new session worktrees near-instantly, instead of every session paying a cold install."
-		/>
+	const label = (
+		<SettingsGroupLabel className="mt-0">Dependency templates</SettingsGroupLabel>
 	);
 
 	if (!repos)
 		return (
-			<SettingsPanel>
-				{header}
+			<>
+				{label}
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
 					<LoadingState>Loading repos…</LoadingState>
 				)}
-			</SettingsPanel>
+			</>
 		);
 
 	return (
-		<SettingsPanel>
-			{header}
+		<>
+			{label}
 
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
@@ -1835,7 +1793,13 @@ function WarmPreviewsPanel() {
 					);
 				})}
 			</SettingCard>
-		</SettingsPanel>
+			<SettingsHint>
+				Keeps a template worktree per repo with node_modules installed,
+				refreshed from its default branch on a schedule. Prebuilt spares of
+				those dep trees are adopted into new session worktrees near-instantly,
+				instead of every session paying a cold install.
+			</SettingsHint>
+		</>
 	);
 }
 
@@ -1892,28 +1856,23 @@ function PreviewPoolPanel() {
 		p.then((r) => setRepos(r.repos)).catch((e) => setError(e.message));
 	}
 
-	const header = (
-		<SettingsHeader
-			title="Preview pool"
-			description="Keep dev-server containers pre-booted from a nightly golden image, so the Preview button claims one in seconds instead of paying a cold boot. Claims follow the session's branch (small edits stream in live; big branch jumps reboot the dev server cleanly) and are released on stop or after sitting unwatched."
-		/>
-	);
+	const label = <SettingsGroupLabel>Preview containers</SettingsGroupLabel>;
 
 	if (!repos)
 		return (
-			<SettingsPanel>
-				{header}
+			<>
+				{label}
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
 					<LoadingState>Loading repos…</LoadingState>
 				)}
-			</SettingsPanel>
+			</>
 		);
 
 	return (
-		<SettingsPanel>
-			{header}
+		<>
+			{label}
 
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
@@ -2023,6 +1982,46 @@ function PreviewPoolPanel() {
 					);
 				})}
 			</SettingCard>
+			<SettingsHint>
+				Keeps dev-server containers pre-booted from a nightly golden image, so
+				the Preview button claims one in seconds instead of paying a cold boot.
+				Claims follow the session's branch (small edits stream in live; big
+				branch jumps reboot the dev server cleanly) and are released on stop or
+				after sitting unwatched.
+			</SettingsHint>
+		</>
+	);
+}
+
+/** Models: everywhere a model a session can run on comes from — the Anthropic
+ * and OpenAI subscription pools, and any provider you brought a key for. These
+ * were two sections whose descriptions each ended by pointing at the other. */
+function ModelsPanel() {
+	return (
+		<SettingsPanel>
+			<SettingsHeader
+				title="Models"
+				description="Where the models sessions run on come from — the Claude (Anthropic) and Codex (OpenAI) subscription accounts, plus any provider you bring your own API key for — and which model new runs start on."
+			/>
+			<AccountsPanel />
+			<ModelProvidersPanel />
+		</SettingsPanel>
+	);
+}
+
+/** Prewarming: the two pre-provisioned things that make a session start fast —
+ * dependency trees for its worktree, dev-server containers for its preview.
+ * Both are the same shape (a per-repo toggle with a status line), which is why
+ * they read better as two groups of one page than as two pages. */
+function PrewarmingPanel() {
+	return (
+		<SettingsPanel>
+			<SettingsHeader
+				title="Prewarming"
+				description="Work done ahead of time, per repo, so a session starts fast instead of paying for it on first use."
+			/>
+			<WarmPreviewsPanel />
+			<PreviewPoolPanel />
 		</SettingsPanel>
 	);
 }
@@ -2089,7 +2088,7 @@ function KeychainPanel() {
 	const panelHeader = (
 		<SettingsHeader
 			title="Keychain"
-			description="Credentials you own that a session can borrow — with your approval, for a stated purpose. Approved calls go through a broker that injects the secret server-side, so the agent never sees it. Grants are scoped to one session, expire, and are revocable."
+			description="Credentials a session can borrow — with the owner's approval, for a stated purpose. Approved calls go through a broker that injects the secret server-side, so the agent never sees it. Grants are scoped to one session, expire, and are revocable. Everyone on this instance sees the list below (who owns what, never the secret); only the owner can approve or remove theirs."
 		/>
 	);
 
@@ -2686,7 +2685,7 @@ function ComposerPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Composer"
-				description="How the message box behaves when you write and send."
+				description="How the message box behaves when you write and send. These follow your account, so they're the same on every device you sign in from."
 			/>
 			<SettingCard>
 				<SettingRow
@@ -3007,7 +3006,7 @@ function AppearancePanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Appearance"
-				description="How this app looks on this device, and what the sidebar shows."
+				description="How this app looks, and what the sidebar shows. Theme and the tool toggles are per browser; sidebar order, feeds and transcript density follow your account everywhere."
 			/>
 			<SettingsGroupLabel>Theme</SettingsGroupLabel>
 			<SettingsSection>

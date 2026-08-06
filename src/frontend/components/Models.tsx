@@ -17,9 +17,7 @@ import {
 	SettingsFormActions,
 	SettingsFormTitle,
 	SettingsGroupLabel,
-	SettingsHeader,
 	SettingsHint,
-	SettingsPanel,
 	rowMenuTriggerClasses,
 	settingsInputClass,
 	settingsSelectClass,
@@ -86,15 +84,14 @@ interface CodexAccountInfo {
 	usable: boolean;
 }
 
+/** The subscription half of Settings → Models: the Anthropic/OpenAI accounts
+ * runs draw from, and the model new runs start on. Renders as groups, not a
+ * page — Settings' ModelsPanel owns the header, so this sits above the
+ * bring-your-own-key providers rather than telling you to go find them. */
 export function AccountsPanel() {
 	return (
-		<SettingsPanel>
-			<SettingsHeader
-				title="Accounts"
-				description="The Claude (Anthropic) and Codex (OpenAI) subscription accounts that session runs draw from, plus the model new runs start on. Other model providers with their own API keys live under Model providers."
-			/>
-
-			<SettingsGroupLabel>Default model</SettingsGroupLabel>
+		<>
+			<SettingsGroupLabel className="mt-0">Default model</SettingsGroupLabel>
 			<SettingCard>
 				<DefaultModelRow />
 				<AutoFallbackRow />
@@ -109,7 +106,7 @@ export function AccountsPanel() {
 				Changes apply to new session runs immediately (config is read per run) — no restart
 				needed. Per-session model overrides still win over the default.
 			</SettingsHint>
-		</SettingsPanel>
+		</>
 	);
 }
 
