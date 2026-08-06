@@ -6,6 +6,11 @@ import AppKit
 struct SessionView: View {
     @State private var viewModel: SessionViewModel
     private let tabs: [Session]
+    /// Canonical workspace names, id-keyed, as the sessions list holds them.
+    /// Regrouping `tabs` here rebuilds the sidebar row this session sits in,
+    /// and without these the row would be titled by whatever the fallback
+    /// chain finds instead of the workspace's actual name.
+    private let workspaceNames: [String: String]
     private let onSelectTab: ((Session) -> Void)?
     private let onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)?
     /// Opens the new-session composer from the iOS navigation bar.
@@ -98,6 +103,7 @@ struct SessionView: View {
         session: Session,
         seed: SessionViewModel.OptimisticSeed? = nil,
         tabs: [Session]? = nil,
+        workspaceNames: [String: String] = [:],
         composerDraft: SessionViewModel.ComposerDraft? = nil,
         onSelectTab: ((Session) -> Void)? = nil,
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
@@ -111,6 +117,7 @@ struct SessionView: View {
             composerDraft: composerDraft
         ))
         self.tabs = tabs ?? [session]
+        self.workspaceNames = workspaceNames
         self.onSelectTab = onSelectTab
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
@@ -121,6 +128,7 @@ struct SessionView: View {
     init(
         viewModel: SessionViewModel,
         tabs: [Session],
+        workspaceNames: [String: String] = [:],
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
         onNewSession: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
@@ -128,6 +136,7 @@ struct SessionView: View {
     ) {
         _viewModel = State(initialValue: viewModel)
         self.tabs = tabs
+        self.workspaceNames = workspaceNames
         self.onSelectTab = nil
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
@@ -377,6 +386,7 @@ struct SessionView: View {
                 SessionActionsMenu(
                     viewModel: viewModel,
                     tabs: tabs,
+                    workspaceNames: workspaceNames,
                     onNewSession: onNewSession,
                     onRenameWorkspace: onRenameWorkspace,
                     onArchiveWorkspace: onArchiveWorkspace,
@@ -743,6 +753,8 @@ private struct SessionActionsMenu: View {
     let viewModel: SessionViewModel
     /// The sessions of this worktree — the sidebar row, regrouped below.
     let tabs: [Session]
+    /// Workspace names for that regrouping; see `SessionView.workspaceNames`.
+    let workspaceNames: [String: String]
     let onNewSession: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
     let onArchiveWorkspace: (() -> Void)?
@@ -842,7 +854,10 @@ private struct SessionActionsMenu: View {
     /// sessions, so regrouping them reproduces the row — and, crucially, the row
     /// KEY that hides are stored under — without reaching for the list's model.
     private var workspace: SidebarWorkspace? {
-        SessionsListViewModel.sidebarWorkspaces(in: tabs).first { workspace in
+        SessionsListViewModel.sidebarWorkspaces(
+            in: tabs,
+            workspaceNames: workspaceNames
+        ).first { workspace in
             workspace.sessions.contains { $0.id == viewModel.session.id }
         }
     }
@@ -896,6 +911,8 @@ private struct ScrollToLatestPill: View {
 struct SessionTabsView: View {
     let initialSession: Session
     let tabs: [Session]
+    /// Passed straight through to SessionView; see its `workspaceNames`.
+    let workspaceNames: [String: String]
     let viewModelForSession: (Session) -> SessionViewModel
     let onSaveComposerDraft: (Session, SessionViewModel.ComposerDraft) -> Void
     let onNewSession: () -> Void
@@ -922,6 +939,7 @@ struct SessionTabsView: View {
     init(
         session: Session,
         tabs: [Session],
+        workspaceNames: [String: String] = [:],
         viewModelForSession: @escaping (Session) -> SessionViewModel,
         onSaveComposerDraft: @escaping (Session, SessionViewModel.ComposerDraft) -> Void,
         onNewSession: @escaping () -> Void,
@@ -931,6 +949,7 @@ struct SessionTabsView: View {
     ) {
         initialSession = session
         self.tabs = tabs
+        self.workspaceNames = workspaceNames
         self.viewModelForSession = viewModelForSession
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
@@ -965,6 +984,7 @@ struct SessionTabsView: View {
                 SessionView(
                     viewModel: viewModelForSession(session),
                     tabs: visibleTabs,
+                    workspaceNames: workspaceNames,
                     onSaveComposerDraft: { draft in
                         onSaveComposerDraft(session, draft)
                     },

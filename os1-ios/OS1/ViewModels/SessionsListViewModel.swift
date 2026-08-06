@@ -287,9 +287,26 @@ final class SessionsListViewModel {
                     ? URL(fileURLWithPath: $0).lastPathComponent
                     : nil
             }
+            // A real workspace row NEVER falls back to the branch, matching the
+            // web sidebar (`ws?.name || sessions[0].title`). The names map is
+            // fetched separately from the sessions list and is empty until that
+            // request lands — or for good, if an app build outlives a rename of
+            // the endpoint it reads (`/api/projects` -> `/api/workspaces`, which
+            // is exactly how every row came to be titled by its branch). Falling
+            // to the session's own title degrades to something a person wrote;
+            // falling to `branch` degrades to machine slugs across the sidebar.
+            // Branch/worktree naming stays where it's the only identity there
+            // is: the legacy workspace-less isolated-worktree rows.
+            let title: String
+            if key.hasPrefix("workspace:") {
+                title = named ?? renamed?.displayTitle ?? main.displayTitle
+            } else {
+                title = renamed?.displayTitle ?? main.branch ?? worktreeName
+                    ?? main.displayTitle
+            }
             return SidebarWorkspace(
                 id: key,
-                title: named ?? renamed?.displayTitle ?? main.branch ?? worktreeName ?? main.displayTitle,
+                title: title,
                 sessions: rowSessions,
                 mainSession: main
             )

@@ -152,6 +152,41 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(workspaces[0].mainSession.id, "first")
     }
 
+    /// The names map arrives from its own request, so it is empty on a cold
+    /// launch and stays empty whenever that request fails — which is what an
+    /// app build outliving a rename of the endpoint it reads looks like. A
+    /// workspace row degrades to the session's own title, never to its branch:
+    /// the whole sidebar reading as machine slugs is how that failure surfaced.
+    func testWorkspaceRowFallsBackToTheSessionTitleNotTheBranch() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(
+                #"[{"id":"first","workspaceId":"ws-1","branch":"feature/some-slug","title":"Add the yin yang spinner","worktreeDir":"/home/ubuntu/worktrees/spinner"}]"#.utf8
+            )
+        )
+
+        let workspaces = SessionsListViewModel.sidebarWorkspaces(in: sessions)
+
+        XCTAssertEqual(workspaces.count, 1)
+        XCTAssertEqual(workspaces[0].title, "Add the yin yang spinner")
+    }
+
+    /// The other half of that rule: a legacy workspace-less row has no name to
+    /// miss, so the branch remains its best identity — as on the web.
+    func testWorktreeRowStillTitlesItselfByItsBranch() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(
+                #"[{"id":"legacy","branch":"feature/some-slug","title":"Add the yin yang spinner","worktreeDir":"/home/ubuntu/worktrees/spinner"}]"#.utf8
+            )
+        )
+
+        let workspaces = SessionsListViewModel.sidebarWorkspaces(in: sessions)
+
+        XCTAssertEqual(workspaces.count, 1)
+        XCTAssertEqual(workspaces[0].title, "feature/some-slug")
+    }
+
     func testSidebarDoesNotMergeDistinctWorkspacesSharingAPath() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,

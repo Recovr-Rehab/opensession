@@ -231,7 +231,11 @@ struct SessionsListView: View {
         } detail: {
             if let selectedSessionID,
                let session = viewModel.sessions.first(where: { $0.id == selectedSessionID }) {
-                SessionView(session: session, seed: optimisticSeeds[session.id])
+                SessionView(
+                    session: session,
+                    seed: optimisticSeeds[session.id],
+                    workspaceNames: viewModel.workspaceNames
+                )
                     // Fresh view (and socket) per session, not a reused one.
                     .id(selectedSessionID)
                     // The selected session reads as read, and keeps re-marking as
@@ -865,6 +869,7 @@ struct SessionsListView: View {
                     in: viewModel.sessions,
                     containing: session
                 ),
+                workspaceNames: viewModel.workspaceNames,
                 viewModelForSession: {
                     sessionPageCache.viewModel(
                         for: $0,
