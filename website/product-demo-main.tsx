@@ -450,7 +450,7 @@ Object.assign(window, {
 });
 localStorage.setItem("opensession-user", "Alex");
 localStorage.setItem("opensession-last-session", activeSessionId);
-localStorage.setItem("opensession-panel-open", "true");
+localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
 localStorage.setItem(
@@ -504,32 +504,6 @@ createRoot(document.getElementById("root")!).render(<ProductDemoApp />);
 
 const featureSessions = [activeSessionId, activeSessionId, "bks-demo-shortcuts"];
 
-function syncFeaturePanel(feature: number, attempt = 0) {
-	const desiredTab = feature === 0 ? "Agents" : feature === 2 ? "Info" : null;
-	const panel = document.querySelector(".viewer-panel");
-	const toggle = document.querySelector<HTMLButtonElement>(
-		'button[aria-label="Toggle side panel"]',
-	);
-
-	if (desiredTab === null && panel) {
-		toggle?.click();
-		return;
-	}
-	if (desiredTab && !panel) {
-		toggle?.click();
-	} else if (desiredTab) {
-		const tab = Array.from(
-			document.querySelectorAll<HTMLButtonElement>(".panel-tab"),
-		).find((button) => button.textContent?.trim().startsWith(desiredTab));
-		if (tab && !tab.classList.contains("active")) tab.click();
-		if (tab) return;
-	}
-
-	if (attempt < 12) {
-		window.setTimeout(() => syncFeaturePanel(feature, attempt + 1), 80);
-	}
-}
-
 window.addEventListener("message", (event) => {
 	if (event.origin !== window.location.origin || event.source !== window.parent) return;
 	if (event.data?.type !== "opensession-demo-feature") return;
@@ -544,5 +518,4 @@ window.addEventListener("message", (event) => {
 		`/session/${encodeURIComponent(sessionId)}`,
 	);
 	window.dispatchEvent(new PopStateEvent("popstate", { state: { d: 1 } }));
-	window.setTimeout(() => syncFeaturePanel(feature), 40);
 });

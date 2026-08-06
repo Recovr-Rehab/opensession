@@ -7,13 +7,16 @@
 		<link rel="stylesheet" href="../src/frontend/styles/global.css" />
 		<link rel="stylesheet" href="./.demo-tailwind.css" />
 		<style>
-			/* The marketing frame focuses on the active session, not navigation. */
-			.sidebar-container {
-				display: none !important;
+			/* Keep real teammate avatars in the chat chrome without repeating the
+			   full People directory in the narrow marketing frame. */
+			.sidebar-independent-section:has(.sidebar-people-row) {
+				display: none;
 			}
 
-			.sidebar-reopen {
-				display: none !important;
+			@media (min-width: 721px) {
+				.sidebar-brand {
+					border-bottom: 1px solid var(--top-divider);
+				}
 			}
 		</style>
 		<title>Open Session product preview</title>

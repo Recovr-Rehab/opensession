@@ -338,9 +338,8 @@ button:focus-visible {
 .product-demo-loading {
 	position: absolute;
 	inset: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	display: grid;
+	grid-template-columns: min(22%, 210px) 1fr;
 	background:
 		radial-gradient(circle at 72% 42%, rgba(119, 161, 147, 0.09), transparent 34%),
 		#f0f1ef;
@@ -353,10 +352,34 @@ button:focus-visible {
 	position: absolute;
 	top: 50px;
 	right: 0;
-	left: 0;
+	left: min(22%, 210px);
 	height: 1px;
 	background: rgba(20, 22, 26, 0.08);
 	content: "";
+}
+
+.product-demo-loading-sidebar {
+	display: flex;
+	padding: 76px 22px;
+	border-right: 1px solid rgba(20, 22, 26, 0.08);
+	background: rgba(255, 255, 255, 0.42);
+	flex-direction: column;
+	gap: 16px;
+}
+
+.product-demo-loading-sidebar span {
+	width: 72%;
+	height: 8px;
+	border-radius: 999px;
+	background: rgba(20, 22, 26, 0.08);
+}
+
+.product-demo-loading-sidebar span:nth-child(2) {
+	width: 88%;
+}
+
+.product-demo-loading-sidebar span:nth-child(3) {
+	width: 60%;
 }
 
 .product-demo-loading-status {
