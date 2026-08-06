@@ -463,10 +463,9 @@ export function scheduleFrontendRebuild(reason: string, debounceMs = 300): void 
 			const fail = buildFailureSummary(e);
 			if (fail.key !== lastBuildErrorKey) {
 				lastBuildErrorKey = fail.key;
-				const by = sharedCheckoutEditors(true);
 				broadcastToAll({
 					type: "notice",
-					message: `Frontend rebuild failed — still serving the last good bundle. ${fail.summary}${by ? ` (likely mid-edit: ${by})` : ""}`,
+					message: "Frontend update paused. No action needed — you're still using the last working version; updates resume automatically.",
 				});
 			}
 			if (fail.needsInstall && Date.now() - lastAutoInstallAt > AUTO_INSTALL_COOLDOWN_MS) {
