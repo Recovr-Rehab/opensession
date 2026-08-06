@@ -35,7 +35,7 @@ const WARN_PATTERNS: RegExp[] = [
 	/^couldn't\b/,
 	/^this session's worktree\b/,
 	// A recoverable background rebuild: clients keep using the prior bundle.
-	/^frontend update paused\b/,
+	/^app update paused\b/,
 ];
 
 /** Leading glyph some notices already carry; the tone supplies its own. */
