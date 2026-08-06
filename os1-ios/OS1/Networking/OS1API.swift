@@ -145,6 +145,67 @@ enum OS1API {
         return try await responseData(for: ServerConfig.shared.authorizedRequest(url))
     }
 
+    /// One file in a session's scratch assets folder — the artifacts an agent
+    /// writes with `opensession-assets` (visualizations, reports, sample data).
+    /// They live outside every worktree, so nothing here is a repo path.
+    struct SessionAsset: Decodable, Sendable, Equatable, Identifiable {
+        let path: String
+        let size: Int
+        let mtime: String
+
+        var id: String { path }
+
+        /// Last path component — what the file is called, without its folder.
+        var name: String {
+            path.split(separator: "/").last.map(String.init) ?? path
+        }
+
+        /// Lowercased extension, or "" — what the viewer picks a renderer by.
+        var ext: String {
+            let name = name
+            guard let dot = name.lastIndex(of: "."), dot != name.startIndex
+            else { return "" }
+            return String(name[name.index(after: dot)...]).lowercased()
+        }
+
+        var modified: Date? { Session.parseISO(mtime) }
+    }
+
+    static func assets(sessionId: String) async throws -> [SessionAsset] {
+        struct AssetsResponse: Decodable, Sendable { let files: [SessionAsset]? }
+        let response: AssetsResponse = try await get("/api/sessions/\(sessionId)/assets")
+        return response.files ?? []
+    }
+
+    /// Where one asset's bytes are served. The route carries the file's
+    /// relative path in the URL PATH rather than a query parameter, which is
+    /// what lets an HTML asset's relative references (./style.css, ./data.json)
+    /// resolve against it — the same reason the web viewer frames this route.
+    static func assetURL(sessionId: String, path: String) -> URL? {
+        guard let base = ServerConfig.shared.baseURL else { return nil }
+        // Per SEGMENT: `urlPathAllowed` leaves "/" alone, and the separators
+        // are structure here, not part of any file's name.
+        let encoded = path
+            .split(separator: "/")
+            .map { segment in
+                String(segment).addingPercentEncoding(
+                    withAllowedCharacters: .urlPathAllowed
+                ) ?? String(segment)
+            }
+            .joined(separator: "/")
+        return URL(
+            string: "\(base.absoluteString)/api/sessions/\(sessionId)/assets/raw/\(encoded)"
+        )
+    }
+
+    /// Bytes of one asset, for the kinds the app renders itself.
+    static func assetData(sessionId: String, path: String) async throws -> Data {
+        guard let url = assetURL(sessionId: sessionId, path: path) else {
+            throw APIError.badURL
+        }
+        return try await responseData(for: ServerConfig.shared.authorizedRequest(url))
+    }
+
     /// Full content for an entry the WS delivered clamped.
     static func fullEntryContent(sessionId: String, entryId: String) async throws -> String {
         struct EntryResponse: Decodable { let content: String }

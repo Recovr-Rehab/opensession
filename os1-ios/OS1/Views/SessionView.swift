@@ -97,6 +97,10 @@ struct SessionView: View {
     /// `bks-…` links into a push — stays in charge of everything else.
     @State private var safariLink: SafariLink?
     @Environment(\.openURL) private var enclosingOpenURL
+    /// The tab strip's assets tab, installed by `SessionTabsView`. Read here
+    /// only to hand it to the toolbar menu; it is `Equatable` on the session
+    /// it belongs to, so it doesn't invalidate this body as the poll lands.
+    @Environment(\.openAssets) private var openAssets
     #endif
 
     init(
@@ -339,10 +343,26 @@ struct SessionView: View {
             VStack(spacing: 0) {
                 #if os(iOS)
                 if tabs.count > 1, let onSelectTab {
+                    // A read-only strip: this path hands selection outwards and
+                    // owns no archiving, so its pills carry no close control.
                     SessionTabBar(
-                        tabs: tabs,
+                        tabs: tabs.map { session in
+                            TabPill(
+                                id: session.id,
+                                title: session.displayTitle,
+                                activity: session.waitingForInput == true
+                                    ? .waiting
+                                    : (session.isRunning == true ? .running : .idle),
+                                closable: false
+                            )
+                        },
                         activeId: viewModel.session.id,
-                        onSelect: onSelectTab
+                        onSelect: { id in
+                            guard let session = tabs.first(where: { $0.id == id })
+                            else { return }
+                            onSelectTab(session)
+                        },
+                        onClose: { _ in }
                     )
                 }
                 #endif
@@ -393,7 +413,11 @@ struct SessionView: View {
                     showWorktreeInfo: $showWorktreeInfo,
                     showPrPanel: $showPrPanel,
                     renaming: $renamingWorkspace,
-                    renameText: $renameText
+                    renameText: $renameText,
+                    // Handed down rather than read from the environment: a
+                    // toolbar's content is hoisted out of the view tree, and
+                    // what reaches it there isn't something to bet a menu on.
+                    openAssets: openAssets
                 )
             }
             #else
@@ -762,6 +786,10 @@ private struct SessionActionsMenu: View {
     @Binding var showPrPanel: Bool
     @Binding var renaming: Bool
     @Binding var renameText: String
+    /// The tab strip's assets tab, when this session is in one. Unavailable
+    /// where there is no strip to open a tab in, which keeps the entry out of
+    /// the menu there rather than offering something that can't happen.
+    let openAssets: OpenAssetsAction
 
     var body: some View {
         Menu {
@@ -787,6 +815,15 @@ private struct SessionActionsMenu: View {
                 showWorktreeInfo = true
             } label: {
                 Label("Worktree details", systemImage: "info.circle")
+            }
+            // The whole scratch folder, for the files no visible tool row
+            // names — the ones written before the transcript you're reading.
+            if openAssets.isAvailable {
+                Button {
+                    openAssets()
+                } label: {
+                    Label("Assets", systemImage: "folder")
+                }
             }
             if let number = viewModel.prDetails?.number ?? viewModel.session.prNumber {
                 Button {
@@ -940,6 +977,10 @@ struct SessionTabsView: View {
     /// opened from the archive sheet still renders), which would leave the tab
     /// you just closed sitting in the strip.
     @State private var closedIds: Set<String> = []
+    /// The assets tab, when one is open: whose scratch folder it shows, and
+    /// the file it opened on. One at a time — opening assets from another
+    /// conversation retargets this tab rather than growing the strip.
+    @State private var assets: AssetsTab?
     /// A "+" that hasn't answered yet, so a second tap can't mint a second tab.
     @State private var openingTab = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -970,14 +1011,82 @@ struct SessionTabsView: View {
         _activeId = State(initialValue: session.id)
     }
 
+    /// The strip's one non-session tab. Its id can't collide with a
+    /// conversation's — those are server-minted `os-…` ids.
+    private struct AssetsTab: Equatable {
+        static let id = "os1-tab-assets"
+        var sessionId: String
+        var path: String?
+    }
+
+    /// What the strip is showing right now — a conversation, or the assets of
+    /// the one it belongs to.
+    private enum ActiveTab: Identifiable, Equatable {
+        case session(Session)
+        case assets(sessionId: String, path: String?)
+
+        var id: String {
+            switch self {
+            case .session(let session): session.id
+            case .assets: AssetsTab.id
+            }
+        }
+    }
+
     private var visibleTabs: [Session] {
         tabs.filter { !closedIds.contains($0.id) }
     }
 
+    /// Everything the strip draws, in order: the conversations, then assets.
+    private var pills: [TabPill] {
+        var pills = visibleTabs.map { session in
+            TabPill(
+                id: session.id,
+                title: session.displayTitle,
+                activity: session.waitingForInput == true
+                    ? .waiting
+                    : (session.isRunning == true ? .running : .idle),
+                // An optimistic session doesn't exist server-side yet, so
+                // there is nothing to archive — it gets no × rather than a
+                // long press into an empty menu.
+                closable: !session.isOptimistic,
+                closeLabel: "Close session"
+            )
+        }
+        if assets != nil {
+            pills.append(
+                TabPill(
+                    id: AssetsTab.id,
+                    title: "Assets",
+                    icon: "folder",
+                    closeLabel: "Close assets",
+                    stateLabel: "Session assets"
+                )
+            )
+        }
+        return pills
+    }
+
+    /// The conversation the strip is on. While the assets tab is up, that's
+    /// the session those assets belong to — the one closing them returns to.
     private var activeSession: Session {
-        visibleTabs.first(where: { $0.id == activeId })
+        let sessionId = activeId == AssetsTab.id ? (assets?.sessionId ?? "") : activeId
+        return visibleTabs.first(where: { $0.id == sessionId })
             ?? visibleTabs.first
             ?? initialSession
+    }
+
+    private var activeTab: ActiveTab {
+        if activeId == AssetsTab.id, let assets {
+            return .assets(sessionId: assets.sessionId, path: assets.path)
+        }
+        return .session(activeSession)
+    }
+
+    /// The conversation being READ, or nil while the assets tab is up — a
+    /// scratch folder isn't the conversation, so it hands the unread mark back.
+    private var readingSession: Session? {
+        activeId == AssetsTab.id ? nil : activeSession
     }
 
     private var conversationTransition: AnyTransition {
@@ -991,25 +1100,40 @@ struct SessionTabsView: View {
 
     var body: some View {
         ZStack {
-            ForEach([activeSession]) { session in
-                SessionView(
-                    viewModel: viewModelForSession(session),
-                    tabs: visibleTabs,
-                    workspaceNames: workspaceNames,
-                    onSaveComposerDraft: { draft in
-                        onSaveComposerDraft(session, draft)
-                    },
-                    onNewSession: openNewTab,
-                    onRenameWorkspace: onRenameWorkspace,
-                    // Archiving the worktree from within it leaves nothing to
-                    // show here, so pop back to the sessions list — the same
-                    // landing as closing the last tab.
-                    onArchiveWorkspace: {
-                        onArchiveWorkspace()
-                        dismiss()
-                    }
-                )
-                .transition(conversationTransition)
+            ForEach([activeTab]) { tab in
+                switch tab {
+                case .session(let session):
+                    SessionView(
+                        viewModel: viewModelForSession(session),
+                        tabs: visibleTabs,
+                        workspaceNames: workspaceNames,
+                        onSaveComposerDraft: { draft in
+                            onSaveComposerDraft(session, draft)
+                        },
+                        onNewSession: openNewTab,
+                        onRenameWorkspace: onRenameWorkspace,
+                        // Archiving the worktree from within it leaves nothing to
+                        // show here, so pop back to the sessions list — the same
+                        // landing as closing the last tab.
+                        onArchiveWorkspace: {
+                            onArchiveWorkspace()
+                            dismiss()
+                        }
+                    )
+                    // What the transcript's asset rows and the workspace page
+                    // reach for. Installed here rather than passed down: the
+                    // deepest caller is a tool-call row several layers in.
+                    .environment(\.openAssets, .opening(sessionId: session.id) { path in
+                        openAssets(sessionId: session.id, path: path)
+                    })
+                    .transition(conversationTransition)
+                case .assets(let sessionId, let path):
+                    AssetsView(sessionId: sessionId, initialPath: path)
+                        // Retargeting the tab at another conversation's folder
+                        // is a different tab's worth of state, not a reload.
+                        .id("\(sessionId)|\(path ?? "")")
+                        .transition(conversationTransition)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1024,9 +1148,9 @@ struct SessionTabsView: View {
         // over the transcript and draws the soft scroll edge effect there. With
         // a plain inset the transcript simply started below an opaque band.
         .safeAreaBar(edge: .top, spacing: 0) {
-            if visibleTabs.count > 1 {
+            if pills.count > 1 {
                 SessionTabBar(
-                    tabs: visibleTabs,
+                    tabs: pills,
                     activeId: activeId,
                     onSelect: select,
                     onClose: close
@@ -1042,12 +1166,27 @@ struct SessionTabsView: View {
         // you stay in it: `activeSession` is re-read from the sessions poll,
         // so each new `lastActivity` re-marks the open session instead of bolding
         // its row behind you. Same rule as the web viewer's markRead tick.
-        .onChange(of: activeSession, initial: true) { _, session in
-            ReadsStore.shared.open(session)
+        .onChange(of: readingSession, initial: true) { previous, session in
+            if let previous, previous.id != session?.id {
+                ReadsStore.shared.close(previous.id)
+            }
+            if let session { ReadsStore.shared.open(session) }
         }
-        .onDisappear { ReadsStore.shared.close(activeSession.id) }
+        .onDisappear {
+            if let readingSession { ReadsStore.shared.close(readingSession.id) }
+        }
         .onChange(of: visibleTabs) { _, updatedTabs in
-            guard !updatedTabs.contains(where: { $0.id == activeId }),
+            // A conversation whose assets are open can be archived from
+            // elsewhere; the scratch folder goes with it.
+            if let open = assets,
+               !updatedTabs.contains(where: { $0.id == open.sessionId }) {
+                closeAssets()
+                return
+            }
+            // The assets tab is deliberately not in `updatedTabs` — leave the
+            // strip on it instead of snapping back to a conversation.
+            guard activeId != AssetsTab.id,
+                  !updatedTabs.contains(where: { $0.id == activeId }),
                   let fallback = updatedTabs.first
             else { return }
 
@@ -1059,11 +1198,22 @@ struct SessionTabsView: View {
         }
     }
 
+    /// Close a tab from the strip. Only conversations archive — the assets tab
+    /// is a view of a folder, and closing it must never touch a session.
+    private func close(_ id: String) {
+        if id == AssetsTab.id {
+            closeAssets()
+            return
+        }
+        guard let session = visibleTabs.first(where: { $0.id == id }) else { return }
+        closeSession(session)
+    }
+
     /// Close a session from the strip: archive it, then land on a neighbour —
     /// the tab to its right, or the one to its left when it was last. Closing
     /// the only remaining session leaves nothing to show, so the stack pops back
     /// to the sessions list.
-    private func close(_ session: Session) {
+    private func closeSession(_ session: Session) {
         let strip = visibleTabs
         let next = SessionsListViewModel.tabAfterClosing(session, in: strip)
         onCloseTab(session)
@@ -1073,6 +1223,11 @@ struct SessionTabsView: View {
             return
         }
         withAnimation(tabSwitchAnimation) {
+            // Its scratch folder was that session's, so it closes with it.
+            if assets?.sessionId == session.id {
+                assets = nil
+                if activeId == AssetsTab.id { activeId = next.id }
+            }
             if session.id == activeId {
                 let closedIndex = strip.firstIndex { $0.id == session.id } ?? 0
                 let nextIndex = strip.firstIndex { $0.id == next.id } ?? 0
@@ -1112,17 +1267,66 @@ struct SessionTabsView: View {
         }
     }
 
-    private func select(_ session: Session) {
-        guard session.id != activeId,
-              let targetIndex = visibleTabs.firstIndex(where: { $0.id == session.id })
-        else { return }
+    private func select(_ id: String) {
+        let ids = pills.map(\.id)
+        guard id != activeId, let targetIndex = ids.firstIndex(of: id) else { return }
 
-        let currentIndex = visibleTabs.firstIndex(where: { $0.id == activeId }) ?? 0
+        let currentIndex = ids.firstIndex(of: activeId) ?? 0
         withAnimation(tabSwitchAnimation) {
             transitionEdge = targetIndex > currentIndex ? .trailing : .leading
-            activeId = session.id
+            activeId = id
         }
     }
+
+    /// The transcript's "Open" on a written asset, and the workspace page's
+    /// asset rows: the scratch folder opens BESIDE the conversation rather
+    /// than on top of it, so reading a report doesn't hide the run that wrote
+    /// it — and one swipe of the strip is the way back.
+    private func openAssets(sessionId: String, path: String?) {
+        withAnimation(tabSwitchAnimation) {
+            // Assets always sit last in the strip, so it arrives from the right.
+            transitionEdge = .trailing
+            assets = AssetsTab(sessionId: sessionId, path: path)
+            activeId = AssetsTab.id
+        }
+    }
+
+    /// Closing assets returns to the conversation they belong to.
+    private func closeAssets() {
+        let returning = assets?.sessionId
+        withAnimation(tabSwitchAnimation) {
+            transitionEdge = .leading
+            assets = nil
+            if activeId == AssetsTab.id {
+                activeId = visibleTabs.first(where: { $0.id == returning })?.id
+                    ?? visibleTabs.first?.id
+                    ?? initialSession.id
+            }
+        }
+    }
+}
+
+/// What one pill in the strip needs to draw itself, whichever kind of tab it
+/// stands for.
+///
+/// The strip predates having more than one kind of tab, and the two differ in
+/// ways the pill can see: a conversation pulses while it runs and closing it
+/// ARCHIVES it, while the assets tab does neither. So the bar takes
+/// descriptions rather than sessions, and no caller can accidentally archive
+/// something that was never a session.
+struct TabPill: Identifiable, Equatable {
+    enum Activity: Equatable { case idle, running, waiting }
+
+    let id: String
+    let title: String
+    var activity: Activity = .idle
+    /// A leading glyph, for tabs that aren't conversations.
+    var icon: String?
+    var closable = true
+    /// The close control's accessibility label — it is not always a session.
+    var closeLabel = "Close tab"
+    /// What VoiceOver reads after the title, when the activity doesn't say it.
+    var stateLabel = ""
 }
 
 /// Workspace session tabs, as individually floating glass pills under the
@@ -1135,11 +1339,11 @@ struct SessionTabsView: View {
 /// The active tab is centered when the strip opens, while horizontal overflow
 /// remains native touch scrolling.
 private struct SessionTabBar: View {
-    let tabs: [Session]
+    let tabs: [TabPill]
     let activeId: String
-    let onSelect: (Session) -> Void
-    /// Close (archive) a session from the strip. Nil leaves the tabs read-only.
-    var onClose: ((Session) -> Void)? = nil
+    let onSelect: (String) -> Void
+    /// Close a tab from the strip — archiving, for the ones that are sessions.
+    let onClose: (String) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Namespace private var activeTabIndicator
@@ -1152,8 +1356,8 @@ private struct SessionTabBar: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
                 HStack(spacing: 6) {
-                    ForEach(tabs) { session in
-                        tab(session)
+                    ForEach(tabs) { pill in
+                        tab(pill)
                     }
                 }
                 // The rail lives on the CONTENT, not the scroll view: pills
@@ -1184,51 +1388,50 @@ private struct SessionTabBar: View {
     /// strip so an optimistic session — which the server can't archive yet — is
     /// simply left without one, instead of long-pressing into an empty menu.
     @ViewBuilder
-    private func tab(_ session: Session) -> some View {
-        let pill = tabPill(session, close: closeAction(for: session))
-        if let close = closeAction(for: session) {
-            pill.contextMenu {
+    private func tab(_ pill: TabPill) -> some View {
+        let capsule = tabPill(pill)
+        if pill.closable {
+            capsule.contextMenu {
                 Button(role: .destructive) {
-                    close(session)
+                    onClose(pill.id)
                 } label: {
-                    Label("Close session", systemImage: "xmark")
+                    Label(pill.closeLabel, systemImage: "xmark")
                 }
             }
         } else {
-            pill
+            capsule
         }
     }
 
-    private func closeAction(for session: Session) -> ((Session) -> Void)? {
-        session.isOptimistic ? nil : onClose
-    }
-
-    private func tabPill(
-        _ session: Session,
-        close: ((Session) -> Void)?
-    ) -> some View {
-        let isActive = session.id == activeId
+    private func tabPill(_ pill: TabPill) -> some View {
+        let isActive = pill.id == activeId
         // The × rides on the OPEN tab only, matching the web strip's "close the
         // session you're in" gesture without spending an extra 32pt of a phone's
         // strip on every sibling — those close through the long-press menu.
-        let showsClose = isActive && close != nil
+        let showsClose = isActive && pill.closable
         return HStack(spacing: 0) {
             Button {
-                if !isActive { onSelect(session) }
+                if !isActive { onSelect(pill.id) }
             } label: {
                 HStack(spacing: 7) {
-                    if session.waitingForInput == true {
+                    switch pill.activity {
+                    case .waiting:
                         PulsingDot(
                             color: OS1VisualStyle.blue,
                             size: 6
                         )
-                    } else if session.isRunning == true {
+                    case .running:
                         PulsingDot(
                             color: OS1VisualStyle.yellow,
                             size: 6
                         )
+                    case .idle:
+                        if let icon = pill.icon {
+                            Image(systemName: icon)
+                                .font(.system(size: 11, weight: .medium))
+                        }
                     }
-                    Text(session.displayTitle)
+                    Text(pill.title)
                         .font(.footnote.weight(
                             isActive ? .semibold : .medium
                         ))
@@ -1250,11 +1453,11 @@ private struct SessionTabBar: View {
             .accessibilityAddTraits(
                 isActive ? .isSelected : []
             )
-            .accessibilityValue(tabAccessibilityValue(session))
+            .accessibilityValue(tabAccessibilityValue(pill))
 
-            if showsClose, let close {
+            if showsClose {
                 Button {
-                    close(session)
+                    onClose(pill.id)
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
@@ -1266,7 +1469,7 @@ private struct SessionTabBar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close session")
+                .accessibilityLabel(pill.closeLabel)
             }
         }
         // The active tab's fill sits INSIDE its own glass, above the material:
@@ -1294,18 +1497,16 @@ private struct SessionTabBar: View {
         .background(OS1VisualStyle.background.opacity(0.7), in: pillShape)
         .background(.thickMaterial, in: pillShape)
         .glassSurface(in: pillShape, interactive: true)
-        .id(session.id)
+        .id(pill.id)
     }
 
-    private func tabAccessibilityValue(_ session: Session) -> String {
-        let state = if session.waitingForInput == true {
-            "Needs input"
-        } else if session.isRunning == true {
-            "Running"
-        } else {
-            "Idle"
+    private func tabAccessibilityValue(_ pill: TabPill) -> String {
+        let state = switch pill.activity {
+        case .waiting: "Needs input"
+        case .running: "Running"
+        case .idle: pill.stateLabel.isEmpty ? "Idle" : pill.stateLabel
         }
-        return session.id == activeId ? "Selected, \(state)" : state
+        return pill.id == activeId ? "Selected, \(state)" : state
     }
 }
 #endif

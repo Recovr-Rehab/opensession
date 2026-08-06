@@ -14,6 +14,9 @@ struct ToolCallRow: View {
     @State private var detail: ToolDetail?
     /// The worker sheet opened from a Task row.
     @State private var openWorker: WorkerLink?
+    /// Installed by the iOS tab strip; absent everywhere else, which is what
+    /// keeps the asset chip from appearing where nothing can open it.
+    @Environment(\.openAssets) private var openAssets
 
     private var presentation: ToolPresentation { item.presentation }
 
@@ -51,6 +54,31 @@ struct ToolCallRow: View {
 
     /// Identifies the sheet's subject; `sheet(item:)` needs Identifiable.
     private struct WorkerLink: Identifiable { let id: String }
+
+    /// The row's drill-in: a worker's transcript, a written file. One pill for
+    /// both, so a row that leads somewhere always says so the same way.
+    private struct RowChip: View {
+        let title: String
+        let action: () -> Void
+
+        var body: some View {
+            Button(action: action) {
+                HStack(spacing: 3) {
+                    Text(title)
+                    Image(systemName: "arrow.up.right")
+                }
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .stroke(OS1VisualStyle.border, lineWidth: 0.5)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
     private var detailKey: String {
         "\(item.id)|\(state.expanded)|\(item.result?.id ?? "")"
@@ -96,24 +124,18 @@ struct ToolCallRow: View {
             // A Task call is otherwise a dead end: the row says a worker was
             // spawned and nothing says what it did.
             if let agentId = item.subagentId {
-                Button {
+                RowChip(title: item.isPending ? "Watch" : "Open") {
                     openWorker = WorkerLink(id: agentId)
-                } label: {
-                    HStack(spacing: 3) {
-                        Text(item.isPending ? "Watch" : "Open")
-                        Image(systemName: "arrow.up.right")
-                    }
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .stroke(OS1VisualStyle.border, lineWidth: 0.5)
-                    }
                 }
-                .buttonStyle(.plain)
                 .accessibilityLabel("Open this sub-agent's transcript")
+            }
+
+            // Same dead end for a written asset: the row names a file the
+            // conversation itself can't show. The chip opens it in the assets
+            // tab, beside this session rather than over it.
+            if let assetPath = item.assetPath, openAssets.isAvailable {
+                RowChip(title: "Open") { openAssets(assetPath) }
+                    .accessibilityLabel("Open this file in the assets tab")
             }
 
             if let stats = presentation.lineStats {

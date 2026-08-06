@@ -70,6 +70,18 @@ struct ToolCallItem: Identifiable, Equatable {
     var mediaSources: [String] { result?.images ?? [] }
     var hasMedia: Bool { !mediaSources.isEmpty }
 
+    /// The scratch file this call wrote, when it was an assets write — the key
+    /// that opens it. Session assets live outside every worktree, so the path
+    /// means nothing to anything but the assets tab.
+    var assetPath: String? {
+        guard presentation.mcpServer == "opensession-assets",
+              presentation.name == "write_asset",
+              let path = use?.toolInput?["path"]?.stringValue,
+              !path.isEmpty
+        else { return nil }
+        return path
+    }
+
     /// The worker this Task call spawned, when it announced one — the key
     /// that opens its transcript. The engine reports it either as the
     /// result's `agentId` or inside the result body as `<task id="ses_…">`.

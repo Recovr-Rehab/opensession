@@ -8,8 +8,12 @@ struct WorktreeInfoView: View {
     let catalog: ModelCatalog?
 
     @Environment(\.dismiss) private var dismiss
+    /// The session tab strip's assets tab, when this page was opened from
+    /// inside one — the asset rows are its second entry point.
+    @Environment(\.openAssets) private var openAssets
     @State private var gitStatus: OS1API.GitStatus?
     @State private var diff: OS1API.SessionDiff?
+    @State private var assets: [OS1API.SessionAsset] = []
     @State private var overview: OS1API.WorkspaceOverview?
     @State private var loading = true
     @State private var loadFailed = false
@@ -24,6 +28,7 @@ struct WorktreeInfoView: View {
                     gitSection
                     pullRequestSection
                     changesSection
+                    assetsSection
                     overviewSection
                     runSettingsSection
                 }
@@ -209,6 +214,59 @@ struct WorktreeInfoView: View {
         }
     }
 
+    /// The session's scratch artifacts. Only ever shown when there are some —
+    /// most sessions write none, and an empty section would be noise on every
+    /// workspace page.
+    @ViewBuilder
+    private var assetsSection: some View {
+        if !assets.isEmpty, openAssets.isAvailable {
+            InfoSection(title: "\(assets.count) asset\(assets.count == 1 ? "" : "s")") {
+                let shown = Array(assets.prefix(8))
+                ForEach(shown) { asset in
+                    Button {
+                        openAssets(asset.path)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: AssetKind.of(asset).symbol)
+                                .symbolRenderingMode(.hierarchical)
+                                .font(.system(size: 13))
+                                .foregroundStyle(OS1VisualStyle.textDim)
+                                .frame(width: 20)
+                            Text(asset.path)
+                                .font(.footnote.monospaced())
+                                .foregroundStyle(OS1VisualStyle.text)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 8)
+                            Text(ByteCountFormatter.string(
+                                fromByteCount: Int64(asset.size),
+                                countStyle: .file
+                            ))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(OS1VisualStyle.textFaint)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if asset.id != shown.last?.id { Divider() }
+                }
+                if assets.count > shown.count {
+                    Text("\(assets.count - shown.count) more in the Assets tab.")
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var pullRequestSection: some View {
         if let number = viewModel.prDetails?.number ?? currentSession.prNumber {
@@ -372,10 +430,12 @@ struct WorktreeInfoView: View {
             repo: currentSession.effectiveRepo
         )
         async let diffResult = try? OS1API.sessionDiff(sessionId: currentSession.id)
+        async let assetsResult = try? OS1API.assets(sessionId: currentSession.id)
         async let overviewResult = loadOverview()
-        let (nextGit, nextDiffResponse, nextOverview) = await (
+        let (nextGit, nextDiffResponse, nextAssets, nextOverview) = await (
             gitResult,
             diffResult,
+            assetsResult,
             overviewResult
         )
         guard !Task.isCancelled else { return }
@@ -383,6 +443,8 @@ struct WorktreeInfoView: View {
         if let nextDiffResponse {
             diff = nextDiffResponse.repos.first(where: \.primary)?.diff
         }
+        // Newest first, like the tab lists them.
+        assets = (nextAssets ?? []).sorted { $0.mtime > $1.mtime }
         if let nextOverview { overview = nextOverview }
         loadFailed = gitStatus == nil && diff == nil && overview == nil
         loading = false

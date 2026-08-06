@@ -69,6 +69,13 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   with repository and branch metadata, local git status, changed files, pull
   request status, workspace context, and model/reasoning controls, matching
   mobile web's info page without embedding the web client.
+- **Assets** — the session's scratch artifacts (`GET /api/sessions/:id/assets`)
+  open as a tab of their own in the strip, beside the conversation rather than
+  over it: from the "Open" chip on a `write_asset` tool row, the workspace
+  sheet's assets section, or the overflow menu. HTML and media render in a
+  `WKWebView` pointed at the raw route — the session token rides in as a
+  cookie scoped to that session's assets path, so relative references between
+  assets resolve — while markdown and code render natively.
 - **Prompting** — WS `prompt` frames (the server has no REST prompt endpoint).
   Sending while a run is active queues, exactly like the web UI. Stop button
   sends `cancel` for the watched session. The floating glass composer uses a
@@ -176,6 +183,7 @@ OS1/
     TurnBlockView.swift      Work fold header + turn footer + file chips
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     SubagentView.swift       A Task call's sub-agent transcript, in a sheet
+    AssetsView.swift         Session assets tab: file list + per-kind preview
     WalkthroughCard.swift    Published walkthrough: demo video, writeup, stills
     MarkdownBody.swift       Streaming/durable markdown rendering
     AskQuestionCard.swift    Options + free text answer
