@@ -2161,12 +2161,22 @@ private struct SessionInputBar: View {
                 // Discard, edit, then send: destructive furthest from the
                 // thumb's resting path and the primary action rightmost,
                 // directly above the composer's own send button.
+                //
+                // Single-stroke glyphs, so the three read as one set beside
+                // the arrow: a bin and a bare pencil were the two densest
+                // marks on a row whose point is the message. Discard is an
+                // `xmark` — the same dismissal the composer's attachments and
+                // the note-mode chip use, and honest about what happens (the
+                // message never reached the transcript, so nothing is being
+                // destroyed). Edit is the compose square, which unlike a lone
+                // pencil reads as "rewrite this message" rather than a
+                // generic annotation.
                 HStack(spacing: 0) {
                     if let onDelete {
-                        rowAction("trash", "Discard message", onDelete)
+                        rowAction("xmark", "Discard message", onDelete)
                     }
                     if canEdit, let onEdit {
-                        rowAction("pencil", "Edit message", onEdit)
+                        rowAction("square.and.pencil", "Edit message", onEdit)
                     }
                     if let onRetry {
                         rowAction("arrow.clockwise", "Try again", onRetry)
@@ -2188,8 +2198,8 @@ private struct SessionInputBar: View {
                         .padding(.leading, 34)
                 }
             }
-            // No whole-row tap: with the pencil right there, a stray tap on a
-            // message opening a modal is a trap, not a shortcut. The long
+            // No whole-row tap: with an edit button right there, a stray tap
+            // on a message opening a modal is a trap, not a shortcut. The long
             // press repeats the row's actions and adds reordering.
             .contentShape(Rectangle())
             .contextMenu { rowActions }
@@ -2217,7 +2227,7 @@ private struct SessionInputBar: View {
         @ViewBuilder
         private var rowActions: some View {
             if canEdit, let onEdit {
-                Button("Edit", systemImage: "pencil", action: onEdit)
+                Button("Edit", systemImage: "square.and.pencil", action: onEdit)
             }
             if let onSteer {
                 Button("Steer into this run", systemImage: "arrow.up", action: onSteer)
