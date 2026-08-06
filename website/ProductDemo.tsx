@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import markUrl from "../os1-mac/build/icon-512.png";
 
-const desktopDemoWidth = 1200;
+const desktopDemoWidth = 1000;
 
 export function ProductDemo({ feature }: { feature: number }) {
 	const previewRef = useRef<HTMLElement>(null);
@@ -51,12 +51,6 @@ export function ProductDemo({ feature }: { feature: number }) {
 				aria-live="polite"
 				aria-hidden={ready}
 			>
-				<div className="product-demo-loading-sidebar" aria-hidden="true">
-					<span />
-					<span />
-					<span />
-					<span />
-				</div>
 				<div className="product-demo-loading-status">
 					<img src={markUrl} alt="" />
 					<span>Loading live workspace</span>
