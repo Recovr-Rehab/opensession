@@ -1472,10 +1472,12 @@ export function readLocalInstructions(dir: string | undefined): string | undefin
   return parts.length ? parts.join("\n\n") : undefined;
 }
 
-/** Session context (ask guardrails, repos note, managing-the-agent notes) —
- *  delivered via an instructions file, OpenCode's system-prompt append
- *  channel. Sibling of buildCodexDeveloperInstructions with engine-accurate
- *  wording. */
+/** Session context (ask guardrails, repos note, managing-the-agent notes,
+ *  capability notes like UI mermaid rendering). Engine-neutral and shared by
+ *  BOTH engines: the opencode runner delivers it via an instructions file
+ *  (OpenCode's system-prompt append channel), the pi runner via
+ *  systemPromptOverride (pi-runner.ts). Run-policy text that every engine
+ *  must carry belongs here, not in an engine-specific prompt. */
 export function buildOpencodeInstructions(input: {
   isAsk: boolean;
   /** Repo-less scratch session (feed-item workspaces — the feeds design). */
