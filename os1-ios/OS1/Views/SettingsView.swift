@@ -138,7 +138,7 @@ struct SettingsView: View {
                 Image(systemName: icon)
                     .symbolRenderingMode(.monochrome)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(OS1VisualStyle.link)
+                    .foregroundStyle(OS1VisualStyle.iconTint)
                     .frame(width: 28, height: 28)
             }
         }

@@ -56,6 +56,16 @@ enum OS1VisualStyle {
     })
     /// Links and other tappable words in running text.
     static let link = Color(uiColor: .link)
+    /// The one hue the otherwise monochrome chrome allows itself, worn by the
+    /// settings row icons. Deliberately not the system link blue — that reads
+    /// as "tap this word" everywhere else in the app — and darkened on light /
+    /// lifted on dark so a 15pt glyph clears text contrast in either
+    /// appearance.
+    static let iconTint = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.310, green: 0.780, blue: 0.820, alpha: 1)
+            : UIColor(red: 0.059, green: 0.478, blue: 0.522, alpha: 1)
+    })
     #else
     static let accent = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .white : .black
@@ -64,6 +74,11 @@ enum OS1VisualStyle {
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .black : .white
     })
     static let link = Color(nsColor: .linkColor)
+    static let iconTint = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.310, green: 0.780, blue: 0.820, alpha: 1)
+            : NSColor(red: 0.059, green: 0.478, blue: 0.522, alpha: 1)
+    })
     #endif
     // One status palette on both platforms — the Mac previously used stock
     // Color.green/.yellow/… which rendered different hues than iOS.
