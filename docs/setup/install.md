@@ -2,14 +2,14 @@
 
 ## Fastest path: nothing to a first session
 
-Two prerequisites the installer cannot give you:
+One prerequisite the installer cannot give you: **a model subscription** — a
+Claude Max subscription for the Anthropic path, or a ChatGPT plan for the
+OpenAI one. Sessions run on subscription capacity, not on a bundled key.
 
-- **A model subscription.** A Claude Max subscription for the Anthropic path,
-  or a ChatGPT plan for the OpenAI one. Sessions run on subscription capacity,
-  not on a bundled key.
-- **The `claude` CLI**, if you take the Claude route. Install it yourself from
-  <https://claude.com/claude-code> — nothing here installs it for you, and it
-  is what mints the account token.
+The tooling it does give you: the OpenCode engine plus the `claude` and `codex`
+CLIs, which are how you mint an account token and how the in-app ChatGPT
+sign-in works. Each is skipped if you already have it, and `--no-engine` skips
+all three.
 
 Then, end to end:
 
@@ -28,8 +28,8 @@ session. A turn that actually runs is the only proof the install works — a
 health check is not.
 
 Budget 5-15 minutes on a fresh box, most of it unattended: the installer
-downloads Bun and the OpenCode engine and installs a multi-gigabyte dependency
-tree.
+downloads Bun, the OpenCode engine and the two model CLIs, and installs a
+multi-gigabyte dependency tree.
 
 Sections 3-7 below — automations, the env-var inventory, the `config.json`
 reference, MCP — are reference material you can skip on a first install, and

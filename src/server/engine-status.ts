@@ -119,7 +119,7 @@ export function engineStatus(): EngineStatus {
     if (!claudeBin) {
       return blocked(
         "The `claude` CLI isn't installed — the bundled Anthropic bridge shells out to it.",
-        "Install Claude Code (https://claude.com/claude-code), or switch the default model to a provider that doesn't need it.",
+        "Install it with `curl -fsSL https://claude.ai/install.sh | bash`, or switch the default model to a provider that doesn't need it.",
       );
     }
   }

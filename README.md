@@ -15,10 +15,11 @@ sandboxes — Docker locally, with pluggable adapters for other providers.
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
 ```
 
-Installs Bun, the OpenCode engine, and the Tailscale client if you do not
-have them, clones the source to `~/.opensession/src`, puts an `opensession`
-command on your `PATH`, and walks you through configuration. Budget 5-15
-minutes on a fresh box — mostly unattended download and dependency install.
+Installs Bun, the OpenCode engine, the `claude` and `codex` CLIs, and the
+Tailscale client if you do not have them, clones the source to
+`~/.opensession/src`, puts an `opensession` command on your `PATH`, and walks
+you through configuration. Budget 5-15 minutes on a fresh box — mostly
+unattended download and dependency install.
 
 ```sh
 opensession start      # run it
@@ -64,8 +65,8 @@ for me. Go step by step and ask me one question at a time before acting.
    integrations to enable (Slack, GitHub, Linear, Plain, Stripe — all
    optional, all can wait).
 4. Model accounts: help me add a Claude subscription token (`claude
-   setup-token` on a Max login — install the Claude Code CLI first if it is
-   missing, nothing here installs it) and/or a ChatGPT-plan Codex login.
+   setup-token` on a Max login) and/or a ChatGPT-plan Codex login. The
+   installer put both CLIs on this box already.
 5. Networking: keep it on 127.0.0.1 unless I pick Tailscale or an SSH
    tunnel. Never expose it publicly — there is no built-in auth.
 6. Finish: `opensession start`, then `opensession doctor` until clean, and

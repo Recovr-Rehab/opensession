@@ -32,13 +32,21 @@ const TOOLS = [
     required: true,
     hint: "the engine that runs agent turns — `npm i -g opencode-ai`",
   },
-  // Needed only for the Anthropic bridge, which is the default model's path.
-  // Nothing installs it, so an absent `claude` is the likeliest fresh-box gap.
+  // Installed by install.sh, but only there — a manual clone or a
+  // `--no-engine` run still has to get these two, and both back a credential
+  // path: `claude setup-token` for the default model, `codex login` for the
+  // in-app ChatGPT sign-in.
   {
     bin: "claude",
     label: "Claude Code",
     required: false,
-    hint: "the bundled Anthropic bridge execs it — https://claude.com/claude-code",
+    hint: "the Anthropic bridge execs it — curl -fsSL https://claude.ai/install.sh | bash",
+  },
+  {
+    bin: "codex",
+    label: "Codex",
+    required: false,
+    hint: "backs the ChatGPT device sign-in — curl -fsSL https://chatgpt.com/codex/install.sh | sh",
   },
   { bin: "docker", label: "Docker", required: false, hint: "optional sandboxed sessions" },
 ];
