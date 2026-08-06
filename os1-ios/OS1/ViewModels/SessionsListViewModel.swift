@@ -635,7 +635,7 @@ final class SessionsListViewModel {
             // The banner sits over a list that's still good, so it takes the
             // headline: "Can't reach the server" is the news, and the system's
             // wording underneath it is for the screen that has room.
-            self.error = diagnosis.isConnection ? diagnosis.title : diagnosis.message
+            self.error = diagnosis.isConnection ? diagnosis.title : diagnosis.detail
             self.loadFailure = diagnosis
         }
         hasLoaded = true

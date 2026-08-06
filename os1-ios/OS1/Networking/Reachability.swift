@@ -42,43 +42,65 @@ enum Reachability {
     }
 
     /// A failed request in the terms a screen needs: a headline naming the
-    /// problem, the line under it, and whether nothing came back at all.
+    /// problem, a sentence naming the fix where there is one, the system's
+    /// own words for the places that want them, and whether nothing came back
+    /// at all.
     ///
     /// `isConnection` decides what the screen offers. A request that never
     /// left the device is fixed out here — a VPN toggle, a signal, a wait —
     /// so retrying is the whole answer; anything else the server said back is
     /// a different conversation.
+    ///
+    /// `fix` is deliberately not the error's own wording. "The request timed
+    /// out" and "a server with the specified hostname could not be found"
+    /// are the same news to anyone who isn't debugging: the difference that
+    /// matters is that one wants patience and the other wants a corrected
+    /// address, and that is what this says instead.
     struct Diagnosis: Equatable, Sendable {
         let title: String
-        let message: String
+        let fix: String?
+        let detail: String
         let isConnection: Bool
     }
 
     static func diagnose(_ error: Error) async -> Diagnosis {
+        let code = (error as? URLError)?.code
         // "Offline" is its own headline: no server is reachable, so naming
         // this one would be beside the point.
-        if (error as? URLError)?.code == .notConnectedToInternet {
+        if code == .notConnectedToInternet {
             return Diagnosis(
                 title: "No internet connection",
-                message: error.localizedDescription,
+                fix: "Reconnect, then try again.",
+                detail: error.localizedDescription,
                 isConnection: true
             )
         }
         guard blamesTheNetwork(error) else {
             return Diagnosis(
                 title: "Couldn't load",
-                message: error.localizedDescription,
+                fix: nil,
+                detail: error.localizedDescription,
                 isConnection: false
             )
         }
-        return await tailnetDiagnosis()
-            ?? Diagnosis(
-                title: "Can't reach the server",
-                // Keep the system's own words underneath: "timed out" and
-                // "couldn't find the host" send you to different places.
-                message: error.localizedDescription,
+        // Ahead of the name check on purpose: a MagicDNS name stops
+        // resolving when the tunnel drops, and "check the address" is the
+        // wrong advice for an address that is perfectly correct.
+        if let tailnet = await tailnetDiagnosis() { return tailnet }
+        if code == .cannotFindHost || code == .dnsLookupFailed {
+            return Diagnosis(
+                title: "Can't find that server",
+                fix: "Check the server address in Settings.",
+                detail: error.localizedDescription,
                 isConnection: true
             )
+        }
+        return Diagnosis(
+            title: "Can't reach the server",
+            fix: nil,
+            detail: error.localizedDescription,
+            isConnection: true
+        )
     }
 
     /// The tailnet diagnosis on its own, for callers holding no error yet —
@@ -91,7 +113,8 @@ enum Reachability {
         guard let hint = await tailnetHint() else { return nil }
         return Diagnosis(
             title: hint,
-            message: "This server only answers on your tailnet. Turn Tailscale on and it loads by itself.",
+            fix: "This server only answers on your tailnet. Turn Tailscale on, then try again.",
+            detail: "The server is on a tailnet this device isn't on.",
             isConnection: true
         )
     }

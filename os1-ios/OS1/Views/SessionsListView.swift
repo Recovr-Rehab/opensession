@@ -449,16 +449,16 @@ struct SessionsListView: View {
         VStack(spacing: 14) {
             ProgressView()
             if let failure = viewModel.loadFailure {
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     Text(failure.title)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(OS1VisualStyle.text)
-                    Text(failure.message)
+                    Text(failure.fix ?? failure.detail)
                         .font(.footnote)
                         .foregroundStyle(OS1VisualStyle.textDim)
                 }
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .frame(maxWidth: 300)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1313,16 +1313,20 @@ struct SessionsListView: View {
             if !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else if peopleFilter == "mine" {
-                ContentUnavailableView {
-                    Label("No sessions of yours yet", systemImage: "person.crop.circle")
-                } description: {
-                    Text("Sessions you start appear here.")
-                } actions: {
+                // Same look as the other two states on this screen: three
+                // different placeholder styles on one list is what makes a
+                // surface read as unfinished.
+                ListPlaceholder(
+                    symbol: "person.crop.circle",
+                    title: "No sessions of yours yet",
+                    message: "Sessions you start appear here."
+                ) {
                     Button("New session") {
                         newSessionRequest = NewSessionRequest()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PlaceholderActionStyle())
                     Button("Show everyone's") { peopleFilter = "all" }
+                        .buttonStyle(PlaceholderActionStyle(prominent: false))
                 }
             }
         }
@@ -1456,11 +1460,16 @@ struct SessionsListView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No sessions", systemImage: "bubble.left.and.bubble.right")
-        } description: {
-            Text("Sessions from the OS1 server will appear here.")
-        } actions: {
+        ListPlaceholder(
+            symbol: "bubble.left.and.bubble.right",
+            title: "No sessions",
+            message: "Start one and it shows up here."
+        ) {
+            // Starting a session is what you came for; Settings is only here
+            // for the case where the list is empty because it's the wrong
+            // server, so it takes the quieter half.
+            Button("New session") { newSessionRequest = NewSessionRequest() }
+                .buttonStyle(PlaceholderActionStyle())
             settingsButton
         }
     }
@@ -1472,47 +1481,52 @@ struct SessionsListView: View {
     /// headline, the server we couldn't reach gets named, and the first
     /// button is the one that answers a connection problem.
     private func unreachableState(_ failure: Reachability.Diagnosis) -> some View {
-        ContentUnavailableView {
-            Label(
-                failure.title,
-                systemImage: failure.isConnection
-                    ? "wifi.exclamationmark"
-                    : "exclamationmark.triangle"
-            )
-        } description: {
-            VStack(spacing: 8) {
-                Text(failure.message)
-                if let host = ServerConfig.shared.baseURL?.host() {
-                    Text(host)
-                        .font(.footnote.monospaced())
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                }
-            }
-        } actions: {
+        ListPlaceholder(
+            symbol: failure.isConnection
+                ? "wifi.exclamationmark"
+                : "exclamationmark.triangle",
+            title: failure.title,
+            message: failureMessage(failure)
+        ) {
             // The poll keeps trying underneath either way — this is for the
             // person who just turned the VPN back on and doesn't want to
             // wonder whether the app noticed.
             Button(action: retryLoad) {
                 if isRetrying {
-                    // Same footprint as the label it replaces, so the row
-                    // doesn't jump when the retry starts.
+                    // Same footprint as the label it replaces, so the capsule
+                    // doesn't resize when the retry starts.
                     ProgressView().controlSize(.small)
                 } else {
                     Text("Try again")
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PlaceholderActionStyle())
             .disabled(isRetrying)
             settingsButton
         }
+    }
+
+    /// The one line under the headline: the fix when the diagnosis knows one,
+    /// otherwise the server that stayed silent — naming it is what tells you
+    /// whether the app is pointed where you think it is. The system's own
+    /// wording is the last resort, for failures that aren't about the
+    /// network at all.
+    private func failureMessage(_ failure: Reachability.Diagnosis) -> String {
+        if let fix = failure.fix { return fix }
+        guard failure.isConnection,
+              let host = ServerConfig.shared.baseURL?.host(), !host.isEmpty
+        else { return failure.detail }
+        return "\(host) didn't answer."
     }
 
     @ViewBuilder
     private var settingsButton: some View {
         #if os(macOS)
         SettingsLink { Text("Settings") }
+            .buttonStyle(PlaceholderActionStyle(prominent: false))
         #else
         Button("Settings") { showSettings = true }
+            .buttonStyle(PlaceholderActionStyle(prominent: false))
         #endif
     }
 

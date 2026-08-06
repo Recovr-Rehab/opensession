@@ -71,13 +71,16 @@ final class ReachabilityTests: XCTestCase {
         let diagnosis = await Reachability.diagnose(URLError(.notConnectedToInternet))
         XCTAssertTrue(diagnosis.isConnection)
         XCTAssertEqual(diagnosis.title, "No internet connection")
-        XCTAssertEqual(diagnosis.message, URLError(.notConnectedToInternet).localizedDescription)
+        XCTAssertNotNil(diagnosis.fix)
+        XCTAssertEqual(diagnosis.detail, URLError(.notConnectedToInternet).localizedDescription)
     }
 
     @MainActor
     func testAnAnsweredRequestIsNotAConnectionProblem() async {
         let diagnosis = await Reachability.diagnose(OS1API.APIError.http(401))
         XCTAssertFalse(diagnosis.isConnection)
-        XCTAssertEqual(diagnosis.message, OS1API.APIError.http(401).localizedDescription)
+        // Nothing to advise: the screen falls back to the system's wording.
+        XCTAssertNil(diagnosis.fix)
+        XCTAssertEqual(diagnosis.detail, OS1API.APIError.http(401).localizedDescription)
     }
 }
