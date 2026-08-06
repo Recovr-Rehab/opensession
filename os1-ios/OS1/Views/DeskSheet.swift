@@ -16,6 +16,7 @@ struct DeskSheet: View {
 
     @State private var loadState: LoadState = .loading
     @State private var engine = DeskVoiceEngine()
+    @State private var showingCall = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +31,14 @@ struct DeskSheet: View {
         .onChange(of: scenePhase) { _, phase in
             // A backgrounded app must never hold the mic open.
             if phase != .active { engine.stop() }
+        }
+        .onChange(of: engine.state) { _, state in
+            // Covers every way a call can end without the button: the idle
+            // timeout, backgrounding, a dropped socket.
+            if state == .idle { showingCall = false }
+        }
+        .fullScreenCoverCompat(isPresented: $showingCall) {
+            DeskVoiceCallView(engine: engine)
         }
     }
 
@@ -92,29 +101,25 @@ struct DeskSheet: View {
     }
 
     private var voiceStatusText: String {
-        switch engine.state {
-        case .idle: ""
-        case .connecting: "Connecting…"
-        case .listening: "Listening"
-        case .thinking: "Thinking…"
-        case .speaking: "Speaking"
-        case .action: "Working…"
-        case .error: engine.errorMessage ?? "Voice call failed"
-        }
+        engine.state == .error
+            ? (engine.errorMessage ?? engine.state.label)
+            : engine.state.label
     }
 
+    /// Starts a call, or returns to one that is already running — a minimized
+    /// call stays live, so this button is the way back to it. Hanging up
+    /// happens on the call screen.
     private var micButton: some View {
         Button {
-            if engine.active {
-                engine.stop()
-            } else {
+            showingCall = true
+            if !engine.active {
                 Task { await engine.start() }
             }
         } label: {
             Image(systemName: engine.active ? "mic.fill" : "mic")
                 .foregroundStyle(engine.active ? OS1VisualStyle.accent : OS1VisualStyle.textDim)
         }
-        .accessibilityLabel(engine.active ? "End voice call" : "Start voice call")
+        .accessibilityLabel(engine.active ? "Return to the voice call" : "Start a voice call")
     }
 
     private func load() async {

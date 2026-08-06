@@ -95,10 +95,21 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   everything the session view already does — streaming, tool folds, questions
   — works there too. Voice mode is opt-in per device via the "Desk voice"
   toggle in Appearance settings (cross-device `desk-voice` ui-pref); when on,
-  a mic button in the Desk header starts/stops a live call brokered by the
+  a mic button in the Desk header starts a live call brokered by the
   server over a raw WebSocket to OpenAI's Realtime API (`DeskVoiceEngine`) —
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
+- **Voice call** — the call itself is a full-screen surface
+  (`DeskVoiceCallView`): one orb that scales with real metered loudness — the
+  mic while you talk, the model's own output while it answers — the spoken
+  line as live captions under it, and mute / captions / hang-up controls.
+  Barge-in is server-side VAD, so talking over the model just interrupts it.
+  Minimizing (the chevron) leaves the call running and returns you to the Desk
+  transcript, which fills in as turns finalize; the header's lit mic button
+  comes back to the call, and hanging up is the only thing that ends it.
+  Mute is local — capture and metering continue, frames stop leaving the
+  device. The orb's level is sampled off the realtime audio threads at ~15Hz
+  rather than pushed per buffer, and honors Reduce Motion.
 
 ## Signing in
 
@@ -171,6 +182,7 @@ OS1/
     PrPanel.swift            Read-only pull-request panel
     WorktreeInfoView.swift   Workspace details sheet
     DeskSheet.swift          Desk sheet: header + voice controls over SessionView
+    DeskVoiceCallView.swift  Full-screen voice call: orb, captions, call controls
     SettingsView.swift       Native settings index + connection controls
     Native*SettingsViews.swift  Native Tools, Personal, Workspace panels
     MacSettings.swift        macOS settings window
