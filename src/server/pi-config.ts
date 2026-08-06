@@ -20,12 +20,21 @@
  *         // not advertised. Served providers: anthropic (the loopback
  *         // bridge) and openai (the codex-accounts pool); anything else
  *         // errors clearly at run time.
- *     "bridgeAccounts": ["<claude-accounts id>"]
- *         // Optional: designated accounts for the loopback Anthropic bridge
- *         // when opencode's own bridgeAccountIds list is empty — same
+ *     "bridgeAccounts": ["<claude-accounts id>"],
+ *         // Optional: designated accounts for the Anthropic path when
+ *         // opencode's own bridgeAccountIds list is empty — same
  *         // never-the-pool containment (anthropic-bridge.ts walks exactly
- *         // these ids through the usable-account gate). Absent (the
- *         // default) = pi rides whatever opencode designates.
+ *         // these ids through the usable-account gate; the in-process
+ *         // provider imports the same pick). Absent (the default) = pi
+ *         // rides whatever opencode designates.
+ *     "anthropicTransport": "inprocess"
+ *         // Optional: how pi/anthropic/* turns reach the Claude Agent SDK.
+ *         // "inprocess" (the default; absent normalizes to it) registers
+ *         // the native in-process provider (pi-anthropic-provider.ts) —
+ *         // token-level streaming, no loopback HTTP hop. "bridge" keeps the
+ *         // pre-2026-08 loopback Anthropic bridge path as rollback. Only
+ *         // the literal "bridge" survives normalization; anything else is
+ *         // the default.
  *   }
  *
  * Read fresh per call (tiny file) so edits apply without a restart. The write
@@ -44,14 +53,22 @@ export function piConfigPath(): string {
   return process.env.OPENSESSION_PI_CONFIG || stateDir("pi.json");
 }
 
+/** Transport for pi/anthropic/* turns: the in-process native provider
+ *  (default) or the loopback HTTP bridge (rollback). */
+export type PiAnthropicTransport = "inprocess" | "bridge";
+
 export interface PiEngineConfig {
   enabled: boolean;
   /** Model ids (pi/<provider>/<model>) to show in the UI picker. */
   pickerModels: string[];
-  /** Designated claude-accounts ids that may serve the loopback Anthropic
-   *  bridge when opencode's bridgeAccountIds list is empty (never the pool —
-   *  see anthropic-bridge.ts). Absent = no pi-side designation. */
+  /** Designated claude-accounts ids that may serve the Anthropic path (bridge
+   *  or in-process) when opencode's bridgeAccountIds list is empty (never the
+   *  pool — see anthropic-bridge.ts). Absent = no pi-side designation. */
   bridgeAccounts?: string[];
+  /** Present only as the non-default "bridge" (absent = "inprocess") — the
+   *  same present-implies-meaningful convention as bridgeAccounts. Read it
+   *  through piAnthropicTransport(), which resolves the default. */
+  anthropicTransport?: PiAnthropicTransport;
 }
 
 /** Pure normalization (exported for tests): raw JSON → typed config. Tolerant
@@ -89,6 +106,10 @@ export function normalizePiConfig(raw: unknown): PiEngineConfig {
     enabled: r.enabled === true,
     pickerModels,
     ...(bridgeAccounts.length ? { bridgeAccounts } : {}),
+    // Only the literal non-default survives; junk/absent = "inprocess".
+    ...(r.anthropicTransport === "bridge"
+      ? { anthropicTransport: "bridge" as const }
+      : {}),
   };
 }
 
@@ -122,6 +143,15 @@ export function piBridgeAccounts(): string[] {
   const cfg = readPiEngineConfig();
   if (!cfg?.enabled) return [];
   return cfg.bridgeAccounts || [];
+}
+
+/** Resolved transport for pi/anthropic/* turns — "inprocess" unless the
+ *  config explicitly says "bridge" (missing/disabled/malformed config all
+ *  default; the engine-enabled gate is separate and comes first). */
+export function piAnthropicTransport(): PiAnthropicTransport {
+  return readPiEngineConfig()?.anthropicTransport === "bridge"
+    ? "bridge"
+    : "inprocess";
 }
 
 // ── Write path (Settings → Accounts "Pi engine" card) ───────────────────────

@@ -70,6 +70,13 @@
  *  - `max_tokens` / `temperature` from the request are ignored (the SDK does
  *    not expose them); thinking blocks are not round-tripped.
  *  - The SDK's own built-in tools are disallowed; only client tools exist.
+ *
+ * The pi engine's in-process sibling (pi-anthropic-provider.ts) reimplements
+ * this same SDK mapping without the HTTP hop; it imports the exported helpers
+ * here (flatten/replay, schema conversion, account pick, designation check,
+ * DISALLOWED_BUILTINS, the rolling admit counter) so the two stay one
+ * implementation of the trick. HTTP concerns (bridge key, SSE synthesis,
+ * body caps) remain bridge-only.
  */
 
 import { homeDir } from "./paths";
@@ -112,31 +119,36 @@ export interface BridgeInfo {
   key: string;
 }
 
-/**
- * Start the bridge (idempotent) and return its URL + access key. Throws when
- * no config designates serving accounts — callers surface that as a clear
- * model-level error. Serves when EITHER opencode is enabled with
- * bridgeAccountIds OR the pi engine is enabled with bridgeAccounts (see the
- * containment doc — pickBridgeAccount applies the same precedence per
- * request).
- */
-export function ensureAnthropicBridge(): BridgeInfo {
+/** Non-null = the reason no config designates serving accounts right now —
+ *  the same gate ensureAnthropicBridge throws on, exported so the in-process
+ *  pi provider can refuse with the identical message without starting the
+ *  HTTP listener. Serving is allowed when EITHER opencode is enabled with
+ *  bridgeAccountIds OR the pi engine is enabled with bridgeAccounts. */
+export function bridgeDesignationError(): string | null {
   const cfg = readOpencodeBridgeConfig();
   const piCfg = readPiEngineConfig();
   const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
   const piIds = piCfg?.enabled ? piCfg.bridgeAccounts || [] : [];
-  if (!ocIds.length && !piIds.length) {
-    throw new Error(
-      cfg?.enabled || piCfg?.enabled
-        ? "The Anthropic bridge has no designated accounts: set bridgeAccountIds in " +
-          "~/.opensession-opencode.json (or, for pi runs, bridgeAccounts in ~/.opensession-pi.json) " +
-          "to the claude-accounts id(s) that may serve bridge traffic (the general pool is never used)."
-        : "The Anthropic bridge is disabled. Enable it in ~/.opensession-opencode.json " +
-          '({"enabled": true, "bridgeAccountIds": ["<claude-accounts id>"]}) or, for pi/anthropic/* ' +
-          'models, in ~/.opensession-pi.json ({"enabled": true, "bridgeAccounts": [...]}) — or use an ' +
-          "API-key provider configured via `opencode auth login` instead."
-    );
-  }
+  if (ocIds.length || piIds.length) return null;
+  return cfg?.enabled || piCfg?.enabled
+    ? "The Anthropic bridge has no designated accounts: set bridgeAccountIds in " +
+        "~/.opensession-opencode.json (or, for pi runs, bridgeAccounts in ~/.opensession-pi.json) " +
+        "to the claude-accounts id(s) that may serve bridge traffic (the general pool is never used)."
+    : "The Anthropic bridge is disabled. Enable it in ~/.opensession-opencode.json " +
+        '({"enabled": true, "bridgeAccountIds": ["<claude-accounts id>"]}) or, for pi/anthropic/* ' +
+        'models, in ~/.opensession-pi.json ({"enabled": true, "bridgeAccounts": [...]}) — or use an ' +
+        "API-key provider configured via `opencode auth login` instead.";
+}
+
+/**
+ * Start the bridge (idempotent) and return its URL + access key. Throws when
+ * no config designates serving accounts — callers surface that as a clear
+ * model-level error (see bridgeDesignationError; pickBridgeAccount applies
+ * the same precedence per request).
+ */
+export function ensureAnthropicBridge(): BridgeInfo {
+  const designationError = bridgeDesignationError();
+  if (designationError) throw new Error(designationError);
   const port = bridgePort();
   if (g.__anthropicBridgeServer) {
     return { url: `http://127.0.0.1:${g.__anthropicBridgeServer.port}`, key: bridgeKey() };
@@ -156,10 +168,30 @@ export function ensureAnthropicBridge(): BridgeInfo {
   return { url: `http://127.0.0.1:${port}`, key: bridgeKey() };
 }
 
+/** Optional account pin for pickBridgeAccount — only the in-process pi
+ *  provider passes it (the HTTP bridge has no channel for a pin); a pin never
+ *  widens serving beyond the designated ids. */
+export interface BridgeAccountPin {
+  accountId?: string;
+  /** Strict pin: never fall back to the other designated accounts. */
+  accountStrict?: boolean;
+  /** Allow extra-usage credits when judging the pin/walk usability. */
+  usageCredits?: boolean;
+}
+
 /** Pick the first usable designated account (utilization-gated). Opencode's
  *  bridgeAccountIds list first; when it names none, pi's bridgeAccounts (both
- *  gated on their own config's `enabled`). Never the general pool. */
-function pickBridgeAccount(model: string | undefined): ClaudeAccount | { error: string } {
+ *  gated on their own config's `enabled`). Never the general pool. A `pin`
+ *  (in-process pi runs only) is honored when it names a designated id: tried
+ *  first, and with accountStrict the walk never widens past it. A pinned id
+ *  OUTSIDE the designation is a config error under strict, and falls through
+ *  to the normal designated walk otherwise. The "no designated bridge
+ *  account" wording is load-bearing: isPiUsageLimitShape's anthropic arm
+ *  keys on it. */
+export function pickBridgeAccount(
+  model: string | undefined,
+  pin?: BridgeAccountPin
+): ClaudeAccount | { error: string } {
   const cfg = readOpencodeBridgeConfig();
   const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
   const ids = ocIds.length ? ocIds : piBridgeAccounts();
@@ -169,8 +201,34 @@ function pickBridgeAccount(model: string | undefined): ClaudeAccount | { error: 
         "bridge has no designated accounts (opencode bridgeAccountIds / pi bridgeAccounts both empty or disabled)",
     };
   }
+  if (pin?.accountId) {
+    const pinName = getAccountById(pin.accountId)?.name || pin.accountId;
+    if (!ids.includes(pin.accountId)) {
+      if (pin.accountStrict) {
+        // Config error, deliberately NOT exhaustion-shaped — hopping models
+        // would not fix a pin that names a non-designated account.
+        return {
+          error:
+            `pinned account "${pinName}" is not a designated bridge account ` +
+            "(only opencode bridgeAccountIds / pi bridgeAccounts may serve bridge traffic) — " +
+            "strict pin, refusing to widen",
+        };
+      }
+      // Non-strict pin outside the designation: ignore it, walk the list.
+    } else {
+      const pinned = getUsableAccountById(pin.accountId, model, pin.usageCredits);
+      if (pinned) return pinned;
+      if (pin.accountStrict) {
+        return {
+          error:
+            `no designated bridge account is currently usable (pinned "${pinName}" is ` +
+            "exhausted or disabled; strict pin — not widening to the other designated accounts)",
+        };
+      }
+    }
+  }
   for (const id of ids) {
-    const usable = getUsableAccountById(id, model);
+    const usable = getUsableAccountById(id, model, pin?.usageCredits);
     if (usable) return usable;
   }
   const known = ids.map((id) => getAccountById(id)?.name || id).join(", ");
@@ -179,8 +237,8 @@ function pickBridgeAccount(model: string | undefined): ClaudeAccount | { error: 
 
 // ── Anthropic request → SDK prompt mapping ───────────────────────────────────
 
-type ContentBlock = Record<string, any>;
-interface AnthropicMessage {
+export type ContentBlock = Record<string, any>;
+export interface AnthropicMessage {
   role: "user" | "assistant";
   content: string | ContentBlock[];
 }
@@ -255,12 +313,12 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
   }
 }
 
-const PASSTHROUGH_MCP = "oc";
-const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
+export const PASSTHROUGH_MCP = "oc";
+export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
 
 /** Built-in SDK tools the bridge must never let run — the client owns all
  *  execution. (The PreToolUse hook blocks everything as backstop.) */
-const DISALLOWED_BUILTINS = [
+export const DISALLOWED_BUILTINS = [
   "Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch",
   "NotebookEdit", "Task", "TaskOutput", "TaskStop", "Agent", "Skill",
   "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "AskUserQuestion",

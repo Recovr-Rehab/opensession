@@ -6,6 +6,7 @@ import {
   addPiPickerModel,
   isPiModelId,
   normalizePiConfig,
+  piAnthropicTransport,
   piBridgeAccounts,
   piConfigPath,
   piEngineEnabled,
@@ -92,6 +93,21 @@ describe("normalizePiConfig", () => {
       normalizePiConfig({ enabled: true, bridgeAccounts: "acc-1" }).bridgeAccounts
     ).toBeUndefined();
   });
+
+  it("keeps anthropicTransport only as the literal non-default \"bridge\"", () => {
+    // Absent = the "inprocess" default; only the exact rollback value
+    // survives normalization (present-implies-non-default, like
+    // bridgeAccounts' present-implies-non-empty).
+    expect(normalizePiConfig({ enabled: true }).anthropicTransport).toBeUndefined();
+    expect(
+      normalizePiConfig({ enabled: true, anthropicTransport: "bridge" }).anthropicTransport
+    ).toBe("bridge");
+    for (const junk of ["inprocess", "Bridge", "loopback", 42, null, true, {}]) {
+      expect(
+        normalizePiConfig({ enabled: true, anthropicTransport: junk }).anthropicTransport
+      ).toBeUndefined();
+    }
+  });
 });
 
 describe("isPiModelId", () => {
@@ -156,6 +172,32 @@ describe("readPiEngineConfig", () => {
       pickerModels: ["pi/anthropic/claude-opus-5"],
     });
     expect(piPickerModels()).toEqual([]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("resolves piAnthropicTransport to \"inprocess\" unless the file says \"bridge\"", () => {
+    // Missing file → default.
+    const dir = withConfigFile();
+    expect(piAnthropicTransport()).toBe("inprocess");
+    // Explicit rollback value.
+    writeFileSync(
+      join(dir, "pi.json"),
+      JSON.stringify({ enabled: true, anthropicTransport: "bridge" })
+    );
+    expect(piAnthropicTransport()).toBe("bridge");
+    // Junk values fall back to the default.
+    writeFileSync(
+      join(dir, "pi.json"),
+      JSON.stringify({ enabled: true, anthropicTransport: "meridian" })
+    );
+    expect(piAnthropicTransport()).toBe("inprocess");
+    // The transport is read independently of the enabled gate (the runner
+    // checks enabled first) — a disabled config keeps its explicit choice.
+    writeFileSync(
+      join(dir, "pi.json"),
+      JSON.stringify({ enabled: false, anthropicTransport: "bridge" })
+    );
+    expect(piAnthropicTransport()).toBe("bridge");
     rmSync(dir, { recursive: true, force: true });
   });
 

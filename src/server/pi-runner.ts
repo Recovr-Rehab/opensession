@@ -14,13 +14,19 @@
  *    (`pi_gate_denied`). The one escape is the module-internal smoke bypass
  *    (kind "pi-smoke", armed only inside runPiSmokeTurn — never reachable
  *    from request/automation data).
- *  - Auth/billing: Anthropic traffic goes through the loopback Anthropic
- *    bridge (`ensureAnthropicBridge`) — provider "anthropic" re-registered
- *    with the bridge baseUrl + per-boot key via setRuntimeApiKey; account
- *    selection stays INSIDE the bridge (designated accounts only — opencode's
- *    bridgeAccountIds, falling back to pi.json's bridgeAccounts). A
- *    stable `x-opencode-session` header gives the bridge session affinity +
- *    audit attribution. OpenAI traffic rides pi's native `openai-codex`
+ *  - Auth/billing: Anthropic traffic runs on the designated bridge accounts
+ *    (opencode's bridgeAccountIds, falling back to pi.json's bridgeAccounts —
+ *    never the pool) over one of two config-gated transports
+ *    (pi-config `anthropicTransport`): "inprocess" (the default) registers a
+ *    NATIVE pi-ai provider (pi-anthropic-provider.ts) that drives the Claude
+ *    Agent SDK in this process — token-level streaming, per-unified-session
+ *    SDK-session continuation, `pi_anthropic_request` audit, usage-limit
+ *    markExhausted — while "bridge" keeps the pre-2026-08 loopback path as
+ *    rollback: `ensureAnthropicBridge` + provider "anthropic" re-registered
+ *    with the bridge baseUrl + per-boot key via setRuntimeApiKey, account
+ *    selection inside the bridge, and a stable `x-opencode-session` header
+ *    for session affinity + audit attribution. OpenAI traffic rides pi's
+ *    native `openai-codex`
  *    provider (chatgpt.com backend, pi's own headers/transport — no custom
  *    headers) on the SAME ChatGPT-subscription codex pool as opencode/openai:
  *    pickOpenaiAccount → buildSeededOpenaiAuth (access-token-only + the
@@ -191,7 +197,8 @@ import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { isLocalProfile } from "./profile";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
-import { piEngineEnabled } from "./pi-config";
+import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
+import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
@@ -1295,11 +1302,37 @@ export async function* runPi(
           `Unknown OpenAI model "${parsed.modelID}" (could not register it with pi)`
         );
       }
+    } else if (piAnthropicTransport() === "inprocess") {
+      // In-process native provider (the default): drives the Claude Agent
+      // SDK directly inside this process — token-level streaming, no
+      // loopback HTTP hop, no per-boot bridge key. Designated-account pick,
+      // usage-limit sidelining, the rolling hourly cap and the
+      // pi_anthropic_request audit discipline all live in
+      // pi-anthropic-provider.ts; build throws the bridge's exact
+      // designation error when no config designates accounts — surfaced
+      // as-is by the catch below. The builtin catalog is read BEFORE
+      // registration (registerNativeProvider replaces the builtin provider)
+      // so ids/cost/contextWindow survive; an unknown model id gets the same
+      // zero-cost fallback entry the bridge path minted.
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: unifiedSessionId || runKey,
+        user,
+        accountId: opts.accountId,
+        accountStrict: opts.accountStrict,
+        usageCredits: opts.usageCredits,
+        builtinModels: runtime.getModels("anthropic"),
+        ensureModelId: parsed.modelID,
+      });
+      runtime.registerNativeProvider(provider);
+      piModel = runtime.getModel("anthropic", parsed.modelID);
+      if (!piModel) {
+        throw new Error(`Unknown Anthropic model "${parsed.modelID}" (could not register it with pi)`);
+      }
     } else {
-      // Bridge + provider: the bridge owns account selection and audits every
-      // HTTP request itself; we only route to it legitimately. ensure* throws
-      // a clear config error when the bridge is off — surfaced as-is by the
-      // catch below.
+      // Rollback transport (anthropicTransport: "bridge"): the loopback HTTP
+      // bridge owns account selection and audits every request itself; we
+      // only route to it legitimately. ensure* throws a clear config error
+      // when the bridge is off — surfaced as-is by the catch below.
       const bridge = ensureAnthropicBridge();
       const sessionHeader = { "x-opencode-session": unifiedSessionId || runKey };
       runtime.registerProvider("anthropic", {
