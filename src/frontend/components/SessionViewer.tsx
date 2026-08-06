@@ -40,8 +40,6 @@ import {
 	orderTranscriptEntries,
 } from "../lib/transcript-state";
 import { TranscriptBlocks } from "./TranscriptBlocks";
-import { TranscriptMinimap } from "./TranscriptMinimap";
-import { buildLandmarks } from "../../shared/transcript-landmarks";
 import {
 	canonicalToolName,
 	LiveSubagentsProvider,
@@ -68,7 +66,6 @@ import {
 	fetchPr,
 	fetchPreview,
 	fetchChatMessagesApi,
-	fetchTurnSummaries,
 	postChatMessageApi,
 	type WorkspaceMediaItem,
 	type ModelOption,
@@ -790,44 +787,6 @@ export function SessionViewer({
 		) => transcriptViewStore.update(update),
 		[transcriptViewStore],
 	);
-	// The minimap's ticks. useMemo on purpose (against the house rule): this is
-	// a full scan of the transcript — up to several thousand entries — not the
-	// routine allocation the compiler is there to handle.
-	const landmarks = useMemo(() => buildLandmarks(entries), [entries]);
-	const [turnTitles, setTurnTitles] = useState<Record<string, string>>({});
-
-	// Generated tick titles. The rail already renders derived labels, so this
-	// only ever upgrades them: fetch once on open, then poll while the server
-	// says a generation pass is still running, and give up after a few rounds
-	// rather than polling a session nobody is looking at forever.
-	useEffect(() => {
-		if (landmarks.length < 4) return;
-		let cancelled = false;
-		let timer: ReturnType<typeof setTimeout> | null = null;
-		let rounds = 0;
-		const poll = async () => {
-			try {
-				const { titles, pending } = await fetchTurnSummaries(session.id);
-				if (cancelled) return;
-				setTurnTitles((prev) =>
-					Object.keys(titles).length === Object.keys(prev).length
-						? prev
-						: titles,
-				);
-				if (pending && rounds++ < 12) timer = setTimeout(poll, 8000);
-			} catch {
-				// Titles are enrichment — a failure just leaves the derived labels.
-			}
-		};
-		void poll();
-		return () => {
-			cancelled = true;
-			if (timer) clearTimeout(timer);
-		};
-		// Landmark COUNT, not identity: a new turn is worth another pass, a
-		// re-rendered array is not.
-	}, [session.id, landmarks.length]);
-
 	const liveTurnStore = useMemo(() => new LiveTurnStore(), [session.id]);
 	const transcriptCommitCount = useRef(0);
 	const onTranscriptRender = useCallback(
@@ -5190,20 +5149,6 @@ export function SessionViewer({
                 reply streams into the space below; sized by the scroll hook. */}
 							<div ref={spacerRef} className="turn-spacer" aria-hidden="true" />
 						</div>
-
-								{/* Sibling of the scroller, not a child: pointer events on the
-								    rail must never reach the transcript container, whose scroll
-								    hook reads a press in the scrollbar strip as "the reader took
-								    over". */}
-								{!loading && (
-									<TranscriptMinimap
-										landmarks={landmarks}
-										titles={turnTitles}
-										containerRef={messagesRef}
-										leaveLatest={leaveLatest}
-										scrollToLatest={scrollToLatest}
-									/>
-								)}
 
 								{showScrollToBottom && entries.length > 0 && (
 									<button

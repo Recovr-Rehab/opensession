@@ -15,8 +15,6 @@ import {
   onTurnActivityChanged,
 } from "../lib/turn-activity";
 import { collectTouchedFiles, LineStats } from "./TurnFooter";
-import { sectionAnchorId, workAnchorId } from "../../shared/transcript-landmarks";
-import { onTurnExpandRequest } from "../lib/turn-expand";
 
 interface Props {
   /** The folded part of one assistant turn: tool_use + intermediate assistant
@@ -83,19 +81,6 @@ export const TurnBlock = React.memo(function TurnBlock({
     setExpanded(defaultExpanded);
   }, [defaultExpanded]);
 
-  // The minimap ticks into this fold's steps, which don't exist while it's
-  // closed. Opening on request counts as the reader's own choice, so it also
-  // takes the fold out of the preference's control (same as a click).
-  const lastItem = items[items.length - 1];
-  const anchorId = lastItem ? workAnchorId(lastItem.id) : "";
-  useEffect(() => {
-    if (!anchorId) return;
-    return onTurnExpandRequest(anchorId, () => {
-      userToggledRef.current = true;
-      setExpanded(true);
-    });
-  }, [anchorId]);
-
   const duration = blockDuration(items, toolResults);
   const failures = tools.filter(
     (it) => it.toolUseId && toolResults.get(it.toolUseId)?.isError
@@ -135,13 +120,14 @@ export const TurnBlock = React.memo(function TurnBlock({
       sections.push({ kind: "msg", entry: it });
     }
   }
+  const lastItem = items[items.length - 1];
 
   return (
     <div
       className="mx-auto mb-3 w-full max-w-[var(--chat-col)]"
       // Anchor identity for the history scroll hold: the LAST item survives a
       // history page merging older items into this turn (the first doesn't).
-      data-eid={anchorId || undefined}
+      data-eid={lastItem ? `${lastItem.id}#turn` : undefined}
     >
       <button
         type="button"
@@ -204,7 +190,7 @@ export const TurnBlock = React.memo(function TurnBlock({
             ) : (
               <div
                 key={sec.items[0].id}
-                data-eid={sectionAnchorId(sec.items[sec.items.length - 1].id)}
+                data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
                 {sec.items.map((entry) => (
                   <ToolCallBlock

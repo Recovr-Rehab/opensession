@@ -55,15 +55,6 @@ import {
 import { isManualStatus, setStatusOverride } from "../status-overrides";
 import { getSubagentTranscript } from "../subagents";
 import { setTitleOverride } from "../title-overrides";
-import {
-	ensureTurnSummaries,
-	getTurnSummaries,
-	turnSummariesPending,
-} from "../turn-summaries";
-import {
-	buildLandmarks,
-	type TranscriptLandmark,
-} from "../../shared/transcript-landmarks";
 import { buildWorkspaceOverview, resolveTranscriptImage } from "../workspace-overview";
 import { type Workspace, deleteWorkspace, getWorkspace } from "../workspaces";
 import { removeWorktree, repoForPath } from "../worktree";
@@ -75,10 +66,6 @@ import {
 	githubMutationCredential,
 } from "./github-credential";
 import { defaultRepo } from "../config";
-
-/** How long a session's derived landmarks are reused across summary polls. */
-const LANDMARK_CACHE_MS = 30_000;
-const landmarkCache = new Map<string, { list: TranscriptLandmark[]; at: number }>();
 
 const SESSIONS_RESPONSE_TTL_MS = 5_000;
 interface SessionsResponseSnapshot {
@@ -391,45 +378,6 @@ export async function handleSessionsRoutes(
 		// sessions from before transcript persistence, and migrated
 		// sessions whose history spans engines).
 		return Response.json(await mergedSessionTranscriptAsync(session));
-	}
-
-	// Generated titles for the transcript's landmarks — what the minimap rail
-	// shows on hover. Returns whatever is cached immediately and kicks off a
-	// bounded generation pass for the rest; the rail renders its derived
-	// labels meanwhile and swaps these in when a later poll picks them up.
-	if (
-		path.match(/^\/api\/sessions\/(.+)\/turn-summaries$/) &&
-		req.method === "GET"
-	) {
-		const sessionId = decodeURIComponent(
-			path.match(/^\/api\/sessions\/(.+)\/turn-summaries$/)![1],
-		);
-		const session = findSession(sessionId);
-		if (!session)
-			return Response.json({ error: "Session not found" }, { status: 404 });
-
-		const titles = getTurnSummaries(sessionId);
-		// Parsing a long transcript on every poll would be the expensive part
-		// of a cheap endpoint, so hold the derived landmarks briefly. A session
-		// gaining a turn mid-window just means its newest tick waits one poll.
-		let landmarks = landmarkCache.get(sessionId);
-		if (!landmarks || Date.now() - landmarks.at > LANDMARK_CACHE_MS) {
-			const entries = await mergedSessionTranscriptAsync(session);
-			landmarks = { list: buildLandmarks(entries), at: Date.now() };
-			landmarkCache.set(sessionId, landmarks);
-		}
-		// Never summarize the turn still being written: its digest is a
-		// half-finished thought, and the id it would be cached under is the
-		// same one the settled turn gets.
-		const settled = isAgentSessionBusy(sessionId)
-			? landmarks.list.slice(0, -1)
-			: landmarks.list;
-		void ensureTurnSummaries(sessionId, settled, requestUser(ctx));
-
-		return Response.json({
-			titles,
-			pending: turnSummariesPending(sessionId),
-		});
 	}
 
 	// One transcript entry, unclamped. The WS wire clamps giant entry contents
