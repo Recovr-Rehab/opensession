@@ -100,11 +100,16 @@ struct NewSessionView: View {
         #if os(iOS)
         Button { create() } label: {
             Image(systemName: "arrow.up")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(
                     startDisabled ? OS1VisualStyle.textDim : OS1VisualStyle.onAccent
                 )
-                .frame(width: 32, height: 32)
+                // 44pt, not the composer's 32: this disc replaces a toolbar
+                // item's own glass circle, and iOS draws that at 44 — the ✕
+                // across the bar measures exactly that. At 32 the pair read as
+                // two different kinds of control, and the primary action was
+                // the one below the tap-target floor.
+                .frame(width: 44, height: 44)
                 .background(
                     startDisabled
                         ? AnyShapeStyle(OS1VisualStyle.hover)
