@@ -21,12 +21,14 @@ import {
 	readFileSync,
 	rmSync,
 } from "node:fs";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { ensureDeskSession } from "./desk";
 import { getSessionControl } from "./session-control";
 import { transcriptStore } from "./transcript-store";
-import { addTodo, listTodos, updateTodo } from "./todos";
+import type { InProcessMcpServer } from "./inprocess-mcp";
 import type { TranscriptEntry } from "./types";
 
 const DIR = stateDir("desk");
@@ -152,33 +154,85 @@ const VOICE_TOOLS = [
 			required: ["session_id", "message"],
 		},
 	},
-	{
-		type: "function",
-		name: "list_todos",
-		description: "The user's open todo list.",
-		parameters: { type: "object", properties: {}, required: [] },
-	},
-	{
-		type: "function",
-		name: "add_todo",
-		description: "Add a todo to the user's list.",
-		parameters: {
-			type: "object",
-			properties: { text: { type: "string" } },
-			required: ["text"],
-		},
-	},
-	{
-		type: "function",
-		name: "complete_todo",
-		description: "Mark a todo done by id (from list_todos).",
-		parameters: {
-			type: "object",
-			properties: { id: { type: "string" } },
-			required: ["id"],
-		},
-	},
 ];
+
+async function voiceMcpServers(
+	user: string,
+	sessionId: string,
+): Promise<Array<{ name: string; server: InProcessMcpServer }>> {
+	const { interactiveMcpServers } = await import("./interactive-mcp");
+	return Object.entries(interactiveMcpServers(user, sessionId))
+		.filter((entry): entry is [string, InProcessMcpServer] =>
+			Boolean((entry[1] as InProcessMcpServer | undefined)?.instance),
+		)
+		.map(([name, server]) => ({ name, server }));
+}
+
+function voiceToolName(server: string, tool: string): string {
+	// Keep the existing concise names for the two original voice surfaces.
+	// Other interactive servers are namespaced exactly like normal Desk tools,
+	// avoiding collisions such as admin.list_memory vs memory.list_memory.
+	return server === "opensession-sessions" || server === "opensession-todos"
+		? tool
+		: `${server}_${tool}`;
+}
+
+async function listVoiceMcpTools(user: string, sessionId: string) {
+	const tools: Array<Record<string, unknown>> = [];
+	for (const { name: serverName, server } of await voiceMcpServers(user, sessionId)) {
+		const client = new Client({ name: "desk-voice", version: "1.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await server.instance.connect(serverTransport);
+		await client.connect(clientTransport);
+		try {
+			const listed = await client.listTools();
+			for (const tool of listed.tools) {
+				const { $schema: _schema, ...parameters } = tool.inputSchema;
+				tools.push({
+					type: "function",
+					name: voiceToolName(serverName, tool.name),
+					description: tool.description,
+					parameters,
+				});
+			}
+		} finally {
+			await client.close();
+			await server.instance.close();
+		}
+	}
+	return tools;
+}
+
+/** Execute one of the normal Desk's interactive MCP tools under the verified
+ * voice caller's identity. Exported for the voice/MCP contract test. */
+export async function callVoiceMcpTool(
+	user: string,
+	sessionId: string,
+	name: string,
+	args: Record<string, unknown>,
+): Promise<{ found: boolean; result?: unknown }> {
+	for (const { name: serverName, server } of await voiceMcpServers(user, sessionId)) {
+		const client = new Client({ name: "desk-voice", version: "1.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await server.instance.connect(serverTransport);
+		await client.connect(clientTransport);
+		try {
+			const listed = await client.listTools();
+			const tool = listed.tools.find(
+				(candidate) => voiceToolName(serverName, candidate.name) === name,
+			);
+			if (!tool) continue;
+			return {
+				found: true,
+				result: await client.callTool({ name: tool.name, arguments: args }),
+			};
+		} finally {
+			await client.close();
+			await server.instance.close();
+		}
+	}
+	return { found: false };
+}
 
 function truncate(s: string, n: number): string {
 	return s.length > n ? `${s.slice(0, n)}…` : s;
@@ -204,12 +258,12 @@ function recentDeskContext(sessionId: string): string {
 
 /** Server-owned Realtime session policy. Exported for contract tests so a
  * client cannot silently fall back to OpenAI's default endpointing. */
-export function buildVoiceSessionConfig(sessionId: string) {
+export async function buildVoiceSessionConfig(sessionId: string, user = "Open Session") {
 	return {
 		type: "realtime",
 		model: DESK_VOICE_MODEL,
 		instructions: VOICE_INSTRUCTIONS + recentDeskContext(sessionId),
-		tools: VOICE_TOOLS,
+		tools: [...VOICE_TOOLS, ...(await listVoiceMcpTools(user, sessionId))],
 		tool_choice: "auto",
 		audio: {
 			input: {
@@ -233,6 +287,7 @@ export async function mintVoiceSecret(user: string): Promise<{
 			"No OpenAI API key configured for Desk voice — set one in Settings → Desk voice.",
 		);
 	const { sessionId } = ensureDeskSession(user);
+	const session = await buildVoiceSessionConfig(sessionId, user);
 	const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
 		method: "POST",
 		headers: {
@@ -241,7 +296,7 @@ export async function mintVoiceSecret(user: string): Promise<{
 		},
 		body: JSON.stringify({
 			expires_after: { anchor: "created_at", seconds: 600 },
-			session: buildVoiceSessionConfig(sessionId),
+			session,
 		}),
 	});
 	if (!res.ok) {
@@ -271,6 +326,8 @@ export async function executeVoiceTool(
 ): Promise<unknown> {
 	const control = getSessionControl();
 	const desk = ensureDeskSession(user);
+	const mcp = await callVoiceMcpTool(user, desk.sessionId, name, args);
+	if (mcp.found) return mcp.result;
 	switch (name) {
 		case "list_current_work": {
 			const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
@@ -330,28 +387,6 @@ export async function executeVoiceTool(
 			if (!id || !message)
 				return { error: "steer_session needs session_id and message" };
 			return await control.deliverToSession(id, message, user);
-		}
-		case "list_todos":
-			return {
-				todos: listTodos({ user }).map((t) => ({
-					id: t.id,
-					text: t.text,
-					due: t.due,
-				})),
-			};
-		case "add_todo": {
-			const text = String(args.text ?? "").trim();
-			if (!text) return { error: "add_todo needs text" };
-			const todo = addTodo({
-				user,
-				text,
-				source: { kind: "manual", by: user },
-			});
-			return { id: todo.id, added: todo.text };
-		}
-		case "complete_todo": {
-			const todo = updateTodo(String(args.id ?? ""), { status: "done" }, user);
-			return { id: todo.id, done: todo.text };
 		}
 		default:
 			return { error: `unknown tool ${name}` };
