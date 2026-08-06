@@ -144,6 +144,33 @@ export interface FeedFilterSpec {
 	optionsFromItems?: { value: string; label: string };
 }
 
+/**
+ * A project — the top level of the model: a source of work that owns a sidebar
+ * band and whose contents resolve to workspaces (mirror of
+ * src/server/projects.ts). Two kinds: a registered git repo, or a feed backed
+ * by an MCP server / integration. See CONCEPTS.md.
+ */
+export interface Project {
+	id: string;
+	kind: "repo" | "feed";
+	/** Unique across kinds: `repo:<id>` / `feed:<id>`. */
+	key: string;
+	label: string;
+	description?: string;
+	tileBg?: string;
+	repo?: {
+		ghRepo: string;
+		defaultBranch: string;
+		sharedCheckout: boolean;
+		isDefault: boolean;
+	};
+	feed?: {
+		refKind: string;
+		fromConfig: boolean;
+		mcpServers?: string[];
+	};
+}
+
 /** A sidebar feed band's identity (mirror of src/server/feeds.ts). */
 export interface FeedDescriptor {
 	id: string;
