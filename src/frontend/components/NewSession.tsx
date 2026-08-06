@@ -18,6 +18,7 @@ import {
   IconConnections,
   IconReturn,
   IconBox,
+  IconFile,
   IconFolderPlus,
   IconMap,
   IconStack,
@@ -705,7 +706,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               {
                 value: SCRATCH_REPO_VALUE,
                 label: "Scratch · no repo",
-                icon: <RepoTile name="scratch" />,
+                icon: <IconFile size={20} />,
               },
               ...(auth?.local && createTarget === "local"
                 ? [
@@ -734,7 +735,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             ariaLabel="Repository"
             isPhone={isPhone}
           >
-            <RepoTile name={mode === "scratch" ? "scratch" : repo} />
+            {mode === "scratch" ? (
+              <IconFile className="shrink-0" size={20} />
+            ) : (
+              <RepoTile name={repo} />
+            )}
             <span className="palette-trigger-label">
               {mode === "scratch"
                 ? "Scratch · no repo"
