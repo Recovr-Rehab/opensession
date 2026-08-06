@@ -137,25 +137,25 @@ export function repoLifecycleState(repo: SetupRepo): {
 			tone: "on",
 			label: setup ? "Ready" : "Boots",
 			description: setup
-				? `${where}/setup.sh provisions each worktree and ${where}/start.sh boots the dev server — previews and headless browser checks work.`
-				: `${where}/start.sh boots the dev server. Add ${where}/setup.sh to provision worktrees with anything beyond the default install.`,
+				? `${where}/ provisions each worktree and boots the dev server.`
+				: `${where}/start.sh boots the dev server — add setup.sh to provision worktrees.`,
 		};
 	if (previewCommand)
 		return {
 			tone: "on",
 			label: "Instance command",
-			description: `Boots through this instance's configured previewCommand. Committing ${where}/start.sh to the repo keeps the recipe with the code.`,
+			description: `Boots through this instance's previewCommand — commit ${where}/start.sh to keep the recipe with the code.`,
 		};
 	if (setup)
 		return {
 			tone: "warn",
 			label: "Setup only",
-			description: `${where}/setup.sh provisions worktrees, but nothing boots the app — add ${where}/start.sh to enable previews.`,
+			description: `${where}/setup.sh provisions worktrees — add start.sh to enable previews.`,
 		};
 	return {
 		tone: "off",
 		label: "None",
-		description: `No ${where}/ scripts — sessions get the default dependency install and the Preview button stays disabled.`,
+		description: `No ${where}/ scripts — previews stay disabled.`,
 	};
 }
 

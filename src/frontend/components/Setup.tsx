@@ -614,13 +614,18 @@ export function SetupPanel() {
 								const missing = status.repos.filter(
 									(r) => repoLifecycleState(r).tone !== "on",
 								);
+								const named = missing
+									.slice(0, 3)
+									.map((r) => r.label)
+									.join(", ");
+								const rest = missing.length - 3;
 								return (
 									<ChecklistRow
 										title="Local dev setup"
 										description={
 											missing.length === 0
 												? "Every repo commits lifecycle scripts — sessions provision themselves, previews boot, and agents can check their own UI changes in a browser."
-												: `No boot script in ${missing.map((r) => r.label).join(", ")} — the Preview button stays disabled there. Add .opensession/start.sh to the repo (see docs/repo-lifecycle.md).`
+												: `No boot script in ${named}${rest > 0 ? ` and ${rest} more` : ""} — the Preview button stays disabled there. Add .opensession/start.sh to the repo (docs/repo-lifecycle.md).`
 										}
 										tone={
 											bootable.length === status.repos.length
