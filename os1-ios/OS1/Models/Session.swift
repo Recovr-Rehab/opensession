@@ -14,7 +14,7 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var repo: String?
     var branch: String?
     var worktreeDir: String?
-    var projectId: String?
+    var workspaceId: String?
     var sideChatOf: String?
     var mode: String?
     var model: String?
@@ -175,7 +175,7 @@ extension Session {
         // start, so the pending row joins that workspace's tab strip (and its
         // sidebar row) immediately instead of flashing as a separate session
         // until the first poll lands.
-        session.projectId = workspaceId
+        session.workspaceId = workspaceId
         session.mode = mode
         session.model = model
         session.effort = effort

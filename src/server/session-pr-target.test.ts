@@ -10,7 +10,7 @@ const session = {
 } as UnifiedSession;
 
 const workspace = {
-	id: "prj-review",
+	id: "ws-review",
 	name: "#5286 Add Lottie timeline primitive",
 	createdBy: "GitHub (automation)",
 	createdAt: "2026-07-28T00:00:00.000Z",

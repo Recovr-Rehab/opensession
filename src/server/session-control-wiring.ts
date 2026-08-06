@@ -285,8 +285,8 @@ registerSessionControl({
 		const sandboxProvider = sandboxResolved.provider;
 		const remoteSandbox = isRemoteSandboxProvider(sandboxProvider);
 		const parentWorkspace =
-			parentSession?.projectId
-				? getWorkspace(parentSession.projectId)
+			parentSession?.workspaceId
+				? getWorkspace(parentSession.workspaceId)
 				: null;
 		// The workspace this chat lands in: the one it explicitly joins, else the
 		// parent's. Everything a chat inherits from its workspace — repo context,
@@ -318,7 +318,7 @@ registerSessionControl({
 			// child sees the parent's downloads); standalone scratch creates get
 			// a fresh one. Never a repo checkout (the feeds design).
 			wtPath = ensureScratchDir(
-				joinedWorkspace?.id || parentSession?.projectId || randomUUIDv7(),
+				joinedWorkspace?.id || parentSession?.workspaceId || randomUUIDv7(),
 			);
 			sessionBranch = "";
 		} else if (isAsk) {
@@ -393,14 +393,14 @@ registerSessionControl({
 		// A joined workspace is the chat's workspace, which also skips the mint /
 		// adopt block below — and with it the auto-naming: a chat that merely
 		// joins an existing workspace must never rename it.
-		let projectId = joinedWorkspace?.id || parentSession?.projectId || null;
+		let resolvedWorkspaceId = joinedWorkspace?.id || parentSession?.workspaceId || null;
 		// A workspace minted below from THIS chat's provisional first line is
 		// renamed once the generated summary lands, exactly like the web create
 		// path — the sidebar rows (web and native) are titled by the workspace,
 		// so without this a session started from the native apps wears its raw
 		// 80-character prompt for life while its own title is a short summary.
 		let autoNamedWorkspace: Workspace | null = null;
-		if (!projectId) {
+		if (!resolvedWorkspaceId) {
 			// Adopt the workspace that already owns the (parent's or this child's)
 			// worktree before minting a duplicate one over it. Failing that, mint —
 			// every chat lives in a workspace (chat-workspace.ts), so a parentless
@@ -411,7 +411,7 @@ registerSessionControl({
 			const owned =
 				workspaceOwningWorktree(parentSession?.worktreeDir) ??
 				workspaceOwningWorktree(wtPath);
-			if (owned) projectId = owned.id;
+			if (owned) resolvedWorkspaceId = owned.id;
 			else {
 				const branchForWs = parentSession?.branch || sessionBranch;
 				// Only an isolated worktree is owned — never a shared main/ask
@@ -427,15 +427,15 @@ registerSessionControl({
 					...(branchForWs ? { branch: branchForWs } : {}),
 					...(dir ? { worktreeDir: dir } : {}),
 				});
-				projectId = ws.id;
+				resolvedWorkspaceId = ws.id;
 				// Only when the name was seeded from this chat's own first line
 				// (compared before createWorkspace trims it): a workspace named
 				// after the parent's identity belongs to the parent's work, and
 				// this child's summary must not rename it.
 				if (wsName === title) autoNamedWorkspace = ws;
 			}
-			if (projectId && parentSession?.source === "opensession")
-				touchNativeSession(parentSession.id, { projectId });
+			if (resolvedWorkspaceId && parentSession?.source === "opensession")
+				touchNativeSession(parentSession.id, { workspaceId: resolvedWorkspaceId });
 		}
 		// Replace the raw first-line title with a short summary in the background;
 		// the next sessions poll (≤5s) picks it up. A workspace minted for this
@@ -492,7 +492,7 @@ registerSessionControl({
 					worktreeDir: wtPath,
 					// Scratch sessions are repo-less (wtPath is a plain dir).
 					...(isScratch ? {} : { repo: repo.id }),
-					...(projectId ? { projectId } : {}),
+					...(resolvedWorkspaceId ? { workspaceId: resolvedWorkspaceId } : {}),
 					...(parentSessionId ? { parentSessionId } : {}),
 					// Persisted so the failure beacon (handoff-evidence.ts) can tell
 					// a worker that owes its parent a report from a child session

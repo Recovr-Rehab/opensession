@@ -67,15 +67,15 @@ export function unpinArchivedSessions(
   if (!justArchived.length) return;
   const dead = (s: UnifiedSession) => s.archived || isArchivedId(s.id);
   const keys: string[] = [];
-  const projectIds = new Set<string>();
+  const workspaceIds = new Set<string>();
   for (const s of justArchived) {
     keys.push(s.id, ...(s.aliasIds || []));
-    if (s.projectId) projectIds.add(s.projectId);
+    if (s.workspaceId) workspaceIds.add(s.workspaceId);
   }
   // A workspace pin is stale only once none of its chats are live anymore —
   // else archiving one chat would yank a still-active workspace off Pinned.
-  for (const pid of projectIds) {
-    if (!allSessions.some((s) => s.projectId === pid && !dead(s)))
+  for (const pid of workspaceIds) {
+    if (!allSessions.some((s) => s.workspaceId === pid && !dead(s)))
       keys.push(`workspace:${pid}`);
   }
   unpinEverywhere(keys);

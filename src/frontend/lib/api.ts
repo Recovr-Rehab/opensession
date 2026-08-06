@@ -12,7 +12,7 @@ import type {
 	FeedItem,
 	ReportGroup,
 	ReportMeta,
-	Project,
+	Workspace,
 	AnalyticsSummary,
 	OsReview,
 } from "./types";
@@ -612,32 +612,32 @@ export async function registerRepoApi(input: {
 	});
 }
 
-// ── Projects (folders that group chats) ──
+// ── Workspaces (containers that group chats) ──
 
-export async function fetchProjects(): Promise<Project[]> {
+export async function fetchWorkspaces(): Promise<Workspace[]> {
 	try {
-		const data = await request<{ projects?: Project[] }>("/projects");
-		return data?.projects ?? [];
+		const data = await request<{ workspaces?: Workspace[] }>("/workspaces");
+		return data?.workspaces ?? [];
 	} catch (e) {
-		console.warn("fetchProjects failed:", e);
+		console.warn("fetchWorkspaces failed:", e);
 		return [];
 	}
 }
 
-export async function createProjectApi(input: {
+export async function createWorkspaceApi(input: {
 	name: string;
 	repo?: string;
 	color?: string;
 	user: string;
-}): Promise<Project> {
-	const body = await request<{ project: Project }>("/projects", {
+}): Promise<Workspace> {
+	const body = await request<{ workspace: Workspace }>("/workspaces", {
 		method: "POST",
 		body: input,
 	});
-	return body.project;
+	return body.workspace;
 }
 
-export async function updateProjectApi(
+export async function updateWorkspaceApi(
 	id: string,
 	patch: {
 		name?: string;
@@ -646,18 +646,18 @@ export async function updateProjectApi(
 		color?: string | null;
 		order?: number;
 	},
-): Promise<Project> {
-	const body = await request<{ project: Project }>(
-		`/projects/${encodeURIComponent(id)}`,
+): Promise<Workspace> {
+	const body = await request<{ workspace: Workspace }>(
+		`/workspaces/${encodeURIComponent(id)}`,
 		{ method: "PATCH", body: patch },
 	);
-	return body.project;
+	return body.workspace;
 }
 
-export async function deleteProjectApi(id: string): Promise<void> {
-	await request<void>(`/projects/${encodeURIComponent(id)}`, {
+export async function deleteWorkspaceApi(id: string): Promise<void> {
+	await request<void>(`/workspaces/${encodeURIComponent(id)}`, {
 		method: "DELETE",
-		label: "Failed to delete project",
+		label: "Failed to delete workspace",
 	});
 }
 
@@ -696,14 +696,14 @@ export async function promoteChatApi(
 	);
 }
 
-/** Move a chat into a project (or `null` to make it standalone). */
-export async function setSessionProjectApi(
+/** Move a chat into a workspace (or `null` to make it standalone). */
+export async function setSessionWorkspaceApi(
 	sessionId: string,
-	projectId: string | null,
+	workspaceId: string | null,
 ): Promise<void> {
-	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/project`, {
+	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/workspace`, {
 		method: "POST",
-		body: { projectId },
+		body: { workspaceId },
 	});
 }
 

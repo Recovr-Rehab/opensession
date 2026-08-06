@@ -434,7 +434,7 @@ export async function handleSessionsRoutes(
 		if (m && req.method === "GET") {
 			const wsId = decodeURIComponent(m[1]);
 			const chats = getCachedSessions().filter(
-				(s) => s.projectId === wsId,
+				(s) => s.workspaceId === wsId,
 			);
 			return Response.json(await buildWorkspaceOverview(chats));
 		}
@@ -877,10 +877,10 @@ export async function handleSessionsRoutes(
 			// otherwise auto-wrapped 1:1 workspaces linger as undeletable empty
 			// sidebar rows. PR-backed workspaces (`key`) stay: they regroup new
 			// chats for the same PR.
-			if (session.projectId) {
-				const ws = getWorkspace(session.projectId);
+			if (session.workspaceId) {
+				const ws = getWorkspace(session.workspaceId);
 				const members = getAllSessions().filter(
-					(s) => s.projectId === session.projectId,
+					(s) => s.workspaceId === session.workspaceId,
 				);
 				if (ws && !ws.key && members.length === 0)
 					deleteWorkspace(ws.id);

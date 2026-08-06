@@ -389,7 +389,7 @@ struct WorktreeInfoView: View {
     }
 
     private func loadOverview() async -> OS1API.WorkspaceOverview? {
-        if let id = currentSession.projectId, !id.isEmpty {
+        if let id = currentSession.workspaceId, !id.isEmpty {
             return try? await OS1API.workspaceOverview(workspaceId: id)
         }
 
@@ -457,7 +457,7 @@ struct WorktreeInfoView: View {
     private var loadIdentity: String {
         [
             currentSession.id,
-            currentSession.projectId ?? "",
+            currentSession.workspaceId ?? "",
             currentSession.worktreeDir ?? "",
             currentSession.branch ?? "",
             String(currentSession.attachedRepos?.count ?? 0),

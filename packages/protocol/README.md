@@ -46,5 +46,5 @@ Engine-neutral events a run emits while executing: `init`, `text_chunk`,
 
 Fields are added, never repurposed. A server ahead of a client adds keys — it
 never breaks one. Clients must ignore unknown frame types. Historical id
-prefixes (`bks-`, `prj-`, `/backstage/*` route literals) are protocol
-constants; renaming them is a breaking change.
+prefixes (`bks-`, `/backstage/*` route literals) are protocol constants;
+renaming them is a breaking change.

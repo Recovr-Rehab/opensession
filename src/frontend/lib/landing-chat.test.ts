@@ -67,20 +67,20 @@ describe("mainChat", () => {
 	test("prefers the oldest human chat that actually ran", () => {
 		const review = chat({
 			id: "bks-ghpr-42-review",
-			projectId: "prj-1",
+			workspaceId: "ws-1",
 			automation: "github-pr-review",
 			claudeSessionId: "review-run",
 			createdAt: "2026-07-01T00:00:00.000Z",
 		});
 		const shell = chat({
 			id: "shell",
-			projectId: "prj-1",
+			workspaceId: "ws-1",
 			createdAt: "2026-07-02T00:00:00.000Z",
 			lastActivity: "2026-07-02T00:00:00.000Z",
 		});
 		const human = chat({
 			id: "human",
-			projectId: "prj-1",
+			workspaceId: "ws-1",
 			claudeSessionId: "human-run",
 			createdAt: "2026-07-03T00:00:00.000Z",
 		});
@@ -102,98 +102,98 @@ describe("mainChat", () => {
 });
 
 describe("pickLandingChat", () => {
-	const prj = "prj-1";
+	const wsId = "ws-1";
 	test("oldest live chat with content wins", () => {
 		const a = chat({
 			id: "a",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "ses_a",
 			createdAt: "2026-07-01T00:00:00.000Z",
 		});
 		const b = chat({
 			id: "b",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "ses_b",
 			createdAt: "2026-07-02T00:00:00.000Z",
 		});
-		expect(pickLandingChat([b, a], prj)?.id).toBe("a");
+		expect(pickLandingChat([b, a], wsId)?.id).toBe("a");
 	});
 	test("empty shell loses to archived history (lost-history bug)", () => {
 		const shell = chat({
 			id: "shell",
-			projectId: prj,
+			workspaceId: wsId,
 			createdAt: "2026-07-23T00:00:00.000Z",
 			lastActivity: "2026-07-23T00:00:00.000Z",
 		});
 		const real = chat({
 			id: "real",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "ses_r",
 			archived: true,
 			createdAt: "2026-07-01T00:00:00.000Z",
 			lastActivity: "2026-07-10T00:00:00.000Z",
 		});
-		expect(pickLandingChat([shell, real], prj)?.id).toBe("real");
+		expect(pickLandingChat([shell, real], wsId)?.id).toBe("real");
 	});
 	test("newest archived conversation wins among archived", () => {
 		const older = chat({
 			id: "older",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "s1",
 			archived: true,
 			lastActivity: "2026-07-05T00:00:00.000Z",
 		});
 		const newer = chat({
 			id: "newer",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "s2",
 			archived: true,
 			lastActivity: "2026-07-10T00:00:00.000Z",
 		});
-		expect(pickLandingChat([older, newer], prj)?.id).toBe("newer");
+		expect(pickLandingChat([older, newer], wsId)?.id).toBe("newer");
 	});
 	test("a shell still wins when the workspace has no history anywhere", () => {
-		const shell = chat({ id: "shell", projectId: prj });
-		expect(pickLandingChat([shell], prj)?.id).toBe("shell");
+		const shell = chat({ id: "shell", workspaceId: wsId });
+		expect(pickLandingChat([shell], wsId)?.id).toBe("shell");
 	});
 	test("remembered chat wins over the oldest live chat", () => {
 		const a = chat({
 			id: "a",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "ses_a",
 			createdAt: "2026-07-01T00:00:00.000Z",
 		});
 		const b = chat({
 			id: "b",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "ses_b",
 			createdAt: "2026-07-02T00:00:00.000Z",
 		});
-		expect(pickLandingChat([a, b], prj, "b")?.id).toBe("b");
+		expect(pickLandingChat([a, b], wsId, "b")?.id).toBe("b");
 	});
 	test("a stale remembered id (archived / other workspace) falls back", () => {
-		const live = chat({ id: "live", projectId: prj, claudeSessionId: "s1" });
+		const live = chat({ id: "live", workspaceId: wsId, claudeSessionId: "s1" });
 		const gone = chat({
 			id: "gone",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "s2",
 			archived: true,
 		});
-		expect(pickLandingChat([live, gone], prj, "gone")?.id).toBe("live");
-		expect(pickLandingChat([live], prj, "elsewhere")?.id).toBe("live");
+		expect(pickLandingChat([live, gone], wsId, "gone")?.id).toBe("live");
+		expect(pickLandingChat([live], wsId, "elsewhere")?.id).toBe("live");
 	});
 	test("legacy hidden chats and other workspaces are ignored", () => {
 		const side = chat({
 			id: "side",
-			projectId: prj,
+			workspaceId: wsId,
 			claudeSessionId: "s",
 			sideChatOf: "parent",
 		});
 		const other = chat({
 			id: "other",
-			projectId: "prj-2",
+			workspaceId: "ws-2",
 			claudeSessionId: "s",
 		});
-		expect(pickLandingChat([side, other], prj)).toBeUndefined();
+		expect(pickLandingChat([side, other], wsId)).toBeUndefined();
 	});
 });

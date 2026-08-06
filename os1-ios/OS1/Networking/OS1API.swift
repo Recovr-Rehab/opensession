@@ -61,10 +61,10 @@ enum OS1API {
     /// Canonical workspace names for collapsing sibling chats into one row.
     static func workspaces() async throws -> [WorkspaceSummary] {
         struct WorkspacesResponse: Decodable, Sendable {
-            let projects: [WorkspaceSummary]
+            let workspaces: [WorkspaceSummary]
         }
-        let response: WorkspacesResponse = try await get("/api/projects")
-        return response.projects
+        let response: WorkspacesResponse = try await get("/api/workspaces")
+        return response.workspaces
     }
 
     static func transcript(sessionId: String) async throws -> [TranscriptEntry] {
@@ -305,9 +305,9 @@ enum OS1API {
     }
 
     static func renameWorkspace(workspaceId: String, name: String) async throws {
-        struct RenameResponse: Decodable { let project: WorkspaceSummary? }
+        struct RenameResponse: Decodable { let workspace: WorkspaceSummary? }
         let _: RenameResponse = try await patch(
-            "/api/projects/\(workspaceId)",
+            "/api/workspaces/\(workspaceId)",
             body: ["name": name]
         )
     }

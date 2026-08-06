@@ -82,9 +82,9 @@ import {
 	renameSessionApi,
 	setSessionStatusApi,
 	fetchNotes,
-	fetchProjects,
-	updateProjectApi,
-	deleteProjectApi,
+	fetchWorkspaces,
+	updateWorkspaceApi,
+	deleteWorkspaceApi,
 	newChatApi,
 	fetchSessionNoteActivityApi,
 	resolveWorkspaceApi,
@@ -102,7 +102,7 @@ import {
 } from "./lib/workspace-last-chat";
 import { sessionHasWorkspace } from "./lib/session-workspace";
 import type {
-	Project,
+	Workspace,
 	SupportThread,
 	FeedDescriptor,
 	FeedItem,
@@ -446,7 +446,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		mode: "ask" | "code" | "scratch";
 		repo: string;
 		branch: string | null;
-		projectId?: string;
+		workspaceId?: string;
 		model?: string;
 		images?: string[];
 		startedAt: string;
@@ -625,23 +625,23 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		return () => window.removeEventListener("focus", onFocus);
 	}, [refreshNotes]);
 
-	// Projects (folders that group chats) — powers the sidebar's Projects section
-	// and the project-scoped tab strip. Refetched on focus and when sessions change
-	// (a new PR chat can auto-create a folder server-side).
-	const [projects, setProjects] = useState<Project[]>([]);
-	const [projectsLoaded, setProjectsLoaded] = useState(false);
-	const refreshProjects = React.useCallback(() => {
-		fetchProjects()
-			.then(setProjects)
+	// Workspaces (containers that group chats) — powers the sidebar rows
+	// and the workspace-scoped tab strip. Refetched on focus and when sessions
+	// change (a new PR chat can auto-create a workspace server-side).
+	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+	const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
+	const refreshWorkspaces = React.useCallback(() => {
+		fetchWorkspaces()
+			.then(setWorkspaces)
 			.catch(() => {})
-			.finally(() => setProjectsLoaded(true));
+			.finally(() => setWorkspacesLoaded(true));
 	}, []);
 	useEffect(() => {
-		refreshProjects();
-		const onFocus = () => refreshProjects();
+		refreshWorkspaces();
+		const onFocus = () => refreshWorkspaces();
 		window.addEventListener("focus", onFocus);
 		return () => window.removeEventListener("focus", onFocus);
-	}, [refreshProjects]);
+	}, [refreshWorkspaces]);
 
 	// Subscribe to the per-user pin/color stores. Both hydrate async at module
 	// load, and on a fast localhost that load() can resolve (and emit) before
@@ -664,14 +664,14 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		const archivedIds = new Set(justArchived.map((s) => s.id));
 		const all = sessionsRef.current;
 		const keys: string[] = [];
-		const projectIds = new Set<string>();
+		const workspaceIds = new Set<string>();
 		for (const s of justArchived) {
 			keys.push(s.id, ...(s.aliasIds || []));
-			if (s.projectId) projectIds.add(s.projectId);
+			if (s.workspaceId) workspaceIds.add(s.workspaceId);
 		}
-		for (const pid of projectIds) {
+		for (const pid of workspaceIds) {
 			const hasLive = all.some(
-				(s) => s.projectId === pid && !s.archived && !archivedIds.has(s.id),
+				(s) => s.workspaceId === pid && !s.archived && !archivedIds.has(s.id),
 			);
 			if (!hasLive) keys.push(`workspace:${pid}`);
 		}
@@ -818,9 +818,9 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	const [palette, setPalette] = useState<{
 		open: boolean;
 		prompt?: string;
-		// When starting a chat inside a project, prefill the folder + its shared repo
+		// When starting a chat inside a workspace, prefill it + its shared repo
 		// and worktree so the new chat lands next to its siblings by default.
-		projectId?: string;
+		workspaceId?: string;
 		repo?: string;
 		branch?: string;
 		mode?: "ask" | "code" | "scratch";
@@ -894,7 +894,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		{},
 	);
 	// Bumped when the per-workspace tab order changes (a drag-drop commit, or a
-	// storage push from another tab) so the strip re-derives `projectChats` in
+	// storage push from another tab) so the strip re-derives `workspaceChats` in
 	// the new order. The order itself lives in localStorage (lib/tab-order).
 	const [, setTabOrderRev] = useState(0);
 	useEffect(
@@ -987,7 +987,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	}, []);
 
 	// Creator Micro macropad → client-side navigation. A local daemon on the
-	// user's machine streams app route paths (e.g. "/workspace/<prj>/chat/<bks>")
+	// user's machine streams app route paths (e.g. "/workspace/<ws>/chat/<chat>")
 	// over SSE; each message navigates in-app via the router — no reload.
 	// Silently inert when the daemon isn't running / not on this machine.
 	useEffect(() => {
@@ -1118,7 +1118,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						startedBy: user,
 						title: msg.newWorkspace
 							? "New workspace"
-							: draft?.projectId
+							: draft?.workspaceId
 								? "New chat"
 								: "New session",
 						lastActivity: now,
@@ -1128,7 +1128,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						transcriptPath: null,
 						mode: draft?.mode,
 						repo: draft?.repo,
-						projectId: msg.workspaceId || draft?.projectId || null,
+						workspaceId: msg.workspaceId || draft?.workspaceId || null,
 						model: draft?.model,
 						archived: false,
 						// Worktree prep still running server-side — the viewer opens
@@ -1171,11 +1171,11 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					unstick(msg.id);
 				}, 30000);
 				refresh();
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "session", id: msg.id });
 			}
 		});
-	}, [addHandler, refresh, refreshProjects, unstick]);
+	}, [addHandler, refresh, refreshWorkspaces, unstick]);
 
 	// Drop the pending flag once we've navigated away from the pending chat (its
 	// fallback timeout clears it otherwise). We deliberately DON'T clear it the
@@ -1214,21 +1214,21 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// view tab opened in a workspace survives switching between sibling chats.
 	const wsKeyFor = (s: UnifiedSession | null | undefined): string | null =>
 		s
-			? s.projectId ||
+			? s.workspaceId ||
 				(s.worktreeDir?.includes("/worktrees/")
 					? s.worktreeDir
 					: s.id)
 			: null;
 	// On the chat-less workspace route the key is the route's workspace id.
 	const routeWorkspaceId = route.view === "workspace" ? route.id : null;
-	const routeWorkspace: Project | null = routeWorkspaceId
-		? projects.find((p) => p.id === routeWorkspaceId) || null
+	const routeWorkspace: Workspace | null = routeWorkspaceId
+		? workspaces.find((p) => p.id === routeWorkspaceId) || null
 		: null;
 	const wsKey = routeWorkspaceId ?? wsKeyFor(currentSession);
 	const wsRecord =
 		routeWorkspace ??
-		(currentSession?.projectId
-			? projects.find((p) => p.id === currentSession.projectId) || null
+		(currentSession?.workspaceId
+			? workspaces.find((p) => p.id === currentSession.workspaceId) || null
 			: null);
 	const reviewDismissed = !!wsKey && reviewClosed.has(wsKey);
 	// Review only leads for a chat-less PR workspace; with chats, the main/last
@@ -1237,7 +1237,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		!!currentSession ||
 		(!!wsKey &&
 			sessions.some(
-				(s) => !s.archived && !s.sideChatOf && s.projectId === wsKey,
+				(s) => !s.archived && !s.sideChatOf && s.workspaceId === wsKey,
 			));
 	const defaultChatView = defaultChatWorkspaceView(
 		wsRecord,
@@ -1270,7 +1270,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// opens Review. Declared after the wsKey reset effect above so the landing
 	// choice wins the same commit.
 	useEffect(() => {
-		if (route.view !== "workspace" || !projectsLoaded) return;
+		if (route.view !== "workspace" || !workspacesLoaded) return;
 		// One-shot: closing the Review tab replaces the URL (dropping /review),
 		// which re-runs this effect — without the suppress it would immediately
 		// re-seed the default pane and reopen the tab just closed.
@@ -1278,7 +1278,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			suppressWsSeedRef.current = false;
 			return;
 		}
-		const p = projects.find((x) => x.id === route.id) || null;
+		const p = workspaces.find((x) => x.id === route.id) || null;
 		// Default pane by workspace shape: ticket workspaces open on the
 		// Conversation; everything else — PR-backed included — lands in its
 		// main/last-open chat. A PR workspace only defaults to Review when it
@@ -1352,7 +1352,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [
 		route.view === "workspace" ? `${route.id}:${route.tab ?? ""}` : null,
-		projectsLoaded,
+		workspacesLoaded,
 	]);
 	// Retired standalone pages (2026-07-24): /pr/…, /support/… and /reviews
 	// deep links resolve into the workspace container and redirect (replace).
@@ -1366,7 +1366,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			tab: "review" | "conversation",
 		) => {
 			if (stale) return;
-			refreshProjects();
+			refreshWorkspaces();
 			navigate({ view: "workspace", id: workspaceId, tab }, { replace: true });
 		};
 		if (route.view === "pr") {
@@ -1385,9 +1385,9 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				const s = sessionsRef.current.find(
 					(x) => x.id === id || x.aliasIds?.includes(id),
 				);
-				if (s?.projectId)
+				if (s?.workspaceId)
 					navigate(
-						{ view: "workspace", id: s.projectId, tab: "review" },
+						{ view: "workspace", id: s.workspaceId, tab: "review" },
 						{ replace: true },
 					);
 				else if (s?.branch)
@@ -1465,8 +1465,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// workspace record — otherwise the tab vanishes as soon as a chat exists.
 	const videoWorkspace =
 		routeWorkspace ??
-		(currentSession?.projectId
-			? projects.find((p) => p.id === currentSession.projectId) ?? null
+		(currentSession?.workspaceId
+			? workspaces.find((p) => p.id === currentSession.workspaceId) ?? null
 			: null);
 	const videoRef =
 		(
@@ -1778,7 +1778,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						title: item.pr.title,
 					},
 				});
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId });
 			} catch {
 				if (item.sessionId) navigate({ view: "reviews", id: item.sessionId });
@@ -1786,7 +1786,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					navigate({ view: "pr", repo: item.pr.repo, branch: item.pr.branch });
 			}
 		},
-		[refreshProjects],
+		[refreshWorkspaces],
 	);
 	const openPrReview = React.useCallback(
 		async (pr: OpenPr) => {
@@ -1799,13 +1799,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						title: pr.title,
 					},
 				});
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
 			} catch {
 				navigate({ view: "pr", repo: pr.repo, branch: pr.branch });
 			}
 		},
-		[refreshProjects],
+		[refreshWorkspaces],
 	);
 	// Sidebar feed row (Tella video, …) → the item's ONE workspace, its web
 	// panel foregrounded (the feeds design).
@@ -1821,13 +1821,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					},
 					name: item.title,
 				});
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId, tab: "video" });
 			} catch (e) {
 				console.error("Feed item open failed:", e);
 			}
 		},
-		[refreshProjects],
+		[refreshWorkspaces],
 	);
 	// Sidebar Support row → the ticket's ONE workspace, Conversation tab. The
 	// row's title rides along as the workspace-name hint (no Plain round-trip).
@@ -1839,13 +1839,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					name:
 						t.title || t.customer.name || t.customer.email || undefined,
 				});
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId, tab: "conversation" });
 			} catch {
 				navigate({ view: "support", threadId: t.id });
 			}
 		},
-		[refreshProjects],
+		[refreshWorkspaces],
 	);
 	// Open a session's Review tab from the sidebar: select it and foreground its
 	// workspace's Review once it lands (pendingReviewOpen survives the
@@ -1871,12 +1871,12 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		route.view === "notes" && route.sel?.kind === "note" ? route.sel.id : null;
 
 	// The tab strip is scoped to the open chat's workspace: its sibling chats
-	// (same projectId), oldest first. Chats with no workspace (slack/linear
+	// (same workspaceId), oldest first. Chats with no workspace (slack/linear
 	// sources — their files are read-only, so the migration couldn't wrap them)
 	// fall back to grouping by shared isolated worktree, so a bks- sibling made
 	// via + shows up next to its slack source. Failing that, the open chat alone
 	// still gets a strip (one tab + the + button).
-	const activeProjectId = routeWorkspaceId ?? (currentSession?.projectId || null);
+	const activeWorkspaceId = routeWorkspaceId ?? (currentSession?.workspaceId || null);
 
 	// Feed the ⌘⇧C copy-link shortcut: the open chat (workspace-scoped when it
 	// has one), the open workspace/PR preview, or nothing linkable.
@@ -1896,15 +1896,15 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		if (route.view !== "session" || !currentSession) return;
 		// Remember the open chat as its workspace's landing tab, so re-entering
 		// the workspace (sidebar, bare /workspace/<id> URL) returns here.
-		if (activeProjectId) saveWorkspaceLastChat(activeProjectId, route.id);
-		const canonical = activeProjectId
-			? `${BASE_PATH}/workspace/${encodeURIComponent(activeProjectId)}/chat/${encodeURIComponent(route.id)}`
+		if (activeWorkspaceId) saveWorkspaceLastChat(activeWorkspaceId, route.id);
+		const canonical = activeWorkspaceId
+			? `${BASE_PATH}/workspace/${encodeURIComponent(activeWorkspaceId)}/chat/${encodeURIComponent(route.id)}`
 			: `${BASE_PATH}/session/${encodeURIComponent(route.id)}`;
 		if (location.pathname !== canonical)
 			// Carry the entry's state across: dropping it would erase this panel's
 			// depth and strand `goBack` (and the Back caret) on the way home.
 			history.replaceState(history.state, "", canonical);
-	}, [route, currentSession, activeProjectId]);
+	}, [route, currentSession, activeWorkspaceId]);
 	const byCreated = (a: UnifiedSession, b: UnifiedSession) =>
 		(a.createdAt || "").localeCompare(b.createdAt || "");
 	// Archived (closed) chats leave the strip — except the one you're actively
@@ -1912,12 +1912,12 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	const liveTab = (s: UnifiedSession) =>
 		!s.archived || s.id === currentSession?.id;
 	// The strip's natural order (createdAt asc), before any user reordering.
-	const naturalChats: UnifiedSession[] = activeProjectId
+	const naturalChats: UnifiedSession[] = activeWorkspaceId
 		? sessions
 				.filter(
 					(s) =>
 						liveTab(s) &&
-						s.projectId === activeProjectId &&
+						s.workspaceId === activeWorkspaceId &&
 						!s.sideChatOf &&
 						// Workers stay behind their parent until explicitly opened from the
 						// header's worker menu. The selected worker then gets a temporary tab.
@@ -1940,14 +1940,14 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// The stable workspace key the tab order is saved under: the workspace id, or
 	// the shared isolated-worktree path for workspace-less (slack/linear) groups.
 	// Empty ⇒ a lone standalone chat, which has nothing to reorder.
-	const tabOrderKey = activeProjectId
-		? activeProjectId
+	const tabOrderKey = activeWorkspaceId
+		? activeWorkspaceId
 		: currentSession?.worktreeDir?.includes("/worktrees/")
 			? currentSession.worktreeDir
 			: "";
 	// Apply the user's saved left-to-right order (drag-drop). Unknown/new chats
 	// fall to the end in natural order; a stale saved id matches nothing.
-	const projectChats: UnifiedSession[] = (() => {
+	const workspaceChats: UnifiedSession[] = (() => {
 		if (!tabOrderKey || naturalChats.length < 2) return naturalChats;
 		const byId = new Map(naturalChats.map((s) => [s.id, s] as const));
 		return applyTabOrder(
@@ -1969,7 +1969,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// Every tab in the strip, in its natural order: chats first, then the view
 	// panes…
 	const naturalStripTabIds = [
-		...projectChats.map((chat) => chat.id),
+		...workspaceChats.map((chat) => chat.id),
 		...viewTabs.map((tab) => tab.id),
 	];
 	// …then the arrangement the user dragged them into. Chats and panes share
@@ -2098,8 +2098,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				: null;
 		const inBar = ids ? new Set(ids) : null;
 		const barChats = inBar
-			? projectChats.filter((chat) => inBar.has(chat.id))
-			: projectChats;
+			? workspaceChats.filter((chat) => inBar.has(chat.id))
+			: workspaceChats;
 		const barActive = side ? activeIdFor(side) : focusedTopTabId;
 		const barViews = (inBar ? viewTabs.filter((tab) => inBar.has(tab.id)) : viewTabs).map(
 			(tab) => (side ? { ...tab, active: tab.id === barActive } : tab),
@@ -2187,10 +2187,10 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// newest activity first. The open chat is excluded — if it's archived it
 	// already holds a live tab via liveTab().
 	const archivedChats: UnifiedSession[] = (
-		activeProjectId
+		activeWorkspaceId
 			? sessions.filter(
 					(s) =>
-						s.archived && s.projectId === activeProjectId && !s.sideChatOf,
+						s.archived && s.workspaceId === activeWorkspaceId && !s.sideChatOf,
 				)
 			: currentSession?.worktreeDir?.includes("/worktrees/")
 				? sessions.filter(
@@ -2277,12 +2277,12 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		const src = currentSession || mainChat(naturalChats);
 		if (!src) {
 			// "+" on an empty workspace (chat-less route): no sibling to clone —
-			// open the new-chat palette scoped to it, same as onOpenProject.
+			// open the new-chat palette scoped to it, same as onOpenWorkspace.
 			if (route.view === "workspace") {
-				const p = projects.find((x) => x.id === route.id);
+				const p = workspaces.find((x) => x.id === route.id);
 				setPalette({
 					open: true,
-					projectId: route.id,
+					workspaceId: route.id,
 					repo: p?.repo,
 					branch: p?.branch,
 					// Feed workspaces (externalRefs, no repo) default new chats
@@ -2386,7 +2386,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		// resolves without it, and collapses on its own once a bar is emptied.
 		// Leaving the id in the record means restoring the chat later puts it
 		// back in the bar it was closed from.
-		const next = wasOpen ? projectChats.find((c) => c.id !== s.id) : null;
+		const next = wasOpen ? workspaceChats.find((c) => c.id !== s.id) : null;
 		let replacementId: string | null = null;
 		if (wasOpen && !next) {
 			try {
@@ -2935,7 +2935,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					return next;
 				})
 			}
-			workspaceChats={projectChats}
+			workspaceChats={workspaceChats}
 			onSetStatus={setChatLanes}
 			showReview={
 				splitMode ? viewTabKind(surfaceId) === "review" : focused && reviewActive
@@ -2980,12 +2980,12 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			onCloseAssets={closeAssetsTab}
 			onOpenWorkspace={() => setActiveViewTab(null)}
 			allSessions={sessions}
-			allProjects={projects}
+			allWorkspaces={workspaces}
 			onNewChat={handleNewChat}
 			// Mirrors SessionTabs' own "render nothing" rule so the header's
 			// lone-chat + never doubles up with the strip's.
 			tabStripVisible={
-				!!activeTabSplit || projectChats.length > 1 || viewTabs.length > 0
+				!!activeTabSplit || workspaceChats.length > 1 || viewTabs.length > 0
 			}
 			parentSession={
 				viewerSession.parentSessionId
@@ -3022,19 +3022,19 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				refresh();
 			}}
 			workspaceName={
-				activeProjectId
-					? projects.find((project) => project.id === activeProjectId)?.name
+				activeWorkspaceId
+					? workspaces.find((project) => project.id === activeWorkspaceId)?.name
 					: undefined
 			}
 			onRenameWorkspace={
-				activeProjectId
+				activeWorkspaceId
 					? async (name) => {
 							try {
-								await updateProjectApi(activeProjectId, { name });
+								await updateWorkspaceApi(activeWorkspaceId, { name });
 							} catch (error) {
 								console.error("Rename workspace failed:", error);
 							}
-							refreshProjects();
+							refreshWorkspaces();
 						}
 					: undefined
 			}
@@ -3154,8 +3154,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								<span className="app-header-title-row">
 									<span className="app-header-title-text">
 										{route.view === "session"
-											? (activeProjectId
-												? projects.find((p) => p.id === activeProjectId)?.name
+											? (activeWorkspaceId
+												? workspaces.find((p) => p.id === activeWorkspaceId)?.name
 												: undefined) ||
 											currentSession?.title ||
 											""
@@ -3283,8 +3283,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 							sessions={sessions}
 							localMode={localMode}
 							cloudUnreachable={cloudUnreachable}
-							workspaceDataReady={!loading && projectsLoaded}
-							projects={projects}
+							workspaceDataReady={!loading && workspacesLoaded}
+							workspaces={workspaces}
 							notes={notes.map((n) => ({ id: n.id, title: n.title }))}
 							teamViewing={teamViewing}
 							selectedId={currentSession?.id || null}
@@ -3300,7 +3300,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								navigate({ view: "automations", id: name })
 							}
 							onOpenPrItem={openPrWorkspace}
-							selectedWorkspaceId={activeProjectId}
+							selectedWorkspaceId={activeWorkspaceId}
 							prTinderActive={route.view === "prtinder"}
 							onOpenPrTinder={() => navigate({ view: "prtinder" })}
 							supportTinderActive={route.view === "supporttinder"}
@@ -3320,7 +3320,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 							onNewSessionInRepo={(repo) =>
 								setPalette({ open: true, repo })
 							}
-							onOpenProject={(id) => {
+							onOpenWorkspace={(id) => {
 								// Sidebar selection navigates directly to a chat rather than via
 								// /workspace/<id>, so restore the same remembered tab here too.
 								const chat = pickLandingChat(
@@ -3336,12 +3336,12 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 									setFocusComposerOnOpen(true);
 									navigate({ view: "session", id: chat.id });
 								} else {
-									const p = projects.find((x) => x.id === id);
+									const p = workspaces.find((x) => x.id === id);
 									// Default the new chat onto the workspace's own branch (share
 									// its worktree) when it has one — e.g. all chats archived.
 									setPalette({
 										open: true,
-										projectId: id,
+										workspaceId: id,
 										repo: p?.repo,
 										branch: p?.branch,
 									...(p?.externalRefs?.length && !p?.repo
@@ -3350,21 +3350,21 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 									});
 								}
 							}}
-							onRenameProject={async (id, name) => {
+							onRenameWorkspace={async (id, name) => {
 								try {
-									await updateProjectApi(id, { name });
-									refreshProjects();
+									await updateWorkspaceApi(id, { name });
+									refreshWorkspaces();
 								} catch (e) {
-									console.error("Rename project failed:", e);
+									console.error("Rename workspace failed:", e);
 								}
 							}}
-							onDeleteProject={async (id) => {
+							onDeleteWorkspace={async (id) => {
 								try {
-									await deleteProjectApi(id);
-									refreshProjects();
+									await deleteWorkspaceApi(id);
+									refreshWorkspaces();
 									refresh();
 								} catch (e) {
-									console.error("Delete project failed:", e);
+									console.error("Delete workspace failed:", e);
 								}
 							}}
 							onToast={showToast}
@@ -3548,7 +3548,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 									key={route.id}
 									onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
 									workspace={routeWorkspace}
-									chats={projectChats}
+									chats={workspaceChats}
 									sessions={sessions}
 									tab={
 										reviewActive
@@ -3566,7 +3566,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								/>
 							) : (
 								<div className="panel-placeholder">
-									{projectsLoaded ? "Workspace not found." : "Loading workspace…"}
+									{workspacesLoaded ? "Workspace not found." : "Loading workspace…"}
 								</div>
 							)
 						) : route.view === "pr" ? (
@@ -3667,7 +3667,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						) : route.view === "catchup" ? (
 							<CatchUpDeck
 								sessions={sessions}
-								projects={projects}
+								workspaces={workspaces}
 								send={send}
 								connected={connected}
 								onArchive={(chats) => {
@@ -3763,7 +3763,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						) : (
 							<Home
 								sessions={sessions}
-								projects={projects}
+								workspaces={workspaces}
 								teamViewing={teamViewing}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onNewSession={() => openPalette()}
@@ -3836,7 +3836,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						addHandler={addHandler}
 						connected={connected}
 						prefillPrompt={palette.prompt}
-						projectId={palette.projectId}
+						workspaceId={palette.workspaceId}
 						forceRepo={palette.repo}
 						forceBranch={palette.branch}
 						forceMode={palette.mode}

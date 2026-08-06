@@ -1542,8 +1542,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					let mintedForChat = false;
 					if (
 						!workspace &&
-						!forkSource?.projectId &&
-						!(typeof msg.projectId === "string" && msg.projectId)
+						!forkSource?.workspaceId &&
+						!(typeof msg.workspaceId === "string" && msg.workspaceId)
 					) {
 						workspace = createWorkspace({
 							name: title || "Workspace",
@@ -1698,12 +1698,12 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 								// scratch dir repoForPath would throw on.
 								...(isScratch ? {} : { repo: repoForPath(wtPath).id }),
 								...(workspace
-									? { projectId: workspace.id }
-									: forkSource?.projectId
+									? { workspaceId: workspace.id }
+									: forkSource?.workspaceId
 										? // A fork lands next to its source in the same workspace.
-											{ projectId: forkSource.projectId }
-										: typeof msg.projectId === "string" && msg.projectId
-											? { projectId: msg.projectId }
+											{ workspaceId: forkSource.workspaceId }
+										: typeof msg.workspaceId === "string" && msg.workspaceId
+											? { workspaceId: msg.workspaceId }
 											: {}),
 								createdBy: user || "Anonymous",
 								...(ws.data?.authLogin

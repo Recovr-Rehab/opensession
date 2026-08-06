@@ -33,7 +33,7 @@ function uiHost(): string {
  * 301 to the bare form (Slack sends whatever the user pasted), and both URL
  * shapes the UI produces:
  *   - `/session/<id>`
- *   - `/workspace/<projectId>/chat/<id>`  (the deep-link the app copies today)
+ *   - `/workspace/<workspaceId>/chat/<id>`  (the deep-link the app copies today)
  */
 export function sessionIdFromUrl(rawUrl: string): string | null {
   let u: URL;

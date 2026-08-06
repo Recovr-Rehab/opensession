@@ -76,8 +76,8 @@ final class SessionsListViewModel {
         // than opening one of its own: rebuild the one row from its chats plus
         // this one, and move it to the front — where a full regroup puts it,
         // since the new chat leads the list that pass walks.
-        if session.sideChatOf == nil, let projectId = session.projectId, !projectId.isEmpty {
-            guard let index = rows.firstIndex(where: { $0.projectId == projectId })
+        if session.sideChatOf == nil, let workspaceId = session.workspaceId, !workspaceId.isEmpty {
+            guard let index = rows.firstIndex(where: { $0.workspaceId == workspaceId })
             else { return nil }
             let merged = Self.sidebarRows(
                 in: [session] + rows[index].sessions, workspaceNames: workspaceNames
@@ -123,7 +123,7 @@ final class SessionsListViewModel {
         #if os(macOS)
         return true
         #else
-        return session.projectId?.isEmpty != false
+        return session.workspaceId?.isEmpty != false
             && Self.isolatedWorktree(for: session) == nil
         #endif
     }
@@ -181,11 +181,11 @@ final class SessionsListViewModel {
         // joins its workspace without requiring the conversation to reopen.
         let current = sessions.first { $0.id == current.id } ?? current
         let belongs: (Session) -> Bool
-        if let projectId = current.projectId, !projectId.isEmpty {
+        if let workspaceId = current.workspaceId, !workspaceId.isEmpty {
             let dir = isolatedWorktree(for: current)
             belongs = {
-                $0.projectId == projectId
-                    || (dir != nil && $0.projectId?.isEmpty != false
+                $0.workspaceId == workspaceId
+                    || (dir != nil && $0.workspaceId?.isEmpty != false
                         && isolatedWorktree(for: $0) == dir)
             }
         } else if let dir = isolatedWorktree(for: current) {
@@ -244,7 +244,7 @@ final class SessionsListViewModel {
     }
 
     /// One sidebar row per workspace, with isolated worktrees as the fallback
-    /// for legacy projectless rows. A projectless row adopts the one workspace
+    /// for legacy workspace-less rows. Such a row adopts the one workspace
     /// already using its worktree, but separate workspaces are never merged
     /// merely because their paths happen to match.
     nonisolated static func sidebarWorkspaces(
@@ -252,20 +252,20 @@ final class SessionsListViewModel {
         workspaceNames: [String: String] = [:]
     ) -> [SidebarWorkspace] {
         let visible = sessions.filter { $0.sideChatOf == nil }
-        let projectKeyByWorktree = Dictionary(grouping: visible.filter {
-            $0.projectId?.isEmpty == false && isolatedWorktree(for: $0) != nil
+        let workspaceKeyByWorktree = Dictionary(grouping: visible.filter {
+            $0.workspaceId?.isEmpty == false && isolatedWorktree(for: $0) != nil
         }, by: { isolatedWorktree(for: $0)! }).compactMapValues { chats in
-            let keys = Set(chats.compactMap(\.projectId))
+            let keys = Set(chats.compactMap(\.workspaceId))
             return keys.count == 1 ? "workspace:\(keys.first!)" : nil
         }
         var order: [String] = []
         var grouped: [String: [Session]] = [:]
         for session in visible {
             let key: String
-            if session.projectId?.isEmpty != false,
+            if session.workspaceId?.isEmpty != false,
                let dir = isolatedWorktree(for: session),
-               let projectKey = projectKeyByWorktree[dir] {
-                key = projectKey
+               let groupKey = workspaceKeyByWorktree[dir] {
+                key = groupKey
             } else {
                 key = workspaceKey(for: session)
             }
@@ -276,7 +276,7 @@ final class SessionsListViewModel {
             guard var chats = grouped[key] else { return nil }
             chats.sort(by: sessionNaturalOrder)
             guard let main = mainSession(in: chats) else { return nil }
-            let named = chats.compactMap(\.projectId).compactMap { workspaceNames[$0] }.first
+            let named = chats.compactMap(\.workspaceId).compactMap { workspaceNames[$0] }.first
             let renamed = chats.first { $0.titleOverridden == true }
             let worktreeName = main.worktreeDir.flatMap {
                 $0.contains("/worktrees/")
@@ -331,8 +331,8 @@ final class SessionsListViewModel {
     }
 
     nonisolated private static func workspaceKey(for session: Session) -> String {
-        if let projectId = session.projectId, !projectId.isEmpty {
-            return "workspace:\(projectId)"
+        if let workspaceId = session.workspaceId, !workspaceId.isEmpty {
+            return "workspace:\(workspaceId)"
         }
         if let dir = isolatedWorktree(for: session) { return "worktree:\(dir)" }
         return "session:\(session.id)"
@@ -392,7 +392,7 @@ final class SessionsListViewModel {
             // Keep the workspace: a chat created into one stays in its row
             // (and its tab strip) across the create resolving, instead of
             // falling out until the server's own row arrives.
-            workspaceId: old.projectId
+            workspaceId: old.workspaceId
         )
         optimistic[realId] = (real, entry.added)
         setSessions(
@@ -468,12 +468,12 @@ final class SessionsListViewModel {
 
     func rename(_ workspace: SidebarWorkspace, to proposedName: String) {
         let name = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if workspace.projectId != nil, name.isEmpty { return }
+        if workspace.workspaceId != nil, name.isEmpty { return }
 
         Task {
             do {
-                if let projectId = workspace.projectId {
-                    try await OS1API.renameWorkspace(workspaceId: projectId, name: name)
+                if let workspaceId = workspace.workspaceId {
+                    try await OS1API.renameWorkspace(workspaceId: workspaceId, name: name)
                 } else if name.isEmpty {
                     for session in workspace.sessions where session.titleOverridden == true {
                         try await OS1API.renameSession(sessionId: session.id, title: "")
@@ -488,7 +488,7 @@ final class SessionsListViewModel {
                 }
                 await refresh()
             } catch {
-                self.error = workspace.projectId == nil
+                self.error = workspace.workspaceId == nil
                     ? "Couldn't rename chat: \(error.localizedDescription)"
                     : "Couldn't rename workspace: \(error.localizedDescription)"
             }
@@ -697,8 +697,8 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     }
 
     var lane: Session.Lane { statusSession.lane }
-    var projectId: String? {
-        sessions.compactMap(\.projectId).first { !$0.isEmpty }
+    var workspaceId: String? {
+        sessions.compactMap(\.workspaceId).first { !$0.isEmpty }
     }
     var isOptimistic: Bool {
         sessions.contains(where: \.isOptimistic)
@@ -709,10 +709,10 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     /// when the row is a real workspace, the bare session URL otherwise.
     @MainActor var shareURL: URL? {
         guard let base = ServerConfig.shared.baseURL else { return nil }
-        if let projectId = mainSession.projectId, !projectId.isEmpty {
+        if let workspaceId = mainSession.workspaceId, !workspaceId.isEmpty {
             return base
                 .appendingPathComponent("workspace")
-                .appendingPathComponent(projectId)
+                .appendingPathComponent(workspaceId)
                 .appendingPathComponent("chat")
                 .appendingPathComponent(mainSession.id)
         }

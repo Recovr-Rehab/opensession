@@ -12,7 +12,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 
 /**
  * The tab strip is scoped to ONE Workspace: it shows the sibling chats of the
- * currently-open chat (every session sharing its `projectId`/workspace). It
+ * currently-open chat (every session sharing its `workspaceId`/workspace). It
  * only renders once a workspace has TWO or more chats — a lone chat needs no
  * strip, so the "+ New tab" affordance moves next to the session title in
  * SessionViewer's header instead (and ⌘T does the same thing). A pre-migration

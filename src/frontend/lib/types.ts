@@ -331,8 +331,10 @@ export interface UnifiedSession {
 	mode?: "ask" | "code" | "scratch";
 	/** Primary repo this chat works in (registered repo id). */
 	repo?: string;
-	/** Optional Project (folder) this chat belongs to; null/undefined = standalone. */
-	projectId?: string | null;
+	/** Workspace this chat belongs to; null/undefined = standalone. NOT a
+	 *  project — a project is the level above (a repo band or a feed band).
+	 *  See CONCEPTS.md. */
+	workspaceId?: string | null;
 	/** Parent/orchestrator session when spawned as a worker sub-session. */
 	parentSessionId?: string;
 	/** Legacy removed side-chat record. Kept hidden until its parent is deleted. */
@@ -446,8 +448,13 @@ export interface UnifiedSession {
 	};
 }
 
-/** A Project — an optional folder that groups chats (sessions). */
-export interface Project {
+/**
+ * A Workspace — the container that groups the chats about one piece of work
+ * (a branch, a PR, a support ticket). Optionally owns a worktree, which new
+ * chats in it inherit. Sits *inside* a project (a repo band or a feed band);
+ * do not confuse the two — see CONCEPTS.md.
+ */
+export interface Workspace {
 	id: string;
 	name: string;
 	repo?: string;

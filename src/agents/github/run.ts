@@ -67,7 +67,7 @@ export function githubFlowMcpServers(): string[] {
  * so the sidebar's PR clicks and these headless runs can never mint diverging
  * workspaces for the same PR. Best-effort: never block a run on this.
  */
-async function projectIdForPr(prNumber: number, branch: string, title: string, cwd: string, ghRepo?: string): Promise<string | null> {
+async function workspaceIdForPr(prNumber: number, branch: string, title: string, cwd: string, ghRepo?: string): Promise<string | null> {
   try {
     const repo = repoForPath(cwd).id;
     // opts.title is per-kind ("Review · PR #123 <PR title>"). The folder groups
@@ -190,7 +190,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   const startedAt = new Date();
 
   // Group this and the PR's other chats under one Project folder.
-  const projectId = await projectIdForPr(opts.prNumber, opts.branch, opts.title, opts.cwd, opts.ghRepo);
+  const workspaceId = await workspaceIdForPr(opts.prNumber, opts.branch, opts.title, opts.cwd, opts.ghRepo);
 
   const existingSessionFile = readSessionFile(bksId);
   // Engine sessions are scoped to their directory; a session started under a
@@ -212,7 +212,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   // shape as the six W3 conversions): creation fields are create-if-absent
   // defaults (an existing file wins), and each call overlays only the fields
   // this run owns — engine ids, effective model + history, and the per-round
-  // PR shape (branch/cwd/title/mode/projectId). Prior engine ids (e.g. a
+  // PR shape (branch/cwd/title/mode/workspaceId). Prior engine ids (e.g. a
   // codexThreadId from an earlier round) and any concurrent writer's fields
   // survive via the fresh-read spread instead of being rebuilt from closures.
   const persist = (engineSessionId: string) =>
@@ -238,7 +238,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
         title: opts.title,
         mode: opts.mode,
         automation: "github-pr-review",
-        ...(projectId ? { projectId } : {}),
+        ...(workspaceId ? { workspaceId } : {}),
       };
     }).catch((e) => {
       console.error(`[github-run] failed to persist session ${bksId}:`, e);

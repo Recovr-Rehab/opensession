@@ -13,7 +13,7 @@ final class HideStoreTests: XCTestCase {
         let rows = SessionsListViewModel.sidebarWorkspaces(
             in: try sessions(
                 """
-                [{"id":"bks-1","projectId":"prj-1"},
+                [{"id":"bks-1","workspaceId":"ws-1"},
                  {"id":"bks-2","worktreeDir":"/home/u/worktrees/feature"},
                  {"id":"bks-3"}]
                 """
@@ -21,7 +21,7 @@ final class HideStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(rows.map(SidebarRowKeys.rowKey(for:)), [
-            "workspace:prj-1",
+            "workspace:ws-1",
             "wt:/home/u/worktrees/feature",
             "bks-3",
         ])
@@ -29,12 +29,12 @@ final class HideStoreTests: XCTestCase {
 
     func testCandidateKeysCoverEveryRowAChatCanSitUnder() throws {
         let session = try sessions(
-            #"[{"id":"bks-1","projectId":"prj-1","worktreeDir":"/home/u/worktrees/feature"}]"#
+            #"[{"id":"bks-1","workspaceId":"ws-1","worktreeDir":"/home/u/worktrees/feature"}]"#
         )[0]
 
         XCTAssertEqual(SidebarRowKeys.candidateKeys(for: session), [
             "bks-1",
-            "workspace:prj-1",
+            "workspace:ws-1",
             "wt:/home/u/worktrees/feature",
         ])
     }
@@ -42,8 +42,8 @@ final class HideStoreTests: XCTestCase {
     func testBlockedChatResurfacesItsHiddenRow() throws {
         let all = try sessions(
             """
-            [{"id":"bks-1","projectId":"prj-1","waitingForInput":true},
-             {"id":"bks-2","projectId":"prj-2"}]
+            [{"id":"bks-1","workspaceId":"ws-1","waitingForInput":true},
+             {"id":"bks-2","workspaceId":"ws-2"}]
             """
         )
 
@@ -51,20 +51,20 @@ final class HideStoreTests: XCTestCase {
             all,
             hiding: [],
             restoring: [],
-            hidden: ["workspace:prj-1", "workspace:prj-2"]
+            hidden: ["workspace:ws-1", "workspace:ws-2"]
         )
 
-        XCTAssertEqual(prepared.resurfacedHideKeys, ["workspace:prj-1"])
+        XCTAssertEqual(prepared.resurfacedHideKeys, ["workspace:ws-1"])
     }
 
     func testQuietChatsResurfaceNothing() throws {
-        let all = try sessions(#"[{"id":"bks-1","projectId":"prj-1","isRunning":true}]"#)
+        let all = try sessions(#"[{"id":"bks-1","workspaceId":"ws-1","isRunning":true}]"#)
 
         let prepared = SessionsListViewModel.prepared(
             all,
             hiding: [],
             restoring: [],
-            hidden: ["workspace:prj-1"]
+            hidden: ["workspace:ws-1"]
         )
 
         XCTAssertTrue(prepared.resurfacedHideKeys.isEmpty)
@@ -72,14 +72,14 @@ final class HideStoreTests: XCTestCase {
 
     func testArchivedBlockedChatDoesNotResurfaceItsRow() throws {
         let all = try sessions(
-            #"[{"id":"bks-1","projectId":"prj-1","waitingForInput":true,"archived":true}]"#
+            #"[{"id":"bks-1","workspaceId":"ws-1","waitingForInput":true,"archived":true}]"#
         )
 
         let prepared = SessionsListViewModel.prepared(
             all,
             hiding: [],
             restoring: [],
-            hidden: ["workspace:prj-1"]
+            hidden: ["workspace:ws-1"]
         )
 
         XCTAssertTrue(prepared.resurfacedHideKeys.isEmpty)

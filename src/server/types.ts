@@ -101,8 +101,10 @@ export interface UnifiedSession {
   mode?: "ask" | "code" | "scratch";
   /** Primary repo this chat works in (registered repo id). */
   repo?: string;
-  /** Optional Project (folder) this chat belongs to; null/undefined = standalone. */
-  projectId?: string | null;
+  /** Workspace this chat belongs to; null/undefined = standalone. NOT a
+   *  project — a project is the level above (a repo band or a feed band).
+   *  See CONCEPTS.md. */
+  workspaceId?: string | null;
   /** Parent/orchestrator session when spawned as a worker sub-session. */
   parentSessionId?: string;
   /** Legacy removed side-chat record. Kept hidden until its parent is deleted. */
@@ -410,8 +412,7 @@ export interface NativeSessionFile {
    *  in vertical slices with per-slice evidence. See buildPlanFirstNote. */
   planFirst?: boolean;
   repo?: string; // which registered repo this chat works in
-  workspaceId?: string | null; // Workspace this chat belongs to (canonical key)
-  projectId?: string | null; // legacy alias of workspaceId (dual-read during migration)
+  workspaceId?: string | null; // Workspace this chat belongs to
   /** The branch this session's worktree was cut from, when it was stacked on
    *  another session's branch rather than on the trunk. Drives the stacked-PR
    *  base (`gh pr create --base`) and the "link this stack" action. */

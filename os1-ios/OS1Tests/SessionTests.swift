@@ -56,7 +56,7 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"second","projectId":"prj-1","createdAt":"2026-07-02T00:00:00Z"},{"id":"other","projectId":"prj-2","createdAt":"2026-07-01T00:00:00Z"},{"id":"first","projectId":"prj-1","createdAt":"2026-07-01T00:00:00Z"},{"id":"archived","projectId":"prj-1","archived":true},{"id":"side","projectId":"prj-1","sideChatOf":"first"}]"#.utf8
+                #"[{"id":"second","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z"},{"id":"other","workspaceId":"ws-2","createdAt":"2026-07-01T00:00:00Z"},{"id":"first","workspaceId":"ws-1","createdAt":"2026-07-01T00:00:00Z"},{"id":"archived","workspaceId":"ws-1","archived":true},{"id":"side","workspaceId":"ws-1","sideChatOf":"first"}]"#.utf8
             )
         )
 
@@ -119,7 +119,7 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"readonly","worktreeDir":"/home/ubuntu/worktrees/feature"},{"id":"filed","projectId":"prj-1","worktreeDir":"/home/ubuntu/worktrees/feature"}]"#.utf8
+                #"[{"id":"readonly","worktreeDir":"/home/ubuntu/worktrees/feature"},{"id":"filed","workspaceId":"ws-1","worktreeDir":"/home/ubuntu/worktrees/feature"}]"#.utf8
             )
         )
 
@@ -137,13 +137,13 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"first","projectId":"prj-1","branch":"feature","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:01:00Z","opencodeSessionId":"oc-1"},{"id":"second","projectId":"prj-1","branch":"feature","createdAt":"2026-07-02T00:00:00Z","lastActivity":"2026-07-02T00:01:00Z"},{"id":"other","projectId":"prj-2","branch":"other"}]"#.utf8
+                #"[{"id":"first","workspaceId":"ws-1","branch":"feature","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:01:00Z","opencodeSessionId":"oc-1"},{"id":"second","workspaceId":"ws-1","branch":"feature","createdAt":"2026-07-02T00:00:00Z","lastActivity":"2026-07-02T00:01:00Z"},{"id":"other","workspaceId":"ws-2","branch":"other"}]"#.utf8
             )
         )
 
         let workspaces = SessionsListViewModel.sidebarWorkspaces(
             in: sessions,
-            workspaceNames: ["prj-1": "Feature workspace"]
+            workspaceNames: ["ws-1": "Feature workspace"]
         )
 
         XCTAssertEqual(workspaces.count, 2)
@@ -156,7 +156,7 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"first","projectId":"prj-1","worktreeDir":"/home/ubuntu/worktrees/shared","branch":"feature"},{"id":"second","projectId":"prj-2","worktreeDir":"/home/ubuntu/worktrees/shared","branch":"feature"},{"id":"main-one","projectId":"prj-3","worktreeDir":"/home/ubuntu/projects/tella-backstage"},{"id":"main-two","projectId":"prj-4","worktreeDir":"/home/ubuntu/projects/tella-backstage"}]"#.utf8
+                #"[{"id":"first","workspaceId":"ws-1","worktreeDir":"/home/ubuntu/worktrees/shared","branch":"feature"},{"id":"second","workspaceId":"ws-2","worktreeDir":"/home/ubuntu/worktrees/shared","branch":"feature"},{"id":"main-one","workspaceId":"ws-3","worktreeDir":"/home/ubuntu/projects/tella-backstage"},{"id":"main-two","workspaceId":"ws-4","worktreeDir":"/home/ubuntu/projects/tella-backstage"}]"#.utf8
             )
         )
 
@@ -168,11 +168,11 @@ final class SessionTests: XCTestCase {
         ])
     }
 
-    func testSidebarAdoptsProjectlessSiblingUsingTheSameWorktree() throws {
+    func testSidebarAdoptsWorkspacelessSiblingUsingTheSameWorktree() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"filed","projectId":"prj-1","worktreeDir":"/home/ubuntu/worktrees/shared","branch":"feature"},{"id":"legacy","worktreeDir":"/home/ubuntu/worktrees/shared","branch":"feature"}]"#.utf8
+                #"[{"id":"filed","workspaceId":"ws-1","worktreeDir":"/home/ubuntu/worktrees/shared","branch":"feature"},{"id":"legacy","worktreeDir":"/home/ubuntu/worktrees/shared","branch":"feature"}]"#.utf8
             )
         )
 
@@ -240,7 +240,7 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"automation","projectId":"prj-1","automation":"Review","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:01:00Z","opencodeSessionId":"oc-1"},{"id":"main","projectId":"prj-1","createdAt":"2026-07-02T00:00:00Z","lastActivity":"2026-07-02T00:01:00Z","opencodeSessionId":"oc-2"},{"id":"shell","projectId":"prj-1","createdAt":"2026-07-03T00:00:00Z","lastActivity":"2026-07-03T00:00:00Z"}]"#.utf8
+                #"[{"id":"automation","workspaceId":"ws-1","automation":"Review","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:01:00Z","opencodeSessionId":"oc-1"},{"id":"main","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z","lastActivity":"2026-07-02T00:01:00Z","opencodeSessionId":"oc-2"},{"id":"shell","workspaceId":"ws-1","createdAt":"2026-07-03T00:00:00Z","lastActivity":"2026-07-03T00:00:00Z"}]"#.utf8
             )
         )
 
@@ -258,7 +258,7 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"current","projectId":"prj-1","createdAt":"2026-07-01T00:00:00Z"},{"id":"sibling","projectId":"prj-1","createdAt":"2026-07-02T00:00:00Z"}]"#.utf8
+                #"[{"id":"current","workspaceId":"ws-1","createdAt":"2026-07-01T00:00:00Z"},{"id":"sibling","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z"}]"#.utf8
             )
         )
 

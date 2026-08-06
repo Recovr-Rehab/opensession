@@ -15,7 +15,7 @@ import { readFileSync } from "fs";
 import { OPENSESSION_CHATS_DIR } from "../../server/paths";
 import { defaultRepo } from "../../server/config";
 import { tryGetSessionControl } from "../../server/session-control";
-import { matchSessions, projectIdForRepo } from "./session-notify";
+import { matchSessions, workspaceIdForRepo } from "./session-notify";
 import { readPrState } from "./state";
 import { bksIdFor } from "./run";
 import type { PrRef } from "./review";
@@ -55,9 +55,9 @@ export function authorFamilyFor(pr: PrRef): { family: ModelFamily; source: strin
   //    the findings is also the one whose reviewer is inverted.
   const control = tryGetSessionControl();
   if (control) {
-    const projectId = projectIdForRepo(pr.ghRepo || defaultRepo().ghRepo);
-    if (projectId) {
-      const owners = matchSessions(control, projectId, pr.headRef)
+    const workspaceId = workspaceIdForRepo(pr.ghRepo || defaultRepo().ghRepo);
+    if (workspaceId) {
+      const owners = matchSessions(control, workspaceId, pr.headRef)
         .filter((s) => !s.id.startsWith("bks-ghpr-"))
         .sort((a, b) => Date.parse(b.lastActivity || "0") - Date.parse(a.lastActivity || "0"));
       for (const s of owners) {

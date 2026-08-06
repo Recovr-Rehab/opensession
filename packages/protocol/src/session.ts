@@ -210,9 +210,7 @@ export type ProtocolClientMessage =
       cloud?: boolean;
       mode?: "ask" | "code" | "scratch";
       repo?: string;
-      /** Existing workspace (folder) to add this new chat to. */
-      projectId?: string;
-      /** Existing workspace to add this chat to (alias of projectId, preferred). */
+      /** Existing workspace to add this new chat to. */
       workspaceId?: string;
       /** Create a new workspace for this chat. */
       createWorkspace?: { name?: string };

@@ -2,7 +2,7 @@
  * The "every chat lives in exactly one workspace" invariant.
  *
  * Workspaces (workspaces.ts) are what the sidebar's main list renders. A chat
- * carrying no `projectId` used to fall through to a *synthesized* row — grouped
+ * carrying no `workspaceId` used to fall through to a *synthesized* row — grouped
  * by shared worktree, else one row per chat — so the sidebar had to model two
  * kinds of row forever. Instead, every chat that surfaces without a workspace
  * is filed into one here, at the single choke point where the unified session
@@ -74,9 +74,7 @@ function persist(chatId: string, workspaceId: string): void {
   void import("./session-cache")
     .then(({ updateSessionFile }) =>
       updateSessionFile(chatId, (data) =>
-        data.projectId || (data as { workspaceId?: string }).workspaceId
-          ? data
-          : { ...data, projectId: workspaceId, workspaceId },
+        data.workspaceId ? data : { ...data, workspaceId },
       ),
     )
     .catch(() => {});
@@ -99,7 +97,7 @@ export function ensureChatWorkspaces(sessions: UnifiedSession[]): void {
   // Archived chats don't render, so they don't need one until they come back:
   // the same sweep files them on the scan right after an un-archive.
   const orphans = sessions.filter(
-    (s) => !s.projectId && !s.archived && !s.automation,
+    (s) => !s.workspaceId && !s.archived && !s.automation,
   );
   if (orphans.length === 0) return;
 
@@ -108,7 +106,7 @@ export function ensureChatWorkspaces(sessions: UnifiedSession[]): void {
     const inflight = pending.get(chat.id);
     // Drop a stale entry if the workspace was deleted out from under us, so the
     // chat gets a new one instead of pointing at nothing.
-    if (inflight && getWorkspace(inflight)) chat.projectId = inflight;
+    if (inflight && getWorkspace(inflight)) chat.workspaceId = inflight;
     else {
       if (inflight) pending.delete(chat.id);
       fresh.push(chat);
@@ -143,7 +141,7 @@ export function ensureChatWorkspaces(sessions: UnifiedSession[]): void {
           ...(dir ? { worktreeDir: dir } : {}),
         });
       for (const chat of chats) {
-        chat.projectId = workspace.id;
+        chat.workspaceId = workspace.id;
         pending.set(chat.id, workspace.id);
         persist(chat.id, workspace.id);
       }

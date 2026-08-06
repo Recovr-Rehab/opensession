@@ -126,7 +126,7 @@ export function PrSessionsList({
 		// Join the PR's existing workspace when a related chat carries one so
 		// the new chat lands as a sibling tab, not a duplicate workspace.
 		const workspaceId =
-			sessions.find((s) => s.projectId)?.projectId || undefined;
+			sessions.find((s) => s.workspaceId)?.workspaceId || undefined;
 		send({
 			type: "create_session",
 			mode: "code",

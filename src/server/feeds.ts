@@ -1,6 +1,14 @@
 /**
  * Feed registry: external-object feeds (Tella videos; eventually Plain
- * tickets, any MCP/API) rendered as sidebar bands. A feed contributes a
+ * tickets, any MCP/API) rendered as sidebar bands.
+ *
+ * A feed is a *project* in product terms — the non-git kind. A registered repo
+ * (worktree.ts REPOS) is the other kind. Both are sources of work that own a
+ * sidebar band and whose contents resolve to workspaces, which is why feed
+ * items adopt a workspace rather than inventing a parallel container. See
+ * CONCEPTS.md.
+ *
+ * A feed contributes a
  * descriptor (band identity + lanes) and a provider (listItems). Items
  * resolve into workspaces via resolveExternalWorkspace (workspace-resolve.ts)
  * keyed `<refKind>-<itemId>`, and the linkage is stamped as a generic

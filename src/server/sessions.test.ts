@@ -118,7 +118,7 @@ describe("getAllSessions", () => {
 			repo: "opensession",
 			model: "gpt-5.5",
 			codexThreadId: "codex-thread-1",
-			projectId: null,
+			workspaceId: null,
 			automation: "Nightly review",
 			automationId: "auto-nightly-review",
 		});
@@ -127,8 +127,7 @@ describe("getAllSessions", () => {
 			repo: "opensession",
 			model: "claude-fable-5",
 			claudeSessionId: "claude-session-1",
-			workspaceId: "prj-demo",
-			projectId: "legacy-project-ignored",
+			workspaceId: "ws-demo",
 		});
 
 		const { getAllSessions } = await import(`./sessions.ts?test=${crypto.randomUUID()}`);
@@ -141,7 +140,7 @@ describe("getAllSessions", () => {
 			repo: "opensession",
 			model: "gpt-5.5",
 			codexThreadId: "codex-thread-1",
-			projectId: null,
+			workspaceId: null,
 			automation: "Nightly review",
 			automationId: "auto-nightly-review",
 		});
@@ -151,7 +150,7 @@ describe("getAllSessions", () => {
 			id: "bks-fable-orchestrator",
 			repo: "opensession",
 			model: "claude-fable-5",
-			projectId: "prj-demo",
+			workspaceId: "ws-demo",
 		});
 	});
 

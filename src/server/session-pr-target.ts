@@ -34,8 +34,8 @@ export function sessionPrBranch(
 	workspace?: Workspace | null,
 ): string | null {
 	const parent =
-		workspace === undefined && session.projectId
-			? getWorkspace(session.projectId)
+		workspace === undefined && session.workspaceId
+			? getWorkspace(session.workspaceId)
 			: workspace;
 	if (session.automation === "github-pr-review")
 		return parent?.prNumber != null && parent.branch
@@ -54,11 +54,11 @@ export function sessionPrBranch(
 export function prWorkspaceReader(): (s: UnifiedSession) => Workspace | null {
 	const cache = new Map<string, Workspace | null>();
 	return (session) => {
-		if (!session.projectId) return null;
+		if (!session.workspaceId) return null;
 		if (session.branch && session.automation !== "github-pr-review") return null;
-		let workspace = cache.get(session.projectId);
+		let workspace = cache.get(session.workspaceId);
 		if (workspace === undefined)
-			cache.set(session.projectId, (workspace = getWorkspace(session.projectId)));
+			cache.set(session.workspaceId, (workspace = getWorkspace(session.workspaceId)));
 		return workspace;
 	};
 }

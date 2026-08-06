@@ -8,10 +8,10 @@ import { BASE_PATH } from "./base";
 /** Canonical chat/workspace URL path — workspace-scoped when the chat has one. */
 export function chatPath(session: {
   id: string;
-  projectId?: string | null;
+  workspaceId?: string | null;
 }): string {
-  return session.projectId
-    ? `${BASE_PATH}/workspace/${encodeURIComponent(session.projectId)}/chat/${encodeURIComponent(session.id)}`
+  return session.workspaceId
+    ? `${BASE_PATH}/workspace/${encodeURIComponent(session.workspaceId)}/chat/${encodeURIComponent(session.id)}`
     : `${BASE_PATH}/session/${encodeURIComponent(session.id)}`;
 }
 

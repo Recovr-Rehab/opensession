@@ -43,9 +43,9 @@ interface Props {
   /** Prefill the prompt (e.g. from the Home "New session" box). */
   prefillPrompt?: string;
   forceMode?: "ask" | "code" | "scratch";
-  /** When starting a chat inside a Project (folder), the chat joins this project… */
-  projectId?: string;
-  /** …and defaults to the project's shared repo + worktree (a sibling's branch). */
+  /** When starting a chat inside a workspace, the chat joins that workspace… */
+  workspaceId?: string;
+  /** …and defaults to the workspace's shared repo + worktree (a sibling's branch). */
   forceRepo?: string;
   forceBranch?: string;
   /** Lets App render the pending chat shell before the created session appears
@@ -55,7 +55,7 @@ interface Props {
     mode: "ask" | "code" | "scratch";
     repo: string;
     branch: string | null;
-    projectId?: string;
+    workspaceId?: string;
     model?: string;
     images?: string[];
   }) => void;
@@ -135,7 +135,7 @@ function slugifyBranch(text: string): string {
   return slug || "new-session";
 }
 
-export function NewSession({ onBack, send, addHandler, connected, prefillPrompt, forceMode, projectId, forceRepo, forceBranch, onCreateStarted }: Props) {
+export function NewSession({ onBack, send, addHandler, connected, prefillPrompt, forceMode, workspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
   const auth = useAuthStatus();
   const desktopShell =
     (window as { os1?: { desktop?: boolean } }).os1?.desktop === true ||
@@ -155,7 +155,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     if (auth?.local || desktopShell) setCreateTarget("cloud");
   }, [auth?.local, desktopShell]);
   const cloudTarget = auth?.local === true && createTarget === "cloud";
-  // In a Project, default to the folder's shared repo; else the prefill/filter repo.
+  // In a workspace, default to its shared repo; else the prefill/filter repo.
   const [repo, setRepo] = useState(forceRepo || prefill.repo);
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [configuredDefaultRepo, setConfiguredDefaultRepo] = useState("");
@@ -198,7 +198,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     });
   }, [configuredDefaultRepo, forceRepo, repos]);
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
-  // In a Project, default to a sibling's branch so the new chat reuses its
+  // In a workspace, default to a sibling's branch so the new chat reuses its
   // worktree; the user can still switch to "New branch" to fork a fresh one.
   const [selectedWorktree, setSelectedWorktree] = useState(forceBranch || "__new__");
   const [newBranch, setNewBranch] = useState(prefill.branch);
@@ -461,7 +461,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   }, [cloudTarget]);
 
   // Worktrees are per-repo; refetch and reset the selection when it changes.
-  // Inside a Project, snap back to the shared sibling branch, not "New branch".
+  // Inside a workspace, snap back to the shared sibling branch, not "New branch".
   useEffect(() => {
     setSelectedWorktree(forceBranch || "__new__");
     if (!repo) {
@@ -570,7 +570,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       mode,
       repo,
       branch: mode === "code" ? branch : null,
-      ...(projectId ? { projectId } : {}),
+      ...(workspaceId ? { workspaceId } : {}),
       ...(model ? { model } : {}),
       ...(images.length ? { images } : {}),
     });
@@ -579,8 +579,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       ...(auth?.local && createTarget === "cloud" ? { cloud: true } : {}),
       mode,
       repo,
-      ...(projectId
-        ? { workspaceId: projectId, chatMode }
+      ...(workspaceId
+        ? { workspaceId: workspaceId, chatMode }
         : { createWorkspace: {} }),
       branch: mode === "code" ? branch : "",
       prompt: prompt.trim(),
@@ -630,24 +630,19 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const createFromLabel =
     mode === "ask"
       ? "Ask · read-only"
-      : mode === "scratch"
-        ? "Scratch · no repo"
-        : selectedWorktree === "__new__"
-          ? "New branch"
-          : selectedWorktree;
+      : selectedWorktree === "__new__"
+        ? "New branch"
+        : selectedWorktree;
   const createFromOptions = [
     {
       value: "__new__",
-      label: projectId && forceBranch
+      label: workspaceId && forceBranch
         ? `New stacked branch (off ${forceBranch})`
         : "New branch",
     },
     // Ask stays above the branch list — as the last option it drowned below
     // the scroll fold once the worktree list grew, reading as "Ask is gone".
     { value: "__ask__", label: "Ask — read-only on main", menuLabel: "Ask · read-only on main" },
-    // Scratch: repo-less scratch dir with write+bash (media/MCP work —
-    // the feeds design). No branch, no PR flow.
-    { value: "__scratch__", label: "Scratch — no repo, writable scratch dir", menuLabel: "Scratch · no repo" },
     ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
   ];
 

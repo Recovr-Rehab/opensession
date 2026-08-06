@@ -21,8 +21,8 @@ enum SidebarRowKeys {
     /// hidden rows a blocked chat should resurface.
     static func candidateKeys(for session: Session) -> [String] {
         var keys = [session.id]
-        if let projectId = session.projectId, !projectId.isEmpty {
-            keys.append("workspace:\(projectId)")
+        if let workspaceId = session.workspaceId, !workspaceId.isEmpty {
+            keys.append("workspace:\(workspaceId)")
         }
         if let dir = session.worktreeDir, !dir.isEmpty {
             keys.append("wt:\(dir)")

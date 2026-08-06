@@ -11,8 +11,12 @@ import { SettingCard, rowMenuTriggerClasses } from "../ui/settings";
 import type { FeedDescriptor } from "../lib/types";
 
 /**
- * Connections → "Projects — sidebar feeds from your MCPs"
- * (the feeds design W3): lists the registered feeds and creates new ones
+ * Connections → "Projects — sidebar feeds from your MCPs" (the feeds design
+ * W3). A *project* is a source of work with its own sidebar band; a registered
+ * git repo is one kind, and these MCP-backed feeds (Plain, videos, …) are the
+ * other. Either way its items/branches become workspaces — see CONCEPTS.md.
+ *
+ * This section lists the registered feeds and creates new ones
  * from pure config. The New-project modal walks: pick a connected MCP server
  * → pick its list-tool (live catalog) → fetch a sample call → the field
  * mapping is auto-suggested from the result and stays editable → optional

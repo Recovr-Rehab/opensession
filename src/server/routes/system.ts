@@ -298,8 +298,8 @@ export async function handleSystemRoutes(
 							: isUnread(s.lastActivity, reads[s.id])
 								? "unread"
 								: "idle";
-			const sessionUrl = s.projectId
-				? `${uiBase}/workspace/${encodeURIComponent(s.projectId)}/chat/${encodeURIComponent(s.id)}`
+			const sessionUrl = s.workspaceId
+				? `${uiBase}/workspace/${encodeURIComponent(s.workspaceId)}/chat/${encodeURIComponent(s.id)}`
 				: `${uiBase}/session/${encodeURIComponent(s.id)}`;
 			sessions.push({
 				id: s.id,

@@ -56,7 +56,7 @@ function newestFirst(sessions: UnifiedSession[]): UnifiedSession[] {
 }
 
 /**
- * Backfill `projectId` onto matching sessions that aren't filed under any
+ * Backfill `workspaceId` onto matching sessions that aren't filed under any
  * workspace yet (serialized field-scoped writes — a concurrent filing wins;
  * see the transcript-v2 §6 note in session-cache). Best-effort, never throws.
  */
@@ -65,12 +65,10 @@ function adoptSiblingSessions(
   predicate: (s: UnifiedSession) => boolean,
 ): void {
   for (const s of getCachedSessions()) {
-    if (!isNativeSessionId(s.id) || s.projectId || s.archived) continue;
+    if (!isNativeSessionId(s.id) || s.workspaceId || s.archived) continue;
     if (!predicate(s)) continue;
     void updateSessionFile(s.id, (data) =>
-      data.projectId || data.workspaceId
-        ? data
-        : { ...data, projectId: workspaceId, workspaceId },
+      data.workspaceId ? data : { ...data, workspaceId },
     ).catch(() => {});
   }
 }
@@ -146,8 +144,8 @@ export async function resolvePrWorkspace(input: {
     // 2. A session already carrying this PR that's filed under a workspace.
     if (branch) {
       for (const s of newestFirst(getCachedSessions().filter((x) => !x.archived))) {
-        if (!s.projectId || !matches(s)) continue;
-        const ws = getWorkspace(s.projectId);
+        if (!s.workspaceId || !matches(s)) continue;
+        const ws = getWorkspace(s.workspaceId);
         if (!ws) continue;
         const stamped = stampWorkspaceIdentity(ws.id, stamp) || ws;
         adoptSiblingSessions(stamped.id, matches);
@@ -209,8 +207,8 @@ export function resolvePlainWorkspace(input: {
     ...all.filter((x) => !x.archived),
     ...all.filter((x) => x.archived),
   ])) {
-    if (!s.projectId) continue;
-    const ws = getWorkspace(s.projectId);
+    if (!s.workspaceId) continue;
+    const ws = getWorkspace(s.workspaceId);
     if (!ws) continue;
     const stamped =
       stampWorkspaceIdentity(ws.id, { key, plainThreadId: threadId }) || ws;
@@ -255,8 +253,8 @@ export function resolveExternalWorkspace(input: {
     ...all.filter((x) => !x.archived),
     ...all.filter((x) => x.archived),
   ])) {
-    if (!s.projectId) continue;
-    const ws = getWorkspace(s.projectId);
+    if (!s.workspaceId) continue;
+    const ws = getWorkspace(s.workspaceId);
     if (!ws) continue;
     const stamped =
       stampWorkspaceIdentity(ws.id, { key, externalRef: ref }) || ws;

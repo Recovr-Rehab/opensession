@@ -1693,7 +1693,7 @@ async function runSessionPromptInner(
 	let cwd =
 		session.worktreeDir ||
 		(session.mode === "scratch"
-			? ensureScratchDir(session.projectId || session.id)
+			? ensureScratchDir(session.workspaceId || session.id)
 			: session.mode === "ask"
 				? await ensureAskCheckout(session.repo)
 				: defaultRepo().repo);

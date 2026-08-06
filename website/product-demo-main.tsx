@@ -21,7 +21,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/transcript.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-presence",
+		workspaceId: "project-presence",
 		model: "openai/gpt-5.6-sol",
 		effort: "high",
 		usage: {
@@ -51,7 +51,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/checkout.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-checkout",
+		workspaceId: "project-checkout",
 		model: "anthropic/claude-opus-5",
 	},
 	{
@@ -68,7 +68,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/mobile.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-mobile",
+		workspaceId: "project-mobile",
 		model: "anthropic/claude-sonnet-5",
 		waitingForInput: true,
 	},
@@ -86,7 +86,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/shortcuts.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-shortcuts",
+		workspaceId: "project-shortcuts",
 		model: "openai/gpt-5.6-terra",
 		prUrl: "https://github.com/tellahq/opensession/pull/1842",
 		prState: "OPEN",
@@ -109,7 +109,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/search.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-search",
+		workspaceId: "project-search",
 		model: "anthropic/claude-opus-5",
 	},
 	{
@@ -126,7 +126,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/release.jsonl",
 		mode: "ask",
 		repo: "opensession",
-		projectId: "project-release",
+		workspaceId: "project-release",
 		model: "openai/gpt-5.6-sol",
 	},
 ];
@@ -214,11 +214,11 @@ for (const session of sessions.slice(1)) {
 	];
 }
 
-const projects = sessions.map((session, index) => ({
-	id: session.projectId!,
+const workspaces = sessions.map((session, index) => ({
+	id: session.workspaceId!,
 	name: session.title.replace(/^(Add|Review|Improve|Ship) /, ""),
 	repo: "opensession",
-	createdBy: session.startedBy || "Michiel",
+	createdBy: session.startedBy || "Alex",
 	createdAt: session.createdAt,
 	order: index,
 }));
@@ -245,7 +245,7 @@ const responseFor = (url: URL, method: string): Response => {
 				{ name: "Louise", fullName: "Louise de Sadeleer", github: "louisedesadeleer" },
 			],
 		});
-	if (path === "/api/projects") return json({ projects });
+	if (path === "/api/workspaces") return json({ workspaces });
 	if (path === "/api/repos")
 		return json({
 			repos: [

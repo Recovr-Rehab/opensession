@@ -1,6 +1,6 @@
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { Project, UnifiedSession, WSServerMessage } from "../lib/types";
+import type { Workspace, UnifiedSession, WSServerMessage } from "../lib/types";
 import { fetchModels, type ModelOption } from "../lib/api";
 import { Composer } from "./Composer";
 import { ConversationPane } from "./ConversationPane";
@@ -15,7 +15,7 @@ import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 
 interface Props {
-	workspace: Project;
+	workspace: Workspace;
 	/** The workspace's live chats, strip order (empty for a chat-less workspace). */
 	chats: UnifiedSession[];
 	/** All sessions — the Review pane matches the PR target against any of them. */

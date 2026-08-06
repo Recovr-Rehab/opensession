@@ -17,7 +17,7 @@ export type Session = {
 	repo?: string | null;
 	branch?: string | null;
 	worktreeDir?: string | null;
-	projectId?: string | null;
+	workspaceId?: string | null;
 	mode?: string | null;
 	model?: string | null;
 	effort?: string | null;

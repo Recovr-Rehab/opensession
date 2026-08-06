@@ -92,12 +92,12 @@ export function clearHides(keys: string[]): void {
  */
 export function unhideForChat(chat: {
 	id: string;
-	projectId?: string | null;
+	workspaceId?: string | null;
 	worktreeDir?: string | null;
 }): void {
 	clearHides([
 		chat.id,
-		...(chat.projectId ? [`workspace:${chat.projectId}`] : []),
+		...(chat.workspaceId ? [`workspace:${chat.workspaceId}`] : []),
 		...(chat.worktreeDir ? [`wt:${chat.worktreeDir}`] : []),
 	]);
 }

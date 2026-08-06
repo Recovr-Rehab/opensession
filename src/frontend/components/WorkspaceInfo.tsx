@@ -87,7 +87,7 @@ type ReviewRequestInfo = {
 interface Props {
 	/** The open chat's session id — anchors the PR + Slack fetches. */
 	sessionId: string;
-	/** The chat's workspace (projectId); null = workspace-less (fallback only). */
+	/** The chat's workspace (workspaceId); null = workspace-less (fallback only). */
 	workspaceId: string | null;
 	workspaceName?: string;
 	/** Sibling chats, oldest first (the tab strip's list). */

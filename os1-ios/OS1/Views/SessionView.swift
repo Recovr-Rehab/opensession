@@ -18,9 +18,6 @@ struct SessionView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// The appearance the conversation itself is drawn in — read out here,
-    /// where it's still the app's, so the input bar can be pinned to it.
-    @Environment(\.colorScheme) private var appColorScheme
 
     /// Full-window-width chat text is unreadable on the Mac; cap the content
     /// column (transcript AND composer) and center it, like other chat apps.
@@ -428,7 +425,7 @@ struct SessionView: View {
             Button("Cancel", role: .cancel) {}
             Button("Rename") { onRenameWorkspace?(renameText) }
                 .disabled(
-                    viewModel.session.projectId != nil
+                    viewModel.session.workspaceId != nil
                         && renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
         } message: {
@@ -481,15 +478,6 @@ struct SessionView: View {
             contentMaxWidth: contentMaxWidth,
             horizontalInset: contentInset
         )
-        // The system treats a bottom `safeAreaBar` as adaptive chrome: when
-        // dark content scrolls under it, it hands the bar's subtree a DARK
-        // colour scheme, and every dynamic colour inside follows — so a black
-        // code block passing under the composer turned the pill, the queue
-        // flap and their text near-black in a light-mode app (measured: the
-        // pill's mean luminance 223 → 120, and the page-coloured wash painted
-        // black). Pin the appearance the rest of the screen is using; the
-        // glass keeps its own look, it just stops repainting the app.
-        .environment(\.colorScheme, appColorScheme)
     }
 
     private var conversationLoader: some View {
@@ -770,7 +758,7 @@ private struct SessionActionsMenu: View {
                     // worktree in code mode); a workspace-less legacy chat has
                     // nothing to join, so the plain wording stays honest.
                     Label(
-                        viewModel.session.projectId == nil
+                        viewModel.session.workspaceId == nil
                             ? "New chat"
                             : "New chat in this workspace",
                         systemImage: "plus"
@@ -927,8 +915,6 @@ struct SessionTabsView: View {
     @State private var closedIds: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
-    /// The appearance outside the bar, to pin the floating tab strip to.
-    @Environment(\.colorScheme) private var tabsColorScheme
 
     init(
         session: Session,
@@ -1011,11 +997,6 @@ struct SessionTabsView: View {
                     onSelect: select,
                     onClose: close
                 )
-                // Same reason the composer bar is pinned (see
-                // SessionView.inputBar): a `safeAreaBar` is adaptive chrome,
-                // and dark content travelling under it repaints the strip and
-                // its labels in the other appearance.
-                .environment(\.colorScheme, tabsColorScheme)
             }
         }
         // Reading a chat clears its unread mark, and keeps clearing it while
@@ -1535,13 +1516,11 @@ private struct SessionInputBar: View {
         }
         .padding(.top, 10)
         .padding(.bottom, 26)
-        // Opaque page colour, NOT a material: a material takes its tone from
-        // whatever is behind it, so a code block scrolling under the bar
-        // turned the flap (and the messages in it) dark in a light-mode app.
-        // Chrome you type into has to hold its own colour. `raised` rather
-        // than `background` keeps it a shade off the composer, so the two
-        // still read as two layers of one piece.
-        .background(OS1VisualStyle.raised, in: flapShape)
+        // The composer's own recipe (page colour over a material) rather than
+        // a flat panel fill: the two are one piece of chrome, and the flat
+        // version read as a grey box taped to the bottom of the glass.
+        .background(OS1VisualStyle.background.opacity(0.55), in: flapShape)
+        .background(.regularMaterial, in: flapShape)
         .overlay { flapShape.stroke(OS1VisualStyle.border, lineWidth: 0.5) }
         .padding(.horizontal, 18)
         .padding(.bottom, -14)
@@ -2145,25 +2124,35 @@ private struct SessionInputBar: View {
                         }
                     }
                 }
-                Spacer(minLength: 6)
-                // Glyphs, not words: three peer actions on a two-line row, so
-                // they read as a row of controls the way the web's do. Steer
-                // wears the composer's own send arrow — folding a held
-                // message into the live run IS sending it now, and the arrow
-                // says that faster than the word "steer" ever did.
-                HStack(spacing: 0) {
-                    if let onSteer {
-                        rowAction("arrow.up", "Steer into this run", onSteer)
+                Spacer(minLength: 8)
+                // Words, not a bordered control: "Steer" has to stay legible
+                // as an action, and a capsule button sitting mid-row was the
+                // heaviest thing in the flap. Label colour, not link blue —
+                // this palette is monochrome, so a blue word ends up the
+                // loudest thing on the screen; weight and position carry the
+                // affordance instead.
+                if let onSteer {
+                    Button("Steer", action: onSteer)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .buttonStyle(.plain)
+                }
+                if let onRetry {
+                    Button("Try again", action: onRetry)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .buttonStyle(.plain)
+                }
+                if let onDelete {
+                    Button(action: onDelete) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .frame(width: 26, height: 26)
+                            .contentShape(Circle())
                     }
-                    if canEdit, let onEdit {
-                        rowAction("pencil", "Edit message", onEdit)
-                    }
-                    if let onRetry {
-                        rowAction("arrow.clockwise", "Try again", onRetry)
-                    }
-                    if let onDelete {
-                        rowAction("trash", "Discard message", onDelete)
-                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Discard message")
                 }
             }
             .padding(.horizontal, 12)
@@ -2178,30 +2167,13 @@ private struct SessionInputBar: View {
                         .padding(.leading, 34)
                 }
             }
-            // No whole-row tap: with the pencil right there, a stray tap on a
-            // message opening a modal is a trap, not a shortcut. The long
-            // press repeats the row's actions and adds reordering.
+            // A whole-row tap opens the editor — the phone equivalent of the
+            // web's pencil, and the gesture people already expect from a
+            // pending item. The rest of the actions hang off a long press so
+            // the row keeps its two-button surface.
             .contentShape(Rectangle())
+            .onTapGesture { if canEdit { onEdit?() } }
             .contextMenu { rowActions }
-        }
-
-        /// One control in the row's trailing cluster. 32pt of hit area around
-        /// a 13pt glyph — the most a flap row can give without pushing the
-        /// message into a column too narrow to read.
-        private func rowAction(
-            _ symbol: String,
-            _ label: String,
-            _ action: @escaping () -> Void
-        ) -> some View {
-            Button(action: action) {
-                Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(label)
         }
 
         @ViewBuilder

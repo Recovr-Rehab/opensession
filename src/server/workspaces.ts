@@ -1,18 +1,24 @@
 /**
  * Workspaces — containers that group chats. A chat carries a `workspaceId`
- * pointing here; every chat belongs to exactly one workspace. Unlike the old
- * "project" folder, a workspace can *optionally own a worktree* (repo + branch +
- * worktreeDir, plus attached repos): new chats created in the workspace inherit
- * that worktree by default (share mode), or branch a new stacked worktree off it.
+ * pointing here; every chat belongs to exactly one workspace.
+ *
+ * NOT a project. A *project* is the level above: a source of work with its own
+ * sidebar band — a registered git repo (worktree.ts REPOS) or a feed (feeds.ts,
+ * e.g. Plain). A project holds many workspaces; a workspace holds many chats.
+ * The full model is in CONCEPTS.md.
+ *
+ * A workspace can *optionally own a worktree* (repo + branch + worktreeDir,
+ * plus attached repos): new chats created in the workspace inherit that
+ * worktree by default (share mode), or branch a new stacked worktree off it.
  * A workspace with no `worktreeDir` is "ask-style" / not yet materialized.
  *
  * The chat still stores its own branch/worktreeDir (the source of truth for the
  * runner cwd); the workspace's worktree fields are the template a new share-mode
  * chat copies, and the flag for "does this workspace own a worktree yet".
  *
- * One JSON file per workspace at `~/.opensession-workspaces/<id>.json` (dual-read
- * fallback to the pre-rename/legacy dirs until the data migrations run).
- * Mirrors the flat-file pattern in pins.ts / models.ts. Team-internal, no auth.
+ * One JSON file per workspace at `~/.opensession-workspaces/<id>.json`, ids
+ * `ws-<uuid>`. Mirrors the flat-file pattern in pins.ts / models.ts.
+ * Team-internal, no auth.
  */
 
 import { homeDir } from "./paths";
@@ -28,21 +34,7 @@ import { randomUUID } from "crypto";
 import type { AttachedRepo, ExternalRef } from "./types";
 import { stateDir } from "./paths";
 
-const HOME = homeDir();
-const WORKSPACES_DIR_LEGACY = `${HOME}/.opensession-projects`;
-/**
- * Dual-read chain: `~/.opensession-workspaces` (primary) → `~/.opensession-workspaces`
- * (pre-rename) → legacy `~/.opensession-projects` — until the one-time migrations
- * rename them. Resolving once at module load keeps reads and writes on the same
- * dir (no split-brain) whether or not a migration has run. Keeps the `prj-` id
- * prefix opaque — see scripts/migrate-workspaces.ts.
- */
-const WORKSPACES_DIR = (() => {
-  const resolved = stateDir("workspaces");
-  return existsSync(resolved) || !existsSync(WORKSPACES_DIR_LEGACY)
-    ? resolved
-    : WORKSPACES_DIR_LEGACY;
-})();
+const WORKSPACES_DIR = stateDir("workspaces");
 
 export interface Workspace {
   id: string;

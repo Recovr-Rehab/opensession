@@ -8,7 +8,7 @@ import {
 } from "motion/react";
 import type {
 	UnifiedSession,
-	Project,
+	Workspace,
 	TranscriptEntry,
 	WSClientMessage,
 } from "../lib/types";
@@ -67,7 +67,7 @@ function replyTarget(card: CatchupCard): UnifiedSession {
 
 interface Props {
 	sessions: UnifiedSession[];
-	projects: Project[];
+	workspaces: Workspace[];
 	/** WebSocket sender — used to post a reply into a session. */
 	send: (msg: WSClientMessage) => void;
 	connected: boolean;
@@ -83,7 +83,7 @@ interface Props {
 
 export function CatchUpDeck({
 	sessions,
-	projects,
+	workspaces,
 	send,
 	connected,
 	onArchive,
@@ -132,7 +132,7 @@ export function CatchUpDeck({
 		const groups = new Map<string, UnifiedSession[]>();
 		const order: string[] = [];
 		for (const s of unread) {
-			const key = s.projectId ? `ws:${s.projectId}` : `chat:${s.id}`;
+			const key = s.workspaceId ? `ws:${s.workspaceId}` : `chat:${s.id}`;
 			if (!groups.has(key)) {
 				groups.set(key, []);
 				order.push(key);
@@ -145,7 +145,7 @@ export function CatchUpDeck({
 				.slice()
 				.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 			const wsId = key.startsWith("ws:") ? key.slice(3) : null;
-			const ws = wsId ? projects.find((p) => p.id === wsId) : null;
+			const ws = wsId ? workspaces.find((p) => p.id === wsId) : null;
 			return {
 				key,
 				workspaceId: wsId,
@@ -164,7 +164,7 @@ export function CatchUpDeck({
 		// genuine "all caught up"). While it's still empty we keep recomputing.
 		if (sessions.length > 0) frozen.current = out;
 		return out;
-	}, [sessions, currentUser, projects]);
+	}, [sessions, currentUser, workspaces]);
 
 	const [index, setIndex] = useState(0);
 	const [dir, setDir] = useState<Action | null>(null);

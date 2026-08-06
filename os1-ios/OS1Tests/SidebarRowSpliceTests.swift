@@ -7,7 +7,7 @@ import XCTest
 /// `SessionsListViewModel.rowsInserting` / `rowsRemoving`).
 ///
 /// These pin the grouping properties that make the splice equivalent to the
-/// regroup it replaces: a project-less, worktree-less chat owns a row nothing
+/// regroup it replaces: a workspace-less, worktree-less chat owns a row nothing
 /// else can join, and dropping one chat only rearranges its own row.
 final class SidebarRowSpliceTests: XCTestCase {
     private func sessions(_ json: String) throws -> [Session] {
@@ -18,8 +18,8 @@ final class SidebarRowSpliceTests: XCTestCase {
     private func existingSessions() throws -> [Session] {
         try sessions(
             """
-            [{"id":"bks-1","projectId":"prj-1","worktreeDir":"/home/u/worktrees/one"},
-             {"id":"bks-2","projectId":"prj-1","worktreeDir":"/home/u/worktrees/one"},
+            [{"id":"bks-1","workspaceId":"ws-1","worktreeDir":"/home/u/worktrees/one"},
+             {"id":"bks-2","workspaceId":"ws-1","worktreeDir":"/home/u/worktrees/one"},
              {"id":"bks-3","worktreeDir":"/home/u/worktrees/two"},
              {"id":"bks-4"}]
             """
@@ -70,18 +70,18 @@ final class SidebarRowSpliceTests: XCTestCase {
     /// the new chat is the first session the pass walks.
     func testPendingChatInAWorkspaceJoinsThatRowAndLeads() throws {
         let existing = try existingSessions()
-        let pending = pendingSession(id: "pending-1", workspaceId: "prj-1")
+        let pending = pendingSession(id: "pending-1", workspaceId: "ws-1")
 
         let regrouped = SessionsListViewModel.sidebarWorkspaces(in: [pending] + existing)
         var rows = SessionsListViewModel.sidebarWorkspaces(in: existing)
-        let index = try XCTUnwrap(rows.firstIndex { $0.projectId == "prj-1" })
+        let index = try XCTUnwrap(rows.firstIndex { $0.workspaceId == "ws-1" })
         let merged = SessionsListViewModel.sidebarWorkspaces(
             in: [pending] + rows[index].sessions
         )
         rows.remove(at: index)
 
         XCTAssertEqual(regrouped, merged + rows)
-        XCTAssertEqual(regrouped.first?.id, "workspace:prj-1")
+        XCTAssertEqual(regrouped.first?.id, "workspace:ws-1")
         XCTAssertEqual(regrouped.first?.sessions.count, 3)
     }
 

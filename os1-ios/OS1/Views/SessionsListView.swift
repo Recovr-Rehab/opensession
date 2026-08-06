@@ -201,7 +201,7 @@ struct SessionsListView: View {
                     viewModel.rename(workspace, to: renameText)
                 }
                 .disabled(
-                    workspace.projectId != nil
+                    workspace.workspaceId != nil
                         && renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
             } message: { _ in
@@ -844,7 +844,7 @@ struct SessionsListView: View {
                     let current = viewModel.sessions.first { $0.id == session.id }
                     newSessionRequest = NewSessionRequest(
                         repo: session.effectiveRepo,
-                        workspaceId: current?.projectId ?? session.projectId
+                        workspaceId: current?.workspaceId ?? session.workspaceId
                     )
                 },
                 onRenameWorkspace: { name in

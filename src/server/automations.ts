@@ -1066,7 +1066,7 @@ export async function runAutomation(
             ? { automationEvent: options.eventContext.slice(0, 10_000) }
             : {}),
           ...(plainThreadId ? { plainThreadId } : {}),
-          ...(ticketWorkspaceId ? { projectId: ticketWorkspaceId } : {}),
+          ...(ticketWorkspaceId ? { workspaceId: ticketWorkspaceId } : {}),
           ...existing,
           ...(engineSessionId
             ? engineSessionPatch(effectiveProvider, engineSessionId)

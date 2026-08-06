@@ -711,9 +711,7 @@ function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
   // The workspace this chat is filed under. Slack/Linear session files are
   // read-only, so for those sources the link lives here in the sidecar (written
   // by chat-workspace.ts) rather than in the session file itself.
-  const workspaceId =
-    (data as { workspaceId?: string | null }).workspaceId ?? data.projectId;
-  if (workspaceId) session.projectId = workspaceId;
+  if (data.workspaceId) session.workspaceId = data.workspaceId;
   return session;
 }
 
@@ -863,11 +861,7 @@ function scanNativeSessions(): UnifiedSession[] {
       mode: data.mode,
       // Back-compat: older session files stored the repo under `project`.
       repo: data.repo ?? (data as { project?: string }).project,
-      // Dual-read: the migration mirrors projectId→workspaceId; prefer the new key.
-      projectId:
-        (data as { workspaceId?: string | null }).workspaceId ??
-        data.projectId ??
-        null,
+      workspaceId: data.workspaceId ?? null,
       parentSessionId: data.parentSessionId,
       sideChatOf: data.sideChatOf,
       desk: data.desk,

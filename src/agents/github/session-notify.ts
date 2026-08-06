@@ -48,26 +48,26 @@ function readPending(): PendingDeploys {
 }
 
 /** Registry project id for a GitHub owner/name, or null if unconfigured. */
-export function projectIdForRepo(fullName: string): string | null {
+export function workspaceIdForRepo(fullName: string): string | null {
   for (const repo of Object.values(REPOS)) {
     if (repo.ghRepo === fullName) return repo.id;
   }
   return null;
 }
 
-/** Live (non-archived) sessions working on `branch` of `projectId`, primary or attached.
+/** Live (non-archived) sessions working on `branch` of `workspaceId`, primary or attached.
  *  Also used by handoff.ts to find the session that owns a PR's branch. */
-export function matchSessions(control: SessionControl, projectId: string, branch: string): SessionSummary[] {
+export function matchSessions(control: SessionControl, workspaceId: string, branch: string): SessionSummary[] {
   return control.listSessions().filter((s) => {
     if (s.state === "archived") return false;
-    if ((s.repo || defaultRepo().id) === projectId) {
+    if ((s.repo || defaultRepo().id) === workspaceId) {
       if (s.branch === branch) return true;
       // The agent may have switched branches inside its worktree (automations
       // renaming their auto-generated branch before opening the PR) while the
       // session record keeps the original name — match the actual HEAD too.
       if (worktreeHeadBranch(s.worktreeDir) === branch) return true;
     }
-    return (s.attachedRepos || []).some((r) => r.repo === projectId && r.branch === branch);
+    return (s.attachedRepos || []).some((r) => r.repo === workspaceId && r.branch === branch);
   });
 }
 
@@ -90,19 +90,19 @@ async function deliver(control: SessionControl, sessionIds: string[], message: s
 export async function notifyMergedPrSessions(payload: any): Promise<void> {
   const pr = payload?.pull_request;
   const headRef: string = pr?.head?.ref || "";
-  const projectId = projectIdForRepo(payload?.repository?.full_name || "");
-  if (!pr || !headRef || !projectId) return;
+  const workspaceId = workspaceIdForRepo(payload?.repository?.full_name || "");
+  if (!pr || !headRef || !workspaceId) return;
   const control = tryGetSessionControl();
   if (!control) return;
 
-  const sessions = matchSessions(control, projectId, headRef);
+  const sessions = matchSessions(control, workspaceId, headRef);
   if (!sessions.length) return;
 
   const prNumber: number = pr.number;
   const title: string = pr.title || `PR #${prNumber}`;
   const mergedBy: string = pr.merged_by?.login || payload?.sender?.login || "someone";
   const base: string = pr.base?.ref || "main";
-  const repo = REPOS[projectId];
+  const repo = REPOS[workspaceId];
   const trackDeploy =
     repo?.deploymentTracking === true &&
     base === repo.defaultBranch &&
@@ -115,7 +115,7 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
       : "") +
     " This is an FYI event: acknowledge briefly; no action needed unless something depends on it.";
 
-  console.log(`[github] PR #${prNumber} merged → notifying ${sessions.length} session(s) on ${projectId}:${headRef}`);
+  console.log(`[github] PR #${prNumber} merged → notifying ${sessions.length} session(s) on ${workspaceId}:${headRef}`);
   await deliver(control, sessions.map((s) => s.id), message);
 
   if (trackDeploy) {

@@ -9,7 +9,7 @@ import React, {
 import { createPortal } from "react-dom";
 import type {
 	UnifiedSession,
-	Project,
+	Workspace,
 	SupportThread,
 	FeedDescriptor,
 	FeedFilterSpec,
@@ -810,8 +810,8 @@ interface Props {
 	cloudUnreachable: boolean;
 	/** Initial sessions + project metadata have loaded, so dependent queues can render. */
 	workspaceDataReady: boolean;
-	/** Project folders that group chats. */
-	projects: Project[];
+	/** Workspace folders that group chats. */
+	workspaces: Workspace[];
 	/** Notes (id + title), to render pinned-note rows. */
 	notes: Array<{ id: string; title: string }>;
 	selectedId: string | null;
@@ -871,11 +871,11 @@ interface Props {
 	/** Start a new session with a repo pre-selected (the repo-band "+" action). */
 	onNewSessionInRepo: (repo: string) => void;
 	/** Open a project — its chats surface in the top tab strip. */
-	onOpenProject: (id: string) => void;
+	onOpenWorkspace: (id: string) => void;
 	/** Rename a project folder. */
-	onRenameProject: (id: string, name: string) => void;
+	onRenameWorkspace: (id: string, name: string) => void;
 	/** Delete a project folder (its chats become standalone). */
-	onDeleteProject: (id: string) => void;
+	onDeleteWorkspace: (id: string) => void;
 	/** Open a note (pinned-note row click). */
 	onOpenNote: (id: string) => void;
 	onOpenArchived: () => void;
@@ -1563,7 +1563,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	localMode,
 	cloudUnreachable,
 	workspaceDataReady,
-	projects,
+	workspaces,
 	notes,
 	selectedId,
 	activeNoteId,
@@ -1594,9 +1594,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenFeedItem,
 	onNewSession,
 	onNewSessionInRepo,
-	onOpenProject,
-	onRenameProject,
-	onDeleteProject,
+	onOpenWorkspace,
+	onRenameWorkspace,
+	onDeleteWorkspace,
 	onOpenNote,
 	onOpenArchived,
 	archivedActive,
@@ -1954,19 +1954,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// Right-click menu on a workspace row (mark unread / pin / status / rename /
 	// copy link / delete), and inline rename (double-click the project name).
-	const [projectMenu, setProjectMenu] = useState<{
+	const [workspaceMenu, setWorkspaceMenu] = useState<{
 		id: string;
 		x: number;
 		y: number;
 	} | null>(null);
-	const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
-	const [projectDraft, setProjectDraft] = useState("");
-	function commitProjectRename() {
-		if (editingProjectId) {
-			const name = projectDraft.trim();
-			if (name) onRenameProject(editingProjectId, name);
+	const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
+	const [workspaceDraft, setWorkspaceDraft] = useState("");
+	function commitWorkspaceRename() {
+		if (editingWorkspaceId) {
+			const name = workspaceDraft.trim();
+			if (name) onRenameWorkspace(editingWorkspaceId, name);
 		}
-		setEditingProjectId(null);
+		setEditingWorkspaceId(null);
 	}
 	// Inline rename for workspace-less rows (slack/linear/solo chats). These
 	// used window.prompt(), which iOS standalone PWAs silently suppress —
@@ -1985,19 +1985,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	/** Is this row's title currently being inline-edited (workspace or chat)? */
 	function rowRenameEditing(row: WsRow): boolean {
 		return row.workspace
-			? editingProjectId === row.workspace.id
+			? editingWorkspaceId === row.workspace.id
 			: !!row.chats[0] && editingChatId === row.chats[0].id;
 	}
 	useEffect(() => {
-		if (!projectMenu) return;
-		const close = () => setProjectMenu(null);
+		if (!workspaceMenu) return;
+		const close = () => setWorkspaceMenu(null);
 		window.addEventListener("click", close);
 		window.addEventListener("scroll", close, true);
 		return () => {
 			window.removeEventListener("click", close);
 			window.removeEventListener("scroll", close, true);
 		};
-	}, [projectMenu]);
+	}, [workspaceMenu]);
 
 	// The Archived row counts *my* archived sessions (the current user's), and honors
 	// the active repo filter — same lens as the archived page it opens.
@@ -2023,7 +2023,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			if (s.archived || s.automation) continue;
 			if (!s.startedBy || s.startedBy.toLowerCase() !== user) continue;
 			if (!isUnread(s.id, s.lastActivity, reads)) continue;
-			groups.add(s.projectId ? `ws:${s.projectId}` : `chat:${s.id}`);
+			groups.add(s.workspaceId ? `ws:${s.workspaceId}` : `chat:${s.id}`);
 		}
 		return groups.size;
 	}, [sessions, currentUser, reads]);
@@ -2280,11 +2280,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// checkout it runs from — so a chat also matches when its workspace
 			// is the filtered repo. Without this, narrowing to a repo hides the
 			// very workspaces that belong to it.
-			const wsRepo = new Map(projects.map((p) => [p.id, p.repo]));
+			const wsRepo = new Map(workspaces.map((p) => [p.id, p.repo]));
 			visible = visible.filter(
 				(s) =>
 					sessionRepo(s) === filter.repo ||
-					(!!s.projectId && wsRepo.get(s.projectId) === filter.repo),
+					(!!s.workspaceId && wsRepo.get(s.workspaceId) === filter.repo),
 			);
 		}
 		// Only a specific teammate narrows the chats themselves. "me" and
@@ -2311,7 +2311,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				(s.startedBy || "").toLowerCase().includes(q) ||
 				(s.automation || "").toLowerCase().includes(q),
 		);
-	}, [sessions, projects, search, filter.repo, filter.person]);
+	}, [sessions, workspaces, search, filter.repo, filter.person]);
 
 	// Sort order applied to every group's items: newest activity or newest
 	// creation first. Groups read from this pre-sorted list so ordering is uniform.
@@ -2342,7 +2342,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		/** Pin/menu key: `workspace:<id>` for real workspaces, the chat id solo. */
 		key: string;
 		/** Real workspace record, or null for an implicit single-chat row. */
-		workspace: Project | null;
+		workspace: Workspace | null;
 		name: string;
 		chats: UnifiedSession[]; // createdAt asc — chats[0] is "the first chat"
 		status: MineStatus;
@@ -2381,15 +2381,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			if (s.automation && !isClaimed(s)) continue;
 			if (s.sideChatOf) continue; // side chats live in the parent's panel, not the sidebar
 			if (s.desk) continue; // the Desk session lives in the ⌘J overlay, not the sidebar
-			if (s.projectId) {
-				const list = byWs.get(s.projectId) || [];
+			if (s.workspaceId) {
+				const list = byWs.get(s.workspaceId) || [];
 				list.push(s);
-				byWs.set(s.projectId, list);
+				byWs.set(s.workspaceId, list);
 			} else solo.push(s);
 		}
 		const mkRow = (
 			key: string,
-			workspace: Project | null,
+			workspace: Workspace | null,
 			name: string,
 			chats: UnifiedSession[],
 		): WsRow => {
@@ -2467,7 +2467,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			};
 		};
 		for (const [wsId, chats] of byWs) {
-			const ws = projects.find((p) => p.id === wsId) || null;
+			const ws = workspaces.find((p) => p.id === wsId) || null;
 			rows.push(
 				mkRow(`workspace:${wsId}`, ws, ws?.name || chats[0].title, chats),
 			);
@@ -2514,7 +2514,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		rows.sort((a, b) => (b[key] || "").localeCompare(a[key] || ""));
 		return rows;
 		// `lanes` feeds mineStatus/pinnedLane (read via the lib cache).
-	}, [filtered, sessions, projects, selectedId, reads, search, filter, lanes, noteActivity, noteReadsRev, activeReviewPrKeys]);
+	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, noteActivity, noteReadsRev, activeReviewPrKeys]);
 
 	// ── Hidden rows ─────────────────────────────────────────────────────────
 	// "Hide from my sidebar" is the personal counterpart to Archive: archiving
@@ -2957,7 +2957,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// A PR row is selected while the open workspace carries its PR.
 	function prRowSelected(item: ReviewQueueItem): boolean {
 		const ws = selectedWorkspaceId
-			? projects.find((p) => p.id === selectedWorkspaceId)
+			? workspaces.find((p) => p.id === selectedWorkspaceId)
 			: null;
 		return (
 			!!ws &&
@@ -3441,7 +3441,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				wsSwipeOffset.current = 0;
 				return;
 			}
-			if (row.workspace) onOpenProject(row.workspace.id);
+			if (row.workspace) onOpenWorkspace(row.workspace.id);
 			else if (row.chats[0]) onSelect(row.chats[0]);
 		} else if (wsLongPressed.current) {
 			// Release after a long-press: the workspace sheet is already up —
@@ -3677,10 +3677,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			lastActivity: string;
 		}> = [];
 		for (const s of mine) {
-			if (s.projectId) {
-				const list = byWs.get(s.projectId) || [];
+			if (s.workspaceId) {
+				const list = byWs.get(s.workspaceId) || [];
 				list.push(s);
-				byWs.set(s.projectId, list);
+				byWs.set(s.workspaceId, list);
 			} else {
 				rows.push({
 					key: s.id,
@@ -3691,7 +3691,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			}
 		}
 		for (const [wsId, chats] of byWs) {
-			const ws = projects.find((p) => p.id === wsId) || null;
+			const ws = workspaces.find((p) => p.id === wsId) || null;
 			chats.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 			rows.push({
 				key: `workspace:${wsId}`,
@@ -3705,7 +3705,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		}
 		rows.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
 		return rows;
-	}, [sessions, projects, currentUser, filter.repo]);
+	}, [sessions, workspaces, currentUser, filter.repo]);
 
 	// Bring an archived row back. `pin` is the one-gesture escalation: unarchive
 	// AND drop it in Pinned, so a row you're resurrecting to work on lands at the
@@ -3990,7 +3990,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						return;
 					}
 					if (editing) return;
-					if (row.workspace) onOpenProject(row.workspace.id);
+					if (row.workspace) onOpenWorkspace(row.workspace.id);
 					else if (row.chats[0]) onSelect(row.chats[0]);
 				}}
 					onMouseEnter={(e) => wsRowHoverEnter(row, e.currentTarget)}
@@ -4016,7 +4016,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// text-selection callout) on top of it.
 					if (wsLongPressed.current || wsPressOrigin.current) return;
 					closeWsHover();
-					setProjectMenu({
+					setWorkspaceMenu({
 						id: row.workspace ? row.workspace.id : row.key,
 						x: e.clientX,
 						y: e.clientY,
@@ -4051,28 +4051,28 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{editing ? (
 					<input
 						className="min-w-0 flex-1 rounded-md border border-[var(--accent,#6b8afd)] bg-bg px-[3px] text-[14px] font-medium text-inherit outline-none"
-						value={row.workspace ? projectDraft : chatDraft}
+						value={row.workspace ? workspaceDraft : chatDraft}
 						autoFocus
 						onChange={(e) =>
 							row.workspace
-								? setProjectDraft(e.target.value)
+								? setWorkspaceDraft(e.target.value)
 								: setChatDraft(e.target.value)
 						}
 						onClick={(e) => e.stopPropagation()}
 						onDoubleClick={(e) => e.stopPropagation()}
 						onBlur={() =>
 							row.workspace
-								? commitProjectRename()
+								? commitWorkspaceRename()
 								: commitChatRename(row.chats[0])
 						}
 						onKeyDown={(e) => {
 							if (e.key === "Enter")
 								row.workspace
-									? commitProjectRename()
+									? commitWorkspaceRename()
 									: commitChatRename(row.chats[0]);
 							else if (e.key === "Escape")
 								row.workspace
-									? setEditingProjectId(null)
+									? setEditingWorkspaceId(null)
 									: setEditingChatId(null);
 							e.stopPropagation();
 						}}
@@ -4086,8 +4086,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						onDoubleClick={(e) => {
 							e.stopPropagation();
 							if (row.workspace) {
-								setProjectDraft(row.workspace.name);
-								setEditingProjectId(row.workspace.id);
+								setWorkspaceDraft(row.workspace.name);
+								setEditingWorkspaceId(row.workspace.id);
 							} else if (row.chats[0]) {
 								// Solo chat rows rename the chat itself.
 								startChatRename(row.chats[0]);
@@ -4260,7 +4260,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	function supportThreadActive(t: SupportThread) {
 		// The ticket's workspace is open (chat-less route or one of its chats)…
 		if (selectedWorkspaceId) {
-			const ws = projects.find((p) => p.id === selectedWorkspaceId);
+			const ws = workspaces.find((p) => p.id === selectedWorkspaceId);
 			if (ws?.plainThreadId === t.id) return true;
 		}
 		// …or its linked session is the open chat (pre-workspace sessions).
@@ -4823,7 +4823,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Is a feed item's workspace (or its linked session) the open surface?
 	function feedItemActive(feed: FeedDescriptor, item: FeedItem) {
 		if (selectedWorkspaceId) {
-			const ws = projects.find((p) => p.id === selectedWorkspaceId);
+			const ws = workspaces.find((p) => p.id === selectedWorkspaceId);
 			if (
 				ws?.externalRefs?.some(
 					(r) => r.kind === feed.refKind && r.id === item.id,
@@ -5318,17 +5318,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				/>
 			)}
 
-			{projectMenu &&
+			{workspaceMenu &&
 				(() => {
 					// The menu id is a real workspace id, or a row key for a
 					// workspace-less row (solo chat / shared-worktree group).
-					const ws = projects.find((p) => p.id === projectMenu.id);
+					const ws = workspaces.find((p) => p.id === workspaceMenu.id);
 					const menuRow = wsRows.find((r) =>
-						ws ? r.workspace?.id === ws.id : r.key === projectMenu.id,
+						ws ? r.workspace?.id === ws.id : r.key === workspaceMenu.id,
 					);
 					const chats = menuRow?.chats ?? [];
 					const first = chats[0];
-					const pinKey = ws ? `workspace:${ws.id}` : projectMenu.id;
+					const pinKey = ws ? `workspace:${ws.id}` : workspaceMenu.id;
 					// A row can be pinned via its own key or a legacy pin on any member
 					// chat (incl. alias ids) — unpin clears all of them.
 					const pinnedKeys = [
@@ -5428,8 +5428,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							icon: <IconPencil size={20} />,
 							label: "Rename",
 							onClick: () => {
-								setProjectDraft(ws.name);
-								setEditingProjectId(ws.id);
+								setWorkspaceDraft(ws.name);
+								setEditingWorkspaceId(ws.id);
 							},
 						});
 					else if (first)
@@ -5499,17 +5499,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										`Delete workspace "${ws.name}"? Its chats become standalone.`,
 									)
 								)
-									onDeleteProject(ws.id);
+									onDeleteWorkspace(ws.id);
 							},
 						});
 					}
 
 					return (
 						<SidebarCtxMenu
-							x={projectMenu.x}
-							y={projectMenu.y}
+							x={workspaceMenu.x}
+							y={workspaceMenu.y}
 							entries={entries}
-							onClose={() => setProjectMenu(null)}
+							onClose={() => setWorkspaceMenu(null)}
 						/>
 					);
 				})()}
@@ -6327,8 +6327,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onOpen={(chat) => onSelect(chat)}
 							onRename={() => {
 								if (ws) {
-									setProjectDraft(ws.name);
-									setEditingProjectId(ws.id);
+									setWorkspaceDraft(ws.name);
+									setEditingWorkspaceId(ws.id);
 								} else if (row.chats[0]) {
 									// Solo chat rows rename the chat itself.
 									startChatRename(row.chats[0]);
@@ -6371,7 +6371,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 													`Delete workspace "${ws.name}"? Its chats become standalone.`,
 												)
 											)
-												onDeleteProject(ws.id);
+												onDeleteWorkspace(ws.id);
 										}
 									: null
 							}
@@ -7616,7 +7616,7 @@ function compactNum(n: number): string {
 // Structural subset of WsRow (declared inside Sidebar) that the card reads.
 interface WsCardRow {
 	key: string;
-	workspace: Project | null;
+	workspace: Workspace | null;
 	name: string;
 	chats: UnifiedSession[];
 	status: MineStatus;

@@ -71,7 +71,7 @@ export interface CreateSessionOpts {
   /**
    * Join an existing workspace as a sibling chat — a new tab, the create path's
    * equivalent of the web tab strip's "+". The chat takes the workspace's
-   * `projectId` (so it lands in that sidebar row's tab strip), defaults its repo
+   * `workspaceId` (so it lands in that sidebar row's tab strip), defaults its repo
    * to the workspace's, and in code mode shares the workspace's worktree/branch
    * instead of minting its own. An unknown id fails the create rather than
    * silently starting a standalone session.

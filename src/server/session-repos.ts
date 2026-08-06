@@ -458,11 +458,11 @@ export async function switchPrimaryRepo(
 	// workspace still points at the worktree being left: with siblings still
 	// there, or on a PR/ticket workspace that deliberately names another repo,
 	// the stamp isn't ours to move.
-	const workspaceId = session.projectId;
+	const workspaceId = session.workspaceId;
 	if (workspaceId) {
 		const ws = getWorkspace(workspaceId);
 		const soleMember = !getCachedSessions().some(
-			(s) => s.projectId === workspaceId && s.id !== sessionId,
+			(s) => s.workspaceId === workspaceId && s.id !== sessionId,
 		);
 		if (
 			ws &&

@@ -245,7 +245,7 @@ interface Props {
 	/** Every session — powers the Chat tab's @-session tagging. */
 	allSessions?: UnifiedSession[];
 	/** Workspace names — lets the Chat tab's @-search match workspaces too. */
-	allProjects?: Array<{ id: string; name: string }>;
+	allWorkspaces?: Array<{ id: string; name: string }>;
 	/** Start a new chat in this workspace — surfaced in the ⋯ menu so it's
 	    reachable on a phone, where the tab strip's + button is hidden. */
 	onNewChat?: (mode: "share" | "stack" | "ask") => void;
@@ -617,7 +617,7 @@ export function SessionViewer({
 	workspaceChats,
 	onSetStatus,
 	allSessions,
-	allProjects,
+	allWorkspaces,
 	onNewChat,
 	tabStripVisible,
 	parentSession,
@@ -2829,8 +2829,8 @@ export function SessionViewer({
 		// closed (archived-after-merge) sibling whose context the new chat needs.
 		// workspaceChats (the live tab strip) is the fallback when the chat has no
 		// workspace id of its own.
-		const siblings = session.projectId
-			? (allSessions || []).filter((c) => c.projectId === session.projectId)
+		const siblings = session.workspaceId
+			? (allSessions || []).filter((c) => c.workspaceId === session.workspaceId)
 			: workspaceChats || [];
 		return siblings
 			.filter(
@@ -2845,7 +2845,7 @@ export function SessionViewer({
 			.sort((a, b) =>
 				(b.lastActivity || "").localeCompare(a.lastActivity || ""),
 			);
-	}, [allSessions, workspaceChats, session.id, session.projectId]);
+	}, [allSessions, workspaceChats, session.id, session.workspaceId]);
 	useEffect(() => {
 		setContextChats([]);
 		setShowAllContextChats(false);
@@ -3314,8 +3314,8 @@ export function SessionViewer({
 	function handleShare() {
 		// Match the canonical URL App maintains: workspace-scoped when the chat
 		// belongs to one, legacy /session/<id> only for workspace-less chats.
-		const path = session.projectId
-			? `${BASE_PATH}/workspace/${encodeURIComponent(session.projectId)}/chat/${encodeURIComponent(session.id)}`
+		const path = session.workspaceId
+			? `${BASE_PATH}/workspace/${encodeURIComponent(session.workspaceId)}/chat/${encodeURIComponent(session.id)}`
 			: `${BASE_PATH}/session/${encodeURIComponent(session.id)}`;
 		const link = `${location.origin}${path}`;
 		// Phone: native share sheet. Desktop: copy, with the inline check on
@@ -4512,7 +4512,7 @@ export function SessionViewer({
 									<div className="session-info-overview">
 										<WorkspaceInfo
 											sessionId={session.id}
-											workspaceId={session.projectId || null}
+											workspaceId={session.workspaceId || null}
 											workspaceName={workspaceName}
 											chats={(workspaceChats?.length ? workspaceChats : [session]).map(
 												(s) => ({
@@ -5470,7 +5470,7 @@ export function SessionViewer({
 								<div className="px-1">
 									<WorkspaceInfo
 										sessionId={session.id}
-										workspaceId={session.projectId || null}
+										workspaceId={session.workspaceId || null}
 										workspaceName={workspaceName}
 										chats={(workspaceChats?.length ? workspaceChats : [session]).map(
 											(s) => ({

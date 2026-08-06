@@ -1,4 +1,4 @@
-import type { Project, UnifiedSession } from "./types";
+import type { Workspace, UnifiedSession } from "./types";
 
 /**
  * The Review pane a chat surface should foreground by default. PR-backed
@@ -7,7 +7,7 @@ import type { Project, UnifiedSession } from "./types";
  * PR workspaces (a bare sidebar PR row with no sessions yet).
  */
 export function defaultChatWorkspaceView(
-	workspace: Pick<Project, "key" | "prNumber"> | null | undefined,
+	workspace: Pick<Workspace, "key" | "prNumber"> | null | undefined,
 	reviewDismissed: boolean,
 	hasLiveChat: boolean,
 ): "review" | null {
@@ -87,11 +87,11 @@ export function pinMainChatFirst(
  */
 export function pickLandingChat(
 	all: UnifiedSession[],
-	projectId: string,
+	workspaceId: string,
 	preferredId?: string,
 ): UnifiedSession | undefined {
 	const live = all
-		.filter((s) => !s.archived && s.projectId === projectId && !s.sideChatOf)
+		.filter((s) => !s.archived && s.workspaceId === workspaceId && !s.sideChatOf)
 		.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 	const preferred = preferredId
 		? live.find((s) => s.id === preferredId)
@@ -103,7 +103,7 @@ export function pickLandingChat(
 		.filter(
 			(s) =>
 				s.archived &&
-				s.projectId === projectId &&
+				s.workspaceId === workspaceId &&
 				!s.sideChatOf &&
 				!chatNeverRan(s),
 		)
