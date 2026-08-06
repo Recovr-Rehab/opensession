@@ -1406,6 +1406,13 @@ struct SessionsListView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .textCase(nil)
         .padding(.top, 4)
+        #if os(iOS)
+        // Lopsided on purpose, like the lane headings below it: a band leads
+        // the rows under it, so it sits nearer to them than to whatever came
+        // before. The list's own header inset is what's being trimmed, hence
+        // the negative value.
+        .padding(.bottom, -3)
+        #endif
     }
 
     /// A lane heading labels the rows under it, so its own insets are
