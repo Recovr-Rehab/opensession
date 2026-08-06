@@ -1448,18 +1448,23 @@ private struct SessionInputBar: View {
     /// The queue uses the web composer's flap treatment: inset from the input,
     /// rounded at the top, and tucked behind the composer at the bottom.
     private var queueFlap: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             Text(queueTitle)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(OS1VisualStyle.textFaint)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
 
             ForEach(viewModel.deliveringItems) { item in
-                QueuedMessageRow(item: item, phase: .delivering)
+                QueuedMessageRow(
+                    item: item, phase: .delivering, showsDivider: item.id != firstRowId
+                )
             }
             ForEach(viewModel.steeredItems) { item in
                 QueuedMessageRow(
                     item: item,
                     phase: .steering,
+                    showsDivider: item.id != firstRowId,
                     // The run keeps the message either way — this only
                     // retires the receipt early.
                     onDelete: { viewModel.dismissSteered(item) }
@@ -1469,6 +1474,7 @@ private struct SessionInputBar: View {
                 QueuedMessageRow(
                     item: item,
                     phase: .queued,
+                    showsDivider: item.id != firstRowId,
                     // Steering needs a run to fold into, and the server can't
                     // fold a message that carries files.
                     onSteer: (viewModel.isRunning && !item.hasFiles)
@@ -1493,6 +1499,7 @@ private struct SessionInputBar: View {
                         hasFiles: !item.imageFiles.isEmpty
                     ),
                     phase: item.failed ? .failed : .unsent,
+                    showsDivider: item.id != firstRowId,
                     detail: item.failed
                         ? item.lastError
                         : (viewModel.outbox.sendingId == item.id ? "Sending…" : nil),
@@ -1507,31 +1514,36 @@ private struct SessionInputBar: View {
                 )
             }
         }
-        .padding(.horizontal, 12)
         .padding(.top, 10)
-        .padding(.bottom, 24)
-        .background(
-            OS1VisualStyle.panel.opacity(0.9),
-            in: UnevenRoundedRectangle(
-                topLeadingRadius: 16,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 16,
-                style: .continuous
-            )
-        )
-        .overlay {
-            UnevenRoundedRectangle(
-                topLeadingRadius: 16,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 16,
-                style: .continuous
-            )
-            .stroke(OS1VisualStyle.border, lineWidth: 0.5)
-        }
+        .padding(.bottom, 26)
+        // The composer's own recipe (page colour over a material) rather than
+        // a flat panel fill: the two are one piece of chrome, and the flat
+        // version read as a grey box taped to the bottom of the glass.
+        .background(OS1VisualStyle.background.opacity(0.55), in: flapShape)
+        .background(.regularMaterial, in: flapShape)
+        .overlay { flapShape.stroke(OS1VisualStyle.border, lineWidth: 0.5) }
         .padding(.horizontal, 18)
         .padding(.bottom, -14)
+    }
+
+    private var flapShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: 20,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: 20,
+            style: .continuous
+        )
+    }
+
+    /// Identity of the topmost row, so every row below it can draw the
+    /// separator that divides them — the flap's sections are one list, not
+    /// four, and it should read as one.
+    private var firstRowId: String? {
+        viewModel.deliveringItems.first?.id
+            ?? viewModel.steeredItems.first?.id
+            ?? viewModel.queuedItems.first?.id
+            ?? unsentItems.first?.id
     }
 
     private var queueTitle: String {
@@ -1987,6 +1999,8 @@ private struct SessionInputBar: View {
 
         let item: QueueItem
         let phase: Phase
+        /// Every row but the first draws the hairline above it.
+        var showsDivider = false
         var detail: String?
         var onSteer: (() -> Void)?
         var onEdit: (() -> Void)?
@@ -2003,9 +2017,12 @@ private struct SessionInputBar: View {
             QueueMessagePresentation(content: item.content, user: item.user)
         }
 
-        private var label: String {
+        /// Only the states worth explaining say so. "Queued" is what the
+        /// flap's own title already says, and repeating it under every
+        /// message was pure noise; the clock beside it is enough.
+        private var label: String? {
             switch phase {
-            case .queued: "Queued — after this run"
+            case .queued: nil
             case .steering: "Steering — delivers next turn"
             case .delivering: "Delivering…"
             case .unsent: detail ?? "Unsent — sends when you're back online"
@@ -2013,11 +2030,40 @@ private struct SessionInputBar: View {
             }
         }
 
+        /// Only the states that need the person to know something wear their
+        /// colour in words. Queued and in-flight are ordinary — their mark
+        /// carries the colour and the label stays quiet, so a flap full of
+        /// messages doesn't read as a flap full of warnings.
         private var labelColor: Color {
             switch phase {
-            case .queued, .unsent: .orange
-            case .failed: .red
-            case .steering, .delivering: .green
+            case .unsent: OS1VisualStyle.yellow
+            case .failed: OS1VisualStyle.red
+            case .queued, .steering, .delivering: OS1VisualStyle.textFaint
+            }
+        }
+
+        /// The state, as a small tinted mark rather than a bold coloured
+        /// sentence per row. In-flight pulses like the run chip above.
+        @ViewBuilder
+        private var mark: some View {
+            switch phase {
+            case .queued:
+                // Carries the state for VoiceOver too, since the queued row
+                // deliberately doesn't spell it out in text.
+                Image(systemName: "clock")
+                    .font(.caption2)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .accessibilityLabel("Queued — delivers after this run")
+            case .steering, .delivering:
+                PulsingDot(color: OS1VisualStyle.green, size: 6)
+            case .unsent:
+                Image(systemName: "arrow.up.circle")
+                    .font(.caption2)
+                    .foregroundStyle(OS1VisualStyle.yellow)
+            case .failed:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(OS1VisualStyle.red)
             }
         }
 
@@ -2029,12 +2075,19 @@ private struct SessionInputBar: View {
         }
 
         var body: some View {
-            HStack(alignment: .center, spacing: 8) {
+            // The message leads and wears the text colour; its state is the
+            // small mark beside it and one faint line under it. It used to be
+            // the other way round — a bold orange banner per row over a dimmed
+            // message — which made a queue of two ordinary messages look like
+            // a stack of warnings.
+            HStack(alignment: .top, spacing: 10) {
+                mark
+                    .frame(width: 12, height: 16)
                 if let first = item.images.first,
                    let thumb = DataImage(dataURL: first) {
                     thumb
-                        .frame(width: 34, height: 34)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .frame(width: 32, height: 32)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .overlay(alignment: .bottomTrailing) {
                             if item.images.count > 1 {
                                 Text("+\(item.images.count - 1)")
@@ -2047,57 +2100,73 @@ private struct SessionInputBar: View {
                         }
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        if phase == .unsent {
-                            Image(systemName: "clock")
+                    Text(message.body)
+                        .font(.subheadline)
+                        .lineLimit(2)
+                        .foregroundStyle(OS1VisualStyle.text)
+                    HStack(spacing: 5) {
+                        if let label {
+                            Text(label)
                                 .font(.caption2)
+                                .foregroundStyle(labelColor)
+                                .lineLimit(1)
                         }
-                        Text(label)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(labelColor)
                         if let from = message.label {
                             Text(from)
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(OS1VisualStyle.textFaint)
                                 .lineLimit(1)
                         }
                         if item.hasFiles {
                             Image(systemName: "paperclip")
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(OS1VisualStyle.textFaint)
                         }
                     }
-                    Text(message.body)
-                        .font(.footnote)
-                        .lineLimit(2)
-                        .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
+                // Words, not a bordered control: "Steer" has to stay legible
+                // as an action, and a capsule button sitting mid-row was the
+                // heaviest thing in the flap. Label colour, not link blue —
+                // this palette is monochrome, so a blue word ends up the
+                // loudest thing on the screen; weight and position carry the
+                // affordance instead.
                 if let onSteer {
                     Button("Steer", action: onSteer)
-                        .font(.footnote.weight(.medium))
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.small)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .buttonStyle(.plain)
                 }
                 if let onRetry {
-                    Button("Retry", action: onRetry)
-                        .font(.footnote.weight(.medium))
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.small)
+                    Button("Try again", action: onRetry)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .buttonStyle(.plain)
                 }
                 if let onDelete {
                     Button(action: onDelete) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .frame(width: 26, height: 26)
+                            .contentShape(Circle())
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Discard message")
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .overlay(alignment: .top) {
+                if showsDivider {
+                    Rectangle()
+                        .fill(OS1VisualStyle.border.opacity(0.6))
+                        .frame(height: 0.5)
+                        // Inset to the text column, the way a list separator
+                        // clears its row's leading icon.
+                        .padding(.leading, 34)
+                }
+            }
             // A whole-row tap opens the editor — the phone equivalent of the
             // web's pencil, and the gesture people already expect from a
             // pending item. The rest of the actions hang off a long press so
