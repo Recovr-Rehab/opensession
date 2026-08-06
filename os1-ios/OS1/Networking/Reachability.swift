@@ -41,16 +41,66 @@ enum Reachability {
         return hint
     }
 
-    /// The diagnosis on its own, for callers holding no error yet — the
-    /// sessions list asks while its first request is still in flight, because
-    /// a minute of spinner is a long way to go to be told "timed out".
+    /// A failed request in the terms a screen needs: a headline naming the
+    /// problem, the line under it, and whether nothing came back at all.
+    ///
+    /// `isConnection` decides what the screen offers. A request that never
+    /// left the device is fixed out here — a VPN toggle, a signal, a wait —
+    /// so retrying is the whole answer; anything else the server said back is
+    /// a different conversation.
+    struct Diagnosis: Equatable, Sendable {
+        let title: String
+        let message: String
+        let isConnection: Bool
+    }
+
+    static func diagnose(_ error: Error) async -> Diagnosis {
+        // "Offline" is its own headline: no server is reachable, so naming
+        // this one would be beside the point.
+        if (error as? URLError)?.code == .notConnectedToInternet {
+            return Diagnosis(
+                title: "No internet connection",
+                message: error.localizedDescription,
+                isConnection: true
+            )
+        }
+        guard blamesTheNetwork(error) else {
+            return Diagnosis(
+                title: "Couldn't load",
+                message: error.localizedDescription,
+                isConnection: false
+            )
+        }
+        return await tailnetDiagnosis()
+            ?? Diagnosis(
+                title: "Can't reach the server",
+                // Keep the system's own words underneath: "timed out" and
+                // "couldn't find the host" send you to different places.
+                message: error.localizedDescription,
+                isConnection: true
+            )
+    }
+
+    /// The tailnet diagnosis on its own, for callers holding no error yet —
+    /// the sessions list asks while its first request is still in flight,
+    /// because a minute of spinner is a long way to go to be told "timed out".
     ///
     /// Nil unless both halves are true: the server lives on a tailnet, and
     /// this device is not on one.
+    static func tailnetDiagnosis() async -> Diagnosis? {
+        guard let hint = await tailnetHint() else { return nil }
+        return Diagnosis(
+            title: hint,
+            message: "This server only answers on your tailnet. Turn Tailscale on and it loads by itself.",
+            isConnection: true
+        )
+    }
+
+    /// The tailnet diagnosis as one line, for the places that have room for
+    /// one — a banner, a settings check.
     ///
-    /// Four words on purpose: it shows in a small banner, and naming the host
-    /// or explaining tailnets adds nothing to do — the fix is the VPN toggle
-    /// either way.
+    /// Four words on purpose: naming the host or explaining tailnets adds
+    /// nothing to do, because the fix is the VPN toggle either way.
     static func tailnetHint() async -> String? {
         guard let host = ServerConfig.shared.baseURL?.host(), !host.isEmpty,
               !deviceIsOnTailnet(),

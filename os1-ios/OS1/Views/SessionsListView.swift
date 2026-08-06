@@ -58,6 +58,8 @@ struct SessionsListView: View {
     /// Surfaced when a background session create fails after the sheet closed.
     @State private var createError: String?
     @State private var showArchived = false
+    /// A tapped "Try again" on the unreachable screen, until it lands.
+    @State private var isRetrying = false
     #if os(iOS)
     @State private var renamingWorkspace: SidebarWorkspace?
     @State private var renameText = ""
@@ -389,20 +391,59 @@ struct SessionsListView: View {
     @ViewBuilder
     private var loadingOrList: some View {
         if !viewModel.hasLoaded {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if viewModel.sessions.isEmpty && viewModel.archivedSessions.isEmpty {
-            emptyState
+            loadingState
+        } else if hasNoRows {
+            if let failure = viewModel.loadFailure {
+                unreachableState(failure)
+            } else {
+                emptyState
+            }
         } else {
             list
         }
     }
 
+    private var hasNoRows: Bool {
+        viewModel.sessions.isEmpty && viewModel.archivedSessions.isEmpty
+    }
+
+    /// True while the whole screen is given over to a failed load — which is
+    /// also the one time the banner has nothing to add.
+    private var showsFailureScreen: Bool {
+        viewModel.hasLoaded && hasNoRows && viewModel.loadFailure != nil
+    }
+
+    /// The first load. A tailnet server with the tunnel down answers nothing
+    /// for a full minute, and a bare spinner spends that minute saying
+    /// nothing — so the diagnosis joins it as soon as there is one.
+    private var loadingState: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+            if let failure = viewModel.loadFailure {
+                VStack(spacing: 4) {
+                    Text(failure.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.text)
+                    Text(failure.message)
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: 0.2), value: viewModel.loadFailure)
+    }
+
     /// Floating glass capsule, matching the session view's banner styling,
     /// instead of a full-width opaque bar.
+    ///
+    /// Silent while the failure screen is up: the same sentence twice, once
+    /// mid-screen and once in red at the bottom, reads as two problems.
     @ViewBuilder
     private var errorBanner: some View {
-        if let error = viewModel.error {
+        if let error = viewModel.error, !showsFailureScreen {
             Text(error)
                 .font(.footnote)
                 .foregroundStyle(.red)
@@ -1360,13 +1401,69 @@ struct SessionsListView: View {
         ContentUnavailableView {
             Label("No sessions", systemImage: "bubble.left.and.bubble.right")
         } description: {
-            Text(viewModel.error ?? "Sessions from the OS1 server will appear here.")
+            Text("Sessions from the OS1 server will appear here.")
         } actions: {
-            #if os(macOS)
-            SettingsLink { Text("Settings") }
-            #else
-            Button("Settings") { showSettings = true }
-            #endif
+            settingsButton
+        }
+    }
+
+    /// The list is empty because nothing came back, which is a different
+    /// screen from an empty list: "No sessions" reads as a server with
+    /// nothing on it, when the truth is a dropped tailnet or a dead signal
+    /// and the fix is nowhere near Settings. So the failure gets the
+    /// headline, the server we couldn't reach gets named, and the first
+    /// button is the one that answers a connection problem.
+    private func unreachableState(_ failure: Reachability.Diagnosis) -> some View {
+        ContentUnavailableView {
+            Label(
+                failure.title,
+                systemImage: failure.isConnection
+                    ? "wifi.exclamationmark"
+                    : "exclamationmark.triangle"
+            )
+        } description: {
+            VStack(spacing: 8) {
+                Text(failure.message)
+                if let host = ServerConfig.shared.baseURL?.host() {
+                    Text(host)
+                        .font(.footnote.monospaced())
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                }
+            }
+        } actions: {
+            // The poll keeps trying underneath either way — this is for the
+            // person who just turned the VPN back on and doesn't want to
+            // wonder whether the app noticed.
+            Button(action: retryLoad) {
+                if isRetrying {
+                    // Same footprint as the label it replaces, so the row
+                    // doesn't jump when the retry starts.
+                    ProgressView().controlSize(.small)
+                } else {
+                    Text("Try again")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isRetrying)
+            settingsButton
+        }
+    }
+
+    @ViewBuilder
+    private var settingsButton: some View {
+        #if os(macOS)
+        SettingsLink { Text("Settings") }
+        #else
+        Button("Settings") { showSettings = true }
+        #endif
+    }
+
+    private func retryLoad() {
+        guard !isRetrying else { return }
+        isRetrying = true
+        Task {
+            await viewModel.refresh()
+            isRetrying = false
         }
     }
 }

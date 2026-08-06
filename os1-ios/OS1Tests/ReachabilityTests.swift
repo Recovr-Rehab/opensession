@@ -61,4 +61,23 @@ final class ReachabilityTests: XCTestCase {
         // An HTTP status, decoded and thrown by the API client.
         XCTAssertFalse(Reachability.blamesTheNetwork(NSError(domain: "OS1", code: 500)))
     }
+
+    /// The sessions screen shows a connection failure differently from an
+    /// empty server, so the flag that picks between them has to be right.
+    /// Only the branches that need no network are pinned here — the tailnet
+    /// question resolves a hostname and reads this device's interfaces.
+    @MainActor
+    func testOfflineIsAConnectionProblemEvenThoughItKeepsItsOwnWording() async {
+        let diagnosis = await Reachability.diagnose(URLError(.notConnectedToInternet))
+        XCTAssertTrue(diagnosis.isConnection)
+        XCTAssertEqual(diagnosis.title, "No internet connection")
+        XCTAssertEqual(diagnosis.message, URLError(.notConnectedToInternet).localizedDescription)
+    }
+
+    @MainActor
+    func testAnAnsweredRequestIsNotAConnectionProblem() async {
+        let diagnosis = await Reachability.diagnose(OS1API.APIError.http(401))
+        XCTAssertFalse(diagnosis.isConnection)
+        XCTAssertEqual(diagnosis.message, OS1API.APIError.http(401).localizedDescription)
+    }
 }

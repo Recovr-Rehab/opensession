@@ -10,6 +10,13 @@ final class SessionsListViewModel {
     private(set) var archivedSessions: [Session] = []
     private(set) var workspaceNames: [String: String] = [:]
     private(set) var error: String?
+    /// Why the list has nothing in it, when the reason is a failed load
+    /// rather than a server with nothing on it.
+    ///
+    /// Kept apart from `error`, which also carries action failures (a rename
+    /// that didn't take, an archive that bounced): the empty screen stands in
+    /// for the list itself, so it may only speak about loading the list.
+    private(set) var loadFailure: Reachability.Diagnosis?
     private(set) var hasLoaded = false
 
     private var pollTask: Task<Void, Never>?
@@ -607,9 +614,15 @@ final class SessionsListViewModel {
                 archivedSessions = archivedNext
             }
             error = nil
+            loadFailure = nil
         } catch {
             // Keep showing the last good list; surface the error alongside it.
-            self.error = await Reachability.describe(error)
+            let diagnosis = await Reachability.diagnose(error)
+            // The banner sits over a list that's still good, so it takes the
+            // headline: "Can't reach the server" is the news, and the system's
+            // wording underneath it is for the screen that has room.
+            self.error = diagnosis.isConnection ? diagnosis.title : diagnosis.message
+            self.loadFailure = diagnosis
         }
         hasLoaded = true
     }
@@ -617,12 +630,16 @@ final class SessionsListViewModel {
     /// Name the reason a first load can't land while it's still trying. Only
     /// speaks up if the answer is still useful — a list that arrived in the
     /// meantime has already said more than any diagnosis could.
+    ///
+    /// It sets `loadFailure` and not `error`: the request hasn't failed yet,
+    /// so this belongs under the spinner as a diagnosis, not in the red
+    /// capsule reserved for something that actually went wrong.
     private func diagnoseUnreachableServer() {
         Task { [weak self] in
-            guard let hint = await Reachability.tailnetHint(),
+            guard let diagnosis = await Reachability.tailnetDiagnosis(),
                   let self, !self.hasLoaded
             else { return }
-            self.error = hint
+            self.loadFailure = diagnosis
         }
     }
 
