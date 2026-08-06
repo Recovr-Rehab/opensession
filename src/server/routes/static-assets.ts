@@ -117,7 +117,11 @@ export async function handleStaticAssetsRoutes(
 				return new Response(Bun.file(generic), {
 					headers: {
 						"Content-Type": "image/png",
-						"Cache-Control": "public, max-age=86400",
+						// Same short, revalidating cache as a configured repo
+						// icon: these are editable assets, and a day-long hard
+						// cache pins a redrawn icon on every client that
+						// already fetched it.
+						"Cache-Control": "public, max-age=3600, must-revalidate",
 					},
 				});
 			}

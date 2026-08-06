@@ -33,10 +33,17 @@ export function repoColor(key: string): string {
 // stable across the rename.
 export { repoLabel } from "../lib/repo-label";
 
+// Repos that ship their own product mark rather than falling back to their
+// GitHub org avatar. Those marks are drawn to app-icon proportions (artwork
+// on ~80% of the canvas), so they take the trim below to sit at the same size
+// as the avatars beside them.
+const APP_ICON_REPOS = new Set(["opensession", "tella-fusion"]);
+
 // A repo's icon tile (sidebar Repo dropdown, session-header breadcrumb, repo
 // menus): the server's /repo-icon/<id>.png — the repo's GitHub org avatar,
-// with opensession wearing the OS1 mac app icon — falling back to the colored
-// letter tile when no icon resolves (unregistered/local repos). `size` (px)
+// with the repos in APP_ICON_REPOS wearing their own product icon — falling
+// back to the colored letter tile when no icon resolves (unregistered/local
+// repos). `size` (px)
 // shrinks it for tight spots like the phone header's model line; omitted =
 // the 18px default. `round` makes it a full circle (e.g. the phone title
 // pill, where it sits against the pill's own rounding).
@@ -63,7 +70,7 @@ export function RepoTile({
 	if (failedFor !== name) {
 		return (
 			<span
-				className={`repo-tile repo-tile--img${name === "opensession" ? " repo-tile--app-icon" : ""}`}
+				className={`repo-tile repo-tile--img${APP_ICON_REPOS.has(name) ? " repo-tile--app-icon" : ""}`}
 				style={style}
 			>
 				<img

@@ -214,8 +214,18 @@ final class RepoImageCache {
         // from it. Reading the store directly rather than through URLSession
         // keeps a relaunch off the network stack entirely — the same bytes
         // `.returnCacheDataElseLoad` would have handed back.
-        if let cached = await Self.decodeCached(request) {
+        if let cachedData = await Self.cachedData(request),
+           let cached = await Self.decode(cachedData) {
             images[key] = cached
+            // That read never expires, so a repo whose icon is redrawn on the
+            // server would keep the old one for the life of the install. Look
+            // for a newer one behind the paint — while the stored response is
+            // fresh that costs no network at all, and once it goes stale the
+            // tile updates itself.
+            if let newer = await Self.changedBytes(url, since: cachedData),
+               let redrawn = await Self.decode(newer) {
+                images[key] = redrawn
+            }
             return
         }
 
@@ -249,8 +259,28 @@ final class RepoImageCache {
         }
     }
 
-    private static func decodeCached(_ request: URLRequest) async -> Image? {
-        await detachedDecode { URLCache.shared.cachedResponse(for: request)?.data }
+    private static func cachedData(_ request: URLRequest) async -> Data? {
+        await Task.detached(priority: .userInitiated) {
+            URLCache.shared.cachedResponse(for: request)?.data
+        }.value
+    }
+
+    /// Re-fetches an icon that was painted from the disk cache, on the
+    /// protocol's own cache policy, and hands back its bytes only when the
+    /// server has a different image than the one already on screen.
+    private static func changedBytes(_ url: URL, since cached: Data) async -> Data? {
+        var request = ServerConfig.shared.authorizedRequest(url)
+        request.cachePolicy = .useProtocolCachePolicy
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode),
+                  data != cached
+            else { return nil }
+            return data
+        } catch {
+            return nil
+        }
     }
 
     private static func decode(_ data: Data) async -> Image? {
