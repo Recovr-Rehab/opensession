@@ -51,7 +51,6 @@ struct NewSessionView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 header
-                Divider()
                 editor
                 if !images.isEmpty {
                     AttachedImagesRow(images: images) { image in
