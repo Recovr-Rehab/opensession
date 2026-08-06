@@ -100,6 +100,9 @@ Then read the real setup guide — secrets, accounts, integrations, systemd:
   agents can test their changes in a real browser)
 - [docs/extending.md](docs/extending.md) — adding tools, recipes, integrations
   and providers
+- [docs/security-model.md](docs/security-model.md) — least-privilege
+  automations, per-user MCP/GitHub scoping, and the self-management tool
+  boundaries
 - [docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md) — isolated
   Docker/Daytona/E2B/Box/Modal/AWS Lambda MicroVM execution for sessions
 
