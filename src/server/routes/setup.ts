@@ -125,6 +125,21 @@ async function validateSetting(value: unknown): Promise<string | null> {
   return validateEnvValue(value);
 }
 
+/**
+ * Is THIS process under a service manager that will bring it back after a
+ * SIGTERM? Not "does this box have systemd" — a foreground `bun run
+ * opensession.ts` on a systemd box is exactly the case that must say no.
+ *
+ * `INVOCATION_ID` is set by systemd for every unit it starts; a launchd agent
+ * (and a systemd service, redundantly) is reparented to pid 1. Both checks err
+ * toward "unsupervised", which is the safe direction: the cost of a false
+ * negative is one manual restart, the cost of a false positive is killing the
+ * operator's only instance from a button labelled Restart.
+ */
+function processIsSupervised(): boolean {
+  return !!process.env.INVOCATION_ID || process.ppid === 1;
+}
+
 // Restart-pending flag on globalThis so a duplicate POST (or a hot reload
 // between POST and SIGTERM) stays idempotent.
 const restartState: { pending: boolean } = ((globalThis as any)
@@ -145,6 +160,7 @@ export async function handleSetupRoutes(
     // missing until the restart happens.
     const { readEnvFileValues } = await import("../env-file-edit");
     const { repoLifecycle } = await import("../preview");
+    const { engineStatus } = await import("../engine-status");
     const envValues = readEnvFileValues();
 
     const publicBaseUrl = configuredServer().publicBaseUrl.replace(/\/$/, "");
@@ -166,6 +182,9 @@ export async function handleSetupRoutes(
         const team = configuredIdentity().team;
         return { count: team.length, names: team.map((m) => m.name) };
       })(),
+      // The only non-optional component, and the one this page used to omit —
+      // a checklist that went all-green on an instance that couldn't run a turn.
+      engine: engineStatus(),
       github: await githubSnapshot(publicBaseUrl),
       // `always` entries self-gate and need no setup, so they are not
       // presented as onboarding steps.
@@ -349,6 +368,20 @@ export async function handleSetupRoutes(
 
   // ── POST /api/setup/restart — apply boot-path changes ────────────────────
   if (path === "/api/setup/restart" && req.method === "POST") {
+    // Restarting here means "SIGTERM myself and trust something to revive me".
+    // Under `bun run opensession.ts` in a terminal — the first thing a new
+    // operator does — nothing revives us, so the button was a kill switch that
+    // reported itself as a restart. Refuse instead, and say who should do it.
+    if (!processIsSupervised()) {
+      return Response.json(
+        {
+          error:
+            "This server isn't running under a service manager, so stopping it would just stop it. Restart it yourself where you started it (or install the service with `opensession service install`).",
+          supervised: false,
+        },
+        { status: 409 },
+      );
+    }
     if (!restartState.pending) {
       restartState.pending = true;
       audit({ kind: "setup_restart", by: ctx.authUser?.login || null });

@@ -323,6 +323,21 @@ function rawPickerModels(raw: Record<string, unknown>): string[] {
     : [];
 }
 
+/**
+ * Turn the engine config on or off. This is the flag that gates the whole
+ * `opencode/` model surface: the Anthropic bridge, and (via
+ * `opencodePickerModels`) whether third-party provider models reach the picker
+ * at all. Nothing used to write it, so a fresh install had it absent — every
+ * Anthropic turn failed pointing at a file no code path created, and
+ * UI-configured providers never showed up. Onboarding seeds it, and Settings →
+ * Setup toggles it; both land here.
+ */
+export function setBridgeEnabled(enabled: boolean): void {
+  const raw = readRawOpencodeConfig();
+  raw.enabled = enabled;
+  writeRawOpencodeConfig(raw);
+}
+
 /** Configured third-party providers (id → apiKey/baseURL). Read fresh. */
 export function opencodeProviders(): Record<string, OpencodeProviderConfig> {
   return readOpencodeBridgeConfig()?.providers || {};

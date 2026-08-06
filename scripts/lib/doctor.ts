@@ -24,7 +24,22 @@ const TOOLS = [
   { bin: "bun", label: "Bun", required: true, hint: "https://bun.sh" },
   { bin: "git", label: "git", required: true, hint: "sessions run in git worktrees" },
   { bin: "gh", label: "GitHub CLI", required: false, hint: "needed for PR operations" },
-  { bin: "opencode", label: "OpenCode", required: false, hint: "the engine that runs agent turns" },
+  // Required, not optional: it executes every agent turn. Listing it as a
+  // warning let `doctor` report a healthy instance that could not run one.
+  {
+    bin: "opencode",
+    label: "OpenCode",
+    required: true,
+    hint: "the engine that runs agent turns — `npm i -g opencode-ai`",
+  },
+  // Needed only for the Anthropic bridge, which is the default model's path.
+  // Nothing installs it, so an absent `claude` is the likeliest fresh-box gap.
+  {
+    bin: "claude",
+    label: "Claude Code",
+    required: false,
+    hint: "the bundled Anthropic bridge execs it — https://claude.com/claude-code",
+  },
   { bin: "docker", label: "Docker", required: false, hint: "optional sandboxed sessions" },
 ];
 
@@ -223,12 +238,40 @@ async function checkService(t: Tally, config?: Record<string, unknown>): Promise
   }
 }
 
+/**
+ * Model capacity — the check whose absence made every other check misleading.
+ * An instance with no engine config runs zero turns while reporting itself
+ * healthy, so a blocker here is an error, not a warning.
+ */
+async function checkEngine(t: Tally): Promise<void> {
+  heading("Engine");
+  const { engineStatus } = await import("../../src/server/engine-status");
+  const e = engineStatus();
+
+  info(dim(`default model ${e.defaultModel}`));
+  const pool = `${e.claudeAccounts} Claude, ${e.codexAccounts} ChatGPT`;
+
+  if (e.ready) {
+    ok("can run turns", `${pool} account(s)`);
+    if (!e.claudeAccounts && !e.codexAccounts) {
+      warn("no subscription accounts", "running on provider API keys only");
+      t.warnings++;
+    }
+    return;
+  }
+
+  fail(e.blocker || "cannot run agent turns", e.fix || undefined);
+  t.errors++;
+  if (e.opencodeBin) info(dim(`bridge ${e.bridgeEnabled ? "enabled" : "disabled"}, ${pool}`));
+}
+
 export async function doctor(): Promise<number> {
   const t: Tally = { errors: 0, warnings: 0 };
 
   info(dim(`checkout ${REPO_ROOT}`));
   await checkTools(t);
   const config = await checkConfig(t);
+  await checkEngine(t);
   await checkIntegrations(t, config);
   await checkService(t, config);
 

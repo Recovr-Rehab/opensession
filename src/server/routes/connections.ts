@@ -317,6 +317,40 @@ export async function handleConnectionsRoutes(
 		}
 	}
 
+	// ── OpenCode engine on/off (Settings → Setup "Engine" checklist row) ──
+	// The `enabled` flag in ~/.opensession-opencode.json gates the Anthropic
+	// bridge AND whether third-party provider models reach the picker. Nothing
+	// wrote it before this route, so a fresh install had it absent and every
+	// default-model turn failed pointing at a file the operator had never seen.
+	if (path === "/api/settings/opencode-engine" && req.method === "GET") {
+		const { engineStatus } = await import("../engine-status");
+		return Response.json(engineStatus());
+	}
+
+	if (path === "/api/settings/opencode-engine" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		if (!body || typeof body !== "object" || typeof body.enabled !== "boolean") {
+			return Response.json(
+				{ error: "enabled must be a boolean" },
+				{ status: 400 },
+			);
+		}
+		try {
+			const { setBridgeEnabled } = await import("../opencode-config");
+			const { engineStatus } = await import("../engine-status");
+			setBridgeEnabled(body.enabled);
+			// Enabling is what makes a configured provider's models resolvable,
+			// so refresh the picker rather than making the user re-save a provider.
+			refreshOpencodePickerModels();
+			return Response.json(engineStatus());
+		} catch (e: any) {
+			return Response.json(
+				{ error: e?.message || "Failed to update the engine config" },
+				{ status: 500 },
+			);
+		}
+	}
+
 	// ── Pi engine (Settings → Accounts "Pi engine" card) ──
 	// The pi engine's on/off switch, picker model ids and designated bridge
 	// accounts in ~/.opensession-pi.json. GET returns the raw-file view (not the

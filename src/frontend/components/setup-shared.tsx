@@ -59,9 +59,27 @@ export interface SetupRepo {
 	lifecycle: SetupRepoLifecycle;
 }
 
+/** Whether the instance can actually run an agent turn — the one thing the
+ *  Getting-started checklist used to omit. Server-side: engine-status.ts. */
+export interface SetupEngine {
+	opencodeBin: string | null;
+	claudeBin: string | null;
+	bridgeEnabled: boolean;
+	claudeAccounts: number;
+	codexAccounts: number;
+	defaultModel: string;
+	provider?: "claude" | "codex";
+	ready: boolean;
+	blocker: string | null;
+	fix: string | null;
+	/** The blocker is a PUT away, so the row can offer a button. */
+	fixableInApp: boolean;
+}
+
 export interface SetupStatus {
 	publicBaseUrl: string;
 	repos: SetupRepo[];
+	engine: SetupEngine;
 	team: { count: number; names: string[] };
 	github: SetupGithub;
 	integrations: SetupIntegration[];
