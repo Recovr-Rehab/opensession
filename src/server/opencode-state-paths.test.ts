@@ -122,8 +122,8 @@ describe("shard DB path derivation (pinned)", () => {
     expect(shardDbPathForKey("bks-ghpr-5024-review")).toBe(
       `${home}/.opensession-chats/opencode/db/bks-ghpr-5024-review.db`,
     );
-    expect(shardDbPathForKey("shared:openai-13fde4f9:michiel")).toBe(
-      `${home}/.opensession-chats/opencode/db/shared_openai-13fde4f9_michiel.db`,
+    expect(shardDbPathForKey("shared:openai-13fde4f9:alex")).toBe(
+      `${home}/.opensession-chats/opencode/db/shared_openai-13fde4f9_alex.db`,
     );
   });
 });

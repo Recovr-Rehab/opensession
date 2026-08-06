@@ -210,14 +210,14 @@ describe("renderMarkdown strikethrough (double-tilde only)", () => {
 describe("renderPrCommentMarkdown GitHub details", () => {
   it("renders collapsible reviews and subtext", () => {
     const html = renderPrCommentMarkdown(`<details> <summary>Outdated review</summary>
-**Michael review** · request changes
+**Ada review** · request changes
 
 <sub>Reviewed 3147253 · open session</sub>
 </details>`);
 
     expect(html).toContain('<details class="md-details">');
     expect(html).toContain("<summary>Outdated review</summary>");
-    expect(html).toContain("<strong>Michael review</strong>");
+    expect(html).toContain("<strong>Ada review</strong>");
     expect(html).toContain("<sub>Reviewed 3147253 · open session</sub>");
   });
 

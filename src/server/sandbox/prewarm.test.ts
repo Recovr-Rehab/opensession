@@ -152,14 +152,14 @@ describe("requestPrewarm", () => {
 
   test.skipIf(killSwitch)("starts one bootstrap, reuses it, reaches ready", async () => {
     const fake = makeFakeAdapter();
-    const first = await requestPrewarm("daytona", "tella-fusion", "michiel");
+    const first = await requestPrewarm("daytona", "tella-fusion", "alex");
     expect(first.state).toBe("bootstrapping");
     // Idempotent while in flight — no second create.
-    const again = await requestPrewarm("daytona", "tella-fusion", "michiel");
+    const again = await requestPrewarm("daytona", "tella-fusion", "alex");
     expect(["bootstrapping", "ready"]).toContain(again.state);
     await until(() => readyEntry()?.state === "ready");
     expect(fake.created.length).toBe(1);
-    const done = await requestPrewarm("daytona", "tella-fusion", "michiel");
+    const done = await requestPrewarm("daytona", "tella-fusion", "alex");
     expect(done.state).toBe("ready");
     expect(done.sandboxId).toBe(fake.created[0]);
     // State file persisted for restart reaping.

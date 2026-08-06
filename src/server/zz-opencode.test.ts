@@ -69,7 +69,7 @@ describe("shared server eligibility", () => {
       sharedOpencodeEligible({
         journal: { kind: "prompt" },
         user: "happylinks",
-        mcpGrantUser: "Michiel",
+        mcpGrantUser: "Alex",
       }),
     ).toBe(true);
   });
@@ -95,7 +95,7 @@ describe("shared server eligibility", () => {
       sharedOpencodeEligible({
         journal: { kind: "prompt" },
         user: "Jaap",
-        mcpGrantUser: "Michiel",
+        mcpGrantUser: "Alex",
       }),
     ).toBe(false);
   });
@@ -707,10 +707,10 @@ describe("buildOpencodeInstructions", () => {
     const s = buildOpencodeInstructions({
       isAsk: false,
       osSessionId: "abc-123",
-      user: "michiel",
-      author: { name: "Michiel Westerbeek", email: "alice@example.com" },
+      user: "alex",
+      author: { name: "Alex Rivera", email: "alice@example.com" },
     });
-    expect(s).toContain("Started by Michiel Westerbeek in [this");
+    expect(s).toContain("Started by Alex Rivera in [this");
     expect(s).toContain("--assignee happylinks");
     expect(s).not.toContain("Created by [this");
   });

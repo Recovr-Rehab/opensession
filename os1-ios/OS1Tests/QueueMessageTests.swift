@@ -6,7 +6,7 @@ import XCTest
 /// renderer swallows and a plain-text chip does not — these pin the stripping
 /// so a queued worker report never shows up as `<!--os:worker-report-->`.
 final class QueueMessageTests: XCTestCase {
-    private func present(_ content: String, user: String? = "Michiel")
+    private func present(_ content: String, user: String? = "Alex")
         -> QueueMessagePresentation
     {
         QueueMessagePresentation(content: content, user: user)
@@ -44,7 +44,7 @@ final class QueueMessageTests: XCTestCase {
 
     func testWorkflowNoticeKeepsItsAttributionOutOfTheBody() {
         let message = present(
-            "[Michiel Westerbeek] <!--os:workflow-notice:wf-1-->\n✅ Workflow \"review\" finished"
+            "[Alex Rivera] <!--os:workflow-notice:wf-1-->\n✅ Workflow \"review\" finished"
         )
         XCTAssertEqual(message.label, "⚙️ Workflow")
         XCTAssertEqual(message.body, "✅ Workflow \"review\" finished")

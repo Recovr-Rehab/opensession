@@ -1,5 +1,5 @@
 /**
- * Automations: cron-scheduled Michael sessions, Devin-style.
+ * Automations: cron-scheduled agent sessions, Devin-style.
  * Records live in ~/.opensession-automations/<id>.json; each run creates a
  * normal opensession session so it shows up in the sessions list and UI.
  */
@@ -67,7 +67,7 @@ export interface GrafanaPollConfig {
  * Config for a channel-watch automation: the Slack agent fires one run per
  * top-level message posted in `channel` (thread replies don't re-trigger).
  * The bot must be a member of the channel to receive its messages — invite
- * @michael first. Runs get the channel's memory (read-only) appended to the
+ * the bot first. Runs get the channel's memory (read-only) appended to the
  * prompt, so "remember ..." facts taught interactively steer the triage.
  */
 export interface SlackWatchConfig {
@@ -811,7 +811,7 @@ export function automationMcpServersByName(name: string): string[] | undefined {
   return listAutomations().find((a) => a.name === name)?.mcpServers;
 }
 
-/** Default engine+model for automations (Michiel 2026-07-09: automations run
+/** Default engine+model for automations (policy: automations run
  *  on the opencode engine; 2026-07-22: model-less automations default to Sol
  *  on the codex pool — research-class automations pin claude-fable-5
  *  explicitly instead of relying on this). */

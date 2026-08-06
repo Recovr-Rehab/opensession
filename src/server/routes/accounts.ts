@@ -55,7 +55,7 @@ export async function handleAccountsRoutes(
 			? Response.json({ ok: true })
 			: Response.json({ error: "Not found" }, { status: 404 });
 	}
-	// Set/clear an account's personal owner ({"owner": "Michiel"} or "").
+	// Set/clear an account's personal owner ({"owner": "Alex"} or "").
 	if (accountDelMatch && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		const updated = setAccountOwner(
@@ -146,7 +146,7 @@ export async function handleAccountsRoutes(
 			? Response.json({ ok: true })
 			: Response.json({ error: "Not found" }, { status: 404 });
 	}
-	// Set/clear an account's personal owner ({"owner": "Michiel"} or "").
+	// Set/clear an account's personal owner ({"owner": "Alex"} or "").
 	if (codexAccountDelMatch && req.method === "PUT") {
 		const body = await req.json().catch(() => null);
 		const updated = setCodexAccountOwner(

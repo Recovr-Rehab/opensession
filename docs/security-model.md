@@ -17,10 +17,10 @@ configuration for the run.
   no tokens from `~/.opensession.env`. MCP servers receive their own
   credentials via mcp-config.json per-server `env` or load it themselves.
 - Each automation has an optional `mcpServers` allowlist (per-automation
-  field, settable via the API); runs only see those servers. Example: a triage
-  automation might name `plain`, `workos`, `tinybird`, `linear`, `sentry`,
-  `stripe` so it can look up the customer, analytics, billing, related issues
-  and errors while investigating.
+  field, settable via the API); runs only see those servers. Example: a
+  support-triage automation might name only its support-inbox, identity,
+  analytics, issue-tracker, error-tracker, and billing servers so it can look
+  up the customer, related issues, and errors while investigating.
 - Automation runs hard-deny *customer-facing and identity-mutating* tools
   (enforced for direct runs and interactive resumes of automation sessions):
   Plain thread writes (reply_to_thread, mark_thread_done/todo, snooze_thread)

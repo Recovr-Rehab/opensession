@@ -15,7 +15,7 @@
  * Claude-subscription capacity via one of two bridges selected by `bridge.mode`
  * in ~/.opensession-opencode.json (see opencode-config.ts):
  *
- *  - "meridian" (the default when enabled; Michiel's 2026-07-08 directive):
+ *  - "meridian" (the default when enabled):
  *    the literal opencode-with-claude + @rynfar/meridian stack, bundled as
  *    exact-pinned npm deps and injected as an OpenCode plugin into the
  *    session's server config. The plugin starts Meridian in-process inside
@@ -40,8 +40,7 @@
  * account, versions) — per-request detail exists only in opencode's own log
  * (~/.local/share/opencode/log/).
  *
- * Server lifecycle — TWO pools since 2026-07-09 (Michiel: "one opencode
- * server, multiple sessions"):
+ * Server lifecycle — TWO pools ("one opencode server, multiple sessions"):
  *
  *  - SHARED always-warm servers for eligible interactive runs (see
  *    sharedOpencodeEligible): ONE `opencode serve` per (bridge account ×
@@ -53,7 +52,7 @@
  *    system prompt), `agent` ("ask" = the config-defined read-only agent),
  *    and `tools` strips (unattended deny-sets, confirm-server `<name>_*`
  *    wildcards, in-process servers the run doesn't carry) — all verified
- *    live 2026-07-09 on opencode 1.17.15. In-process michael-* tool calls
+ *    live on opencode 1.17.15. In-process opensession-* tool calls
  *    are routed per session via opencode-plugin-session-tag.js + run-rpc's
  *    ocSession registry. cwd = a neutral state dir (never a worktree); idle
  *    kill after 6h; a config change while runs are active DRAINS the old
@@ -98,7 +97,7 @@
  *    server, which needlessly blanked Stripe reads.)
  *  - Unattended least-privilege runs (automations, and any run carrying
  *    `deniedTools` — e.g. an interactive resume of an automation session) ARE
- *    allowed on this engine (Michiel 2026-07-09: automations run on opencode).
+ *    allowed on this engine (automations run on opencode).
  *    Their deny-set is enforced by STRIPPING the tools from the model's tool
  *    list via OpenCode's `tools` config (opencodeRunPolicy → `<server>_<tool>`
  *    ids, naming verified live 2026-07-09 against opencode 1.17.15 + the
@@ -1282,7 +1281,7 @@ export function buildOpencodeMcpConfig(
   scope: McpScope,
   user: string | undefined,
   /** OAuth grant identities in priority order (session creator first — a
-   *  shared session's MCP calls run as its creator; Michiel 2026-07-29). */
+   *  shared session's MCP calls run as its creator). */
   grantUsers?: Array<string | undefined>,
 ): { mcp: Record<string, Record<string, unknown>> } {
   const filtered = filterMcpServers(scope, user, grantUsers) as Record<string, any>;
@@ -1343,11 +1342,11 @@ export function buildOpencodeMcpConfig(
  *  30-minute per-call ceiling, and mcp-proxy retries to 32 — at the previous
  *  60s a blocking ask on an opencode-engine session was GUARANTEED to die
  *  with MCP -32001 while the teammate's answer landed on a dead request
- *  (2026-07-10: Michiel answered an SSO-approval ask and the session never
+ *  (seen live: a human answered an SSO-approval ask and the session never
  *  saw it). Sit just above the whole chain. */
 const PROXY_MCP_TIMEOUT_MS = 33 * 60_000;
 
-/** In-process michael-* servers, exposed as stdio proxies that forward to the
+/** In-process opensession-* servers, exposed as stdio proxies that forward to the
  *  opensession process over the run-rpc socket — the exact pattern Codex uses
  *  (codex-runner proxyMcpConfigs), in OpenCode's config shape. */
 export function proxyOpencodeMcpConfigs(
@@ -1473,7 +1472,7 @@ export function readLocalInstructions(dir: string | undefined): string | undefin
   return parts.length ? parts.join("\n\n") : undefined;
 }
 
-/** Session context (ask guardrails, repos note, managing-Michael notes) —
+/** Session context (ask guardrails, repos note, managing-the-agent notes) —
  *  delivered via an instructions file, OpenCode's system-prompt append
  *  channel. Sibling of buildCodexDeveloperInstructions with engine-accurate
  *  wording. */
@@ -1883,7 +1882,7 @@ export interface OpencodeServerEntry {
   /** Busy turns observed during boot adoption but not yet claimed by journal
    *  reattachment. Protects the survivor during the restart recovery gap. */
   recoveringSessionIds?: Set<string>;
-  /** Stable per-server run-rpc token for the michael-* stdio proxies. */
+  /** Stable per-server run-rpc token for the in-process stdio proxies. */
   rpcToken: string;
   /** Stable per-server Meridian proxy API key (meridian-mode servers only) —
    *  reused across runs so the config hash (and thus the server) stays put. */
@@ -3095,7 +3094,7 @@ interface TurnTranscriptState {
 }
 
 /** Runaway backstop only — NOT the real limit. Walk EVERY account before giving
- *  up (Michiel 2026-07-11): each usage-limit rotation marks the capped account
+ *  up: each usage-limit rotation marks the capped account
  *  exhausted (markExhausted) and pickMeridianAccount only returns a not-yet-
  *  exhausted account, so the pool strictly shrinks and the loop terminates on
  *  its own when the pool is dry (rotation stays false → terminal error ⇒
@@ -3419,11 +3418,11 @@ async function* runOpencodeAttempt(
 
   // Test hook: pretend usage limits are exhausted on every model, so the
   // fallback chain can be verified without burning real limits. Set
-  // MICHAEL_FORCE_LIMIT=1 on a dev process only — never the service env.
+  // OPENSESSION_FORCE_LIMIT=1 on a dev process only — never the service env.
   if (process.env.OPENSESSION_FORCE_LIMIT === "1") {
     yield {
       type: "done",
-      result: "Claude AI usage limit reached|forced-by-MICHAEL_FORCE_LIMIT",
+      result: "Claude AI usage limit reached|forced-by-OPENSESSION_FORCE_LIMIT",
       provider: PROVIDER,
       model,
       usageLimitExhausted: true,
@@ -3996,7 +3995,7 @@ async function* runOpencodeAttempt(
 
     const { mcp: externalMcp } = buildOpencodeMcpConfig(shared ? "all" : mcpServers, user, [opts.mcpGrantUser, user]);
 
-    // Session context (ask guardrails, repos note, managing-Michael notes).
+    // Session context (ask guardrails, repos note, managing-the-agent notes).
     // Per-session servers deliver it via an instructions FILE in the config;
     // shared servers can't (config is multi-session), so it rides the
     // per-prompt `system` param instead — verified live to APPEND to
@@ -4357,7 +4356,7 @@ async function* runOpencodeAttempt(
     };
     for (const key of registeredKeys) activeOpencodeSteers.set(key, steerFn);
     // Shared servers: map this opencode session to its opensession session for
-    // the run's duration, so proxied michael-* tool calls (tagged with the
+    // the run's duration, so proxied in-process tool calls (tagged with the
     // opencode session id by the session-tag plugin) route to THIS session's
     // in-process tools rather than whichever run registered the token last.
     if (shared && rpcTokenRegistered && journal?.osSessionId) {

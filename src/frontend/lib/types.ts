@@ -586,7 +586,7 @@ export interface PrDetails {
 	 *  another chat's branch: the branch underneath. With no `stack`, it's the
 	 *  cue to offer "link these into a stack". */
 	stackBase?: string;
-	/** The latest automated Michael review for this PR. */
+	/** The latest automated agent review for this PR. */
 	osReview?: OsReview;
 	/** An automated review is currently running for this PR. */
 	reviewActive?: boolean;

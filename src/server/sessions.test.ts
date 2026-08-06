@@ -86,7 +86,7 @@ function writeSession(id: string, data: Record<string, unknown>): void {
 				claudeSessionId: "",
 				branch: "",
 				worktreeDir: "/home/ubuntu/projects/opensession",
-				createdBy: "Michael",
+				createdBy: "Alex",
 				createdAt: "2026-07-02T18:00:00.000Z",
 				lastActivity: "2026-07-02T18:00:00.000Z",
 				mode: "ask",
@@ -163,7 +163,7 @@ describe("getAllSessions", () => {
 		});
 		writeSlackSession("C123-1719860000.000000", {
 			branch: "codex-thread-branch",
-			userId: "Michael",
+			userId: "Alex",
 			worktreeDir: "/home/ubuntu/projects/opensession",
 			claudeSessionId: null,
 			codexThreadId: "codex-thread-shared",

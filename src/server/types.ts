@@ -147,7 +147,7 @@ export interface UnifiedSession {
    *  successor to per-source foreign keys like plainThreadId (see
    *  the feeds design). A session can carry several. */
   externalRefs?: ExternalRef[];
-  /** Model id for runs in this session; unset = default (MICHAEL_MODEL). */
+  /** Model id for runs in this session; unset = default (OPENSESSION_MODEL). */
   model?: string;
   /** OpenCode reasoning variant for runs in this session; unset = model default. */
   effort?: string;

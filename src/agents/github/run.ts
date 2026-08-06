@@ -1,7 +1,7 @@
 /**
  * Shared headless-run helper for the github agent. Composes `runAgent` like
  * automations.ts does, but persists its own visible NativeSessionFile so each
- * PR review/fix/simplify shows up as a Michael session in the web UI, and resumes
+ * PR review/fix/simplify shows up as a session in the web UI, and resumes
  * the engine conversation across rounds via the deterministic per-PR session file.
  */
 import { existsSync, readFileSync } from "fs";

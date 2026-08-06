@@ -604,7 +604,7 @@ if (!g.__opensessionBooted) {
 	// Poll per-account Claude usage (drives account picking + the Connections UI)
 	startUsagePoller();
 
-	// DM owners/Michiel when pool credentials expire or break (account-health.ts)
+	// DM account owners when pool credentials expire or break (account-health.ts)
 	startAccountHealthMonitor();
 
 	// Reclaim rust target/ build caches from idle worktrees we keep (disk-gc.ts)

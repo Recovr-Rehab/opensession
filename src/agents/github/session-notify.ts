@@ -3,7 +3,7 @@
  * head branch belongs to a session (primary branch or an attached repo) is
  * merged, a `[GitHub]` message is delivered into that session's chat through the
  * SessionControl registry — the same steer/queue/start path a human message
- * takes — so Michael sees it and can react. The merge commit is then tracked in
+ * takes — so the agent sees it and can react. The merge commit is then tracked in
  * ~/.opensession-github/pending-deploys.json (survives restarts), and when the
  * Deploy workflow (.github/workflows/deploy.yml) completes for that commit the
  * session gets a second message with the outcome. (Pre-merge staging previews

@@ -10,7 +10,7 @@
  *
  *  - Claude account with an `owner` (personal sub) → DM that teammate
  *    (resolved through the same identity table as commit attribution).
- *  - Pool Claude accounts and all codex accounts → DM Michiel.
+ *  - Pool Claude accounts and all codex accounts → DM the instance owner.
  *
  * Detected issues: unreadable/expired Claude OAuth credential files, revoked
  * setup-tokens (401 from the usage endpoint), Claude refresh tokens within a

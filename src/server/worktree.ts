@@ -555,7 +555,7 @@ export async function createReviewWorktreeForPrHead(
 
 /**
  * Worktree for a FOLLOW-UP branch cut fresh off `baseRef` (a PR's base, e.g.
- * `main`). Used when someone @-mentions Michael asking for a change on a PR that
+ * `main`). Used when someone @-mentions the bot asking for a change on a PR that
  * is already merged/closed — you can't push to the old PR, so the work goes on a
  * new branch that opens its own PR. Idempotent: reuses an existing worktree/branch
  * (so a webhook-redelivery replay doesn't fork a second branch) rather than

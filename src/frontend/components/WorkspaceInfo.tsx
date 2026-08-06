@@ -728,7 +728,7 @@ const PR_AGENT_ACTIONS: Array<{
 	},
 ];
 
-function MichaelReviewCard({
+function AgentReviewCard({
 	sessionId,
 	repo,
 	pr,
@@ -849,7 +849,7 @@ function MichaelReviewCard({
 	const moreActions = PR_AGENT_ACTIONS.slice(2);
 
 	return (
-		<div data-michael-score className={INFO_SECTION_CLASS}>
+		<div data-agent-score className={INFO_SECTION_CLASS}>
 			<div className="flex items-center gap-2 px-1">
 				<div className={INFO_LABEL_CLASS}>{AGENT_NAME} score</div>
 				<div className="ml-auto flex items-center gap-2">
@@ -1704,7 +1704,7 @@ export function WorkspaceInfo({
 				{pr && <ChecksChip pr={pr} onOpenChecks={onOpenChecks} />}
 			</div>
 			{pr?.number && (
-				<MichaelReviewCard
+				<AgentReviewCard
 					sessionId={sessionId}
 					repo={repo}
 					pr={pr}

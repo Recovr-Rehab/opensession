@@ -561,7 +561,7 @@ try {
   const rpcProbe = await wsSbx.exec(["bun", "-e", `
     const ws = new WebSocket("${wsBase}/rpc-ws?host=${probeHostId}", { headers: { authorization: "Bearer ${probeWsToken}" } });
     const bail = setTimeout(() => { console.log("TIMEOUT"); process.exit(1); }, 10000);
-    ws.onopen = () => ws.send(JSON.stringify({ id: "p1", path: "/mcp/list", token: "${scratchToken}", server: "michael-sessions" }));
+    ws.onopen = () => ws.send(JSON.stringify({ id: "p1", path: "/mcp/list", token: "${scratchToken}", server: "opensession-sessions" }));
     ws.onmessage = (ev) => { console.log(String(ev.data)); clearTimeout(bail); process.exit(0); };
     ws.onclose = () => { console.log("CLOSED"); clearTimeout(bail); process.exit(1); };
   `]);

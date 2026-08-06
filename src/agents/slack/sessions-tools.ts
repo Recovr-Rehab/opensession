@@ -1,5 +1,5 @@
 /**
- * opensession-sessions — an in-process MCP server that lets Michael see and steer
+ * opensession-sessions — an in-process MCP server that lets the agent see and steer
  * every other Open Session session from Slack: what's running, what's waiting on a
  * question, and the controls to answer / message / cancel / spin up sessions.
  *
@@ -12,7 +12,7 @@
  * be able to puppet other sessions).
  *
  * Gating: the read tools (list/get) are available to any whitelisted user who
- * can talk to Michael; the control tools (answer/send/cancel/create, and the
+ * can talk to the bot; the control tools (answer/send/cancel/create, and the
  * spawn_task/task_status/cancel_task task primitives) are gated to the trusted
  * user via `isAdmin`, matching opensession-admin.
  */
@@ -119,7 +119,7 @@ function fmtTranscriptTail(entries: TranscriptEntry[]): string {
         e.type === "user"
           ? "user"
           : e.type === "assistant"
-            ? "michael"
+            ? "assistant"
             : e.type === "tool_use"
               ? `tool:${e.toolName || "?"}`
               : e.type;
@@ -179,7 +179,7 @@ export function sessionNoticePayload(message: string): string {
 /**
  * A worker reporting to its parent gets the server's facts stapled to its
  * prose, and is attributed as a worker rather than as the human whose name it
- * inherited (a report arriving as "[Michiel] …" reads to the parent model like
+ * inherited (a report arriving as "[Alex] …" reads to the parent model like
  * a human instruction, which it is not).
  *
  * The evidence is snapshotted HERE, at send time, not inside deliverToSession:
@@ -248,7 +248,7 @@ export async function workerReportPayload(
 // SessionControl.createSession code path as create_session (never a parallel
 // implementation); what it adds is the task contract: return {taskId, url}
 // immediately, poll with task_status, stop with cancel_task — plus a spawn-
-// depth loop guard and an automation refusal (defense-in-depth: michael-
+// depth loop guard and an automation refusal (defense-in-depth: opensession-
 // sessions is never wired into automation runs in the first place; opensession.ts
 // gates inProcessMcp on !isAutomationSession and admin-tools/handlers wire it
 // only for interactive Slack runs).

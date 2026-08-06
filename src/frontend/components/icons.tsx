@@ -7,8 +7,7 @@ import React from "react";
  * All are 24×24, `currentColor`, stroke-width 1.5 — size via the `size` prop.
  *
  * Size scale — stick to these three steps so icons feel consistent (bumped
- * one step 2026-07: the old 18/20 read too small — Kent + Michiel both asked
- * for bigger icons):
+ * one step 2026-07: the old 18/20 read too small):
  *   20 = inline/meta glyphs riding along with text (draft pencil, trailing
  *        chevrons, tool-status check/x, disclosure carets in rows)
  *   22 = standard standalone icons (the default — search, list rows, menus)

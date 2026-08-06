@@ -23,7 +23,7 @@ describe("buildChildSessionPrompt", () => {
 		});
 
 		expect(prompt).toContain("Inspect the failing tests");
-		expect(prompt).toContain("worker session delegated by another Michael session");
+		expect(prompt).toContain("worker session delegated by another");
 		expect(prompt).toContain("report back to the parent/orchestrator session `bks-parent`");
 		expect(prompt).toContain("send_to_session");
 	});
@@ -126,7 +126,7 @@ function makeHarness(childId?: string): Harness {
 }
 
 const ctx = (currentSessionId?: string): SessionsToolContext => ({
-	createdBy: "Michiel",
+	createdBy: "Alex",
 	isAdmin: true,
 	currentSessionId,
 });
@@ -156,10 +156,10 @@ describe("spawnTaskImpl", () => {
 		// linked to the parent, user inherited.
 		expect(h.created).toHaveLength(1);
 		expect(h.created[0].prompt).toContain("Investigate the flaky test.");
-		expect(h.created[0].prompt).toContain("worker session delegated by another Michael session");
+		expect(h.created[0].prompt).toContain("worker session delegated by another");
 		expect(h.created[0].prompt).toContain(`report back to the parent/orchestrator session \`${parent}\``);
 		expect(h.created[0].parentSessionId).toBe(parent);
-		expect(h.created[0].user).toBe("Michiel");
+		expect(h.created[0].user).toBe("Alex");
 		expect(h.created[0].mode).toBe("ask");
 	});
 
@@ -337,7 +337,7 @@ describe("task_status / cancel_task", () => {
 // ---------------------------------------------------------------------------
 
 describe("workerReportPayload", () => {
-	const ctx = { createdBy: "Michiel", currentSessionId: "bks-child" };
+	const ctx = { createdBy: "Alex", currentSessionId: "bks-child" };
 	const deps = {
 		parentOf: (id: string) => (id === "bks-child" ? "bks-parent" : undefined),
 		evidence: async () => "— evidence —\nfiles changed: 1 file(s)",
@@ -351,7 +351,7 @@ describe("workerReportPayload", () => {
 	});
 
 	it("attributes the report to the worker, not to the human it inherited", async () => {
-		// "[Michiel] ..." reads to the parent model like a human instruction.
+		// "[Alex] ..." reads to the parent model like a human instruction.
 		const out = await workerReportPayload("bks-parent", "Done.", ctx, deps);
 		expect(out.user).toBe("worker bks-child");
 	});
@@ -367,17 +367,17 @@ describe("workerReportPayload", () => {
 
 	it("leaves messages to any other session untouched", async () => {
 		const out = await workerReportPayload("bks-someone-else", "ping", ctx, deps);
-		expect(out).toEqual({ content: "ping", user: "Michiel" });
+		expect(out).toEqual({ content: "ping", user: "Alex" });
 	});
 
 	it("leaves a non-worker session's messages untouched", async () => {
 		const out = await workerReportPayload(
 			"bks-parent",
 			"ping",
-			{ createdBy: "Michiel", currentSessionId: "bks-root" },
+			{ createdBy: "Alex", currentSessionId: "bks-root" },
 			deps,
 		);
-		expect(out).toEqual({ content: "ping", user: "Michiel" });
+		expect(out).toEqual({ content: "ping", user: "Alex" });
 	});
 
 	it("still delivers the prose when evidence can't be computed", async () => {
@@ -388,7 +388,7 @@ describe("workerReportPayload", () => {
 			},
 		});
 		expect(out.content).toBe("Done.");
-		expect(out.user).toBe("Michiel");
+		expect(out.user).toBe("Alex");
 	});
 
 	it("caps the appended block so a handoff can't refill the parent's context", async () => {

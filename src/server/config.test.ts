@@ -263,8 +263,8 @@ describe("config loader", () => {
         futureSection: { keep: true },
       }),
     );
-    updateIdentityConfig({ personaName: " Michael ", productName: "OS¹" });
-    expect(personaName()).toBe("Michael");
+    updateIdentityConfig({ personaName: " Ava ", productName: "OS¹" });
+    expect(personaName()).toBe("Ava");
     expect(productName()).toBe("OS¹");
     const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
     // Untouched keys — modeled and unmodeled alike — survive the write.

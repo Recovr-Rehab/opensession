@@ -462,7 +462,7 @@ export function PreviewButton({
   // primary action; right-click opens the services popover (stop / snapshot).
   // While the server is up (or starting) a small caret rides beside the icon —
   // the popover's stop action was right-click-only and nobody found it
-  // (Michiel, 2026-07-09).
+  // (seen live, 2026-07-09).
   if (variant === "header") {
     const menuCaret = (running || anyRunning || isStarting) && (
       <Tooltip label="Dev services — stop the server, snapshot" side="bottom">

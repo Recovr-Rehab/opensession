@@ -983,7 +983,7 @@ interface PrInfo {
 
 /**
  * The session id out of the attribution footer every session-opened PR carries
- * ("Started by … in [this Michael session](https://os.tella.dev/session/<id>)",
+ * ("Started by … in [this session](<public base URL>/session/<id>)",
  * written by opencode-runner/system-prompt). This is how a session finds the
  * PRs it opened on branches it doesn't own — a second branch of its own repo,
  * or a repo it never attached.
@@ -1499,7 +1499,7 @@ function getPrsByRepo(): Map<string, Map<string, PrInfo>> {
   return prCache.data;
 }
 
-/** The bot credential's GitHub account — PRs Michael opens without a per-user
+/** The bot credential's GitHub account — PRs the bot opens without a per-user
  *  token are authored by it (mirrors analytics.ts's BOT_LOGINS). */
 /**
  * PRs grouped by the session id in their attribution footer, keyed session id →

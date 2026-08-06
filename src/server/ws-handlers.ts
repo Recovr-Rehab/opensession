@@ -1129,7 +1129,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// Durable trace in the transcript too: a stopped turn otherwise
 						// just goes silent mid-tool-call, and readers can't tell a
 						// deliberate stop from a crash (the audit line answers it for
-						// Michael, this chip answers it for everyone reading the UI).
+						// the agent, this chip answers it for everyone reading the UI).
 						if (session.claudeSessionId) {
 							try {
 								appendOpencodeTranscript(session.claudeSessionId, [

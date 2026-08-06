@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────
-   Michael — Tella's internal coding agent
+   Open Session
    Devin-inspired dark theme
    ───────────────────────────────────────────────────────────── */
 
@@ -658,7 +658,7 @@ html.wco .app-body.sidebar-collapsed
 	gap: 8px;
 }
 
-/* Michael title + settings chevron, kept tight together. */
+/* Product title + settings chevron, kept tight together. */
 .app-brand {
 	display: flex;
 	align-items: center;
@@ -685,7 +685,7 @@ html.wco .app-body.sidebar-collapsed
 	letter-spacing: -0.01em;
 }
 
-/* ── Settings dropdown (chevron behind the Michael title) ── */
+/* ── Settings dropdown (chevron behind the product title) ── */
 .settings-hint {
 	margin-top: 8px;
 	font-size: 11px;
@@ -988,7 +988,7 @@ html[data-platform="windows"] .workspace-shell {
 	}
 }
 
-/* Brand row at the top of the desktop sidebar: Michael menu left, collapse
+/* Brand row at the top of the desktop sidebar: product menu left, collapse
    toggle right. */
 .sidebar-brand {
 	display: flex;
@@ -15729,7 +15729,7 @@ html.wco .settings-sidenav {
 	cursor: default;
 }
 
-/* "Settings" entry in the Michael-menu dropdown */
+/* "Settings" entry in the product-menu dropdown */
 /* Theme picker — three preview cards (System / Light / Dark) */
 .theme-cards {
 	display: grid;

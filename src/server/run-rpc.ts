@@ -32,7 +32,7 @@ import { devInstanceBootError, isDevInstance } from "./dev-mode";
 import { MCP_HTTP_PORT, rpcSocketPath } from "./run-rpc-protocol";
 
 /**
- * In-process MCP server ids renamed michael-* → opensession-* (2026-07-09).
+ * In-process MCP server ids renamed michael-* → opensession-*.
  * Legacy ids still arrive at runtime from persisted state: journaled runs
  * resumed after a restart (RunHostSpec.proxyMcpServers, per-run proxy env)
  * and engine sessions whose context still names old tool ids. Normalize at

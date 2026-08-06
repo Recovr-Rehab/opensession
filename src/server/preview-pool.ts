@@ -325,7 +325,7 @@ const MVM_SCRIPTS = `${process.cwd()}/deploy/sandbox/microvm`;
  *  9100-9999 host-preview band (no collision) and inside the 9xxx range the
  *  tailnet ACL demonstrably passes (ports >9999 hang from member devices
  *  while loopback works — every 101xx preview URL was unreachable from
- *  Michiel's browser, 2026-07-24). */
+ *  a member browser). */
 const MVM_HTTPS_BASE = 9000;
 
 function isMicrovm(c: PoolContainer): boolean {
@@ -402,8 +402,8 @@ async function sudoRun(args: string[], timeoutMs = 120_000): Promise<{ ok: boole
  *
  * PAUSED (opt-in via OPENSESSION_MVM_PREFAULT=1) 2026-07-27: on a loaded host
  * the cold pass grinds EBS for minutes, and the restart-looping server kept
- * re-starting it from scratch (the throttle lives on globalThis). Michiel
- * called it off until we fix it properly — a real fix wants the read to
+ * re-starting it from scratch (the throttle lives on globalThis). Paused
+ * until we fix it properly — a real fix wants the read to
  * survive restarts (throttle stamp on disk) and to be cheap when cold
  * (e.g. vmtouch with a rate cap, or pinning only the hot subset).
  */
@@ -1596,7 +1596,7 @@ export async function releasePoolPreview(worktreeDir: string): Promise<boolean> 
  * `git checkout -f` — atomic adds/removes, so ReScript/Turbopack never see an
  * incoherent module graph. (File-level copying of a big reverse delta broke
  * exactly that way on an old branch: main-only modules got deleted while
- * files importing them stayed — Michiel's Module-not-found, 2026-07-23.)
+ * files importing them stayed — a live Module-not-found.)
  *
  * Object transfer, in order:
  *  1. shallow fetch of the exact sha from the remote (works whenever the

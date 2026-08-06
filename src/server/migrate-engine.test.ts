@@ -20,7 +20,7 @@ function writeSession(id: string, extra: Record<string, unknown> = {}) {
       claudeSessionId: "11111111-2222-7000-8000-000000000000",
       branch: "",
       worktreeDir: "/tmp",
-      createdBy: "Michael",
+      createdBy: "Alex",
       createdAt: "2026-07-08T00:00:00.000Z",
       lastActivity: "2026-07-08T00:00:00.000Z",
       model: "claude-haiku-4-5",
@@ -89,7 +89,7 @@ describe("migrateSessionEngine", () => {
       if (!res.ok) expect(res.error).toContain("automation-owned");
     }
     expect(isAutomationOwnedSession({ automation: "x", createdBy: "y" })).toBe(true);
-    expect(isAutomationOwnedSession({ createdBy: "Michael" })).toBe(false);
+    expect(isAutomationOwnedSession({ createdBy: "Alex" })).toBe(false);
   });
 
   test("rejects sessions with an in-flight journaled run", () => {

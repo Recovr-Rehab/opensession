@@ -247,7 +247,7 @@ export function crossSiteViolation(req: Request): string | null {
 
 /**
  * Backfill `createdByLogin` on existing session files by resolving their
- * `createdBy` (historical picker first names like "Michiel") through the SAME
+ * `createdBy` (historical picker first names) through the SAME
  * identity table the sign-in uses — so sessions created before GitHub auth
  * belong to the same verified person afterwards. Runs once at boot when
  * sign-in is active (marker file), atomic per-file, and only ADDS the login

@@ -1,4 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
+import { AGENT_NAME } from "../lib/brand";
 import { commitPrompt } from "../lib/commit-prompt";
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import type {
@@ -2688,11 +2689,11 @@ export function CheckRow({ check }: { check: PrCheck }) {
  * The local/remote work a branch still owes: conflicts to resolve, base
  * commits to pull, local commits to push, a dirty tree to commit. Shared by
  * the workspace panel's Git status rows and the review canvas's divergence
- * strip so both name the task — and ask Michael for it — identically.
+ * strip so both name the task — and ask the agent for it — identically.
  *
  * Push is a direct server-side `git push`; the judgment calls (resolve
  * conflicts, update from base, commit stray changes) prompt the session —
- * Michael does the work, not a bare button.
+ * the agent does the work, not a bare button.
  */
 /** Status-dot colours for a Git status row — the state, not a step marker. */
 type GitDotTone = "green" | "yellow" | "red" | "blue" | "purple" | "muted";
@@ -2890,7 +2891,7 @@ function GitDivergenceStrip({
         </span>
       ))}
       {runner.prompted && (
-        <span className="text-xs text-faint">Asked Michael to {runner.prompted} ✓</span>
+        <span className="text-xs text-faint">Asked {AGENT_NAME} to {runner.prompted} ✓</span>
       )}
       {runner.error && <span className="text-xs text-red">{runner.error}</span>}
     </section>
@@ -2901,7 +2902,7 @@ function GitDivergenceStrip({
  * Local/remote discrepancy rows for the Status card: each gets a line with one
  * action on the right. Push is a direct server-side `git push`; the judgment
  * calls (create the PR, resolve conflicts, update from base, commit stray
- * changes) prompt the session — Michael does the work, not a bare button.
+ * changes) prompt the session — the agent does the work, not a bare button.
  */
 function GitStatusRows({
   git,
@@ -3037,7 +3038,7 @@ function GitStatusRows({
           {row.action}
         </div>
       ))}
-      {prompted && <div className="pr-git-note">Asked Michael to {prompted} ✓</div>}
+      {prompted && <div className="pr-git-note">Asked {AGENT_NAME} to {prompted} ✓</div>}
       {error && <div className="pr-git-note pr-git-note-error">{error}</div>}
     </>
   );

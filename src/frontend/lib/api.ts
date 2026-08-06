@@ -2741,7 +2741,7 @@ export async function searchNotesApi(q: string): Promise<NoteSearchHit[]> {
 	return body?.hits ?? [];
 }
 
-/** One note's meta + current markdown text (preview / discuss-with-Michael). */
+/** One note's meta + current markdown text (preview / discuss). */
 export async function fetchNote(
 	id: string,
 ): Promise<NoteMeta & { text: string }> {

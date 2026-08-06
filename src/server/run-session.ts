@@ -2293,7 +2293,7 @@ async function runSessionPromptInner(
 		isRunning: false,
 	});
 
-	// Mirror Michael's reply back to Slack: a turn that came from a Slack thread
+	// Mirror the agent's reply back to Slack: a turn that came from a Slack thread
 	// (a reply under a message this session posted — see slackReplyTo plumbing)
 	// answers in that thread.
 	if (!endedWithError && assistantText.trim() && slackReplyTo) {
