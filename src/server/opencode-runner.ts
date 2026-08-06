@@ -199,6 +199,7 @@ import { gitIdentityEnv, githubLoginFor, userMatchesAny, type GitIdentity } from
 import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
 import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
 import { stateDir } from "./paths";
+import { resolveOpencodeBin, versionTuple } from "./opencode-bin";
 import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
 import {
@@ -290,39 +291,6 @@ const UI_BASE =
   process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
 
-/** Last resort when PATH has no opencode (systemd's trimmed env): scan the
- *  nvm installs, newest node first, instead of hardcoding one node version —
- *  the pinned v20.20.0 literal goes stale on any node upgrade, and the
- *  Health Monitor's codex fallback died on posix_spawn ENOENT for exactly
- *  that path (2026-07-25). */
-function nvmOpencodeScan(): string | undefined {
-  const root = `${HOME}/.nvm/versions/node`;
-  try {
-    const versions = readdirSync(root)
-      .map((v) => ({ v, t: versionTuple(v) }))
-      .filter((x): x is { v: string; t: [number, number, number] } => !!x.t)
-      .sort((a, b) => b.t[0] - a.t[0] || b.t[1] - a.t[1] || b.t[2] - a.t[2]);
-    for (const { v } of versions) {
-      const p = `${root}/${v}/bin/opencode`;
-      if (existsSync(p)) return p;
-    }
-  } catch {}
-  return undefined;
-}
-
-function resolveOpencodeBin(): string {
-  return (
-    process.env.OPENSESSION_OPENCODE_BIN ||
-    Bun.which("opencode") ||
-    nvmOpencodeScan() ||
-    // Where opencode.ai's own installer puts it. The previous last-resort was a
-    // specific nvm version path from Tella's box, which on any other machine
-    // produced a confusing "no such file" naming a directory the operator had
-    // never heard of.
-    `${HOME}/.opencode/bin/opencode`
-  );
-}
-
 /** opencode binary (installed user-level: `npm i -g opencode-ai`).
  * `let`, not `const`: an `npm i -g` upgrade can replace the bin tree out from
  * under a module-load-time resolution (2026-08-03: ENOENT on a stale
@@ -349,12 +317,6 @@ export const LOCAL_OPENCODE_MIN_VERSION = "1.3.8";
 
 function executableAvailable(path: string): boolean {
   return path.includes("/") ? existsSync(path) : !!Bun.which(path);
-}
-
-function versionTuple(value: string): [number, number, number] | undefined {
-  const match = value.match(/\bv?(\d+)\.(\d+)\.(\d+)\b/i);
-  if (!match) return;
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
 export function assertLocalOpencodeVersion(found: string, bin = OPENCODE_BIN): void {

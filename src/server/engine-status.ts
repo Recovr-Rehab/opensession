@@ -20,6 +20,7 @@ import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { configuredPaths } from "./config";
 import { accountProviderForModel, interactiveDefaultModel } from "./models";
+import { findOpencodeBin } from "./opencode-bin";
 import { bridgeEnabled, configPath, readOpencodeBridgeConfig } from "./opencode-config";
 import { homeDir } from "./paths";
 
@@ -53,23 +54,6 @@ export interface EngineStatus {
   /** True when `blocker` is resolved by PUT /api/settings/opencode-engine —
    *  i.e. the UI can offer a button rather than a copy-pasteable command. */
   fixableInApp: boolean;
-}
-
-/**
- * Locate the opencode binary. Mirrors the user-visible cases of
- * `resolveOpencodeBin` (opencode-runner.ts) without importing the runner —
- * doctor is a CLI and must not drag the whole server graph in to answer one
- * question. Unlike the runner's version this returns null rather than a
- * hopeful default path, because "not installed" is exactly what we report.
- */
-function findOpencodeBin(): string | null {
-  const explicit = process.env.OPENSESSION_OPENCODE_BIN;
-  if (explicit) return existsSync(explicit) ? explicit : null;
-  const onPath = Bun.which("opencode");
-  if (onPath) return onPath;
-  // Where opencode.ai's own installer (and ours) puts it.
-  const installed = `${homeDir()}/.opencode/bin/opencode`;
-  return existsSync(installed) ? installed : null;
 }
 
 function findClaudeBin(): string | null {

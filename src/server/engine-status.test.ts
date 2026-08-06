@@ -10,22 +10,71 @@ import { join } from "node:path";
 // against whatever this box happens to be running.
 const SCRATCH = mkdtempSync(join(tmpdir(), "engine-status-"));
 const ENGINE_CONFIG = join(SCRATCH, "opencode.json");
-process.env.OPENSESSION_STATE_DIR = SCRATCH;
-process.env.OPENSESSION_CHATS_DIR = SCRATCH;
-process.env.OPENSESSION_OPENCODE_CONFIG = ENGINE_CONFIG;
-process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH = join(SCRATCH, "claude-accounts.json");
 
-const { engineStatus } = await import("./engine-status");
-const { __setCodexAccountsPathForTest } = await import("./codex-accounts");
-__setCodexAccountsPathForTest(join(SCRATCH, "codex-accounts.json"));
+const SCRATCH_ENV = {
+  OPENSESSION_STATE_DIR: SCRATCH,
+  OPENSESSION_CHATS_DIR: SCRATCH,
+  OPENSESSION_OPENCODE_CONFIG: ENGINE_CONFIG,
+  OPENSESSION_CLAUDE_ACCOUNTS_PATH: join(SCRATCH, "claude-accounts.json"),
+};
+
+/** Run `fn` with the scratch state namespace in effect, then put the
+ *  environment back exactly as it was. `bun test` shares ONE process across
+ *  files, so env set at module scope leaks into every test file that loads
+ *  later — which is precisely how the pre-existing opencode state-path
+ *  failures happen. Don't add to that. */
+function withScratchEnv<T>(fn: () => T): T {
+  const saved = Object.entries(SCRATCH_ENV).map(
+    ([k, v]) => [k, process.env[k], v] as const,
+  );
+  for (const [k, , v] of saved) process.env[k] = v;
+  try {
+    return fn();
+  } finally {
+    for (const [k, prev] of saved) {
+      if (prev === undefined) delete process.env[k];
+      else process.env[k] = prev;
+    }
+  }
+}
+
+const { engineStatus } = await withScratchEnv(async () => {
+  const mod = await import("./engine-status");
+  const { __setCodexAccountsPathForTest } = await import("./codex-accounts");
+  // Module-level path in codex-accounts, so env alone wouldn't isolate it.
+  __setCodexAccountsPathForTest(join(SCRATCH, "codex-accounts.json"));
+  return mod;
+});
 
 /** Re-point the engine config at `cfg` (null = the file doesn't exist, which
  *  is the fresh-install state) and read the status. Both are read per call. */
 function statusWith(cfg: object | null) {
   if (cfg) writeFileSync(ENGINE_CONFIG, JSON.stringify(cfg));
   else rmSync(ENGINE_CONFIG, { force: true });
-  return engineStatus();
+  return withScratchEnv(() => engineStatus());
 }
+
+// The status check and the runner must agree on where the engine is. They
+// didn't: a second, simpler copy of the lookup in the status path missed the
+// nvm fallback and reported "not installed" on a box that was running turns
+// (systemd's PATH omits the node bin dir). Same module now — pin the contract
+// that makes the two safe to share.
+describe("opencode binary lookup", () => {
+  test("an explicit but missing OPENSESSION_OPENCODE_BIN is null, not hopeful", async () => {
+    const { findOpencodeBin, resolveOpencodeBin } = await import("./opencode-bin");
+    const prev = process.env.OPENSESSION_OPENCODE_BIN;
+    process.env.OPENSESSION_OPENCODE_BIN = join(SCRATCH, "nope", "opencode");
+    try {
+      // findOpencodeBin answers "is it installed" — it must say no.
+      expect(findOpencodeBin()).toBeNull();
+      // resolveOpencodeBin answers "what should I exec" — it hands back the
+      // configured path so the failure names what the operator asked for.
+      expect(resolveOpencodeBin()).toBe(join(SCRATCH, "nope", "opencode"));
+    } finally {
+      process.env.OPENSESSION_OPENCODE_BIN = prev;
+    }
+  });
+});
 
 describe("engineStatus", () => {
   test("a fresh install (no engine config) is not ready, and is one click from fixed", () => {
