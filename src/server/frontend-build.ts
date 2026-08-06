@@ -465,7 +465,7 @@ export function scheduleFrontendRebuild(reason: string, debounceMs = 300): void 
 				lastBuildErrorKey = fail.key;
 				broadcastToAll({
 					type: "notice",
-					message: "App update paused. Keep working. Updates resume automatically.",
+					message: "App update paused. No action needed.",
 				});
 			}
 			if (fail.needsInstall && Date.now() - lastAutoInstallAt > AUTO_INSTALL_COOLDOWN_MS) {
