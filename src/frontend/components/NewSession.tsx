@@ -80,6 +80,7 @@ const LIGHT_CREATE =
 
 const LAST_REPO_KEY = "opensession-new-session-repo";
 const ADD_REPO_VALUE = "__add_repo__";
+const SCRATCH_REPO_VALUE = "__scratch__";
 
 function lastSelectedRepo(): string | null {
   try {
@@ -614,14 +615,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     (prompt.trim() || images.length > 0 || files.length > 0) &&
     (mode === "ask" || mode === "scratch" || selectedWorktree !== "");
 
-  // "Create from…" combines the mode + base into one control.
-  const createFromValue =
-    mode === "ask" ? "__ask__" : mode === "scratch" ? "__scratch__" : selectedWorktree;
+  // "Create from…" combines the repo-backed mode + base into one control.
+  const createFromValue = mode === "ask" ? "__ask__" : selectedWorktree;
   function onCreateFromChange(v: string) {
     if (v === "__ask__") {
       setMode("ask");
-    } else if (v === "__scratch__") {
-      setMode("scratch");
     } else {
       setMode("code");
       setSelectedWorktree(v);
@@ -694,27 +692,21 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             always visible — on phones the create-from picker hides until the
             options toggle in the footer opens it. */}
         <div className="palette-header">
-          {mode === "scratch" ? (
-            // Scratch sessions are repo-less — a picker here would imply the
-            // choice matters. A muted chip holds the slot instead.
-            <span
-              className="palette-trigger palette-trigger-strong pointer-events-none opacity-60"
-              title="Scratch sessions have no repository"
-            >
-              <RepoTile name="scratch" />
-              <span className="palette-trigger-label">No repo</span>
-            </span>
-          ) : (
           <PaletteSelect
             className="palette-trigger palette-trigger-strong"
             title="Repository"
-            value={repo}
+            value={mode === "scratch" ? SCRATCH_REPO_VALUE : repo}
             options={[
               ...repos.map((p) => ({
                 value: p.id,
                 label: p.label,
                 icon: <RepoTile name={p.id} />,
               })),
+              {
+                value: SCRATCH_REPO_VALUE,
+                label: "Scratch · no repo",
+                icon: <RepoTile name="scratch" />,
+              },
               ...(auth?.local && createTarget === "local"
                 ? [
                     {
@@ -726,10 +718,15 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 : []),
             ]}
             onChange={(nextRepo) => {
+              if (nextRepo === SCRATCH_REPO_VALUE) {
+                setMode("scratch");
+                return;
+              }
               if (nextRepo === ADD_REPO_VALUE) {
                 setAddRepoOpen(true);
                 return;
               }
+              if (mode === "scratch") setMode("code");
               setRepo(nextRepo);
               rememberSelectedRepo(nextRepo);
             }}
@@ -737,15 +734,16 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             ariaLabel="Repository"
             isPhone={isPhone}
           >
-            <RepoTile name={repo} />
+            <RepoTile name={mode === "scratch" ? "scratch" : repo} />
             <span className="palette-trigger-label">
-              {repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
+              {mode === "scratch"
+                ? "Scratch · no repo"
+                : repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
             </span>
             <IconChevronDown className="palette-chevron" size={22} />
           </PaletteSelect>
-          )}
 
-          {optionsVisible && (
+          {optionsVisible && mode !== "scratch" && (
           <PaletteSelect
             className="palette-trigger"
             title="What to create from"
