@@ -2121,9 +2121,12 @@ private struct SessionInputBar: View {
                 // wears the composer's own send arrow — folding a held
                 // message into the live run IS sending it now, and the arrow
                 // says that faster than the word "steer" ever did.
+                // Discard, edit, then send: destructive furthest from the
+                // thumb's resting path and the primary action rightmost,
+                // directly above the composer's own send button.
                 HStack(spacing: 0) {
-                    if let onSteer {
-                        rowAction("arrow.up", "Steer into this run", onSteer)
+                    if let onDelete {
+                        rowAction("trash", "Discard message", onDelete)
                     }
                     if canEdit, let onEdit {
                         rowAction("pencil", "Edit message", onEdit)
@@ -2131,8 +2134,8 @@ private struct SessionInputBar: View {
                     if let onRetry {
                         rowAction("arrow.clockwise", "Try again", onRetry)
                     }
-                    if let onDelete {
-                        rowAction("trash", "Discard message", onDelete)
+                    if let onSteer {
+                        rowAction("arrow.up", "Steer into this run", onSteer)
                     }
                 }
             }

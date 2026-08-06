@@ -90,7 +90,7 @@ struct ComposerSettingsView: View {
                     Text("New sessions use this model when available. No preference uses the workspace default.")
                 }
 
-                Section("Sending") {
+                Section {
                     #if os(macOS)
                     Picker("Send messages with", selection: $sendKey) {
                         Text("Enter").tag("enter")
@@ -110,6 +110,17 @@ struct ComposerSettingsView: View {
                             Text("Steer the current run").tag("steer")
                         }
                     }
+                    #endif
+                } header: {
+                    Text("Sending")
+                } footer: {
+                    // The setting is only the default: the other verb is
+                    // always one gesture away, and this is the only place
+                    // that says so.
+                    #if os(macOS)
+                    Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Hold the send button to use the other one for a single message.")
+                    #else
+                    Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Touch and hold the send button to use the other one for a single message.")
                     #endif
                 }
 
