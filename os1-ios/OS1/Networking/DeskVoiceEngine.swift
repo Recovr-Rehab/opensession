@@ -58,8 +58,23 @@ final class DeskVoiceEngine {
     private(set) var muted = false {
         didSet { rt.muted = muted }
     }
+    /// Whether the full-screen call is on screen. It lives on the engine
+    /// rather than in the Desk sheet because a minimized call is still a
+    /// running call, and the ways back to it are scattered across views —
+    /// the sheet header and the composer's mic both just flip this.
+    var callPresented = false
 
     var active: Bool { state != .idle && state != .error }
+
+    /// Show the call screen, starting a call if one isn't already running.
+    /// Returning to a minimized call must NOT restart it, which is why this
+    /// is one entry point rather than a start button repeated per view.
+    func open() {
+        callPresented = true
+        if !active {
+            Task { await start() }
+        }
+    }
 
     /// Realtime minutes are expensive; an abandoned call must die on its own.
     private static let idleTimeout: Duration = .seconds(180)
@@ -486,6 +501,11 @@ final class DeskVoiceEngine {
             caption = nil
             captionItemId = nil
             muted = false
+            // Every way a call ends — hang up, the idle timeout, the app
+            // leaving the foreground — takes the call screen with it. The
+            // error path deliberately doesn't: that screen is where the
+            // failure is legible.
+            callPresented = false
         }
     }
 }

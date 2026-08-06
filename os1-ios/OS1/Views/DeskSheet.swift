@@ -16,10 +16,10 @@ struct DeskSheet: View {
 
     @State private var loadState: LoadState = .loading
     @State private var engine = DeskVoiceEngine()
-    @State private var showingCall = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        @Bindable var engine = engine
+        return VStack(spacing: 0) {
             header
             Divider()
             content
@@ -32,12 +32,7 @@ struct DeskSheet: View {
             // A backgrounded app must never hold the mic open.
             if phase != .active { engine.stop() }
         }
-        .onChange(of: engine.state) { _, state in
-            // Covers every way a call can end without the button: the idle
-            // timeout, backgrounding, a dropped socket.
-            if state == .idle { showingCall = false }
-        }
-        .fullScreenCoverCompat(isPresented: $showingCall) {
+        .fullScreenCoverCompat(isPresented: $engine.callPresented) {
             DeskVoiceCallView(engine: engine)
         }
     }
@@ -62,6 +57,11 @@ struct DeskSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready(let sessionId):
             SessionView(session: Session(id: sessionId))
+                // The composer's mic lives inside SessionView, which knows
+                // nothing about voice; handing it the engine here is what
+                // keeps voice a Desk-only affordance rather than a control
+                // every session's composer would have to hide.
+                .environment(deskVoice == "on" ? engine : nil as DeskVoiceEngine?)
         }
     }
 
@@ -111,10 +111,7 @@ struct DeskSheet: View {
     /// happens on the call screen.
     private var micButton: some View {
         Button {
-            showingCall = true
-            if !engine.active {
-                Task { await engine.start() }
-            }
+            engine.open()
         } label: {
             Image(systemName: engine.active ? "mic.fill" : "mic")
                 .foregroundStyle(engine.active ? OS1VisualStyle.accent : OS1VisualStyle.textDim)

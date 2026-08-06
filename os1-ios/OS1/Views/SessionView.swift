@@ -1984,6 +1984,7 @@ private struct SessionInputBar: View {
                     if viewModel.isRunning {
                         stopButton
                     }
+                    ComposerVoiceButton()
                     if !viewModel.isRunning || viewModel.canSend {
                         sendButton
                     }
@@ -2000,6 +2001,7 @@ private struct SessionInputBar: View {
                         stopButton
                     }
 
+                    ComposerVoiceButton()
                     sendButton
                 }
                 .padding(.horizontal, controlRowInset.horizontal)
