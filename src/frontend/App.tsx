@@ -213,7 +213,6 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"notifications",
 	"appearance",
 	"setup",
-	"workspace",
 	"models",
 	"connections",
 	"memory",
@@ -229,6 +228,7 @@ const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
 	modelProviders: "models",
 	warmPreviews: "prewarming",
 	previewPool: "prewarming",
+	workspace: "setup",
 	personalPrompt: "general",
 	deskVoice: "general",
 };

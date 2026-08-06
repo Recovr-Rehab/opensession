@@ -3,29 +3,6 @@ import SwiftUI
 // Native settings panels intentionally use only SettingsAPI. They can be hosted by
 // any settings navigation container without depending on the legacy web settings view.
 
-struct WorkspaceGeneralSettingsView: View {
-    @State private var loaded = false
-
-    var body: some View {
-        Form {
-            Section("Server") {
-                LabeledContent("Address", value: ServerConfig.shared.baseURLString)
-                LabeledContent("Person", value: ServerConfig.shared.userName.isEmpty ? "Not set" : ServerConfig.shared.userName)
-                LabeledContent("Authentication", value: ServerConfig.shared.token.isEmpty ? "Not connected" : "Connected")
-            }
-            Section("Product") {
-                LabeledContent("Client", value: "OS1 native")
-                Text("Workspace server configuration is read-only here. Change server and sign-in details from the Connection screen.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("Identity")
-        .task { loaded = true }
-        .overlay { if !loaded { ProgressView() } }
-    }
-}
-
 /// Settings → Models. The subscription pools and the bring-your-own-key
 /// providers are one screen, matching the web: they answer the same question
 /// ("where do the models come from?") and each half used to end by pointing at

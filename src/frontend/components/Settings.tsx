@@ -204,7 +204,6 @@ export type SettingsSectionKey =
 	| "notifications"
 	| "appearance"
 	| "setup"
-	| "workspace"
 	| "models"
 	| "connections"
 	| "memory"
@@ -366,24 +365,6 @@ const SECTIONS: {
 				<path d="M7.8 8.4h5.5" strokeLinecap="round" />
 				<path d="M2.7 12.1l1 1 1.8-2" strokeLinecap="round" strokeLinejoin="round" />
 				<path d="M7.8 12.4h5.5" strokeLinecap="round" />
-			</svg>
-		),
-	},
-	{
-		key: "workspace",
-		label: "Identity",
-		group: "Workspace",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="8" cy="5.5" r="2.5" />
-				<path d="M3.5 13.5c.6-2.4 2.4-3.6 4.5-3.6s3.9 1.2 4.5 3.6" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -625,7 +606,6 @@ function SectionPanel({
 			{section === "composer" && <ComposerPanel />}
 			{section === "appearance" && <AppearancePanel />}
 			{section === "setup" && <SetupPanel />}
-			{section === "workspace" && <WorkspacePanel />}
 			{section === "audit" && <AuditPanel />}
 			{section === "models" && <ModelsPanel />}
 			{section === "connections" && <Connections />}
@@ -2820,57 +2800,8 @@ function ComposerPanel() {
 
 // ── Workspace · General ─────────────────────────────────────────────────────
 
-const IDENTITY_INPUT_CLASS = cn(settingsInputClass, "w-[140px]");
-
 /** Text field that commits on blur/Enter (Esc reverts), for the identity
  *  settings backed by the config file rather than local prefs. */
-function IdentityInput({
-	label,
-	value,
-	placeholder,
-	onSave,
-}: {
-	label: string;
-	value: string;
-	placeholder: string;
-	onSave: (next: string) => Promise<void>;
-}) {
-	const [draft, setDraft] = useState(value);
-	const [saving, setSaving] = useState(false);
-	useEffect(() => setDraft(value), [value]);
-	const commit = async () => {
-		const next = draft.trim();
-		if (saving) return;
-		if (next === value) {
-			setDraft(value);
-			return;
-		}
-		setSaving(true);
-		try {
-			await onSave(next);
-		} catch {
-			setDraft(value);
-		} finally {
-			setSaving(false);
-		}
-	};
-	return (
-		<input
-			className={IDENTITY_INPUT_CLASS}
-			value={draft}
-			disabled={saving}
-			onChange={(e) => setDraft(e.target.value)}
-			onBlur={commit}
-			onKeyDown={(e) => {
-				if (e.key === "Enter") e.currentTarget.blur();
-				else if (e.key === "Escape") setDraft(value);
-			}}
-			placeholder={placeholder}
-			aria-label={label}
-		/>
-	);
-}
-
 /**
  * Instance identity. The source of truth is ~/.opensession/config.json
  * (persona.name / branding.productName) on the server, read and written
@@ -2878,85 +2809,6 @@ function IdentityInput({
  * schedules a frontend rebuild, so open tabs get the update-pill nudge once
  * the re-branded bundle is live.
  */
-function WorkspacePanel() {
-	const [identity, setIdentity] = useState<InstanceIdentityDto | null>(null);
-	useEffect(() => {
-		let cancelled = false;
-		fetchInstanceIdentity()
-			.then((dto) => {
-				if (!cancelled) setIdentity(dto);
-			})
-			.catch(() => {});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-	const save = async (patch: {
-		personaName?: string;
-		productName?: string;
-	}) => {
-		try {
-			setIdentity(await saveInstanceIdentity(patch));
-			toast("Saved — open tabs update after the next rebuild", {
-				variant: "success",
-			});
-		} catch (e: any) {
-			toast(e?.message || "Failed to save", { variant: "error" });
-			throw e;
-		}
-	};
-	return (
-		<SettingsPanel>
-			<SettingsHeader
-				title="Identity"
-				description="What this instance and its agent are called. Workspace-wide, shared by everyone here."
-			/>
-			<SettingsGroupLabel>Identity</SettingsGroupLabel>
-			<SettingCard>
-				<SettingRow
-					title="Agent name"
-					desc={
-						<>
-							What the agent calls itself in prompts, Slack messages, and the
-							UI. Stored as <code>persona.name</code> in{" "}
-							<code>~/.opensession/config.json</code> on the server.
-						</>
-					}
-					control={
-						<IdentityInput
-							label="Agent name"
-							value={identity?.personaName ?? AGENT_NAME}
-							placeholder="Assistant"
-							onSave={(next) => save({ personaName: next })}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Product name"
-					desc={
-						<>
-							What this app calls itself in titles and headers. Stored as{" "}
-							<code>branding.productName</code> in the same config file.
-						</>
-					}
-					control={
-						<IdentityInput
-							label="Product name"
-							value={identity?.productName ?? PRODUCT_NAME}
-							placeholder="Open Session"
-							onSave={(next) => save({ productName: next })}
-						/>
-					}
-				/>
-			</SettingCard>
-			<SettingsHint>
-				Changes apply to new agent runs immediately. Clearing a field restores
-				the built-in default.
-			</SettingsHint>
-		</SettingsPanel>
-	);
-}
-
 function AppearancePanel() {
 	const [pref, setPref] = useState<ThemePref>(getThemePref);
 	useEffect(() => onThemeChanged(() => setPref(getThemePref())), []);

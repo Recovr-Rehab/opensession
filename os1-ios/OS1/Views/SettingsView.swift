@@ -73,9 +73,6 @@ struct SettingsView: View {
             }
 
             Section("Workspace") {
-                settingsLink("Identity", icon: "person") {
-                    WorkspaceGeneralSettingsView()
-                }
                 settingsLink("Models", icon: "square.grid.2x2") {
                     ModelsSettingsView()
                 }

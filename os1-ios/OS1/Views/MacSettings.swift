@@ -14,7 +14,6 @@ struct MacSettingsView: View {
         case composer
         case notifications
         case appearance
-        case identity
         case models
         case connections
         case memory
@@ -35,7 +34,6 @@ struct MacSettingsView: View {
             case .composer: "Composer"
             case .notifications: "Notifications"
             case .appearance: "Appearance"
-            case .identity: "Identity"
             case .models: "Models"
             case .connections: "Connections"
             case .memory: "Memory"
@@ -56,7 +54,6 @@ struct MacSettingsView: View {
             case .composer: "keyboard"
             case .notifications: "bell.badge"
             case .appearance: "circle.lefthalf.filled"
-            case .identity: "person"
             case .models: "square.grid.2x2"
             case .connections: "point.3.connected.trianglepath.dotted"
             case .memory: "brain"
@@ -93,7 +90,6 @@ struct MacSettingsView: View {
                     paneRow(.appearance)
                 }
                 Section("Workspace") {
-                    paneRow(.identity)
                     paneRow(.models)
                     paneRow(.connections)
                     paneRow(.memory)
@@ -150,7 +146,6 @@ struct MacSettingsView: View {
         case .composer: ComposerSettingsView()
         case .notifications: NotificationsSettingsView()
         case .appearance: AppearanceSettingsView()
-        case .identity: WorkspaceGeneralSettingsView()
         case .models: ModelsSettingsView()
         case .connections: ConnectionsSettingsView()
         case .memory: MemorySettingsView()
