@@ -475,7 +475,9 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         model: model || undefined,
         resume: sdkSessionId,
         // Turn 1 is the real answer; turn 2 exists because blocked tool calls
-        // count as a turn boundary (the hook's reason tells the model to stop).
+        // count as a turn boundary (the hook's reason tells the model to
+        // stop). Models that keep going anyway are handled at the result:
+        // error_max_turns with captured calls returns them as tool_use.
         maxTurns: 2,
         systemPrompt: system || " ",
         settingSources: [],
@@ -535,10 +537,18 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
       if (msg.type === "result") {
         const rm = msg as any;
         sdkSessionId = rm.session_id || sdkSessionId;
+        // error_max_turns WITH captured calls is a SUCCESS for this bridge:
+        // sequential-tool models (sonnet especially) often answer a blocked
+        // call by trying the next tool — a fresh turn each time — and blow
+        // the cap before "ending" cleanly. The captured calls are the whole
+        // point; return them as tool_use and let the client execute. Only a
+        // capture-less max-turns (model never called a tool) stays an error.
+        const maxTurnsWithCaptures =
+          rm.subtype === "error_max_turns" && captured.length > 0;
         // Surface SDK/API failures as provider errors, not assistant text —
         // the CLI narrates errors (e.g. "API Error: 400 …") as a message,
         // which would otherwise read as a normal model reply in opencode.
-        if (rm.is_error || rm.subtype !== "success") {
+        if ((rm.is_error || rm.subtype !== "success") && !maxTurnsWithCaptures) {
           const detail =
             (typeof rm.result === "string" && rm.result) ||
             contentOut.filter((b) => b.type === "text").map((b) => b.text).join("\n") ||
