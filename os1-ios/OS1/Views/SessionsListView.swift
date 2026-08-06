@@ -507,6 +507,29 @@ struct SessionsListView: View {
         #endif
     }
 
+    /// The tab strip's "+" — a new session in a workspace opens as a tab right
+    /// away, with no composer sheet in between. The server mints an EMPTY
+    /// sibling that shares this workspace's worktree and branch; it carries no
+    /// run until its first message, so there is no prompt to collect up front,
+    /// and nothing the sheet would have asked for is still open (repo, branch
+    /// and mode all come from the workspace).
+    ///
+    /// The create is awaited rather than optimistic: writing the session file
+    /// is one round trip — no worktree to prepare — so the tab appears with a
+    /// real id from its first frame, and a failure lands before there's a tab
+    /// to tear down. The row is filed locally so the strip has it immediately
+    /// instead of on the next poll.
+    private func openSiblingTab(of source: Session) async -> Session? {
+        do {
+            let created = try await OS1API.newSiblingSession(from: source.id)
+            viewModel.addOptimistic(created)
+            return created
+        } catch {
+            createError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// The background create finished: move the pending row (and the open
     /// conversation) onto the server's real id, or roll the pending row back
     /// and surface the error.
@@ -886,11 +909,16 @@ struct SessionsListView: View {
                     // tab, not a standalone session. The workspace id comes from
                     // the latest polled copy — the row NavigationPath retained
                     // predates a workspace this session may have joined since.
-                    let current = viewModel.sessions.first { $0.id == session.id }
-                    newSessionRequest = NewSessionRequest(
-                        repo: session.effectiveRepo,
-                        workspaceId: current?.workspaceId ?? session.workspaceId
-                    )
+                    let current = viewModel.sessions.first { $0.id == session.id } ?? session
+                    guard current.workspaceId?.isEmpty == false else {
+                        // A workspace-less legacy session has no strip to join,
+                        // so the composer sheet stays the way in — it's a
+                        // standalone session, and its repo/mode are still open
+                        // questions.
+                        newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
+                        return nil
+                    }
+                    return await openSiblingTab(of: current)
                 },
                 onRenameWorkspace: { name in
                     guard let workspace = workspace(containing: session) else { return }

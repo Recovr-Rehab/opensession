@@ -290,6 +290,13 @@ final class SessionViewModel {
         if self.isRunning {
             self.runStartedAt = session.runStartedDate
         }
+        // A session the server says has never run has no transcript to wait
+        // for, and the watch confirms that in a moment. Opening on the loading
+        // spinner would make an empty tab — the tab strip's "+" lands on one —
+        // look like it was still fetching something. `createdAt` is the proof
+        // that this IS the server's row: `neverRan` reads as true for a bare
+        // id-only stub as well, and about one of those we know nothing.
+        if session.createdAt != nil, session.neverRan { isLoadingConversation = false }
         if let seed {
             awaitingCreation = true
             isLoadingConversation = false

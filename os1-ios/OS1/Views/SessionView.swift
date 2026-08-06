@@ -915,7 +915,11 @@ struct SessionTabsView: View {
     let workspaceNames: [String: String]
     let viewModelForSession: (Session) -> SessionViewModel
     let onSaveComposerDraft: (Session, SessionViewModel.ComposerDraft) -> Void
-    let onNewSession: () -> Void
+    /// Open a new session in this workspace. Answers with the session that was
+    /// created — this view focuses it as a tab — or nil when there was nothing
+    /// to open as one (a workspace-less session falls back to the composer
+    /// sheet, and a failed create has already surfaced its error).
+    let onNewSession: () async -> Session?
     /// Rename the worktree these sessions share, from the session's overflow menu.
     let onRenameWorkspace: (String) -> Void
     /// Archive every session of the worktree, from the session's overflow menu.
@@ -931,6 +935,8 @@ struct SessionTabsView: View {
     /// opened from the archive sheet still renders), which would leave the tab
     /// you just closed sitting in the strip.
     @State private var closedIds: Set<String> = []
+    /// A "+" that hasn't answered yet, so a second tap can't mint a second tab.
+    @State private var openingTab = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     /// The appearance outside the bar, to pin the floating tab strip to.
@@ -942,7 +948,7 @@ struct SessionTabsView: View {
         workspaceNames: [String: String] = [:],
         viewModelForSession: @escaping (Session) -> SessionViewModel,
         onSaveComposerDraft: @escaping (Session, SessionViewModel.ComposerDraft) -> Void,
-        onNewSession: @escaping () -> Void,
+        onNewSession: @escaping () async -> Session?,
         onRenameWorkspace: @escaping (String) -> Void,
         onArchiveWorkspace: @escaping () -> Void,
         onCloseTab: @escaping (Session) -> Void
@@ -988,7 +994,7 @@ struct SessionTabsView: View {
                     onSaveComposerDraft: { draft in
                         onSaveComposerDraft(session, draft)
                     },
-                    onNewSession: onNewSession,
+                    onNewSession: openNewTab,
                     onRenameWorkspace: onRenameWorkspace,
                     // Archiving the worktree from within it leaves nothing to
                     // show here, so pop back to the sessions list — the same
@@ -1061,7 +1067,7 @@ struct SessionTabsView: View {
             dismiss()
             return
         }
-        withAnimation(closeAnimation) {
+        withAnimation(tabSwitchAnimation) {
             if session.id == activeId {
                 let closedIndex = strip.firstIndex { $0.id == session.id } ?? 0
                 let nextIndex = strip.firstIndex { $0.id == next.id } ?? 0
@@ -1072,10 +1078,33 @@ struct SessionTabsView: View {
         }
     }
 
-    private var closeAnimation: Animation {
+    /// One conversation giving way to another: a tab closed, tapped, or newly
+    /// opened at the end of the strip. They're the same move, so they share a
+    /// curve.
+    private var tabSwitchAnimation: Animation {
         reduceMotion
             ? .easeOut(duration: 0.16)
             : .snappy(duration: 0.26, extraBounce: 0)
+    }
+
+    /// The overflow menu's "New session in this workspace": open the tab, don't
+    /// ask about it. The session is created empty, so the new tab lands on its
+    /// own composer — the sheet had nothing left to collect. It joins `tabs`
+    /// through the list's optimistic overlay before this returns, so switching
+    /// to it is an ordinary tab selection.
+    private func openNewTab() {
+        guard !openingTab else { return }
+        openingTab = true
+        Task {
+            let created = await onNewSession()
+            openingTab = false
+            guard let created else { return }
+            withAnimation(tabSwitchAnimation) {
+                // A new session sorts last, so it always arrives from the right.
+                transitionEdge = .trailing
+                activeId = created.id
+            }
+        }
     }
 
     private func select(_ session: Session) {
@@ -1084,11 +1113,7 @@ struct SessionTabsView: View {
         else { return }
 
         let currentIndex = visibleTabs.firstIndex(where: { $0.id == activeId }) ?? 0
-        withAnimation(
-            reduceMotion
-                ? .easeOut(duration: 0.16)
-                : .snappy(duration: 0.26, extraBounce: 0)
-        ) {
+        withAnimation(tabSwitchAnimation) {
             transitionEdge = targetIndex > currentIndex ? .trailing : .leading
             activeId = session.id
         }
@@ -1400,6 +1425,13 @@ private struct SessionInputBar: View {
         .padding(.horizontal, horizontalInset)
         .padding(.top, Self.barTopPadding)
         .padding(.bottom, 8)
+        // A session that has never run has nothing to read, so the only thing
+        // to do in it is write — open with the keyboard up. This is the tab
+        // strip's "+" landing: the tab appears already waiting for the prompt
+        // that the sheet used to ask for.
+        .onAppear {
+            if viewModel.session.neverRan { inputFocused = true }
+        }
         // Presented from the bar, not from the "+" itself: the button moves
         // between the collapsed pill and the expanded toolbar, and a sheet
         // anchored to a view that goes away closes with it.

@@ -160,6 +160,19 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.displayItems.map(\.id), ["e1", "e2"])
     }
 
+    /// A session opened as a new tab in a workspace is created empty: it has a
+    /// real server row and no run, so it opens on its (empty) conversation
+    /// rather than the loading spinner. An id-only stub looks the same to
+    /// `neverRan` but says nothing about the session, so it keeps waiting.
+    func testServerRowThatNeverRanSkipsTheLoadingState() {
+        let created = "2026-08-06T10:00:00.000Z"
+        let empty = SessionViewModel(
+            session: Session(id: "bks-new", createdAt: created, lastActivity: created)
+        )
+        XCTAssertFalse(empty.isLoadingConversation)
+        XCTAssertTrue(makeViewModel().isLoadingConversation)
+    }
+
     func testEventsForOtherSessionsAreIgnored() {
         let viewModel = makeViewModel()
         viewModel.handle(.transcriptInit(sessionId: "bks-other", entries: [entry("x", "user")], cursor: .empty))
