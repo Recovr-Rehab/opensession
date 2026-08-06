@@ -767,16 +767,21 @@ private struct SessionActionsMenu: View {
         Menu {
             if let onNewSession {
                 Button(action: onNewSession) {
-                    // A session in a workspace gets a sibling tab (sharing the
-                    // worktree in code mode); a workspace-less legacy session has
-                    // nothing to join, so the plain wording stays honest.
-                    Label(
-                        viewModel.session.workspaceId == nil
-                            ? "New session"
-                            : "New session in this workspace",
-                        systemImage: "plus"
-                    )
+                    // Two words, because the workspace it lands in is the one
+                    // you're already looking at — spelling it out wrapped the
+                    // row onto two lines to say what the tab strip then shows
+                    // anyway. VoiceOver keeps the long form, where naming the
+                    // scope costs no space: the same split as the web tab
+                    // strip's bare "+" and its aria-label.
+                    Label("New session", systemImage: "plus")
                 }
+                .accessibilityLabel(
+                    // A workspace-less legacy session has nothing to join, so
+                    // the plain wording stays honest there.
+                    viewModel.session.workspaceId == nil
+                        ? "New session"
+                        : "New session in this workspace"
+                )
             }
             Button {
                 showWorktreeInfo = true
