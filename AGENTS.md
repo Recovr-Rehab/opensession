@@ -149,6 +149,28 @@ chaos:
   `git apply --cached your.patch` → `git write-tree` → `git commit-tree` →
   `git update-ref refs/heads/main <new> <old>` (the three-argument form is a
   compare-and-swap that fails instead of clobbering).
+- **After a private-index commit, resync the shared index to HEAD for the
+  paths you committed.** `update-ref` moves the branch without touching the
+  shared index, so every path you just committed is left staged at its
+  *pre-commit* content. `git status` then shows dozens of files as modified
+  when the worktree already matches HEAD, and the next plain `git commit` in
+  this checkout silently REVERTS them. Walk your own paths only — never the
+  whole index, which would unstage other sessions' deliberate work:
+
+  ```sh
+  for f in $(git diff --name-only HEAD~1 HEAD); do
+    if git cat-file -e "HEAD:$f" 2>/dev/null; then
+      git update-index --add --cacheinfo \
+        "$(git ls-tree HEAD -- "$f" | awk '{print $1}'),$(git rev-parse "HEAD:$f"),$f"
+    else
+      git update-index --force-remove "$f"
+    fi
+  done
+  ```
+
+  Reading `git status` here: a path listed as modified whose
+  `git diff HEAD -- <path>` is empty is a stale index entry, not open work —
+  resync it. Real open work shows up in `git diff HEAD --name-only`.
 - **Commit + push frequently.** Un-pushed work is the only thing a sync can't
   protect (the deploy is `merge --ff-only`, never `reset --hard`, so it aborts
   loudly instead of wiping — but push anyway).
