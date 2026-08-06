@@ -229,15 +229,18 @@ export function TeamFacepile({
 	// enough that every face stays a face rather than a sliver. Two of those
 	// pixels go to the ring, so the tuck reads as a gap, not a collision.
 	const overlap = Math.round(size * 0.26);
+	const selectedIndex = selectedKey ? shown.findIndex((m) => m.key === selectedKey) : -1;
+	const selectedTuck = Math.max(2, Math.round(size * 0.08));
 	return (
 		<div className={cn("flex items-center", className)}>
 			{shown.map((m, i) => {
 				const selected = !!selectedKey && m.key === selectedKey;
 				const label = `${m.person.fullName} · ${presenceLabel(m)}`;
+				const besideSelected = i === selectedIndex || i === selectedIndex + 1;
 				const style: React.CSSProperties = {
-					// The picked face steps out of the pile so its accent ring stays
-					// whole rather than cutting into its neighbour.
-					marginLeft: i === 0 ? 0 : selected ? 3 : -overlap,
+					// Tighten both gaps around the picked face. Its higher z-index keeps
+					// the larger face and accent ring above the neighbours tucked behind it.
+					marginLeft: i === 0 ? 0 : -(overlap + (besideSelected ? selectedTuck : 0)),
 					// The pile runs front-to-back, left to right: each face tucks
 					// behind the one before it, so nothing later covers what's read
 					// first. The picked face clears them all.
@@ -253,7 +256,10 @@ export function TeamFacepile({
 					<button
 						key={m.key}
 						type="button"
-						className="relative cursor-pointer rounded-full border-0 bg-transparent p-0 transition-transform duration-100 hover:z-20 hover:-translate-y-px focus-visible:z-20 focus-visible:outline-none"
+						className={cn(
+							"relative cursor-pointer rounded-full border-0 bg-transparent p-0 transition-transform duration-100 hover:z-20 hover:-translate-y-px focus-visible:z-20 focus-visible:outline-none",
+							selected && "scale-[1.1]",
+						)}
 						style={style}
 						title={label}
 						aria-pressed={selected}
