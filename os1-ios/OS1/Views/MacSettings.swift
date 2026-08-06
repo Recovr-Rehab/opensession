@@ -10,11 +10,11 @@ struct MacSettingsView: View {
     /// nav and the panes' own navigation titles.
     enum Pane: String, CaseIterable, Identifiable {
         case connection
-        case personalPrompt
+        case general
         case composer
         case notifications
         case appearance
-        case general
+        case identity
         case models
         case connections
         case memory
@@ -31,11 +31,11 @@ struct MacSettingsView: View {
         var title: String {
             switch self {
             case .connection: "Connection"
-            case .personalPrompt: "Personal prompt"
+            case .general: "General"
             case .composer: "Composer"
             case .notifications: "Notifications"
             case .appearance: "Appearance"
-            case .general: "General"
+            case .identity: "Identity"
             case .models: "Models"
             case .connections: "Connections"
             case .memory: "Memory"
@@ -52,11 +52,11 @@ struct MacSettingsView: View {
         var icon: String {
             switch self {
             case .connection: "server.rack"
-            case .personalPrompt: "text.bubble"
+            case .general: "slider.horizontal.3"
             case .composer: "keyboard"
             case .notifications: "bell.badge"
             case .appearance: "circle.lefthalf.filled"
-            case .general: "gearshape"
+            case .identity: "person"
             case .models: "square.grid.2x2"
             case .connections: "point.3.connected.trianglepath.dotted"
             case .memory: "brain"
@@ -71,7 +71,7 @@ struct MacSettingsView: View {
         }
     }
 
-    @State private var selection: Pane? = .personalPrompt
+    @State private var selection: Pane? = .general
     @State private var authenticationMessage: String?
     @State private var config = ServerConfig.shared
     @AppStorage("os1.appearance") private var appearance = "system"
@@ -87,13 +87,13 @@ struct MacSettingsView: View {
                     paneRow(.connection)
                 }
                 Section("Personal") {
-                    paneRow(.personalPrompt)
+                    paneRow(.general)
                     paneRow(.composer)
                     paneRow(.notifications)
                     paneRow(.appearance)
                 }
                 Section("Workspace") {
-                    paneRow(.general)
+                    paneRow(.identity)
                     paneRow(.models)
                     paneRow(.connections)
                     paneRow(.memory)
@@ -144,13 +144,13 @@ struct MacSettingsView: View {
 
     @ViewBuilder
     private var paneView: some View {
-        switch selection ?? .personalPrompt {
+        switch selection ?? .general {
         case .connection: MacConnectionSettingsView(authenticationMessage: authenticationMessage)
-        case .personalPrompt: PersonalPromptSettingsView()
+        case .general: PersonalGeneralSettingsView()
         case .composer: ComposerSettingsView()
         case .notifications: NotificationsSettingsView()
         case .appearance: AppearanceSettingsView()
-        case .general: WorkspaceGeneralSettingsView()
+        case .identity: WorkspaceGeneralSettingsView()
         case .models: ModelsSettingsView()
         case .connections: ConnectionsSettingsView()
         case .memory: MemorySettingsView()

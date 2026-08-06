@@ -20,7 +20,7 @@ struct WorkspaceGeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("General")
+        .navigationTitle("Identity")
         .task { loaded = true }
         .overlay { if !loaded { ProgressView() } }
     }

@@ -197,11 +197,10 @@ export type ToolSectionKey =
 
 /** Listed in nav order (SECTIONS below). */
 export type SettingsSectionKey =
+	| "general"
 	| "myAccounts"
 	| "keychain"
-	| "personalPrompt"
 	| "composer"
-	| "deskVoice"
 	| "notifications"
 	| "appearance"
 	| "setup"
@@ -228,6 +227,30 @@ const SECTIONS: {
 	group: string;
 	icon: React.ReactNode;
 }[] = [
+	{
+		key: "general",
+		label: "General",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M3 3.5h10M3 6.5h10M3 9.5h6"
+					strokeLinecap="round"
+				/>
+				<path
+					d="M12.9 9.1l-3.4 3.4-.5 1.5 1.5-.5 3.4-3.4a1 1 0 0 0-1-1z"
+					strokeLinejoin="round"
+				/>
+			</svg>
+		),
+	},
 	{
 		key: "myAccounts",
 		label: "My accounts",
@@ -265,30 +288,6 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "personalPrompt",
-		label: "Personal prompt",
-		group: "Personal",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M3 3.5h10M3 6.5h10M3 9.5h6"
-					strokeLinecap="round"
-				/>
-				<path
-					d="M12.9 9.1l-3.4 3.4-.5 1.5 1.5-.5 3.4-3.4a1 1 0 0 0-1-1z"
-					strokeLinejoin="round"
-				/>
-			</svg>
-		),
-	},
-	{
 		key: "composer",
 		label: "Composer",
 		group: "Personal",
@@ -308,12 +307,6 @@ const SECTIONS: {
 				/>
 			</svg>
 		),
-	},
-	{
-		key: "deskVoice",
-		label: "Desk voice",
-		group: "Personal",
-		icon: <IconMic size={20} />,
 	},
 	{
 		key: "notifications",
@@ -378,7 +371,7 @@ const SECTIONS: {
 	},
 	{
 		key: "workspace",
-		label: "General",
+		label: "Identity",
 		group: "Workspace",
 		icon: (
 			<svg
@@ -629,7 +622,6 @@ function SectionPanel({
 		<>
 			{TOOL_SECTIONS.has(section) && children}
 			{section === "notifications" && <NotificationsPanel />}
-			{section === "deskVoice" && <DeskVoicePanel />}
 			{section === "composer" && <ComposerPanel />}
 			{section === "appearance" && <AppearancePanel />}
 			{section === "setup" && <SetupPanel />}
@@ -637,7 +629,7 @@ function SectionPanel({
 			{section === "audit" && <AuditPanel />}
 			{section === "models" && <ModelsPanel />}
 			{section === "connections" && <Connections />}
-			{section === "personalPrompt" && <PersonalPromptPanel />}
+			{section === "general" && <PersonalGeneralPanel />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}
 			{section === "prewarming" && <PrewarmingPanel />}
@@ -697,7 +689,7 @@ export function Settings({
 	// Default landing = the first non-tool row in the nav. Tool sections can't be
 	// the default: their panel arrives as `children`, which App only passes on a
 	// tool route, so a bare /settings would render an empty pane.
-	const active = section ?? "myAccounts";
+	const active = section ?? "general";
 
 	return (
 		<div className="settings-page">
@@ -1208,12 +1200,8 @@ function DeskVoicePanel() {
 	useEffect(() => onDeskVoiceChanged(() => setOn(getDeskVoicePref())), []);
 
 	return (
-		<SettingsPanel>
-			<SettingsHeader
-				title="Desk voice"
-				description="Talk to your Desk out loud. Voice mode uses OpenAI Realtime and adds a microphone button to the Desk overlay."
-			/>
-
+		<>
+			<SettingsGroupLabel>Desk voice</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Voice mode"
@@ -1222,12 +1210,30 @@ function DeskVoicePanel() {
 						<Toggle label="Voice mode" checked={on} onChange={setDeskVoicePref} />
 					}
 				/>
-			</SettingCard>
-
-			<SettingsGroupLabel>OpenAI API key</SettingsGroupLabel>
-			<SettingCard>
 				<DeskVoiceApiKeyRow />
 			</SettingCard>
+			<SettingsHint>
+				Talk to your Desk — the standing session you summon with ⌘J — out loud
+				instead of typing. Voice mode uses OpenAI Realtime and adds a
+				microphone button to the Desk overlay; the API key is shared by
+				everyone on this instance.
+			</SettingsHint>
+		</>
+	);
+}
+
+/** Settings → General (personal): the per-user settings that don't fill a page
+ * of their own. A standing prompt is one text box and Desk voice is a toggle
+ * plus a key — each was a whole nav row for a single control. */
+function PersonalGeneralPanel() {
+	return (
+		<SettingsPanel>
+			<SettingsHeader
+				title="General"
+				description="Standing instructions for the sessions you start, and how you reach your Desk. Both follow your account rather than this browser."
+			/>
+			<PersonalPromptPanel />
+			<DeskVoicePanel />
 		</SettingsPanel>
 	);
 }
@@ -1572,29 +1578,26 @@ function PersonalPromptPanel() {
 		}
 	}
 
-	const header = (
-		<SettingsHeader
-			title="Personal prompt"
-			description={`Standing instructions added to the system prompt of every session you (${user}) start, on top of the built-in ones — tone, preferences, how you like work reported. It follows you across devices and surfaces (same identity as your memory store), and is never given to automations. Leave empty to turn it off.`}
-		/>
+	const label = (
+		<SettingsGroupLabel className="mt-0">Personal prompt</SettingsGroupLabel>
 	);
 
 	if (prompt === null)
 		return (
-			<SettingsPanel>
-				{header}
+			<>
+				{label}
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
 					<LoadingState>Loading your prompt…</LoadingState>
 				)}
-			</SettingsPanel>
+			</>
 		);
 
 	const dirty = prompt !== savedPrompt;
 	return (
-		<SettingsPanel>
-			{header}
+		<>
+			{label}
 			<SettingsSection>
 				<textarea
 					className={settingsTextareaClass}
@@ -1622,7 +1625,14 @@ function PersonalPromptPanel() {
 					)}
 				</div>
 			</SettingsSection>
-		</SettingsPanel>
+			<SettingsHint>
+				Added to the system prompt of every session you ({user}) start, on top
+				of the built-in ones — tone, preferences, how you like work reported.
+				It follows you across devices and surfaces (same identity as your
+				memory store), and is never given to automations. Leave it empty to
+				turn it off.
+			</SettingsHint>
+		</>
 	);
 }
 
@@ -2898,8 +2908,8 @@ function WorkspacePanel() {
 	return (
 		<SettingsPanel>
 			<SettingsHeader
-				title="General"
-				description="Workspace-wide settings, shared by everyone on this instance."
+				title="Identity"
+				description="What this instance and its agent are called. Workspace-wide, shared by everyone here."
 			/>
 			<SettingsGroupLabel>Identity</SettingsGroupLabel>
 			<SettingCard>

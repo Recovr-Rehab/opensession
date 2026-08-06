@@ -206,11 +206,10 @@ function isToolView(view: string): view is ToolView {
 
 // Non-tool settings sections, addressable as <base>/settings/<section>.
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
+	"general",
 	"myAccounts",
 	"keychain",
-	"personalPrompt",
 	"composer",
-	"deskVoice",
 	"notifications",
 	"appearance",
 	"setup",
@@ -230,6 +229,8 @@ const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
 	modelProviders: "models",
 	warmPreviews: "prewarming",
 	previewPool: "prewarming",
+	personalPrompt: "general",
+	deskVoice: "general",
 };
 
 function parseRoute(pathname: string): Route {

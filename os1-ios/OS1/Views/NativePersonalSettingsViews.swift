@@ -357,7 +357,9 @@ struct AppearanceSettingsView: View {
     }
 }
 
-struct PersonalPromptSettingsView: View {
+/// Settings → General (personal). Holds the per-user settings that don't fill
+/// a page of their own — today the standing prompt, which is one text box.
+struct PersonalGeneralSettingsView: View {
     @State private var prompt = ""
     @State private var savedPrompt = ""
     @State private var loading = true
@@ -411,7 +413,7 @@ struct PersonalPromptSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Personal prompt")
+        .navigationTitle("General")
         .task { await load() }
     }
 

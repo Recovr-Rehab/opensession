@@ -58,8 +58,8 @@ struct SettingsView: View {
             // Groups mirror the web nav (src/frontend/components/Settings.tsx):
             // what one person owns first, then what the whole instance does.
             Section("Personal") {
-                settingsLink("Personal prompt", icon: "text.bubble") {
-                    PersonalPromptSettingsView()
+                settingsLink("General", icon: "slider.horizontal.3") {
+                    PersonalGeneralSettingsView()
                 }
                 settingsLink("Composer", icon: "keyboard") {
                     ComposerSettingsView()
@@ -73,7 +73,7 @@ struct SettingsView: View {
             }
 
             Section("Workspace") {
-                settingsLink("General", icon: "person") {
+                settingsLink("Identity", icon: "person") {
                     WorkspaceGeneralSettingsView()
                 }
                 settingsLink("Models", icon: "square.grid.2x2") {
