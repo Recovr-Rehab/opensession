@@ -3,55 +3,6 @@ import SwiftUI
 import WebKit
 #endif
 
-/// Open the session's assets — the scratch folder of agent-produced artifacts
-/// — as a tab beside the conversation, optionally on one named file.
-///
-/// An environment action rather than a callback threaded down through the
-/// transcript: the deepest caller is a tool-call row, several layers below the
-/// session view, and none of the rows in between have any business knowing
-/// that an assets tab exists. `isAvailable` is what a caller checks before
-/// drawing a button — the Mac app doesn't install a handler, and an "Open"
-/// chip that does nothing is worse than no chip.
-struct OpenAssetsAction: Equatable {
-    /// The session whose folder this opens — and the action's identity.
-    ///
-    /// Equatable on purpose, and keyed on something stable: the handler is a
-    /// fresh closure on every parent update, and an environment value that
-    /// never compares equal would re-evaluate `SessionView.body` — transcript
-    /// and all — every time the sessions poll landed.
-    let sessionId: String?
-    fileprivate let handler: ((String?) -> Void)?
-
-    var isAvailable: Bool { handler != nil }
-
-    /// `openAssets()` for the whole folder, `openAssets(path)` for one file.
-    func callAsFunction(_ path: String? = nil) { handler?(path) }
-
-    static let unavailable = OpenAssetsAction(sessionId: nil, handler: nil)
-
-    static func opening(
-        sessionId: String,
-        _ handler: @escaping (String?) -> Void
-    ) -> OpenAssetsAction {
-        OpenAssetsAction(sessionId: sessionId, handler: handler)
-    }
-
-    static func == (lhs: OpenAssetsAction, rhs: OpenAssetsAction) -> Bool {
-        lhs.sessionId == rhs.sessionId && lhs.isAvailable == rhs.isAvailable
-    }
-}
-
-private struct OpenAssetsKey: EnvironmentKey {
-    static let defaultValue = OpenAssetsAction.unavailable
-}
-
-extension EnvironmentValues {
-    var openAssets: OpenAssetsAction {
-        get { self[OpenAssetsKey.self] }
-        set { self[OpenAssetsKey.self] = newValue }
-    }
-}
-
 #if os(iOS)
 /// The session's scratch assets, as a tab: the file list, and the file you
 /// picked rendered in place.

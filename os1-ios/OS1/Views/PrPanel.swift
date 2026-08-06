@@ -49,26 +49,48 @@ extension PrDetails.Summary {
 /// Read-only by design — actions (merge, review, comment) stay on the web UI.
 struct PrPanelView: View {
     var viewModel: SessionViewModel
+    /// How this is being shown. As a `.tab` in the session strip it brings no
+    /// chrome of its own: the navigation stack is already there, and the way
+    /// out is the tab's × rather than a Done button.
+    var chrome: Chrome = .sheet
     @Environment(\.dismiss) private var dismiss
 
+    enum Chrome { case sheet, tab }
+
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle(
-                    viewModel.prDetails.map { "PR #\($0.number)" } ?? "Pull request"
-                )
-                .inlineTitleBarCompat()
-                .toolbar {
-                    ToolbarItem(placement: .topTrailingCompat) {
-                        Button("Done") { dismiss() }
-                    }
+        Group {
+            switch chrome {
+            case .sheet:
+                NavigationStack {
+                    titled(content)
+                        .toolbar {
+                            ToolbarItem(placement: .topTrailingCompat) {
+                                Button("Done") { dismiss() }
+                            }
+                        }
                 }
+            case .tab:
+                titled(content)
+            }
         }
         // Checks move fast while CI runs; re-fetch on open (server-cached).
         .task { await viewModel.refreshPr() }
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 540)
         #endif
+    }
+
+    private func titled(_ view: some View) -> some View {
+        // `Text(verbatim:)`, not a bare interpolation: inferred as a
+        // LocalizedStringKey, "PR #\(number)" runs the number through the
+        // device's locale — #5555 renders "PR #5.555" anywhere that groups
+        // thousands with a dot. Same reason the overflow menu spells its PR
+        // row verbatim.
+        view
+            .navigationTitle(
+                Text(verbatim: viewModel.prDetails.map { "PR #\($0.number)" } ?? "Pull request")
+            )
+            .inlineTitleBarCompat()
     }
 
     @ViewBuilder

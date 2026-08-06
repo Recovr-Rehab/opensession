@@ -10,7 +10,7 @@ struct WorktreeInfoView: View {
     @Environment(\.dismiss) private var dismiss
     /// The session tab strip's assets tab, when this page was opened from
     /// inside one — the asset rows are its second entry point.
-    @Environment(\.openAssets) private var openAssets
+    @Environment(\.openViewTab) private var openViewTab
     @State private var gitStatus: OS1API.GitStatus?
     @State private var diff: OS1API.SessionDiff?
     @State private var assets: [OS1API.SessionAsset] = []
@@ -219,12 +219,12 @@ struct WorktreeInfoView: View {
     /// workspace page.
     @ViewBuilder
     private var assetsSection: some View {
-        if !assets.isEmpty, openAssets.isAvailable {
+        if !assets.isEmpty, openViewTab.isAvailable {
             InfoSection(title: "\(assets.count) asset\(assets.count == 1 ? "" : "s")") {
                 let shown = Array(assets.prefix(8))
                 ForEach(shown) { asset in
                     Button {
-                        openAssets(asset.path)
+                        openViewTab(.assets(path: asset.path))
                         dismiss()
                     } label: {
                         HStack(spacing: 10) {
@@ -272,7 +272,14 @@ struct WorktreeInfoView: View {
         if let number = viewModel.prDetails?.number ?? currentSession.prNumber {
             InfoSection(title: "Pull request") {
                 Button {
-                    showPrPanel = true
+                    // Same rule as the overflow menu: a tab of its own where
+                    // there's a strip to hold one, the sheet otherwise.
+                    if openViewTab.isAvailable {
+                        openViewTab(.review)
+                        dismiss()
+                    } else {
+                        showPrPanel = true
+                    }
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.triangle.pull")

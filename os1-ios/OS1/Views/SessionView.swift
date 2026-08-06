@@ -100,7 +100,7 @@ struct SessionView: View {
     /// The tab strip's assets tab, installed by `SessionTabsView`. Read here
     /// only to hand it to the toolbar menu; it is `Equatable` on the session
     /// it belongs to, so it doesn't invalidate this body as the poll lands.
-    @Environment(\.openAssets) private var openAssets
+    @Environment(\.openViewTab) private var openViewTab
     #endif
 
     init(
@@ -417,7 +417,7 @@ struct SessionView: View {
                     // Handed down rather than read from the environment: a
                     // toolbar's content is hoisted out of the view tree, and
                     // what reaches it there isn't something to bet a menu on.
-                    openAssets: openAssets
+                    openViewTab: openViewTab
                 )
             }
             #else
@@ -789,7 +789,7 @@ private struct SessionActionsMenu: View {
     /// The tab strip's assets tab, when this session is in one. Unavailable
     /// where there is no strip to open a tab in, which keeps the entry out of
     /// the menu there rather than offering something that can't happen.
-    let openAssets: OpenAssetsAction
+    let openViewTab: OpenViewTabAction
 
     var body: some View {
         Menu {
@@ -818,16 +818,22 @@ private struct SessionActionsMenu: View {
             }
             // The whole scratch folder, for the files no visible tool row
             // names — the ones written before the transcript you're reading.
-            if openAssets.isAvailable {
+            if openViewTab.isAvailable {
                 Button {
-                    openAssets()
+                    openViewTab(.assets(path: nil))
                 } label: {
                     Label("Assets", systemImage: "folder")
                 }
             }
             if let number = viewModel.prDetails?.number ?? viewModel.session.prNumber {
                 Button {
-                    showPrPanel = true
+                    // A tab where there's a strip to open one in; the sheet
+                    // stays the fallback for the surfaces without one.
+                    if openViewTab.isAvailable {
+                        openViewTab(.review)
+                    } else {
+                        showPrPanel = true
+                    }
                 } label: {
                     Label {
                         Text(verbatim: "Pull request #\(number)")
@@ -977,10 +983,10 @@ struct SessionTabsView: View {
     /// opened from the archive sheet still renders), which would leave the tab
     /// you just closed sitting in the strip.
     @State private var closedIds: Set<String> = []
-    /// The assets tab, when one is open: whose scratch folder it shows, and
-    /// the file it opened on. One at a time — opening assets from another
-    /// conversation retargets this tab rather than growing the strip.
-    @State private var assets: AssetsTab?
+    /// The strip's non-conversation tabs — assets, review, whatever comes
+    /// next — in the order they were opened, after the conversations. One per
+    /// kind per session: asking again retargets the tab that's already there.
+    @State private var viewTabs: [ViewTab] = []
     /// A "+" that hasn't answered yet, so a second tap can't mint a second tab.
     @State private var openingTab = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1011,24 +1017,15 @@ struct SessionTabsView: View {
         _activeId = State(initialValue: session.id)
     }
 
-    /// The strip's one non-session tab. Its id can't collide with a
-    /// conversation's — those are server-minted `os-…` ids.
-    private struct AssetsTab: Equatable {
-        static let id = "os1-tab-assets"
-        var sessionId: String
-        var path: String?
-    }
-
-    /// What the strip is showing right now — a conversation, or the assets of
-    /// the one it belongs to.
+    /// What the strip is showing right now — a conversation, or a view of one.
     private enum ActiveTab: Identifiable, Equatable {
         case session(Session)
-        case assets(sessionId: String, path: String?)
+        case view(ViewTab)
 
         var id: String {
             switch self {
             case .session(let session): session.id
-            case .assets: AssetsTab.id
+            case .view(let tab): tab.id
             }
         }
     }
@@ -1037,9 +1034,10 @@ struct SessionTabsView: View {
         tabs.filter { !closedIds.contains($0.id) }
     }
 
-    /// Everything the strip draws, in order: the conversations, then assets.
+    /// Everything the strip draws, in order: the conversations, then the views
+    /// onto them.
     private var pills: [TabPill] {
-        var pills = visibleTabs.map { session in
+        visibleTabs.map { session in
             TabPill(
                 id: session.id,
                 title: session.displayTitle,
@@ -1052,41 +1050,39 @@ struct SessionTabsView: View {
                 closable: !session.isOptimistic,
                 closeLabel: "Close session"
             )
-        }
-        if assets != nil {
-            pills.append(
-                TabPill(
-                    id: AssetsTab.id,
-                    title: "Assets",
-                    icon: "folder",
-                    closeLabel: "Close assets",
-                    stateLabel: "Session assets"
-                )
+        } + viewTabs.map { tab in
+            TabPill(
+                id: tab.id,
+                title: tab.kind.title,
+                icon: tab.kind.icon,
+                closeLabel: tab.kind.closeLabel,
+                stateLabel: tab.kind.title
             )
         }
-        return pills
     }
 
-    /// The conversation the strip is on. While the assets tab is up, that's
-    /// the session those assets belong to — the one closing them returns to.
+    private var activeViewTab: ViewTab? {
+        viewTabs.first { $0.id == activeId }
+    }
+
+    /// The conversation the strip is on. While a view tab is up, that's the
+    /// session it is a view OF — the one closing it returns to.
     private var activeSession: Session {
-        let sessionId = activeId == AssetsTab.id ? (assets?.sessionId ?? "") : activeId
+        let sessionId = activeViewTab?.sessionId ?? activeId
         return visibleTabs.first(where: { $0.id == sessionId })
             ?? visibleTabs.first
             ?? initialSession
     }
 
     private var activeTab: ActiveTab {
-        if activeId == AssetsTab.id, let assets {
-            return .assets(sessionId: assets.sessionId, path: assets.path)
-        }
+        if let activeViewTab { return .view(activeViewTab) }
         return .session(activeSession)
     }
 
-    /// The conversation being READ, or nil while the assets tab is up — a
-    /// scratch folder isn't the conversation, so it hands the unread mark back.
+    /// The conversation being READ, or nil while a view tab is up — a scratch
+    /// folder or a PR isn't the conversation, so it hands the unread mark back.
     private var readingSession: Session? {
-        activeId == AssetsTab.id ? nil : activeSession
+        activeViewTab == nil ? activeSession : nil
     }
 
     private var conversationTransition: AnyTransition {
@@ -1120,18 +1116,19 @@ struct SessionTabsView: View {
                             dismiss()
                         }
                     )
-                    // What the transcript's asset rows and the workspace page
-                    // reach for. Installed here rather than passed down: the
-                    // deepest caller is a tool-call row several layers in.
-                    .environment(\.openAssets, .opening(sessionId: session.id) { path in
-                        openAssets(sessionId: session.id, path: path)
+                    // What the transcript's asset rows, the workspace page and
+                    // the overflow menu reach for. Installed here rather than
+                    // passed down: the deepest caller is a tool-call row
+                    // several layers in.
+                    .environment(\.openViewTab, .opening(sessionId: session.id) { kind in
+                        openViewTab(sessionId: session.id, kind: kind)
                     })
                     .transition(conversationTransition)
-                case .assets(let sessionId, let path):
-                    AssetsView(sessionId: sessionId, initialPath: path)
-                        // Retargeting the tab at another conversation's folder
-                        // is a different tab's worth of state, not a reload.
-                        .id("\(sessionId)|\(path ?? "")")
+                case .view(let tab):
+                    viewTabContent(tab)
+                        // Retargeting a tab at another file is a different
+                        // tab's worth of state, not a reload of this one.
+                        .id(viewTabIdentity(tab))
                         .transition(conversationTransition)
                 }
             }
@@ -1176,16 +1173,17 @@ struct SessionTabsView: View {
             if let readingSession { ReadsStore.shared.close(readingSession.id) }
         }
         .onChange(of: visibleTabs) { _, updatedTabs in
-            // A conversation whose assets are open can be archived from
-            // elsewhere; the scratch folder goes with it.
-            if let open = assets,
-               !updatedTabs.contains(where: { $0.id == open.sessionId }) {
-                closeAssets()
+            // A conversation with views open can be archived from elsewhere;
+            // its views go with it.
+            if let orphan = viewTabs.first(where: { tab in
+                !updatedTabs.contains(where: { $0.id == tab.sessionId })
+            }) {
+                closeViewTab(orphan.id)
                 return
             }
-            // The assets tab is deliberately not in `updatedTabs` — leave the
-            // strip on it instead of snapping back to a conversation.
-            guard activeId != AssetsTab.id,
+            // View tabs are deliberately not in `updatedTabs` — leave the
+            // strip on one instead of snapping back to a conversation.
+            guard activeViewTab == nil,
                   !updatedTabs.contains(where: { $0.id == activeId }),
                   let fallback = updatedTabs.first
             else { return }
@@ -1198,11 +1196,11 @@ struct SessionTabsView: View {
         }
     }
 
-    /// Close a tab from the strip. Only conversations archive — the assets tab
-    /// is a view of a folder, and closing it must never touch a session.
+    /// Close a tab from the strip. Only conversations archive — a view tab is
+    /// a window onto one, and closing it must never touch a session.
     private func close(_ id: String) {
-        if id == AssetsTab.id {
-            closeAssets()
+        if viewTabs.contains(where: { $0.id == id }) {
+            closeViewTab(id)
             return
         }
         guard let session = visibleTabs.first(where: { $0.id == id }) else { return }
@@ -1223,10 +1221,11 @@ struct SessionTabsView: View {
             return
         }
         withAnimation(tabSwitchAnimation) {
-            // Its scratch folder was that session's, so it closes with it.
-            if assets?.sessionId == session.id {
-                assets = nil
-                if activeId == AssetsTab.id { activeId = next.id }
+            // Its views were views of THAT session, so they close with it.
+            if viewTabs.contains(where: { $0.sessionId == session.id }) {
+                let wasActive = activeViewTab?.sessionId == session.id
+                viewTabs.removeAll { $0.sessionId == session.id }
+                if wasActive { activeId = next.id }
             }
             if session.id == activeId {
                 let closedIndex = strip.firstIndex { $0.id == session.id } ?? 0
@@ -1278,27 +1277,65 @@ struct SessionTabsView: View {
         }
     }
 
-    /// The transcript's "Open" on a written asset, and the workspace page's
-    /// asset rows: the scratch folder opens BESIDE the conversation rather
-    /// than on top of it, so reading a report doesn't hide the run that wrote
-    /// it — and one swipe of the strip is the way back.
-    private func openAssets(sessionId: String, path: String?) {
-        withAnimation(tabSwitchAnimation) {
-            // Assets always sit last in the strip, so it arrives from the right.
-            transitionEdge = .trailing
-            assets = AssetsTab(sessionId: sessionId, path: path)
-            activeId = AssetsTab.id
+    /// What each kind of view tab actually draws. The one place a new kind has
+    /// to be taught anything — the strip itself stays kind-agnostic.
+    @ViewBuilder
+    private func viewTabContent(_ tab: ViewTab) -> some View {
+        switch tab.kind {
+        case .assets(let path):
+            AssetsView(sessionId: tab.sessionId, initialPath: path)
+        case .review:
+            PrPanelView(
+                viewModel: viewModelForSession(session(for: tab)),
+                // The navigation bar and the way out belong to the strip here,
+                // not to the panel's own sheet chrome.
+                chrome: .tab
+            )
         }
     }
 
-    /// Closing assets returns to the conversation they belong to.
-    private func closeAssets() {
-        let returning = assets?.sessionId
+    /// Identity for the tab's content: enough to rebuild it when the tab is
+    /// aimed somewhere new, stable across everything else.
+    private func viewTabIdentity(_ tab: ViewTab) -> String {
+        switch tab.kind {
+        case .assets(let path): "\(tab.id)|\(path ?? "")"
+        case .review: tab.id
+        }
+    }
+
+    private func session(for tab: ViewTab) -> Session {
+        visibleTabs.first { $0.id == tab.sessionId } ?? activeSession
+    }
+
+    /// The transcript's "Open" on a written asset, the workspace page's rows,
+    /// the overflow menu: the view opens BESIDE the conversation rather than
+    /// on top of it, so reading a report or a set of checks doesn't hide the
+    /// run that produced it — and one tap of the strip is the way back.
+    private func openViewTab(sessionId: String, kind: ViewTab.Kind) {
+        let tab = ViewTab(sessionId: sessionId, kind: kind)
+        withAnimation(tabSwitchAnimation) {
+            // View tabs always sit last in the strip, so one arrives from the
+            // right whether it is new or being switched to.
+            transitionEdge = .trailing
+            if let existing = viewTabs.firstIndex(where: { $0.isSameTab(as: tab) }) {
+                // Same tab, possibly aimed at another file.
+                viewTabs[existing] = tab
+            } else {
+                viewTabs.append(tab)
+            }
+            activeId = tab.id
+        }
+    }
+
+    /// Closing a view returns to the conversation it was a view of.
+    private func closeViewTab(_ id: String) {
+        guard let index = viewTabs.firstIndex(where: { $0.id == id }) else { return }
+        let closed = viewTabs[index]
         withAnimation(tabSwitchAnimation) {
             transitionEdge = .leading
-            assets = nil
-            if activeId == AssetsTab.id {
-                activeId = visibleTabs.first(where: { $0.id == returning })?.id
+            viewTabs.remove(at: index)
+            if activeId == id {
+                activeId = visibleTabs.first(where: { $0.id == closed.sessionId })?.id
                     ?? visibleTabs.first?.id
                     ?? initialSession.id
             }

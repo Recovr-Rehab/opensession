@@ -16,7 +16,7 @@ struct ToolCallRow: View {
     @State private var openWorker: WorkerLink?
     /// Installed by the iOS tab strip; absent everywhere else, which is what
     /// keeps the asset chip from appearing where nothing can open it.
-    @Environment(\.openAssets) private var openAssets
+    @Environment(\.openViewTab) private var openViewTab
 
     private var presentation: ToolPresentation { item.presentation }
 
@@ -133,8 +133,8 @@ struct ToolCallRow: View {
             // Same dead end for a written asset: the row names a file the
             // conversation itself can't show. The chip opens it in the assets
             // tab, beside this session rather than over it.
-            if let assetPath = item.assetPath, openAssets.isAvailable {
-                RowChip(title: "Open") { openAssets(assetPath) }
+            if let assetPath = item.assetPath, openViewTab.isAvailable {
+                RowChip(title: "Open") { openViewTab(.assets(path: assetPath)) }
                     .accessibilityLabel("Open this file in the assets tab")
             }
 

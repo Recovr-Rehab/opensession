@@ -69,13 +69,20 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   with repository and branch metadata, local git status, changed files, pull
   request status, workspace context, and model/reasoning controls, matching
   mobile web's info page without embedding the web client.
+- **View tabs** — the strip holds more than conversations: a `ViewTab` is a
+  view ONTO a session (assets, review, and whatever comes next), pilled beside
+  it and closed without archiving anything. Adding a kind is a case in
+  `ViewTab.Kind` plus its content in `SessionTabsView.viewTabContent`; the
+  strip itself stays kind-agnostic. Opened through the `openViewTab`
+  environment action, which is absent on surfaces with no strip — that is what
+  keeps entries from appearing where nothing can open them.
 - **Assets** — the session's scratch artifacts (`GET /api/sessions/:id/assets`)
-  open as a tab of their own in the strip, beside the conversation rather than
-  over it: from the "Open" chip on a `write_asset` tool row, the workspace
-  sheet's assets section, or the overflow menu. HTML and media render in a
-  `WKWebView` pointed at the raw route — the session token rides in as a
-  cookie scoped to that session's assets path, so relative references between
-  assets resolve — while markdown and code render natively.
+  open as a view tab, beside the conversation rather than over it: from the
+  "Open" chip on a `write_asset` tool row, the workspace sheet's assets
+  section, or the overflow menu. HTML and media render in a `WKWebView`
+  pointed at the raw route — the session token rides in as a cookie scoped to
+  that session's assets path, so relative references between assets resolve —
+  while markdown and code render natively.
 - **Prompting** — WS `prompt` frames (the server has no REST prompt endpoint).
   Sending while a run is active queues, exactly like the web UI. Stop button
   sends `cancel` for the watched session. The floating glass composer uses a
@@ -86,9 +93,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
 - **AskUserQuestion** — blocking questions render as an inline card with option
   buttons + free-text answer, wired to `answer_question`.
 - **PR panel** — sessions with a pull request expose a row in the title-opened
-  workspace sheet; it opens a read-only panel with state, review decision,
-  conflicts, every check with its status, and reviewers, via
-  `GET /api/sessions/:id/pr`. Actions (merge/review) stay on the web UI.
+  workspace sheet and the overflow menu; it opens a read-only panel with state,
+  review decision, conflicts, every check with its status, and reviewers, via
+  `GET /api/sessions/:id/pr`. Actions (merge/review) stay on the web UI. In the
+  session strip it opens as a Review view tab (`PrPanelView(chrome: .tab)`,
+  which drops the panel's own navigation stack and Done button); the sheet
+  stays the fallback wherever there is no strip.
 - **Connection care** — client-initiated pings every 20s (the server never
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.
@@ -183,6 +193,7 @@ OS1/
     TurnBlockView.swift      Work fold header + turn footer + file chips
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     SubagentView.swift       A Task call's sub-agent transcript, in a sheet
+    ViewTab.swift            Non-conversation tabs + the openViewTab action
     AssetsView.swift         Session assets tab: file list + per-kind preview
     WalkthroughCard.swift    Published walkthrough: demo video, writeup, stills
     MarkdownBody.swift       Streaming/durable markdown rendering
