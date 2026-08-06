@@ -487,6 +487,70 @@ enum OS1API {
         }
     }
 
+    // MARK: - Desk
+
+    struct DeskEnsure: Decodable, Sendable {
+        let sessionId: String
+        let clearedAt: String?
+    }
+
+    /// Get-or-create the user's standing Desk session (server: desk.ts).
+    static func ensureDesk() async throws -> DeskEnsure {
+        try await post("/api/desk/ensure", body: ["user": ServerConfig.shared.userName])
+    }
+
+    struct DeskVoiceSecret: Decodable, Sendable {
+        let clientSecret: String
+        let expiresAt: Double?
+        let model: String
+        let sessionId: String
+    }
+
+    /// Mint a short-lived Realtime client secret for a Desk voice call — the
+    /// real OpenAI key stays on the server (desk-voice.ts).
+    static func deskVoiceSecret() async throws -> DeskVoiceSecret {
+        try await post("/api/desk/voice/secret", body: ["user": ServerConfig.shared.userName])
+    }
+
+    /// Run one Realtime tool call server-side, as the verified user, and hand
+    /// back the JSON string the model gets as its function_call_output. The
+    /// result under "result" has no fixed schema, so this path stays on raw
+    /// JSONSerialization instead of a Decodable.
+    static func deskVoiceTool(
+        callId: String,
+        name: String,
+        args: [String: Any]
+    ) async throws -> String {
+        var body: [String: Any] = ["callId": callId, "name": name, "args": args]
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["user"] = user }
+        let data = try await mutateData("/api/desk/voice/tool", method: "POST", body: body)
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let result = object["result"],
+           let out = try? JSONSerialization.data(
+               withJSONObject: result,
+               options: [.fragmentsAllowed]
+           ),
+           let text = String(data: out, encoding: .utf8) {
+            return text
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// Mirror finalized voice-call turns into the Desk transcript (and the
+    /// next text turn's handoff note, server-side).
+    static func deskVoiceTranscript(
+        entries: [(id: String, role: String, text: String)]
+    ) async throws {
+        struct OkResponse: Decodable, Sendable { let ok: Bool? }
+        var body: [String: Any] = [
+            "entries": entries.map { ["id": $0.id, "role": $0.role, "text": $0.text] }
+        ]
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["user"] = user }
+        let _: OkResponse = try await post("/api/desk/voice/transcript", body: body)
+    }
+
     private static func post<T: Decodable & Sendable>(
         _ path: String,
         body: [String: Any]
@@ -531,6 +595,33 @@ enum OS1API {
             throw APIError.http(http.statusCode)
         }
         return try await decodeDetached(T.self, from: data)
+    }
+
+    /// `mutate` without a Decodable — for responses with no fixed schema
+    /// (the Desk voice tool relay). Same error contract.
+    private static func mutateData(
+        _ path: String,
+        method: String,
+        body: [String: Any]
+    ) async throws -> Data {
+        let config = ServerConfig.shared
+        guard let base = config.baseURL else { throw APIError.notConfigured }
+        guard config.isConfigured else { throw APIError.notConfigured }
+        guard let url = URL(string: base.absoluteString + path) else { throw APIError.badURL }
+
+        var request = config.authorizedRequest(url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
+               let message = serverError.error {
+                throw APIError.server(message)
+            }
+            throw APIError.http(http.statusCode)
+        }
+        return data
     }
 
     private static func get<T: Decodable & Sendable>(

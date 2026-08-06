@@ -223,6 +223,7 @@ struct ComposerSettingsView: View {
 struct AppearanceSettingsView: View {
     @AppStorage("os1.appearance") private var appearance = "system"
     @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "collapsed"
+    @AppStorage("os1.desk.voice") private var deskVoice = "off"
 
     @State private var turnActivity = "collapsed"
     @State private var loading = true
@@ -266,6 +267,18 @@ struct AppearanceSettingsView: View {
                 Text("Controls how a turn's working activity is folded in a session. Sidebar settings are not shown because the native app has no web sidebar.")
             }
 
+            Section {
+                Toggle("Desk voice", isOn: Binding(
+                    get: { deskVoice == "on" },
+                    set: { enabled in
+                        deskVoice = enabled ? "on" : "off"
+                        pushDeskVoice(enabled)
+                    }
+                ))
+            } footer: {
+                Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
+            }
+
             if let error {
                 Section {
                     Text(error).foregroundStyle(.red)
@@ -279,6 +292,18 @@ struct AppearanceSettingsView: View {
         .navigationTitle("Appearance")
         .task { await load() }
         .disabled(saving)
+    }
+
+    /// Fire-and-forget: the toggle is already reflected locally via
+    /// `@AppStorage`, this just lets other devices pick it up.
+    private func pushDeskVoice(_ enabled: Bool) {
+        let user = NativePreferences.context().user
+        Task {
+            _ = try? await SettingsAPI.updateUiPrefs(
+                user: user,
+                prefs: ["desk-voice": enabled ? "on" : "off"]
+            )
+        }
     }
 
     private func load() async {

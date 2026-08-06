@@ -88,6 +88,17 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
   plus server/GitHub/token configuration and a connection test. Cross-device
   composer and session preferences refresh at launch and when the app foregrounds.
+- **Desk** — a standing per-user concierge session (`POST /api/desk/ensure`
+  get-or-creates it), summoned as a sheet from a toolbar button next to the
+  sessions list (iOS: `lamp.desk` toolbar item; macOS: the same button in the
+  sidebar header). It's an ordinary `SessionView` under a compact header, so
+  everything the session view already does — streaming, tool folds, questions
+  — works there too. Voice mode is opt-in per device via the "Desk voice"
+  toggle in Appearance settings (cross-device `desk-voice` ui-pref); when on,
+  a mic button in the Desk header starts/stops a live call brokered by the
+  server over a raw WebSocket to OpenAI's Realtime API (`DeskVoiceEngine`) —
+  the app never holds an OpenAI key, and the call is torn down whenever the
+  app leaves the foreground.
 
 ## Signing in
 
@@ -159,6 +170,7 @@ OS1/
     AskQuestionCard.swift    Options + free text answer
     PrPanel.swift            Read-only pull-request panel
     WorktreeInfoView.swift   Workspace details sheet
+    DeskSheet.swift          Desk sheet: header + voice controls over SessionView
     SettingsView.swift       Native settings index + connection controls
     Native*SettingsViews.swift  Native Tools, Personal, Workspace panels
     MacSettings.swift        macOS settings window

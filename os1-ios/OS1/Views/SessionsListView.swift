@@ -38,6 +38,7 @@ struct SessionsListView: View {
 
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
+    @State private var showDesk = false
     /// The push stack, typed rather than a `NavigationPath`, so a create that
     /// resolves after the person has navigated elsewhere can find its own
     /// pending entry instead of assuming it is still on top.
@@ -267,6 +268,10 @@ struct SessionsListView: View {
                 onRestore: viewModel.unarchive
             )
         }
+        .sheet(isPresented: $showDesk) {
+            DeskSheet()
+                .frame(minWidth: 520, minHeight: 600)
+        }
         .safeAreaInset(edge: .bottom) {
             errorBanner
         }
@@ -289,6 +294,13 @@ struct SessionsListView: View {
                     .menuIndicator(.hidden)
                     .controlSize(.small)
                     .help("Filter, group, and sort sessions")
+                Button {
+                    showDesk = true
+                } label: {
+                    Image(systemName: "lamp.desk")
+                }
+                .controlSize(.small)
+                .help("Open the Desk")
                 Button {
                     newSessionRequest = NewSessionRequest()
                 } label: {
@@ -349,6 +361,15 @@ struct SessionsListView: View {
                     // circle around it read as a stray border.
                     .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topTrailingCompat) {
+                        Button {
+                            showDesk = true
+                        } label: {
+                            Image(systemName: "lamp.desk")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel("Open the Desk")
+                    }
+                    ToolbarItem(placement: .topTrailingCompat) {
                         filterMenu
                     }
                     // New session lives in the top bar; search moved into the
@@ -367,6 +388,11 @@ struct SessionsListView: View {
                 }
                 .sheet(isPresented: $showSettings) {
                     SettingsView()
+                }
+                .sheet(isPresented: $showDesk) {
+                    DeskSheet()
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
                 }
                 .sheet(item: $newSessionRequest) { request in
                     NewSessionView(
