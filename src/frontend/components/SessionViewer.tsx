@@ -41,10 +41,12 @@ import {
 } from "../lib/transcript-state";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import {
+	canonicalToolName,
 	LiveSubagentsProvider,
 	ToolPathRootsProvider,
 	type LiveSubagent,
 } from "./ToolCallBlock";
+import { parsePlanItems, type PlanItem } from "../lib/todo-plan";
 import { MarkdownBody } from "./MarkdownBody";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
@@ -336,6 +338,43 @@ interface Props {
 // Stable identity for "no sub-agent open", so the default prop doesn't hand
 // the memoized transcript a fresh array on every render.
 const NO_SUBAGENTS: SubagentRef[] = [];
+const NO_PLAN: PlanItem[] = [];
+const NO_WORKFLOW_RUNS: WorkflowRunSnapshot[] = [];
+
+// A two-item "plan" is ceremony, not a plan — below this the flap stays shut
+// and the checklist lives in the transcript like any other tool call.
+const MIN_PLAN_ITEMS = 3;
+
+/**
+ * The model's own plan for the turn that's running right now: the newest
+ * todowrite/update_plan checklist written since the last user message.
+ *
+ * Both bounds matter. Stopping at the last user entry keeps a finished turn's
+ * plan from being adopted by the next one (a steer mid-turn also stops the
+ * scan — the plan reappears the moment the model writes the next one). Gating
+ * on `running` means a half-checked list can never outlive its turn above the
+ * composer, where it would read as work still in flight.
+ */
+function useLivePlan(
+	entries: TranscriptEntry[],
+	running: boolean,
+): PlanItem[] {
+	return useMemo(() => {
+		if (!running) return NO_PLAN;
+		for (let i = entries.length - 1; i >= 0; i--) {
+			const e = entries[i];
+			if (e.type === "user") break;
+			if (e.type !== "tool_use") continue;
+			if (canonicalToolName(e.toolName) !== "TodoWrite") continue;
+			// todoread canonicalizes to the same name and carries no list —
+			// parsing to nothing means "keep looking", not "no plan".
+			const items = parsePlanItems(e.toolInput);
+			if (items.length === 0) continue;
+			return items.length >= MIN_PLAN_ITEMS ? items : NO_PLAN;
+		}
+		return NO_PLAN;
+	}, [entries, running]);
+}
 
 type PanelTab =
 	| "info"
@@ -3387,22 +3426,30 @@ export function SessionViewer({
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
 
-	// Compact "agents running" flap above the composer — phone-only. On desktop
-	// the Agents panel tab (with its pulsing dot) is always visible; on a phone
-	// the right panel overlays the chat and is closed by default, so a running
-	// workflow fan-out has no glance. ComposerAgents is the tappable
-	// pill → mini-card → full-panel progression. Reuses the queue flap's
-	// tuck-under styling.
+	// Run-status flap above the composer (ComposerAgents): the tappable
+	// pill → mini-card → full-panel progression, reusing the queue flap's
+	// tuck-under styling. It carries two things at different breakpoints.
+	//
+	// Agents — phone-only. On desktop the Agents panel tab (with its pulsing
+	// dot) is always visible; on a phone the right panel overlays the chat and
+	// is closed by default, so a running workflow fan-out has no glance.
 	const runningWorkflowRuns = workflowRuns.filter((r) => r.status === "running");
 	// Sub-agents ride along only while one is live, so a finished batch doesn't
 	// pad a later workflow's tallies (their statuses clamp to done once the
 	// session's run ends, so the flap can't stick around stale either).
 	const anySubagentRunning = subagents.some((s) => s.status === "running");
+	const showAgents =
+		isPhone && (runningWorkflowRuns.length > 0 || anySubagentRunning);
+	// Plan — every width, since the model's todowrite checklist has no other
+	// home at any size (in the transcript it's one dim row inside a turn fold
+	// that's collapsed by default).
+	const livePlan = useLivePlan(entries, isBusy);
 	const agentBubble =
-		isPhone && (runningWorkflowRuns.length > 0 || anySubagentRunning) ? (
+		showAgents || livePlan.length > 0 ? (
 			<ComposerAgents
-				runs={runningWorkflowRuns}
-				subagents={anySubagentRunning ? subagents : undefined}
+				runs={showAgents ? runningWorkflowRuns : NO_WORKFLOW_RUNS}
+				subagents={showAgents && anySubagentRunning ? subagents : undefined}
+				plan={livePlan}
 				onOpenPanel={() => {
 					selectPanelTab("workflows");
 					setInfoPageOpen(true);

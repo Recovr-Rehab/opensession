@@ -10121,6 +10121,27 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	color: var(--text-faint);
 	flex: none;
 }
+/* Plan section (the model's own todowrite checklist) — its own stack so the
+   section title hugs its list, and it scrolls rather than pushing the composer
+   down when the plan is long. */
+.composer-agents-plan {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	max-height: 168px;
+	overflow-y: auto;
+}
+/* Agent half of the card. Its own stack so it can carry a rule when the plan
+   sits above it — without one the two sections read as a single list. */
+.composer-agents-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.composer-agents-section.has-divider {
+	padding-top: 10px;
+	border-top: 1px solid var(--border);
+}
 .composer-agents-open {
 	display: inline-flex;
 	align-items: center;
