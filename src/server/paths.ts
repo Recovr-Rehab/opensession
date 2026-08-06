@@ -5,6 +5,7 @@
  * write — stays on the same one for the life of the process.
  */
 
+import { existsSync } from "fs";
 import { homedir } from "os";
 import { randomUUIDv7 } from "bun";
 import { isLocalProfile, localProfileRoot } from "./profile";
@@ -65,6 +66,39 @@ export function __setSessionsDirForTest(dir: string): string {
   const prev = OPENSESSION_SESSIONS_DIR;
   OPENSESSION_SESSIONS_DIR = dir;
   return prev;
+}
+
+/**
+ * Names the session store has had. Absolute paths were persisted verbatim by
+ * whatever the store was called at the time — walkthrough stills and demo
+ * videos, staged composer uploads, `OPENSESSION_VIDEO:` markers in transcripts,
+ * media links spliced into PR descriptions — so each rename orphaned every one
+ * of them: the path is still in the record, the directory it names is gone.
+ */
+const LEGACY_SESSIONS_DIR_NAMES = [".opensession-chats", ".backstage-chats"];
+
+/**
+ * Map a stored absolute path under a former session-store dir onto the active
+ * one. Only rewrites when the stored path is genuinely gone and the remapped
+ * one exists, so a legacy dir that still has its own contents keeps winning,
+ * and a path outside the store is returned untouched. Callers keep doing their
+ * own scoping checks — this resolves a name, it does not grant access.
+ */
+export function resolveLegacySessionsPath(p: string): string {
+  if (!p.startsWith("/")) return p;
+  const roots = [process.env.OPENSESSION_STATE_DIR, homeDir()];
+  for (const name of LEGACY_SESSIONS_DIR_NAMES) {
+    for (const root of roots) {
+      if (!root) continue;
+      const prefix = `${root}/${name}/`;
+      if (!p.startsWith(prefix)) continue;
+      const remapped = `${OPENSESSION_SESSIONS_DIR}/${p.slice(prefix.length)}`;
+      if (remapped !== p && !existsSync(p) && existsSync(remapped))
+        return remapped;
+      return p;
+    }
+  }
+  return p;
 }
 
 /**
