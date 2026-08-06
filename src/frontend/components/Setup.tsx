@@ -26,6 +26,7 @@ import {
 	CopyableCode,
 	LinkChips,
 	StateChip,
+	repoLifecycleState,
 	setupRequest,
 	type ChipTone,
 	type SetupGithub,
@@ -605,6 +606,33 @@ export function SetupPanel() {
 									: "None registered"
 							}
 						/>
+						{status.repos.length > 0 &&
+							(() => {
+								const bootable = status.repos.filter(
+									(r) => repoLifecycleState(r).tone === "on",
+								);
+								const missing = status.repos.filter(
+									(r) => repoLifecycleState(r).tone !== "on",
+								);
+								return (
+									<ChecklistRow
+										title="Local dev setup"
+										description={
+											missing.length === 0
+												? "Every repo commits lifecycle scripts — sessions provision themselves, previews boot, and agents can check their own UI changes in a browser."
+												: `No boot script in ${missing.map((r) => r.label).join(", ")} — the Preview button stays disabled there. Add .opensession/start.sh to the repo (see docs/repo-lifecycle.md).`
+										}
+										tone={
+											bootable.length === status.repos.length
+												? "on"
+												: bootable.length > 0
+													? "warn"
+													: "off"
+										}
+										label={`${bootable.length}/${status.repos.length} bootable`}
+									/>
+								);
+							})()}
 						<ChecklistRow
 							title="Team roster"
 							description={

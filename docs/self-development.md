@@ -34,7 +34,7 @@ byte-identical to today's behavior.
 ## Previewing your own change
 
 The Preview button uses the repo's own lifecycle scripts, the same convention
-every other repo uses:
+every other repo uses ([repo-lifecycle.md](repo-lifecycle.md)):
 
 - `.opensession/setup.sh` — one-shot per worktree: `bun install
   --frozen-lockfile`. Safe to re-run.

@@ -112,6 +112,36 @@ export function externalPreviewCommandDirs(): string[] {
 // Repo lifecycle dirs, in precedence order.
 const LIFECYCLE_DIRS = [".opensession", ".backstage"] as const;
 
+/** What a repo's committed lifecycle directory provides. Read straight off
+ *  the main checkout for Settings → Setup, which tells operators whether
+ *  sessions in that repo can install deps and boot a preview on their own.
+ *  Docs: docs/repo-lifecycle.md. */
+export interface RepoLifecycle {
+  /** The winning lifecycle dir (`.opensession`, or the `.backstage`
+   *  fallback), or null when the repo commits neither. */
+  dir: string | null;
+  setup: boolean;
+  start: boolean;
+  previewJson: boolean;
+}
+
+/** Inspect `repoRoot`'s lifecycle dir. Same precedence as resolvePreviewBoot:
+ *  the first dir that exists wins outright, so a leftover `.backstage/` never
+ *  contributes files to an `.opensession/` repo. */
+export function repoLifecycle(repoRoot: string): RepoLifecycle {
+  for (const dir of LIFECYCLE_DIRS) {
+    const base = `${repoRoot}/${dir}`;
+    if (!existsSync(base)) continue;
+    return {
+      dir,
+      setup: existsSync(`${base}/setup.sh`),
+      start: existsSync(`${base}/start.sh`),
+      previewJson: existsSync(`${base}/preview.json`),
+    };
+  }
+  return { dir: null, setup: false, start: false, previewJson: false };
+}
+
 export interface PreviewBoot {
   kind: "repo-script" | "preview-command";
   /** `sh -c`-ready command; every path component passes assertSafePath. */

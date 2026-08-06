@@ -144,6 +144,7 @@ export async function handleSetupRoutes(
     // reading as present on every later status refetch, not flap back to
     // missing until the restart happens.
     const { readEnvFileValues } = await import("../env-file-edit");
+    const { repoLifecycle } = await import("../preview");
     const envValues = readEnvFileValues();
 
     const publicBaseUrl = configuredServer().publicBaseUrl.replace(/\/$/, "");
@@ -154,6 +155,12 @@ export async function handleSetupRoutes(
         id: r.id,
         label: r.label,
         path: r.repo,
+        // Can sessions in this repo provision and boot themselves? Read off
+        // the main checkout — worktrees carry the same committed files.
+        lifecycle: {
+          ...repoLifecycle(r.repo),
+          previewCommand: !!r.previewCommand,
+        },
       })),
       team: (() => {
         const team = configuredIdentity().team;

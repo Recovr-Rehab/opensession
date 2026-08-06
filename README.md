@@ -87,6 +87,9 @@ Then read the real setup guide — secrets, accounts, integrations, systemd:
   execution node (`opensession connect`)
 - [docs/worktrees.md](docs/worktrees.md) — how sessions map to git worktrees,
   and where the disk goes
+- [docs/repo-lifecycle.md](docs/repo-lifecycle.md) — the `.opensession/`
+  scripts a repo commits so sessions provision and boot it themselves (and
+  agents can test their changes in a real browser)
 - [docs/extending.md](docs/extending.md) — adding tools, recipes, integrations
   and providers
 - [docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md) — isolated

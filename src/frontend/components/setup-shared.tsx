@@ -41,9 +41,27 @@ export interface SetupGithub {
 	appCreateUrl: string;
 }
 
+/** Whether a repo commits the lifecycle scripts that let sessions provision
+ *  and boot it unattended (docs/repo-lifecycle.md). `dir` is the winning
+ *  lifecycle directory, null when the repo commits neither. */
+export interface SetupRepoLifecycle {
+	dir: string | null;
+	setup: boolean;
+	start: boolean;
+	previewJson: boolean;
+	previewCommand: boolean;
+}
+
+export interface SetupRepo {
+	id: string;
+	label: string;
+	path: string;
+	lifecycle: SetupRepoLifecycle;
+}
+
 export interface SetupStatus {
 	publicBaseUrl: string;
-	repos: { id: string; label: string; path: string }[];
+	repos: SetupRepo[];
 	team: { count: number; names: string[] };
 	github: SetupGithub;
 	integrations: SetupIntegration[];
@@ -100,6 +118,46 @@ const CHIP_DOTS: Record<ChipTone, string> = {
 	warn: "var(--yellow)",
 	off: "var(--text-faint)",
 };
+
+/** Does this repo carry what a session needs to provision and boot it on its
+ *  own? `start.sh` (or an instance `previewCommand`) is the load-bearing half
+ *  — without it the Preview button has nothing to run and an agent can't see
+ *  its own UI change. `setup.sh` alone still helps: worktrees provision, but
+ *  nothing boots. Explained in docs/repo-lifecycle.md. */
+export function repoLifecycleState(repo: SetupRepo): {
+	tone: ChipTone;
+	label: string;
+	/** Sentence for the repo row — what works, or what to add. */
+	description: string;
+} {
+	const { dir, setup, start, previewCommand } = repo.lifecycle;
+	const where = dir ?? ".opensession";
+	if (start)
+		return {
+			tone: "on",
+			label: setup ? "Ready" : "Boots",
+			description: setup
+				? `${where}/setup.sh provisions each worktree and ${where}/start.sh boots the dev server — previews and headless browser checks work.`
+				: `${where}/start.sh boots the dev server. Add ${where}/setup.sh to provision worktrees with anything beyond the default install.`,
+		};
+	if (previewCommand)
+		return {
+			tone: "on",
+			label: "Instance command",
+			description: `Boots through this instance's configured previewCommand. Committing ${where}/start.sh to the repo keeps the recipe with the code.`,
+		};
+	if (setup)
+		return {
+			tone: "warn",
+			label: "Setup only",
+			description: `${where}/setup.sh provisions worktrees, but nothing boots the app — add ${where}/start.sh to enable previews.`,
+		};
+	return {
+		tone: "off",
+		label: "None",
+		description: `No ${where}/ scripts — sessions get the default dependency install and the Preview button stays disabled.`,
+	};
+}
 
 export function StateChip({ tone, label }: { tone: ChipTone; label: string }) {
 	return (
