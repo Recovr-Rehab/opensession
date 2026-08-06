@@ -1279,6 +1279,16 @@ private struct SessionInputBar: View {
     /// In-flight promote — the row says so rather than looking inert, since
     /// cutting a worktree isn't always instant.
     @State private var promoting = false
+    /// Latched once the draft has wrapped past one line, cleared when the
+    /// draft empties. It has to latch: the multi-line layout hands the field
+    /// the whole width, so text that just wrapped between the round buttons
+    /// usually fits on one line again once it opens — an unlatched height
+    /// test would oscillate between the two forms on a single keystroke.
+    @State private var draftWrapped = false
+    /// Roughly the height of a one-line `.body` field, scaled with Dynamic
+    /// Type. The wrap test compares against 1.6× this, comfortably between
+    /// one line and two whatever internal padding the field carries.
+    @ScaledMetric(relativeTo: .body) private var oneLineFieldHeight: CGFloat = 22
 
     /// Air above the topmost element in the bar — and where the composer
     /// scrim's dissolve has to finish, so it ends level with that element.
@@ -1485,17 +1495,41 @@ private struct SessionInputBar: View {
         return parts.joined(separator: " · ")
     }
 
-    /// Phone layout: ONE row, always — [+] [field] [send], the way Slack and
-    /// Messages do it. A long draft grows the field taller and the row's
-    /// controls stay pinned to its bottom edge; nothing ever reflows onto a
-    /// second row, which is what made the old wrap-triggered morph feel like
-    /// the composer was changing shape under your hands mid-sentence.
-    /// Mac keeps the wider two-row form: draft above, controls beneath.
+    /// Phone resting layout: ONE row — [+] [field] [send], the way Slack and
+    /// Messages do it, with the controls seated on the pill's bottom edge.
+    /// Once the draft passes one line it becomes the Messages multi-line
+    /// form instead: the text takes the full width of the box with real air
+    /// around it, and the controls drop to their own row underneath. Growing
+    /// the field between the buttons instead would keep squeezing long text
+    /// into the narrow middle column. Mac always uses the multi-line form.
     private var isSingleRow: Bool {
         #if os(iOS)
-        true
+        !draftWrapped && viewModel.attachedImages.isEmpty
         #else
         false
+        #endif
+    }
+
+    /// Insets for the multi-line form. The phone's are Messages-sized: a
+    /// wrapped draft is a block of prose and reads as one only with proper
+    /// margins. The Mac composer sits in a wider window and keeps its
+    /// tighter, longstanding values.
+    private var multiLineInset: (horizontal: CGFloat, top: CGFloat, bottom: CGFloat) {
+        #if os(iOS)
+        (16, 14, 6)
+        #else
+        (10, 9, 5)
+        #endif
+    }
+
+    /// Inset for the control row under the field. Smaller than the text's,
+    /// because the round buttons carry ~6pt of their own transparent frame —
+    /// matching the numbers would push them visibly further in than the text.
+    private var controlRowInset: (horizontal: CGFloat, bottom: CGFloat) {
+        #if os(iOS)
+        (4, 5)
+        #else
+        (4, 3)
         #endif
     }
 
@@ -1525,6 +1559,15 @@ private struct SessionInputBar: View {
                 )
                 .textFieldStyle(.plain)
                 .lineLimit(1...10)
+                // Measured on the field itself, BEFORE the frame and padding
+                // below — so the reading is the text's own height and doesn't
+                // move when the surrounding layout does.
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    if height > oneLineFieldHeight * 1.6 { draftWrapped = true }
+                }
+                .onChange(of: viewModel.draft) { _, draft in
+                    if draft.isEmpty { draftWrapped = false }
+                }
                 // A vertical-axis TextField is greedy: without an explicit
                 // fill it claims the row's whole width in the pill and pushes
                 // the send button off the right edge. The minimum height is
@@ -1532,11 +1575,13 @@ private struct SessionInputBar: View {
                 // between them instead of hugging the bottom alignment.
                 .frame(maxWidth: .infinity, minHeight: isSingleRow ? 44 : nil)
                 // In the single row the buttons set the pill's height and the
-                // field just sits between them; on Mac it carries its own air
-                // above the toolbar row.
-                .padding(.horizontal, isSingleRow ? 4 : 10)
-                .padding(.top, isSingleRow ? 0 : 9)
-                .padding(.bottom, isSingleRow ? 0 : 5)
+                // field just sits between them. Multi-line, the text owns the
+                // full width of the box and gets real air around it — the
+                // inset a paragraph needs to read as a paragraph, not the 4pt
+                // gap that suits a one-line field between two round buttons.
+                .padding(.horizontal, isSingleRow ? 4 : multiLineInset.horizontal)
+                .padding(.top, isSingleRow ? 0 : multiLineInset.top)
+                .padding(.bottom, isSingleRow ? 0 : multiLineInset.bottom)
                 .focused($inputFocused)
                 // Mac: Return sends; Shift/Option-Return insert a newline. On
                 // iOS the software keyboard's return key just wraps, as before.
@@ -1582,8 +1627,8 @@ private struct SessionInputBar: View {
 
                     sendButton
                 }
-                .padding(.horizontal, 4)
-                .padding(.bottom, 3)
+                .padding(.horizontal, controlRowInset.horizontal)
+                .padding(.bottom, controlRowInset.bottom)
             }
         }
         #if os(iOS)
@@ -1615,10 +1660,11 @@ private struct SessionInputBar: View {
         .simultaneousGesture(
             TapGesture().onEnded { inputFocused = true }
         )
-        // The field's growth is the only shape change left, and it wants to
-        // track the text rather than ease behind it — a snappy, short spring
-        // so a fast typist never sees the pill lagging the caret.
+        // Growth and the one-row → multi-line morph both want to track the
+        // text rather than ease behind it — a snappy, short spring so a fast
+        // typist never sees the box lagging the caret.
         .animation(.snappy(duration: 0.18), value: viewModel.draft)
+        .animation(.snappy(duration: 0.18), value: isSingleRow)
         #endif
     }
 
