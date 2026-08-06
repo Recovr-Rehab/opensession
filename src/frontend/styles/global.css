@@ -13782,6 +13782,24 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .md-image {
 	cursor: zoom-in;
 }
+/* Rendered ```mermaid diagram (MarkdownBody swaps the fence for the SVG) */
+.md-mermaid {
+	margin: 2px 0 8px;
+	padding: 12px;
+	background: #0c0c10;
+	border: 1px solid var(--border);
+	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
+	overflow-x: auto;
+}
+html[data-theme="light"] .md-mermaid {
+	background: #fbfbfc;
+}
+.md-mermaid svg {
+	display: block;
+	margin: 0 auto;
+	max-width: 100%;
+	height: auto;
+}
 .tool-result-videos,
 .msg-videos {
 	display: flex;
