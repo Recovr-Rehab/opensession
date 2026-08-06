@@ -115,10 +115,18 @@ struct RepoTile: View {
 
     private var iconURL: URL? { Self.iconURL(for: name) }
 
+    /// Bumped when the icons behind /repo-icon are redrawn — keep it in step
+    /// with ICON_VERSION in the web tile. The response is cacheable and
+    /// URLCache survives an app update, so without a new URL a freshly
+    /// installed build would keep painting the art the old one cached.
+    private static let iconVersion = 2
+
     private static func iconURL(for name: String) -> URL? {
-        ServerConfig.shared.baseURL?
+        var url = ServerConfig.shared.baseURL?
             .appendingPathComponent("repo-icon")
             .appendingPathComponent("\(name).png")
+        url?.append(queryItems: [URLQueryItem(name: "v", value: "\(iconVersion)")])
+        return url
     }
 
     /// The icon on its own, for the one place that can't host the tile: a menu
