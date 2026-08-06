@@ -269,6 +269,10 @@ export async function buildVoiceSessionConfig(sessionId: string, user = "Open Se
 			input: {
 				transcription: { model: "gpt-4o-mini-transcribe" },
 				turn_detection: DESK_VOICE_TURN_DETECTION,
+				// Near-field: tuned for phone/laptop mics — strips speaker bleed
+				// and room noise before the VAD sees it (phone speakers leak
+				// the assistant's own answer back into the mic).
+				noise_reduction: { type: "near_field" },
 			},
 			output: { voice: "marin" },
 		},

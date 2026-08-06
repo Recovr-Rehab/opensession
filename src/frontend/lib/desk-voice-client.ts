@@ -58,6 +58,16 @@ export class DeskVoiceClient {
 	private idleTimer: number | null = null;
 	private connected = false;
 
+	// Mobile/touch browsers' echo cancellation is weak enough that the phone's
+	// own speaker output leaks back into the mic and the model answers (or
+	// barges in on) itself. Those devices run half-duplex: the mic track is
+	// gated off while the assistant is audibly speaking. Desktop keeps full
+	// duplex, where AEC works and voice barge-in stays possible.
+	private halfDuplex =
+		typeof window.matchMedia === "function" &&
+		window.matchMedia("(pointer: coarse)").matches;
+	private micGateTimer: number | null = null;
+
 	// Transcript mirror POSTs are serialized so rapid finals (barge-in,
 	// fast turn-taking) can't race each other out of order at the server.
 	private transcriptQueue: Promise<void> = Promise.resolve();
@@ -83,7 +93,14 @@ export class DeskVoiceClient {
 		this.onState("connecting");
 		try {
 			this.micStream = await navigator.mediaDevices.getUserMedia({
-				audio: true,
+				// Explicit processing constraints: mobile browsers don't reliably
+				// default to echo cancellation, and without it the phone's own
+				// speaker output comes back in as user speech.
+				audio: {
+					echoCancellation: true,
+					noiseSuppression: true,
+					autoGainControl: true,
+				},
 			});
 		} catch {
 			this.onState("error", "Microphone permission denied");
@@ -187,6 +204,10 @@ export class DeskVoiceClient {
 			window.clearTimeout(this.idleTimer);
 			this.idleTimer = null;
 		}
+		if (this.micGateTimer !== null) {
+			window.clearTimeout(this.micGateTimer);
+			this.micGateTimer = null;
+		}
 		document.removeEventListener("visibilitychange", this.onVisibilityChange);
 		this.teardownMedia();
 		this.connected = false;
@@ -237,6 +258,30 @@ export class DeskVoiceClient {
 			text,
 		});
 		return true;
+	}
+
+	private setMicEnabled(on: boolean) {
+		if (!this.micStream) return;
+		for (const track of this.micStream.getTracks()) track.enabled = on;
+	}
+
+	/** Half-duplex gate: mute instantly when playback starts, reopen after a
+	 *  short tail so the speaker's decay doesn't leak into the fresh mic. A
+	 *  new playback window cancels a pending reopen. */
+	private gateMic(muted: boolean) {
+		if (this.micGateTimer !== null) {
+			window.clearTimeout(this.micGateTimer);
+			this.micGateTimer = null;
+		}
+		if (muted) {
+			this.setMicEnabled(false);
+			return;
+		}
+		this.micGateTimer = window.setTimeout(() => {
+			this.micGateTimer = null;
+			this.setMicEnabled(true);
+			if (this.connected) this.onState("listening");
+		}, 250);
 	}
 
 	private resetIdleTimer() {
@@ -315,6 +360,17 @@ export class DeskVoiceClient {
 				break;
 			case "response.done":
 				this.onState("listening");
+				break;
+			// The audible playback window (WebRTC transport emits these). The
+			// half-duplex gate keys off it rather than the response lifecycle —
+			// response.done fires while audio is still leaving the speaker.
+			case "output_audio_buffer.started":
+				if (this.halfDuplex) this.gateMic(true);
+				this.onState("speaking");
+				break;
+			case "output_audio_buffer.stopped":
+			case "output_audio_buffer.cleared":
+				if (this.halfDuplex) this.gateMic(false);
 				break;
 			case "conversation.item.input_audio_transcription.completed": {
 				const text = String(event.transcript ?? "");
