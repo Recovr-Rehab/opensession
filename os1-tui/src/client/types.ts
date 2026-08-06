@@ -35,7 +35,6 @@ export type Session = {
 	startedBy?: string | null;
 	lastRunError?: string | null;
 	workspacePreparing?: boolean;
-	sideChatOf?: string | null;
 	automation?: unknown;
 };
 

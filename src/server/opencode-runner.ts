@@ -3,7 +3,7 @@
  * deleted — agent-runner maps every model id onto its opencode form and
  * dispatches here). Wraps a per-session `opencode serve` HTTP server
  * (OpenCode is MIT, 75+ providers) in the StreamEvent generator shape the
- * chat pipeline / journal / audit contract downstream consumes.
+ * session pipeline / journal / audit contract downstream consumes.
  *
  * Model ids are `opencode/<provider>/<model>`
  * (e.g. opencode/anthropic/claude-sonnet-5, opencode/openai/gpt-5.5).
@@ -195,7 +195,7 @@ import { audit, summarizeText } from "./audit";
 import { gitIdentityEnv, userMatchesAny, type GitIdentity } from "./shared/user-mappings";
 import { buildRunInstructions, GH_CHECKS_CLI_PATH } from "./run-instructions";
 import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { stateDir } from "./paths";
 import { resolveOpencodeBin, versionTuple } from "./opencode-bin";
 import { isDevInstance } from "./dev-mode";
@@ -369,11 +369,11 @@ export function assertLocalEngineRuntime(providers: LocalEngineProvider[]): void
   }
 }
 
-/** Instructions/state under the chat store (exported for the state-path
+/** Instructions/state under the session store (exported for the state-path
  *  regression test — must stay derived from the SAME dual-read resolution the
  *  docker adapter mounts by, or in-container runs break; see
  *  containerStateDirFixups in sandbox/docker.ts). */
-export const OPENCODE_STATE_DIR = `${OPENSESSION_CHATS_DIR}/opencode`;
+export const OPENCODE_STATE_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode`;
 
 /** Per-server SQLite shards (2026-07-17 storage review): every `opencode
  *  serve` process gets its own DB file via the official OPENCODE_DB env var —
@@ -1249,14 +1249,14 @@ const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
 };
 
 /** Ask-mode external_directory rules: composer attachments are staged under
- *  the chats uploads dir (outside any worktree), so reading them must work in
+ *  the sessions uploads dir (outside any worktree), so reading them must work in
  *  read-only sessions too; everything else outside the worktree stays denied
  *  (deny errors immediately — never "ask", which blocks the tool on a
  *  permission ask; see the permission-ask bridge in runOpencodeAttempt).
  *  Catch-all deny FIRST — last-match-wins, see ASK_BASH_PERMISSIONS. */
 const ASK_EXTERNAL_DIR_PERMISSIONS: Record<string, "allow" | "deny"> = {
   "*": "deny",
-  [`${OPENSESSION_CHATS_DIR}/uploads/**`]: "allow",
+  [`${OPENSESSION_SESSIONS_DIR}/uploads/**`]: "allow",
   // Shared scratch: digests, triage and other read-only runs stage working
   // files under /tmp/opencode/<subdir>/… — a single-star glob wouldn't match
   // those nested paths, so allow the whole subtree (deny catch-all is first,
@@ -1361,7 +1361,7 @@ export function proxyOpencodeMcpConfigs(
       // 42GB RSS on 2026-07-27).
       command: [BUN_BIN, "--smol", "run", MCP_PROXY_ENTRY],
       environment: {
-        OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_CHATS_DIR),
+        OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_SESSIONS_DIR),
         OPENSESSION_RPC_TOKEN: rpcToken,
         OPENSESSION_MCP_SERVER: name,
         OPENSESSION_MCP_CATALOG: catalog,
@@ -2673,7 +2673,7 @@ interface AccountRotation {
  *  box above is recreated per attempt). Tracks which engine session's file got
  *  this turn's user line — a rotation retry can either resume the same session
  *  (line already there; skip) or start a FRESH one when the turn had no
- *  session to resume (first turn of a chat), where skipping left the user
+ *  session to resume (first turn of a session), where skipping left the user
  *  message out of the new file entirely (bks-019f52bd: bubble stuck on
  *  "Sending…", user turn missing after reload). Same contract as the remote
  *  mirror's promptWrittenTo (sandbox/adapters/bootstrap.ts). `notes` queues
@@ -3730,7 +3730,7 @@ async function* runOpencodeAttempt(
           plugin: [...(meridianPlugin || []), SESSION_TAG_PLUGIN_PATH, ARG_COERCE_PLUGIN_PATH],
           ...(Object.keys(providerConfig).length ? { provider: providerConfig } : {}),
           // Code mode reads files outside the worktree as a matter of course —
-          // attachments land in ~/.opensession-chats/uploads — and opencode's
+          // attachments land in ~/.opensession-sessions/uploads — and opencode's
           // default for external_directory is "ask", which blocks the tool on
           // a permission ask no one is there to answer (the 2026-07-10 wedge:
           // a session sat busy 40 min on a `read` of a staged PDF). Bash is

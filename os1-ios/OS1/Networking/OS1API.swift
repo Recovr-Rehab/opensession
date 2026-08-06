@@ -58,7 +58,7 @@ enum OS1API {
         let name: String
     }
 
-    /// Canonical workspace names for collapsing sibling chats into one row.
+    /// Canonical workspace names for collapsing sibling sessions into one row.
     static func workspaces() async throws -> [WorkspaceSummary] {
         struct WorkspacesResponse: Decodable, Sendable {
             let workspaces: [WorkspaceSummary]
@@ -86,34 +86,6 @@ enum OS1API {
         return try await get("/api/sessions/\(session)/subagent/\(agent)")
     }
 
-    /// Team notes on a session, oldest first — the session's chat channel.
-    /// Live notes arrive over the WS as `chat_message`; this is the backfill.
-    static func sessionNotes(sessionId: String) async throws -> [SessionNote] {
-        struct NotesResponse: Decodable, Sendable { let messages: [SessionNote]? }
-        let channel = SessionNote.channel(for: sessionId)
-            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-            ?? SessionNote.channel(for: sessionId)
-        let response: NotesResponse = try await get(
-            "/api/chat/messages?channel=\(channel)&limit=200"
-        )
-        return response.messages ?? []
-    }
-
-    /// Write a team note onto the session's chat channel. The server stores it
-    /// and broadcasts it to every watcher as a `chat_message`, so the poster
-    /// gets it back through the same path as everyone else.
-    static func postSessionNote(sessionId: String, text: String) async throws {
-        struct PostedNote: Decodable, Sendable { let message: SessionNote? }
-        let _: PostedNote = try await post(
-            "/api/chat/messages",
-            body: [
-                "channel": SessionNote.channel(for: sessionId),
-                "text": text,
-                "user": ServerConfig.shared.userName,
-            ]
-        )
-    }
-
     /// `@`-mention targets matching a query, for the composer's "Reference a
     /// file" picker. Scoped to the session, so an attached repo's files come
     /// back too (labelled with their repo).
@@ -127,7 +99,7 @@ enum OS1API {
         return response.files ?? []
     }
 
-    /// Promote an ask-mode chat to code mode. The server cuts the worktree —
+    /// Promote an ask-mode session to code mode. The server cuts the worktree —
     /// which is why this is one-way, and why the row says so.
     @discardableResult
     static func promoteToCode(sessionId: String) async throws -> String? {
@@ -151,12 +123,6 @@ enum OS1API {
                 "user": ServerConfig.shared.userName,
             ]
         )
-    }
-
-    /// Bytes of an image attached to a note. Chat images live in their own
-    /// permanent per-image storage, keyed by uuid.
-    static func chatImage(id: String) async throws -> Data {
-        try await getData("/api/chat/image/\(id)")
     }
 
     /// A server-side media file (walkthrough stills and demo videos are staged
@@ -391,9 +357,9 @@ enum OS1API {
         struct CreateResponse: Decodable { let id: String }
         var body: [String: Any] = ["prompt": prompt, "mode": mode]
         if !repo.isEmpty { body["repo"] = repo }
-        // Join an existing workspace as a sibling chat (a new tab) rather than
-        // starting a standalone session: the server takes the workspace's
-        // worktree/branch for code chats, so the tabs share one checkout.
+        // Join an existing workspace as a sibling session (a new tab) rather
+        // than starting a standalone session: the server takes the workspace's
+        // worktree/branch for code sessions, so the tabs share one checkout.
         if let workspaceId, !workspaceId.isEmpty { body["workspaceId"] = workspaceId }
         if let model, !model.isEmpty { body["model"] = model }
         if let effort, !effort.isEmpty { body["effort"] = effort }
@@ -415,7 +381,7 @@ enum OS1API {
         case delivered(status: String, message: String)
         /// The server understood and refused — retrying won't help.
         case rejected(String)
-        /// No such session (yet): a freshly created chat may not be persisted.
+        /// No such session (yet): a freshly created session may not be persisted.
         case missing(String)
         /// Couldn't reach the server, or it failed on its own. Retry.
         case unavailable(String)

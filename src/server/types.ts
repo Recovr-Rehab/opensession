@@ -14,7 +14,7 @@ export interface ExternalRef {
 }
 
 /**
- * Cumulative token/cost accounting for a chat session, updated after every run.
+ * Cumulative token/cost accounting for a session, updated after every run.
  * Cost is the USD price returned by the engine for each completed provider
  * message. `contextTokens` is the size of the most recent turn's full prompt
  * (input + cache read + cache creation) — the live "how full is the window"
@@ -99,16 +99,14 @@ export interface UnifiedSession {
   /** What the last automated review concluded on this PR. */
   prOsReview?: OsReviewSummary;
   mode?: "ask" | "code" | "scratch";
-  /** Primary repo this chat works in (registered repo id). */
+  /** Primary repo this session works in (registered repo id). */
   repo?: string;
-  /** Workspace this chat belongs to; null/undefined = standalone. NOT a
+  /** Workspace this session belongs to; null/undefined = standalone. NOT a
    *  project — a project is the level above (a repo band or a feed band).
    *  See CONCEPTS.md. */
   workspaceId?: string | null;
   /** Parent/orchestrator session when spawned as a worker sub-session. */
   parentSessionId?: string;
-  /** Legacy removed side-chat record. Kept hidden until its parent is deleted. */
-  sideChatOf?: string;
   /** The user's standing Desk (concierge) session — hidden from lists. */
   desk?: boolean;
   /** How many spawn_task hops away from a human-created session this is
@@ -117,7 +115,7 @@ export interface UnifiedSession {
   spawnDepth?: number;
   /** Secondary repos this session also works in (cross-repo sessions). */
   attachedRepos?: AttachedRepo[];
-  /** The branch beneath this one when this chat was stacked on another's. */
+  /** The branch beneath this one when this session was stacked on another's. */
   stackedOn?: StackedOn;
   /** PRs manually linked to this session (beyond branch/attached-repo ones). */
   linkedPrs?: LinkedPr[];
@@ -308,14 +306,14 @@ export interface AttachedRepo {
 
 /**
  * The branch a stacked session was cut from — the layer directly beneath it.
- * Recorded at worktree creation, when we still know which chat we branched
+ * Recorded at worktree creation, when we still know which session we branched
  * off; `baseRefName` on the PR can't stand in for it, because GitHub rebases
  * a stack's bases as lower layers merge.
  */
 export interface StackedOn {
   repo: string; // repo id
   branch: string; // the parent layer's branch
-  sessionId?: string; // the chat that owns that branch, when it is one of ours
+  sessionId?: string; // the session that owns that branch, when it is one of ours
 }
 
 /**
@@ -411,16 +409,14 @@ export interface NativeSessionFile {
    *  doc and get it approved via ask_user before writing code, then implement
    *  in vertical slices with per-slice evidence. See buildPlanFirstNote. */
   planFirst?: boolean;
-  repo?: string; // which registered repo this chat works in
-  workspaceId?: string | null; // Workspace this chat belongs to
+  repo?: string; // which registered repo this session works in
+  workspaceId?: string | null; // Workspace this session belongs to
   /** The branch this session's worktree was cut from, when it was stacked on
    *  another session's branch rather than on the trunk. Drives the stacked-PR
    *  base (`gh pr create --base`) and the "link this stack" action. */
   stackedOn?: StackedOn;
-  /** Parent/orchestrator session when this chat was spawned as a visible worker sub-session. */
+  /** Parent/orchestrator session when this session was spawned as a visible worker sub-session. */
   parentSessionId?: string;
-  /** Legacy removed side-chat record. Kept hidden until its parent is deleted. */
-  sideChatOf?: string;
   /** The user's standing Desk (concierge) session — fixed title, suppressed
    *  from the session lists, opened via the Desk overlay. */
   desk?: boolean;

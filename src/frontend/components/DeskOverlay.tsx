@@ -12,12 +12,12 @@ import { Button } from "../ui/button";
  * and kicking off work without leaving the current view.
  *
  * Persistence is the point: after the first summon the body STAYS MOUNTED
- * (hidden, not unmounted) — the chat's scoped socket keeps watching, so every
+ * (hidden, not unmounted) — the session's scoped socket keeps watching, so every
  * later ⌘J is instant with the transcript already in place. No enter/exit
  * animations
  * either; summon-dismiss-summon should feel like toggling a HUD.
  *
- * The chat is a normal durable session (desk: true, hidden from the session
+ * The Desk is a normal durable session (desk: true, hidden from the session
  * lists) pinned to a fast model+effort server-side; "Clear" sets a display
  * marker (server-stored) so the modal starts visually fresh while the full
  * transcript stays in the expanded session view.
@@ -79,7 +79,7 @@ function DeskBody({
 		(ta as HTMLTextAreaElement | null)?.focus();
 	}, [active, phone]);
 
-	async function clearChat() {
+	async function clearSession() {
 		try {
 			const res = await fetch(`${BASE_PATH}/api/desk/clear`, {
 				method: "POST",
@@ -105,8 +105,8 @@ function DeskBody({
 					variant="ghost"
 					size="xs"
 					className="shrink-0 text-faint"
-					onClick={clearChat}
-					title="Clear the chat here — the full transcript stays in the expanded session"
+					onClick={clearSession}
+					title="Clear the session here — the full transcript stays in the expanded session"
 				>
 					Clear
 				</Button>
@@ -134,7 +134,7 @@ function DeskBody({
 				/>
 			</div>
 
-			{/* Concierge chat */}
+			{/* Concierge session */}
 			<div className="min-h-0 flex-1">
 				{ensureError ? (
 					<div className="px-4 py-6 text-center text-[13px] font-medium text-dim">

@@ -45,7 +45,7 @@ const DESK_MODEL = "opencode/anthropic/claude-sonnet-5";
 const DESK_EFFORT = "low";
 
 /** Get-or-create the user's Desk session (same direct-mint shape as side
- *  chats: ask mode, no worktree; repo opensession so it reads the Open Session
+ *  sessions: ask mode, no worktree; repo opensession so it reads the Open Session
  *  checkout when it needs context). */
 export function ensureDeskSession(user: string): {
 	sessionId: string;
@@ -98,7 +98,7 @@ export function ensureDeskSession(user: string): {
 }
 
 /** "Clear" in the Desk overlay: hide everything before now from the modal's
- *  chat view. A display marker only — the transcript itself is untouched and
+ *  transcript view. A display marker only — the transcript itself is untouched and
  *  fully visible in the expanded session view. */
 export function clearDesk(user: string): { clearedAt: string } {
 	const store = readStore();

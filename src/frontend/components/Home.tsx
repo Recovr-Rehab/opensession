@@ -60,7 +60,7 @@ function cleanTitle(title: string): string {
 }
 
 function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
-  if (session.sideChatOf || session.desk) return [];
+  if (session.desk) return [];
 
   if (session.prs?.some((pr) => pr.url)) {
     return session.prs

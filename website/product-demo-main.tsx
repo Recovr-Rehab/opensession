@@ -214,7 +214,7 @@ for (const session of sessions.slice(1)) {
 	];
 }
 
-const workspaces = sessions.map((session, index) => ({
+const projects = sessions.map((session, index) => ({
 	id: session.workspaceId!,
 	name: session.title.replace(/^(Add|Review|Improve|Ship) /, ""),
 	repo: "opensession",
@@ -245,7 +245,7 @@ const responseFor = (url: URL, method: string): Response => {
 				{ name: "Louise", fullName: "Louise de Sadeleer", github: "louisedesadeleer" },
 			],
 		});
-	if (path === "/api/workspaces") return json({ workspaces });
+	if (path === "/api/projects") return json({ projects });
 	if (path === "/api/repos")
 		return json({
 			repos: [
@@ -281,8 +281,6 @@ const responseFor = (url: URL, method: string): Response => {
 		});
 	if (path === "/api/open-prs") return json({ prs: [] });
 	if (path === "/api/feeds") return json({ feeds: [] });
-	if (path === "/api/chat/session-activity") return json({ channels: [] });
-	if (path === "/api/chat/messages") return json({ messages: [] });
 	if (path === "/api/todos") return json({ todos: [] });
 	if (path === "/api/pins") return json({ pins: [activeSessionId] });
 	if (path === "/api/ui-prefs") return json({ prefs: {} });

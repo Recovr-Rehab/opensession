@@ -185,7 +185,7 @@ what the code actually reads, by feature:
 | `OPENSESSION_UI_BASE` | `http://127.0.0.1:<port>` | public base URL used in links posted to Slack/Linear/notes |
 | `OPENSESSION_CONFIG` | `~/.opensession/config.json` | config-file path override |
 | `SHUTDOWN_DRAIN_MS` | `60000` | graceful-shutdown drain window for in-flight runs |
-| `OPENSESSION_CHATS_DIR` | `~/.opensession-chats` | session store override (mostly a test seam) |
+| `OPENSESSION_SESSIONS_DIR` | `~/.opensession-sessions` | session store override (mostly a test seam) |
 | `OPENSESSION_WORKTREES_DIR` | `~/.opensession/worktrees` | where session worktrees are created |
 | `OPENSESSION_DEV` | unset | `1` = dev frontend build only; does NOT disable agent loops (a second naive instance double-sends) |
 

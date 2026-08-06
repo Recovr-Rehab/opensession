@@ -6,28 +6,21 @@ import UIKit
 
 /// The composer's "+" — the web input's add menu, natively. Attaching an image
 /// is one row inside it rather than the whole button: the same menu carries the
-/// camera, the session goal and team notes, which is everything the paperclip
-/// it replaced could never say it did.
-///
-/// The rows are deliberately mode-aware. Writing a team note posts to the
-/// session's chat channel (no attachment endpoint behind it), so the picker
-/// rows step aside while note mode is on instead of offering an attachment the
-/// send would silently drop.
+/// camera and the session goal, which is everything the paperclip it replaced
+/// could never say it did.
 struct ComposerAddMenu: View {
     @Binding var images: [AttachedImage]
-    var noteMode: Bool
     var hasGoal: Bool = false
     /// Nil when the session can't take a goal — `/goal` is a backstage-native
-    /// slash command, so Slack/Linear-sourced chats don't get the row.
+    /// slash command, so Slack/Linear-sourced sessions don't get the row.
     var onSetGoal: (() -> Void)?
-    var onToggleNoteMode: () -> Void
     /// Opens the `@`-mention picker. Nil where mention search isn't available.
     var onReferenceFile: (() -> Void)?
     /// Scheduling needs something to schedule, so the row dims on an empty
     /// draft rather than opening a picker that can't submit.
     var hasDraft: Bool = false
     var onSchedule: (() -> Void)?
-    /// Set only for an ask-mode chat that the server would let promote.
+    /// Set only for an ask-mode session that the server would let promote.
     var onSwitchToCode: (() -> Void)?
     var promoting: Bool = false
     var maxCount: Int = 6
@@ -44,33 +37,31 @@ struct ComposerAddMenu: View {
 
     var body: some View {
         Menu {
-            if !noteMode {
+            Button {
+                #if os(iOS)
+                showingPhotos = true
+                #else
+                importing = true
+                #endif
+            } label: {
+                Label(attachLabel, systemImage: "photo.on.rectangle")
+            }
+            .disabled(remaining == 0)
+
+            #if os(iOS)
+            if CameraPicker.isAvailable {
                 Button {
-                    #if os(iOS)
-                    showingPhotos = true
-                    #else
-                    importing = true
-                    #endif
+                    showingCamera = true
                 } label: {
-                    Label(attachLabel, systemImage: "photo.on.rectangle")
+                    Label("Take a photo", systemImage: "camera")
                 }
                 .disabled(remaining == 0)
+            }
+            #endif
 
-                #if os(iOS)
-                if CameraPicker.isAvailable {
-                    Button {
-                        showingCamera = true
-                    } label: {
-                        Label("Take a photo", systemImage: "camera")
-                    }
-                    .disabled(remaining == 0)
-                }
-                #endif
-
-                if let onReferenceFile {
-                    Button(action: onReferenceFile) {
-                        Label("Reference a file", systemImage: "at")
-                    }
+            if let onReferenceFile {
+                Button(action: onReferenceFile) {
+                    Label("Reference a file", systemImage: "at")
                 }
             }
 
@@ -78,13 +69,6 @@ struct ComposerAddMenu: View {
                 Button(action: onSetGoal) {
                     Label(hasGoal ? "Edit goal" : "Set a goal", systemImage: "target")
                 }
-            }
-
-            Button(action: onToggleNoteMode) {
-                Label(
-                    noteMode ? "Back to prompting" : "Write a team note",
-                    systemImage: "note.text"
-                )
             }
 
             if let onSwitchToCode {
@@ -116,7 +100,7 @@ struct ComposerAddMenu: View {
         .menuStyle(.button)
         .fixedSize()
         #endif
-        .accessibilityLabel("Attach files and chat options")
+        .accessibilityLabel("Attach files and session options")
         #if os(iOS)
         .photosPicker(
             isPresented: $showingPhotos,
@@ -186,8 +170,9 @@ struct ComposerAddMenu: View {
     }
 }
 
-/// Editor for the session goal. A goal is appended to every prompt in the chat
-/// until it's cleared, so the sheet offers clearing as plainly as setting.
+/// Editor for the session goal. A goal is appended to every prompt in the
+/// session until it's cleared, so the sheet offers clearing as plainly as
+/// setting.
 struct GoalSheet: View {
     let hadGoal: Bool
     let onSubmit: (String?) -> Void
@@ -209,7 +194,7 @@ struct GoalSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Session goal")
                 .font(.headline)
-            Text("Rides every prompt in this chat until you clear it.")
+            Text("Rides every prompt in this session until you clear it.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

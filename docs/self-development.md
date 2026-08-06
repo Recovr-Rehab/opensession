@@ -24,7 +24,7 @@ A dev instance is `bun run opensession.ts` with:
   show without real history. (Forthcoming; until the generator lands a demo
   instance simply starts empty.)
 - `OPENSESSION_STATE_DIR=<dir>` — root for all instance state. Everything
-  that defaults to `~/.opensession-*` (chats, config, automations, sandbox
+  that defaults to `~/.opensession-*` (sessions, config, automations, sandbox
   config, the run-rpc unix socket, …) resolves under this dir instead, so a
   dev instance never reads or writes the operator's live stores.
 

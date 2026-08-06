@@ -73,17 +73,6 @@ final class SessionViewModel {
     private(set) var prLoadFailed = false
     private var prTask: Task<Void, Never>?
 
-    // ── Team notes ──
-
-    /// Human-to-human notes on this session, interleaved into the transcript
-    /// by the time they were written. The agent never sees them.
-    private(set) var notes: [SessionNote] = []
-    private var notesTask: Task<Void, Never>?
-    /// Composer mode: the draft posts as a team note instead of prompting.
-    /// Mirrors the web composer's note mode, and like it survives a send —
-    /// writing notes usually comes in twos and threes.
-    var noteMode = false
-
     // ── Session goal ──
     /// Goal set from this app (`/goal`), used to label the composer menu's
     /// row and prefill its editor. The server owns the real value; this is
@@ -365,7 +354,6 @@ final class SessionViewModel {
         outbox.poke()
         connect()
         loadPr()
-        loadNotes()
     }
 
     func stop() {
@@ -386,27 +374,8 @@ final class SessionViewModel {
         creationRetryTask?.cancel()
         deliveringPruneTask?.cancel()
         prTask?.cancel()
-        notesTask?.cancel()
         socket?.disconnect()
         socket = nil
-    }
-
-    /// Backfill the session's notes. Live ones arrive over the WS, so this
-    /// runs once per connect; a failure just leaves the transcript noteless.
-    private func loadNotes() {
-        notesTask?.cancel()
-        notesTask = Task { [weak self] in
-            guard let sessionId = self?.session.id,
-                  let loaded = try? await OS1API.sessionNotes(sessionId: sessionId),
-                  let self, !Task.isCancelled
-            else { return }
-            // Anything that arrived over the WS while this was in flight wins.
-            let known = Set(self.notes.map(\.id))
-            let merged = loaded.filter { !known.contains($0.id) } + self.notes
-            guard merged != self.notes else { return }
-            self.notes = merged.sorted { $0.ts < $1.ts }
-            self.rebuildDisplayItems()
-        }
     }
 
     /// Fire-and-forget PR refresh (open, foreground, run end).
@@ -476,9 +445,6 @@ final class SessionViewModel {
     /// button (or hit a socket that only LOOKED alive), and the text vanished.
     var canSend: Bool {
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        // A note is plain text over REST — and no image path behind it (the
-        // composer's picker rows hide in note mode).
-        if noteMode { return hasText }
         return hasText || !attachedImages.isEmpty
     }
 
@@ -486,10 +452,6 @@ final class SessionViewModel {
     /// and it stays there until the server says it has it — so a send made in
     /// a tunnel arrives when the signal does, in the order it was written.
     func sendDraft(busyModeOverride: String? = nil) {
-        if noteMode {
-            postNote()
-            return
-        }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = attachedImages.map(\.dataURL)
         guard !text.isEmpty || !images.isEmpty else { return }
@@ -509,7 +471,7 @@ final class SessionViewModel {
             notice = "Too many unsent messages — send or delete some first."
             return
         }
-        // You can't be done with a chat you're actively working in: prompting
+        // You can't be done with a session you're actively working in: prompting
         // clears any sidebar hide covering it (opening it deliberately doesn't).
         HideStore.shared.unhide(for: session)
         draft = ""
@@ -565,34 +527,6 @@ final class SessionViewModel {
         }
     }
 
-    /// Post the draft as a team note on the session's chat channel. Notes are
-    /// human-to-human — they never reach the engine — and the server
-    /// broadcasts the stored note back as a `chat_message`, which is what puts
-    /// it in the transcript, so there's no local echo to keep in sync.
-    func postNote() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        draft = ""
-        let sessionId = session.id
-        Task { [weak self] in
-            do {
-                try await OS1API.postSessionNote(sessionId: sessionId, text: text)
-            } catch {
-                guard let self else { return }
-                // A swallowed failure used to lose the note outright. Hand the
-                // text back when the composer is still free to take it.
-                if self.draft.isEmpty {
-                    self.draft = text
-                    self.noteMode = true
-                    self.notice = "Couldn't post the note — try again."
-                } else {
-                    self.notice = "Couldn't post the note."
-                }
-            }
-        }
-        sendSeq += 1
-    }
-
     /// Pin (or clear) the session goal. Goals have no endpoint of their own —
     /// `/goal` is a server-side slash command on the ordinary prompt channel,
     /// exactly as the web composer sets one.
@@ -625,7 +559,7 @@ final class SessionViewModel {
         sendSeq += 1
     }
 
-    /// Promote an ask-mode chat to code mode. One-way: the server cuts a
+    /// Promote an ask-mode session to code mode. One-way: the server cuts a
     /// worktree, and the local snapshot follows so the row disappears without
     /// waiting for the next sessions refresh. The branch it returns is for
     /// callers that want to say so; the notice covers the rest.
@@ -1059,19 +993,6 @@ final class SessionViewModel {
                 self.socket?.watch(sessionId: self.session.id)
             }
 
-        case .chatNote(let channel, let note)
-            where channel == SessionNote.channel(for: session.id):
-            // Chat frames go to every client, so an edit of an existing note
-            // replaces it in place rather than appending a duplicate.
-            if let index = notes.firstIndex(where: { $0.id == note.id }) {
-                guard notes[index] != note else { return }
-                notes[index] = note
-            } else {
-                notes.append(note)
-                notes.sort { $0.ts < $1.ts }
-            }
-            rebuildDisplayItems()
-
         case .notice(let message), .serverError(let message):
             notice = message.isEmpty ? nil : message
 
@@ -1148,7 +1069,6 @@ final class SessionViewModel {
             from: items,
             live: isRunning || isStreaming,
             worktreeDir: session.worktreeDir,
-            notes: notes,
             walkthrough: session.walkthrough
         )
     }

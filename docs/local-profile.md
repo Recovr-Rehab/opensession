@@ -300,7 +300,7 @@ Defaults are isolated from a hosted Open Session installation:
 | OpenAI access-only seeds | `~/os1/auth/opencode-openai/` |
 
 Existing path, port, and binary overrides still win, including `OPENSESSION_CONFIG`,
-`OPENSESSION_CHATS_DIR`, `OPENSESSION_WORKTREES_DIR`,
+`OPENSESSION_SESSIONS_DIR`, `OPENSESSION_WORKTREES_DIR`,
 `OPENSESSION_MCP_CONFIG`, `OPENSESSION_OPENCODE_BIN`, and `PORT`. `HOST` is
 restricted to `127.0.0.1`, `::1`, or `localhost` in local mode.
 
@@ -326,7 +326,7 @@ session on a new branch. Verify that:
 - Only providers logged into through Claude Code or Codex appear in the picker.
 - A model turn runs on that CLI subscription without an OpenCode login prompt.
 - The code session's checkout appears under `~/os1/worktrees`.
-- No files are created in the hosted profile's `~/.opensession-chats` store.
+- No files are created in the hosted profile's `~/.opensession-sessions` store.
 
 Stop the server with `Ctrl-C`. The profile is selected per process and does not
 write a persistent mode setting.

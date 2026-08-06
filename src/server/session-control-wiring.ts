@@ -20,7 +20,7 @@ import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { parseImageDataUrls } from "./uploads";
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
-import { findSession, getCachedSessions, invalidateSessionsCache, isLegacySideChat, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
+import { findSession, getCachedSessions, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
 import { type SessionState, type SessionSummary, registerSessionControl } from "./session-control";
 import { buildBranchNote, memoryNoteFor, resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
 import { engineSessionPatch, engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sessions";
@@ -29,7 +29,7 @@ import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
 import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
-import { ownedWorktree } from "./chat-workspace";
+import { ownedWorktree } from "./session-workspace";
 import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, worktreeHeadBranch } from "./worktree";
 import { broadcastToAll, broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
@@ -82,16 +82,16 @@ relinkAskThreads();
 // exact same way a human does in the web UI. See src/server/session-control.ts.
 registerSessionControl({
 	listSessions: () =>
-		getCachedSessions().filter((s) => !isLegacySideChat(s)).map(buildSummary),
+		getCachedSessions().map(buildSummary),
 
 	getSession: (id) => {
 		const s = findSession(id);
-		return s && !isLegacySideChat(s) ? buildSummary(s) : undefined;
+		return s ? buildSummary(s) : undefined;
 	},
 
 	transcriptTail: (id, n) => {
 		const s = findSession(id);
-		if (!s || isLegacySideChat(s)) return [];
+		if (!s) return [];
 		// Engine-spanning read (file + opencode store) — same as the transcript
 		// route, so get_session works on opencode/migrated sessions too.
 		return mergedSessionTranscript(s).slice(-Math.max(0, n));
@@ -108,7 +108,7 @@ registerSessionControl({
 
 	deliverToSession: async (id, content, user, opts) => {
 		const session = findSession(id);
-		if (!session || isLegacySideChat(session))
+		if (!session)
 			return { status: "error" as const, message: "No session with that id." };
 		if (session.upgradedTo || isLocalSessionUpgradeInProgress(id)) {
 			return {
@@ -172,7 +172,7 @@ registerSessionControl({
 				message: "Queued behind the current run.",
 			};
 		}
-		// Open Session chats with no engine id are fresh chats — the first prompt
+		// Open Session sessions with no engine id are fresh sessions — the first prompt
 		// starts a new conversation (see runSessionPrompt).
 		if (
 			providerFor(session.model) === "claude" &&
@@ -204,7 +204,7 @@ registerSessionControl({
 
 	cancelSession: (id) => {
 		const session = findSession(id);
-		if (!session || isLegacySideChat(session)) return false;
+		if (!session) return false;
 		// Same park as the UI Stop: without it the run-end guards (queue drain,
 		// orphaned-steer redelivery in maybeQueueAutoContinue) would immediately
 		// start a new turn on the session that was just deliberately cancelled.
@@ -253,7 +253,7 @@ registerSessionControl({
 		const createFastMode = fastModeInput === true;
 		const images = parseImageDataUrls(imageUrls);
 		const parentSession = parentSessionId ? findSession(parentSessionId) : null;
-		// Explicit workspace join (the native apps' "new chat in this workspace" —
+		// Explicit workspace join (the native apps' "new session in this workspace" —
 		// this path's equivalent of the web tab strip's "+"). An unknown id is a
 		// hard error: falling back to a standalone create would silently mint the
 		// duplicate sidebar row the caller asked to avoid.
@@ -269,7 +269,7 @@ registerSessionControl({
 			? resolveSessionRepoContext(parentSession, repoInput, prompt)
 			: null;
 		// A joined workspace's repo outranks the global default: a caller that
-		// names only a workspace means "a chat in there", and defaulting to the
+		// names only a workspace means "a session in there", and defaulting to the
 		// configured default repo would mint a foreign worktree inside it.
 		const repo = getRepo(
 			repoInput ||
@@ -288,11 +288,11 @@ registerSessionControl({
 			parentSession?.workspaceId
 				? getWorkspace(parentSession.workspaceId)
 				: null;
-		// The workspace this chat lands in: the one it explicitly joins, else the
-		// parent's. Everything a chat inherits from its workspace — repo context,
+		// The workspace this session lands in: the one it explicitly joins, else the
+		// parent's. Everything a session inherits from its workspace — repo context,
 		// worktree, feed refs and their MCP scoping — reads from this.
 		const contextWorkspace = joinedWorkspace ?? parentWorkspace;
-		// Least privilege: chats in feed-item workspaces default their MCP
+		// Least privilege: sessions in feed-item workspaces default their MCP
 		// allowlist to the feed's declared servers, else inherit the parent's
 		// scoping — never widen back to the full mcp-config.
 		const { feedMcpServersForRefs } = await import("./feeds");
@@ -332,9 +332,9 @@ registerSessionControl({
 				wtPath = await ensureAskCheckout(repo.id);
 			}
 		} else {
-			// Same workspace ⇒ same worktree: a code chat joining a workspace (its
+			// Same workspace ⇒ same worktree: a code session joining a workspace (its
 			// parent's, or one it named) shares that worktree/branch instead of
-			// creating a fresh one. Only when the repo matches — a chat explicitly
+			// creating a fresh one. Only when the repo matches — a session explicitly
 			// targeting another repo still gets its own isolated worktree there.
 			const shared =
 				sharedParentContext
@@ -361,7 +361,7 @@ registerSessionControl({
 			} else {
 				if (!sessionBranch.trim()) {
 					throw new Error(
-						"Code-mode chat needs a branch because the workspace it joins has no sharable worktree.",
+						"Code-mode session needs a branch because the workspace it joins has no sharable worktree.",
 					);
 				}
 				const worktrees = await listWorktrees(repo.id);
@@ -369,11 +369,11 @@ registerSessionControl({
 				if (!wtPath) wtPath = await createWorktree(branch!, repo.id);
 			}
 		}
-		// The first code chat in a joined workspace that owns no worktree yet (an
-		// ask-style or ticket workspace) materializes it, so the next chat joining
+		// The first code session in a joined workspace that owns no worktree yet (an
+		// ask-style or ticket workspace) materializes it, so the next session joining
 		// the workspace inherits THIS worktree instead of minting a second one and
 		// silently splitting the tabs across two trees. Only an isolated worktree
-		// is owned — never a shared main/ask checkout, which every other chat in
+		// is owned — never a shared main/ask checkout, which every other session in
 		// the repo uses too.
 		if (
 			joinedWorkspace &&
@@ -390,11 +390,11 @@ registerSessionControl({
 
 		const bksId = newSessionId();
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
-		// A joined workspace is the chat's workspace, which also skips the mint /
-		// adopt block below — and with it the auto-naming: a chat that merely
+		// A joined workspace is the session's workspace, which also skips the mint /
+		// adopt block below — and with it the auto-naming: a session that merely
 		// joins an existing workspace must never rename it.
 		let resolvedWorkspaceId = joinedWorkspace?.id || parentSession?.workspaceId || null;
-		// A workspace minted below from THIS chat's provisional first line is
+		// A workspace minted below from THIS session's provisional first line is
 		// renamed once the generated summary lands, exactly like the web create
 		// path — the sidebar rows (web and native) are titled by the workspace,
 		// so without this a session started from the native apps wears its raw
@@ -403,8 +403,8 @@ registerSessionControl({
 		if (!resolvedWorkspaceId) {
 			// Adopt the workspace that already owns the (parent's or this child's)
 			// worktree before minting a duplicate one over it. Failing that, mint —
-			// every chat lives in a workspace (chat-workspace.ts), so a parentless
-			// child, or one hanging off a workspace-less slack/linear chat, gets
+			// every session lives in a workspace (session-workspace.ts), so a parentless
+			// child, or one hanging off a workspace-less slack/linear session, gets
 			// wrapped here instead of surfacing as an orphan for the read-side
 			// sweep to adopt. The parent's identity seeds the name when there is
 			// one: the pair is one piece of work.
@@ -415,7 +415,7 @@ registerSessionControl({
 			else {
 				const branchForWs = parentSession?.branch || sessionBranch;
 				// Only an isolated worktree is owned — never a shared main/ask
-				// checkout, which every other chat there uses too.
+				// checkout, which every other session there uses too.
 				const dir =
 					ownedWorktree(parentSession?.worktreeDir) ?? ownedWorktree(wtPath);
 				const wsName =
@@ -428,7 +428,7 @@ registerSessionControl({
 					...(dir ? { worktreeDir: dir } : {}),
 				});
 				resolvedWorkspaceId = ws.id;
-				// Only when the name was seeded from this chat's own first line
+				// Only when the name was seeded from this session's own first line
 				// (compared before createWorkspace trims it): a workspace named
 				// after the parent's identity belongs to the parent's work, and
 				// this child's summary must not rename it.
@@ -439,8 +439,8 @@ registerSessionControl({
 		}
 		// Replace the raw first-line title with a short summary in the background;
 		// the next sessions poll (≤5s) picks it up. A workspace minted for this
-		// chat is named ONCE from that same summary and keeps the name for life —
-		// later chats never rename it.
+		// session is named ONCE from that same summary and keeps the name for life —
+		// later sessions never rename it.
 		void ensureGeneratedTitle(bksId, prompt, user, model).then((t) => {
 			if (!t) return;
 			invalidateSessionsCache();
@@ -496,14 +496,14 @@ registerSessionControl({
 					...(parentSessionId ? { parentSessionId } : {}),
 					// Persisted so the failure beacon (handoff-evidence.ts) can tell
 					// a worker that owes its parent a report from a child session
-					// that was explicitly told not to report (e.g. the PR chat).
+					// that was explicitly told not to report (e.g. the PR session).
 					...(parentSessionId && reportBack ? { reportBack: true } : {}),
-					// Feed-item linkage follows the chat's workspace (Video tab +
+					// Feed-item linkage follows the session's workspace (Video tab +
 					// sidebar feed-row join — the feeds design).
 					...(contextWorkspace?.externalRefs?.length
 						? { externalRefs: contextWorkspace.externalRefs }
 						: {}),
-					// A chat in a support-ticket workspace is on that ticket too —
+					// A session in a support-ticket workspace is on that ticket too —
 					// same rule as the web tab strip's "+".
 					...(joinedWorkspace?.plainThreadId
 						? { plainThreadId: joinedWorkspace.plainThreadId }
@@ -549,16 +549,16 @@ registerSessionControl({
 
 		// @session:<id> mentions in a create_session prompt (e.g. a monitor
 		// session spun up to watch others) get the same resolving footer as
-		// prompts on existing chats — this create path bypasses
+		// prompts on existing sessions — this create path bypasses
 		// runSessionPromptInner.
 		const createMentionsNote = sessionMentionsNote(prompt);
 		let openingPrompt = createMentionsNote
 			? `${prompt}\n\n${createMentionsNote}`
 			: prompt;
-		// A chat joining a workspace opens with the workspace's own context, the
+		// A session joining a workspace opens with the workspace's own context, the
 		// same as the web create: the feed item it hangs off, and the support
 		// ticket it belongs to. Without this a "new tab" in a ticket workspace is
-		// an amnesiac chat that has to be told what it's looking at.
+		// an amnesiac session that has to be told what it's looking at.
 		if (joinedWorkspace) {
 			const { wrapContext } = await import("./prompt-context");
 			if (joinedWorkspace.externalRefs?.length) {
@@ -577,7 +577,7 @@ registerSessionControl({
 					);
 					const thread = await getThreadWithMessages(threadId);
 					openingPrompt += `\n\n${wrapContext(
-						`This chat was opened from a Plain support ticket. Ticket context:\n\n${formatThreadContext(thread, true)}`,
+						`This session was opened from a Plain support ticket. Ticket context:\n\n${formatThreadContext(thread, true)}`,
 					)}`;
 				} catch (e) {
 					console.error(
@@ -585,14 +585,14 @@ registerSessionControl({
 						e,
 					);
 					openingPrompt += `\n\n${wrapContext(
-						`This chat was opened from Plain support ticket ${threadId} (the context lookup failed — use the plain MCP tools to fetch the thread).`,
+						`This session was opened from Plain support ticket ${threadId} (the context lookup failed — use the plain MCP tools to fetch the thread).`,
 					)}`;
 				}
 			}
 		}
 
 		// Make the id resolvable before returning it. Callers can navigate to the
-		// fresh chat immediately, while engine startup continues in the background.
+		// fresh session immediately, while engine startup continues in the background.
 		await persist();
 
 		// Run in the background; watchers (web UI) see the live stream, the same as
@@ -679,7 +679,7 @@ registerSessionControl({
 								...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
 							});
 						else await persist();
-						// Attach anyone already viewing this fresh chat to its brand-new
+						// Attach anyone already viewing this fresh session to its brand-new
 						// transcript file so the first turn streams live (see
 						// attachSessionWatchersToTranscript).
 						if (engineSessionId) {

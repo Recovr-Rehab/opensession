@@ -31,7 +31,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { audit } from "./audit";
 import { tryGetSessionControl } from "./session-control";
 import { findSession } from "./session-cache";
@@ -46,7 +46,7 @@ import {
 import { configuredServer, personaName, productName } from "./config";
 
 const HOME = homeDir();
-const STORE = `${OPENSESSION_CHATS_DIR}/human-asks.json`;
+const STORE = `${OPENSESSION_SESSIONS_DIR}/human-asks.json`;
 const UI_BASE =
   process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;

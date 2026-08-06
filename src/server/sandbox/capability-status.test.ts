@@ -6,7 +6,7 @@
  *
  * Config is pointed at a scratch file via OPENSESSION_SANDBOX_CONFIG (read fresh
  * per call), saved/restored so the rest of the suite never sees it. The
- * kill-switch file lives under OPENSESSION_CHATS_DIR; expectations read the live
+ * kill-switch file lives under OPENSESSION_SESSIONS_DIR; expectations read the live
  * sandboxesEnabled() instead of assuming it, so a dev box with the switch on
  * still passes.
  */

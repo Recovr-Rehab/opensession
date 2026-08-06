@@ -1,14 +1,14 @@
 /**
  * Merge/deploy/preview events for PR-linked Open Session sessions. When a PR whose
  * head branch belongs to a session (primary branch or an attached repo) is
- * merged, a `[GitHub]` message is delivered into that session's chat through the
+ * merged, a `[GitHub]` message is delivered into that session's transcript through the
  * SessionControl registry — the same steer/queue/start path a human message
  * takes — so the agent sees it and can react. The merge commit is then tracked in
  * ~/.opensession-github/pending-deploys.json (survives restarts), and when the
  * Deploy workflow (.github/workflows/deploy.yml) completes for that commit the
  * session gets a second message with the outcome. (Pre-merge staging previews
  * are NOT announced here — the session header's Preview environment button already surfaces
- * the preview URL + Ready state, so a chat notification would just be redundant.)
+ * the preview URL + Ready state, so a session notification would just be redundant.)
  */
 import { stateDir } from "../../server/paths";
 import { existsSync, readFileSync } from "fs";

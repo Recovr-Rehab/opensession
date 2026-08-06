@@ -215,7 +215,7 @@ function DefaultModelRow() {
  * Manual vs auto: when a session's model runs out of usage credits pool-wide,
  * either drop it to a fallback model and keep going (auto, the default) or stop
  * on the limit notice and let the human pick the next model (manual). Global,
- * read fresh per run. The switch is always announced in the chat as a divider.
+ * read fresh per run. The switch is always announced in the session as a divider.
  */
 function AutoFallbackRow() {
 	const [auto, setAuto] = useState<boolean | null>(null);
@@ -258,7 +258,7 @@ function AutoFallbackRow() {
 				<SettingRowTitle>Auto-switch when out of credits</SettingRowTitle>
 				<SettingRowDescription>
 					{error ||
-						"When a run has an explicit fallback model and the current model runs out of usage credits, keep going on that configured fallback. Off = the run halts and you pick the next model. Either way the switch shows in the chat."}
+						"When a run has an explicit fallback model and the current model runs out of usage credits, keep going on that configured fallback. Off = the run halts and you pick the next model. Either way the switch shows in the session."}
 				</SettingRowDescription>
 			</SettingRowText>
 			<SettingRowControl>

@@ -46,7 +46,7 @@ import { isRunnableSandboxProvider } from "./sandbox/config";
 import { createRemoteWorkspaceMcpServer } from "./sandbox/workspace-mcp";
 
 /** The session's primary repo id, for the papercuts toggle (undefined =
- *  chat-only session, which logs under no repo and is always enabled). */
+ *  session-only session, which logs under no repo and is always enabled). */
 function sessionRepoId(sessionId: string): string | undefined {
 	const s = findSession(sessionId);
 	if (!s) return undefined;

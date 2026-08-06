@@ -32,7 +32,7 @@ import {
   type SessionState,
   type SessionSummary,
 } from "../../server/session-control";
-import { OPENSESSION_CHATS_DIR } from "../../server/paths";
+import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { migrateSessionEngine } from "../../server/migrate-engine";
 import { resolveSessionRepoContext } from "../../server/session-repos";
@@ -270,7 +270,7 @@ export interface SpawnTaskDeps {
 
 function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
   try {
-    const path = `${OPENSESSION_CHATS_DIR}/${id}.json`;
+    const path = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   } catch {
@@ -287,7 +287,7 @@ function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
  * (below) covers the guard in the meantime.
  */
 async function defaultStampSpawnDepth(id: string, depth: number): Promise<void> {
-  const path = `${OPENSESSION_CHATS_DIR}/${id}.json`;
+  const path = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
   for (let i = 0; i < 240; i++) {
     if (existsSync(path)) {
       try {

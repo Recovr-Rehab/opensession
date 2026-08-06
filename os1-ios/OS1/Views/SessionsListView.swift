@@ -70,7 +70,7 @@ struct SessionsListView: View {
         let id = UUID()
         var repo: String?
         /// Set when the create joins an existing workspace as a new tab (the
-        /// chat's ⋯ menu); nil starts a standalone session.
+        /// session's ⋯ menu); nil starts a standalone session.
         var workspaceId: String?
     }
 
@@ -78,7 +78,7 @@ struct SessionsListView: View {
     @AppStorage("os1.list.repo") private var repoFilter = "all"
     @AppStorage("os1.list.sort") private var sortByRaw = SortBy.updated.rawValue
     // Default to the signed-in person's own sessions, like the web sidebar —
-    // the server also hosts hundreds of automation runs and teammates' chats.
+    // the server also hosts hundreds of automation runs and teammates' sessions.
     @AppStorage("os1.list.people") private var peopleFilter = "mine"
     @AppStorage("os1.sidebar.repoOrder") private var preferredRepoOrder = "[]"
     /// Section headings the person has folded shut — repo bands, status lanes
@@ -234,7 +234,7 @@ struct SessionsListView: View {
                 SessionView(session: session, seed: optimisticSeeds[session.id])
                     // Fresh view (and socket) per session, not a reused one.
                     .id(selectedSessionID)
-                    // The selected chat reads as read, and keeps re-marking as
+                    // The selected session reads as read, and keeps re-marking as
                     // the poll hands it fresher activity — see SessionTabsView
                     // for the same rule on the iOS stack.
                     .onChange(of: session, initial: true) { _, open in
@@ -601,7 +601,7 @@ struct SessionsListView: View {
         let repo = repoFilter
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         // Rows this person has hidden drop out of the sidebar — except while
-        // a chat of theirs is blocked on a question (the poll consumes the
+        // a session of theirs is blocked on a question (the poll consumes the
         // hide when that happens), and except while searching, which is how a
         // hidden row is found again so its menu can restore it.
         #if os(iOS)
@@ -878,10 +878,10 @@ struct SessionsListView: View {
                     composerDrafts[id] = draft.isEmpty ? nil : draft
                 },
                 onNewSession: {
-                    // The chat's ⋯ → "New chat in this workspace": a sibling
+                    // The session's ⋯ → "New session in this workspace": a sibling
                     // tab, not a standalone session. The workspace id comes from
                     // the latest polled copy — the row NavigationPath retained
-                    // predates a workspace this chat may have joined since.
+                    // predates a workspace this session may have joined since.
                     let current = viewModel.sessions.first { $0.id == session.id }
                     newSessionRequest = NewSessionRequest(
                         repo: session.effectiveRepo,
@@ -918,7 +918,7 @@ struct SessionsListView: View {
         SessionRow(
             session: workspace.statusSession,
             title: workspace.title,
-            chats: workspace.sessions,
+            sessions: workspace.sessions,
             onArchive: canArchive ? { archive(workspace) } : nil
         )
         .tag(session.id)
@@ -931,7 +931,7 @@ struct SessionsListView: View {
             SessionRow(
                 session: workspace.statusSession,
                 title: workspace.title,
-                chats: workspace.sessions
+                sessions: workspace.sessions
             )
         }
         .buttonStyle(.plain)
@@ -1002,7 +1002,7 @@ struct SessionsListView: View {
         if !workspace.isOptimistic {
             Divider()
             // Hiding is the personal counterpart to archiving: the row leaves
-            // YOUR sidebar (here and in the web one) while the chat keeps
+            // YOUR sidebar (here and in the web one) while the session keeps
             // running for everyone else — so it isn't destructive-styled.
             if HideStore.shared.isHidden(workspace) {
                 Button {
@@ -1031,8 +1031,8 @@ struct SessionsListView: View {
         }
     }
 
-    /// The sidebar row a pushed chat belongs to, so the chat's own overflow
-    /// menu can act on the whole worktree. Resolved ids first: a chat pushed
+    /// The sidebar row a pushed session belongs to, so the session's own overflow
+    /// menu can act on the whole worktree. Resolved ids first: a session pushed
     /// while it was still optimistic keeps its temp id in the stack.
     private func workspace(containing session: Session) -> SidebarWorkspace? {
         let id = resolvedSessionIds[session.id] ?? session.id
@@ -1067,7 +1067,7 @@ struct SessionsListView: View {
                 // to the glyph alone in a short swipe), and a custom view is
                 // rendered as its text only — which is why the archive glyph
                 // never appeared. `archivebox` is the metaphor the overflow
-                // menus here and in the chat already use.
+                // menus here and in the session already use.
                 Label("Archive", systemImage: "archivebox.fill")
             }
             // Red, matching the web sidebar's own swipe action at phone width
@@ -1539,10 +1539,10 @@ extension Session.Lane {
 struct SessionRow: View {
     let session: Session
     var title: String? = nil
-    /// Every chat the row stands for. Unread emphasis is per ROW, like the web
-    /// sidebar's `.sidebar-item-unread`: one chat with activity past your read
+    /// Every session the row stands for. Unread emphasis is per ROW, like the web
+    /// sidebar's `.sidebar-item-unread`: one session with activity past your read
     /// mark bolds the whole workspace. Empty falls back to `session` alone.
-    var chats: [Session] = []
+    var sessions: [Session] = []
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mac: hover-revealed archive button (nil hides it).
     var onArchive: (() -> Void)? = nil
@@ -1627,7 +1627,7 @@ struct SessionRow: View {
     /// `@Observable`, so a mark landing invalidates the rows that read it
     /// instead of the whole list body.
     private var unread: Bool {
-        ReadsStore.shared.isUnread(chats.isEmpty ? [session] : chats)
+        ReadsStore.shared.isUnread(sessions.isEmpty ? [session] : sessions)
     }
 
     private var markSize: CGFloat {

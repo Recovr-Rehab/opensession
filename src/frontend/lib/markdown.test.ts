@@ -97,9 +97,9 @@ describe("renderMarkdown session links", () => {
     expect(html).not.toContain("target=");
   });
 
-  it("labels a pasted (auto-linked) chat URL with just the session id", () => {
+  it("labels a pasted (auto-linked) session URL with just the session id", () => {
     const url =
-      "http://127.0.0.1:3850/workspace/ws-28712580-a369-4d58-996b-f8c23e523ed1/chat/bks-019f9608-ab20-7000-b98e-4de52d5fe436";
+      "http://127.0.0.1:3850/workspace/ws-28712580-a369-4d58-996b-f8c23e523ed1/session/bks-019f9608-ab20-7000-b98e-4de52d5fe436";
     const html = renderMarkdown(`${url} shows no right sidebar.`);
     expect(html).toContain(
       'data-session-id="bks-019f9608-ab20-7000-b98e-4de52d5fe436"',

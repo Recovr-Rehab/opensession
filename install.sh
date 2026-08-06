@@ -99,7 +99,7 @@ if [ "$DO_UNINSTALL" = "1" ]; then
   muted "  $DIR            the checkout"
   muted "  $OPENSESSION_HOME/config.json   your configuration"
   muted "  $HOME/.opensession.env          your secrets"
-  muted "  $HOME/.opensession-chats        your sessions"
+  muted "  $HOME/.opensession-sessions     your sessions"
   # Tailscale is a system daemon that may now be carrying your SSH access.
   # Removing it as a side effect of uninstalling Open Session would be hostile.
   if command -v tailscale >/dev/null 2>&1; then

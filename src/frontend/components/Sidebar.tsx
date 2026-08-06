@@ -66,11 +66,10 @@ import {
 	markUnread,
 	onReadsChanged,
 } from "../lib/reads";
-import { isNoteUnread, onNoteReadsChanged } from "../lib/note-reads";
 import { usePeople } from "../lib/people";
 import { TeamPresencePopover, useTeamPresence } from "./TeamPresence";
 import { Button } from "../ui/button";
-import { chatPath, absoluteLink, copyToClipboard } from "../lib/share-link";
+import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { providerFromUrl } from "../lib/provider";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
 import { getWsTimePref, onWsTimeChanged } from "../lib/workspace-time";
@@ -159,7 +158,7 @@ import {
 const AUTOMATION_COLOR = "#d29922";
 
 // Archive the active workspace. The viewer's ⌘E/⌘⇧A archives just the open
-// chat and bails on Alt, so the Alt-carrying escalation here never
+// session and bails on Alt, so the Alt-carrying escalation here never
 // double-fires it.
 const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 const isChromium = /Chrome|Chromium|CriOS|Edg|OPR/.test(navigator.userAgent);
@@ -176,7 +175,7 @@ const ARCHIVE_SHORTCUT_KEYS = isChromium
 		: ["Ctrl", "E"];
 const PIN_SHORTCUT_KEYS = isApple ? ["⌘", "P"] : ["Ctrl", "P"];
 
-/** ⌘E (primary) or ⌘⇧A (legacy) — the archive-this-chat chord. */
+/** ⌘E (primary) or ⌘⇧A (legacy) — the archive-this-session chord. */
 function isArchiveChord(e: KeyboardEvent): boolean {
 	if (!(e.metaKey || e.ctrlKey) || e.altKey) return false;
 	const k = e.key.toLowerCase();
@@ -810,7 +809,7 @@ interface Props {
 	cloudUnreachable: boolean;
 	/** Initial sessions + project metadata have loaded, so dependent queues can render. */
 	workspaceDataReady: boolean;
-	/** Workspace folders that group chats. */
+	/** Workspace folders that group sessions. */
 	workspaces: Workspace[];
 	/** Notes (id + title), to render pinned-note rows. */
 	notes: Array<{ id: string; title: string }>;
@@ -836,7 +835,7 @@ interface Props {
 	onOpenAutomation: (name: string) => void;
 	/** Open a PR row's workspace (resolve-or-create, Review tab default). */
 	onOpenPrItem: (item: ReviewQueueItem) => void;
-	/** The open workspace id (route or the open chat's), for row selection. */
+	/** The open workspace id (route or the open session's), for row selection. */
 	selectedWorkspaceId?: string | null;
 	/** True while the PR Tinder deck is open — highlights its entry. */
 	prTinderActive: boolean;
@@ -858,10 +857,8 @@ interface Props {
 	deskActive: boolean;
 	/** Summon the Desk overlay (the ⌘J concierge session). */
 	onOpenDesk: () => void;
-	/** Latest team note per session (unread-note dots on workspace rows). */
-	noteActivity?: Record<string, { lastTs: number; lastUser: string }>;
 	onSelect: (session: UnifiedSession) => void;
-	/** Foreground a session's Review view-tab (from a chat row's context menu). */
+	/** Foreground a session's Review view-tab (from a session row's context menu). */
 	onOpenReview: (session: UnifiedSession) => void;
 	/** Open a Support ticket's workspace (resolve-or-create, Conversation tab). */
 	onOpenTicket: (t: SupportThread) => void;
@@ -870,11 +867,11 @@ interface Props {
 	onNewSession: () => void;
 	/** Start a new session with a repo pre-selected (the repo-band "+" action). */
 	onNewSessionInRepo: (repo: string) => void;
-	/** Open a project — its chats surface in the top tab strip. */
+	/** Open a project — its sessions surface in the top tab strip. */
 	onOpenWorkspace: (id: string) => void;
 	/** Rename a project folder. */
 	onRenameWorkspace: (id: string, name: string) => void;
-	/** Delete a project folder (its chats become standalone). */
+	/** Delete a project folder (its sessions become standalone). */
 	onDeleteWorkspace: (id: string) => void;
 	/** Open a note (pinned-note row click). */
 	onOpenNote: (id: string) => void;
@@ -892,28 +889,28 @@ interface Props {
 	 */
 	onArchive: (session: UnifiedSession, next: UnifiedSession | null) => void;
 	/**
-	 * Archive every chat in a workspace (the row's archive icon). `next` is the
-	 * first chat of the workspace row that follows it in the sidebar's visible
+	 * Archive every session in a workspace (the row's archive icon). `next` is the
+	 * first session of the workspace row that follows it in the sidebar's visible
 	 * order (or the previous one for the last row) — the caller opens it when
 	 * the active workspace is archived away.
 	 */
 	onArchiveWorkspace: (
-		chats: UnifiedSession[],
+		sessions: UnifiedSession[],
 		next: UnifiedSession | null,
 	) => void;
 	/**
-	 * Bring every chat of an archived row back (the Archived band's unarchive
+	 * Bring every session of an archived row back (the Archived band's unarchive
 	 * icon) — the exact inverse of `onArchiveWorkspace`, minus the "what opens
 	 * next" dance: nothing is closing, so nothing needs replacing.
 	 */
-	onUnarchiveWorkspace: (chats: UnifiedSession[]) => void;
+	onUnarchiveWorkspace: (sessions: UnifiedSession[]) => void;
 	/** Rename a session (double-click its title); empty title resets it. */
 	onRename: (session: UnifiedSession, title: string) => void;
 	/**
-	 * Pin a workspace's chats into a sidebar lane (or clear back to derived with
-	 * `null`). Applies to every chat in the row so the aggregated row lands there.
+	 * Pin a workspace's sessions into a sidebar lane (or clear back to derived with
+	 * `null`). Applies to every session in the row so the aggregated row lands there.
 	 */
-	onSetStatus: (chats: UnifiedSession[], status: LaneChoice | null) => void;
+	onSetStatus: (sessions: UnifiedSession[], status: LaneChoice | null) => void;
 	/** Who's viewing what right now (global presence), for live People rows. */
 	teamViewing?: Array<{ user: string; sessionId: string }>;
 	/**
@@ -933,10 +930,13 @@ export interface SidebarHandle {
 // Groups are rendered in three visually separated bands (spacing between each):
 //   "personal"    — My sessions (split by status), Pinned
 //   "people"      — one group per other teammate (+ ownerless source groups)
-//   "automations" — one group per automation ("projects")
+//   "automations" — one group per automation
+// Distinct from the *project* bands below (renderRepoGroups + the feed bands):
+// a project is a source of work — a repo or a feed like Plain — and the rows
+// inside it are workspaces. See CONCEPTS.md.
 type GroupBand = "personal" | "people" | "automations";
 
-// The bands below the personal one get a text header ("People" / "Projects").
+// The bands below the personal one get a text header ("People" / "Automations").
 function bandLabel(band: GroupBand): string | null {
 	if (band === "people") return "People";
 	if (band === "automations") return "Automations";
@@ -980,7 +980,7 @@ const MINE_STATUS_META: Array<{
 	{ key: "merged", label: "Done", dotColor: "var(--purple)" },
 ];
 
-// ── Right-click context menu (workspace / chat / PR rows) ──────────────────
+// ── Right-click context menu (workspace / session / PR rows) ──────────────────
 // A single presentational menu shared by every sidebar row that has one. Rows
 // pass a flat list of entries; a `status` entry renders the "Set status" row
 // with a hover flyout (the sub-panel is a sibling of the menu, not a child, so
@@ -1339,7 +1339,7 @@ function runNeedsAttention(s: UnifiedSession): boolean {
 	return !!s.lastRunError && !s.isRunning;
 }
 
-// Whether this session lives in YOUR sidebar lanes. Your own chats always do;
+// Whether this session lives in YOUR sidebar lanes. Your own sessions always do;
 // automation runs and teammates' workspaces only once you claim them (the
 // lane entry is the claim — see lib/lanes.ts).
 function isClaimed(s: UnifiedSession): boolean {
@@ -1388,14 +1388,14 @@ function mineStatus(s: UnifiedSession): MineStatus {
 // the review has landed, so the row leaves the sidebar until another review is
 // requested. Without this a session you sent out sits in "Awaiting review"
 // forever, since the band otherwise only clears on a manual accept.
-// A chat that shipped one feature as several PRs has only landed once they all
+// A session that shipped one feature as several PRs has only landed once they all
 // have: keying off the primary branch's PR alone drops the row into Done with
-// three PRs still open. Single-PR chats keep the exact old behaviour.
-function wsPrMerged(r: { chats: UnifiedSession[] }): boolean {
-	return r.chats.some(sessionPrMerged);
+// three PRs still open. Single-PR sessions keep the exact old behaviour.
+function wsPrMerged(r: { sessions: UnifiedSession[] }): boolean {
+	return r.sessions.some(sessionPrMerged);
 }
-function wsPrApproved(r: { chats: UnifiedSession[] }): boolean {
-	return !wsPrMerged(r) && r.chats.some(sessionPrApproved);
+function wsPrApproved(r: { sessions: UnifiedSession[] }): boolean {
+	return !wsPrMerged(r) && r.sessions.some(sessionPrApproved);
 }
 // Has `person` (lowercase person key) already given their review on the row's
 // PR? Their latest submitted review counts whatever the outcome — approve,
@@ -1404,14 +1404,14 @@ function wsPrApproved(r: { chats: UnifiedSession[] }): boolean {
 // requested-reviewers behavior. Keeps "Needs review" honest when the reviewer
 // reviewed on GitHub instead of clicking "Mark as reviewed".
 function wsPrReviewGivenBy(
-	r: { chats: UnifiedSession[] },
+	r: { sessions: UnifiedSession[] },
 	person: string,
 ): boolean {
 	const has = (list?: string[]) =>
 		(list || []).some((p) => p.toLowerCase() === person);
 	return (
-		r.chats.some((c) => has(c.prReviewedBy)) &&
-		!r.chats.some((c) => has(c.prReviewRequested))
+		r.sessions.some((c) => has(c.prReviewedBy)) &&
+		!r.sessions.some((c) => has(c.prReviewRequested))
 	);
 }
 
@@ -1421,14 +1421,14 @@ function wsPrReviewGivenBy(
 // checks, changes requested, drafts, awaiting review — stays in Backlog with
 // the red/yellow PR glyph carrying the problem, so In progress keeps meaning
 // "a run is live". Returns null to leave the derived lane alone.
-function prLaneForChats(chats: UnifiedSession[]): MineStatus | null {
-	const chat = frontingPrChat(chats);
-	if (!chat || chat.prState !== "OPEN" || chat.prIsDraft) return null;
-	const checks = chat.prChecks;
+function prLaneForSessions(sessions: UnifiedSession[]): MineStatus | null {
+	const session = frontingPrSession(sessions);
+	if (!session || session.prState !== "OPEN" || session.prIsDraft) return null;
+	const checks = session.prChecks;
 	const ready =
 		(!checks || checks.total === 0 || (checks.failed === 0 && checks.pending === 0)) &&
-		chat.prMergeable !== "CONFLICTING" &&
-		chat.prReviewDecision !== "CHANGES_REQUESTED";
+		session.prMergeable !== "CONFLICTING" &&
+		session.prReviewDecision !== "CHANGES_REQUESTED";
 	return ready ? "review" : null;
 }
 
@@ -1537,16 +1537,16 @@ function readFilter(): FilterState {
 }
 
 function sessionRepo(s: UnifiedSession): string {
-	// Repo-less feed/scratch chats file under their feed's kind so they
+	// Repo-less feed/scratch sessions file under their feed's kind so they
 	// don't mislabel as the default repo (the feeds design).
 	return s.repo || s.externalRefs?.[0]?.kind || DEFAULT_PROJECT;
 }
 
-// Every `repo\nbranch` key a chat's work can be reached by: its own checkout
-// plus each PR / attached-repo / linked-PR ref it carries. Matching chats to
+// Every `repo\nbranch` key a session's work can be reached by: its own checkout
+// plus each PR / attached-repo / linked-PR ref it carries. Matching sessions to
 // the open-PR list runs through this, so the PR-row dedupe and the live-review
 // lookup below can't drift apart.
-function chatPrKeys(c: UnifiedSession): string[] {
+function sessionPrKeys(c: UnifiedSession): string[] {
 	const keys = c.branch ? [`${sessionRepo(c)}\n${c.branch}`] : [];
 	for (const ref of [
 		...(c.prs || []),
@@ -1587,7 +1587,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenAnalytics,
 	deskActive,
 	onOpenDesk,
-	noteActivity = {},
 	onSelect,
 	onOpenReview,
 	onOpenTicket,
@@ -1695,7 +1694,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	);
 	// Per-user sidebar hides (row key → ISO hidden-at). The personal
 	// counterpart to Archive, which is global: a hidden row leaves only THIS
-	// user's sidebar, and the chat keeps running for everyone else.
+	// user's sidebar, and the session keeps running for everyone else.
 	const [hides, setHidesState] = useState<Record<string, string>>(getHides);
 	// Drag-to-reorder in the Pinned band. onReorder fires continuously during a
 	// drag, so the in-flight order lives in local state (pinOrderDraft) and only
@@ -1708,12 +1707,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const pinJustDragged = useRef(false);
 	// Drag-into-lane: while a Pinned row is mid-drag, the status lanes below
 	// double as drop targets (per-repo lanes only for the row's own repo).
-	// pinDragMeta carries the dragged entry's chats/repo/pin keys; laneDropHover
+	// pinDragMeta carries the dragged entry's sessions/repo/pin keys; laneDropHover
 	// marks the lane under the pointer. Both keep a ref twin so the drag-end
 	// commit never reads a stale closure mid-batch.
 	type PinDragMeta = {
 		repo: string | null;
-		chats: UnifiedSession[];
+		sessions: UnifiedSession[];
 		pinKeys: string[];
 	};
 	type LaneDropTarget = { gkey: string; lane: MineStatus };
@@ -1731,7 +1730,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	function updateLaneDropHover(clientX: number, clientY: number) {
 		const meta = pinDragMetaRef.current;
 		let next: LaneDropTarget | null = null;
-		if (meta && meta.chats.length > 0) {
+		if (meta && meta.sessions.length > 0) {
 			const targets =
 				sidebarScrollRef.current?.querySelectorAll<HTMLElement>(
 					"[data-lane-drop]",
@@ -1765,7 +1764,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// same event the viewer fires when it marks a session read.
 	const [reads, setReads] = useState(getReads);
 	const currentUser = useCurrentUser();
-	const meUser = currentUser;
 	// Team directory (GET /api/people) — the always-on People band roster.
 	const roster = usePeople();
 	// The same roster with live status attached, for the Home entry's face pile.
@@ -1778,7 +1776,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			{ id: string; title: string; last: string; running: boolean }
 		>();
 		for (const s of sessions) {
-			if (s.archived || s.sideChatOf || s.automation) continue;
+			if (s.archived || s.automation) continue;
 			const key = (s.startedBy || "").toLowerCase();
 			if (!key) continue;
 			const cur = m.get(key);
@@ -1796,13 +1794,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		}
 		return m;
 	}, [sessions]);
-	// Note-read stamps live in localStorage; bump to recompute the rows when
-	// the viewer marks a session's notes read.
-	const [noteReadsRev, setNoteReadsRev] = useState(0);
-	useEffect(
-		() => onNoteReadsChanged(() => setNoteReadsRev((r) => r + 1)),
-		[],
-	);
 	useEffect(
 		() => onSidebarToolsChanged(() => setHiddenTools(readHiddenSidebarTools())),
 		[],
@@ -1968,25 +1959,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		}
 		setEditingWorkspaceId(null);
 	}
-	// Inline rename for workspace-less rows (slack/linear/solo chats). These
+	// Inline rename for workspace-less rows (slack/linear/solo sessions). These
 	// used window.prompt(), which iOS standalone PWAs silently suppress —
 	// Rename tapped, nothing happened. Same inline editor as workspace rows;
 	// an empty commit clears the manual title back to the derived one.
-	const [editingChatId, setEditingChatId] = useState<string | null>(null);
-	const [chatDraft, setChatDraft] = useState("");
-	function startChatRename(chat: { id: string; title: string }) {
-		setChatDraft(chat.title);
-		setEditingChatId(chat.id);
+	const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+	const [sessionDraft, setSessionDraft] = useState("");
+	function startSessionRename(session: { id: string; title: string }) {
+		setSessionDraft(session.title);
+		setEditingSessionId(session.id);
 	}
-	function commitChatRename(chat: UnifiedSession) {
-		if (editingChatId) onRename(chat, chatDraft.trim());
-		setEditingChatId(null);
+	function commitSessionRename(session: UnifiedSession) {
+		if (editingSessionId) onRename(session, sessionDraft.trim());
+		setEditingSessionId(null);
 	}
-	/** Is this row's title currently being inline-edited (workspace or chat)? */
+	/** Is this row's title currently being inline-edited (workspace or session)? */
 	function rowRenameEditing(row: WsRow): boolean {
 		return row.workspace
 			? editingWorkspaceId === row.workspace.id
-			: !!row.chats[0] && editingChatId === row.chats[0].id;
+			: !!row.sessions[0] && editingSessionId === row.sessions[0].id;
 	}
 	useEffect(() => {
 		if (!workspaceMenu) return;
@@ -2023,7 +2014,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			if (s.archived || s.automation) continue;
 			if (!s.startedBy || s.startedBy.toLowerCase() !== user) continue;
 			if (!isUnread(s.id, s.lastActivity, reads)) continue;
-			groups.add(s.workspaceId ? `ws:${s.workspaceId}` : `chat:${s.id}`);
+			groups.add(s.workspaceId ? `ws:${s.workspaceId}` : `session:${s.id}`);
 		}
 		return groups.size;
 	}, [sessions, currentUser, reads]);
@@ -2270,14 +2261,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			.map(([key, { label }]) => ({ key, label }));
 	}, [sessions, openPrs]);
 
-	// Every non-archived chat, narrowed by the repo/person filters and search.
-	// Rows are built per-workspace below; a chat matching the filter surfaces its
+	// Every non-archived session, narrowed by the repo/person filters and search.
+	// Rows are built per-workspace below; a session matching the filter surfaces its
 	// whole workspace row.
 	const filtered = useMemo(() => {
 		let visible = sessions.filter((s) => !s.archived);
 		if (filter.repo !== "all") {
-			// A workspace can span repos, and a chat's own repo is just the
-			// checkout it runs from — so a chat also matches when its workspace
+			// A workspace can span repos, and a session's own repo is just the
+			// checkout it runs from — so a session also matches when its workspace
 			// is the filtered repo. Without this, narrowing to a repo hides the
 			// very workspaces that belong to it.
 			const wsRepo = new Map(workspaces.map((p) => [p.id, p.repo]));
@@ -2287,9 +2278,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					(!!s.workspaceId && wsRepo.get(s.workspaceId) === filter.repo),
 			);
 		}
-		// Only a specific teammate narrows the chats themselves. "me" and
-		// "everyone" keep every chat so workspace rows stay whole (your
-		// workspaces can contain teammates' chats, and pinned rows survive) —
+		// Only a specific teammate narrows the sessions themselves. "me" and
+		// "everyone" keep every session so workspace rows stay whole (your
+		// workspaces can contain teammates' sessions, and pinned rows survive) —
 		// the owner lens is applied per-row in focusWsRows instead.
 		if (
 			filter.person !== "me" &&
@@ -2324,8 +2315,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// PRs with an automated Open Session review in flight, keyed `repo\nbranch`
 	// — the same signal the PR rows spell out as "Review running". The review
-	// itself runs in a `bks-ghpr-*` chat that lives in the Automations band, so
-	// the workspace lanes below can't see it in their own chats.
+	// itself runs in a `bks-ghpr-*` session that lives in the Automations band, so
+	// the workspace lanes below can't see it in their own sessions.
 	const activeReviewPrKeys = useMemo(() => {
 		const keys = new Set<string>();
 		for (const pr of openPrs || [])
@@ -2334,23 +2325,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	}, [openPrs]);
 
 	// ── Workspace rows ──────────────────────────────────────────────────────
-	// The sidebar's main list is Workspaces (not individual chats): one row per
-	// workspace, plus one implicit row per not-yet-wrapped standalone chat (the
+	// The sidebar's main list is Workspaces (not individual sessions): one row per
+	// workspace, plus one implicit row per not-yet-wrapped standalone session (the
 	// pre-migration case — the data migration wraps those 1:1). A row's status
-	// dot is derived from its most urgent chat; clicking opens the first chat.
+	// dot is derived from its most urgent session; clicking opens the first session.
 	interface WsRow {
-		/** Pin/menu key: `workspace:<id>` for real workspaces, the chat id solo. */
+		/** Pin/menu key: `workspace:<id>` for real workspaces, the session id solo. */
 		key: string;
-		/** Real workspace record, or null for an implicit single-chat row. */
+		/** Real workspace record, or null for an implicit single-session row. */
 		workspace: Workspace | null;
 		name: string;
-		chats: UnifiedSession[]; // createdAt asc — chats[0] is "the first chat"
+		sessions: UnifiedSession[]; // createdAt asc — sessions[0] is "the first session"
 		status: MineStatus;
 		lastActivity: string;
 		createdAt: string;
 		unread: boolean;
 		running: boolean;
-		/** Lowercased owner (workspace creator, else the first chat's starter). */
+		/** Lowercased owner (workspace creator, else the first session's starter). */
 		owner: string;
 	}
 
@@ -2379,7 +2370,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// Lanes are per-user, so a claimed run moves only for the user who
 			// claimed it (legacy global overrides still count for all).
 			if (s.automation && !isClaimed(s)) continue;
-			if (s.sideChatOf) continue; // side chats live in the parent's panel, not the sidebar
 			if (s.desk) continue; // the Desk session lives in the ⌘J overlay, not the sidebar
 			if (s.workspaceId) {
 				const list = byWs.get(s.workspaceId) || [];
@@ -2391,22 +2381,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			key: string,
 			workspace: Workspace | null,
 			name: string,
-			chats: UnifiedSession[],
+			sessions: UnifiedSession[],
 		): WsRow => {
-			chats.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
-			// Spawned workers are implementation details of their parent chat. A failed
+			sessions.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+			// Spawned workers are implementation details of their parent session. A failed
 			// oracle/task must not leave the whole workspace looking blocked after the
 			// parent recovered, but live workers still make the workspace actively busy.
 			// Fall back for an unusual child-only workspace.
-			const stateChats = chats.filter((c) => !c.parentSessionId);
-			const statusSources = stateChats.length > 0 ? stateChats : chats;
-			const workerRunning = chats.some((c) => c.parentSessionId && c.isRunning);
-			// Automated PR reviews run in a separate bks-ghpr-* automation chat,
-			// so the workspace's own chats never carry isRunning for that work.
+			const stateSessions = sessions.filter((c) => !c.parentSessionId);
+			const statusSources = stateSessions.length > 0 ? stateSessions : sessions;
+			const workerRunning = sessions.some((c) => c.parentSessionId && c.isRunning);
+			// Automated PR reviews run in a separate bks-ghpr-* automation session,
+			// so the workspace's own sessions never carry isRunning for that work.
 			// The PR feed is the authoritative live signal for both its lane and
 			// its leading spinner.
-			const reviewRunning = chats.some((c) =>
-				chatPrKeys(c).some((k) => activeReviewPrKeys.has(k)),
+			const reviewRunning = sessions.some((c) =>
+				sessionPrKeys(c).some((k) => activeReviewPrKeys.has(k)),
 			);
 			let status =
 				STATUS_PRIORITY.find((st) =>
@@ -2419,13 +2409,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			if (
 				workerRunning &&
 				status !== "needsinput" &&
-				!chats.some((c) => pinnedLane(c))
+				!sessions.some((c) => pinnedLane(c))
 			)
 				status = "inprogress";
 			// An idle row's lane follows its PR lifecycle (ready → Ready to
 			// merge, otherwise-open → In progress). A human-pinned lane wins —
 			// deliberately parking a row in Backlog must stick.
-			if (status === "pending" && !chats.some((c) => pinnedLane(c))) {
+			if (status === "pending" && !sessions.some((c) => pinnedLane(c))) {
 				// …unless an automated review is still running. The row already
 				// wears the spinner for it (see `running` below), and a spinning
 				// row parked outside In progress reads as a contradiction. The
@@ -2435,54 +2425,43 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// has already merged.
 				status = reviewRunning
 					? "inprogress"
-					: (prLaneForChats(statusSources) ?? status);
+					: (prLaneForSessions(statusSources) ?? status);
 			}
 			return {
 				key,
 				workspace,
 				name,
-				chats,
+				sessions,
 				status,
-				lastActivity: chats.reduce(
+				lastActivity: sessions.reduce(
 					(m, c) => (c.lastActivity > m ? c.lastActivity : m),
 					"",
 				),
-				createdAt: chats[0]?.createdAt || "",
-				unread:
-					chats.some(
-						(c) =>
-							c.id !== selectedId && isUnread(c.id, c.lastActivity, reads),
-					) ||
-					// Unread team notes (transcript NoteBubbles) light the row too.
-					chats.some((c) => {
-						const a = noteActivity[c.id];
-						return (
-							!!a &&
-							c.id !== selectedId &&
-							isNoteUnread(c.id, a.lastTs, a.lastUser, meUser)
-						);
-					}),
-				running: chats.some((c) => c.isRunning) || reviewRunning,
-				owner: (workspace?.createdBy || chats[0]?.startedBy || "").toLowerCase(),
+				createdAt: sessions[0]?.createdAt || "",
+				unread: sessions.some(
+					(c) => c.id !== selectedId && isUnread(c.id, c.lastActivity, reads),
+				),
+				running: sessions.some((c) => c.isRunning) || reviewRunning,
+				owner: (workspace?.createdBy || sessions[0]?.startedBy || "").toLowerCase(),
 			};
 		};
-		for (const [wsId, chats] of byWs) {
+		for (const [wsId, sessions] of byWs) {
 			const ws = workspaces.find((p) => p.id === wsId) || null;
 			rows.push(
-				mkRow(`workspace:${wsId}`, ws, ws?.name || chats[0].title, chats),
+				mkRow(`workspace:${wsId}`, ws, ws?.name || sessions[0].title, sessions),
 			);
 		}
-		// A workspace with no chats gets NO row. Workspaces are minted with their
-		// first chat (or by the PR/ticket resolvers, which park them under Pull
-		// requests / Support until a chat joins), so a chatless one is a leftover —
-		// its chats were archived or deleted — not a place to start work.
+		// A workspace with no sessions gets NO row. Workspaces are minted with their
+		// first session (or by the PR/ticket resolvers, which park them under Pull
+		// requests / Support until a session joins), so a sessionless one is a leftover —
+		// its sessions were archived or deleted — not a place to start work.
 		//
-		// Automation runs are the one chat kind that lives outside a workspace: a
+		// Automation runs are the one session kind that lives outside a workspace: a
 		// workspace per run would bury every real one, so they render in the
 		// Automations band instead. A *claimed* run is pulled into this list, and
 		// groups by shared isolated worktree — the SAME rule the tab strip uses —
-		// so the sidebar and tabs agree on what belongs together. Every other chat
-		// carries a workspace (server-side invariant: see chat-workspace.ts), so
+		// so the sidebar and tabs agree on what belongs together. Every other session
+		// carries a workspace (server-side invariant: see session-workspace.ts), so
 		// these fallback rows stay empty in practice.
 		const byWorktree = new Map<string, UnifiedSession[]>();
 		const loose: UnifiedSession[] = [];
@@ -2493,19 +2472,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				byWorktree.set(s.worktreeDir, list);
 			} else loose.push(s);
 		}
-		for (const [dir, chats] of byWorktree) {
-			chats.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
-			// The branch is the row's stable name (chat titles drift as generated
+		for (const [dir, sessions] of byWorktree) {
+			sessions.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+			// The branch is the row's stable name (session titles drift as generated
 			// titles land; the branch names the shared piece of work). A manual
 			// rename is explicit user intent though — it wins over the branch,
 			// otherwise renaming a slack/linear session looks like a no-op.
-			const renamed = chats.find((c) => c.titleOverridden);
+			const renamed = sessions.find((c) => c.titleOverridden);
 			rows.push(
 				mkRow(
 					`wt:${dir}`,
 					null,
-					renamed?.title || chats[0].branch || chats[0].title,
-					chats,
+					renamed?.title || sessions[0].branch || sessions[0].title,
+					sessions,
 				),
 			);
 		}
@@ -2514,33 +2493,33 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		rows.sort((a, b) => (b[key] || "").localeCompare(a[key] || ""));
 		return rows;
 		// `lanes` feeds mineStatus/pinnedLane (read via the lib cache).
-	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, noteActivity, noteReadsRev, activeReviewPrKeys]);
+	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys]);
 
 	// ── Hidden rows ─────────────────────────────────────────────────────────
 	// "Hide from my sidebar" is the personal counterpart to Archive: archiving
 	// is global (archive.ts), so it's the wrong tool when a teammate is still
-	// working in the chat. A hide drops the row from THIS user's sidebar only,
+	// working in the session. A hide drops the row from THIS user's sidebar only,
 	// and every band below derives from `wsRows` — so hiding removes it from
 	// pins, lanes, review and snoozed in one go.
 	//
-	// The one exception: a hidden row resurfaces while any of its chats is
+	// The one exception: a hidden row resurfaces while any of its sessions is
 	// blocked on a question, so a hide can never swallow work waiting on you.
 	// Resurfacing consumes the entry (see the sweep below), which keeps the
 	// rule "it came back because it needed me, and stays back until I hide it
 	// again" instead of flickering as questions get asked and answered.
 	//
-	// Otherwise you get a hidden row back by opening one of its chats — ⌘K
+	// Otherwise you get a hidden row back by opening one of its sessions — ⌘K
 	// still finds it — which resurfaces the row (below) so its menu can offer
 	// "Restore to my sidebar"; prompting in it clears the hide outright
-	// (SessionViewer → unhideForChat). There is no Hidden band: hiding is
+	// (SessionViewer → unhideForSession). There is no Hidden band: hiding is
 	// removal from your sidebar, not a folder to browse.
 	const { hiddenKeys: hiddenRowKeys, resurfaced: resurfacedRows } = useMemo(
 		() => partitionHidden(allWsRows, hides),
 		[allWsRows, hides],
 	);
-	// The open chat's row always shows, hidden or not — the same rule that keeps
+	// The open session's row always shows, hidden or not — the same rule that keeps
 	// it from disappearing inside a collapsed band. It's what makes hiding
-	// reversible without a Hidden band to browse: ⌘K finds a hidden chat (the
+	// reversible without a Hidden band to browse: ⌘K finds a hidden session (the
 	// palette ignores hides), opening it brings its row back, and the row menu
 	// then offers "Restore to my sidebar".
 	const wsRows = useMemo(
@@ -2548,17 +2527,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			allWsRows.filter(
 				(r) =>
 					!hiddenRowKeys.has(r.key) ||
-					r.chats.some((c) => c.id === selectedId),
+					r.sessions.some((c) => c.id === selectedId),
 			),
 		[allWsRows, hiddenRowKeys, selectedId],
 	);
 	// Consume the hide of any row that just resurfaced (blocked on a question),
-	// marking its chats unread so the return reads as fresh activity — the same
+	// marking its sessions unread so the return reads as fresh activity — the same
 	// shape as the snooze wake above. Idempotent: clearHides ignores keys that
 	// another tab already dropped.
 	useEffect(() => {
 		if (!resurfacedRows.length) return;
-		for (const r of resurfacedRows) r.chats.forEach((c) => markUnread(c.id));
+		for (const r of resurfacedRows) r.sessions.forEach((c) => markUnread(c.id));
 		clearHides(resurfacedRows.map((r) => r.key));
 	}, [resurfacedRows]);
 
@@ -2630,7 +2609,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const keys = [
 			pinKey,
 			row.key,
-			...row.chats.flatMap((c) => [c.id, ...(c.aliasIds || [])]),
+			...row.sessions.flatMap((c) => [c.id, ...(c.aliasIds || [])]),
 		].filter((k, i, a) => pins.includes(k) && a.indexOf(k) === i);
 		const pinned = keys.length > 0;
 		const toggle = () => {
@@ -2645,7 +2624,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return { pinned, toggle };
 	}
 
-	// Pinned rows (pinned via their own key or a legacy pin on a member chat)
+	// Pinned rows (pinned via their own key or a legacy pin on a member session)
 	// and the focus person's rows — shared by the list rendering below and by
 	// archive-next, so both always agree on what's actually in the sidebar.
 	// Rows a teammate flagged for YOUR review (the info panel's Reviewer picker).
@@ -2654,7 +2633,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// ── Snoozed rows ────────────────────────────────────────────────────────
 	// A row with an active snooze leaves every band (review, pinned, status
 	// lanes) and parks in the Snoozed section, soonest wake first. The sweep
-	// below prunes lapsed entries — marking the row's chats unread first, so
+	// below prunes lapsed entries — marking the row's sessions unread first, so
 	// the wake surfaces like fresh activity — which re-derives membership.
 	const activeSnoozeKeys = useMemo(() => {
 		const now = Date.now();
@@ -2682,7 +2661,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			for (const [key, until] of Object.entries(snoozes)) {
 				if (Date.parse(until) > now) continue;
 				const row = wsRows.find((r) => r.key === key);
-				row?.chats.forEach((c) => markUnread(c.id));
+				row?.sessions.forEach((c) => markUnread(c.id));
 				clearSnooze(key);
 			}
 		};
@@ -2697,7 +2676,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				!activeSnoozeKeys.has(r.key) &&
 				reviewRowMatchesPersonFilter(
 					r.owner,
-					r.chats.map((chat) => chat.reviewRequest),
+					r.sessions.map((session) => session.reviewRequest),
 					filter.person,
 					currentUser,
 				),
@@ -2712,7 +2691,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// You already reviewed the PR on GitHub (approve/changes/comment,
 				// no re-request since) → your part is done, so hide the row.
 				!wsPrReviewGivenBy(r, me) &&
-				r.chats.some(
+				r.sessions.some(
 					(c) =>
 						c.reviewRequest?.to?.toLowerCase() === me &&
 						!c.reviewRequest?.accepted,
@@ -2733,7 +2712,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				!needsKeys.has(r.key) &&
 				!wsPrMerged(r) &&
 				!wsPrApproved(r) &&
-				r.chats.some(
+				r.sessions.some(
 					(c) =>
 						c.reviewRequest?.by?.toLowerCase() === me &&
 						!c.reviewRequest?.accepted &&
@@ -2755,7 +2734,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const me = currentUser.toLowerCase();
 		return reviewScopeRows.filter((r) => {
 			if (wsPrMerged(r)) return false;
-			const mineRequest = r.chats.some((c) => {
+			const mineRequest = r.sessions.some((c) => {
 				const rq = c.reviewRequest;
 				return (
 					rq && (rq.by.toLowerCase() === me || rq.to.toLowerCase() === me)
@@ -2763,9 +2742,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			});
 			if (!mineRequest) return false;
 			return (
-				r.chats.some((c) => c.reviewRequest?.accepted) ||
+				r.sessions.some((c) => c.reviewRequest?.accepted) ||
 				wsPrApproved(r) ||
-				r.chats.some(
+				r.sessions.some(
 					(c) =>
 						c.reviewRequest &&
 						wsPrReviewGivenBy(r, c.reviewRequest.to.toLowerCase()),
@@ -2790,10 +2769,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const pinIdx = new Map(pins.map((p, i) => [p, i] as const));
 		// A row's slot in the band = its first matching key's position in the
 		// pins array (rows can be pinned via their workspace key or a legacy
-		// member-chat pin) — pins order is user-controlled (drag-to-reorder), so
+		// member-session pin) — pins order is user-controlled (drag-to-reorder), so
 		// it wins over wsRows' recency order.
 		const rowIdx = (r: WsRow) => {
-			const hits = [r.key, ...r.chats.map((c) => c.id)]
+			const hits = [r.key, ...r.sessions.map((c) => c.id)]
 				.map((k) => pinIdx.get(k))
 				.filter((i): i is number => i !== undefined);
 			return hits.length ? Math.min(...hits) : Infinity;
@@ -2803,7 +2782,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				(r) =>
 					!reviewBandKeys.has(r.key) &&
 					!activeSnoozeKeys.has(r.key) &&
-					(pinSet.has(r.key) || r.chats.some((c) => pinSet.has(c.id))),
+					(pinSet.has(r.key) || r.sessions.some((c) => pinSet.has(c.id))),
 			)
 			.sort((a, b) => rowIdx(a) - rowIdx(b));
 	}, [wsRows, pins, reviewBandKeys, activeSnoozeKeys]);
@@ -2841,14 +2820,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							// Ownership follows the people in the room, not whoever
 							// opened the door: a PR/ticket workspace is minted by an
 							// automation, so its creator is a bot even when the work
-							// inside is yours. Your own chat in it makes the row yours.
-							r.chats.some(
+							// inside is yours. Your own session in it makes the row yours.
+							r.sessions.some(
 								(c) =>
 									!c.automation &&
 									(c.startedBy || "").toLowerCase() === focus,
 							) ||
 							((r.owner === "" || focus === currentUser.toLowerCase()) &&
-								r.chats.some((c) => getLane(c.id))))) &&
+								r.sessions.some((c) => getLane(c.id))))) &&
 				!reviewBandKeys.has(r.key) &&
 				!activeSnoozeKeys.has(r.key) &&
 				// Idle feed workspaces stay out of the lanes (their feed row is
@@ -2890,7 +2869,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			...awaitingReviewRows,
 		];
 		for (const r of rowsInView)
-			for (const c of r.chats) for (const k of chatPrKeys(c)) covered.add(k);
+			for (const c of r.sessions) for (const k of sessionPrKeys(c)) covered.add(k);
 		return reviewQueueItems.filter((item) => {
 			if (covered.has(`${item.pr.repo}\n${item.pr.branch}`)) return false;
 			if (filter.repo !== "all" && item.pr.repo !== filter.repo)
@@ -3030,17 +3009,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		prRowItems.length === 0;
 
 	function archiveWorkspaceWithNext(row: WsRow) {
-		// Chatless rows can't be opened, so they're not "next" candidates.
-		const candidates = wsRowOrder.filter((r) => r.chats.length > 0);
+		// Sessionless rows can't be opened, so they're not "next" candidates.
+		const candidates = wsRowOrder.filter((r) => r.sessions.length > 0);
 		const idx = candidates.findIndex((r) => r.key === row.key);
 		const rest = candidates.filter((r) => r.key !== row.key);
 		const next =
 			idx >= 0 ? (rest[Math.min(idx, rest.length - 1)] ?? null) : (rest[0] ?? null);
-		onArchiveWorkspace(row.chats, next?.chats[0] ?? null);
+		onArchiveWorkspace(row.sessions, next?.sessions[0] ?? null);
 	}
 
 	/**
-	 * Hide a row from THIS user's sidebar, leaving the chats untouched for
+	 * Hide a row from THIS user's sidebar, leaving the sessions untouched for
 	 * everyone else (the point of the feature — see `hiddenRowKeys`). Drops the
 	 * row's pins and any snooze first: a pinned-but-hidden row would snap to the
 	 * top of Pinned the moment it resurfaced, and a snooze wake would resurface
@@ -3050,7 +3029,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	function hideRow(row: WsRow) {
 		const pinnedKeys = [
 			row.key,
-			...row.chats.flatMap((c) => [c.id, ...(c.aliasIds || [])]),
+			...row.sessions.flatMap((c) => [c.id, ...(c.aliasIds || [])]),
 		].filter((k, i, a) => pins.includes(k) && a.indexOf(k) === i);
 		if (pinnedKeys.length) {
 			let next = pins;
@@ -3058,57 +3037,57 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			setPins(next);
 		}
 		clearSnooze(row.key);
-		// Keep something open if the row being hidden owns the active chat.
-		if (row.chats.some((c) => c.id === selectedId)) {
-			const candidates = wsRowOrder.filter((r) => r.chats.length > 0);
+		// Keep something open if the row being hidden owns the active session.
+		if (row.sessions.some((c) => c.id === selectedId)) {
+			const candidates = wsRowOrder.filter((r) => r.sessions.length > 0);
 			const idx = candidates.findIndex((r) => r.key === row.key);
 			const rest = candidates.filter((r) => r.key !== row.key);
 			const next =
 				idx >= 0
 					? (rest[Math.min(idx, rest.length - 1)] ?? null)
 					: (rest[0] ?? null);
-			if (next) onSelect(next.chats[0]);
+			if (next) onSelect(next.sessions[0]);
 		}
 		setHide(row.key);
 	}
 
-	// Archive just the open chat and pick what becomes active. We resolve the open
+	// Archive just the open session and pick what becomes active. We resolve the open
 	// session through wsRowOrder (the rendered workspace rows) rather than flatOrder
-	// — flatOrder only carries pinned + automation chats, so a normal open session
-	// isn't in it. If the chat has siblings in its workspace, land on one of them;
-	// otherwise the row empties out, so land on the next workspace's first chat.
-	function archiveOpenChatWithNext() {
-		const candidates = wsRowOrder.filter((r) => r.chats.length > 0);
+	// — flatOrder only carries pinned + automation sessions, so a normal open session
+	// isn't in it. If the session has siblings in its workspace, land on one of them;
+	// otherwise the row empties out, so land on the next workspace's first session.
+	function archiveOpenSessionWithNext() {
+		const candidates = wsRowOrder.filter((r) => r.sessions.length > 0);
 		const rowIdx = candidates.findIndex((r) =>
-			r.chats.some((c) => c.id === selectedId),
+			r.sessions.some((c) => c.id === selectedId),
 		);
 		if (rowIdx < 0) {
-			// The open chat can be hidden by the current person/repo/search lens.
-			// Archiving the active chat must not depend on it being rendered.
-			const chat = sessions.find((s) => s.id === selectedId && !s.archived);
-			if (chat) onArchive(chat, null);
+			// The open session can be hidden by the current person/repo/search lens.
+			// Archiving the active session must not depend on it being rendered.
+			const session = sessions.find((s) => s.id === selectedId && !s.archived);
+			if (session) onArchive(session, null);
 			return;
 		}
 		const row = candidates[rowIdx];
-		const chat = row.chats.find((c) => c.id === selectedId);
-		if (!chat) return;
+		const session = row.sessions.find((c) => c.id === selectedId);
+		if (!session) return;
 		let next: UnifiedSession | null;
-		const siblings = row.chats.filter((c) => c.id !== selectedId);
+		const siblings = row.sessions.filter((c) => c.id !== selectedId);
 		if (siblings.length > 0) {
-			const chatIdx = row.chats.findIndex((c) => c.id === selectedId);
-			next = siblings[Math.min(chatIdx, siblings.length - 1)] ?? null;
+			const sessionIdx = row.sessions.findIndex((c) => c.id === selectedId);
+			next = siblings[Math.min(sessionIdx, siblings.length - 1)] ?? null;
 		} else {
 			const rest = candidates.filter((r) => r.key !== row.key);
-			next = rest[Math.min(rowIdx, rest.length - 1)]?.chats[0] ?? null;
+			next = rest[Math.min(rowIdx, rest.length - 1)]?.sessions[0] ?? null;
 		}
-		onArchive(chat, next);
+		onArchive(session, next);
 	}
 
 	React.useImperativeHandle(ref, () => ({
-		archiveSelected: archiveOpenChatWithNext,
+		archiveSelected: archiveOpenSessionWithNext,
 	}));
 
-	// ⌘E (or the legacy ⌘⇧A) archives the open chat and lands on the next entry
+	// ⌘E (or the legacy ⌘⇧A) archives the open session and lands on the next entry
 	// in the sidebar, rather than dropping back to Home. This lives here (not in
 	// the viewer) because the sidebar owns the row ordering that defines "next".
 	// The viewer keeps the same chord only for the unarchive toggle on an
@@ -3131,13 +3110,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			if (!canArchive) return;
 			e.preventDefault();
 			closeWsHover();
-			archiveOpenChatWithNext();
+			archiveOpenSessionWithNext();
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [wsRowOrder, sessions, selectedId, onArchive]);
 
-	// ⌘⌥⇧A escalates the chat archive (⌘E/⌘⇧A) to the whole active workspace.
+	// ⌘⌥⇧A escalates the session archive (⌘E/⌘⇧A) to the whole active workspace.
 	// The Alt modifier is the only thing that separates the two handlers, so
 	// exactly one fires. Targets the workspace holding the open session.
 	useEffect(() => {
@@ -3152,7 +3131,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				return;
 			if (editableSwallowsArchiveChord(e.target)) return;
 			const row = wsRowOrder.find(
-				(r) => r.chats.length > 0 && r.chats.some((c) => c.id === selectedId),
+				(r) => r.sessions.length > 0 && r.sessions.some((c) => c.id === selectedId),
 			);
 			if (!row) return;
 			e.preventDefault();
@@ -3442,7 +3421,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				return;
 			}
 			if (row.workspace) onOpenWorkspace(row.workspace.id);
-			else if (row.chats[0]) onSelect(row.chats[0]);
+			else if (row.sessions[0]) onSelect(row.sessions[0]);
 		} else if (wsLongPressed.current) {
 			// Release after a long-press: the workspace sheet is already up —
 			// swallow any ghost click so it can't land on the sheet (or its
@@ -3673,7 +3652,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const rows: Array<{
 			key: string;
 			name: string;
-			chats: UnifiedSession[];
+			sessions: UnifiedSession[];
 			lastActivity: string;
 		}> = [];
 		for (const s of mine) {
@@ -3685,19 +3664,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				rows.push({
 					key: s.id,
 					name: s.title || "Untitled",
-					chats: [s],
+					sessions: [s],
 					lastActivity: s.lastActivity || "",
 				});
 			}
 		}
-		for (const [wsId, chats] of byWs) {
+		for (const [wsId, sessions] of byWs) {
 			const ws = workspaces.find((p) => p.id === wsId) || null;
-			chats.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+			sessions.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 			rows.push({
 				key: `workspace:${wsId}`,
-				name: ws?.name || chats[0].title || "Untitled",
-				chats,
-				lastActivity: chats.reduce(
+				name: ws?.name || sessions[0].title || "Untitled",
+				sessions,
+				lastActivity: sessions.reduce(
 					(m, c) => (c.lastActivity > m ? c.lastActivity : m),
 					"",
 				),
@@ -3710,10 +3689,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Bring an archived row back. `pin` is the one-gesture escalation: unarchive
 	// AND drop it in Pinned, so a row you're resurrecting to work on lands at the
 	// top of the sidebar instead of wherever its derived lane puts it. The pin key
-	// matches workspacePinState's (workspace key, or the solo chat's id), which is
+	// matches workspacePinState's (workspace key, or the solo session's id), which is
 	// exactly what `archivedRows` keys rows by.
-	function unarchiveRow(row: { key: string; chats: UnifiedSession[] }, pin: boolean) {
-		onUnarchiveWorkspace(row.chats);
+	function unarchiveRow(row: { key: string; sessions: UnifiedSession[] }, pin: boolean) {
+		onUnarchiveWorkspace(row.sessions);
 		if (pin && !pins.includes(row.key)) setPins(togglePin(row.key));
 	}
 
@@ -3759,7 +3738,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									<button
 										key={r.key}
 										className="sidebar-item sidebar-ws-row sidebar-archived-row"
-										onClick={() => onSelect(r.chats[0])}
+										onClick={() => onSelect(r.sessions[0])}
 										aria-label={r.name}
 									>
 										<span className="sidebar-rail">
@@ -3786,8 +3765,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 													tabIndex={0}
 													className="sidebar-ws-action"
 													aria-label={
-														r.chats.length > 1
-															? `Unarchive workspace (${r.chats.length} chats) and pin`
+														r.sessions.length > 1
+															? `Unarchive workspace (${r.sessions.length} sessions) and pin`
 															: "Unarchive and pin"
 													}
 													onClick={(e) => {
@@ -3806,8 +3785,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											</Tooltip>
 											<Tooltip
 												label={
-													r.chats.length > 1
-														? `Unarchive workspace (${r.chats.length} chats)`
+													r.sessions.length > 1
+														? `Unarchive workspace (${r.sessions.length} sessions)`
 														: "Unarchive"
 												}
 											>
@@ -3859,9 +3838,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				})()
 			: null;
 
-	// One sidebar row per workspace: status dot (most urgent chat), name, chat
-	// count, unread dot. Click opens the first chat (or the workspace itself for
-	// real workspaces — App resolves that to its first chat / scoped New palette).
+	// One sidebar row per workspace: status dot (most urgent session), name, session
+	// count, unread dot. Click opens the first session (or the workspace itself for
+	// real workspaces — App resolves that to its first session / scoped New palette).
 	// Right-click opens the workspace menu (pin / color / rename / delete);
 	// double-click renames inline.
 	function renderWsRow(row: WsRow) {
@@ -3879,17 +3858,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// attention dot is the third copy of the same fact (header, count, and the
 	// row's own accent wash), so it's dropped.
 	function renderWsRowImpl(row: WsRow, inbox: boolean, banded = false) {
-		const active = row.chats.some((s) => s.id === selectedId);
+		const active = row.sessions.some((s) => s.id === selectedId);
 		const editing = rowRenameEditing(row);
 		const waiting = row.status === "needsinput";
-		// The "in progress" ticker start: the earliest running chat's start, so a
-		// workspace with several live chats shows how long it's been busy overall.
-		// Done/idle chats don't count — only chats actually running feed the clock.
+		// The "in progress" ticker start: the earliest running session's start, so a
+		// workspace with several live sessions shows how long it's been busy overall.
+		// Done/idle sessions don't count — only sessions actually running feed the clock.
 		// Prefer the server's runStartedAt (survives refresh); fall back to the
 		// first moment we saw this row running. Pruned when the row goes idle.
 		let runStartMs: number | null = null;
 		if (row.running) {
-			const stamps = row.chats
+			const stamps = row.sessions
 				.filter((c) => c.isRunning && c.runStartedAt)
 				.map((c) => Date.parse(c.runStartedAt!))
 				.filter((n) => !Number.isNaN(n));
@@ -3941,7 +3920,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						: undefined
 				}
 			>
-				{isPhone && row.chats.length > 0 && (
+				{isPhone && row.sessions.length > 0 && (
 					<button
 						className="sidebar-swipe-action sidebar-swipe-action--archive"
 						onClick={(e) => {
@@ -3950,8 +3929,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							archiveWorkspaceWithNext(row);
 						}}
 						title={
-							row.chats.length > 1
-								? `Archive workspace (${row.chats.length} chats)`
+							row.sessions.length > 1
+								? `Archive workspace (${row.sessions.length} sessions)`
 								: "Archive"
 						}
 					>
@@ -3991,7 +3970,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					}
 					if (editing) return;
 					if (row.workspace) onOpenWorkspace(row.workspace.id);
-					else if (row.chats[0]) onSelect(row.chats[0]);
+					else if (row.sessions[0]) onSelect(row.sessions[0]);
 				}}
 					onMouseEnter={(e) => wsRowHoverEnter(row, e.currentTarget)}
 					onMouseLeave={scheduleWsHoverClose}
@@ -4039,7 +4018,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					) : row.running ? (
 						<PixelSpinner className="text-yellow sidebar-spinner" />
 					) : (
-						<WsPrStatusMark chats={row.chats} size={18} workspace={row.workspace} />
+						<WsPrStatusMark sessions={row.sessions} size={18} workspace={row.workspace} />
 					)}
 				</span>
 				{/* Inbox rows name their repo with the tile alone, in front of the
@@ -4051,29 +4030,29 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{editing ? (
 					<input
 						className="min-w-0 flex-1 rounded-md border border-[var(--accent,#6b8afd)] bg-bg px-[3px] text-[14px] font-medium text-inherit outline-none"
-						value={row.workspace ? workspaceDraft : chatDraft}
+						value={row.workspace ? workspaceDraft : sessionDraft}
 						autoFocus
 						onChange={(e) =>
 							row.workspace
 								? setWorkspaceDraft(e.target.value)
-								: setChatDraft(e.target.value)
+								: setSessionDraft(e.target.value)
 						}
 						onClick={(e) => e.stopPropagation()}
 						onDoubleClick={(e) => e.stopPropagation()}
 						onBlur={() =>
 							row.workspace
 								? commitWorkspaceRename()
-								: commitChatRename(row.chats[0])
+								: commitSessionRename(row.sessions[0])
 						}
 						onKeyDown={(e) => {
 							if (e.key === "Enter")
 								row.workspace
 									? commitWorkspaceRename()
-									: commitChatRename(row.chats[0]);
+									: commitSessionRename(row.sessions[0]);
 							else if (e.key === "Escape")
 								row.workspace
 									? setEditingWorkspaceId(null)
-									: setEditingChatId(null);
+									: setEditingSessionId(null);
 							e.stopPropagation();
 						}}
 					/>
@@ -4088,27 +4067,27 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							if (row.workspace) {
 								setWorkspaceDraft(row.workspace.name);
 								setEditingWorkspaceId(row.workspace.id);
-							} else if (row.chats[0]) {
-								// Solo chat rows rename the chat itself.
-								startChatRename(row.chats[0]);
+							} else if (row.sessions[0]) {
+								// Solo session rows rename the session itself.
+								startSessionRename(row.sessions[0]);
 							}
 						}}
 					>
 						{stripPrTitlePrefix(row.name)}
 					</span>
 				)}
-				{localMode && row.chats.some((chat) => chat.local) && !editing && (
+				{localMode && row.sessions.some((session) => session.local) && !editing && (
 					<span className="shrink-0 rounded-full border border-line px-1.5 py-px text-meta font-medium tracking-wide text-faint">
 						local
 					</span>
 				)}
-				{/* Teammates currently viewing a chat in this workspace. */}
+				{/* Teammates currently viewing a session in this workspace. */}
 				{!editing &&
 					(() => {
 						const viewers = teamViewing.filter(
 							(v) =>
 								v.user.toLowerCase() !== currentUser.toLowerCase() &&
-								row.chats.some((c) => c.id === v.sessionId),
+								row.sessions.some((c) => c.id === v.sessionId),
 						);
 						if (!viewers.length) return null;
 						// Faces sit side by side rather than stacked: an overlapped pile
@@ -4132,7 +4111,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						);
 					})()}
 				{/* A live workspace run always earns its elapsed ticker. Idle timestamps
-				    are reserved for standalone chats, so an automation review does not
+				    are reserved for standalone sessions, so an automation review does not
 				    make its PR workspace look recently active. */}
 				{runStartMs !== null && <RunTicker startMs={runStartMs} />}
 				{snoozeIso && !editing && <SnoozeBadge until={snoozeIso} />}
@@ -4153,9 +4132,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							{shortTime(row.lastActivity)}
 						</span>
 					)}
-				{/* Slack-style pencil: a chat here holds an unsent draft — come back
+				{/* Slack-style pencil: a session here holds an unsent draft — come back
 				    and finish it. Yields to the hover actions like the count/time. */}
-				{row.chats.some((c) => hasDraft(`chat:${c.id}`)) && (
+				{row.sessions.some((c) => hasDraft(`session:${c.id}`)) && (
 					<span
 						className="sidebar-ws-draft"
 						aria-label="Unsent draft. Return to finish it."
@@ -4191,19 +4170,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					>
 						<IconPin size={21} fill={pinned ? "currentColor" : "none"} />
 					</span>
-					{row.chats.length > 0 && (
+					{row.sessions.length > 0 && (
 						<Tooltip
 							label={
-								row.chats.length > 1
-									? `Archive workspace (${row.chats.length} chats)`
+								row.sessions.length > 1
+									? `Archive workspace (${row.sessions.length} sessions)`
 									: "Archive workspace"
 							}
 							shortcut={
-								// Single-chat workspace: archiving the workspace is archiving
-								// the open chat, so advertise its browser-compatible chord. The
-								// ⌘⌥⇧A escalation only matters with more than one chat.
+								// Single-session workspace: archiving the workspace is archiving
+								// the open session, so advertise its browser-compatible chord. The
+								// ⌘⌥⇧A escalation only matters with more than one session.
 								active
-									? row.chats.length > 1
+									? row.sessions.length > 1
 										? ARCHIVE_WS_SHORTCUT_KEYS
 										: ARCHIVE_SHORTCUT_KEYS
 									: undefined
@@ -4258,12 +4237,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// session-less ticket preview when there isn't one. Hovering reveals the
 	// one-click "mark done" button at the row's right edge.
 	function supportThreadActive(t: SupportThread) {
-		// The ticket's workspace is open (chat-less route or one of its chats)…
+		// The ticket's workspace is open (session-less route or one of its sessions)…
 		if (selectedWorkspaceId) {
 			const ws = workspaces.find((p) => p.id === selectedWorkspaceId);
 			if (ws?.plainThreadId === t.id) return true;
 		}
-		// …or its linked session is the open chat (pre-workspace sessions).
+		// …or its linked session is the open session (pre-workspace sessions).
 		const session = supportSessionByThread.get(t.id);
 		return !!session && session.id === selectedId;
 	}
@@ -4291,8 +4270,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	}
 
 	// The repo band a workspace row files under. The workspace's own repo wins:
-	// it's what the work is *about*, while a chat's repo is only the checkout it
-	// happens to run from — a PR workspace for shared-infra whose chat runs in a
+	// it's what the work is *about*, while a session's repo is only the checkout it
+	// happens to run from — a PR workspace for shared-infra whose session runs in a
 	// tella-fusion worktree belongs under shared-infra. A workspace spanning
 	// repos still files under one band (a row in two bands double-counts and
 	// reads as two pieces of work); the repo *filter* honours every repo it
@@ -4301,8 +4280,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return (
 		row.workspace?.repo ||
 		row.workspace?.externalRefs?.[0]?.kind ||
-		row.chats[0]?.repo ||
-		sessionRepo(row.chats[0] || ({} as UnifiedSession))
+		row.sessions[0]?.repo ||
+		sessionRepo(row.sessions[0] || ({} as UnifiedSession))
 	);
 	}
 
@@ -4330,7 +4309,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					/>
 				</button>
 				{rows
-					.filter((r) => open || r.chats.some((c) => c.id === selectedId))
+					.filter((r) => open || r.sessions.some((c) => c.id === selectedId))
 					.map(renderWsRow)}
 			</div>
 		);
@@ -4352,7 +4331,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// materialize (dimmed) so every status can take the drop.
 		const dropEligible =
 			!!pinDragMeta &&
-			pinDragMeta.chats.length > 0 &&
+			pinDragMeta.sessions.length > 0 &&
 			(!laneRepo || laneRepo === pinDragMeta.repo);
 		const lanes = MINE_STATUS_META.map((meta) => {
 			const items = rows.filter((r) => r.status === meta.key);
@@ -4394,7 +4373,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						/>
 					</button>
 					{items
-						.filter((r) => open || r.chats.some((c) => c.id === selectedId))
+						.filter((r) => open || r.sessions.some((c) => c.id === selectedId))
 						.map((r) => renderWsRowImpl(r, false, meta.key === "needsinput"))}
 					{prs
 						.filter((i) => open || prRowSelected(i))
@@ -4498,7 +4477,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							/>
 						</button>
 						{b.rows
-							.filter((r) => open || r.chats.some((c) => c.id === selectedId))
+							.filter((r) => open || r.sessions.some((c) => c.id === selectedId))
 							// Nested, the two-line variant's meta line would repeat the
 							// repo tile + name the band header already carries, so the
 							// rows stay compact like every other repo-nested mode's.
@@ -4637,7 +4616,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				const selectedRows = open
 					? []
 					: [...rows, ...snoozedRows].filter((r) =>
-							r.chats.some((c) => c.id === selectedId),
+							r.sessions.some((c) => c.id === selectedId),
 						);
 				const selectedPrs = open ? [] : prs.filter(prRowSelected);
 				return (
@@ -5321,22 +5300,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			{workspaceMenu &&
 				(() => {
 					// The menu id is a real workspace id, or a row key for a
-					// workspace-less row (solo chat / shared-worktree group).
+					// workspace-less row (solo session / shared-worktree group).
 					const ws = workspaces.find((p) => p.id === workspaceMenu.id);
 					const menuRow = wsRows.find((r) =>
 						ws ? r.workspace?.id === ws.id : r.key === workspaceMenu.id,
 					);
-					const chats = menuRow?.chats ?? [];
-					const first = chats[0];
+					const sessions = menuRow?.sessions ?? [];
+					const first = sessions[0];
 					const pinKey = ws ? `workspace:${ws.id}` : workspaceMenu.id;
 					// A row can be pinned via its own key or a legacy pin on any member
-					// chat (incl. alias ids) — unpin clears all of them.
+					// session (incl. alias ids) — unpin clears all of them.
 					const pinnedKeys = [
 						pinKey,
 						...(menuRow
 							? [
 									menuRow.key,
-									...menuRow.chats.flatMap((c) => [
+									...menuRow.sessions.flatMap((c) => [
 										c.id,
 										...(c.aliasIds || []),
 									]),
@@ -5353,24 +5332,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							setPins(togglePin(pinKey));
 						}
 					};
-					const anyManual = chats.some((c) => pinnedLane(c));
+					const anyManual = sessions.some((c) => pinnedLane(c));
 					const sharedManual =
 						anyManual &&
-						chats.every((c) => pinnedLane(c) === pinnedLane(chats[0]))
-							? (pinnedLane(chats[0]) ?? null)
+						sessions.every((c) => pinnedLane(c) === pinnedLane(sessions[0]))
+							? (pinnedLane(sessions[0]) ?? null)
 							: null;
 
 					const entries: CtxEntry[] = [];
 					// Offer the move you can actually make: a row with unread
 					// activity reads, an already-read one goes back to unread.
 					const rowUnread = menuRow?.unread ?? false;
-					if (chats.length > 0)
+					if (sessions.length > 0)
 						entries.push({
 							kind: "item",
 							icon: <IconMail size={20} />,
 							label: rowUnread ? "Mark as read" : "Mark as unread",
 							onClick: () =>
-								chats.forEach((c) =>
+								sessions.forEach((c) =>
 									rowUnread
 										? markRead(c.id, c.lastActivity)
 										: markUnread(c.id),
@@ -5381,9 +5360,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// your sessions do (In progress while running, Backlog when
 					// idle). Rows you started are already there, so they don't
 					// offer it; the full lane picker stays in the flyout below.
-					const rowClaimed = chats.some((c) => isClaimed(c));
-					const rowMine = chats.some((c) => ownedBy(c, currentUser));
-					if (chats.length > 0 && (!rowMine || rowClaimed))
+					const rowClaimed = sessions.some((c) => isClaimed(c));
+					const rowMine = sessions.some((c) => ownedBy(c, currentUser));
+					if (sessions.length > 0 && (!rowMine || rowClaimed))
 						entries.push({
 							kind: "item",
 							icon: <IconInbox size={20} />,
@@ -5391,7 +5370,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								? "Remove from my workspaces"
 								: "Add to my workspaces",
 							onClick: () =>
-								onSetStatus(chats, rowClaimed ? null : "mine"),
+								onSetStatus(sessions, rowClaimed ? null : "mine"),
 						});
 					entries.push({
 						kind: "item",
@@ -5401,15 +5380,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						label: pinned ? "Unpin" : "Pin",
 						onClick: togglePinNow,
 					});
-					if (chats.length > 0)
+					if (sessions.length > 0)
 						entries.push({
 							kind: "status",
 							current: sharedManual,
-							// Applies the pin to every chat so the aggregated row lands
+							// Applies the pin to every session so the aggregated row lands
 							// in the chosen lane; "Auto" clears it back to the derived one.
-							onPick: (s) => onSetStatus(chats, s),
+							onPick: (s) => onSetStatus(sessions, s),
 						});
-					if (menuRow && chats.length > 0)
+					if (menuRow && sessions.length > 0)
 						entries.push({
 							kind: "snooze",
 							until: activeSnoozeKeys.has(menuRow.key)
@@ -5437,7 +5416,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							kind: "item",
 							icon: <IconPencil size={20} />,
 							label: "Rename",
-							onClick: () => startChatRename(first),
+							onClick: () => startSessionRename(first),
 						});
 					if (first)
 						entries.push({
@@ -5446,11 +5425,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							label: "Copy link",
 							shortcut: "⌘⇧C",
 							onClick: () =>
-								copyToClipboard(absoluteLink(chatPath(first)), () =>
+								copyToClipboard(absoluteLink(sessionPath(first)), () =>
 									onToast?.("Link copied"),
 								),
 						});
-					// A chat that owns a worktree/branch (and thus a PR/diff) can open
+					// A session that owns a worktree/branch (and thus a PR/diff) can open
 					// its Review tab here — it's off by default in the viewer.
 					if (first && (first.worktreeDir || first.branch))
 						entries.push({
@@ -5459,10 +5438,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							label: "Open review",
 							onClick: () => onOpenReview(first),
 						});
-					// Archive is the removal action here (a chat/workspace is finished
-					// by archiving, never inferred-deleted). A chatless workspace has
+					// Archive is the removal action here (a session/workspace is finished
+					// by archiving, never inferred-deleted). A sessionless workspace has
 					// nothing to archive, so it keeps Delete as its only removal.
-					if (menuRow && chats.length > 0) {
+					if (menuRow && sessions.length > 0) {
 						entries.push({ kind: "sep" });
 						// Hide sits above Archive as the gentler removal: Archive is
 						// global (it ends the work for the whole team), Hide only
@@ -5496,7 +5475,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onClick: () => {
 								if (
 									window.confirm(
-										`Delete workspace "${ws.name}"? Its chats become standalone.`,
+										`Delete workspace "${ws.name}"? Its sessions become standalone.`,
 									)
 								)
 									onDeleteWorkspace(ws.id);
@@ -5554,7 +5533,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</button>
 								{needsReviewRows
 									.filter(
-										(r) => open || r.chats.some((c) => c.id === selectedId),
+										(r) => open || r.sessions.some((c) => c.id === selectedId),
 									)
 									.map(renderWsRow)}
 								{requestedPrItems
@@ -5592,7 +5571,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</button>
 								{awaitingReviewRows
 									.filter(
-										(r) => open || r.chats.some((c) => c.id === selectedId),
+										(r) => open || r.sessions.some((c) => c.id === selectedId),
 									)
 									.map(renderWsRow)}
 							</div>
@@ -5602,24 +5581,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{/* ── Pinned (workspaces + notes, mixed) ── */}
 				{(() => {
 					const pinnedRows = pinnedWsRows;
-					// Pinned chats that don't map to a workspace row (automation runs).
-					const rowChatIds = new Set(
-						wsRows.flatMap((r) => r.chats.map((c) => c.id)),
+					// Pinned sessions that don't map to a workspace row (automation runs).
+					const rowSessionIds = new Set(
+						wsRows.flatMap((r) => r.sessions.map((c) => c.id)),
 					);
 					const pinnedLoose = pins
 						.filter((e) => !e.startsWith("note:") && !e.startsWith("workspace:"))
-						.filter((id) => !rowChatIds.has(id))
+						.filter((id) => !rowSessionIds.has(id))
 						.map((id) =>
 							sessions.find(
 								(s) => s.id === id || s.aliasIds?.includes(id),
 							),
 						)
-						// An archived chat must never surface in Pinned — its pin is
+						// An archived session must never surface in Pinned — its pin is
 						// stale (archiving drops it server-side, but a resurrected or
 						// legacy pin can still point at it). Skip it so it can't render
 						// as an un-archivable ghost row.
 						.filter((s): s is UnifiedSession => !!s && !s.archived)
-						// Honor the repo filter — a pinned chat from another repo
+						// Honor the repo filter — a pinned session from another repo
 						// shouldn't leak into a repo-scoped view (workspace pins
 						// already drop out via wsRows/filtered).
 						.filter(
@@ -5631,7 +5610,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						.filter((n): n is { id: string; title: string } => !!n);
 					// Pinned Plain tickets and PRs — resolved against the live
 					// queues, so a done ticket / closed PR just stops rendering
-					// (its stale pin key is harmless, like an archived chat's).
+					// (its stale pin key is harmless, like an archived session's).
 					const pinnedTickets = pins
 						.filter((e) => e.startsWith("support:"))
 						.map((e) =>
@@ -5672,11 +5651,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					const pinnedOpen = isOpen("pinned");
 
 					// One flat drag-to-reorder list: every pinned thing (workspace row,
-					// loose chat, note) becomes an entry slotted by its first key's
+					// loose session, note) becomes an entry slotted by its first key's
 					// position in the pins array, so reordering is just rewriting that
 					// array (reorderPins). `pinKeys` is everything in `pins` that maps
 					// to the entry — a workspace can be pinned via its own key AND
-					// legacy member-chat pins — so a drop moves them as one unit.
+					// legacy member-session pins — so a drop moves them as one unit.
 					type PinEntry = {
 						key: string;
 						pinKeys: string[];
@@ -5684,7 +5663,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						    = not droppable, e.g. notes) + the entry's repo for the
 						    same-repo rule under per-repo lanes. */
 						repo: string | null;
-						chats: UnifiedSession[];
+						sessions: UnifiedSession[];
 						node: React.ReactNode;
 					};
 					const pinIdx = new Map(pins.map((p, i) => [p, i] as const));
@@ -5692,28 +5671,28 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					for (const row of pinnedRows) {
 						entries.push({
 							key: `ws:${row.key}`,
-							pinKeys: [row.key, ...row.chats.map((c) => c.id)].filter((k) =>
+							pinKeys: [row.key, ...row.sessions.map((c) => c.id)].filter((k) =>
 								pinIdx.has(k),
 							),
 							repo: wsRowRepo(row),
-							chats: row.chats,
+							sessions: row.sessions,
 							node: renderWsRow(row),
 						});
 					}
 					const seenLoose = new Set<string>();
 					for (const s of pinnedLoose) {
-						// A chat pinned via both its id and an alias maps to the same
+						// A session pinned via both its id and an alias maps to the same
 						// session twice — render (and reorder) it once.
 						if (seenLoose.has(s.id)) continue;
 						seenLoose.add(s.id);
 						const pin = sessionPinState(s);
 						entries.push({
-							key: `chat:${s.id}`,
+							key: `session:${s.id}`,
 							pinKeys: [s.id, ...(s.aliasIds ?? [])].filter((k) =>
 								pinIdx.has(k),
 							),
 							repo: sessionRepo(s),
-							chats: [s],
+							sessions: [s],
 							node: (
 								<SidebarItem
 									session={s}
@@ -5743,7 +5722,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							key: `note:${n.id}`,
 							pinKeys: [`note:${n.id}`],
 							repo: null,
-							chats: [],
+							sessions: [],
 							node: (
 								<button
 									className={`sidebar-item ${n.id === activeNoteId ? "sidebar-item-selected" : ""}`}
@@ -5765,7 +5744,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							key: `support:${t.id}`,
 							pinKeys: [`support:${t.id}`],
 							repo: null,
-							chats: [],
+							sessions: [],
 							node: renderSupportRow(t),
 						});
 					}
@@ -5777,7 +5756,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							key: pinKey,
 							pinKeys: [pinKey],
 							repo: null,
-							chats: [],
+							sessions: [],
 							node: (
 								<FeedRow
 									key={pinKey}
@@ -5802,7 +5781,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							key: `pr:${item.pr.url}`,
 							pinKeys: [`pr:${item.pr.url}`],
 							repo: null,
-							chats: [],
+							sessions: [],
 							node: renderPrRow(item),
 						});
 					}
@@ -5837,7 +5816,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							pinJustDragged.current = false;
 						}, 0);
 						// A drop onto a status lane wins over the reorder: lane-pin the
-						// row's chats there and unpin it — dragging OUT of Pinned reads
+						// row's sessions there and unpin it — dragging OUT of Pinned reads
 						// as a move, unlike right-click Set-status which keeps the pin
 						// (the row shows in both the Pinned band and its lane).
 						const laneDrop = laneDropHoverRef.current;
@@ -5846,11 +5825,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						setPinDragMeta(null);
 						laneDropHoverRef.current = null;
 						setLaneDropHover(null);
-						if (laneDrop && dragMeta && dragMeta.chats.length > 0) {
+						if (laneDrop && dragMeta && dragMeta.sessions.length > 0) {
 							pinOrderPending.current = null;
 							setPinOrderDraft(null);
 							setPins(unpin(dragMeta.pinKeys));
-							onSetStatus(dragMeta.chats, laneDrop.lane);
+							onSetStatus(dragMeta.sessions, laneDrop.lane);
 							return;
 						}
 						const orderKeys = pinOrderPending.current;
@@ -5914,7 +5893,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												setPinDragKey(e.key);
 												const meta = {
 													repo: e.repo,
-													chats: e.chats,
+													sessions: e.sessions,
 													pinKeys: e.pinKeys,
 												};
 												pinDragMetaRef.current = meta;
@@ -6277,9 +6256,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									closeWsHover();
 									archiveWorkspaceWithNext(wsHover.row);
 								}}
-								onOpen={(chat) => {
+								onOpen={(session) => {
 									closeWsHover();
-									onSelect(chat);
+									onSelect(session);
 								}}
 							/>
 						</div>
@@ -6292,12 +6271,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					const ws = row.workspace;
 					// Same pin resolution as the row's star and the right-click menu: a
 					// row can be pinned via its own key or a legacy pin on any member
-					// chat (incl. alias ids) — unpin must clear all of them.
+					// session (incl. alias ids) — unpin must clear all of them.
 					const pinKey = ws ? `workspace:${ws.id}` : row.key;
 					const pinnedKeys = [
 						pinKey,
 						row.key,
-						...row.chats.flatMap((c) => [c.id, ...(c.aliasIds || [])]),
+						...row.sessions.flatMap((c) => [c.id, ...(c.aliasIds || [])]),
 					].filter((k, i, a) => pins.includes(k) && a.indexOf(k) === i);
 					const pinned = pinnedKeys.length > 0;
 					return (
@@ -6315,7 +6294,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							}}
 							onClose={() => setWsSheet(null)}
 							onArchive={() => archiveWorkspaceWithNext(row)}
-							onSetStatus={(status) => onSetStatus(row.chats, status)}
+							onSetStatus={(status) => onSetStatus(row.sessions, status)}
 							snoozeUntil={
 								activeSnoozeKeys.has(row.key)
 									? (snoozes[row.key] ?? null)
@@ -6324,30 +6303,30 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onSnooze={(until) =>
 								until ? setSnooze(row.key, until) : clearSnooze(row.key)
 							}
-							onOpen={(chat) => onSelect(chat)}
+							onOpen={(session) => onSelect(session)}
 							onRename={() => {
 								if (ws) {
 									setWorkspaceDraft(ws.name);
 									setEditingWorkspaceId(ws.id);
-								} else if (row.chats[0]) {
-									// Solo chat rows rename the chat itself.
-									startChatRename(row.chats[0]);
+								} else if (row.sessions[0]) {
+									// Solo session rows rename the session itself.
+									startSessionRename(row.sessions[0]);
 								}
 							}}
 							claimed={
-								row.chats.length === 0
+								row.sessions.length === 0
 									? null
-									: row.chats.some((c) => isClaimed(c))
+									: row.sessions.some((c) => isClaimed(c))
 										? true
-										: row.chats.some((c) => ownedBy(c, currentUser))
+										: row.sessions.some((c) => ownedBy(c, currentUser))
 											? null
 											: false
 							}
 							unread={row.unread}
 							onToggleRead={
-								row.chats.length > 0
+								row.sessions.length > 0
 									? () =>
-											row.chats.forEach((c) =>
+											row.sessions.forEach((c) =>
 												row.unread
 													? markRead(c.id, c.lastActivity)
 													: markUnread(c.id),
@@ -6355,10 +6334,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									: null
 							}
 							onCopyLink={
-								row.chats[0]
+								row.sessions[0]
 									? () =>
 											copyToClipboard(
-												absoluteLink(chatPath(row.chats[0])),
+												absoluteLink(sessionPath(row.sessions[0])),
 												() => onToast?.("Link copied"),
 											)
 									: null
@@ -6368,7 +6347,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									? () => {
 											if (
 												window.confirm(
-													`Delete workspace "${ws.name}"? Its chats become standalone.`,
+													`Delete workspace "${ws.name}"? Its sessions become standalone.`,
 												)
 											)
 												onDeleteWorkspace(ws.id);
@@ -7033,7 +7012,7 @@ function SidebarItem({
 		>
 			<div className="sidebar-item-top">
 				{/* Match workspace rows: the rail holds the PR glyph alone — a blocked
-				    chat reads from its accent wash and bold title, not from a second
+				    session reads from its accent wash and bold title, not from a second
 				    dot wedged in beside it — and merged PRs keep the glyph itself
 				    purple instead of adding metadata. */}
 				<span className="sidebar-rail">
@@ -7041,7 +7020,7 @@ function SidebarItem({
 					{session.isRunning ? (
 						<PixelSpinner className="text-yellow sidebar-spinner" />
 					) : (
-						<WsPrStatusMark chats={[session]} size={18} />
+						<WsPrStatusMark sessions={[session]} size={18} />
 					)}
 				</span>
 				{editing ? (
@@ -7087,7 +7066,7 @@ function SidebarItem({
 						))}
 					</span>
 				)}
-				{!editing && hasDraft(`chat:${session.id}`) && (
+				{!editing && hasDraft(`session:${session.id}`) && (
 					<span
 						className="sidebar-ws-draft"
 						aria-label="Unsent draft. Return to finish it."
@@ -7442,7 +7421,7 @@ function MobileActionSheet({
 	);
 }
 
-// The chat row's card body. Content is state-dependent: the prominent status
+// The session row's card body. Content is state-dependent: the prominent status
 // line and the rows that render depend on whether the session is
 // waiting/running/merged/etc. and which of its optional facets (PR, Linear
 // issue, goal, loop, extra repos) are populated. Everything comes off the
@@ -7618,7 +7597,7 @@ interface WsCardRow {
 	key: string;
 	workspace: Workspace | null;
 	name: string;
-	chats: UnifiedSession[];
+	sessions: UnifiedSession[];
 	status: MineStatus;
 	lastActivity: string;
 	running: boolean;
@@ -7632,7 +7611,7 @@ interface WsCardRow {
 // Live "in progress" ticker: counts up from when the run started, in the
 // in-progress color (yellow). Ticks once a second, isolated to this tiny node
 // so the whole sidebar doesn't re-render every second. `startMs` is the earliest
-// running chat's start (see runStartMs) — the workspace's been busy for that long.
+// running session's start (see runStartMs) — the workspace's been busy for that long.
 function RunTicker({ startMs }: { startMs: number }) {
 	const [now, setNow] = useState(() => Date.now());
 	useEffect(() => {
@@ -7674,28 +7653,28 @@ function stripPrTitlePrefix(name: string): string {
 	return name.replace(/^PR\s*#\d+(:|\s*[—–-])\s*/i, "");
 }
 
-function frontingPrChat(chats: UnifiedSession[]): UnifiedSession | undefined {
-	return [...chats]
+function frontingPrSession(sessions: UnifiedSession[]): UnifiedSession | undefined {
+	return [...sessions]
 		.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""))
-		.find((chat) => chat.prUrl);
+		.find((session) => session.prUrl);
 }
 
 function WsPrStatusMark({
-	chats,
+	sessions,
 	size,
 	workspace,
 }: {
-	chats: UnifiedSession[];
+	sessions: UnifiedSession[];
 	size: number;
 	workspace?: { branch?: string | null; prNumber?: number } | null;
 }) {
-	const chat = frontingPrChat(chats);
-	if (!chat) {
+	const session = frontingPrSession(sessions);
+	if (!session) {
 		// Rows that can never have a PR — feed/scratch workspaces (repo-less
-		// chats, no workspace branch/PR) — get an empty alignment slot, not a
+		// sessions, no workspace branch/PR) — get an empty alignment slot, not a
 		// misleading git glyph.
 		const canPr =
-			chats.some((c) => c.branch || c.prUrl || c.repo) ||
+			sessions.some((c) => c.branch || c.prUrl || c.repo) ||
 			!!workspace?.branch ||
 			workspace?.prNumber !== undefined;
 		if (!canPr)
@@ -7711,26 +7690,26 @@ function WsPrStatusMark({
 			</span>
 		);
 	}
-	if (chat.prState === "MERGED") {
+	if (session.prState === "MERGED") {
 		return (
 			<span title="PR merged">
 				<IconPullRequest size={size} className="text-purple" />
 			</span>
 		);
 	}
-	const failed = (chat.prChecks?.failed || 0) > 0;
-	const pending = (chat.prChecks?.pending || 0) > 0;
-	const changesRequested = chat.prReviewDecision === "CHANGES_REQUESTED";
+	const failed = (session.prChecks?.failed || 0) > 0;
+	const pending = (session.prChecks?.pending || 0) > 0;
+	const changesRequested = session.prReviewDecision === "CHANGES_REQUESTED";
 	const className =
-		chat.prState === "CLOSED" || failed || changesRequested
+		session.prState === "CLOSED" || failed || changesRequested
 			? "text-red"
 			: pending
 				? "text-yellow"
-				: chat.prIsDraft
+				: session.prIsDraft
 					? "text-faint"
 					: "text-green";
 	const label =
-		chat.prState === "CLOSED"
+		session.prState === "CLOSED"
 			? "PR closed"
 			: changesRequested
 				? "PR changes requested"
@@ -7738,9 +7717,9 @@ function WsPrStatusMark({
 					? "PR checks failing"
 					: pending
 						? "PR checks running"
-						: chat.prIsDraft
+						: session.prIsDraft
 							? "Draft PR"
-							: chat.prReviewDecision === "APPROVED"
+							: session.prReviewDecision === "APPROVED"
 								? "PR approved"
 								: "PR open";
 	return (
@@ -7754,7 +7733,7 @@ function WsStatusMark({
 	row,
 	size = 20,
 }: {
-	row: { status: MineStatus; running: boolean; chats: UnifiedSession[] };
+	row: { status: MineStatus; running: boolean; sessions: UnifiedSession[] };
 	size?: number;
 }) {
 	// Every mark rides in the same `size`-wide (20px) flex slot so #number/title
@@ -7775,7 +7754,7 @@ function WsStatusMark({
 	if (row.running)
 		return slot(<PixelSpinner className="text-yellow sidebar-spinner" />);
 	if (row.status === "review") {
-		const open = row.chats.filter((c) => c.prState === "OPEN");
+		const open = row.sessions.filter((c) => c.prState === "OPEN");
 		const allDraft = open.length > 0 && open.every((c) => c.prIsDraft);
 		return slot(
 			<IconPullRequest
@@ -7790,8 +7769,8 @@ function WsStatusMark({
 	// idle row whose latest PR landed still sits in Backlog. Its mark should
 	// carry the PR lifecycle anyway, like the lane-grouped view's
 	// WsPrStatusMark does — a grey idle dot on a merged row reads as "no PR".
-	const prChat = frontingPrChat(row.chats);
-	if (row.status === "pending" && prChat && sessionPrMerged(prChat))
+	const prSession = frontingPrSession(row.sessions);
+	if (row.status === "pending" && prSession && sessionPrMerged(prSession))
 		return slot(<IconGitMerge size={size} className="text-purple" />);
 	return dot("sidebar-status-idle");
 }
@@ -7807,8 +7786,8 @@ const WS_ACTION =
 // and the long-press sheet (mobile).
 function useWsOverview(row: WsCardRow): WorkspaceOverview | null {
 	const cacheKey =
-		row.workspace?.id || `chats:${row.chats.map((c) => c.id).join(",")}`;
-	const activityKey = row.lastActivity || row.chats.map((c) => c.lastActivity).join(",");
+		row.workspace?.id || `sessions:${row.sessions.map((c) => c.id).join(",")}`;
+	const activityKey = row.lastActivity || row.sessions.map((c) => c.lastActivity).join(",");
 	const [ov, setOv] = useState<WorkspaceOverview | null>(
 		() => overviewCache.get(cacheKey)?.data ?? null,
 	);
@@ -7816,7 +7795,7 @@ function useWsOverview(row: WsCardRow): WorkspaceOverview | null {
 		let alive = true;
 		const cached = overviewCache.get(cacheKey);
 		setOv(cached?.data ?? null);
-		if (row.chats.length === 0) return;
+		if (row.sessions.length === 0) return;
 		const activityAt = activityKey ? new Date(activityKey).getTime() : 0;
 		if (
 			cached &&
@@ -7827,7 +7806,7 @@ function useWsOverview(row: WsCardRow): WorkspaceOverview | null {
 		loadOverview(
 			cacheKey,
 			row.workspace?.id ?? null,
-			row.chats.map((c) => ({
+			row.sessions.map((c) => ({
 				id: c.id,
 				title: c.title,
 				createdAt: c.createdAt,
@@ -7847,42 +7826,42 @@ function useWsOverview(row: WsCardRow): WorkspaceOverview | null {
 	return ov;
 }
 
-// The PR that fronts the workspace (the newest chat that has one) and how to
+// The PR that fronts the workspace (the newest session that has one) and how to
 // present it: "basically ready to be merged" (open, not draft, checks green,
 // no changes requested) turns the main action green; the status bits spell
 // out draft/merged/closed, the review decision, and a checks summary.
 function wsPrInfo(row: WsCardRow) {
-	const newestFirst = [...row.chats].sort((a, b) =>
+	const newestFirst = [...row.sessions].sort((a, b) =>
 		(b.lastActivity || "").localeCompare(a.lastActivity || ""),
 	);
-	const prChat = newestFirst.find((c) => c.prUrl);
-	const branch = prChat?.branch || newestFirst.find((c) => c.branch)?.branch;
+	const prSession = newestFirst.find((c) => c.prUrl);
+	const branch = prSession?.branch || newestFirst.find((c) => c.branch)?.branch;
 	const prReady =
-		!!prChat &&
-		prChat.prState === "OPEN" &&
-		!prChat.prIsDraft &&
-		prChat.prReviewDecision !== "CHANGES_REQUESTED" &&
-		(!prChat.prChecks ||
-			prChat.prChecks.total === 0 ||
-			(prChat.prChecks.failed === 0 && prChat.prChecks.pending === 0));
-	const prStatusBits = prChat
+		!!prSession &&
+		prSession.prState === "OPEN" &&
+		!prSession.prIsDraft &&
+		prSession.prReviewDecision !== "CHANGES_REQUESTED" &&
+		(!prSession.prChecks ||
+			prSession.prChecks.total === 0 ||
+			(prSession.prChecks.failed === 0 && prSession.prChecks.pending === 0));
+	const prStatusBits = prSession
 		? [
-				prChat.prState === "OPEN" && prChat.prIsDraft ? "draft" : null,
-				prChat.prState === "MERGED" ? "merged" : null,
-				prChat.prState === "CLOSED" ? "closed" : null,
-				prChat.prReviewDecision
-					? prettyReview(prChat.prReviewDecision)
+				prSession.prState === "OPEN" && prSession.prIsDraft ? "draft" : null,
+				prSession.prState === "MERGED" ? "merged" : null,
+				prSession.prState === "CLOSED" ? "closed" : null,
+				prSession.prReviewDecision
+					? prettyReview(prSession.prReviewDecision)
 					: null,
-				prChat.prChecks && prChat.prChecks.total > 0
-					? prChat.prChecks.failed > 0
-						? `${prChat.prChecks.failed} failing`
-						: prChat.prChecks.pending > 0
-							? `${prChat.prChecks.pending} pending`
+				prSession.prChecks && prSession.prChecks.total > 0
+					? prSession.prChecks.failed > 0
+						? `${prSession.prChecks.failed} failing`
+						: prSession.prChecks.pending > 0
+							? `${prSession.prChecks.pending} pending`
 							: "checks pass"
 					: null,
 			].filter((b): b is string => !!b)
 		: [];
-	return { prChat, branch, prReady, prStatusBits };
+	return { prSession, branch, prReady, prStatusBits };
 }
 
 /** Stills rendered in the hover card's filmstrip. The strip scrolls, so this
@@ -7900,7 +7879,7 @@ function WsOverviewInfo({
 	row: WsCardRow;
 	ov: WorkspaceOverview | null;
 }) {
-	const { prChat, branch } = wsPrInfo(row);
+	const { prSession, branch } = wsPrInfo(row);
 	const meta = MINE_STATUS_META.find((m) => m.key === row.status);
 	const desc = (ov?.lastMessage?.content || ov?.prompt?.content || "")
 		.replace(/\s+/g, " ")
@@ -7910,15 +7889,15 @@ function WsOverviewInfo({
 		<>
 			<div className="hovercard-head">
 				<span className="hovercard-branch">
-					{branch || repoLabel(row.chats[0]?.repo || DEFAULT_REPO_ID)}
+					{branch || repoLabel(row.sessions[0]?.repo || DEFAULT_REPO_ID)}
 				</span>
-				{prChat?.prAdditions != null && prChat?.prDeletions != null && (
+				{prSession?.prAdditions != null && prSession?.prDeletions != null && (
 					<span className="hovercard-diff">
 						<span className="hovercard-add">
-							+{compactNum(prChat.prAdditions)}
+							+{compactNum(prSession.prAdditions)}
 						</span>{" "}
 						<span className="hovercard-del">
-							-{compactNum(prChat.prDeletions)}
+							-{compactNum(prSession.prDeletions)}
 						</span>
 					</span>
 				)}
@@ -7931,22 +7910,22 @@ function WsOverviewInfo({
 
 			{/* What os-review made of this PR — the question a Ready-to-merge row
 			    raises, answered without opening GitHub. */}
-			{prChat?.prOsReview && (
+			{prSession?.prOsReview && (
 				<div className="hovercard-state">
 					<span className="text-faint">OS review </span>
-					{osReviewLabel(prChat.prOsReview)}
+					{osReviewLabel(prSession.prOsReview)}
 				</div>
 			)}
 
 			{row.status === "needsinput" &&
-				(row.chats.some((c) => c.waitingForInput) ? (
+				(row.sessions.some((c) => c.waitingForInput) ? (
 					<div className="hovercard-callout">
 						Blocked on a question — open to answer.
 					</div>
 				) : (
 					<div className="hovercard-callout">
 						Run failed:{" "}
-						{row.chats
+						{row.sessions
 							.find((c) => runNeedsAttention(c))
 							?.lastRunError?.message.slice(0, 200) || "needs attention"}
 					</div>
@@ -7970,7 +7949,7 @@ function WsOverviewInfo({
 							type="button"
 							onClick={() => openLightbox(media, i)}
 							className="relative block aspect-video w-[124px] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
-							title={[m.chatTitle, new Date(m.at).toLocaleString()]
+							title={[m.sessionTitle, new Date(m.at).toLocaleString()]
 								.filter(Boolean)
 								.join(" · ")}
 						>
@@ -8011,7 +7990,7 @@ function WsOverviewInfo({
 
 // The workspace counterpart of SessionCardBody: branch + diff stats + status
 // at a glance, the latest assistant message as a "where things stand" line,
-// screenshot thumbnails from the workspace's chats, and quick actions
+// screenshot thumbnails from the workspace's sessions, and quick actions
 // (Archive, PR link) — the only card body that carries controls, which is why
 // its shell is the one the pointer can travel into.
 function WsCardBody({
@@ -8021,11 +8000,11 @@ function WsCardBody({
 }: {
 	row: WsCardRow;
 	onArchive: () => void;
-	/** Open a chat (the "Answer" action jumps to the blocked one). */
-	onOpen: (chat: UnifiedSession) => void;
+	/** Open a session (the "Answer" action jumps to the blocked one). */
+	onOpen: (session: UnifiedSession) => void;
 }) {
 	const ov = useWsOverview(row);
-	const { prChat, prReady, prStatusBits } = wsPrInfo(row);
+	const { prSession, prReady, prStatusBits } = wsPrInfo(row);
 
 	return (
 		<>
@@ -8038,18 +8017,18 @@ function WsCardBody({
 				{/* The single main action, colored by what the workspace needs next:
 				    answer the blocked question (accent), merge the ready PR (green),
 				    review the not-ready PR (neutral), or archive merged work (purple). */}
-				{row.status === "needsinput" && row.chats.length > 0 ? (
+				{row.status === "needsinput" && row.sessions.length > 0 ? (
 					<button
 						className={`${WS_ACTION} bg-accent text-white hover:opacity-90`}
 						onClick={() =>
 							onOpen(
-								row.chats.find((c) => c.waitingForInput) ||
-									row.chats.find((c) => runNeedsAttention(c)) ||
-									row.chats[0],
+								row.sessions.find((c) => c.waitingForInput) ||
+									row.sessions.find((c) => runNeedsAttention(c)) ||
+									row.sessions[0],
 							)
 						}
 					>
-						{row.chats.some((c) => c.waitingForInput) ? "Answer" : "Open"}
+						{row.sessions.some((c) => c.waitingForInput) ? "Answer" : "Open"}
 					</button>
 				) : row.status === "merged" ? (
 					<button
@@ -8070,9 +8049,9 @@ function WsCardBody({
 						</svg>
 						Archive
 					</button>
-				) : row.status === "review" && prChat?.prUrl ? (
+				) : row.status === "review" && prSession?.prUrl ? (
 					<a
-						href={prChat.prUrl}
+						href={prSession.prUrl}
 						target="_blank"
 						rel="noopener noreferrer"
 						className={
@@ -8084,13 +8063,13 @@ function WsCardBody({
 						{prReady ? "Merge" : "Review"} ↗
 					</a>
 				) : null}
-				{prChat?.prUrl && (
+				{prSession?.prUrl && (
 					<CardLink
-						href={prChat.prUrl}
-						title={`Open on ${providerFromUrl(prChat.prUrl).name}`}
+						href={prSession.prUrl}
+						title={`Open on ${providerFromUrl(prSession.prUrl).name}`}
 					>
 						<span className="hovercard-mono">
-							{prChat.prNumber ? `#${prChat.prNumber}` : "PR"}
+							{prSession.prNumber ? `#${prSession.prNumber}` : "PR"}
 						</span>{" "}
 						↗
 					</CardLink>
@@ -8139,21 +8118,21 @@ function WsMobileSheet({
 	snoozeUntil: string | null;
 	/** Snooze until the given ISO time, or unsnooze with `null`. */
 	onSnooze: (until: string | null) => void;
-	onOpen: (chat: UnifiedSession) => void;
+	onOpen: (session: UnifiedSession) => void;
 	onRename: () => void;
 	/** Whether the row has unread activity — picks the read/unread direction. */
 	unread: boolean;
 	/** In your lanes already (true), claimable (false), or your own row with
 	    nothing to claim (null — the action is hidden). */
 	claimed: boolean | null;
-	/** Flip every chat in the row read or unread; null for chatless rows. */
+	/** Flip every session in the row read or unread; null for sessionless rows. */
 	onToggleRead: (() => void) | null;
-	/** Copy a link to the row's first chat; null for chatless rows. */
+	/** Copy a link to the row's first session; null for sessionless rows. */
 	onCopyLink: (() => void) | null;
 	onDelete: (() => void) | null;
 }) {
 	const ov = useWsOverview(row);
-	const { prChat, prReady, prStatusBits } = wsPrInfo(row);
+	const { prSession, prReady, prStatusBits } = wsPrInfo(row);
 	const drag = useSheetDismiss(onClose);
 	// Lock the page behind the sheet so a scroll drags the list, not the page.
 	useEffect(() => {
@@ -8194,11 +8173,11 @@ function WsMobileSheet({
 					<WsOverviewInfo row={row} ov={ov} />
 					{(prStatusBits.length > 0 || row.lastActivity) && (
 						<div className="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-faint">
-							{prChat?.prNumber != null && (
+							{prSession?.prNumber != null && (
 								<span
-									className={`hovercard-mono shrink-0 hovercard-pr-${prTone(prChat)}`}
+									className={`hovercard-mono shrink-0 hovercard-pr-${prTone(prSession)}`}
 								>
-									#{prChat.prNumber}
+									#{prSession.prNumber}
 								</span>
 							)}
 							{prStatusBits.length > 0 && (
@@ -8216,40 +8195,40 @@ function WsMobileSheet({
 				</div>
 				<div className="mobile-sheet-sep" />
 				{/* Main action, colored by what the workspace needs next. */}
-				{row.status === "needsinput" && row.chats.length > 0 && (
+				{row.status === "needsinput" && row.sessions.length > 0 && (
 					<button
 						className="mobile-sheet-item"
 						style={{ color: "var(--accent)", fontWeight: 600 }}
 						onClick={closing(() =>
 							onOpen(
-								row.chats.find((c) => c.waitingForInput) ||
-									row.chats.find((c) => runNeedsAttention(c)) ||
-									row.chats[0],
+								row.sessions.find((c) => c.waitingForInput) ||
+									row.sessions.find((c) => runNeedsAttention(c)) ||
+									row.sessions[0],
 							),
 						)}
 					>
 						<WsStatusMark row={row} size={22} />
-						{row.chats.some((c) => c.waitingForInput)
+						{row.sessions.some((c) => c.waitingForInput)
 							? "Answer question"
 							: "Check failed run"}
 					</button>
 				)}
-				{row.status === "review" && prChat?.prUrl && (
+				{row.status === "review" && prSession?.prUrl && (
 					<button
 						className="mobile-sheet-item"
 						style={
 							prReady ? { color: "var(--green)", fontWeight: 600 } : undefined
 						}
 						onClick={closing(() =>
-							window.open(prChat.prUrl, "_blank", "noopener"),
+							window.open(prSession.prUrl, "_blank", "noopener"),
 						)}
 					>
 						<IconPullRequest size={22} />
-						{prReady ? `Merge on ${providerFromUrl(prChat.prUrl).name}` : "Review PR"}
-						{prChat.prNumber != null && ` #${prChat.prNumber}`}
+						{prReady ? `Merge on ${providerFromUrl(prSession.prUrl).name}` : "Review PR"}
+						{prSession.prNumber != null && ` #${prSession.prNumber}`}
 					</button>
 				)}
-				{row.status === "merged" && row.chats.length > 0 && (
+				{row.status === "merged" && row.sessions.length > 0 && (
 					<button
 						className="mobile-sheet-item"
 						style={{ color: "var(--purple)", fontWeight: 600 }}
@@ -8259,15 +8238,15 @@ function WsMobileSheet({
 						Archive workspace
 					</button>
 				)}
-				{prChat?.prUrl && row.status !== "review" && (
+				{prSession?.prUrl && row.status !== "review" && (
 					<button
 						className="mobile-sheet-item"
 						onClick={closing(() =>
-							window.open(prChat.prUrl, "_blank", "noopener"),
+							window.open(prSession.prUrl, "_blank", "noopener"),
 						)}
 					>
 						<IconPullRequest size={22} />
-						Open PR{prChat.prNumber != null ? ` #${prChat.prNumber}` : ""}
+						Open PR{prSession.prNumber != null ? ` #${prSession.prNumber}` : ""}
 					</button>
 				)}
 				{claimed !== null && (
@@ -8315,15 +8294,15 @@ function WsMobileSheet({
 				)}
 				{/* Pin the workspace into a lane manually — tap a chip to move it there
 				    (tap the active one, or Auto, to release it back to the derived lane). */}
-				{row.chats.length > 0 &&
+				{row.sessions.length > 0 &&
 					(() => {
-						const anyManual = row.chats.some((c) => pinnedLane(c));
+						const anyManual = row.sessions.some((c) => pinnedLane(c));
 						const sharedManual =
 							anyManual &&
-							row.chats.every(
-								(c) => pinnedLane(c) === pinnedLane(row.chats[0]),
+							row.sessions.every(
+								(c) => pinnedLane(c) === pinnedLane(row.sessions[0]),
 							)
-								? (pinnedLane(row.chats[0]) ?? null)
+								? (pinnedLane(row.sessions[0]) ?? null)
 								: null;
 						return (
 							<div className="px-4 py-2">
@@ -8386,7 +8365,7 @@ function WsMobileSheet({
 				{/* Snooze chips — the mobile stand-in for the right-click Snooze
 				    flyout. Tapping a preset parks the row in the Snoozed section
 				    until the resolved time. */}
-				{row.chats.length > 0 && (
+				{row.sessions.length > 0 && (
 					<div className="px-4 py-2">
 						<div className="mb-1.5 text-[11px] font-semibold text-faint">
 							{snoozeUntil
@@ -8434,12 +8413,12 @@ function WsMobileSheet({
 						</div>
 					</div>
 				)}
-				{((row.status !== "merged" && row.chats.length > 0) || onDelete) && (
+				{((row.status !== "merged" && row.sessions.length > 0) || onDelete) && (
 					<div className="mobile-sheet-sep" />
 				)}
 				{/* Archiving stays reachable pre-merge from the explicit menu — the
 				    status coloring only governs which action gets top billing. */}
-				{row.status !== "merged" && row.chats.length > 0 && (
+				{row.status !== "merged" && row.sessions.length > 0 && (
 					<button
 						className="mobile-sheet-item mobile-sheet-item--danger"
 						onClick={closing(onArchive)}

@@ -43,12 +43,12 @@ interface Props {
   /** Prefill the prompt (e.g. from the Home "New session" box). */
   prefillPrompt?: string;
   forceMode?: "ask" | "code" | "scratch";
-  /** When starting a chat inside a workspace, the chat joins that workspace… */
+  /** When starting a session inside a workspace, the session joins that workspace… */
   workspaceId?: string;
   /** …and defaults to the workspace's shared repo + worktree (a sibling's branch). */
   forceRepo?: string;
   forceBranch?: string;
-  /** Lets App render the pending chat shell before the created session appears
+  /** Lets App render the pending session shell before the created session appears
       in the polled session list. */
   onCreateStarted?: (draft: {
     prompt: string;
@@ -199,7 +199,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     });
   }, [configuredDefaultRepo, forceRepo, repos]);
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
-  // In a workspace, default to a sibling's branch so the new chat reuses its
+  // In a workspace, default to a sibling's branch so the new session reuses its
   // worktree; the user can still switch to "New branch" to fork a fresh one.
   const [selectedWorktree, setSelectedWorktree] = useState(forceBranch || "__new__");
   const [newBranch, setNewBranch] = useState(prefill.branch);
@@ -248,7 +248,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // Phones open on just the prompt — repo/base/model/effort have sensible
   // defaults and hide behind the sliders toggle until you actually need them.
   const isPhone = useIsPhone();
-  // "Send messages with" (Settings → Composer). The chat composer honors it,
+  // "Send messages with" (Settings → Composer). The session composer honors it,
   // so this field has to as well — otherwise Enter silently does nothing here
   // while the Create button advertises ↩.
   const [sendKey, setSendKey] = useState(getSendKeyPref);
@@ -561,10 +561,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     setCreating(true);
     creatingRef.current = true;
     // Workspace linkage: scoped to an existing workspace (the tab/sidebar +),
-    // the chat joins it — sharing its worktree when reusing the sibling branch,
+    // the session joins it — sharing its worktree when reusing the sibling branch,
     // stacking a fresh worktree off it for a new branch. Unscoped, the default
-    // is a brand-new Workspace + first Chat created together.
-    const chatMode =
+    // is a brand-new Workspace + first Session created together.
+    const worktreeMode =
       mode === "ask" ? "ask" : mode === "code" && selectedWorktree === "__new__" ? "stack" : "share";
     onCreateStarted?.({
       prompt: prompt.trim(),
@@ -581,7 +581,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       mode,
       repo,
       ...(workspaceId
-        ? { workspaceId: workspaceId, chatMode }
+        ? { workspaceId: workspaceId, worktreeMode }
         : { createWorkspace: {} }),
       branch: mode === "code" ? branch : "",
       prompt: prompt.trim(),
@@ -655,7 +655,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const planBody: React.CSSProperties | undefined = planFirst
     ? {
         backgroundColor: "color-mix(in srgb, var(--bg-panel) 96%, var(--accent))",
-        // The hatch fades out downwards, same as the composer's note mode: the
+        // The hatch fades out downwards, same as the composer's ask mode: the
         // flat tint is layered back over the stripes so the writing surface
         // settles into the footer instead of hatching all the way to the edge.
         backgroundImage:
@@ -815,7 +815,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               }
               // The @/slash popup claims plain Enter to accept a suggestion.
               if (mentions.handleKeyDown(e)) return;
-              // Otherwise the send key creates, exactly as it sends in the chat
+              // Otherwise the send key creates, exactly as it sends in the session
               // composer — including the unclosed-``` fence exception, so a
               // multi-line code block can still be typed into the first prompt.
               // Nothing to create yet? Let the newline land rather than eating

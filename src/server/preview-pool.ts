@@ -50,7 +50,7 @@ import {
 import { join } from "node:path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { configuredRepos, type Repo } from "./config";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
 import { sandboxConfig } from "./sandbox/config";
@@ -105,7 +105,7 @@ const DEFAULTS: Omit<PreviewPoolRepoConfig, "enabled"> = {
 };
 
 function poolDir(): string {
-  return join(OPENSESSION_CHATS_DIR, "preview-pool");
+  return join(OPENSESSION_SESSIONS_DIR, "preview-pool");
 }
 
 function configFile(): string {
@@ -364,7 +364,7 @@ function mvmGoldenReady(): boolean {
  * even though their goldens/stores are deliberately separate. */
 function sandboxMicrovmIndexes(): Set<number> {
   const indexes = new Set<number>();
-  const dir = join(OPENSESSION_CHATS_DIR, "sandboxes");
+  const dir = join(OPENSESSION_SESSIONS_DIR, "sandboxes");
   try {
     for (const file of readdirSync(dir)) {
       if (!file.startsWith("microvm-") || !file.endsWith(".json")) continue;

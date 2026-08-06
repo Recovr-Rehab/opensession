@@ -56,7 +56,7 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"second","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z"},{"id":"other","workspaceId":"ws-2","createdAt":"2026-07-01T00:00:00Z"},{"id":"first","workspaceId":"ws-1","createdAt":"2026-07-01T00:00:00Z"},{"id":"archived","workspaceId":"ws-1","archived":true},{"id":"side","workspaceId":"ws-1","sideChatOf":"first"}]"#.utf8
+                #"[{"id":"second","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z"},{"id":"other","workspaceId":"ws-2","createdAt":"2026-07-01T00:00:00Z"},{"id":"first","workspaceId":"ws-1","createdAt":"2026-07-01T00:00:00Z"},{"id":"archived","workspaceId":"ws-1","archived":true}]"#.utf8
             )
         )
 
@@ -86,7 +86,7 @@ final class SessionTests: XCTestCase {
             SessionsListViewModel.tabAfterClosing(sessions[2], in: sessions)?.id,
             "two"
         )
-        // The workspace's last chat leaves nothing to show.
+        // The workspace's last session leaves nothing to show.
         XCTAssertNil(
             SessionsListViewModel.tabAfterClosing(sessions[0], in: [sessions[0]])
         )
@@ -224,7 +224,7 @@ final class SessionTests: XCTestCase {
     func testOptimisticSessionStaysMarkedAfterReceivingRealId() {
         let session = Session.optimistic(
             id: "bks-real",
-            title: "New chat",
+            title: "New session",
             repo: "backstage",
             mode: "code",
             model: nil,
@@ -236,7 +236,7 @@ final class SessionTests: XCTestCase {
         XCTAssertTrue(session.isOptimisticPlaceholder == true)
     }
 
-    func testTabSessionsPinStartedHumanChatFirst() throws {
+    func testTabSessionsPinStartedHumanSessionFirst() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(

@@ -3,10 +3,10 @@ import Observation
 
 /// Per-user sidebar hides — the personal counterpart to archiving.
 ///
-/// Archiving is global (it removes a chat for the whole team), which is the
+/// Archiving is global (it removes a session for the whole team), which is the
 /// wrong tool for "this isn't mine to watch anymore" while a teammate is still
-/// working in the chat. A hide is an overlay on a sidebar ROW key that only
-/// ever affects one user; the chat keeps running and stays in everyone else's
+/// working in the session. A hide is an overlay on a sidebar ROW key that only
+/// ever affects one user; the session keeps running and stays in everyone else's
 /// sidebar. Same store the web sidebar writes (`GET/PUT /api/hides`, see
 /// src/server/hides.ts and src/frontend/lib/hides.ts), so a row hidden on the
 /// phone is hidden in the browser too.
@@ -15,8 +15,8 @@ import Observation
 /// sidebar, not filed into a drawer. Search ignores hides — that's how a
 /// hidden row is found again, and its context menu then offers to restore it.
 /// Two rules keep a hide from swallowing work: a hidden row resurfaces (and
-/// its entry is consumed) while one of its chats is blocked on a question, and
-/// prompting in a chat clears its hide outright.
+/// its entry is consumed) while one of its sessions is blocked on a question, and
+/// prompting in a session clears its hide outright.
 @Observable
 @MainActor
 final class HideStore {
@@ -66,10 +66,10 @@ final class HideStore {
         save()
     }
 
-    /// Clear the hide covering a chat, whichever row key its row uses. Called
-    /// when the user PROMPTS in a chat: you can't be done with a chat you're
+    /// Clear the hide covering a session, whichever row key its row uses. Called
+    /// when the user PROMPTS in a session: you can't be done with a session you're
     /// actively working in, and "I replied but it's still gone" reads as a bug.
-    /// Opening a hidden chat deliberately does NOT unhide it.
+    /// Opening a hidden session deliberately does NOT unhide it.
     func unhide(for session: Session) {
         clear(SidebarRowKeys.candidateKeys(for: session))
     }

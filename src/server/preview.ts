@@ -35,7 +35,7 @@ import {
 } from "fs";
 import { basename, dirname, join } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { sandboxConfig } from "./sandbox/config";
 import {
   lookupSandboxHttpsPort,
@@ -531,7 +531,7 @@ async function allocateHostWebappPort(worktreeDir: string): Promise<number | nul
 // runs setup.sh at workspace materialization instead — see sandbox/adapters).
 // Stamped per worktree; "settled" once run, success or not, mirroring the
 // sandbox semantics: setup never blocks or retries.
-const SETUP_STAMP_DIR = join(OPENSESSION_CHATS_DIR, "preview-setup");
+const SETUP_STAMP_DIR = join(OPENSESSION_SESSIONS_DIR, "preview-setup");
 function setupStampPath(worktreeDir: string): string {
   return join(SETUP_STAMP_DIR, worktreeDir.replace(/\//g, "_") + ".done");
 }

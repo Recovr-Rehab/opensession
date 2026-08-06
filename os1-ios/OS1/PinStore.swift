@@ -23,7 +23,7 @@ final class PinStore {
     private(set) var pins: [String] = []
 
     /// Key → slot in `pins`, so ranking a row during a body evaluation costs a
-    /// dictionary lookup per chat rather than a scan of the whole list.
+    /// dictionary lookup per session rather than a scan of the whole list.
     private var slots: [String: Int] = [:]
 
     /// Bumped by every local write and by every hydrate. An in-flight GET that
@@ -51,8 +51,8 @@ final class PinStore {
     }
 
     /// This row's slot in the Pinned band, or nil when it isn't pinned. A row
-    /// can be pinned under its own key or under one of its chats' ids (the web
-    /// pins workspaces by row key, but a pin made from a chat predates that and
+    /// can be pinned under its own key or under one of its sessions' ids (the web
+    /// pins workspaces by row key, but a pin made from a session predates that and
     /// still counts) — the earliest matching slot wins.
     func rank(_ workspace: SidebarWorkspace) -> Int? {
         matchingKeys(of: workspace).compactMap { slots[$0] }.min()

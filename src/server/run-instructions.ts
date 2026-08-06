@@ -270,7 +270,7 @@ export function buildRunInstructions(input: {
         "diagrams, sample data. Files appear immediately in the session's Assets tab with a " +
         "live preview; relative references between assets resolve, so multi-file pages " +
         "(index.html + style.css + data.json) work. Reach for it when a visual or document " +
-        "explains something better than chat text — a chart of results, an interactive demo, a " +
+        "explains something better than plain text — a chart of results, an interactive demo, a " +
         "formatted report. It also works in read-only Ask sessions: the assets folder is " +
         "session scratch space, not the checkout. If an artifact turns out repo-worthy, copy " +
         "it into the worktree explicitly and commit it like any other change."
@@ -333,7 +333,7 @@ export function buildRunInstructions(input: {
         "before/after screenshots when the change is visual, and a 2-6 sentence markdown " +
         "writeup (what changed, root cause for fixes, how you verified it). Record media " +
         "first and pass absolute file paths; they are copied to durable " +
-        "storage. It renders inline in the chat where you publish it (video and all) and " +
+        "storage. It renders inline in the session where you publish it (video and all) and " +
         "in the session's Review tab, and is mirrored into the PR " +
         "description; if you publish before the PR exists, call it again after `gh pr create` " +
         "so it lands there too. Use the repository's own preview lifecycle or configured " +

@@ -2,12 +2,12 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { __setChatsDirForTest } from "./paths";
+import { __setSessionsDirForTest } from "./paths";
 
 const scratch = mkdtempSync(join(tmpdir(), "migrate-engine-test-"));
-const prevDir = __setChatsDirForTest(scratch);
+const prevDir = __setSessionsDirForTest(scratch);
 
-// Import AFTER repointing the chats dir isn't required (the module reads the
+// Import AFTER repointing the sessions dir isn't required (the module reads the
 // live binding per call), but cache-bust anyway for isolation.
 const { migrateSessionEngine, isAutomationOwnedSession, sessionHasJournaledRun } =
   await import(`./migrate-engine.ts?test=${crypto.randomUUID()}`);
@@ -43,7 +43,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  __setChatsDirForTest(prevDir);
+  __setSessionsDirForTest(prevDir);
   rmSync(scratch, { recursive: true, force: true });
 });
 

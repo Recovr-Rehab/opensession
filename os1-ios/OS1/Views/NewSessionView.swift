@@ -18,8 +18,9 @@ struct NewSessionView: View {
     /// Preset repo (the per-repo "+" in the sessions list); nil = remembered.
     var initialRepo: String?
 
-    /// Workspace this chat joins as a new tab (the chat's ⋯ → "New chat in
-    /// this workspace"); nil starts a standalone session in its own workspace.
+    /// Workspace this session joins as a new tab (the session's ⋯ → "New
+    /// session in this workspace"); nil starts a standalone session in its own
+    /// workspace.
     var initialWorkspaceId: String?
 
     /// Called the moment Start is tapped, with an optimistic session row
@@ -63,7 +64,7 @@ struct NewSessionView: View {
                 controls
             }
             .background(OS1VisualStyle.background)
-            .navigationTitle(initialWorkspaceId == nil ? "New session" : "New chat")
+            .navigationTitle("New session")
             .inlineTitleBarCompat()
             #if os(macOS)
             .frame(minWidth: 560, minHeight: 440)
@@ -244,8 +245,8 @@ struct NewSessionView: View {
         .disabled(repos.isEmpty)
     }
 
-    /// Joining a workspace changes what code mode means: the chat shares that
-    /// workspace's worktree and branch rather than cutting a new one, so the
+    /// Joining a workspace changes what code mode means: the session shares
+    /// that workspace's worktree and branch rather than cutting a new one, so the
     /// chip says so instead of promising a branch it won't create.
     private var codeModeLabel: String {
         initialWorkspaceId == nil ? "New branch" : "Same branch"

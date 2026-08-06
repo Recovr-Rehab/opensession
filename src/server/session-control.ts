@@ -69,8 +69,8 @@ export interface CreateSessionOpts {
   /** Optional MCP allowlist for the opening run. Empty array means no MCP servers. */
   mcpServers?: string[];
   /**
-   * Join an existing workspace as a sibling chat — a new tab, the create path's
-   * equivalent of the web tab strip's "+". The chat takes the workspace's
+   * Join an existing workspace as a sibling session — a new tab, the create path's
+   * equivalent of the web tab strip's "+". The session takes the workspace's
    * `workspaceId` (so it lands in that sidebar row's tab strip), defaults its repo
    * to the workspace's, and in code mode shares the workspace's worktree/branch
    * instead of minting its own. An unknown id fails the create rather than

@@ -5,10 +5,10 @@ import Observation
 ///
 /// Same store the web sidebar writes (`GET/PUT /api/reads`, see
 /// src/server/reads.ts and src/frontend/lib/reads.ts): session id → the
-/// `lastActivity` the chat carried the last time you looked at it. A chat is
-/// unread when its current `lastActivity` is NEWER than that mark, so a chat
+/// `lastActivity` the session carried the last time you looked at it. A session is
+/// unread when its current `lastActivity` is NEWER than that mark, so a session
 /// you have never opened never lights up — the flag means "new since you read
-/// it", not "never seen". Because the marks live on the server, reading a chat
+/// it", not "never seen". Because the marks live on the server, reading a session
 /// on the phone clears its emphasis in the browser too.
 @Observable
 @MainActor
@@ -18,7 +18,7 @@ final class ReadsStore {
     /// Session id → ISO `lastActivity` at the moment it was last read.
     private(set) var reads: [String: String] = [:]
 
-    /// The chat on screen right now. Its row is never unread: the web sidebar
+    /// The session on screen right now. Its row is never unread: the web sidebar
     /// skips the selected session the same way, so activity arriving while
     /// you watch it can't bold the row behind the conversation for the few
     /// seconds before the next poll re-marks it.
@@ -52,7 +52,7 @@ final class ReadsStore {
         guard requestGeneration == generation,
               NativePreferences.context() == requestContext
         else { return }
-        // Merge, don't replace: a chat read before this landed keeps its mark,
+        // Merge, don't replace: a session read before this landed keeps its mark,
         // and the server's other marks (the browser's, another device's) are
         // adopted rather than overwritten on the next save.
         var merged = loaded
@@ -75,9 +75,9 @@ final class ReadsStore {
         return lhs > rhs
     }
 
-    /// A chat came on screen: it reads up to its current activity, and stays
+    /// A session came on screen: it reads up to its current activity, and stays
     /// out of the unread emphasis until it's closed. Called again with each
-    /// fresh copy from the poll, which is what keeps an open chat read while
+    /// fresh copy from the poll, which is what keeps an open session read while
     /// new output lands in it — the web viewer's markRead-on-activity tick.
     func open(_ session: Session) {
         if openSessionId != session.id { openSessionId = session.id }
@@ -90,7 +90,7 @@ final class ReadsStore {
 
     /// Record that `session` has been read up to its current `lastActivity`.
     /// A no-op when the mark already matches, so calling it on every poll of
-    /// an open chat costs nothing and doesn't spam the server mirror.
+    /// an open session costs nothing and doesn't spam the server mirror.
     func markRead(_ session: Session) {
         guard let activity = session.lastActivity, !activity.isEmpty else { return }
         guard reads[session.id] != activity else { return }
@@ -99,7 +99,7 @@ final class ReadsStore {
         save()
     }
 
-    /// True when the chat has activity past your read mark.
+    /// True when the session has activity past your read mark.
     func isUnread(_ session: Session) -> Bool {
         guard session.id != openSessionId, let mark = reads[session.id] else { return false }
         guard let activity = session.lastActivity, activity != mark else { return false }
@@ -109,7 +109,7 @@ final class ReadsStore {
         return last > read
     }
 
-    /// A sidebar row is unread when any chat under it is — one unread chat
+    /// A sidebar row is unread when any session under it is — one unread session
     /// bolds the whole workspace row, like the web sidebar.
     func isUnread(_ sessions: [Session]) -> Bool {
         sessions.contains { isUnread($0) }

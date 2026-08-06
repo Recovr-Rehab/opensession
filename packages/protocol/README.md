@@ -33,7 +33,7 @@ client renders a live session with nothing but these: `watch` →
 control to drive it, `ask_question` / `ask_resolved` for human-in-the-loop.
 
 The reference web UI multiplexes app extensions (collaborative notes, team
-chat, terminals, presence, change pings) over the same socket — those are the
+terminals, presence, change pings) over the same socket — those are the
 app, not the protocol, and are deliberately absent here.
 
 ## `./events` — the run event stream

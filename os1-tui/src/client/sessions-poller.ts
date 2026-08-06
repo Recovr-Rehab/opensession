@@ -219,7 +219,7 @@ export class SessionsPoller {
 		try {
 			this.raw = (await this.api.sessions()).filter(
 				// Side chats and desk todos aren't standalone sessions in the UI.
-				(s) => !s.sideChatOf && !s.desk && !s.archived,
+				(s) => !s.desk && !s.archived,
 			);
 			this.set({
 				...this.state,

@@ -20,7 +20,7 @@ describe("prompt receipts", () => {
 		});
 	});
 
-	test("ids are scoped per session — the same id in another chat is new", () => {
+	test("ids are scoped per session — the same id in another session is new", () => {
 		rememberPromptReceipt(promptReceiptKey("os-1", "abc"), { status: "started" });
 		expect(promptReceipt(promptReceiptKey("os-2", "abc"))).toBeUndefined();
 	});

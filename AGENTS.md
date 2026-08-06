@@ -78,7 +78,7 @@ entry file (that's what keeps parallel sessions from colliding):
   `/notes/search` before `/notes/:id`) in one module. New endpoint → add it to
   the matching domain file (or a new file + one line in index.ts).
 - `src/server/ws-handlers.ts` — the UI WebSocket (watch/prompt/queue control/
-  answers/terminals/notes/chat + create_session).
+  answers/terminals/notes + create_session).
 - `src/server/run-session.ts` — driving a session turn: runSessionPrompt(Inner),
   queue delivery (enqueue/steer/interrupt/drain), sandbox launch, restart
   resume, /loop ticker. This is runner-adjacent: changes need a real restart.
@@ -108,8 +108,9 @@ Basics:
 - Bun automatically loads .env, so don't use dotenv.
 - HTML imports for frontend bundling (no Vite).
 - Naming: OPENSESSION_* env vars, `~/.opensession-*` state. URLs are
-  prefix-less: the app serves at the bare domain root.
-- Own session store at ~/.opensession-chats/. All other engines' session file
+  prefix-less: the app serves at the bare domain root. The product model —
+  Projects > Workspaces > Sessions — is in CONCEPTS.md; use those words.
+- Own session store at ~/.opensession-sessions/. All other engines' session file
   access is read-only (never modify ~/.slack-sessions/ or ~/.linear-sessions/)
   — sole exception: `src/server/agent-session-sync.ts` (see that module's doc
   before widening it).

@@ -27,7 +27,7 @@ final class HideStoreTests: XCTestCase {
         ])
     }
 
-    func testCandidateKeysCoverEveryRowAChatCanSitUnder() throws {
+    func testCandidateKeysCoverEveryRowASessionCanSitUnder() throws {
         let session = try sessions(
             #"[{"id":"bks-1","workspaceId":"ws-1","worktreeDir":"/home/u/worktrees/feature"}]"#
         )[0]
@@ -39,7 +39,7 @@ final class HideStoreTests: XCTestCase {
         ])
     }
 
-    func testBlockedChatResurfacesItsHiddenRow() throws {
+    func testBlockedSessionResurfacesItsHiddenRow() throws {
         let all = try sessions(
             """
             [{"id":"bks-1","workspaceId":"ws-1","waitingForInput":true},
@@ -57,7 +57,7 @@ final class HideStoreTests: XCTestCase {
         XCTAssertEqual(prepared.resurfacedHideKeys, ["workspace:ws-1"])
     }
 
-    func testQuietChatsResurfaceNothing() throws {
+    func testQuietSessionsResurfaceNothing() throws {
         let all = try sessions(#"[{"id":"bks-1","workspaceId":"ws-1","isRunning":true}]"#)
 
         let prepared = SessionsListViewModel.prepared(
@@ -70,7 +70,7 @@ final class HideStoreTests: XCTestCase {
         XCTAssertTrue(prepared.resurfacedHideKeys.isEmpty)
     }
 
-    func testArchivedBlockedChatDoesNotResurfaceItsRow() throws {
+    func testArchivedBlockedSessionDoesNotResurfaceItsRow() throws {
         let all = try sessions(
             #"[{"id":"bks-1","workspaceId":"ws-1","waitingForInput":true,"archived":true}]"#
         )

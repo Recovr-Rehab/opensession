@@ -65,7 +65,7 @@ final class SessionsListViewModel {
         sessionsRevision += 1
     }
 
-    /// Cached rows with one chat spliced in as a row of its own, or nil when
+    /// Cached rows with one session spliced in as a row of its own, or nil when
     /// the insert can't be proven row-local — the caller then invalidates and
     /// the next read regroups.
     ///
@@ -74,16 +74,16 @@ final class SessionsListViewModel {
     /// thousands of rows on the main actor: the pass `refresh` goes out of its
     /// way to keep off-main. Creating a session did exactly that at the moment
     /// the new conversation was being pushed, which is why the list sat there
-    /// for seconds before the chat appeared.
+    /// for seconds before the session appeared.
     private func rowsInserting(
         _ session: Session, into rows: [SidebarWorkspace]
     ) -> [SidebarWorkspace]? {
         #if !os(macOS)
-        // A chat started inside a workspace joins that workspace's row rather
-        // than opening one of its own: rebuild the one row from its chats plus
+        // A session started inside a workspace joins that workspace's row rather
+        // than opening one of its own: rebuild the one row from its sessions plus
         // this one, and move it to the front — where a full regroup puts it,
-        // since the new chat leads the list that pass walks.
-        if session.sideChatOf == nil, let workspaceId = session.workspaceId, !workspaceId.isEmpty {
+        // since the new session leads the list that pass walks.
+        if let workspaceId = session.workspaceId, !workspaceId.isEmpty {
             guard let index = rows.firstIndex(where: { $0.workspaceId == workspaceId })
             else { return nil }
             let merged = Self.sidebarRows(
@@ -102,7 +102,7 @@ final class SessionsListViewModel {
         return [row] + rows
     }
 
-    /// Cached rows with one chat dropped, regrouping just the row that held
+    /// Cached rows with one session dropped, regrouping just the row that held
     /// it. Nil when that regroup doesn't reproduce the same single row, i.e.
     /// the removal moved the grouping and only a full pass can say how.
     private func rowsRemoving(
@@ -122,11 +122,10 @@ final class SessionsListViewModel {
         return next
     }
 
-    /// A chat no existing row can absorb and that absorbs none: no workspace,
-    /// no isolated worktree, not a side chat. (Every Mac row is a single chat,
-    /// so there the question doesn't arise.)
+    /// A session no existing row can absorb and that absorbs none: no workspace,
+    /// no isolated worktree. (Every Mac row is a single session, so there the
+    /// question doesn't arise.)
     private func ownsItsRow(_ session: Session) -> Bool {
-        guard session.sideChatOf == nil else { return false }
         #if os(macOS)
         return true
         #else
@@ -177,7 +176,7 @@ final class SessionsListViewModel {
         return ordered + discovered.filter { seen.insert($0).inserted }
     }
 
-    /// Live sibling chats shown in the conversation tab strip. This mirrors
+    /// Live sibling sessions shown in the conversation tab strip. This mirrors
     /// the web client: workspace membership wins, with isolated worktrees as
     /// the fallback for legacy rows, and the natural order is oldest first.
     nonisolated static func tabSessions(
@@ -201,9 +200,7 @@ final class SessionsListViewModel {
             return [current]
         }
         var tabs = sessions.filter {
-            belongs($0)
-                && $0.sideChatOf == nil
-                && ($0.archived != true || $0.id == current.id)
+            belongs($0) && ($0.archived != true || $0.id == current.id)
         }
         if !tabs.contains(where: { $0.id == current.id }) {
             tabs.append(current)
@@ -218,9 +215,9 @@ final class SessionsListViewModel {
         return [main] + tabs.filter { $0.id != main.id }
     }
 
-    /// The chat that takes over the strip when `closed` is closed from it: the
+    /// The session that takes over the strip when `closed` is closed from it: the
     /// tab to its right, or the one to its left when it was the rightmost. Nil
-    /// when it was the workspace's last chat and there is nothing left to show.
+    /// when it was the workspace's last session and there is nothing left to show.
     nonisolated static func tabAfterClosing(
         _ closed: Session, in tabs: [Session]
     ) -> Session? {
@@ -231,13 +228,13 @@ final class SessionsListViewModel {
     }
 
     /// The sidebar's rows on this platform: workspace groups on iOS, and one
-    /// row per chat on the Mac, whose detail has no sibling-tab strip yet.
+    /// row per session on the Mac, whose detail has no sibling-tab strip yet.
     nonisolated static func sidebarRows(
         in sessions: [Session],
         workspaceNames: [String: String]
     ) -> [SidebarWorkspace] {
         #if os(macOS)
-        return sessions.filter { $0.sideChatOf == nil }.map {
+        return sessions.map {
             SidebarWorkspace(
                 id: "session:\($0.id)",
                 title: $0.displayTitle,
@@ -258,16 +255,15 @@ final class SessionsListViewModel {
         in sessions: [Session],
         workspaceNames: [String: String] = [:]
     ) -> [SidebarWorkspace] {
-        let visible = sessions.filter { $0.sideChatOf == nil }
-        let workspaceKeyByWorktree = Dictionary(grouping: visible.filter {
+        let workspaceKeyByWorktree = Dictionary(grouping: sessions.filter {
             $0.workspaceId?.isEmpty == false && isolatedWorktree(for: $0) != nil
-        }, by: { isolatedWorktree(for: $0)! }).compactMapValues { chats in
-            let keys = Set(chats.compactMap(\.workspaceId))
+        }, by: { isolatedWorktree(for: $0)! }).compactMapValues { group in
+            let keys = Set(group.compactMap(\.workspaceId))
             return keys.count == 1 ? "workspace:\(keys.first!)" : nil
         }
         var order: [String] = []
         var grouped: [String: [Session]] = [:]
-        for session in visible {
+        for session in sessions {
             let key: String
             if session.workspaceId?.isEmpty != false,
                let dir = isolatedWorktree(for: session),
@@ -280,11 +276,12 @@ final class SessionsListViewModel {
             grouped[key, default: []].append(session)
         }
         return order.compactMap { key in
-            guard var chats = grouped[key] else { return nil }
-            chats.sort(by: sessionNaturalOrder)
-            guard let main = mainSession(in: chats) else { return nil }
-            let named = chats.compactMap(\.workspaceId).compactMap { workspaceNames[$0] }.first
-            let renamed = chats.first { $0.titleOverridden == true }
+            guard var rowSessions = grouped[key] else { return nil }
+            rowSessions.sort(by: sessionNaturalOrder)
+            guard let main = mainSession(in: rowSessions) else { return nil }
+            let named = rowSessions.compactMap(\.workspaceId)
+                .compactMap { workspaceNames[$0] }.first
+            let renamed = rowSessions.first { $0.titleOverridden == true }
             let worktreeName = main.worktreeDir.flatMap {
                 $0.contains("/worktrees/")
                     ? URL(fileURLWithPath: $0).lastPathComponent
@@ -293,7 +290,7 @@ final class SessionsListViewModel {
             return SidebarWorkspace(
                 id: key,
                 title: named ?? renamed?.displayTitle ?? main.branch ?? worktreeName ?? main.displayTitle,
-                sessions: chats,
+                sessions: rowSessions,
                 mainSession: main
             )
         }
@@ -312,7 +309,7 @@ final class SessionsListViewModel {
         let dayStart = calendar.startOfDay(for: now)
         let yesterdayStart = dayStart.addingTimeInterval(-24 * 60 * 60)
         // Decorated: each row's activity date is derived once (it walks the
-        // row's chats), not once per comparison — this runs on every body
+        // row's sessions), not once per comparison — this runs on every body
         // evaluation over a list that can be thousands of rows.
         var bucketed: [InboxBand: [(workspace: SidebarWorkspace, date: Date)]] = [:]
         for workspace in workspaces {
@@ -396,7 +393,7 @@ final class SessionsListViewModel {
             effort: old.effort,
             fastMode: old.fastMode ?? false,
             startedBy: old.startedBy ?? "",
-            // Keep the workspace: a chat created into one stays in its row
+            // Keep the workspace: a session created into one stays in its row
             // (and its tab strip) across the create resolving, instead of
             // falling out until the server's own row arrives.
             workspaceId: old.workspaceId
@@ -496,7 +493,7 @@ final class SessionsListViewModel {
                 await refresh()
             } catch {
                 self.error = workspace.workspaceId == nil
-                    ? "Couldn't rename chat: \(error.localizedDescription)"
+                    ? "Couldn't rename session: \(error.localizedDescription)"
                     : "Couldn't rename workspace: \(error.localizedDescription)"
             }
         }
@@ -585,7 +582,7 @@ final class SessionsListViewModel {
                     hidden: hideKeys
                 )
             }.value
-            // A hidden row comes back while one of its chats is blocked on a
+            // A hidden row comes back while one of its sessions is blocked on a
             // question, and the entry is consumed when it does — so a hide can
             // never swallow work that needs you. Consuming it here (not in the
             // row filter) keeps the mutation out of view body evaluation.
@@ -644,7 +641,7 @@ final class SessionsListViewModel {
     }
 
     /// Drop archived/desk/locally-hidden rows and sort by last activity, and
-    /// report which sidebar hides a blocked chat resurfaces.
+    /// report which sidebar hides a blocked session resurfaces.
     /// Decorated sort on purpose: the comparator form re-parsed each row's
     /// ISO date ~2·log n times, which multiplied into hundreds of
     /// milliseconds per poll at this list size — parse once per row instead.
@@ -722,7 +719,7 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     }
     var effectiveRepo: String { mainSession.effectiveRepo }
 
-    /// This row's page on the web app, for sharing: the workspace chat URL
+    /// This row's page on the web app, for sharing: the workspace session URL
     /// when the row is a real workspace, the bare session URL otherwise.
     @MainActor var shareURL: URL? {
         guard let base = ServerConfig.shared.baseURL else { return nil }
@@ -730,14 +727,14 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
             return base
                 .appendingPathComponent("workspace")
                 .appendingPathComponent(workspaceId)
-                .appendingPathComponent("chat")
+                .appendingPathComponent("session")
                 .appendingPathComponent(mainSession.id)
         }
         return base
             .appendingPathComponent("session")
             .appendingPathComponent(mainSession.id)
     }
-    /// Any chat of the row is mid-turn — the row counts as live even when a
+    /// Any session of the row is mid-turn — the row counts as live even when a
     /// blocked sibling owns its lane.
     var isRunning: Bool { sessions.contains { $0.isRunning == true } }
     var lastActivityDate: Date {

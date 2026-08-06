@@ -73,10 +73,10 @@ enum OS1VisualStyle {
     static let red = Color(red: 0.973, green: 0.318, blue: 0.286)
     static let purple = Color(red: 0.639, green: 0.443, blue: 0.969)
     #if os(iOS)
-    static let chatMaxWidth: CGFloat = 780
+    static let sessionMaxWidth: CGFloat = 780
     #else
     /// Keep 13pt desktop body copy near the comfortable 65-75 character range.
-    static let chatMaxWidth: CGFloat = 720
+    static let sessionMaxWidth: CGFloat = 720
     #endif
 }
 

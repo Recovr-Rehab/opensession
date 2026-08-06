@@ -31,7 +31,6 @@ import { handleAutomationsRoutes } from "./automations";
 import { handleHumanAsksRoutes } from "./human-asks";
 import { handleKeychainRoutes } from "./keychain";
 import { handleDeployRoutes } from "./deploys";
-import { handleChatRoutes } from "./chat";
 import { handlePeopleRoutes } from "./people";
 import { handlePrefsRoutes } from "./prefs";
 import { handleSecurityRoutes } from "./security";
@@ -88,7 +87,6 @@ export const routeHandlers: RouteHandler[] = [
 	handleHumanAsksRoutes,
 	handleKeychainRoutes,
 	handleDeployRoutes,
-	handleChatRoutes,
 	handlePeopleRoutes,
 	handlePrefsRoutes,
 	handleSecurityRoutes,

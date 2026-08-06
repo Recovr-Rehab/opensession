@@ -1766,7 +1766,7 @@ export function PrPanel({
                     className="pr-comments-add-all"
                     onClick={() => onAddToInput(formatPrCommentsPrompt(comments, pr))}
                   >
-                    Add all to chat
+                    Add all to session
                   </button>
                 ) : undefined
               }
@@ -1788,7 +1788,7 @@ export function PrPanel({
                       className="pr-comment-add"
                       onClick={() => onAddToInput(formatPrCommentPrompt(comment, pr))}
                     >
-                      Add to chat
+                      Add to session
                     </button>
                   )}
                 </div>
@@ -1936,7 +1936,7 @@ export function PrPanel({
                     className="text-meta"
                     onClick={() => onAddToInput(formatPendingCommentsPrompt(pending, pr))}
                   >
-                    Add to chat
+                    Add to session
                   </Button>
                 )}
               </div>
@@ -2308,8 +2308,8 @@ function PrCard({
  * sits under the last row, the way the stack is drawn on github.com). The row
  * for the PR being viewed is marked rather than linked — it's already here.
  *
- * Also carries the "link into a stack" action for a chat that was branched off
- * another chat's branch but whose PRs were never linked (pr.stackBase, set by
+ * Also carries the "link into a stack" action for a session that was branched off
+ * another session's branch but whose PRs were never linked (pr.stackBase, set by
  * the session PR route).
  */
 /**
@@ -2318,8 +2318,8 @@ function PrCard({
  * The row for the PR being viewed is marked rather than linked — it's already
  * here. Rendered by both PrPanel layouts through the wrappers below.
  *
- * Also carries the "link into a stack" action for a chat that was branched off
- * another chat's branch but whose PRs were never linked (pr.stackBase, set by
+ * Also carries the "link into a stack" action for a session that was branched off
+ * another session's branch but whose PRs were never linked (pr.stackBase, set by
  * the session PR route).
  */
 function StackBody({
@@ -2444,7 +2444,7 @@ function StackBody({
 }
 
 /**
- * Whether this PR has anything stack-shaped to say: a real stack, or a chat
+ * Whether this PR has anything stack-shaped to say: a real stack, or a session
  * stacked locally whose PRs a human could still link. Both layouts gate on
  * this so a standalone PR never grows an empty section.
  */
@@ -2462,7 +2462,7 @@ function StackCard({
 }: {
   pr: PrDetails;
   /** Absent on the session-less /pr/<repo>/<branch> view: the map still
-   *  renders there, only the link action needs a chat to act on. */
+   *  renders there, only the link action needs a session to act on. */
   sessionId?: string;
   repo?: string;
   onOpenPr?: (repo: string, branch: string) => void;

@@ -279,7 +279,7 @@ describe("buildReviewQueue", () => {
 		expect(item.sessionId).toBe("primary");
 	});
 
-	test("links a review chat parked on its derived -os-review branch", () => {
+	test("links a review session parked on its derived -os-review branch", () => {
 		const target = pr({ number: 15, branch: "add-timeline-range" });
 		const [item] = buildReviewQueue(
 			[target],

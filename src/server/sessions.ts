@@ -1,5 +1,5 @@
 import { chmodSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { statePath } from "./paths";
 import { existsSync } from "fs";
 import {
@@ -12,7 +12,7 @@ import { getTitleOverride } from "./title-overrides";
 import { getStatusOverride } from "./status-overrides";
 import { getReviewRequest } from "./review-requests";
 import { getGeneratedTitle } from "./generated-titles";
-import { ensureChatWorkspaces } from "./chat-workspace";
+import { ensureSessionWorkspaces } from "./session-workspace";
 import { findCodexRollout } from "./codex-accounts";
 import { providerFor } from "./models";
 import { parseTranscript, parseTranscriptAsync } from "./jsonl-parser";
@@ -58,7 +58,7 @@ import type {
 const SLACK_SESSIONS_DIR = statePath(".slack-sessions");
 const LINEAR_SESSIONS_DIR = statePath(".linear-sessions");
 const CLI_SESSIONS_DIR = statePath(".claude/sessions");
-const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 const CLAUDE_PROJECTS_DIR = statePath(".claude/projects");
 
 const SKIP_FILES = new Set([
@@ -693,7 +693,7 @@ function getFileMtime(path: string): string {
 /**
  * Overlay natively-owned extras onto a slack/linear-scanned session.
  * touchNativeSession writes fields like walkthrough/linkedPrs keyed by the
- * UNIFIED id into ~/.opensession-chats/<id>.json — for non-opensession sessions
+ * UNIFIED id into ~/.opensession-sessions/<id>.json — for non-opensession sessions
  * that sidecar has no `id` field, so scanNativeSessions skips it and the
  * fields silently vanished from the unified view (publish_walkthrough on a
  * Slack session kept answering "no walkthrough on session" right after
@@ -708,9 +708,9 @@ function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
   if (data.linkedPrs?.length) session.linkedPrs = data.linkedPrs;
   if (data.attachedRepos?.length) session.attachedRepos = data.attachedRepos;
   if (data.previewPath) session.previewPath = data.previewPath;
-  // The workspace this chat is filed under. Slack/Linear session files are
+  // The workspace this session is filed under. Slack/Linear session files are
   // read-only, so for those sources the link lives here in the sidecar (written
-  // by chat-workspace.ts) rather than in the session file itself.
+  // by session-workspace.ts) rather than in the session file itself.
   if (data.workspaceId) session.workspaceId = data.workspaceId;
   return session;
 }
@@ -863,7 +863,6 @@ function scanNativeSessions(): UnifiedSession[] {
       repo: data.repo ?? (data as { project?: string }).project,
       workspaceId: data.workspaceId ?? null,
       parentSessionId: data.parentSessionId,
-      sideChatOf: data.sideChatOf,
       desk: data.desk,
       spawnDepth: data.spawnDepth,
       attachedRepos: data.attachedRepos,
@@ -2086,7 +2085,7 @@ export function getAllSessions(): UnifiedSession[] {
     string,
     Array<{ repo: string; branch: string; pr: PrInfo }>
   >();
-  // Chats with no branch of their own inherit their workspace's, so every chat
+  // Sessions with no branch of their own inherit their workspace's, so every session
   // in a workspace resolves to the same PR. Read each workspace once.
   const workspaceOf = prWorkspaceReader();
   if (prsBySession.size > 0)
@@ -2251,11 +2250,11 @@ export function getAllSessions(): UnifiedSession[] {
     if (review) session.reviewRequest = review;
   }
 
-  // Every chat belongs to exactly one workspace (chat-workspace.ts). File any
+  // Every session belongs to exactly one workspace (session-workspace.ts). File any
   // that surfaced without one — in memory now, on disk right after — so the
   // sidebar only ever has workspace rows to render. Runs after the title
-  // registries above so a minted workspace takes the chat's final name.
-  ensureChatWorkspaces(allSessions);
+  // registries above so a minted workspace takes the session's final name.
+  ensureSessionWorkspaces(allSessions);
 
   // Sort by lastActivity descending
   allSessions.sort(

@@ -16,7 +16,7 @@ import { UserAvatar } from "./UserAvatar";
  * connection state already lives on the account row. Status appears where
  * there's room to say it in words — the popover's rows, where a face is dimmed
  * when the person has OS¹ closed, gets a hollow green dot when they're in the
- * app, and a filled pulsing one while a chat of theirs has a turn in flight.
+ * app, and a filled pulsing one while a session of theirs has a turn in flight.
  * That pulsing green dot is the same "working" language as the viewer's
  * Working pill.
  */
@@ -27,12 +27,12 @@ export interface TeamMember {
 	person: Person;
 	/** Has OS¹ open right now (global presence). */
 	online: boolean;
-	/** One of their chats has a turn in flight. */
+	/** One of their sessions has a turn in flight. */
 	working: boolean;
 	/** True for the signed-in person. */
 	isYou: boolean;
 	/**
-	 * What answers "what are they on": the running chat, else the one they're
+	 * What answers "what are they on": the running session, else the one they're
 	 * looking at, else their most recent.
 	 */
 	session?: UnifiedSession;
@@ -76,14 +76,14 @@ export function useTeamPresence({
 	const viewingBy = new Map<string, string>();
 	for (const v of teamViewing || []) viewingBy.set(firstName(v.user), v.sessionId);
 
-	// Per person: the newest chat, and any chat of theirs with a run in flight.
-	// Automations and sub-agent chats are machine work, not "what Kent is on".
+	// Per person: the newest session, and any session of theirs with a run in flight.
+	// Automations and sub-agent sessions are machine work, not "what Kent is on".
 	const latest = new Map<string, UnifiedSession>();
 	const runningBy = new Map<string, UnifiedSession>();
 	const byId = new Map<string, UnifiedSession>();
 	for (const s of sessions) {
 		byId.set(s.id, s);
-		if (s.archived || s.sideChatOf || s.automation) continue;
+		if (s.archived || s.automation) continue;
 		const key = firstName(s.startedBy);
 		if (!key) continue;
 		const prev = latest.get(key);
@@ -284,7 +284,7 @@ export function TeamFacepile({
 
 /**
  * The sidebar's pile: a face row that opens the team, each row saying what
- * that person is on. Clicking a row opens their chat.
+ * that person is on. Clicking a row opens their session.
  */
 export function TeamPresencePopover({
 	members,

@@ -7,14 +7,14 @@ import XCTest
 /// `SessionsListViewModel.rowsInserting` / `rowsRemoving`).
 ///
 /// These pin the grouping properties that make the splice equivalent to the
-/// regroup it replaces: a workspace-less, worktree-less chat owns a row nothing
-/// else can join, and dropping one chat only rearranges its own row.
+/// regroup it replaces: a workspace-less, worktree-less session owns a row nothing
+/// else can join, and dropping one session only rearranges its own row.
 final class SidebarRowSpliceTests: XCTestCase {
     private func sessions(_ json: String) throws -> [Session] {
         try JSONDecoder().decode([Session].self, from: Data(json.utf8))
     }
 
-    /// A workspace of two chats, a legacy worktree row, and a lone chat.
+    /// A workspace of two sessions, a legacy worktree row, and a lone session.
     private func existingSessions() throws -> [Session] {
         try sessions(
             """
@@ -40,7 +40,7 @@ final class SidebarRowSpliceTests: XCTestCase {
         )
     }
 
-    func testPendingChatOwnsAFreshRowAheadOfTheRest() throws {
+    func testPendingSessionOwnsAFreshRowAheadOfTheRest() throws {
         let existing = try existingSessions()
         let pending = pendingSession(id: "pending-1")
 
@@ -52,7 +52,7 @@ final class SidebarRowSpliceTests: XCTestCase {
         XCTAssertEqual(regrouped.first?.id, "session:pending-1")
     }
 
-    func testResolvedPendingChatReplacesItsOwnRow() throws {
+    func testResolvedPendingSessionReplacesItsOwnRow() throws {
         let existing = try existingSessions()
         let pending = pendingSession(id: "pending-1")
         let real = pendingSession(id: "bks-new")
@@ -65,10 +65,10 @@ final class SidebarRowSpliceTests: XCTestCase {
         XCTAssertEqual(regrouped, spliced)
     }
 
-    /// A chat created into an existing workspace joins that row instead, and
+    /// A session created into an existing workspace joins that row instead, and
     /// the row leads the list — the position a full regroup gives it, since
-    /// the new chat is the first session the pass walks.
-    func testPendingChatInAWorkspaceJoinsThatRowAndLeads() throws {
+    /// the new session is the first session the pass walks.
+    func testPendingSessionInAWorkspaceJoinsThatRowAndLeads() throws {
         let existing = try existingSessions()
         let pending = pendingSession(id: "pending-1", workspaceId: "ws-1")
 
@@ -85,7 +85,7 @@ final class SidebarRowSpliceTests: XCTestCase {
         XCTAssertEqual(regrouped.first?.sessions.count, 3)
     }
 
-    func testDroppingAChatOnlyRearrangesItsOwnRow() throws {
+    func testDroppingASessionOnlyRearrangesItsOwnRow() throws {
         let all = try existingSessions()
         let dropped = "bks-1"
 
@@ -104,7 +104,7 @@ final class SidebarRowSpliceTests: XCTestCase {
         XCTAssertEqual(regrouped, spliced)
     }
 
-    func testDroppingARowsLastChatRemovesTheRow() throws {
+    func testDroppingARowsLastSessionRemovesTheRow() throws {
         let all = try existingSessions()
         let dropped = "bks-4"
 

@@ -237,22 +237,22 @@ struct AppearanceSettingsView: View {
 
             Section {
                 if loading {
-                    ProgressView("Loading chat preferences…")
+                    ProgressView("Loading session preferences…")
                 } else {
                     Picker("Tool calls and messages", selection: $turnActivity) {
                         Text("Expand while running").tag("auto")
                         Text("Always expanded").tag("expanded")
                         Text("Always collapsed").tag("collapsed")
                     }
-                    Button(saving ? "Saving…" : "Save chat preference") {
+                    Button(saving ? "Saving…" : "Save session preference") {
                         Task { await saveTurnActivity() }
                     }
                     .disabled(!prefsLoaded || saving || turnActivity == savedTurnActivity)
                 }
             } header: {
-                Text("Chat")
+                Text("Session")
             } footer: {
-                Text("Controls how a turn's working activity is folded in chat. Sidebar settings are not shown because the native app has no web sidebar.")
+                Text("Controls how a turn's working activity is folded in a session. Sidebar settings are not shown because the native app has no web sidebar.")
             }
 
             if let error {
@@ -313,7 +313,7 @@ struct AppearanceSettingsView: View {
             turnActivity = confirmed["turn-activity"] ?? selected
             nativeTurnActivity = turnActivity
             savedTurnActivity = turnActivity
-            savedMessage = "Chat preference saved."
+            savedMessage = "Session preference saved."
         } catch {
             self.error = error.localizedDescription
         }

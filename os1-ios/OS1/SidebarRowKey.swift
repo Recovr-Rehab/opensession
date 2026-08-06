@@ -4,7 +4,7 @@ import Foundation
 /// share — hides (`src/server/hides.ts`) and pins (`src/server/pins.ts`).
 ///
 /// A row is keyed `workspace:<id>` when it's a real workspace, `wt:<dir>` for a
-/// legacy isolated-worktree row, and by the bare chat id for a solo chat. Only
+/// legacy isolated-worktree row, and by the bare session id for a solo session. Only
 /// these forms may be persisted: the iOS-internal `worktree:` / `session:`
 /// prefixes on `SidebarWorkspace.id` would be invisible to the web sidebar,
 /// which writes the same files.
@@ -16,9 +16,9 @@ enum SidebarRowKeys {
         return id
     }
 
-    /// Every row key a chat can sit under. Used to clear an overlay entry
+    /// Every row key a session can sit under. Used to clear an overlay entry
     /// (over-clearing is safe — it only ever restores a row) and to spot the
-    /// hidden rows a blocked chat should resurface.
+    /// hidden rows a blocked session should resurface.
     static func candidateKeys(for session: Session) -> [String] {
         var keys = [session.id]
         if let workspaceId = session.workspaceId, !workspaceId.isEmpty {

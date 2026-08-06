@@ -4,7 +4,7 @@
  * normal opensession session so it shows up in the sessions list and UI.
  */
 import { randomUUIDv7 } from "bun";
-import { OPENSESSION_CHATS_DIR , newSessionId} from "./paths";
+import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { parseCron, cronMatches, nextRun } from "./cron";
@@ -33,7 +33,7 @@ import { configuredIntegration, personaName } from "./config";
 import { shouldPersistModelSwitch } from "./run-events";
 
 const AUTOMATIONS_DIR = stateDir("automations");
-const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 /**
  * Config for an automation that is driven by polling a Grafana Loki failure
@@ -992,7 +992,7 @@ export async function runAutomation(
       } catch {}
     }
     // File ticket-triggered sessions under the ticket's ONE workspace so they
-    // show up as chat tabs there (adopt-don't-duplicate; workspace-resolve.ts).
+    // show up as session tabs there (adopt-don't-duplicate; workspace-resolve.ts).
     let ticketWorkspaceId: string | undefined;
     if (plainThreadId) {
       try {

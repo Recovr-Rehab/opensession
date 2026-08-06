@@ -146,7 +146,7 @@ wins over the config id) activates BOTH halves at once:
   client-claimed `user` on every WS message and stamps `createdByLogin` on
   new sessions; a one-time boot migration backfills `createdByLogin` onto
   existing sessions from `createdBy` (marker:
-  `~/.opensession-chats/.github-user-migration.json`). Non-browser callers
+  `~/.opensession-sessions/.github-user-migration.json`). Non-browser callers
   (curl/CDP recipes) authenticate with `Authorization: Bearer <token>` using a
   token from the web-sessions file.
 

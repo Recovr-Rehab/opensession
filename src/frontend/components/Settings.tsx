@@ -2894,12 +2894,12 @@ function AppearancePanel() {
 			</SettingsSection>
 
 			<SettingsGroupLabel>
-				Chat
+				Session
 			</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Tool calls & messages"
-					desc="How each turn's working — tool calls and in-between messages — folds in the chat. Work stays folded by default; expanding a turn does not open its individual tool inputs."
+					desc="How each turn's working — tool calls and in-between messages — folds in the session. Work stays folded by default; expanding a turn does not open its individual tool inputs."
 					control={
 						<Select
 							label="Tool calls & messages"

@@ -38,10 +38,10 @@ describe("sessionPrBranch", () => {
 		).toBe("add-lottie-primitive-os-review");
 	});
 
-	// An ask-style chat shares its workspace's checkout but stores no branch of
+	// An ask-style session shares its workspace's checkout but stores no branch of
 	// its own, so without the fallback it showed "Create PR" beside a sibling
 	// tab on the same workspace's connected PR.
-	test("a branchless chat inherits its workspace's branch", () => {
+	test("a branchless session inherits its workspace's branch", () => {
 		expect(
 			sessionPrBranch(
 				{ id: "bks-ask", branch: null } as unknown as UnifiedSession,
@@ -74,7 +74,7 @@ describe("sessionPrBranch", () => {
 		).toBeNull();
 	});
 
-	// A workspace can hold chats from several repos; the branch belongs to one.
+	// A workspace can hold sessions from several repos; the branch belongs to one.
 	test("never inherits a branch from another repo", () => {
 		expect(
 			sessionPrBranch({ id: "bks-ask", repo: "opensession" } as UnifiedSession, {

@@ -25,13 +25,12 @@ import {
 	findSession,
 	getCachedSessions,
 	invalidateSessionsCache,
-	isLegacySideChat,
 	maybePersistEffort,
 	maybePersistFastMode,
 	runErrors,
 } from "../session-cache";
 import { asDataUrlList, parseImageDataUrls } from "../uploads";
-import { mentionedUsers } from "../chat";
+import { mentionedUsers } from "../people";
 import { sendPushToUser } from "../push";
 import {
 	promptReceipt,
@@ -157,8 +156,8 @@ export async function handleSessionsRoutes(
 		if (!prompt) {
 			return Response.json({ error: "prompt required" }, { status: 400 });
 		}
-		// Join an existing workspace as a sibling chat — the native apps' "new
-		// chat in this workspace", equivalent to the web tab strip's "+".
+		// Join an existing workspace as a sibling session — the native apps' "new
+		// session in this workspace", equivalent to the web tab strip's "+".
 		const workspaceId =
 			typeof body?.workspaceId === "string" && body.workspaceId
 				? body.workspaceId
@@ -170,7 +169,7 @@ export async function handleSessionsRoutes(
 					? ("scratch" as const)
 					: ("ask" as const);
 		let branch = typeof body?.branch === "string" ? body.branch.trim() : "";
-		// A code chat joining a workspace that already owns a worktree works on
+		// A code session joining a workspace that already owns a worktree works on
 		// that worktree's branch, so skip the (LLM) branch suggestion — it would
 		// only be discarded. A workspace with no worktree yet still needs one.
 		const joinsWorktree = !!(workspaceId && getWorkspace(workspaceId)?.worktreeDir);
@@ -228,7 +227,6 @@ export async function handleSessionsRoutes(
 		// how many prompts are queued behind it. Drives the sidebar/tab "needs
 		// input" highlight without a second round-trip.
 		const enriched = getCachedSessions()
-			.filter((s) => !isLegacySideChat(s))
 			.map((s) => ({
 				...s,
 				repo: s.repo || defaultRepo().id,
@@ -244,7 +242,7 @@ export async function handleSessionsRoutes(
 				lastRunError: runErrors.get(s.id) || s.lastRunError,
 			}));
 		const { sessions, cloudUnreachable } = await mergedCloudSessions(enriched);
-		const text = JSON.stringify(sessions.filter((s) => !isLegacySideChat(s)));
+		const text = JSON.stringify(sessions);
 		sessionsResponseSnapshot = {
 			text,
 			hash: Bun.hash(text).toString(16),
@@ -256,7 +254,7 @@ export async function handleSessionsRoutes(
 
 	// Deliver a follow-up prompt to an existing session. REST shape for the
 	// native/extension clients (os1-ios, os1-chrome) — the web UI keeps its
-	// richer WS "prompt" message (staged file attachments, context chats).
+	// richer WS "prompt" message (staged file attachments, context sessions).
 	// Same semantics as the opensession-sessions MCP send_to_session: steers a
 	// busy run by default, `busy: "queue"` waits behind it, idle starts a fresh
 	// turn.
@@ -424,7 +422,7 @@ export async function handleSessionsRoutes(
 	}
 
 	// Workspace overview: the opening prompt + all media (screenshots,
-	// videos) across the workspace's member chats — feeds the floating
+	// videos) across the workspace's member sessions — feeds the floating
 	// preview panel in the session viewer. Images come back as
 	// transcript-image refs (below), not inline base64.
 	{
@@ -433,10 +431,10 @@ export async function handleSessionsRoutes(
 		);
 		if (m && req.method === "GET") {
 			const wsId = decodeURIComponent(m[1]);
-			const chats = getCachedSessions().filter(
+			const members = getCachedSessions().filter(
 				(s) => s.workspaceId === wsId,
 			);
-			return Response.json(await buildWorkspaceOverview(chats));
+			return Response.json(await buildWorkspaceOverview(members));
 		}
 	}
 
@@ -513,7 +511,6 @@ export async function handleSessionsRoutes(
 		const byPath = new Map<string, string>(); // transcriptPath → sessionId
 		for (const s of getCachedSessions()) {
 			if (
-				!isLegacySideChat(s) &&
 				s.transcriptPath &&
 				!byPath.has(s.transcriptPath) &&
 				existsSync(s.transcriptPath)
@@ -652,8 +649,8 @@ export async function handleSessionsRoutes(
 		invalidateSessionsCache();
 		if (archived) {
 			// setArchived drops the plain id pin; also drop legacy alias-id pins,
-			// and the workspace pin once its last live chat is archived (else the
-			// row resurfaces in Pinned when a new chat joins the workspace).
+			// and the workspace pin once its last live session is archived (else the
+			// row resurfaces in Pinned when a new session joins the workspace).
 			unpinArchivedSessions([session], getAllSessions());
 		}
 		return Response.json({ ok: true, stoppedRun });
@@ -853,18 +850,6 @@ export async function handleSessionsRoutes(
 			} catch {}
 		};
 		try {
-			// Cascade-delete legacy side-chat records with their parent. They remain
-			// hidden after the feature's removal, so orphaning them would leave
-			// unreachable files on disk.
-			for (const child of getAllSessions().filter(
-				(s) => s.sideChatOf === sessionId,
-			)) {
-				try {
-					deleteSession(child);
-					destroySessionSandbox(child, "delete");
-				} catch {}
-				purgeTranscriptRows(child.id);
-			}
 			deleteSession(session);
 			purgeTranscriptRows(session.id);
 			invalidateSessionsCache();
@@ -873,10 +858,10 @@ export async function handleSessionsRoutes(
 			// loss is the mode's documented contract). Best-effort and detached:
 			// a docker hiccup must never block the delete.
 			destroySessionSandbox(session, "delete");
-			// If that was the workspace's last chat, delete the workspace too —
+			// If that was the workspace's last session, delete the workspace too —
 			// otherwise auto-wrapped 1:1 workspaces linger as undeletable empty
 			// sidebar rows. PR-backed workspaces (`key`) stay: they regroup new
-			// chats for the same PR.
+			// sessions for the same PR.
 			if (session.workspaceId) {
 				const ws = getWorkspace(session.workspaceId);
 				const members = getAllSessions().filter(

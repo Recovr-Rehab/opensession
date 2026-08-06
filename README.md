@@ -80,8 +80,8 @@ Details are in docs/setup/ in the repo — read them when unsure.
 
 Then read the real setup guide — secrets, accounts, integrations, systemd:
 
-- **[CONCEPTS.md](CONCEPTS.md)** — the core model: repositories, workspaces,
-  sessions, automations, goals and how they fit together
+- **[CONCEPTS.md](CONCEPTS.md)** — the core model: projects, workspaces, chats,
+  automations, goals and how they fit together
 - **[docs/setup/](docs/setup/README.md)** — overview, requirements, trust model
 - [docs/setup/install.md](docs/setup/install.md) — bare box → running service
 - [docs/setup/ec2.md](docs/setup/ec2.md) — provisioning a clean EC2 box

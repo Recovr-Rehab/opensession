@@ -22,9 +22,9 @@ struct SessionView: View {
     /// where it's still the app's, so the input bar can be pinned to it.
     @Environment(\.colorScheme) private var appColorScheme
 
-    /// Full-window-width chat text is unreadable on the Mac; cap the content
+    /// Full-window-width session text is unreadable on the Mac; cap the content
     /// column (transcript AND composer) and center it, like other chat apps.
-    private let contentMaxWidth = OS1VisualStyle.chatMaxWidth
+    private let contentMaxWidth = OS1VisualStyle.sessionMaxWidth
 
     /// Mobile web uses a tighter 12pt content rail; regular-width iPad and Mac
     /// keep more breathing room while sharing the same 780pt reading column.
@@ -285,17 +285,6 @@ struct SessionView: View {
                             newBelow = true
                         }
                     }
-                    // Notes interleave into the blocks without touching
-                    // `displayItems`, so they need their own trigger — the
-                    // backfill lands a beat after the transcript and would
-                    // otherwise drop a note silently below the fold.
-                    .onChange(of: viewModel.notes.count) {
-                        if pinnedToBottom || holdingAtLatest {
-                            scrollToBottom(proxy, animated: true)
-                        } else {
-                            newBelow = true
-                        }
-                    }
                     .onChange(of: viewModel.liveText) {
                         if pinnedToBottom {
                             scrollToBottom(proxy, animated: false)
@@ -437,7 +426,7 @@ struct SessionView: View {
         .sheet(isPresented: $showWorktreeInfo) {
             WorktreeInfoView(
                 viewModel: viewModel,
-                chats: tabs,
+                sessions: tabs,
                 catalog: catalog
             )
             .presentationDetents([.large])
@@ -739,12 +728,12 @@ struct SessionView: View {
 }
 
 #if os(iOS)
-/// The chat's overflow menu — the trailing nav-bar control, a native `Menu` so
+/// The session's overflow menu — the trailing nav-bar control, a native `Menu` so
 /// iOS renders (and animates) it as a real UIMenu.
 ///
 /// It carries the worktree actions the sidebar row offers under long-press, so
-/// the chat isn't a dead end for them: details, its pull request, rename, share,
-/// hide and archive — plus "New chat", which used to be the bare `+` this menu
+/// the session isn't a dead end for them: details, its pull request, rename, share,
+/// hide and archive — plus "New session", which used to be the bare `+` this menu
 /// replaced.
 ///
 /// Its own view struct on purpose. The menu reads `prDetails` and the hide
@@ -752,7 +741,7 @@ struct SessionView: View {
 /// whole body — transcript included — every time one of them moved.
 private struct SessionActionsMenu: View {
     let viewModel: SessionViewModel
-    /// The chats of this worktree — the sidebar row, regrouped below.
+    /// The sessions of this worktree — the sidebar row, regrouped below.
     let tabs: [Session]
     let onNewSession: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
@@ -766,13 +755,13 @@ private struct SessionActionsMenu: View {
         Menu {
             if let onNewSession {
                 Button(action: onNewSession) {
-                    // A chat in a workspace gets a sibling tab (sharing the
-                    // worktree in code mode); a workspace-less legacy chat has
+                    // A session in a workspace gets a sibling tab (sharing the
+                    // worktree in code mode); a workspace-less legacy session has
                     // nothing to join, so the plain wording stays honest.
                     Label(
                         viewModel.session.workspaceId == nil
-                            ? "New chat"
-                            : "New chat in this workspace",
+                            ? "New session"
+                            : "New session in this workspace",
                         systemImage: "plus"
                     )
                 }
@@ -815,12 +804,12 @@ private struct SessionActionsMenu: View {
             if let workspace, !workspace.isOptimistic {
                 Section {
                     // Hiding is the personal counterpart to archiving: the row
-                    // leaves YOUR sidebar while the chat keeps running for
+                    // leaves YOUR sidebar while the session keeps running for
                     // everyone else — so it isn't destructive-styled.
                     if HideStore.shared.isHidden(workspace) {
                         Button {
                             // `unhide` rather than clearing this row's key:
-                            // it drops every key the chat could sit under,
+                            // it drops every key the session could sit under,
                             // which is deliberately safe (over-clearing only
                             // ever restores a row) and keeps the menu off the
                             // row-key helper.
@@ -846,11 +835,11 @@ private struct SessionActionsMenu: View {
             Image(systemName: "ellipsis")
                 .foregroundStyle(OS1VisualStyle.text)
         }
-        .accessibilityLabel("Chat actions")
+        .accessibilityLabel("Session actions")
     }
 
-    /// The sidebar row these chats form. `tabs` is exactly one worktree's
-    /// chats, so regrouping them reproduces the row — and, crucially, the row
+    /// The sidebar row these sessions form. `tabs` is exactly one worktree's
+    /// sessions, so regrouping them reproduces the row — and, crucially, the row
     /// KEY that hides are stored under — without reaching for the list's model.
     private var workspace: SidebarWorkspace? {
         SessionsListViewModel.sidebarWorkspaces(in: tabs).first { workspace in
@@ -910,18 +899,18 @@ struct SessionTabsView: View {
     let viewModelForSession: (Session) -> SessionViewModel
     let onSaveComposerDraft: (Session, SessionViewModel.ComposerDraft) -> Void
     let onNewSession: () -> Void
-    /// Rename the worktree these chats share, from the chat's overflow menu.
+    /// Rename the worktree these sessions share, from the session's overflow menu.
     let onRenameWorkspace: (String) -> Void
-    /// Archive every chat of the worktree, from the chat's overflow menu.
+    /// Archive every session of the worktree, from the session's overflow menu.
     let onArchiveWorkspace: () -> Void
-    /// Close (archive) a chat closed from the tab strip.
+    /// Close (archive) a session closed from the tab strip.
     let onCloseTab: (Session) -> Void
 
     @State private var activeId: String
     @State private var transitionEdge = Edge.trailing
-    /// Chats closed from the strip during this visit. Archiving alone doesn't
-    /// retire the pushed chat's tab: `tabSessions` deliberately keeps the
-    /// session the stack was pushed with even once it's archived (so a chat
+    /// Sessions closed from the strip during this visit. Archiving alone doesn't
+    /// retire the pushed session's tab: `tabSessions` deliberately keeps the
+    /// session the stack was pushed with even once it's archived (so a session
     /// opened from the archive sheet still renders), which would leave the tab
     /// you just closed sitting in the strip.
     @State private var closedIds: Set<String> = []
@@ -1018,9 +1007,9 @@ struct SessionTabsView: View {
                 .environment(\.colorScheme, tabsColorScheme)
             }
         }
-        // Reading a chat clears its unread mark, and keeps clearing it while
+        // Reading a session clears its unread mark, and keeps clearing it while
         // you stay in it: `activeSession` is re-read from the sessions poll,
-        // so each new `lastActivity` re-marks the open chat instead of bolding
+        // so each new `lastActivity` re-marks the open session instead of bolding
         // its row behind you. Same rule as the web viewer's markRead tick.
         .onChange(of: activeSession, initial: true) { _, session in
             ReadsStore.shared.open(session)
@@ -1039,9 +1028,9 @@ struct SessionTabsView: View {
         }
     }
 
-    /// Close a chat from the strip: archive it, then land on a neighbour —
+    /// Close a session from the strip: archive it, then land on a neighbour —
     /// the tab to its right, or the one to its left when it was last. Closing
-    /// the only remaining chat leaves nothing to show, so the stack pops back
+    /// the only remaining session leaves nothing to show, so the stack pops back
     /// to the sessions list.
     private func close(_ session: Session) {
         let strip = visibleTabs
@@ -1086,9 +1075,9 @@ struct SessionTabsView: View {
     }
 }
 
-/// Workspace chat tabs, as individually floating glass pills under the
+/// Workspace session tabs, as individually floating glass pills under the
 /// navigation bar. Not one bar: each tab is its own capsule with its own
-/// surface, so the row reads as chips over the chat rather than a second band
+/// surface, so the row reads as chips over the session rather than a second band
 /// of chrome. The transcript passes BEHIND them (the strip is attached as a
 /// `safeAreaBar`) and dissolves through the soft scroll edge effect plus
 /// `tabStripTopWash`.
@@ -1099,7 +1088,7 @@ private struct SessionTabBar: View {
     let tabs: [Session]
     let activeId: String
     let onSelect: (Session) -> Void
-    /// Close (archive) a chat from the strip. Nil leaves the tabs read-only.
+    /// Close (archive) a session from the strip. Nil leaves the tabs read-only.
     var onClose: ((Session) -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -1124,7 +1113,7 @@ private struct SessionTabBar: View {
                 .padding(.vertical, 2)
             }
             .scrollIndicators(.hidden)
-            // No top padding: the pills are the chat's own chrome rather than
+            // No top padding: the pills are the session's own chrome rather than
             // a second band, so they ride tight under the navigation bar.
             .padding(.bottom, 4)
             .tabStripTopWash()
@@ -1142,7 +1131,7 @@ private struct SessionTabBar: View {
     }
 
     /// One tab pill. The close affordance is attached here rather than in the
-    /// strip so an optimistic chat — which the server can't archive yet — is
+    /// strip so an optimistic session — which the server can't archive yet — is
     /// simply left without one, instead of long-pressing into an empty menu.
     @ViewBuilder
     private func tab(_ session: Session) -> some View {
@@ -1152,7 +1141,7 @@ private struct SessionTabBar: View {
                 Button(role: .destructive) {
                     close(session)
                 } label: {
-                    Label("Close chat", systemImage: "xmark")
+                    Label("Close session", systemImage: "xmark")
                 }
             }
         } else {
@@ -1170,7 +1159,7 @@ private struct SessionTabBar: View {
     ) -> some View {
         let isActive = session.id == activeId
         // The × rides on the OPEN tab only, matching the web strip's "close the
-        // chat you're in" gesture without spending an extra 32pt of a phone's
+        // session you're in" gesture without spending an extra 32pt of a phone's
         // strip on every sibling — those close through the long-press menu.
         let showsClose = isActive && close != nil
         return HStack(spacing: 0) {
@@ -1227,7 +1216,7 @@ private struct SessionTabBar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close chat")
+                .accessibilityLabel("Close session")
             }
         }
         // The active tab's fill sits INSIDE its own glass, above the material:
@@ -1251,7 +1240,7 @@ private struct SessionTabBar: View {
         // each pill, and bare glass took on the luminance of whatever scrolled
         // under it — a dark code block dragged the whole tab dark. The page
         // colour over a thick material holds it at a stable brightness; the
-        // chat still shows around it, not through it.
+        // session still shows around it, not through it.
         .background(OS1VisualStyle.background.opacity(0.7), in: pillShape)
         .background(.thickMaterial, in: pillShape)
         .glassSurface(in: pillShape, interactive: true)
@@ -1638,15 +1627,6 @@ private struct SessionInputBar: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 2) {
-            // Note mode tints nothing on its own, so it names itself — and the
-            // marker is the way back out of it. With no toolbar row to carry
-            // it, the single-row layout floats it above the field.
-            if isSingleRow, viewModel.noteMode {
-                noteModeChip
-                    .padding(.leading, 10)
-                    .padding(.top, 8)
-            }
-
             // Bottom-aligned: as the draft grows the field rises and the round
             // buttons stay seated on the pill's bottom edge, rather than
             // drifting to the middle of a tall row.
@@ -1719,9 +1699,6 @@ private struct SessionInputBar: View {
             if !isSingleRow {
                 HStack(spacing: 6) {
                     addMenu
-                    if viewModel.noteMode {
-                        noteModeChip
-                    }
                     Spacer(minLength: 8)
 
                     if viewModel.isRunning {
@@ -1738,7 +1715,7 @@ private struct SessionInputBar: View {
         // Near-solid surface, not a see-through pane: the transcript passes
         // BEHIND the composer, and a washed-out bar over live text made the
         // draft hard to read. The page color on top of a thick material lands
-        // on white in light mode and stays dark in dark mode — the chat still
+        // on white in light mode and stays dark in dark mode — the session still
         // shows around and below the pill, just not through it.
         .background(
             OS1VisualStyle.background.opacity(0.7),
@@ -1771,46 +1748,20 @@ private struct SessionInputBar: View {
         #endif
     }
 
-    /// Marker for note mode, which tints nothing on its own — and the way back
-    /// out of it. Shared by both composer layouts.
-    private var noteModeChip: some View {
-        Button {
-            viewModel.noteMode = false
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "note.text")
-                Text("Team note")
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
-            }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(OS1VisualStyle.hover, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Stop writing a team note")
-    }
-
-    /// The composer's "+": attachments plus the chat-level actions (mentions,
-    /// goal, team note, promote, scheduling) the web input has always carried
+    /// The composer's "+": attachments plus the session-level actions
+    /// (mentions, goal, promote, scheduling) the web input has always carried
     /// behind the same button.
     private var addMenu: some View {
         ComposerAddMenu(
             images: $viewModel.attachedImages,
-            noteMode: viewModel.noteMode,
             hasGoal: viewModel.goal != nil,
             // `/goal` is a native slash command; a Slack- or Linear-sourced
-            // chat would just post the text at the agent.
+            // session would just post the text at the agent. "backstage" is the
+            // pre-rename source value older servers still send.
             onSetGoal: isNativeSession ? { sheet = .goal } : nil,
-            onToggleNoteMode: {
-                viewModel.noteMode.toggle()
-                inputFocused = true
-            },
             onReferenceFile: { sheet = .reference },
             hasDraft: !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            // Scheduling is a server-side hold on a native chat's own queue;
+            // Scheduling is a server-side hold on a native session's own queue;
             // an agent-owned session has no such queue to put it on.
             onSchedule: isNativeSession ? { sheet = .schedule } : nil,
             // Ask mode reads the code but can't change it. Promoting cuts a
@@ -1828,7 +1779,7 @@ private struct SessionInputBar: View {
         )
     }
 
-    /// A chat this app owns end to end, rather than one mirrored from Slack or
+    /// A session this app owns end to end, rather than one mirrored from Slack or
     /// Linear. "backstage" is the pre-rename value older servers still send.
     private var isNativeSession: Bool {
         viewModel.session.source == "opensession"
@@ -1836,7 +1787,6 @@ private struct SessionInputBar: View {
     }
 
     private var composerPlaceholder: String {
-        if viewModel.noteMode { return "Team note — the agent won't see it" }
         guard viewModel.isRunning else { return "Message" }
         return busySend == "steer"
             ? "Message — steers this run"
@@ -1851,7 +1801,7 @@ private struct SessionInputBar: View {
     /// between, so an idle composer keeps the plain button.
     @ViewBuilder
     private var sendButton: some View {
-        if viewModel.isRunning && !viewModel.noteMode {
+        if viewModel.isRunning {
             Menu {
                 Button {
                     viewModel.sendDraft(busyModeOverride: "steer")

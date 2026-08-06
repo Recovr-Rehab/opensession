@@ -6,8 +6,8 @@
  * attached repos + linked PRs) — so resolution never relies on the `ghpr-` /
  * `plain-` dedupe key alone: it also matches member sessions' PR refs and
  * worktree ownership before minting anything. The key marks provenance of
- * workspaces minted chat-less from a PR/ticket (and hides them from the
- * Workspaces band until they gain a chat); an adopted user workspace is
+ * workspaces minted session-less from a PR/ticket (and hides them from the
+ * Workspaces band until they gain a session); an adopted user workspace is
  * key-stamped only if it has no key yet.
  *
  * Used by the HTTP resolve endpoint (routes/workspace.ts), create_session /
@@ -95,7 +95,7 @@ export interface ResolvedWorkspace {
 /**
  * Resolve the one workspace for a PR. Lookup order (adopt before create):
  * dedupe key → newest PR-matching session's workspace → worktree owner →
- * mint a chat-less `ghpr-` workspace. Returns null when the PR can't be
+ * mint a session-less `ghpr-` workspace. Returns null when the PR can't be
  * normalized (unknown to the PR cache and the caller gave no branch).
  */
 export async function resolvePrWorkspace(input: {
@@ -161,7 +161,7 @@ export async function resolvePrWorkspace(input: {
       }
     }
 
-    // 4. Mint a chat-less PR workspace (no worktreeDir — the first chat
+    // 4. Mint a session-less PR workspace (no worktreeDir — the first session
     // materializes it via the create_session fromPr path).
     const name =
       number !== undefined
@@ -231,7 +231,7 @@ export function resolvePlainWorkspace(input: {
  * Resolve the one workspace for a generic feed item (Tella video, …) by its
  * ExternalRef. The generic sibling of resolvePlainWorkspace: dedupe key
  * `<kind>-<id>`, adopt a filed session already carrying the ref, else mint a
- * chat-less workspace stamped with the ref (the feeds design).
+ * session-less workspace stamped with the ref (the feeds design).
  */
 export function resolveExternalWorkspace(input: {
   ref: ExternalRef;
@@ -262,7 +262,7 @@ export function resolveExternalWorkspace(input: {
     return { workspace: stamped, created: false };
   }
 
-  // Deliberately repo-less: feed-item workspaces start their chats in
+  // Deliberately repo-less: feed-item workspaces start their sessions in
   // scratch mode (repo-less scratch dir), not in a repo checkout.
   const workspace = createWorkspace({
     name: (ref.title || "").trim().slice(0, 120) || `${ref.kind} ${ref.id}`,

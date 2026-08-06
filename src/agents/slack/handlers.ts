@@ -686,7 +686,7 @@ export async function processMessage(
   if (createdSession) pinSlackSession(`slack-${sessionKey}`, msg.userId);
 
   // Auto-name the session from its opening prompt, exactly like a UI-created
-  // chat. Without this a Slack session wears its session key as a title
+  // session. Without this a Slack session wears its session key as a title
   // (scanSlackSessions falls back to `branch`, which for a thread/DM session is
   // the raw <channel>-<threadTs>), because the two other ensureGeneratedTitle
   // callers are UI-only: run-session.ts gates on source === "opensession" and

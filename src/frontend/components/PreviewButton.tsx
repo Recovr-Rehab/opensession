@@ -66,7 +66,7 @@ export function PreviewButton({
    *  into stray Electron windows). The interstitial flow stays for contexts
    *  without a tab (phones, PreviewWait deep links). */
   onOpenTab?: () => void;
-  /** When set, the snapshot modal offers "Attach to chat" (stages the PNG as a
+  /** When set, the snapshot modal offers "Attach to session" (stages the PNG as a
    *  composer image, like a paste). */
   onAttachImage?: (dataUrl: string) => void;
   /** Mirrors the polled status to the parent so other preview affordances can
@@ -248,7 +248,7 @@ export function PreviewButton({
                 setShot(null);
               }}
             >
-              Attach to chat
+              Attach to session
             </Button>
           )}
           {shot && (

@@ -196,8 +196,8 @@ export interface OpenSessionConfig {
 // branch from.
 //
 // NOTE: a "Project" in the UI is a separate thing — an optional folder that
-// groups chats (see src/server/projects.ts). A chat's worktree lives on the
-// chat and belongs to one of these repos.
+// groups sessions (see src/server/projects.ts). A session's worktree lives on the
+// session and belongs to one of these repos.
 export interface Repo {
   id: string;
   label: string;

@@ -5,7 +5,7 @@
  * the engine conversation across rounds via the deterministic per-PR session file.
  */
 import { existsSync, readFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "../../server/paths";
+import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import { recordRunOutcome, updateSessionFile } from "../../server/session-cache";
 import { runAgent } from "../../server/agent-runner";
 import { listAutomations } from "../../server/automations";
@@ -20,7 +20,7 @@ import type { NativeSessionFile } from "../../server/types";
 import { configuredServer } from "../../server/config";
 import { shouldPersistModelSwitch } from "../../server/run-events";
 
-const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 /**
  * Default external MCP servers for a PR flow, used when the review automation
@@ -61,7 +61,7 @@ export function githubFlowMcpServers(): string[] {
 }
 
 /**
- * All chats for one PR (its review/autofix/simplify/adversarial/mention runs,
+ * All sessions for one PR (its review/autofix/simplify/adversarial/mention runs,
  * plus whatever session originally opened the PR) belong in one Project folder.
  * Delegates to the shared adopt-don't-duplicate resolver (workspace-resolve.ts)
  * so the sidebar's PR clicks and these headless runs can never mint diverging
@@ -189,7 +189,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   const bksId = bksIdFor(opts.prNumber, opts.kind, opts.ghRepo);
   const startedAt = new Date();
 
-  // Group this and the PR's other chats under one Project folder.
+  // Group this and the PR's other sessions under one Project folder.
   const workspaceId = await workspaceIdForPr(opts.prNumber, opts.branch, opts.title, opts.cwd, opts.ghRepo);
 
   const existingSessionFile = readSessionFile(bksId);

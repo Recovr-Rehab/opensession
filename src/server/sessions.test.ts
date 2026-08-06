@@ -6,7 +6,7 @@ import type { UnifiedSession } from "./types";
 
 let home: string;
 let priorHome: string | undefined;
-let priorChatsDir: string | undefined;
+let priorSessionsDir: string | undefined;
 let priorCodexHome: string | undefined;
 let priorConfig: string | undefined;
 let priorGhBackoff: number | undefined;
@@ -15,7 +15,7 @@ beforeAll(async () => {
 	priorHome = process.env.HOME;
 	home = join(tmpdir(), `backstage-sessions-test-${crypto.randomUUID()}`);
 	process.env.HOME = home;
-	mkdirSync(join(home, ".opensession-chats"), { recursive: true });
+	mkdirSync(join(home, ".opensession-sessions"), { recursive: true });
 	mkdirSync(join(home, ".slack-sessions"), { recursive: true });
 	// The PR-cache assertions need a repo that actually carries a ghRepo:
 	// prRepos() filters those out, and the only BUILT-IN repo is `opensession`
@@ -48,14 +48,14 @@ beforeAll(async () => {
 	// The HOME override only reaches paths.ts / codex-accounts.ts if nothing
 	// evaluated them yet — and bun test file order guarantees nothing
 	// (another test file importing the server graph poisons the cached
-	// OPENSESSION_CHATS_DIR / codex-accounts' HOME with the real store, which
+	// OPENSESSION_SESSIONS_DIR / codex-accounts' HOME with the real store, which
 	// then leaks live sessions/rollouts into these assertions). The live-
 	// binding seams repoint them regardless of who loaded the module first;
-	// the cache-busted sessions.ts imports below re-read OPENSESSION_CHATS_DIR
+	// the cache-busted sessions.ts imports below re-read OPENSESSION_SESSIONS_DIR
 	// at their load (findCodexRollout is reached through a bare import of
 	// ./codex-accounts either way, so it needs the same live-binding seam).
 	const paths = await import("./paths");
-	priorChatsDir = paths.__setChatsDirForTest(join(home, ".opensession-chats"));
+	priorSessionsDir = paths.__setSessionsDirForTest(join(home, ".opensession-sessions"));
 	const codexAccounts = await import("./codex-accounts");
 	priorCodexHome = codexAccounts.__setCodexHomeForTest(home);
 });
@@ -68,8 +68,8 @@ afterAll(async () => {
 	if (priorGhBackoff !== undefined) {
 		(await import("./github-limit")).__setGhBackoffForTest(priorGhBackoff);
 	}
-	if (priorChatsDir !== undefined) {
-		(await import("./paths")).__setChatsDirForTest(priorChatsDir);
+	if (priorSessionsDir !== undefined) {
+		(await import("./paths")).__setSessionsDirForTest(priorSessionsDir);
 	}
 	if (priorCodexHome !== undefined) {
 		(await import("./codex-accounts")).__setCodexHomeForTest(priorCodexHome);
@@ -79,7 +79,7 @@ afterAll(async () => {
 
 function writeSession(id: string, data: Record<string, unknown>): void {
 	writeFileSync(
-		join(home, ".opensession-chats", `${id}.json`),
+		join(home, ".opensession-sessions", `${id}.json`),
 		JSON.stringify(
 			{
 				id,

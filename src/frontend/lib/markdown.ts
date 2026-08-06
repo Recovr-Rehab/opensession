@@ -4,7 +4,7 @@ import { PUBLIC_BASE_URL } from "./brand";
 // Dedicated marked instance for session messages so this config doesn't leak
 // into other markdown (wiki, etc.). Two customisations:
 //  - external links open in a new tab (target=_blank + safe rel); links into
-//    OS1 itself navigate in place — session/chat URLs become session-link
+//    OS1 itself navigate in place — session URLs become session-link
 //    chips handled client-side, other internal paths load in the same tab
 //  - images/videos render inline, capped in size; clicks open the media
 //    lightbox (see MediaLightbox.tsx)
@@ -122,7 +122,7 @@ const INTERNAL_HOSTS = new Set(
 );
 
 // An auto-linked (or <bracketed>) bare URL: marked hands the raw URL over as
-// the link text. Trailing-slash tolerant so `…/chat/bks-x/` still counts.
+// the link text. Trailing-slash tolerant so `…/session/bks-x/` still counts.
 function isBareUrlLink(token: any): boolean {
   const strip = (v: string) => String(v ?? "").replace(/\/+$/, "");
   const text = strip(token.text);
@@ -149,7 +149,7 @@ function internalHref(href: string | null | undefined): {
   const m =
     path.match(/^\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i) ??
     path.match(
-      /^\/workspace\/[^/]+\/chat\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i,
+      /^\/workspace\/[^/]+\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i,
     );
   return { sessionId: m ? decodeURIComponent(m[1]) : undefined };
 }
@@ -189,13 +189,13 @@ md.use({
       const title = token.title ? ` title="${attr(token.title)}"` : "";
       const internal = internalHref(token.href);
       if (internal) {
-        // A pasted session/chat URL auto-links with the whole ~90-char URL as
+        // A pasted session URL auto-links with the whole ~90-char URL as
         // its text, which ran straight past the message bubble's edge inside
         // the nowrap chip. Label it like a bare `bks-…` in prose instead.
         if (internal.sessionId && isBareUrlLink(token)) {
           return sessionLink(internal.sessionId, token.href);
         }
-        // Same app: navigate in place. Session/chat URLs get the session-link
+        // Same app: navigate in place. Session URLs get the session-link
         // chip + data-session-id so the delegated handler (SessionViewer)
         // navigates client-side; href stays for middle/cmd-click and for
         // surfaces without the handler (full-page load, same tab).
