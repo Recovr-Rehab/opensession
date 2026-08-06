@@ -133,7 +133,7 @@ repos, your Slack, your name on the agent. No fork needed for that.
 Forking is welcome — recommended, even — when you want to change what it *is*,
 not just whose it is: strip the integrations you'll never use, rebrand the
 client apps to your own bundle ids, hard-code opinions we left configurable.
-It's Apache-2.0, so you owe nothing but the license notice. And if your change
+It's MIT, so you owe nothing but the license notice. And if your change
 would help everyone, propose it upstream — see below.
 
 ## Contributing
@@ -146,7 +146,6 @@ handle the implementation. Report vulnerabilities privately — see
 
 ## License
 
-[Apache License 2.0](LICENSE). Use it, fork it, run it commercially, build on
-it — the only obligations are keeping the notice and not using the project's
-trademarks to imply endorsement. Contributions are accepted under the same
-license.
+[MIT License](LICENSE). Use it, fork it, run it commercially, build on
+it — the only obligation is keeping the copyright and permission notice.
+Contributions are accepted under the same license.
