@@ -26,14 +26,14 @@
  *    starts a fresh SDK session with a full flat-text replay.
  *
  * Containment (all enforced here, not in prompts):
- *  - Never starts unless a config designates serving accounts: opencode's
- *    ~/.opensession-opencode.json (`enabled` + `bridgeAccountIds`) or — the
- *    pi engine's own designation, since pi/anthropic/* has no other path —
- *    ~/.opensession-pi.json (`enabled` + `bridgeAccounts`).
- *  - Only designated accounts ever serve traffic — never the pool. Per
- *    request, opencode's `bridgeAccountIds` list is walked first; only when
- *    that list is empty does pi's `bridgeAccounts` list serve, through the
- *    same usable-account gate.
+ *  - Never starts unless an engine that uses it is enabled (opencode's
+ *    ~/.opensession-opencode.json or pi's ~/.opensession-pi.json) and at
+ *    least one Claude account exists to serve on.
+ *  - Account pick per request (pickBridgeAccount): when opencode's
+ *    `bridgeAccountIds` designates accounts, ONLY those serve (legacy
+ *    containment override); otherwise the general claude-accounts pool
+ *    serves, picked exactly like opencode/meridian runs (personal-first by
+ *    user, utilization-gated).
  *  - Binds 127.0.0.1 only, and every request must present the per-boot bridge
  *    key (x-api-key) that only the opencode-runner hands out — so another
  *    local process can't quietly burn subscription capacity through it.
@@ -84,10 +84,16 @@ import { stateDir } from "./paths";
 import { query, createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit, summarizeText } from "./audit";
-import { getAccountById, getUsableAccountById, type ClaudeAccount } from "./claude-accounts";
+import {
+  getAccountById,
+  getUsableAccountById,
+  hasAccounts,
+  pickAccount,
+  type ClaudeAccount,
+} from "./claude-accounts";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
 import { bridgePort, bridgeMaxRequestsPerHour, readOpencodeBridgeConfig } from "./opencode-config";
-import { piBridgeAccounts, readPiEngineConfig } from "./pi-config";
+import { readPiEngineConfig } from "./pi-config";
 import { mkdirSync } from "fs";
 
 const HOME = homeDir();
@@ -127,17 +133,19 @@ export interface BridgeInfo {
 export function bridgeDesignationError(): string | null {
   const cfg = readOpencodeBridgeConfig();
   const piCfg = readPiEngineConfig();
+  if (!cfg?.enabled && !piCfg?.enabled) {
+    return (
+      "The Anthropic bridge is disabled. Enable it in ~/.opensession-opencode.json " +
+      '({"enabled": true}) or, for pi/anthropic/* models, in ~/.opensession-pi.json ' +
+      '({"enabled": true}) — or use an API-key provider configured via `opencode auth login` instead.'
+    );
+  }
   const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
-  const piIds = piCfg?.enabled ? piCfg.bridgeAccounts || [] : [];
-  if (ocIds.length || piIds.length) return null;
-  return cfg?.enabled || piCfg?.enabled
-    ? "The Anthropic bridge has no designated accounts: set bridgeAccountIds in " +
-        "~/.opensession-opencode.json (or, for pi runs, bridgeAccounts in ~/.opensession-pi.json) " +
-        "to the claude-accounts id(s) that may serve bridge traffic (the general pool is never used)."
-    : "The Anthropic bridge is disabled. Enable it in ~/.opensession-opencode.json " +
-        '({"enabled": true, "bridgeAccountIds": ["<claude-accounts id>"]}) or, for pi/anthropic/* ' +
-        'models, in ~/.opensession-pi.json ({"enabled": true, "bridgeAccounts": [...]}) — or use an ' +
-        "API-key provider configured via `opencode auth login` instead.";
+  if (ocIds.length || hasAccounts()) return null;
+  return (
+    "The Anthropic bridge has no accounts to serve on: add a Claude account in " +
+    "Settings → Models (or designate bridgeAccountIds in ~/.opensession-opencode.json)."
+  );
 }
 
 /**
@@ -170,36 +178,64 @@ export function ensureAnthropicBridge(): BridgeInfo {
 
 /** Optional account pin for pickBridgeAccount — only the in-process pi
  *  provider passes it (the HTTP bridge has no channel for a pin); a pin never
- *  widens serving beyond the designated ids. */
+ *  widens serving beyond what the pick mode allows. */
 export interface BridgeAccountPin {
   accountId?: string;
-  /** Strict pin: never fall back to the other designated accounts. */
+  /** Strict pin: never fall back to the other eligible accounts. */
   accountStrict?: boolean;
+  /** Run user, for the pool pick's personal-account preference (same identity
+   *  matching as pickAccount everywhere else). */
+  user?: string;
   /** Allow extra-usage credits when judging the pin/walk usability. */
   usageCredits?: boolean;
 }
 
-/** Pick the first usable designated account (utilization-gated). Opencode's
- *  bridgeAccountIds list first; when it names none, pi's bridgeAccounts (both
- *  gated on their own config's `enabled`). Never the general pool. A `pin`
- *  (in-process pi runs only) is honored when it names a designated id: tried
- *  first, and with accountStrict the walk never widens past it. A pinned id
- *  OUTSIDE the designation is a config error under strict, and falls through
- *  to the normal designated walk otherwise. The "no designated bridge
- *  account" wording is load-bearing: isPiUsageLimitShape's anthropic arm
- *  keys on it. */
+/** Pick the account to serve a bridge/pi request (utilization-gated).
+ *
+ *  Two modes:
+ *  - Designated: when opencode's `bridgeAccountIds` names accounts, ONLY
+ *    those may serve (walked in order) — the legacy containment for the
+ *    loopback bridge era, kept as an explicit override.
+ *  - Pool (the default, matching how opencode/meridian picks): no
+ *    designation → pickAccount over the general claude-accounts pool, with
+ *    the same personal-first/user routing as every other run. Pi traffic is
+ *    first-party Claude Agent SDK traffic billed to plan limits (verified
+ *    live on a credits-off account, 2026-08-06), so there is no billing
+ *    reason to fence it off from the pool.
+ *
+ *  A `pin` (in-process pi runs only) is tried first; with accountStrict the
+ *  walk never widens past it. The "no designated bridge account" / "no usable
+ *  Claude account" wordings are load-bearing: isPiUsageLimitShape's anthropic
+ *  arm keys on them. */
 export function pickBridgeAccount(
   model: string | undefined,
   pin?: BridgeAccountPin
 ): ClaudeAccount | { error: string } {
   const cfg = readOpencodeBridgeConfig();
-  const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
-  const ids = ocIds.length ? ocIds : piBridgeAccounts();
+  const ids = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
   if (!ids.length) {
-    return {
-      error:
-        "bridge has no designated accounts (opencode bridgeAccountIds / pi bridgeAccounts both empty or disabled)",
-    };
+    // Pool mode. Pin first (an id outside the pool's usable set behaves like
+    // the designated walk: strict refuses, non-strict falls through).
+    if (pin?.accountId) {
+      const pinned = getUsableAccountById(pin.accountId, model, pin.usageCredits);
+      if (pinned) return pinned;
+      if (pin.accountStrict) {
+        const pinName = getAccountById(pin.accountId)?.name || pin.accountId;
+        return {
+          error:
+            `no usable Claude account (pinned "${pinName}" is exhausted, disabled or ` +
+            "unknown; strict pin — not widening to the pool)",
+        };
+      }
+    }
+    const picked = pickAccount(undefined, pin?.user, model, pin?.usageCredits);
+    if (picked) return picked;
+    if (!hasAccounts()) {
+      // Deliberately NOT usage-limit-shaped: an empty pool is a config
+      // problem, and hopping models would not fix it.
+      return { error: "no Claude accounts configured (add one in Settings → Models)" };
+    }
+    return { error: "no usable Claude account in the pool (all exhausted or sidelined)" };
   }
   if (pin?.accountId) {
     const pinName = getAccountById(pin.accountId)?.name || pin.accountId;
@@ -210,7 +246,7 @@ export function pickBridgeAccount(
         return {
           error:
             `pinned account "${pinName}" is not a designated bridge account ` +
-            "(only opencode bridgeAccountIds / pi bridgeAccounts may serve bridge traffic) — " +
+            "(opencode bridgeAccountIds is set, so only those ids may serve bridge traffic) — " +
             "strict pin, refusing to widen",
         };
       }

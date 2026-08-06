@@ -382,7 +382,10 @@ export function isPiUsageLimitShape(message: string, providerID: string): boolea
     s.includes("overloaded_error") ||
     /\b529\b/.test(s) ||
     /\b429\b/.test(s) ||
-    s.includes("no designated bridge account")
+    s.includes("no designated bridge account") ||
+    // Pool-mode pickBridgeAccount: exhausted pool (not the empty-pool config
+    // error, which deliberately says "no Claude accounts configured").
+    s.includes("no usable claude account")
   );
 }
 

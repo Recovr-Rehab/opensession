@@ -7,13 +7,11 @@ import {
   isPiModelId,
   normalizePiConfig,
   piAnthropicTransport,
-  piBridgeAccounts,
   piConfigPath,
   piEngineEnabled,
   piPickerModels,
   readPiEngineConfig,
   removePiPickerModel,
-  setPiBridgeAccounts,
   setPiEnabled,
 } from "./pi-config";
 
@@ -70,34 +68,15 @@ describe("normalizePiConfig", () => {
     expect(normalizePiConfig({ enabled: true, pickerModels: "pi/a/b" }).pickerModels).toEqual([]);
   });
 
-  it("keeps bridgeAccounts as non-empty string ids, absent by default", () => {
-    expect(normalizePiConfig({ enabled: true }).bridgeAccounts).toBeUndefined();
-    expect(
-      normalizePiConfig({
-        enabled: true,
-        bridgeAccounts: ["acc-1", "", 42, null, "acc-2"],
-      }).bridgeAccounts
-    ).toEqual(["acc-1", "acc-2"]);
-  });
-
-  it("normalizes an empty or malformed bridgeAccounts to absent", () => {
-    // Present-implies-non-empty: downstream (anthropic-bridge) treats the
-    // field's presence as "pi designates accounts".
-    expect(
-      normalizePiConfig({ enabled: true, bridgeAccounts: [] }).bridgeAccounts
-    ).toBeUndefined();
-    expect(
-      normalizePiConfig({ enabled: true, bridgeAccounts: [42, ""] }).bridgeAccounts
-    ).toBeUndefined();
-    expect(
-      normalizePiConfig({ enabled: true, bridgeAccounts: "acc-1" }).bridgeAccounts
-    ).toBeUndefined();
+  it("ignores the retired bridgeAccounts field (pi picks from the pool)", () => {
+    const cfg = normalizePiConfig({ enabled: true, bridgeAccounts: ["acc-1"] });
+    expect("bridgeAccounts" in cfg).toBe(false);
+    expect(cfg).toEqual({ enabled: true, pickerModels: [] });
   });
 
   it("keeps anthropicTransport only as the literal non-default \"bridge\"", () => {
     // Absent = the "inprocess" default; only the exact rollback value
-    // survives normalization (present-implies-non-default, like
-    // bridgeAccounts' present-implies-non-empty).
+    // survives normalization (present-implies-non-default).
     expect(normalizePiConfig({ enabled: true }).anthropicTransport).toBeUndefined();
     expect(
       normalizePiConfig({ enabled: true, anthropicTransport: "bridge" }).anthropicTransport
@@ -201,20 +180,6 @@ describe("readPiEngineConfig", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("serves piBridgeAccounts only while enabled with accounts", () => {
-    const dir = withConfigFile({ enabled: true, bridgeAccounts: ["acc-1"] });
-    expect(piBridgeAccounts()).toEqual(["acc-1"]);
-    // Disabled config keeps its ids but designates nothing.
-    writeFileSync(
-      join(dir, "pi.json"),
-      JSON.stringify({ enabled: false, bridgeAccounts: ["acc-1"] })
-    );
-    expect(piBridgeAccounts()).toEqual([]);
-    // Enabled without accounts designates nothing either.
-    writeFileSync(join(dir, "pi.json"), JSON.stringify({ enabled: true }));
-    expect(piBridgeAccounts()).toEqual([]);
-    rmSync(dir, { recursive: true, force: true });
-  });
 });
 
 describe("write path", () => {
@@ -286,16 +251,12 @@ describe("write path", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("setPiBridgeAccounts replaces wholesale; empty deletes the field", () => {
-    const dir = withConfigFile({ enabled: true, bridgeAccounts: ["old-1"] });
-    setPiBridgeAccounts(["acc-1", "acc-2"]);
-    expect(rawFile().bridgeAccounts).toEqual(["acc-1", "acc-2"]);
-    expect(piBridgeAccounts()).toEqual(["acc-1", "acc-2"]);
-    // Empty selection deletes the field — the file stays canonical
-    // (bridgeAccounts present always means "at least one designated id").
-    setPiBridgeAccounts([]);
-    expect("bridgeAccounts" in rawFile()).toBe(false);
-    expect(piBridgeAccounts()).toEqual([]);
+  it("preserves a retired bridgeAccounts field on unrelated writes", () => {
+    // The field is inert (pi picks from the pool) but the raw-preserving
+    // write path must not eat hand-written unknowns.
+    const dir = withConfigFile({ enabled: false, bridgeAccounts: ["old-1"] });
+    setPiEnabled(true);
+    expect(rawFile().bridgeAccounts).toEqual(["old-1"]);
     rmSync(dir, { recursive: true, force: true });
   });
 });

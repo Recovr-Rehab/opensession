@@ -46,13 +46,14 @@
  *    "aborted", which runPi's user-cancel path swallows quietly.
  *
  * Containment (all enforced here, not in prompts):
- *  - Designated accounts only, never the pool: pickBridgeAccount (exported by
- *    the bridge — opencode bridgeAccountIds first, else pi bridgeAccounts,
- *    getUsableAccountById walk). Run-level pins (accountId/accountStrict/
- *    usageCredits) are honored only within the designation. Building the
- *    provider throws bridgeDesignationError()'s exact message when no config
- *    designates accounts, so the run fails as early and as clearly as the
- *    bridge path did.
+ *  - Account pick mirrors opencode/meridian: pickBridgeAccount (exported by
+ *    the bridge) draws from the general claude-accounts pool with the run
+ *    user's personal-first routing, honoring run-level pins (accountId/
+ *    accountStrict/usageCredits). An opencode bridgeAccountIds designation,
+ *    when set, still contains serving to exactly those ids (legacy override).
+ *    Building the provider throws bridgeDesignationError()'s exact message
+ *    when the engine is disabled or no account exists, so the run fails as
+ *    early and as clearly as the bridge path did.
  *  - Usage-limit-shaped SDK failures markExhausted the picked account and
  *    surface with their original message, which isPiUsageLimitShape's
  *    anthropic arm already classifies (isClaudeUsageLimitError shapes, 429,
@@ -531,6 +532,7 @@ async function* runSdkStream(
       accountId: opts.accountId,
       accountStrict: opts.accountStrict,
       usageCredits: opts.usageCredits,
+      user: opts.user,
     });
     if ("error" in picked) throw new Error(picked.error);
     account = picked;

@@ -70,26 +70,38 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** Designate accounts through the pi config (the pi-side designation path). */
-function designate(bridgeAccounts: string[] | null): void {
-  if (bridgeAccounts === null) {
+/** Configure the pick mode: null = everything disabled; [] = pi enabled with
+ *  no designation (pool mode — the default in production); a non-empty list
+ *  designates accounts through opencode's bridgeAccountIds, the only
+ *  designation path left (pi's own bridgeAccounts field is retired). */
+function designate(bridgeAccountIds: string[] | null): void {
+  if (bridgeAccountIds === null) {
     writeFileSync(piConfigFile, JSON.stringify({ enabled: false }));
-  } else {
-    writeFileSync(piConfigFile, JSON.stringify({ enabled: true, bridgeAccounts }));
+    rmSync(ocConfigFile, { force: true });
+    return;
   }
-  rmSync(ocConfigFile, { force: true });
+  writeFileSync(piConfigFile, JSON.stringify({ enabled: true }));
+  if (bridgeAccountIds.length) {
+    writeFileSync(ocConfigFile, JSON.stringify({ enabled: true, bridgeAccountIds }));
+  } else {
+    rmSync(ocConfigFile, { force: true });
+  }
 }
 
-function seedAccounts(ids: string[]): void {
+function seedAccounts(entries: Array<string | { id: string; owner?: string }>): void {
   writeFileSync(
     accountsFile,
     JSON.stringify({
-      accounts: ids.map((id) => ({
-        id,
-        name: id,
-        token: `sk-ant-oat01-${id}`,
-        createdAt: "2026-01-01T00:00:00.000Z",
-      })),
+      accounts: entries.map((e) => {
+        const { id, owner } = typeof e === "string" ? { id: e, owner: undefined } : e;
+        return {
+          id,
+          name: id,
+          token: `sk-ant-oat01-${id}`,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          ...(owner ? { owner } : {}),
+        };
+      }),
     })
   );
 }
@@ -359,16 +371,22 @@ describe("usageFromSdkResult", () => {
 });
 
 describe("buildPiAnthropicProvider", () => {
-  test("throws the bridge's designation error when nothing designates accounts", () => {
+  test("throws the bridge's gate error when disabled or no accounts exist", () => {
     designate(null);
     expect(() => buildPiAnthropicProvider({ unifiedSessionId: "os-1" })).toThrow(
       /Anthropic bridge is disabled/
     );
-    // Enabled but designation-less: the other wording of the same gate.
-    writeFileSync(piConfigFile, JSON.stringify({ enabled: true }));
+    // Enabled but zero Claude accounts configured: the other wording.
+    designate([]);
+    seedAccounts([]);
     expect(() => buildPiAnthropicProvider({ unifiedSessionId: "os-1" })).toThrow(
-      /no designated accounts/
+      /no accounts to serve on/
     );
+    // Pool mode: an existing account is enough — no designation required.
+    seedAccounts(["pool-gate-a"]);
+    expect(() =>
+      buildPiAnthropicProvider({ unifiedSessionId: "os-1", builtinModels: [model] })
+    ).not.toThrow();
   });
 
   test("builds a configured provider carrying the catalog under the builtin id", async () => {
@@ -525,5 +543,65 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
     accounts.__setUsageCacheForTest("des-a", freshUsage);
     const picked = pickBridgeAccount("claude-sonnet-5");
     expect((picked as any).id).toBe("des-a");
+  });
+});
+
+describe("pickBridgeAccount pool mode (no designation — picks like opencode)", () => {
+  test("picks the least-used usable account from the general pool", () => {
+    designate([]);
+    seedAccounts(["pool-a", "pool-b"]);
+    accounts.__setUsageCacheForTest("pool-a", maxedUsage);
+    accounts.__setUsageCacheForTest("pool-b", freshUsage);
+    const picked = pickBridgeAccount("claude-sonnet-5");
+    expect((picked as any).id).toBe("pool-b");
+  });
+
+  test("exhausted pool fails usage-limit-shaped; empty pool is a config error", () => {
+    designate([]);
+    seedAccounts(["pool-maxed"]);
+    accounts.__setUsageCacheForTest("pool-maxed", maxedUsage);
+    const picked = pickBridgeAccount("claude-sonnet-5");
+    const error = (picked as any).error as string;
+    expect(error).toMatch(/no usable Claude account in the pool/);
+    expect(isPiUsageLimitShape(error, "anthropic")).toBe(true);
+    // Zero accounts configured: a config problem, not exhaustion — the
+    // model-fallback walk must NOT engage (hopping models can't fix it).
+    seedAccounts([]);
+    const empty = pickBridgeAccount("claude-sonnet-5");
+    const emptyError = (empty as any).error as string;
+    expect(emptyError).toMatch(/no Claude accounts configured/);
+    expect(isPiUsageLimitShape(emptyError, "anthropic")).toBe(false);
+  });
+
+  test("pins are honored; a strict pin never widens to the pool", () => {
+    designate([]);
+    seedAccounts(["pool-pin-a", "pool-pin-maxed"]);
+    accounts.__setUsageCacheForTest("pool-pin-a", freshUsage);
+    accounts.__setUsageCacheForTest("pool-pin-maxed", maxedUsage);
+    const pinned = pickBridgeAccount("claude-sonnet-5", { accountId: "pool-pin-a" });
+    expect((pinned as any).id).toBe("pool-pin-a");
+    const strict = pickBridgeAccount("claude-sonnet-5", {
+      accountId: "pool-pin-maxed",
+      accountStrict: true,
+    });
+    const error = (strict as any).error as string;
+    expect(error).toMatch(/no usable Claude account/);
+    expect(isPiUsageLimitShape(error, "anthropic")).toBe(true);
+    // Non-strict pin on an exhausted account widens to the pool.
+    const widened = pickBridgeAccount("claude-sonnet-5", { accountId: "pool-pin-maxed" });
+    expect((widened as any).id).toBe("pool-pin-a");
+  });
+
+  test("a user's personal account wins for their runs, never for others", () => {
+    designate([]);
+    seedAccounts(["pool-shared", { id: "pool-personal", owner: "alice" }]);
+    accounts.__setUsageCacheForTest("pool-shared", freshUsage);
+    accounts.__setUsageCacheForTest("pool-personal", freshUsage);
+    const alice = pickBridgeAccount("claude-sonnet-5", { user: "alice" });
+    expect((alice as any).id).toBe("pool-personal");
+    const bob = pickBridgeAccount("claude-sonnet-5", { user: "bob" });
+    expect((bob as any).id).toBe("pool-shared");
+    const anonymous = pickBridgeAccount("claude-sonnet-5");
+    expect((anonymous as any).id).toBe("pool-shared");
   });
 });

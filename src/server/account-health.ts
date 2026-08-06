@@ -15,7 +15,9 @@
  * Detected issues: unreadable/expired Claude OAuth credential files, revoked
  * setup-tokens (401 from the usage endpoint), Claude refresh tokens within a
  * week of expiry, and codex ChatGPT access tokens expired or within a day of
- * expiry (they only refresh when a codex turn runs, so an idle account rots).
+ * expiry. The sweep first runs refreshIdleCodexTokens (codex-token-refresh.ts)
+ * so a codex expiry alert only ever fires when the in-process refresh itself
+ * failed (dead refresh token, endpoint trouble).
  *
  * Alerts dedupe through a state file: a standing issue re-alerts daily, and
  * clears silently once fixed. Transient poller noise (rate-limit cooldowns)
@@ -25,6 +27,7 @@
 import { existsSync, readFileSync } from "fs";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
+import { refreshIdleCodexTokens } from "./codex-token-refresh";
 import { stateDir } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -281,6 +284,11 @@ async function githubPatIssues(): Promise<Issue[]> {
 
 /** One sweep: detect, dedupe against state, DM, persist. Exported for tests/manual runs. */
 export async function sweepAccountHealth(): Promise<Issue[]> {
+  // Repair before detecting: refresh idle codex accounts' ChatGPT tokens so
+  // an expiry that a refresh can fix never becomes an alert.
+  await refreshIdleCodexTokens().catch((e) =>
+    console.warn("[account-health] codex token refresh failed:", e)
+  );
   const issues = [...detectAccountIssues(), ...(await githubPatIssues())];
   const state = readState();
   const now = Date.now();

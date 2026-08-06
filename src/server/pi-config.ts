@@ -17,16 +17,10 @@
  *         // Full pi/<provider>/<model> ids to surface in the UI model
  *         // picker; malformed entries are dropped. Any other well-formed
  *         // pi/ id still resolves (resolveModel's pi/ branch) — it's just
- *         // not advertised. Served providers: anthropic (the loopback
- *         // bridge) and openai (the codex-accounts pool); anything else
- *         // errors clearly at run time.
- *     "bridgeAccounts": ["<claude-accounts id>"],
- *         // Optional: designated accounts for the Anthropic path when
- *         // opencode's own bridgeAccountIds list is empty — same
- *         // never-the-pool containment (anthropic-bridge.ts walks exactly
- *         // these ids through the usable-account gate; the in-process
- *         // provider imports the same pick). Absent (the default) = pi
- *         // rides whatever opencode designates.
+ *         // not advertised. Served providers: anthropic (the claude-accounts
+ *         // pool, picked exactly like opencode/meridian — see
+ *         // pickBridgeAccount in anthropic-bridge.ts) and openai (the
+ *         // codex-accounts pool); anything else errors clearly at run time.
  *     "anthropicTransport": "inprocess"
  *         // Optional: how pi/anthropic/* turns reach the Claude Agent SDK.
  *         // "inprocess" (the default; absent normalizes to it) registers
@@ -61,12 +55,7 @@ export interface PiEngineConfig {
   enabled: boolean;
   /** Model ids (pi/<provider>/<model>) to show in the UI picker. */
   pickerModels: string[];
-  /** Designated claude-accounts ids that may serve the Anthropic path (bridge
-   *  or in-process) when opencode's bridgeAccountIds list is empty (never the
-   *  pool — see anthropic-bridge.ts). Absent = no pi-side designation. */
-  bridgeAccounts?: string[];
-  /** Present only as the non-default "bridge" (absent = "inprocess") — the
-   *  same present-implies-meaningful convention as bridgeAccounts. Read it
+  /** Present only as the non-default "bridge" (absent = "inprocess"). Read it
    *  through piAnthropicTransport(), which resolves the default. */
   anthropicTransport?: PiAnthropicTransport;
 }
@@ -75,9 +64,9 @@ export interface PiEngineConfig {
  *  — anything that isn't a JSON object normalizes to the disabled config, and
  *  pickerModels entries that aren't full `pi/<provider>/<model>` ids are
  *  dropped (a bare "pi/foo" would otherwise mint a bogus opencode passthrough
- *  downstream). bridgeAccounts keeps non-empty strings only; nothing left (or
- *  not an array) normalizes to the field being absent, so `bridgeAccounts`
- *  present always means "at least one designated id". */
+ *  downstream). Unknown fields (e.g. the retired bridgeAccounts designation —
+ *  pi picks from the account pool like opencode since 2026-08-06) are simply
+ *  ignored. */
 /** Whether `id` is a full `pi/<provider>/<model>` model id — the shape the
  *  picker, the write API, and normalizePiConfig's drop rule all agree on (a
  *  bare "pi/foo" would mint a bogus opencode passthrough downstream). */
@@ -97,15 +86,9 @@ export function normalizePiConfig(raw: unknown): PiEngineConfig {
   const pickerModels = Array.isArray(r.pickerModels)
     ? r.pickerModels.filter(isPiModelId)
     : [];
-  const bridgeAccounts = Array.isArray(r.bridgeAccounts)
-    ? r.bridgeAccounts.filter(
-        (x: unknown): x is string => typeof x === "string" && !!x
-      )
-    : [];
   return {
     enabled: r.enabled === true,
     pickerModels,
-    ...(bridgeAccounts.length ? { bridgeAccounts } : {}),
     // Only the literal non-default survives; junk/absent = "inprocess".
     ...(r.anthropicTransport === "bridge"
       ? { anthropicTransport: "bridge" as const }
@@ -134,15 +117,6 @@ export function piPickerModels(): string[] {
   const cfg = readPiEngineConfig();
   if (!cfg?.enabled) return [];
   return cfg.pickerModels;
-}
-
-/** Designated bridge accounts for pi runs — empty unless the engine is
- *  enabled AND names accounts, so callers can treat non-empty as "pi may
- *  serve bridge traffic on these ids". */
-export function piBridgeAccounts(): string[] {
-  const cfg = readPiEngineConfig();
-  if (!cfg?.enabled) return [];
-  return cfg.bridgeAccounts || [];
 }
 
 /** Resolved transport for pi/anthropic/* turns — "inprocess" unless the
@@ -232,13 +206,3 @@ export function setPiPickerModels(ids: string[]): string[] {
   return raw.pickerModels as string[];
 }
 
-/** Replace the designated bridge accounts. An empty list deletes the field —
- *  normalization treats present-and-empty as absent anyway, so deleting keeps
- *  the file canonical (present always means "at least one designated id"). */
-export function setPiBridgeAccounts(ids: string[]): void {
-  const raw = readRawPiConfig();
-  const clean = ids.filter((x) => typeof x === "string" && !!x);
-  if (clean.length) raw.bridgeAccounts = clean;
-  else delete raw.bridgeAccounts;
-  writeRawPiConfig(raw);
-}

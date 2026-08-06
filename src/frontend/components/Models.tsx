@@ -27,7 +27,6 @@ import {
 import { Switch } from "../ui/switch";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
-import { fetchProviderAccounts, type ProviderAccountOption } from "../lib/api";
 import { IconDotsHorizontal, IconHistory, IconPlug, IconPlus, IconSliders, IconTrash, IconX } from "./icons";
 
 // The Settings → Accounts panel: the Claude / Codex subscription accounts
@@ -278,20 +277,16 @@ function AutoFallbackRow() {
 interface PiEngineConfig {
 	enabled: boolean;
 	pickerModels: string[];
-	bridgeAccounts?: string[];
 }
 
 /**
  * The pi engine's config card (~/.opensession-pi.json via
- * /api/settings/pi-engine): the on/off switch, which pi/<provider>/<model>
- * ids the picker advertises, and which Claude accounts may serve its loopback
- * Anthropic bridge. Lives in Accounts because the bridge-accounts selector
- * draws on the same Claude pool the rest of this panel manages.
+ * /api/settings/pi-engine): the on/off switch and which pi/<provider>/<model>
+ * ids the picker advertises. Anthropic turns pick from the same Claude
+ * account pool as opencode runs — no pi-specific account config.
  */
 function PiEngineSection() {
 	const [cfg, setCfg] = useState<PiEngineConfig | null>(null);
-	const [claudeAccounts, setClaudeAccounts] = useState<ProviderAccountOption[] | null>(null);
-	const [accountsFetchFailed, setAccountsFetchFailed] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [testing, setTesting] = useState(false);
 	const [newModel, setNewModel] = useState("");
@@ -302,11 +297,6 @@ function PiEngineSection() {
 			.then((r) => (r.ok ? r.json() : null))
 			.then((body) => body && setCfg(body))
 			.catch(() => {});
-		fetchProviderAccounts()
-			.then((list) => setClaudeAccounts(list.filter((a) => a.provider === "claude")))
-			// Keep null on failure: [] means a genuinely empty pool and renders
-			// the "add one below" hint, which would mislead on a fetch error.
-			.catch(() => setAccountsFetchFailed(true));
 	}, []);
 
 	/** PUT a partial update (present field = wholesale replace), optimistically
@@ -356,18 +346,6 @@ function PiEngineSection() {
 		save({ pickerModels }, { ...cfg, pickerModels });
 	}
 
-	function handleToggleAccount(accountId: string) {
-		if (!cfg) return;
-		const current = cfg.bridgeAccounts || [];
-		const next = current.includes(accountId)
-			? current.filter((id) => id !== accountId)
-			: [...current, accountId];
-		save(
-			{ bridgeAccounts: next },
-			{ ...cfg, ...(next.length ? { bridgeAccounts: next } : { bridgeAccounts: undefined }) },
-		);
-	}
-
 	async function handleTest() {
 		if (testing) return;
 		setTesting(true);
@@ -386,7 +364,6 @@ function PiEngineSection() {
 		setTesting(false);
 	}
 
-	const selected = cfg?.bridgeAccounts || [];
 	return (
 		<>
 			<SettingsGroupLabel
@@ -475,54 +452,11 @@ function PiEngineSection() {
 					</SettingRowControl>
 				</SettingRow>
 
-				<SettingRow className="items-start">
-					<SettingRowText>
-						<SettingRowTitle>Bridge accounts</SettingRowTitle>
-						<SettingRowDescription>
-							{selected.length === 0
-								? "Claude accounts that may serve pi's loopback Anthropic bridge. None selected — pi uses OpenCode's bridge designation."
-								: "Claude accounts that may serve pi's loopback Anthropic bridge (never the whole pool)."}
-						</SettingRowDescription>
-						{claudeAccounts && claudeAccounts.length > 0 && (
-							<div className="mt-1.5 flex flex-col gap-1">
-								{claudeAccounts.map((a) => (
-									<label
-										key={a.id}
-										className="inline-flex cursor-pointer items-center gap-2 text-supporting text-dim"
-									>
-										<input
-											type="checkbox"
-											checked={selected.includes(a.id)}
-											disabled={!cfg || saving}
-											onChange={() => handleToggleAccount(a.id)}
-										/>
-										<span className="truncate">{a.name}</span>
-										{a.owner && (
-											<span className="rounded-sm bg-active px-1.5 py-px text-meta text-faint">
-												👤 {a.owner}
-											</span>
-										)}
-									</label>
-								))}
-							</div>
-						)}
-						{claudeAccounts && claudeAccounts.length === 0 && (
-							<div className="mt-1 text-meta text-faint">
-								No Claude accounts in the pool yet — add one below first.
-							</div>
-						)}
-						{accountsFetchFailed && !claudeAccounts && (
-							<div className="mt-1 text-meta text-faint">
-								Couldn't load the Claude accounts list — reload the page to
-								pick bridge accounts.
-							</div>
-						)}
-					</SettingRowText>
-				</SettingRow>
 			</SettingCard>
 			<SettingsHint>
-				Changes apply to new runs immediately — the pi config is read fresh per run,
-				no restart needed.
+				Anthropic turns run on the same Claude account pool as OpenCode runs (personal
+				accounts first for their owners, then the shared pool). Changes apply to new runs
+				immediately — the pi config is read fresh per run, no restart needed.
 			</SettingsHint>
 		</>
 	);
@@ -852,17 +786,6 @@ function ClaudeAccountsSection() {
 				/>
 			)}
 
-			{signIn && (
-				<ClaudeSignInForm
-					account={signIn}
-					onClose={() => setSignIn(null)}
-					onDone={() => {
-						setSignIn(null);
-						load();
-					}}
-				/>
-			)}
-
 			<SettingCard>
 				{!accounts ? (
 					<LoadingState placement="row">Loading accounts…</LoadingState>
@@ -874,7 +797,8 @@ function ClaudeAccountsSection() {
 					</EmptyState>
 				) : (
 					accounts.map((a) => (
-						<SettingRow key={a.id} className="items-start">
+						<React.Fragment key={a.id}>
+						<SettingRow className="items-start">
 							<Avatar name={a.name} className="bg-[#d97757]" />
 							<SettingRowText>
 								<div className="flex items-center gap-2 min-w-0">
@@ -963,6 +887,17 @@ function ClaudeAccountsSection() {
 								</Menu.Root>
 							</SettingRowControl>
 						</SettingRow>
+						{signIn?.id === a.id && (
+							<ClaudeSignInForm
+								account={a}
+								onClose={() => setSignIn(null)}
+								onDone={() => {
+									setSignIn(null);
+									load();
+								}}
+							/>
+						)}
+						</React.Fragment>
 					))
 				)}
 			</SettingCard>
@@ -1243,6 +1178,10 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
  * credentials to an existing pool account. The server hands us an authorize
  * URL; the user signs in on any device and pastes back the code Anthropic
  * displays (`…#…`), which the server exchanges and stores.
+ *
+ * Renders as an expansion directly beneath the triggering account row inside
+ * the SettingCard (CardList draws the divider) — row-triggered content must
+ * uncollapse in place, never teleport to the top of the section.
  */
 function ClaudeSignInForm({
 	account,
@@ -1312,13 +1251,10 @@ function ClaudeSignInForm({
 	}
 
 	return (
-		<SettingsForm className="mb-3 flex flex-col gap-3.5">
-			<SettingsFormTitle className="mb-0">
-				Sign in with Claude — {account.name}
-			</SettingsFormTitle>
-			<SettingRowDescription className="-mt-2">
-				Connects usage tracking for this account with its own auto-refreshing login (runs keep
-				using the setup-token). Open the link, sign in as{" "}
+		<div className="flex flex-col gap-3.5 bg-panel px-4 py-3.5">
+			<SettingRowDescription>
+				Connect usage tracking with its own auto-refreshing Claude login (runs keep using the
+				setup-token). Open the link, sign in as{" "}
 				{account.email ? <b>{account.email}</b> : "the Claude account behind this token"}, then
 				paste the code Anthropic shows you.
 			</SettingRowDescription>
@@ -1346,7 +1282,7 @@ function ClaudeSignInForm({
 
 			{error && <InlineAlert>{error}</InlineAlert>}
 
-			<SettingsFormActions className="mt-0 gap-2.5">
+			<div className="flex justify-end gap-2.5">
 				<Button onClick={handleClose} disabled={busy}>
 					Cancel
 				</Button>
@@ -1357,8 +1293,8 @@ function ClaudeSignInForm({
 				>
 					{busy ? "Connecting…" : "Connect usage"}
 				</Button>
-			</SettingsFormActions>
-		</SettingsForm>
+			</div>
+		</div>
 	);
 }
 

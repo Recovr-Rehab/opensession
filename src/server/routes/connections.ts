@@ -11,8 +11,7 @@ import { getAgents } from "../agents-registry";
 import { addMcpServer, getConnections, removeMcpServer, setMcpAllowedUsers } from "../connections";
 import { refreshOpencodePickerModels, refreshPiPickerModels } from "../models";
 import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setOpencodeProvider } from "../opencode-config";
-import { isPiModelId, readPiEngineConfig, setPiBridgeAccounts, setPiEnabled, setPiPickerModels } from "../pi-config";
-import { getAccountById } from "../claude-accounts";
+import { isPiModelId, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
 
 export async function handleConnectionsRoutes(
 	ctx: RouteContext,
@@ -407,35 +406,9 @@ export async function handleConnectionsRoutes(
 				if (!pickerModels.includes(id)) pickerModels.push(id);
 			}
 		}
-		let bridgeAccounts: string[] | undefined;
-		if ("bridgeAccounts" in body) {
-			if (
-				!Array.isArray(body.bridgeAccounts) ||
-				body.bridgeAccounts.some((x: unknown) => typeof x !== "string" || !x)
-			) {
-				return Response.json(
-					{ error: "bridgeAccounts must be an array of account ids" },
-					{ status: 400 },
-				);
-			}
-			// Designated bridge accounts must exist in the Claude pool — a
-			// typo'd/deleted id would otherwise persist silently and starve the
-			// native bridge at pick time.
-			const unknown = (body.bridgeAccounts as string[]).filter(
-				(id) => !getAccountById(id),
-			);
-			if (unknown.length) {
-				return Response.json(
-					{ error: `Unknown Claude account id(s): ${unknown.join(", ")}` },
-					{ status: 400 },
-				);
-			}
-			bridgeAccounts = body.bridgeAccounts;
-		}
 		try {
 			if (typeof body.enabled === "boolean") setPiEnabled(body.enabled);
 			if (pickerModels) setPiPickerModels(pickerModels);
-			if (bridgeAccounts) setPiBridgeAccounts(bridgeAccounts);
 			refreshPiPickerModels();
 			return Response.json(
 				readPiEngineConfig() ?? { enabled: false, pickerModels: [] },
