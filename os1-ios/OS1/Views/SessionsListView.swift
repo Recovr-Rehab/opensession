@@ -38,7 +38,10 @@ struct SessionsListView: View {
 
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
-    @State private var path = NavigationPath()
+    /// The push stack, typed rather than a `NavigationPath`, so a create that
+    /// resolves after the person has navigated elsewhere can find its own
+    /// pending entry instead of assuming it is still on top.
+    @State private var path: [Session] = []
     @State private var searchText = ""
     /// Non-nil opens the new-session sheet; carries the per-repo "+" preset.
     @State private var newSessionRequest: NewSessionRequest?
@@ -141,10 +144,6 @@ struct SessionsListView: View {
 
     #if os(macOS)
     @State private var selectedSessionID: String?
-    #else
-    /// Temp id of the pending session pushed onto the stack, so the resolved
-    /// real session can swap in place (and a failed create can pop it).
-    @State private var pushedPendingId: String?
     #endif
 
     var body: some View {
@@ -504,7 +503,6 @@ struct SessionsListView: View {
         #if os(macOS)
         selectedSessionID = session.id
         #else
-        pushedPendingId = session.id
         path.append(session)
         #endif
     }
@@ -527,20 +525,22 @@ struct SessionsListView: View {
             #if os(macOS)
             if selectedSessionID == tempId { selectedSessionID = id }
             #else
-            if pushedPendingId == tempId, !path.isEmpty,
+            // Swap the pending entry wherever it sits in the stack, rather
+            // than whatever happens to be on top: worktree prep takes seconds,
+            // and by the time it lands the person may have gone back and
+            // opened a different session — replacing the top would yank them
+            // into the session they started earlier.
+            if let index = path.firstIndex(where: { $0.id == tempId }),
                let session = viewModel.sessions.first(where: { $0.id == id }) {
-                // Swap the pending push for the real session without a
-                // visible pop/push double transition.
                 var next = path
-                next.removeLast()
-                next.append(session)
+                next[index] = session
+                // No visible pop/push double transition.
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) {
                     path = next
                 }
             }
-            pushedPendingId = nil
             #endif
         case .failure(let error):
             viewModel.removeOptimistic(tempId)
@@ -549,10 +549,9 @@ struct SessionsListView: View {
             #if os(macOS)
             if selectedSessionID == tempId { selectedSessionID = nil }
             #else
-            if pushedPendingId == tempId, !path.isEmpty {
-                path.removeLast()
-            }
-            pushedPendingId = nil
+            // Same care as the success path: drop the failed session's own
+            // screen, not whatever the person is looking at now.
+            path.removeAll { $0.id == tempId }
             #endif
             createError = error.localizedDescription
         }
