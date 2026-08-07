@@ -1604,6 +1604,10 @@ private struct SessionInputBar: View {
     /// usually fits on one line again once it opens — an unlatched height
     /// test would oscillate between the two forms on a single keystroke.
     @State private var draftWrapped = false
+    /// Owned here rather than in the button: the composer swaps between its
+    /// one-row and two-row layouts as the draft grows, which is exactly what
+    /// a long dictation does — state living in the button would die mid-word.
+    @State private var dictation = Dictation()
     /// Whether the outbox's pending rows have earned their place in the flap.
     /// EVERY send lands in the outbox first, so rendering those rows the
     /// instant they appear made the flap blink open and shut on ordinary
@@ -1698,6 +1702,8 @@ private struct SessionInputBar: View {
         .onAppear {
             if viewModel.session.neverRan { inputFocused = true }
         }
+        // Leaving the session must not leave the mic open.
+        .onDisappear { dictation.stop() }
         // Reveal (or re-hide) the outbox's pending rows. Re-runs whenever the
         // pending set changes, which is what makes the window per-send rather
         // than a latch that stays open for the rest of the session.
@@ -2039,7 +2045,7 @@ private struct SessionInputBar: View {
                     if viewModel.isRunning {
                         stopButton
                     }
-                    ComposerVoiceButton()
+                    ComposerDictationButton(dictation: dictation, draft: $viewModel.draft)
                     if !viewModel.isRunning || viewModel.canSend {
                         sendButton
                     }
@@ -2056,7 +2062,7 @@ private struct SessionInputBar: View {
                         stopButton
                     }
 
-                    ComposerVoiceButton()
+                    ComposerDictationButton(dictation: dictation, draft: $viewModel.draft)
                     sendButton
                 }
                 .padding(.horizontal, controlRowInset.horizontal)

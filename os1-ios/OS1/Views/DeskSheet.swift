@@ -64,11 +64,6 @@ struct DeskSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready(let sessionId):
             SessionView(session: Session(id: sessionId))
-                // The composer's mic lives inside SessionView, which knows
-                // nothing about voice; handing it the engine here is what
-                // keeps voice a Desk-only affordance rather than a control
-                // every session's composer would have to hide.
-                .environment(deskVoice == "on" ? engine : nil as DeskVoiceEngine?)
         }
     }
 
