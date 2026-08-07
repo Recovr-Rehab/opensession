@@ -90,6 +90,23 @@ export interface CreateSessionOpts {
    * else the create fails with a clear error.
    */
   sandbox?: boolean | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm";
+  /**
+   * Pin a Claude/Codex provider account for the session's runs. Soft pin
+   * (falls back to the pool when exhausted), validated like the web palette:
+   * mismatched/unknown/foreign personal ids are dropped rather than persisted.
+   */
+  accountId?: string;
+  /** Plan-first gate: the session must post a design doc before editing files. */
+  planFirst?: boolean;
+  /**
+   * Fork an existing session instead of starting fresh: the new session shares
+   * the source's worktree/branch/model (and effort/fast-mode/account pin), and
+   * Claude-engine sources are cloned via SDK forkSession — optionally from a
+   * specific past message. Other engines get a transcript handoff in the
+   * opening prompt. `mode`/`branch`/`model`/`sandbox` inputs are ignored
+   * (inherited from the source); forks never sandbox.
+   */
+  forkFrom?: { sourceId: string; messageId?: string };
 }
 
 /**

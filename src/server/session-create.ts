@@ -1,13 +1,22 @@
 /**
- * Session creation — the `create_session` flow extracted verbatim from
- * ws-handlers.ts: resolve the target repo/worktree/workspace, persist the
- * session file, announce it to the creating client, then drive the opening
- * run through runAgent with the full event ladder (init → model_switch →
- * text_chunk → tool_use → tool_result → usage_snapshot → done → error).
+ * Session creation — the ONE create path shared by the web UI and the
+ * opensession-sessions MCP (session-control-wiring.ts).
  *
- * The WebSocket `create_session` case delegates here; the params object
- * enumerates exactly what the old closure captured — the creating socket and
- * the fields of the client message the flow reads.
+ * Layout:
+ *  - Each entry point resolves its own inputs (repo/worktree/workspace/opening
+ *    prompt) into a `ResolvedCreate` — that's where the paths deliberately
+ *    differ (the web palette knows PR rows and stacked worktrees; the MCP
+ *    knows parent/worker inheritance and prompt-derived branch names).
+ *  - `openCreatedSession()` is the shared engine: persist the session file,
+ *    announce the id, materialize a deferred worktree, launch the opening run
+ *    (sandboxed or host) and drive the full event ladder (init → model_switch
+ *    → text_chunk → tool_use → tool_result → usage_snapshot → done → error),
+ *    then persist the outcome. Path-specific transport (who hears the events,
+ *    how failures surface) rides the `CreateSessionIO` callbacks.
+ *
+ * `handleCreateSessionMessage` is the web UI adapter (the WebSocket
+ * `create_session` case delegates here); the MCP adapter lives in
+ * session-control-wiring.ts.
  */
 
 import type { ServerWebSocket } from "bun";
@@ -25,17 +34,23 @@ import { accountProviderForModel, interactiveDefaultModel, interactiveFallbackMo
 import { newSessionId } from "./paths";
 import { wrapContext } from "./prompt-context";
 import { promptQueues } from "./queue-state";
-import { shouldPersistModelSwitch } from "./run-events";
-import { attachSessionWatchersToEngineTranscript, drainQueue, foldSessionUsage, maybeLaunchSandboxedRun, sessionMentionsNote } from "./run-session";
+import { type ImageInput, shouldPersistModelSwitch } from "./run-events";
+import { attachSessionWatchersToEngineTranscript, drainQueue, foldSessionUsage, maybeLaunchSandboxedRun, maybeQueueAutoContinue, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
 import { type McpScope, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { isRemoteSandboxProvider, resolveRequestedSandbox, sandboxConfig, sandboxesEnabled } from "./sandbox/config";
+
+/** Sandbox provider id as resolveRequestedSandbox resolves it (null = host). */
+type ResolvedSandboxProvider = Extract<
+	ReturnType<typeof resolveRequestedSandbox>,
+	{ ok: true }
+>["provider"];
 import { SESSION_EFFORTS, findSession, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
 import { buildBranchNote, buildPlanFirstNote, memoryNoteFor, workspaceOwningWorktree } from "./session-repos";
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
 import { userMatchesAny } from "./shared/user-mappings";
 import { sanitizeBranchSlug } from "./suggest-branch";
-import { type NativeSessionFile, type SessionUsage } from "./types";
+import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
@@ -69,10 +84,656 @@ export interface CreateSessionMessage {
 	planFirst?: unknown;
 }
 
+/** A resolved fork request: the source session plus how it can be forked. */
+export interface ForkContext {
+	source: UnifiedSession;
+	/** Fork point: resume from this past message (default: the tip). */
+	messageId?: string;
+	/** Claude can clone the real engine conversation via SDK forkSession… */
+	canFork: boolean;
+	/** …other backends get a transcript handoff in the opening prompt instead. */
+	needsHandoff: boolean;
+}
+
+/**
+ * Resolve a create's fork request. Returns undefined when no fork was asked
+ * for; throws when the source session doesn't exist (callers surface that on
+ * their own transport).
+ */
+export function resolveForkContext(
+	forkFrom: { sourceId?: string; messageId?: string } | undefined,
+): ForkContext | undefined {
+	if (!forkFrom?.sourceId) return undefined;
+	const source = findSession(forkFrom.sourceId);
+	if (!source) throw new Error("Fork source session not found");
+	const canFork =
+		providerFor(source.model) === "claude" && !!source.claudeSessionId;
+	return {
+		source,
+		messageId: forkFrom.messageId,
+		canFork,
+		needsHandoff: !canFork,
+	};
+}
+
+/** Opening-prompt context block handing a non-clonable fork its source transcript. */
+export async function forkHandoffContext(fork: ForkContext): Promise<string> {
+	const entries = fork.source.transcriptPath
+		? await parseTranscriptAsync(fork.source.transcriptPath)
+		: [];
+	return wrapContext(
+		buildForkHandoffNote({
+			sourceId: fork.source.id,
+			sourceTitle: fork.source.title,
+			sourceModel: fork.source.model,
+			messageId: fork.messageId,
+			entries,
+		}),
+	);
+}
+
+/**
+ * Validate a requested provider-account pin for a create. Soft pin: the
+ * runner prefers it and falls back to the pool when it's exhausted.
+ * Mismatched, unknown, and foreign personal ids are dropped (undefined)
+ * rather than persisted as a pin that can never apply.
+ */
+export function resolvePinnedAccountId(
+	model: string | undefined,
+	accountId: unknown,
+	user: string | undefined,
+): string | undefined {
+	const provider = accountProviderForModel(model);
+	const requested =
+		typeof accountId === "string" && accountId
+			? provider === "codex"
+				? getCodexAccountById(accountId)
+				: provider === "claude"
+					? getAccountById(accountId)
+					: undefined
+			: undefined;
+	return requested &&
+		(!requested.owner || (!!user && userMatchesAny(user, [requested.owner])))
+		? (accountId as string)
+		: undefined;
+}
+
+/**
+ * A create resolved down to what the shared engine needs: where the session
+ * lives, what it persists, and how its opening run is configured. Built by
+ * the per-path setup (web palette vs. MCP) — every deliberate difference
+ * between those paths lives in how they fill this in.
+ */
+export interface ResolvedCreate {
+	id: string;
+	/** Raw first-line title persisted immediately (replaced by the generated summary). */
+	title: string;
+	/** The raw prompt the background title/summary is generated from. */
+	titlePrompt: string;
+	/** The fully assembled opening prompt (uploads note, contexts, handoffs). */
+	openingPrompt: string;
+	user?: string;
+	createdBy: string;
+	createdAt: string;
+	/** Verified web sign-in identity of the creator (web creates only). */
+	createdByLogin?: string;
+	mode: "ask" | "code" | "scratch";
+	wtPath: string;
+	/** Branch recorded on the session file ("" for ask/scratch sessions). */
+	persistBranch: string;
+	/** Branch the session works on — branch note + HEAD-drift comparisons. */
+	branch: string;
+	/** Repo recorded on the session file; undefined for repo-less scratch. */
+	repoId?: string;
+	/** Repos whose memory notes ride the opening prompt. */
+	memoryRepoIds: string[];
+	stackedOn?: { repo: string; branch: string };
+	/** Workspace recorded on the session file. */
+	workspaceId?: string;
+	/** Workspace id echoed on the announce (the web session_created event). */
+	announceWorkspaceId?: string;
+	/** Whether this create minted a brand-new workspace (announce hint). */
+	createdWorkspaceNow?: boolean;
+	/** Workspace to rename once the generated title lands (minted by THIS create). */
+	autoNameWorkspace?: Workspace | null;
+	parentSessionId?: string;
+	reportBack?: boolean;
+	planFirst?: boolean;
+	/** Undefined only for forks of sessions with no recorded model (historic). */
+	model?: string;
+	effort?: string;
+	fastMode?: boolean;
+	accountId?: string;
+	images?: ImageInput[];
+	externalRefs?: NativeSessionFile["externalRefs"];
+	plainThreadId?: string;
+	/** MCP allowlist persisted on the session file (non-empty lists only). */
+	persistMcpServers?: string[];
+	/**
+	 * MCP scope for the opening run. May be undefined at runtime (historic
+	 * web-palette behavior — read as "all" downstream); the sandbox launcher
+	 * defaults it to [] (fail-closed) instead.
+	 */
+	runMcpServers?: McpScope;
+	sandboxProvider: ResolvedSandboxProvider;
+	/** Sandbox volume workspace: no host worktree, provider clones in-container. */
+	volumeWorkspace: boolean;
+	remoteSandbox: boolean;
+	/** Worktree creation deferred until after the announce (web creates). */
+	needsWorktree: boolean;
+	/** Materializes the deferred worktree (present iff needsWorktree). */
+	materializeWorktree?: () => Promise<unknown>;
+	/** Engine-level fork (Claude SDK forkSession) of the source conversation. */
+	fork?: { engineSessionId: string; resumeAt?: string };
+	/**
+	 * How the opening run hands off at the end: "drain" delivers any queued
+	 * prompts right away (web creates); "auto-continue-guard" runs the shared
+	 * announce-then-stop guard first (MCP creates, which nothing wraps in
+	 * runSessionPromptAndDrain).
+	 */
+	finish: "drain" | "auto-continue-guard";
+}
+
+/** Per-path transport for a create: who hears the announce/stream/failures. */
+export interface CreateSessionIO {
+	/**
+	 * The session file exists and the id is resolvable — the web adapter sends
+	 * session_created, the MCP adapter resolves the tool call.
+	 */
+	announce(info: {
+		id: string;
+		workspaceId?: string;
+		newWorkspace: boolean;
+		preparingWorkspace: boolean;
+		createdBy: string;
+		createdAt: string;
+	}): void;
+	/** A stream event of the opening run (no sessionId stamp — adapters add it). */
+	emit(m: Record<string, unknown>): void;
+	/** Failure before the announce — no session exists to surface it on. */
+	fail(message: string): void;
+}
+
+/**
+ * The shared create engine: persist + announce the resolved session, then run
+ * its opening turn end-to-end. Failures after the announce close out the
+ * stream and are recorded on the session (a setup-failed session must not
+ * look inexplicably empty — bks-019f472f, 2026-07-09); failures before it go
+ * to io.fail.
+ */
+export async function openCreatedSession(
+	spec: ResolvedCreate,
+	io: CreateSessionIO,
+): Promise<void> {
+	const bksId = spec.id;
+	// Replace the raw first-line title with a short summary in the background;
+	// the next sessions poll (≤5s) picks it up. A workspace minted by THIS
+	// create is named ONCE from the same generated summary (it provisionally
+	// wore the raw first line) and keeps that name for life — later sessions
+	// never rename it, and a manual rename in the meantime wins.
+	const wsToName = spec.autoNameWorkspace;
+	void ensureGeneratedTitle(bksId, spec.titlePrompt, spec.user, spec.model).then(
+		(t) => {
+			if (!t) return;
+			invalidateSessionsCache();
+			if (!wsToName) return;
+			const cur = getWorkspace(wsToName.id);
+			if (cur && cur.name === wsToName.name)
+				updateWorkspace(wsToName.id, { name: t });
+		},
+	);
+
+	// Set once the session has been announced — a later failure must then
+	// close out the stream instead of leaving the just-opened viewer spinning.
+	let announced = false;
+	let engineSessionId = "";
+	let effectiveModel = spec.model;
+	let selectedModel = spec.model;
+	let effectiveProvider = providerFor(effectiveModel);
+	const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
+	let persisted = false;
+	// Cumulative token/cost for this new session's opening run.
+	let latestUsage: SessionUsage | undefined;
+	// Terminal failure the opening run died on — recorded after the loop so
+	// the fresh session surfaces as "Needs input".
+	let runFailure: string | null = null;
+	// The runner already wrote its own, friendlier transcript line.
+	let failureNoticePersisted = false;
+	// The opening turn's reply and tool count, for the announce-then-stop
+	// guard (finish: "auto-continue-guard").
+	let assistantText = "";
+	let toolUseCount = 0;
+	// Actual worktree HEAD when it drifted from the recorded branch (the
+	// agent switched/renamed branches during the opening turn).
+	const headBranchPatch = () => {
+		const head = spec.persistBranch ? worktreeHeadBranch(spec.wtPath) : null;
+		return head && head !== spec.branch ? { branch: head } : {};
+	};
+	// Field-scoped write: creation fields are create-if-absent defaults
+	// (an existing file — e.g. one touched with the engine id or a
+	// materialized sandboxId while the opening run streams — wins);
+	// this run only owns the engine-id/model/HEAD-sync fields it
+	// actually changes. Serialized via updateSessionFile.
+	const persist = () =>
+		updateSessionFile(bksId, (data) => {
+			// Widen to Partial: the file may not exist yet.
+			const existing: Partial<NativeSessionFile> = data;
+			return {
+				id: bksId,
+				claudeSessionId: "",
+				branch: spec.persistBranch,
+				worktreeDir: spec.wtPath,
+				// Scratch sessions are repo-less (no repoId resolved for them).
+				...(spec.repoId ? { repo: spec.repoId } : {}),
+				...(spec.workspaceId ? { workspaceId: spec.workspaceId } : {}),
+				...(spec.parentSessionId
+					? { parentSessionId: spec.parentSessionId }
+					: {}),
+				// Persisted so the failure beacon (handoff-evidence.ts) can tell
+				// a worker that owes its parent a report from a child session
+				// that was explicitly told not to report (e.g. the PR session).
+				...(spec.parentSessionId && spec.reportBack ? { reportBack: true } : {}),
+				createdBy: spec.createdBy,
+				...(spec.createdByLogin
+					? { createdByLogin: spec.createdByLogin }
+					: {}),
+				createdAt: spec.createdAt,
+				title: spec.title,
+				mode: spec.mode,
+				...(spec.stackedOn && spec.stackedOn.branch !== spec.persistBranch
+					? { stackedOn: spec.stackedOn }
+					: {}),
+				...(spec.planFirst && spec.mode !== "ask" ? { planFirst: true } : {}),
+				...(spec.effort ? { effort: spec.effort } : {}),
+				...(spec.fastMode ? { fastMode: true } : {}),
+				...(spec.accountId ? { accountId: spec.accountId } : {}),
+				...(spec.plainThreadId ? { plainThreadId: spec.plainThreadId } : {}),
+				...(spec.externalRefs?.length
+					? { externalRefs: spec.externalRefs }
+					: {}),
+				...(spec.persistMcpServers?.length
+					? { mcpServers: spec.persistMcpServers }
+					: {}),
+				...(spec.sandboxProvider
+					? {
+							sandbox: {
+								provider: spec.sandboxProvider,
+								// Volume intent is recorded up front so the prompt
+								// paths know the workspace never exists host-side
+								// (hasRemoteWorkspace) even before the first ensure.
+								// Remote providers are ALWAYS volume — no host mounts.
+								...(spec.volumeWorkspace || spec.remoteSandbox
+									? { workspace: "volume" as const }
+									: {}),
+							},
+						}
+					: {}),
+				...existing,
+				...(engineSessionId
+					? engineSessionPatch(effectiveProvider, engineSessionId)
+					: {}),
+				// Record the engine that ran so the first later cross-provider
+				// switch bridges context (see runSessionPromptInner handoff).
+				...(engineSessionId
+					? { lastEngineProvider: effectiveProvider }
+					: {}),
+				...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
+				...(selectedModel ? { model: selectedModel } : {}),
+				...(modelHistory.length ? { modelHistory } : {}),
+				...headBranchPatch(),
+				lastActivity: new Date().toISOString(),
+			};
+		}).then(() => {
+			persisted = true;
+		});
+
+	try {
+		// Persist + announce BEFORE the slow parts (worktree git work,
+		// engine boot with its MCP connects) so the client drops into
+		// the empty session immediately — the title fills in from the
+		// background summary and the opening turn streams in when the
+		// engine is up. The starting mark keeps a prompt typed in that
+		// window from double-starting a run (same race as
+		// runSessionPrompt).
+		markSessionStarting(bksId);
+		if (spec.needsWorktree) preparingWorkspaces.add(bksId);
+		try {
+			await persist();
+			io.announce({
+				id: bksId,
+				workspaceId: spec.announceWorkspaceId,
+				newWorkspace: !!spec.createdWorkspaceNow,
+				preparingWorkspace: spec.needsWorktree,
+				createdBy: spec.createdBy,
+				createdAt: spec.createdAt,
+			});
+			announced = true;
+
+			if (spec.needsWorktree && spec.materializeWorktree) {
+				try {
+					await spec.materializeWorktree();
+					// Deps install runs in the background (worktree.ts) — say
+					// so, since builds/tests may not be ready for a beat.
+					io.emit({
+						type: "notice",
+						message:
+							"Workspace ready — installing dependencies in the background.",
+					});
+				} finally {
+					// Ready (or failed — the error surfaces separately): flip the
+					// viewer out of "Waiting for workspace" and let the queue go.
+					preparingWorkspaces.delete(bksId);
+					io.emit({ type: "workspace_status", ready: true });
+				}
+			}
+
+			// Sandbox session: route the OPENING turn through the same
+			// launcher the prompt path uses (the session file was persisted
+			// above, so it resolves) — bind mode included, so the first turn
+			// runs in the sandbox like every later one (the worktree was
+			// created above, so the bind mounts are ready; ensure() is
+			// idempotent + per-session locked, and later prompts are held
+			// behind markSessionStarting, so there's no double-ensure race).
+			// Volume workspaces (docker volume mode / remote providers) have
+			// no host dir: a failed launch errors the stream (announced is
+			// set, so the catch below closes it out). Bind mode keeps the
+			// host fallback — a failed launch runs this turn on the worktree.
+			let sandboxOpeningRun: AsyncGenerator<StreamEvent> | null = null;
+			if (spec.sandboxProvider) {
+				const created = findSession(bksId);
+				sandboxOpeningRun = created
+					? await maybeLaunchSandboxedRun(created, {
+							prompt: spec.openingPrompt,
+							cwd: spec.wtPath,
+							user: spec.user,
+							images: spec.images,
+							mcpServers: spec.runMcpServers ?? [],
+							isAutomationSession: false,
+						})
+					: null;
+				if (!sandboxOpeningRun && (spec.volumeWorkspace || spec.remoteSandbox)) {
+					throw new Error(
+						"Sandbox unavailable for this volume-workspace session - the opening prompt was not run. Check sandbox config/kill-switch and retry.",
+					);
+				}
+			}
+
+			for await (const event of sandboxOpeningRun ?? runAgent({
+				prompt: spec.openingPrompt,
+				cwd: spec.wtPath,
+				mode: spec.mode,
+				model: spec.model,
+				effort: spec.effort,
+				fastMode: spec.fastMode,
+				accountId: spec.accountId,
+				fallbackModel: interactiveFallbackModel(spec.model),
+				// Feed workspaces default to their feed's scoped list (least
+				// privilege) — same value the session file persists above.
+				// May be undefined at runtime (see ResolvedCreate.runMcpServers).
+				mcpServers: spec.runMcpServers as McpScope,
+				reposNote:
+					[
+						buildPlanFirstNote({
+							mode: spec.mode,
+							planFirst: !!spec.planFirst,
+						}),
+						buildBranchNote({
+							mode: spec.mode,
+							branch: spec.branch,
+							worktreeDir: spec.wtPath,
+						}),
+						await memoryNoteFor(spec.user, spec.memoryRepoIds),
+					]
+						.filter(Boolean)
+						.join("\n\n") || undefined,
+				images: spec.images,
+				// Fork: resume the source engine session into a new branch,
+				// optionally from a specific past message.
+				...(spec.fork
+					? {
+							sessionId: spec.fork.engineSessionId,
+							forkSession: true,
+							resumeSessionAt: spec.fork.resumeAt,
+						}
+					: {}),
+				inProcessMcp: interactiveMcpServers(spec.user, bksId),
+				confirmTools: STRIPE_CONFIRM_TOOLS,
+				aws: true, // interactive sessions keep AWS read access (via injected creds)
+				user: spec.user, // gate per-user MCP servers (allowedUsers) to the creator
+				journal: { osSessionId: bksId, kind: "create" },
+				onAskUser: makeAskHandler(bksId),
+			})) {
+				if (event.type === "init") {
+					engineSessionId = event.sessionId || "";
+					if (event.provider) effectiveProvider = event.provider;
+					if (event.model) effectiveModel = event.model;
+					// Session was persisted/announced before setup — just record
+					// the engine id so the run is resumable while it streams.
+					touchNativeSession(
+						bksId,
+						{
+							...engineSessionPatch(
+								effectiveProvider,
+								engineSessionId,
+							),
+							...(engineSessionId
+								? { lastEngineProvider: effectiveProvider }
+								: {}),
+							...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
+						},
+					);
+					// The transcript file didn't exist when viewers sent their
+					// watch (fresh session) — attach them now so this first turn
+					// streams live instead of only appearing after a re-watch.
+					if (engineSessionId) {
+						attachSessionWatchersToEngineTranscript(
+							bksId,
+							effectiveProvider,
+							spec.wtPath,
+							engineSessionId,
+						);
+					}
+				}
+				if (event.type === "model_switch") {
+					const to = event.toModel || "";
+					const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
+					if (to) {
+						effectiveModel = to;
+						effectiveProvider = providerFor(to);
+						if (shouldPersistModelSwitch(event)) {
+							selectedModel = to;
+							modelHistory.push({
+								model: to,
+								from: event.fromModel,
+								at: new Date().toISOString(),
+								by: reason,
+							});
+							touchNativeSession(bksId, {
+								model: selectedModel,
+								modelHistory,
+							});
+							io.emit({
+								type: "model_changed",
+								model: to,
+								from: event.fromModel,
+								by: reason,
+							});
+						} else {
+							io.emit({
+								type: "notice",
+								message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
+							});
+						}
+					}
+				}
+				if (event.type === "text_chunk") {
+					assistantText += event.text;
+					io.emit({ type: "stream_text", text: event.text });
+				}
+				if (event.type === "tool_use") {
+					toolUseCount++;
+					const entry = {
+						id: event.toolUseId || crypto.randomUUID(),
+						type: "tool_use" as const,
+						content: `Using ${event.toolName}`,
+						timestamp: new Date().toISOString(),
+						toolName: event.toolName,
+						toolInput: event.toolInput,
+						toolUseId: event.toolUseId,
+					};
+					io.emit({ type: "stream_tool_use", entry });
+				}
+				if (event.type === "tool_result") {
+					const entry = {
+						id: event.toolUseId
+							? `tr-${event.toolUseId}`
+							: crypto.randomUUID(),
+						type: "tool_result" as const,
+						content: event.content || "",
+						timestamp: new Date().toISOString(),
+						toolUseId: event.toolUseId,
+						...(event.images && event.images.length > 0
+							? { images: event.images }
+							: {}),
+						...(event.videos && event.videos.length > 0
+							? { videos: event.videos }
+							: {}),
+					};
+					io.emit({ type: "stream_tool_result", entry });
+				}
+				if (event.type === "usage_snapshot" && event.usage) {
+					// Live mid-run cost/context. Snapshots are run-cumulative and
+					// this is the session's only run, so the fold base is empty —
+					// each snapshot recomputes the total from scratch (folding
+					// onto latestUsage would double-count).
+					latestUsage = foldSessionUsage(
+						undefined,
+						event.usage,
+						effectiveModel,
+					);
+					io.emit({ type: "usage_update", usage: latestUsage });
+				}
+				if (event.type === "done") {
+					engineSessionId = event.sessionId || engineSessionId;
+					if (event.provider) effectiveProvider = event.provider;
+					if (event.model) effectiveModel = event.model;
+					if (event.usageLimitExhausted)
+						runFailure =
+							event.result || "Usage limit reached on every account";
+					if (event.usage) {
+						latestUsage = foldSessionUsage(
+							undefined,
+							event.usage,
+							event.model || effectiveModel,
+						);
+						// emit (not a bare broadcast) so it also reaches the
+						// creator's socket in the window before they watch.
+						io.emit({ type: "usage_update", usage: latestUsage });
+					}
+					if (event.cacheMissWarning)
+						io.emit({ type: "cache_warning", sessionId: bksId });
+				}
+				if (event.type === "error") {
+					runFailure = event.content || "Run failed";
+					if (event.noticePersisted) failureNoticePersisted = true;
+					io.emit({ type: "error", message: event.content });
+				}
+			}
+
+			if (!persisted) await persist();
+			else
+				touchNativeSession(
+					bksId,
+					{
+						...engineSessionPatch(
+							effectiveProvider,
+							engineSessionId,
+						),
+						...(engineSessionId
+							? { lastEngineProvider: effectiveProvider }
+							: {}),
+						...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
+						...(modelHistory.length ? { modelHistory } : {}),
+						// The opening turn may have switched branches in the
+						// worktree (same sync as runSessionPromptInner's run-end
+						// patch) — keep the record on the actual HEAD.
+						...headBranchPatch(),
+					},
+				);
+			// Persist opening-run usage regardless of which branch ran
+			// above (persist() writes the base file without it).
+			if (latestUsage)
+				touchNativeSession(bksId, { usage: latestUsage });
+			recordRunOutcome(bksId, runFailure, {
+				engineSessionId,
+				noticePersisted: failureNoticePersisted,
+			});
+		} finally {
+			unmarkSessionStarting(bksId);
+			// Safety net for throws before the worktree block's own finally
+			// (persist/announce failures) — must never leak a session stuck
+			// in "Waiting for workspace".
+			preparingWorkspaces.delete(bksId);
+		}
+
+		io.emit({ type: "stream_done" });
+		io.emit({ type: "session_status", isRunning: false });
+		if (spec.finish === "auto-continue-guard") {
+			// An opening turn announce-then-stops exactly like a later one, and
+			// this path bypasses runSessionPromptInner — so run the shared guard
+			// here too. Nothing wraps this run in runSessionPromptAndDrain, so a
+			// queued nudge needs the drain watcher to deliver it.
+			if (
+				maybeQueueAutoContinue({
+					sessionId: bksId,
+					assistantText,
+					toolUseCount,
+					endedWithError: !!runFailure,
+					runFailure,
+				})
+			) {
+				watchExternalRunAndDrain(bksId);
+			}
+			if (!promptQueues.get(bksId)?.length) {
+				onHumanAsksSessionIdle(bksId);
+			}
+		} else {
+			if (promptQueues.get(bksId)?.length)
+				await drainQueue(bksId);
+			else
+				onHumanAsksSessionIdle(bksId);
+		}
+	} catch (e: any) {
+		// Failure after the early announce: the client is already in the
+		// session — close out the stream and surface the failure there
+		// instead of leaving the viewer spinning. Before the announce there's
+		// no session to scope to, so the raw error goes back to the caller.
+		if (announced) {
+			io.emit({ type: "error", message: e.message || String(e) });
+			io.emit({ type: "stream_done" });
+			io.emit({
+				type: "notice",
+				message: `Session setup failed: ${e.message || String(e)}`,
+			});
+			io.emit({ type: "session_status", isRunning: false });
+			// Persist the failure on the session file too — the live
+			// events above are gone on reload, and a setup-failed session
+			// (e.g. `git worktree add` refusing a branch name that
+			// collides with an existing `name/...` ref) otherwise shows
+			// as an inexplicably empty session (bks-019f472f, 2026-07-09).
+			recordRunOutcome(
+				bksId,
+				`Session setup failed: ${e.message || String(e)}`,
+			);
+		} else {
+			io.fail(e.message || String(e));
+		}
+	}
+}
+
 /**
  * Create a session from a UI WebSocket `create_session` message and drive its
  * opening run, streaming events back to the creating socket / session room.
- * Extracted verbatim from the ws-handlers case arm — behavior-identical.
  */
 export async function handleCreateSessionMessage(
 	ws: ServerWebSocket<WSClientData>,
@@ -96,10 +757,10 @@ export async function handleCreateSessionMessage(
 	const forkFrom = msg.forkFrom as
 		| { sourceId?: string; messageId?: string }
 		| undefined;
-	const forkSource = forkFrom?.sourceId
-		? findSession(forkFrom.sourceId)
-		: undefined;
-	if (forkFrom?.sourceId && !forkSource) {
+	let fork: ForkContext | undefined;
+	try {
+		fork = resolveForkContext(forkFrom);
+	} catch {
 		ws.send(
 			JSON.stringify({
 				type: "error",
@@ -108,11 +769,9 @@ export async function handleCreateSessionMessage(
 		);
 		return;
 	}
-	const canFork =
-		!!forkSource &&
-		providerFor(forkSource.model) === "claude" &&
-		!!forkSource.claudeSessionId;
-	const needsForkHandoff = !!forkSource && !canFork;
+	const forkSource = fork?.source;
+	const canFork = !!fork?.canFork;
+	const needsForkHandoff = !!fork?.needsHandoff;
 
 	// Scratch: repo-less sessions for feed-item workspaces (Tella videos —
 	// the feeds design). Full write + bash in a per-workspace scratch
@@ -141,25 +800,9 @@ export async function handleCreateSessionMessage(
 			: undefined;
 	const createFastMode = forkSource?.fastMode;
 	// Pinned provider account from the palette (forks inherit).
-	// Soft pin: the runner prefers it and falls back to the pool when
-	// it's exhausted. Mismatched, unknown, and foreign personal ids
-	// are dropped rather than persisted as a pin that can never apply.
-	const requestedAccountProvider = accountProviderForModel(model);
-	const requestedAccount =
-		typeof msg.accountId === "string" && msg.accountId
-			? requestedAccountProvider === "codex"
-				? getCodexAccountById(msg.accountId)
-				: requestedAccountProvider === "claude"
-					? getAccountById(msg.accountId)
-					: undefined
-			: undefined;
 	const createAccountId = forkSource
 		? forkSource.accountId
-		: requestedAccount &&
-				(!requestedAccount.owner ||
-					(!!user && userMatchesAny(user, [requestedAccount.owner])))
-			? msg.accountId
-			: undefined;
+		: resolvePinnedAccountId(model, msg.accountId, user);
 	const createMcpServers = Array.isArray(msg.mcpServers)
 		? msg.mcpServers.map(String)
 		: undefined;
@@ -275,12 +918,14 @@ export async function handleCreateSessionMessage(
 		}
 		broadcastToSession(announcedId, scoped, watching ? undefined : ws);
 	};
+	let spec: ResolvedCreate;
 	try {
 		let wtPath: string;
 		// Deferred worktree setup: the git fetch + worktree add +
 		// bun install can take tens of seconds, so the session is
 		// announced on the deterministic path first and the worktree
-		// is created after session_created goes out (below).
+		// is created after session_created goes out (in
+		// openCreatedSession).
 		let needsWorktree = false;
 		// Volume-mode sandbox workspace (Phase 2): no host worktree at
 		// all - the sandbox provider clones it in-container on the
@@ -426,31 +1071,16 @@ export async function handleCreateSessionMessage(
 			});
 			mintedForSession = true;
 		}
-		// Replace the raw first-line title with a short summary in the
-		// background; next sessions poll (≤5s) picks it up. An
-		// auto-created workspace is named ONCE from the same generated
-		// summary (it provisionally wore the raw first line) and keeps
-		// that name for life — later sessions never rename it.
-		// Only a workspace minted by THIS create gets auto-named — an
-		// adopted pre-existing workspace keeps its own name.
+		// An auto-created workspace is renamed ONCE from the generated
+		// summary (see openCreatedSession) — it provisionally wears the raw
+		// first line. Only a workspace minted by THIS create gets auto-named;
+		// an adopted pre-existing workspace keeps its own name.
 		const wsAutoNamed =
 			mintedForSession ||
 			(createdWorkspaceNow &&
 				!!workspace &&
 				!!msg.createWorkspace &&
 				!msg.createWorkspace.name);
-		const wsToName = workspace;
-		void ensureGeneratedTitle(bksId, prompt, user, model).then((t) => {
-			if (!t) return;
-			invalidateSessionsCache();
-			if (wsAutoNamed && wsToName) {
-				const cur = getWorkspace(wsToName.id);
-				// Only while it still wears the provisional name — a manual
-				// rename in the meantime wins.
-				if (cur && cur.name === wsToName.name)
-					updateWorkspace(wsToName.id, { name: t });
-			}
-		});
 		// Non-image attachments: stage to disk, hand the agent the paths.
 		let openingPrompt = withUploadsNote(
 			prompt,
@@ -514,467 +1144,114 @@ export async function handleCreateSessionMessage(
 				)}`;
 			}
 		}
-		if (needsForkHandoff && forkSource) {
-			const entries = forkSource.transcriptPath
-				? await parseTranscriptAsync(forkSource.transcriptPath)
-				: [];
-			openingPrompt += `\n\n${wrapContext(
-				buildForkHandoffNote({
-					sourceId: forkSource.id,
-					sourceTitle: forkSource.title,
-					sourceModel: forkSource.model,
-					messageId: forkFrom?.messageId,
-					entries,
-				}),
-			)}`;
+		if (needsForkHandoff && fork) {
+			openingPrompt += `\n\n${await forkHandoffContext(fork)}`;
 		}
 
-		let engineSessionId = "";
-		let effectiveModel = model;
-		let selectedModel = model;
-		let effectiveProvider = providerFor(effectiveModel);
-		const modelHistory: NonNullable<
-			NativeSessionFile["modelHistory"]
-		> = [];
-		let persisted = false;
-		// Cumulative token/cost for this new session's opening run.
-		let latestUsage: SessionUsage | undefined;
-		// Terminal failure the opening run died on — recorded after the
-		// loop so the fresh session surfaces as "Needs input".
-		let runFailure: string | null = null;
-		// The runner already wrote its own, friendlier transcript line.
-		let failureNoticePersisted = false;
-		// Actual worktree HEAD when it drifted from the recorded branch
-		// (the agent switched/renamed branches during the opening turn).
-		const headBranchPatch = () => {
-			const head = sessionBranch ? worktreeHeadBranch(wtPath) : null;
-			return head && head !== sessionBranch ? { branch: head } : {};
-		};
-		// Field-scoped write: creation fields are create-if-absent defaults
-		// (an existing file — e.g. one touched with the engine id or a
-		// materialized sandboxId while the opening run streams — wins);
-		// this run only owns the engine-id/model/HEAD-sync fields it
-		// actually changes. Serialized via updateSessionFile.
-		const persist = () =>
-			updateSessionFile(bksId, (data) => {
-				// Widen to Partial: the file may not exist yet.
-				const existing: Partial<NativeSessionFile> = data;
-				return {
-					id: bksId,
-					claudeSessionId: "",
-					branch: sessionBranch,
-					worktreeDir: wtPath,
-					// Scratch sessions are repo-less: wtPath is a plain
-					// scratch dir repoForPath would throw on.
-					...(isScratch ? {} : { repo: repoForPath(wtPath).id }),
-					...(workspace
-						? { workspaceId: workspace.id }
-						: forkSource?.workspaceId
-							? // A fork lands next to its source in the same workspace.
-								{ workspaceId: forkSource.workspaceId }
-							: typeof msg.workspaceId === "string" && msg.workspaceId
-								? { workspaceId: msg.workspaceId }
-								: {}),
-					createdBy: user || "Anonymous",
-					...(ws.data?.authLogin
-						? { createdByLogin: ws.data.authLogin }
-						: {}),
-					createdAt: new Date().toISOString(),
-					title,
-					mode: (isScratch ? "scratch" : isAsk ? "ask" : "code") as
-						| "ask"
-						| "code"
-						| "scratch",
-					...(stackBase && stackBase !== sessionBranch
-						? {
-								stackedOn: {
-									repo: repoForPath(wtPath).id,
-									branch: stackBase,
-								},
-							}
-						: {}),
-					...(msg.planFirst === true && !isAsk ? { planFirst: true } : {}),
-					...(createEffort ? { effort: createEffort } : {}),
-					...(createFastMode ? { fastMode: true } : {}),
-					...(createAccountId ? { accountId: createAccountId } : {}),
-					...(plainThreadId ? { plainThreadId } : {}),
-					...(inheritedRefs?.length
-						? { externalRefs: inheritedRefs }
-						: {}),
-					...(createMcpServers && createMcpServers.length
-						? { mcpServers: createMcpServers }
-						: feedMcpServers?.length
-							? { mcpServers: feedMcpServers }
-							: {}),
-					...(createSandboxProvider
-						? {
-								sandbox: {
-									provider: createSandboxProvider,
-									// Volume intent is recorded up front so the prompt
-									// paths know the workspace never exists host-side
-									// (hasRemoteWorkspace) even before the first ensure.
-									// Remote providers are ALWAYS volume — no host mounts.
-									...(volumeWorkspace || remoteSandbox
-										? { workspace: "volume" as const }
-										: {}),
-								},
-							}
-						: {}),
-					...existing,
-					...(engineSessionId
-						? engineSessionPatch(effectiveProvider, engineSessionId)
-						: {}),
-					// Record the engine that ran so the first later cross-provider
-					// switch bridges context (see runSessionPromptInner handoff).
-					...(engineSessionId
-						? { lastEngineProvider: effectiveProvider }
-						: {}),
-					...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-					...(selectedModel ? { model: selectedModel } : {}),
-					...(modelHistory.length ? { modelHistory } : {}),
-					...headBranchPatch(),
-					lastActivity: new Date().toISOString(),
-				};
-			}).then(() => {
-				persisted = true;
-			});
-
-		// Persist + announce BEFORE the slow parts (worktree git work,
-		// engine boot with its MCP connects) so the client drops into
-		// the empty session immediately — the title fills in from the
-		// background summary and the opening turn streams in when the
-		// engine is up. The starting mark keeps a prompt typed in that
-		// window from double-starting a run (same race as
-		// runSessionPrompt).
-		markSessionStarting(bksId);
-		if (needsWorktree) preparingWorkspaces.add(bksId);
-		try {
-			await persist();
-			ws.send(
-				JSON.stringify({
-					type: "session_created",
-					id: bksId,
-					...(workspace ? { workspaceId: workspace.id } : {}),
-					...(createdWorkspaceNow ? { newWorkspace: true } : {}),
-					...(needsWorktree ? { preparingWorkspace: true } : {}),
-				}),
-			);
-			announcedId = bksId;
-			emit({ type: "stream_start" });
-
-			if (needsWorktree) {
-				try {
-					if (fromPr) {
-						await createWorktreeForExistingBranch(branch, repo.id);
-					} else {
-						await createWorktree(
-							branch,
-							repo.id,
-							stackBase ? { base: stackBase } : undefined,
-						);
-					}
-					// Deps install runs in the background (worktree.ts) — say
-					// so, since builds/tests may not be ready for a beat.
-					emit({
-						type: "notice",
-						message:
-							"Workspace ready — installing dependencies in the background.",
-					});
-				} finally {
-					// Ready (or failed — the error surfaces separately): flip the
-					// viewer out of "Waiting for workspace" and let the queue go.
-					preparingWorkspaces.delete(bksId);
-					emit({ type: "workspace_status", ready: true });
-				}
-			}
-
-		// Sandbox session: route the OPENING turn through the same
-		// launcher the prompt path uses (the session file was persisted
-		// above, so it resolves) — bind mode included, so the first turn
-		// runs in the sandbox like every later one (the worktree was
-		// created above, so the bind mounts are ready; ensure() is
-		// idempotent + per-session locked, and later prompts are held
-		// behind markSessionStarting, so there's no double-ensure race).
-		// Volume workspaces (docker volume mode / remote providers) have
-		// no host dir: a failed launch errors the stream (announcedId is
-		// set, so the catch below closes it out). Bind mode keeps the
-		// host fallback — a failed launch runs this turn on the worktree.
-		let sandboxOpeningRun: AsyncGenerator<StreamEvent> | null = null;
-		if (createSandboxProvider) {
-			const created = findSession(bksId);
-			sandboxOpeningRun = created
-				? await maybeLaunchSandboxedRun(created, {
-						prompt: openingPrompt,
-						cwd: wtPath,
-						user,
-						images,
-						mcpServers: (createMcpServers?.length ? createMcpServers : feedMcpServers) ?? [],
-						isAutomationSession: false,
-					})
-				: null;
-			if (!sandboxOpeningRun && (volumeWorkspace || remoteSandbox)) {
-				throw new Error(
-					"Sandbox unavailable for this volume-workspace session - the opening prompt was not run. Check sandbox config/kill-switch and retry.",
-				);
-			}
-		}
-
-		for await (const event of sandboxOpeningRun ?? runAgent({
-			prompt: openingPrompt,
-			cwd: wtPath,
-			mode: isScratch ? ("scratch" as const) : isAsk ? ("ask" as const) : ("code" as const),
+		spec = {
+			id: bksId,
+			title,
+			titlePrompt: prompt,
+			openingPrompt,
+			user,
+			createdBy: user || "Anonymous",
+			createdAt: new Date().toISOString(),
+			createdByLogin: ws.data?.authLogin || undefined,
+			mode: isScratch
+				? ("scratch" as const)
+				: isAsk
+					? ("ask" as const)
+					: ("code" as const),
+			wtPath,
+			persistBranch: sessionBranch,
+			branch: sessionBranch,
+			// Scratch sessions are repo-less: wtPath is a plain scratch dir
+			// repoForPath would throw on.
+			repoId: isScratch ? undefined : repoForPath(wtPath).id,
+			memoryRepoIds: [repo.id],
+			stackedOn: stackBase
+				? { repo: repoForPath(wtPath).id, branch: stackBase }
+				: undefined,
+			workspaceId: workspace
+				? workspace.id
+				: forkSource?.workspaceId
+					? // A fork lands next to its source in the same workspace.
+						forkSource.workspaceId
+					: typeof msg.workspaceId === "string" && msg.workspaceId
+						? msg.workspaceId
+						: undefined,
+			announceWorkspaceId: workspace?.id,
+			createdWorkspaceNow,
+			autoNameWorkspace: wsAutoNamed ? workspace : null,
+			planFirst: msg.planFirst === true,
 			model,
 			effort: createEffort,
 			fastMode: createFastMode,
 			accountId: createAccountId,
-			fallbackModel: interactiveFallbackModel(model),
-			// Feed workspaces default to their feed's scoped list (least
-			// privilege) — same value the session file persists above.
-			// The assertion preserves the exact runtime value the inline arm
-			// passed (msg was `any` there, so the latent `undefined` — read as
-			// "all" downstream — never surfaced in types).
-			mcpServers: (createMcpServers?.length
-				? createMcpServers
-				: feedMcpServers) as McpScope,
-			reposNote:
-				[
-					buildPlanFirstNote({
-						mode: isScratch ? ("scratch" as const) : isAsk ? ("ask" as const) : ("code" as const),
-						planFirst: msg.planFirst === true,
-					}),
-					buildBranchNote({
-						mode: isScratch ? ("scratch" as const) : isAsk ? ("ask" as const) : ("code" as const),
-						branch: sessionBranch,
-						worktreeDir: wtPath,
-					}),
-					await memoryNoteFor(user, [repo.id]),
-				]
-					.filter(Boolean)
-					.join("\n\n") || undefined,
 			images,
-			// Fork: resume the source engine session into a new branch,
-			// optionally from a specific past message.
-			...(canFork
+			externalRefs: inheritedRefs,
+			plainThreadId,
+			persistMcpServers: createMcpServers?.length
+				? createMcpServers
+				: feedMcpServers?.length
+					? feedMcpServers
+					: undefined,
+			// May be undefined at runtime (historic behavior — reads as "all"
+			// downstream); see ResolvedCreate.runMcpServers.
+			runMcpServers: (createMcpServers?.length
+				? createMcpServers
+				: feedMcpServers) as McpScope | undefined,
+			sandboxProvider: createSandboxProvider,
+			volumeWorkspace,
+			remoteSandbox,
+			needsWorktree,
+			materializeWorktree: needsWorktree
+				? () =>
+						fromPr
+							? createWorktreeForExistingBranch(branch, repo.id)
+							: createWorktree(
+									branch,
+									repo.id,
+									stackBase ? { base: stackBase } : undefined,
+								)
+				: undefined,
+			fork: canFork
 				? {
-						sessionId: forkSource!.claudeSessionId!,
-						forkSession: true,
-						resumeSessionAt: forkFrom?.messageId,
+						engineSessionId: forkSource!.claudeSessionId!,
+						resumeAt: forkFrom?.messageId,
 					}
-				: {}),
-			inProcessMcp: interactiveMcpServers(user, bksId),
-			confirmTools: STRIPE_CONFIRM_TOOLS,
-			aws: true, // interactive sessions keep AWS read access (via injected creds)
-			user, // gate per-user MCP servers (allowedUsers) to the creator
-			journal: { osSessionId: bksId, kind: "create" },
-			onAskUser: makeAskHandler(bksId),
-		})) {
-			if (event.type === "init") {
-				engineSessionId = event.sessionId || "";
-				if (event.provider) effectiveProvider = event.provider;
-				if (event.model) effectiveModel = event.model;
-				// Session was persisted/announced before setup — just record
-				// the engine id so the run is resumable while it streams.
-				touchNativeSession(
-					bksId,
-					{
-						...engineSessionPatch(
-							effectiveProvider,
-							engineSessionId,
-						),
-						...(engineSessionId
-							? { lastEngineProvider: effectiveProvider }
-							: {}),
-						...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-					},
-				);
-				// The transcript file didn't exist when viewers sent their
-				// watch (fresh session) — attach them now so this first turn
-				// streams live instead of only appearing after a re-watch.
-				if (engineSessionId) {
-					attachSessionWatchersToEngineTranscript(
-						bksId,
-						effectiveProvider,
-						wtPath,
-						engineSessionId,
-					);
-				}
-			}
-			if (event.type === "model_switch") {
-				const to = event.toModel || "";
-				const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
-				if (to) {
-					effectiveModel = to;
-					effectiveProvider = providerFor(to);
-					if (shouldPersistModelSwitch(event)) {
-						selectedModel = to;
-						modelHistory.push({
-							model: to,
-							from: event.fromModel,
-							at: new Date().toISOString(),
-							by: reason,
-						});
-						touchNativeSession(bksId, {
-							model: selectedModel,
-							modelHistory,
-						});
-						emit({
-							type: "model_changed",
-							model: to,
-							from: event.fromModel,
-							by: reason,
-						});
-					} else {
-						emit({
-							type: "notice",
-							message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
-						});
-					}
-				}
-			}
-			if (event.type === "text_chunk") {
-				emit({ type: "stream_text", text: event.text });
-			}
-			if (event.type === "tool_use") {
-				const entry = {
-					id: event.toolUseId || crypto.randomUUID(),
-					type: "tool_use" as const,
-					content: `Using ${event.toolName}`,
-					timestamp: new Date().toISOString(),
-					toolName: event.toolName,
-					toolInput: event.toolInput,
-					toolUseId: event.toolUseId,
-				};
-				emit({ type: "stream_tool_use", entry });
-			}
-			if (event.type === "tool_result") {
-				const entry = {
-					id: event.toolUseId
-						? `tr-${event.toolUseId}`
-						: crypto.randomUUID(),
-					type: "tool_result" as const,
-					content: event.content || "",
-					timestamp: new Date().toISOString(),
-					toolUseId: event.toolUseId,
-					...(event.images && event.images.length > 0
-						? { images: event.images }
-						: {}),
-					...(event.videos && event.videos.length > 0
-						? { videos: event.videos }
-						: {}),
-				};
-				emit({ type: "stream_tool_result", entry });
-			}
-			if (event.type === "usage_snapshot" && event.usage) {
-				// Live mid-run cost/context. Snapshots are run-cumulative and
-				// this is the session's only run, so the fold base is empty —
-				// each snapshot recomputes the total from scratch (folding
-				// onto latestUsage would double-count).
-				latestUsage = foldSessionUsage(
-					undefined,
-					event.usage,
-					effectiveModel,
-				);
-				emit({ type: "usage_update", usage: latestUsage });
-			}
-			if (event.type === "done") {
-				engineSessionId = event.sessionId || engineSessionId;
-				if (event.provider) effectiveProvider = event.provider;
-				if (event.model) effectiveModel = event.model;
-				if (event.usageLimitExhausted)
-					runFailure =
-						event.result || "Usage limit reached on every account";
-				if (event.usage) {
-					latestUsage = foldSessionUsage(
-						undefined,
-						event.usage,
-						event.model || effectiveModel,
-					);
-					// emit (not a bare broadcast) so it also reaches the
-					// creator's socket in the window before they watch.
-					emit({ type: "usage_update", usage: latestUsage });
-				}
-				if (event.cacheMissWarning)
-					emit({ type: "cache_warning", sessionId: bksId });
-			}
-			if (event.type === "error") {
-				runFailure = event.content || "Run failed";
-				if (event.noticePersisted) failureNoticePersisted = true;
-				emit({ type: "error", message: event.content });
-			}
-		}
-
-		if (!persisted) await persist();
-		else
-			touchNativeSession(
-				bksId,
-				{
-					...engineSessionPatch(
-						effectiveProvider,
-						engineSessionId,
-					),
-					...(engineSessionId
-						? { lastEngineProvider: effectiveProvider }
-						: {}),
-					...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-					...(modelHistory.length ? { modelHistory } : {}),
-					// The opening turn may have switched branches in the
-					// worktree (same sync as runSessionPromptInner's run-end
-					// patch) — keep the record on the actual HEAD.
-					...headBranchPatch(),
-				},
-			);
-			// Persist opening-run usage regardless of which branch ran
-			// above (persist() writes the base file without it).
-			if (latestUsage)
-				touchNativeSession(bksId, { usage: latestUsage });
-		recordRunOutcome(bksId, runFailure, {
-			engineSessionId,
-			noticePersisted: failureNoticePersisted,
-		});
-		} finally {
-			unmarkSessionStarting(bksId);
-			// Safety net for throws before the worktree block's own finally
-			// (persist/announce failures) — must never leak a session stuck
-			// in "Waiting for workspace".
-			preparingWorkspaces.delete(bksId);
-		}
-
-		emit({ type: "stream_done" });
-		emit({ type: "session_status", isRunning: false });
-		if (promptQueues.get(bksId)?.length)
-			await drainQueue(bksId);
-		else
-			onHumanAsksSessionIdle(bksId);
+				: undefined,
+			finish: "drain",
+		};
 	} catch (e: any) {
-		// Failure after the early session_created: the client is already
-		// in the session — close out the stream and surface the failure
-		// there instead of leaving the viewer spinning. Before the
-		// announce there's no session to scope to, so the raw error goes
-		// straight back to the sender.
-		if (announcedId) {
-			emit({ type: "error", message: e.message || String(e) });
-			emit({ type: "stream_done" });
-			emit({
-				type: "notice",
-				message: `Session setup failed: ${e.message || String(e)}`,
-			});
-			emit({ type: "session_status", isRunning: false });
-			// Persist the failure on the session file too — the live
-			// events above are gone on reload, and a setup-failed session
-			// (e.g. `git worktree add` refusing a branch name that
-			// collides with an existing `name/...` ref) otherwise shows
-			// as an inexplicably empty session (bks-019f472f, 2026-07-09).
-			recordRunOutcome(
-				announcedId,
-				`Session setup failed: ${e.message || String(e)}`,
-			);
-		} else {
+		// Setup failed before anything was persisted or announced — the raw
+		// error goes straight back to the sender (same as before extraction).
+		ws.send(
+			JSON.stringify({
+				type: "error",
+				message: e.message || String(e),
+			}),
+		);
+		return;
+	}
+
+	await openCreatedSession(spec, {
+		announce: (info) => {
 			ws.send(
 				JSON.stringify({
-					type: "error",
-					message: e.message || String(e),
+					type: "session_created",
+					id: info.id,
+					...(info.workspaceId ? { workspaceId: info.workspaceId } : {}),
+					...(info.newWorkspace ? { newWorkspace: true } : {}),
+					...(info.preparingWorkspace ? { preparingWorkspace: true } : {}),
 				}),
 			);
-		}
-	}
+			announcedId = info.id;
+			emit({ type: "stream_start" });
+		},
+		emit,
+		fail: (message) => {
+			ws.send(JSON.stringify({ type: "error", message }));
+		},
+	});
 }
