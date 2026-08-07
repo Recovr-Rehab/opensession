@@ -30,6 +30,16 @@ extraResources:
     to: bun
   - from: build/vendor/server
     to: server
+  # The sidecar's own dependencies need their own entry. electron-builder's
+  # copy filter drops a top-level node_modules outright — createFilter in
+  # app-builder-lib returns false for `relative === "node_modules"` before it
+  # looks at any pattern, so no `filter:` can let it back in. Copying the
+  # directory as its own root sidesteps that: nothing inside it is called
+  # "node_modules" at the root. Without this the packaged sidecar has no
+  # bridge packages at all and Local Sessions cannot resolve
+  # opencode-with-claude at run time.
+  - from: build/vendor/server/node_modules
+    to: server/node_modules
 afterPack: scripts/sign-binaries.js
 mac:
   category: public.app-category.developer-tools
@@ -63,6 +73,11 @@ mac:
       arch: [arm64]
   extendInfo:
     CFBundleIconName: AppIcon
+    # Without a usage description macOS never shows the microphone prompt, so
+    # dictation fails as "denied" on the first try. This string is what the
+    # system prompt shows. Pairs with com.apple.security.device.audio-input in
+    # the entitlements.
+    NSMicrophoneUsageDescription: OS¹ uses the microphone to dictate prompts into the composer.
     CFBundleURLTypes:
       - CFBundleURLName: OS¹ deep link
         CFBundleURLSchemes: [os1]

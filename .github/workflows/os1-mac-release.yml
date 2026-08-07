@@ -124,27 +124,54 @@ jobs:
       - name: Verify vendored binaries
         run: |
           APP='dist/mac-arm64/OS¹.app'
+          # Every assertion says what it found. The first version of this step
+          # used bare `test` and `… | grep -q`, which fail while printing
+          # nothing: v0.3.8 died here leaving a log that ended mid-check, so
+          # nobody could tell what broke, and the shell stayed on 0.3.6 with
+          # every fix behind it (the microphone permission handling included).
+          fail() { echo "::error::$*"; exit 1; }
+          require_jit() {
+            codesign -d --entitlements :- "$1" > /tmp/os1-entitlements.plist ||
+              fail "cannot read the code signature of $1"
+            /usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.allow-jit' \
+              /tmp/os1-entitlements.plist 2>&1 | grep -q true || {
+                echo "entitlements of $1:"
+                cat /tmp/os1-entitlements.plist
+                fail "$1 is signed without com.apple.security.cs.allow-jit"
+              }
+          }
+
           OPENCODE="$APP/Contents/Resources/opencode"
-          test -x "$OPENCODE" || { echo '::error::Bundled OpenCode is missing or not executable'; exit 1; }
-          "$OPENCODE" --version | grep -q '1\.18\.4'
-          codesign --verify --strict --verbose=2 "$OPENCODE"
-          codesign -d --entitlements :- "$OPENCODE" > /tmp/os1-opencode-entitlements.plist
-          /usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.allow-jit' /tmp/os1-opencode-entitlements.plist | grep -q true
-          codesign -dv --verbose=4 "$OPENCODE" 2>&1 | grep -q 'Authority=Developer ID Application: Tella HQ Inc.'
+          test -x "$OPENCODE" || fail 'Bundled OpenCode is missing or not executable'
+          "$OPENCODE" --version | grep -q '1\.18\.4' ||
+            fail "Bundled OpenCode is not 1.18.4 but $("$OPENCODE" --version)"
+          codesign --verify --strict --verbose=2 "$OPENCODE" ||
+            fail 'Bundled OpenCode failed signature verification'
+          require_jit "$OPENCODE"
+          codesign -dv --verbose=4 "$OPENCODE" 2>&1 | grep -q 'Authority=Developer ID Application: Tella HQ Inc.' ||
+            fail 'Bundled OpenCode is not signed by Tella HQ Inc.'
+
           BUN="$APP/Contents/Resources/bun"
-          test -x "$BUN" || { echo '::error::Bundled Bun runtime is missing or not executable'; exit 1; }
-          "$BUN" --version | grep -q '1\.3\.14'
-          codesign --verify --strict --verbose=2 "$BUN"
-          codesign -d --entitlements :- "$BUN" > /tmp/os1-bun-entitlements.plist
-          /usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.allow-jit' /tmp/os1-bun-entitlements.plist | grep -q true
+          test -x "$BUN" || fail 'Bundled Bun runtime is missing or not executable'
+          "$BUN" --version | grep -q '1\.3\.14' ||
+            fail "Bundled Bun is not 1.3.14 but $("$BUN" --version)"
+          codesign --verify --strict --verbose=2 "$BUN" ||
+            fail 'Bundled Bun failed signature verification'
+          require_jit "$BUN"
+
           SIDECAR="$APP/Contents/Resources/server"
-          test -f "$SIDECAR/opensession.js" || { echo '::error::Server sidecar is missing'; exit 1; }
-          test -f "$SIDECAR/mcp-proxy.js"
-          test -f "$SIDECAR/opencode-plugin-session-tag.js"
-          test -d "$SIDECAR/node_modules/opencode-with-claude"
+          test -d "$SIDECAR" || fail 'Server sidecar is missing from the packaged app'
+          for entry in opensession.js mcp-proxy.js opencode-plugin-session-tag.js node_modules/opencode-with-claude; do
+            test -e "$SIDECAR/$entry" || {
+              echo "server sidecar contains:"
+              ls -la "$SIDECAR" "$SIDECAR/node_modules" 2>&1 | head -60
+              fail "Server sidecar is missing $entry"
+            }
+          done
           # --deep also fails on any unsigned Mach-O inside the sidecar's
           # node_modules, guarding the afterPack signing walk.
-          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP" ||
+            fail 'Packaged app failed deep signature verification'
           # First tagged release: also launch the installed app on Apple Silicon,
           # enable Local Sessions, and confirm opencode runs without a hardened-
           # runtime/JIT kill. Static codesign checks cannot exercise that path.

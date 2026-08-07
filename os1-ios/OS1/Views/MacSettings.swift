@@ -10,7 +10,6 @@ struct MacSettingsView: View {
     /// nav and the panes' own navigation titles.
     enum Pane: String, CaseIterable, Identifiable {
         case connection
-        case general
         case composer
         case notifications
         case appearance
@@ -30,7 +29,6 @@ struct MacSettingsView: View {
         var title: String {
             switch self {
             case .connection: "Connection"
-            case .general: "General"
             case .composer: "Composer"
             case .notifications: "Notifications"
             case .appearance: "Appearance"
@@ -50,7 +48,6 @@ struct MacSettingsView: View {
         var icon: String {
             switch self {
             case .connection: "server.rack"
-            case .general: "slider.horizontal.3"
             case .composer: "keyboard"
             case .notifications: "bell.badge"
             case .appearance: "circle.lefthalf.filled"
@@ -68,7 +65,7 @@ struct MacSettingsView: View {
         }
     }
 
-    @State private var selection: Pane? = .general
+    @State private var selection: Pane? = .composer
     @State private var authenticationMessage: String?
     @State private var config = ServerConfig.shared
     @AppStorage("os1.appearance") private var appearance = "system"
@@ -84,7 +81,6 @@ struct MacSettingsView: View {
                     paneRow(.connection)
                 }
                 Section("Personal") {
-                    paneRow(.general)
                     paneRow(.composer)
                     paneRow(.notifications)
                     paneRow(.appearance)
@@ -140,9 +136,8 @@ struct MacSettingsView: View {
 
     @ViewBuilder
     private var paneView: some View {
-        switch selection ?? .general {
+        switch selection ?? .composer {
         case .connection: MacConnectionSettingsView(authenticationMessage: authenticationMessage)
-        case .general: PersonalGeneralSettingsView()
         case .composer: ComposerSettingsView()
         case .notifications: NotificationsSettingsView()
         case .appearance: AppearanceSettingsView()

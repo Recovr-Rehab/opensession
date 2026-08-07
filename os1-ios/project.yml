@@ -32,8 +32,12 @@ targets:
         # "Take a photo" in the composer's + menu. The photo library needs no
         # string: PhotosPicker runs out of process.
         INFOPLIST_KEY_NSCameraUsageDescription: Attach a photo you take to a message.
-        # Desk voice mode: live mic capture for the Realtime voice call.
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: Talk to your Desk — live voice conversations with your workspace.
+        # Mic capture for two features: composer dictation and the Desk's
+        # Realtime voice call.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Dictate messages, and talk to your Desk on a live voice call.
+        # Composer dictation. Transcription runs on device where the hardware
+        # supports it, but the permission is required either way.
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Turn what you say into text in the message box.
         PRODUCT_BUNDLE_IDENTIFIER: dev.tella.os1
         DEVELOPMENT_TEAM: 6GUXT43C8B
         CODE_SIGN_STYLE: Automatic
@@ -75,8 +79,12 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_OS1DefaultServerURL: http://127.0.0.1:3850
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
-        # Desk voice mode: live mic capture for the Realtime voice call.
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: Talk to your Desk — live voice conversations with your workspace.
+        # Mic capture for two features: composer dictation and the Desk's
+        # Realtime voice call.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Dictate messages, and talk to your Desk on a live voice call.
+        # Composer dictation. Transcription runs on device where the hardware
+        # supports it, but the permission is required either way.
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Turn what you say into text in the message box.
         PRODUCT_NAME: OS1
         # Same id as the iOS target: one App Store Connect record (universal
         # purchase) hosts both platforms. The Electron shell (os1-mac) moved

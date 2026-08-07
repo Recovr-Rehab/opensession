@@ -46,7 +46,7 @@ import {
 	type LiveSubagent,
 } from "./ToolCallBlock";
 import { parsePlanItems, type PlanItem } from "../lib/todo-plan";
-import { MarkdownBody } from "./MarkdownBody";
+import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
 import { getCurrentUser, useCurrentUser } from "./UserPicker";
@@ -5576,9 +5576,10 @@ function StreamingMessage({ store }: { store: LiveTurnStore }) {
 		store.getServerSnapshot,
 	);
 	const markdownText = snapshot.rapid ? "" : snapshot.text;
+	const repo = useMarkdownRepo();
 	const html = React.useMemo(
-		() => (markdownText ? renderMarkdown(markdownText) : ""),
-		[markdownText],
+		() => (markdownText ? renderMarkdown(markdownText, { repo }) : ""),
+		[markdownText, repo],
 	);
 	if (!snapshot.text) return null;
 

@@ -53,6 +53,7 @@ import { CommentableDiff, type CommentTarget, type PendingComment } from "./Comm
 import { SelectionToSession } from "./SelectionToSession";
 import { getCurrentUser } from "./UserPicker";
 import { renderMarkdown, renderPrCommentMarkdown } from "../lib/markdown";
+import { useMarkdownRepo } from "./MarkdownBody";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
 import { providerFromUrl, avatarUrl, prCapabilities, type Provider } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
@@ -391,6 +392,11 @@ export function PrPanel({
   const loadTargetKey = previewTarget
     ? `preview:${previewTarget.repo}:${previewTarget.branch}`
     : active?.key || sessionId;
+  // `#5528` in a PR body or review comment means a PR in the repo THIS panel is
+  // showing — which is the attached repo's, not the session's, when the strip
+  // is on a sibling PR. Only fall back to the surrounding surface's repo.
+  const contextRepo = useMarkdownRepo();
+  const markdownRepo = previewTarget?.repo || active?.repo || contextRepo;
   const [pr, setPr] = useState<PrDetails | null>(null);
   const [git, setGit] = useState<GitStatusInfo | null>(null);
   const [loadedDiff, setDiff] = useState<PrDiffData | null>(null);
@@ -856,8 +862,8 @@ export function PrPanel({
         "",
       )
       .trim();
-    return stripped ? renderMarkdown(stripped) : "";
-  }, [pr?.body]);
+    return stripped ? renderMarkdown(stripped, { repo: markdownRepo }) : "";
+  }, [pr?.body, markdownRepo]);
   const provider = useMemo(() => providerFromUrl(pr?.url), [pr?.url]);
   // Host capability gating: absent (GitHub, older cache entries) means all
   // true, so nothing GitHub-shaped ever disappears. code.storage payloads
@@ -1362,6 +1368,7 @@ export function PrPanel({
                   author={pr.author}
                   descriptionHtml={bodyHtml}
                   comments={comments}
+                  repo={markdownRepo}
                 />
               ) : !diff?.patch ? (
                 <div className="py-12 text-center text-sm text-faint">
@@ -2256,10 +2263,13 @@ function ConversationView({
   author,
   descriptionHtml,
   comments,
+  repo,
 }: {
   author: string;
   descriptionHtml: string;
   comments: PrComment[];
+  /** The repo a bare `#5528` in a comment refers to (see markdown.ts). */
+  repo?: string;
 }) {
   return (
     <div className="mx-auto max-w-[760px]">
@@ -2317,7 +2327,9 @@ function ConversationView({
                 </div>
                 <div
                   className="markdown px-4 py-4 text-body leading-relaxed text-dim"
-                  dangerouslySetInnerHTML={{ __html: renderPrCommentMarkdown(body) }}
+                  dangerouslySetInnerHTML={{
+                    __html: renderPrCommentMarkdown(body, { repo }),
+                  }}
                 />
               </article>
             );

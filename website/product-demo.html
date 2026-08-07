@@ -7,6 +7,10 @@
 		<link rel="stylesheet" href="../src/frontend/styles/global.css" />
 		<link rel="stylesheet" href="./.demo-tailwind.css" />
 		<style>
+			.sidebar-independent-section:has(.sidebar-people-row) {
+				display: none;
+			}
+
 			@media (min-width: 721px) {
 				.sidebar-brand {
 					border-bottom: 1px solid var(--top-divider);

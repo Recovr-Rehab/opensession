@@ -1,5 +1,33 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { effectiveTheme, onThemeChanged, type EffectiveTheme } from "../lib/theme";
+
+/**
+ * The repo the markdown on this surface is about — what a bare `#5528` in it
+ * refers to (see markdown.ts). Ambient rather than a prop because the callers
+ * that render markdown are scattered several levels down a transcript
+ * (ClampedBody, walkthroughs, ask cards, PR comments) and none of them
+ * otherwise care which repo they are inside.
+ */
+const MarkdownRepoContext = createContext<string | undefined>(undefined);
+
+export function MarkdownRepoProvider({
+	repo,
+	children,
+}: {
+	repo: string | undefined;
+	children: React.ReactNode;
+}) {
+	return (
+		<MarkdownRepoContext.Provider value={repo || undefined}>
+			{children}
+		</MarkdownRepoContext.Provider>
+	);
+}
+
+/** The repo to render markdown against — pass to `renderMarkdown(src, { repo })`. */
+export function useMarkdownRepo(): string | undefined {
+	return useContext(MarkdownRepoContext);
+}
 
 /**
  * Rendered-markdown container that upgrades ```lang fences after mount:

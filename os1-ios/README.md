@@ -69,36 +69,55 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   with repository and branch metadata, local git status, changed files, pull
   request status, workspace context, and model/reasoning controls, matching
   mobile web's info page without embedding the web client.
-- **View tabs** — the strip holds more than conversations: a `ViewTab` is a
-  view ONTO a session (assets, review, and whatever comes next), pilled beside
-  it and closed without archiving anything. Adding a kind is a case in
-  `ViewTab.Kind` plus its content in `SessionTabsView.viewTabContent`; the
-  strip itself stays kind-agnostic. Opened through the `openViewTab`
-  environment action, which is absent on surfaces with no strip — that is what
-  keeps entries from appearing where nothing can open them.
+- **Session panels** — details of a session (its assets, one of those files,
+  its pull request) open ONE LEVEL DEEPER on the stack that is already there,
+  not as tabs and not as sheets: the chevron and the edge swipe are the way
+  back, and nothing is left open to close later. A `SessionPanel` names the
+  kind; `SessionPanelView` draws it, so a new kind lands in both hosts (the
+  session's stack and the workspace sheet's) at once. Pushed through the
+  `openPanel` environment action from the transcript and the overflow menu,
+  and directly by the workspace sheet's own rows — which push within the
+  sheet, so that page stays where it was.
 - **Assets** — the session's scratch artifacts (`GET /api/sessions/:id/assets`)
-  open as a view tab, beside the conversation rather than over it: from the
-  "Open" chip on a `write_asset` tool row, the workspace sheet's assets
-  section, or the overflow menu. HTML and media render in a `WKWebView`
-  pointed at the raw route — the session token rides in as a cookie scoped to
-  that session's assets path, so relative references between assets resolve —
-  while markdown and code render natively.
+  reached three ways: the "Open" chip on a `write_asset` tool row (straight to
+  that file), the workspace sheet's assets section, and the overflow menu.
+  HTML and media render in a `WKWebView` pointed at the raw route — the
+  session token rides in as a cookie scoped to that session's assets path, so
+  relative references between assets resolve — while markdown and code render
+  natively.
 - **Prompting** — WS `prompt` frames (the server has no REST prompt endpoint).
   Sending while a run is active queues, exactly like the web UI. Stop button
   sends `cancel` for the watched session. The floating glass composer uses a
   progressive material fade so transcript content recedes cleanly beneath it;
   its full surface focuses the field and keeps a comfortable keyboard gap.
+- **Dictation** — the composer's mic (left of send, every session) is speech
+  to text, not a call: `Dictation.swift` runs `SFSpeechRecognizer` over an
+  `AVAudioEngine` tap and streams the utterance into the draft, appended to
+  whatever was already typed. It asks for on-device recognition wherever the
+  hardware supports it, since drafts carry customer and ticket detail that the
+  server-side route would send to Apple. The recognizer object is owned by
+  `SessionInputBar`, not the button: a long dictation wraps the composer to
+  its two-row layout, which swaps the branch the button renders in and would
+  otherwise destroy its state mid-sentence.
 - **Session creation** — a full-height prompt editor with image attachments and
   a compact single-row iOS toolbar for repository, mode, and model settings.
 - **AskUserQuestion** — blocking questions render as an inline card with option
   buttons + free-text answer, wired to `answer_question`.
 - **PR panel** — sessions with a pull request expose a row in the title-opened
-  workspace sheet and the overflow menu; it opens a read-only panel with state,
-  review decision, conflicts, every check with its status, and reviewers, via
-  `GET /api/sessions/:id/pr`. Actions (merge/review) stay on the web UI. In the
-  session strip it opens as a Review view tab (`PrPanelView(chrome: .tab)`,
-  which drops the panel's own navigation stack and Done button); the sheet
-  stays the fallback wherever there is no strip.
+  workspace sheet and the overflow menu; it opens a panel with state, review
+  decision, conflicts, every check with its status, and reviewers, via
+  `GET /api/sessions/:id/pr`. While the PR is open it also carries the web
+  panel's actions, on the same routes: **Review** (approve / request changes /
+  comment with a summary, plus the "squash and merge after approving"
+  shortcut, `POST …/pr-review`), **Merge** (squash, merge commit or rebase,
+  behind a confirmation that names what it would land on top of — conflicts,
+  failing checks, a draft, requested changes — `POST …/pr-merge`), and
+  **Close pull request** (`POST …/pr-close`). Each needs a GitHub credential
+  server-side, which with web sign-in on is the signed-in person's own token,
+  so an unconnected account gets the server's "connect your GitHub account"
+  sentence in the panel rather than a status code. It is
+  pushed as a panel (`PrPanelView(chrome: .pushed)` drops its own navigation
+  stack and Done button); the sheet form is what the Mac still uses.
 - **Connection care** — client-initiated pings every 20s (the server never
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.
@@ -112,8 +131,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   everything the session view already does — streaming, tool folds, questions
   — works there too. Voice mode is opt-in per device via the "Desk voice"
   toggle in Appearance settings (cross-device `desk-voice` ui-pref); when on,
-  a mic in the Desk composer (left of send) or in the sheet header starts a
-  live call brokered by the
+  the mic in the sheet header starts a live call brokered by the
   server over a raw WebSocket to OpenAI's Realtime API (`DeskVoiceEngine`) —
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
@@ -125,10 +143,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   Minimizing (the chevron) leaves the call running and returns you to the Desk
   transcript, which fills in as turns finalize; either lit mic — composer or
   header — comes back to the call, and hanging up is the only thing that ends
-  it. The composer mic (`ComposerVoiceButton`) renders only where the
-  environment carries a `DeskVoiceEngine`, which is the Desk alone, so no
-  other session's composer grows a control voice can't serve: the server
-  resolves every voice call to the Desk session.
+  it. A call is always the DESK's — `desk-voice.ts` resolves one with
+  `ensureDeskSession(user)` whichever session is on screen — so it is offered
+  only there, and never from a composer.
   Mute is local — capture and metering continue, frames stop leaving the
   device. The orb's level is sampled off the realtime audio threads at ~15Hz
   rather than pushed per buffer, and honors Reduce Motion.
@@ -198,8 +215,8 @@ OS1/
     TurnBlockView.swift      Work fold header + turn footer + file chips
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     SubagentView.swift       A Task call's sub-agent transcript, in a sheet
-    ViewTab.swift            Non-conversation tabs + the openViewTab action
-    AssetsView.swift         Session assets tab: file list + per-kind preview
+    SessionPanel.swift       Pushed session details + the openPanel action
+    AssetsView.swift         Assets list + one asset, per-kind preview
     WalkthroughCard.swift    Published walkthrough: demo video, writeup, stills
     MarkdownBody.swift       Streaming/durable markdown rendering
     AskQuestionCard.swift    Options + free text answer

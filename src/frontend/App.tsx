@@ -1,9 +1,11 @@
 import "./lib/storage-migrate"; // must run before any lib reads its pref keys
 import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
-import { setSessionTitles } from "./lib/markdown";
+import { setKnownRepos, setSessionTitles } from "./lib/markdown";
+import { repoLabel } from "./lib/repo-label";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { MarkdownRepoProvider } from "./components/MarkdownBody";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { ToastHost, toast } from "./ui/toast";
@@ -86,6 +88,7 @@ import {
 	updateWorkspaceApi,
 	deleteWorkspaceApi,
 	newSessionApi,
+	fetchRepos,
 	resolveWorkspaceApi,
 	type NoteMeta,
 	type OpenPr,
@@ -163,8 +166,11 @@ type Route =
 	// Conversation) and, when it has no sessions, the first-session composer. An
 	// optional tab suffix picks the foregrounded pane on entry.
 	| { view: "workspace"; id: string; tab?: "review" | "conversation" | "video" }
-	// Session-less PR preview (a sidebar PR row with no session yet).
-	| { view: "pr"; repo: string; branch: string }
+	// Session-less PR preview (a sidebar PR row with no session yet), addressed
+	// by head branch or — when only the PR number is known, as in a `#5528`
+	// mention — by number, which the resolve below turns into a workspace.
+	| { view: "pr"; repo: string; branch: string; number?: number }
+	| { view: "pr"; repo: string; branch?: undefined; number: number }
 	// Session-less support-ticket preview (a Support row with no session yet).
 	| { view: "support"; threadId: string }
 	| { view: "reports"; automationId?: string; reportId?: string }
@@ -206,7 +212,6 @@ function isToolView(view: string): view is ToolView {
 
 // Non-tool settings sections, addressable as <base>/settings/<section>.
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
-	"general",
 	"myAccounts",
 	"keychain",
 	"composer",
@@ -229,8 +234,9 @@ const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
 	warmPreviews: "prewarming",
 	previewPool: "prewarming",
 	workspace: "setup",
-	personalPrompt: "general",
-	deskVoice: "general",
+	general: "composer",
+	personalPrompt: "composer",
+	deskVoice: "composer",
 };
 
 function parseRoute(pathname: string): Route {
@@ -260,14 +266,19 @@ function parseRoute(pathname: string): Route {
 	if (sessionMatch)
 		return { view: "session", id: decodeURIComponent(sessionMatch[1]) };
 	// PR preview: <base>/pr/<repo>/<branch> (branch is fully URI-encoded, so
-	// slashes in branch names arrive as %2F and land in one segment).
+	// slashes in branch names arrive as %2F and land in one segment) — or
+	// <base>/pr/<repo>/<number>, where the PR is named the way a person (or an
+	// agent writing `#5528`) refers to it, with no branch to hand. Digits alone
+	// are never a branch we make, and a repo that did have one would still
+	// resolve to the same PR through its number.
 	const prMatch = pathname.match(/^\/pr\/([^/]+)\/(.+)$/);
-	if (prMatch)
-		return {
-			view: "pr",
-			repo: decodeURIComponent(prMatch[1]),
-			branch: decodeURIComponent(prMatch[2]),
-		};
+	if (prMatch) {
+		const repo = decodeURIComponent(prMatch[1]);
+		const ref = decodeURIComponent(prMatch[2]);
+		return /^\d{1,7}$/.test(ref)
+			? { view: "pr", repo, number: Number(ref) }
+			: { view: "pr", repo, branch: ref };
+	}
 	// Support-ticket preview: <base>/support/<plain thread id>.
 	const supportMatch = pathname.match(/^\/support\/(.+)$/);
 	if (supportMatch)
@@ -363,7 +374,11 @@ function routePath(route: Route): string {
 		case "workspace":
 			return `${BASE_PATH}/workspace/${encodeURIComponent(route.id)}${route.tab ? `/${route.tab}` : ""}`;
 		case "pr":
-			return `${BASE_PATH}/pr/${encodeURIComponent(route.repo)}/${encodeURIComponent(route.branch)}`;
+			return `${BASE_PATH}/pr/${encodeURIComponent(route.repo)}/${
+				route.branch === undefined
+					? route.number
+					: encodeURIComponent(route.branch)
+			}`;
 		case "support":
 			return `${BASE_PATH}/support/${encodeURIComponent(route.threadId)}`;
 		case "reports":
@@ -444,7 +459,15 @@ function samePanel(a: Route, b: Route): boolean {
 	return id(a) !== undefined && id(a) === id(b);
 }
 
-export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) {
+export function App(
+	{
+		serviceWorker = true,
+		initialTeamViewing = [],
+	}: {
+		serviceWorker?: boolean;
+		initialTeamViewing?: Array<{ user: string; sessionId: string }>;
+	} = {},
+) {
 	const { sessions, loading, cloudUnreachable, refresh, inject, unstick, patch, remove } =
 		useSessions();
 	const auth = useAuthStatus();
@@ -506,6 +529,23 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	useEffect(() => {
 		setSessionTitles(sessions.map((s) => [s.id, s.title] as const));
 	}, [sessions]);
+	// Same deal for PR-mention chips (`opensession#128`): markdown.ts only links
+	// a qualified mention it can place, so it needs the repos this instance
+	// serves — their ids to match on, their GitHub names for the cmd-click
+	// escape to github.com. Bare `#5528` mentions don't come through here —
+	// those belong to the repo of whatever surface renders them
+	// (MarkdownRepoProvider).
+	useEffect(() => {
+		let live = true;
+		fetchRepos()
+			.then((repos) => {
+				if (live) setKnownRepos(repos);
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, []);
 	// Register the service worker at boot, not just when enabling push: it also
 	// caches the app shell (sw.js), so a cold start on a flaky tailnet paints
 	// the app instead of white-screening.
@@ -595,7 +635,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// Who's viewing what, app-wide (from global_presence).
 	const [teamViewing, setTeamViewing] = useState<
 		Array<{ user: string; sessionId: string }>
-	>([]);
+	>(initialTeamViewing);
 	const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
 		undefined,
 	);
@@ -753,6 +793,66 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		else history.pushState(navState(depth === null ? null : depth + 1), "", path);
 		setRoute(next);
 	}
+	const navigateRef = useRef(navigate);
+	navigateRef.current = navigate;
+
+	// PR-mention chips (markdown.ts) are anchors inside
+	// dangerouslySetInnerHTML, so they can't carry a React handler — and they
+	// turn up in every markdown surface, not just the transcript. One
+	// document-level listener gives them both readings of "open this PR":
+	//   - plain click → the review here, navigated in place rather than
+	//     reloading the whole SPA to follow the href
+	//   - cmd/ctrl-click (and the middle button, which fires `auxclick`) → the
+	//     PR on github.com in a new tab. That gesture means "open elsewhere",
+	//     and elsewhere for a PR is GitHub — opening a second copy of this app
+	//     in a tab is never what it was asked for.
+	// A repo with no GitHub name to go to keeps the browser's own behavior.
+	useEffect(() => {
+		const chipAt = (e: MouseEvent) => {
+			if (e.defaultPrevented) return null;
+			const target = e.target as HTMLElement | null;
+			const el = target?.closest?.("a[data-pr-number]") as HTMLElement | null;
+			const repo = el?.dataset.prRepo;
+			const number = Number(el?.dataset.prNumber);
+			if (!repo || !Number.isInteger(number)) return null;
+			return { repo, number, ghRepo: el?.dataset.prGh };
+		};
+		const openOnGithub = (e: MouseEvent, chip: NonNullable<ReturnType<typeof chipAt>>) => {
+			if (!chip.ghRepo) return false;
+			e.preventDefault();
+			window.open(
+				`https://github.com/${chip.ghRepo}/pull/${chip.number}`,
+				"_blank",
+				"noopener,noreferrer",
+			);
+			return true;
+		};
+		const onClick = (e: MouseEvent) => {
+			if (e.button !== 0) return;
+			const chip = chipAt(e);
+			if (!chip) return;
+			if (e.metaKey || e.ctrlKey) {
+				openOnGithub(e, chip);
+				return;
+			}
+			// Shift (new window) and alt (download) are deliberate browser
+			// gestures on the href — leave them to it.
+			if (e.shiftKey || e.altKey) return;
+			e.preventDefault();
+			navigateRef.current({ view: "pr", repo: chip.repo, number: chip.number });
+		};
+		const onAuxClick = (e: MouseEvent) => {
+			if (e.button !== 1) return;
+			const chip = chipAt(e);
+			if (chip) openOnGithub(e, chip);
+		};
+		document.addEventListener("click", onClick);
+		document.addEventListener("auxclick", onAuxClick);
+		return () => {
+			document.removeEventListener("click", onClick);
+			document.removeEventListener("auxclick", onAuxClick);
+		};
+	}, []);
 
 	// Pop back to the sidebar root. With the root beneath us, one `history.go`
 	// lands on it directly — keeping the browser/OS back button in lockstep
@@ -1345,6 +1445,9 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		route.view === "workspace" ? `${route.id}:${route.tab ?? ""}` : null,
 		workspacesLoaded,
 	]);
+	// A PR reference (`/pr/<repo>/<number>`) that GitHub doesn't know: the
+	// number came out of prose, so it can be a typo or an invention.
+	const [prRefMissing, setPrRefMissing] = useState(false);
 	// Retired standalone pages (2026-07-24): /pr/…, /support/… and /reviews
 	// deep links resolve into the workspace container and redirect (replace).
 	// The old components keep rendering as the in-flight/failure fallback, so
@@ -1361,9 +1464,21 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			navigate({ view: "workspace", id: workspaceId, tab }, { replace: true });
 		};
 		if (route.view === "pr") {
-			resolveWorkspaceApi({ pr: { repo: route.repo, branch: route.branch } })
+			setPrRefMissing(false);
+			resolveWorkspaceApi({
+				pr: {
+					repo: route.repo,
+					...(route.branch !== undefined ? { branch: route.branch } : {}),
+					...(route.number !== undefined ? { number: route.number } : {}),
+				},
+			})
 				.then(({ workspaceId }) => toWorkspace(workspaceId, "review"))
-				.catch(() => {});
+				.catch(() => {
+					// Addressed by branch there is still a preview to render; by
+					// number alone a failed resolve means no such PR, and the pane
+					// has to say so rather than spin.
+					if (!stale && route.branch === undefined) setPrRefMissing(true);
+				});
 		} else if (route.view === "support") {
 			resolveWorkspaceApi({ plainThreadId: route.threadId })
 				.then(({ workspaceId }) => toWorkspace(workspaceId, "conversation"))
@@ -1877,7 +1992,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			: route.view === "workspace"
 				? routePath(route)
 				: route.view === "pr"
-					? prPath(route.repo, route.branch)
+					? routePath(route)
 					: null;
 
 	// Canonicalize the open session's URL to /workspace/<wsId>/session/<sessionId> once
@@ -2881,151 +2996,156 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		splitMode: boolean,
 		surfaceId = viewerSession.id,
 	) => (
-		<SessionViewer
-			key={viewerSession.id}
-			onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
-			session={viewerSession}
-			focused={focused}
-			hideHeader={splitMode && !focused}
-			hideRightPanel={splitMode && !focused}
-			localMode={localMode}
-			onBack={goBack}
-			onArchive={() =>
-				focused
-					? sidebarRef.current?.archiveSelected()
-					: closeSession(viewerSession)
-			}
-			onArchived={(stoppedRun) => {
-				if (stoppedRun) showToast("Archived · stopped the running turn");
-				// Only fires when the viewer archived on its own — with onArchive
-				// passed (a focused pane) it defers to the sidebar path instead, so
-				// this can't double-record.
-				rememberArchived([viewerSession.id]);
-			}}
-			send={socket.send}
-			addHandler={socket.addHandler}
-			connected={socket.connected}
-			initialPending={pendingInitialPrompts[viewerSession.id]}
-			topbarEl={focused ? topbarEl : null}
-			headerActionsEl={focused ? headerActionsEl : null}
-			headerModelEl={focused ? headerModelEl : null}
-			headerRepoEl={focused ? headerRepoEl : null}
-			rightPanelEl={focused ? rightPanelEl : null}
-			newSessionSeq={focused ? newSessionSeq : 0}
-			autoFocusComposer={focused && focusComposerOnOpen}
-			composerPrefillExternal={sessionComposerPrefills[viewerSession.id] ?? null}
-			onComposerPrefillConsumed={(seq) =>
-				setSessionComposerPrefills((prev) => {
-					const cur = prev[viewerSession.id];
-					if (!cur || cur.seq !== seq) return prev;
-					const next = { ...prev };
-					delete next[viewerSession.id];
-					return next;
-				})
-			}
-			workspaceSessions={workspaceSessions}
-			onSetStatus={setSessionLanes}
-			showReview={
-				splitMode ? viewTabKind(surfaceId) === "review" : focused && reviewActive
-			}
-			showConversation={
-				splitMode
-					? viewTabKind(surfaceId) === "conversation"
-					: focused && conversationActive
-			}
-			conversationThreadId={conversationThreadId}
-			showVideo={
-				splitMode ? viewTabKind(surfaceId) === "video" : focused && videoActive
-			}
-			videoPanel={videoPanel}
-			videoTitle={videoRef?.title || null}
-			showStaging={
-				splitMode ? viewTabKind(surfaceId) === "staging" : focused && stagingActive
-			}
-			showAssets={
-				splitMode ? viewTabKind(surfaceId) === "assets" : focused && assetsActive
-			}
-			showPreviewTab={
-				splitMode
-					? viewTabKind(surfaceId) === "preview"
-					: focused && previewLiveActive
-			}
-			// The sub-agent drill-in, opened from this pane's own transcript.
-			showSubagent={
-				splitMode
-					? viewTabKind(surfaceId) === "subagent"
-					: focused && subagentActive
-			}
-			subagentStack={subagentTabs[viewerSession.id] ?? NO_SUBAGENTS}
-			onOpenSubagent={openSubagent}
-			onSubagentBack={popSubagent}
-			onOpenReview={openReview}
-			onOpenStaging={openStaging}
-			onCloseStaging={closeStagingTab}
-			onOpenPreviewTab={openPreviewTab}
-			onClosePreviewTab={closePreviewTab}
-			onOpenAssets={openAssets}
-			onCloseAssets={closeAssetsTab}
-			onOpenWorkspace={() => setActiveViewTab(null)}
-			allSessions={sessions}
-			onNewSession={handleNewSession}
-			// Mirrors SessionTabs' own "render nothing" rule so the header's
-			// lone-session + never doubles up with the strip's.
-			tabStripVisible={
-				!!activeTabSplit || workspaceSessions.length > 1 || viewTabs.length > 0
-			}
-			parentSession={
-				viewerSession.parentSessionId
-					? (() => {
-							const parent = sessions.find(
-								(session) => session.id === viewerSession.parentSessionId,
-							);
-							return parent
-								? { id: parent.id, title: parent.title, model: parent.model }
-								: null;
-						})()
-					: null
-			}
-			workerSessions={sessions
-				.filter((session) => session.parentSessionId === viewerSession.id)
-				.map((session) => ({
-					id: session.id,
-					title: session.title,
-					model: session.model,
-					isRunning: session.isRunning,
-				}))}
-			onOpenSession={openSession}
-			onOpenNewSession={openPrefilledSession}
-			onRunningChange={handleSessionRunningChange}
-			onReviewChange={(id, request) =>
-				patch(id, { reviewRequest: request ?? undefined })
-			}
-			onRename={async (id, title) => {
-				try {
-					await renameSessionApi(id, title);
-				} catch (error) {
-					console.error("Rename failed:", error);
+		// A `#5528` written anywhere in this pane's transcript means a PR in the
+		// pane's OWN repo — which is why the context is per pane rather than
+		// app-wide: a split view can hold two sessions on two different repos.
+		<MarkdownRepoProvider key={viewerSession.id} repo={viewerSession.repo}>
+			<SessionViewer
+				key={viewerSession.id}
+				onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
+				session={viewerSession}
+				focused={focused}
+				hideHeader={splitMode && !focused}
+				hideRightPanel={splitMode && !focused}
+				localMode={localMode}
+				onBack={goBack}
+				onArchive={() =>
+					focused
+						? sidebarRef.current?.archiveSelected()
+						: closeSession(viewerSession)
 				}
-				refresh();
-			}}
-			workspaceName={
-				activeWorkspaceId
-					? workspaces.find((project) => project.id === activeWorkspaceId)?.name
-					: undefined
-			}
-			onRenameWorkspace={
-				activeWorkspaceId
-					? async (name) => {
-							try {
-								await updateWorkspaceApi(activeWorkspaceId, { name });
-							} catch (error) {
-								console.error("Rename workspace failed:", error);
+				onArchived={(stoppedRun) => {
+					if (stoppedRun) showToast("Archived · stopped the running turn");
+					// Only fires when the viewer archived on its own — with onArchive
+					// passed (a focused pane) it defers to the sidebar path instead, so
+					// this can't double-record.
+					rememberArchived([viewerSession.id]);
+				}}
+				send={socket.send}
+				addHandler={socket.addHandler}
+				connected={socket.connected}
+				initialPending={pendingInitialPrompts[viewerSession.id]}
+				topbarEl={focused ? topbarEl : null}
+				headerActionsEl={focused ? headerActionsEl : null}
+				headerModelEl={focused ? headerModelEl : null}
+				headerRepoEl={focused ? headerRepoEl : null}
+				rightPanelEl={focused ? rightPanelEl : null}
+				newSessionSeq={focused ? newSessionSeq : 0}
+				autoFocusComposer={focused && focusComposerOnOpen}
+				composerPrefillExternal={sessionComposerPrefills[viewerSession.id] ?? null}
+				onComposerPrefillConsumed={(seq) =>
+					setSessionComposerPrefills((prev) => {
+						const cur = prev[viewerSession.id];
+						if (!cur || cur.seq !== seq) return prev;
+						const next = { ...prev };
+						delete next[viewerSession.id];
+						return next;
+					})
+				}
+				workspaceSessions={workspaceSessions}
+				onSetStatus={setSessionLanes}
+				showReview={
+					splitMode ? viewTabKind(surfaceId) === "review" : focused && reviewActive
+				}
+				showConversation={
+					splitMode
+						? viewTabKind(surfaceId) === "conversation"
+						: focused && conversationActive
+				}
+				conversationThreadId={conversationThreadId}
+				showVideo={
+					splitMode ? viewTabKind(surfaceId) === "video" : focused && videoActive
+				}
+				videoPanel={videoPanel}
+				videoTitle={videoRef?.title || null}
+				showStaging={
+					splitMode ? viewTabKind(surfaceId) === "staging" : focused && stagingActive
+				}
+				showAssets={
+					splitMode ? viewTabKind(surfaceId) === "assets" : focused && assetsActive
+				}
+				showPreviewTab={
+					splitMode
+						? viewTabKind(surfaceId) === "preview"
+						: focused && previewLiveActive
+				}
+				// The sub-agent drill-in, opened from this pane's own transcript.
+				showSubagent={
+					splitMode
+						? viewTabKind(surfaceId) === "subagent"
+						: focused && subagentActive
+				}
+				subagentStack={subagentTabs[viewerSession.id] ?? NO_SUBAGENTS}
+				onOpenSubagent={openSubagent}
+				onSubagentBack={popSubagent}
+				onOpenReview={openReview}
+				onOpenStaging={openStaging}
+				onCloseStaging={closeStagingTab}
+				onOpenPreviewTab={openPreviewTab}
+				onClosePreviewTab={closePreviewTab}
+				onOpenAssets={openAssets}
+				onCloseAssets={closeAssetsTab}
+				onOpenWorkspace={() => setActiveViewTab(null)}
+				allSessions={sessions}
+				onNewSession={handleNewSession}
+				// Mirrors SessionTabs' own "render nothing" rule so the header's
+				// lone-session + never doubles up with the strip's.
+				tabStripVisible={
+					!!activeTabSplit || workspaceSessions.length > 1 || viewTabs.length > 0
+				}
+				parentSession={
+					viewerSession.parentSessionId
+						? (() => {
+								const parent = sessions.find(
+									(session) => session.id === viewerSession.parentSessionId,
+								);
+								return parent
+									? { id: parent.id, title: parent.title, model: parent.model }
+									: null;
+							})()
+						: null
+				}
+				workerSessions={sessions
+					.filter((session) => session.parentSessionId === viewerSession.id)
+					.map((session) => ({
+						id: session.id,
+						title: session.title,
+						model: session.model,
+						isRunning: session.isRunning,
+					}))}
+				onOpenSession={openSession}
+				onOpenNewSession={openPrefilledSession}
+				onRunningChange={handleSessionRunningChange}
+				onReviewChange={(id, request) =>
+					patch(id, { reviewRequest: request ?? undefined })
+				}
+				onRename={async (id, title) => {
+					try {
+						await renameSessionApi(id, title);
+					} catch (error) {
+						console.error("Rename failed:", error);
+					}
+					refresh();
+				}}
+				workspaceName={
+					activeWorkspaceId
+						? workspaces.find((project) => project.id === activeWorkspaceId)?.name
+						: undefined
+				}
+				onRenameWorkspace={
+					activeWorkspaceId
+						? async (name) => {
+								try {
+									await updateWorkspaceApi(activeWorkspaceId, { name });
+								} catch (error) {
+									console.error("Rename workspace failed:", error);
+								}
+								refreshWorkspaces();
 							}
-							refreshWorkspaces();
-						}
-					: undefined
-			}
-		/>
+						: undefined
+				}
+			/>
+		</MarkdownRepoProvider>
 	);
 
 	return (
@@ -3556,16 +3676,26 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								</div>
 							)
 						) : route.view === "pr" ? (
-							<PrQueuePreview
-								key={`${route.repo}:${route.branch}`}
-								repo={route.repo}
-								branch={route.branch}
-								sessions={sessions}
-								onOpenSession={(id) => navigate({ view: "session", id })}
-								onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
-								send={send}
-								addHandler={addHandler}
-							/>
+							route.branch === undefined ? (
+								// Number-only: nothing to preview until the resolve above
+								// finds the PR's workspace and replaces this route.
+								<div className="panel-placeholder">
+									{prRefMissing
+										? `${repoLabel(route.repo)} has no pull request #${route.number}.`
+										: `Opening #${route.number}…`}
+								</div>
+							) : (
+								<PrQueuePreview
+									key={`${route.repo}:${route.branch}`}
+									repo={route.repo}
+									branch={route.branch}
+									sessions={sessions}
+									onOpenSession={(id) => navigate({ view: "session", id })}
+									onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
+									send={send}
+									addHandler={addHandler}
+								/>
+							)
 						) : route.view === "reports" ? (
 							<Reports
 								selectedAutomationId={route.automationId}

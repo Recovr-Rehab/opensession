@@ -392,10 +392,18 @@ registerSessionControl({
 		const sessionCreatedBy = user || personaName();
 		const sessionCreatedAt = new Date().toISOString();
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
+		// The Desk (desk.ts) is an orchestrator living in an overlay, not a piece
+		// of work: it carries no workspace, and a worker it spawns is its own
+		// independent thing. So a desk parent contributes NOTHING to the workspace
+		// resolution below — no inherited id, no name seed, no back-fill. Without
+		// this the workers landed in (or minted) a workspace named "Desk", which
+		// is exactly how the Desk surfaced in the sidebar's Workspaces list.
+		const deskParent = !!parentSession?.desk;
 		// A joined workspace is the session's workspace, which also skips the mint /
 		// adopt block below — and with it the auto-naming: a session that merely
 		// joins an existing workspace must never rename it.
-		let resolvedWorkspaceId = joinedWorkspace?.id || parentSession?.workspaceId || null;
+		let resolvedWorkspaceId =
+			joinedWorkspace?.id || (deskParent ? null : parentSession?.workspaceId) || null;
 		// A workspace minted below from THIS session's provisional first line is
 		// renamed once the generated summary lands, exactly like the web create
 		// path — the sidebar rows (web and native) are titled by the workspace,
@@ -410,22 +418,29 @@ registerSessionControl({
 			// wrapped here instead of surfacing as an orphan for the read-side
 			// sweep to adopt. The parent's identity seeds the name when there is
 			// one: the pair is one piece of work.
+			// The Desk lends nothing to a minted workspace (see deskParent above):
+			// seeding from it would name the workspace "Desk" — and a
+			// parent-seeded name never arms autoNamedWorkspace, so that name
+			// would stick for life instead of being replaced by the generated
+			// summary. Treating it as parentless makes the child name its own
+			// workspace, which is what a delegated worker deserves.
+			const wsParent = deskParent ? null : parentSession;
 			const owned =
-				workspaceOwningWorktree(parentSession?.worktreeDir) ??
+				workspaceOwningWorktree(wsParent?.worktreeDir) ??
 				workspaceOwningWorktree(wtPath);
 			if (owned) resolvedWorkspaceId = owned.id;
 			else {
-				const branchForWs = parentSession?.branch || sessionBranch;
+				const branchForWs = wsParent?.branch || sessionBranch;
 				// Only an isolated worktree is owned — never a shared main/ask
 				// checkout, which every other session there uses too.
 				const dir =
-					ownedWorktree(parentSession?.worktreeDir) ?? ownedWorktree(wtPath);
+					ownedWorktree(wsParent?.worktreeDir) ?? ownedWorktree(wtPath);
 				const wsName =
-					parentSession?.title || parentSession?.branch || title || "Workspace";
+					wsParent?.title || wsParent?.branch || title || "Workspace";
 				const ws = createWorkspace({
 					name: wsName,
-					...(isScratch ? {} : { repo: parentSession?.repo || repo.id }),
-					createdBy: user || parentSession?.createdBy || parentSession?.startedBy || "Anonymous",
+					...(isScratch ? {} : { repo: wsParent?.repo || repo.id }),
+					createdBy: user || wsParent?.createdBy || wsParent?.startedBy || "Anonymous",
 					...(branchForWs ? { branch: branchForWs } : {}),
 					...(dir ? { worktreeDir: dir } : {}),
 				});
@@ -436,7 +451,10 @@ registerSessionControl({
 				// this child's summary must not rename it.
 				if (wsName === title) autoNamedWorkspace = ws;
 			}
-			if (resolvedWorkspaceId && parentSession?.source === "opensession")
+			// …but never drag the Desk into its worker's workspace: that would put
+			// it right back in the sidebar, and touchNativeSession would bump its
+			// lastActivity on every delegation too.
+			if (resolvedWorkspaceId && !deskParent && parentSession?.source === "opensession")
 				touchNativeSession(parentSession.id, { workspaceId: resolvedWorkspaceId });
 		}
 		// Replace the raw first-line title with a short summary in the background;

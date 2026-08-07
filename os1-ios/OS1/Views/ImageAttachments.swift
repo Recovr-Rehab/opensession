@@ -86,19 +86,25 @@ struct AttachImagesButton: View {
     }
 }
 
-/// Horizontal strip of attached-image thumbnails, each removable.
+/// Horizontal strip of attached-image thumbnails, each removable — and, on
+/// iOS, tappable to check what was actually attached before sending it. At
+/// 56pt a screenshot is unreadable, so the thumbnail alone can't answer "is
+/// this the right one?"; the ✕ stays on top of the tap target, so removing
+/// still takes one tap rather than a trip through the viewer.
 struct AttachedImagesRow: View {
     let images: [AttachedImage]
     let onRemove: (AttachedImage) -> Void
+
+    #if os(iOS)
+    @State private var previewing: AttachedImage?
+    #endif
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(images) { image in
                     ZStack(alignment: .topTrailing) {
-                        DataImage(data: image.jpegData)
-                            .frame(width: 56, height: 56)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        thumbnail(image)
                         Button {
                             onRemove(image)
                         } label: {
@@ -114,6 +120,34 @@ struct AttachedImagesRow: View {
             }
             .padding(.vertical, 2)
         }
+        #if os(iOS)
+        // `item:` rather than a bool: the sheet renders the image it was
+        // opened with even if the strip changes underneath it.
+        .fullScreenCover(item: $previewing) { image in
+            FullScreenImagePreview(data: image.jpegData)
+        }
+        #endif
+    }
+
+    private func thumbnail(_ image: AttachedImage) -> some View {
+        #if os(iOS)
+        Button {
+            previewing = image
+        } label: {
+            thumbnailImage(image)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open attached image")
+        .accessibilityHint("Shows the image full screen")
+        #else
+        thumbnailImage(image)
+        #endif
+    }
+
+    private func thumbnailImage(_ image: AttachedImage) -> some View {
+        DataImage(data: image.jpegData)
+            .frame(width: 56, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -163,9 +197,10 @@ struct DataImage: View {
     }
 }
 
-/// A sent conversation image that opens into the familiar full-screen iOS
-/// viewer. Composer thumbnails deliberately stay non-expandable because their
-/// primary interaction is removing the attachment before sending.
+/// A sent conversation image. A tap opens the familiar full-screen iOS
+/// viewer; a pinch zooms it where it sits, without going anywhere (see
+/// `pinchToPeek`). Composer thumbnails (`AttachedImagesRow`) open the same
+/// viewer on tap, but keep the ✕ as their primary interaction.
 struct ExpandableDataImage: View {
     let data: Data
 
@@ -192,6 +227,12 @@ struct ExpandableDataImage: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Open image")
         .accessibilityHint("Shows the image full screen")
+        // Pinch the picture right here, rather than as a shortcut into the
+        // viewer: the image lifts off the transcript, follows the fingers and
+        // springs back. A presentation can't be part of that gesture — it
+        // takes the presenting hierarchy out of the window and cancels the
+        // touches with it — so the zoom has to happen in place.
+        .pinchToPeek(data)
         .fullScreenCover(isPresented: $previewPresented) {
             FullScreenImagePreview(data: data)
         }

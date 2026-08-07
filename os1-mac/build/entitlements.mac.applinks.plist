@@ -7,6 +7,10 @@
     <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
+    <!-- Dictation — see entitlements.mac.plist. Keep the two files in step:
+         this one signs the top-level app, that one every helper. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
     <!-- Universal links. Requires a Developer ID provisioning profile for
          dev.tella.os1.shell (restricted entitlement) — see README "Universal links".
          The ?mode=developer alternate is listed because os.tella.dev is

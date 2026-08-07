@@ -29,6 +29,14 @@
  * live runs would bury every real one in the pickers. A run gets a workspace
  * only when something files it into one (automations.ts ticket filing), and a
  * *claimed* run is the one case the sidebar still renders without a workspace.
+ *
+ * Desk sessions (desk.ts) are the second exception, for the same reason: the
+ * Desk is summoned as an overlay, never listed. Filing it minted a workspace
+ * named "Desk" per user — invisible on its own (the sidebar skips desk
+ * sessions), but the workers the Desk spawns inherited that workspace id and
+ * resurrected the row, so the Desk surfaced in the Workspaces list wearing its
+ * own delegated work. A Desk session stays workspace-less for life; its
+ * children each get their own (session-control-wiring.ts).
  */
 
 import { createWorkspace, findWorkspaceByWorktree, getWorkspace } from "./workspaces";
@@ -97,7 +105,7 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
   // Archived sessions don't render, so they don't need one until they come back:
   // the same sweep files them on the scan right after an un-archive.
   const orphans = sessions.filter(
-    (s) => !s.workspaceId && !s.archived && !s.automation,
+    (s) => !s.workspaceId && !s.archived && !s.automation && !s.desk,
   );
   if (orphans.length === 0) return;
 

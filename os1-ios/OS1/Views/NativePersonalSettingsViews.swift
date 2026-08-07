@@ -59,8 +59,8 @@ struct ComposerSettingsView: View {
     @State private var busySendMod = "steer"
     @State private var loading = true
     @State private var saving = false
+    @State private var resaveNeeded = false
     @State private var error: String?
-    @State private var savedMessage: String?
     @State private var savedPrefs: [String: String] = [:]
     @State private var prefsLoaded = false
 
@@ -123,22 +123,25 @@ struct ComposerSettingsView: View {
                     Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Touch and hold the send button to use the other one for a single message.")
                     #endif
                 }
-
-                Section {
-                    Button(saving ? "Saving…" : "Save composer preferences") {
-                        Task { await save() }
-                    }
-                    .disabled(!prefsLoaded || saving || currentPrefs == savedPrefs)
-                    if let savedMessage {
-                        Text(savedMessage)
-                            .foregroundStyle(.green)
-                    }
-                }
             }
+            PersonalPromptSection()
         }
         .navigationTitle("Composer")
         .task { await load() }
-        .disabled(saving)
+        .onChange(of: defaultModel) { _, _ in commit() }
+        .onChange(of: sendKey) { _, _ in commit() }
+        .onChange(of: busySend) { _, _ in commit() }
+        .onChange(of: busySendMod) { _, _ in commit() }
+        .onDisappear { commit() }
+    }
+
+    /// Every control writes through on change — there is no Save button, so
+    /// leaving the screen is only a backstop for a request still in flight.
+    /// A change made mid-save queues behind it rather than racing it.
+    private func commit() {
+        guard prefsLoaded, !loading, currentPrefs != savedPrefs else { return }
+        guard !saving else { resaveNeeded = true; return }
+        Task { await save() }
     }
 
     private func load() async {
@@ -174,14 +177,13 @@ struct ComposerSettingsView: View {
     private func save() async {
         saving = true
         error = nil
-        savedMessage = nil
         do {
             let current = currentPrefs
             var patch: [String: String?] = [:]
             for (key, value) in current where savedPrefs[key] != value {
                 patch[key] = value
             }
-            guard !patch.isEmpty else { saving = false; return }
+            guard !patch.isEmpty else { saving = false; resaveNeeded = false; return }
             let requestContext = NativePreferences.context()
             let response = try await SettingsAPI.updateUiPrefs(user: requestContext.user, prefs: patch)
             var confirmed = savedPrefs
@@ -203,11 +205,14 @@ struct ComposerSettingsView: View {
             nativeBusySend = busySend
             nativeBusySendMod = busySendMod
             savedPrefs = confirmed
-            savedMessage = "Composer preferences saved."
         } catch {
             self.error = error.localizedDescription
         }
         saving = false
+        if resaveNeeded {
+            resaveNeeded = false
+            commit()
+        }
     }
 
     private var currentPrefs: [String: String] {
@@ -229,7 +234,6 @@ struct AppearanceSettingsView: View {
     @State private var loading = true
     @State private var saving = false
     @State private var error: String?
-    @State private var savedMessage: String?
     @State private var savedTurnActivity = "auto"
     @State private var prefsLoaded = false
 
@@ -256,10 +260,6 @@ struct AppearanceSettingsView: View {
                         Text("Always expanded").tag("expanded")
                         Text("Always collapsed").tag("collapsed")
                     }
-                    Button(saving ? "Saving…" : "Save session preference") {
-                        Task { await saveTurnActivity() }
-                    }
-                    .disabled(!prefsLoaded || saving || turnActivity == savedTurnActivity)
                 }
             } header: {
                 Text("Session")
@@ -285,13 +285,13 @@ struct AppearanceSettingsView: View {
                     Button("Try again") { Task { await load() } }
                 }
             }
-            if let savedMessage {
-                Section { Text(savedMessage).foregroundStyle(.green) }
-            }
         }
         .navigationTitle("Appearance")
         .task { await load() }
-        .disabled(saving)
+        .onChange(of: turnActivity) { _, _ in
+            guard prefsLoaded, !saving, turnActivity != savedTurnActivity else { return }
+            Task { await saveTurnActivity() }
+        }
     }
 
     /// Fire-and-forget: the toggle is already reflected locally via
@@ -328,10 +328,10 @@ struct AppearanceSettingsView: View {
         loading = false
     }
 
+    /// Writes through on selection, like the Desk voice toggle above it.
     private func saveTurnActivity() async {
         saving = true
         error = nil
-        savedMessage = nil
         do {
             let requestContext = NativePreferences.context()
             let selected = turnActivity
@@ -349,7 +349,6 @@ struct AppearanceSettingsView: View {
             turnActivity = confirmed["turn-activity"] ?? selected
             nativeTurnActivity = turnActivity
             savedTurnActivity = turnActivity
-            savedMessage = "Session preference saved."
         } catch {
             self.error = error.localizedDescription
         }
@@ -357,64 +356,48 @@ struct AppearanceSettingsView: View {
     }
 }
 
-/// Settings → General (personal). Holds the per-user settings that don't fill
-/// a page of their own — today the standing prompt, which is one text box.
-struct PersonalGeneralSettingsView: View {
+/// The standing prompt, shown inside Composer. There is no Save button: it
+/// commits when the box loses focus and again when the screen goes away, so
+/// leaving keeps your edit — same contract as the web.
+struct PersonalPromptSection: View {
     @State private var prompt = ""
     @State private var savedPrompt = ""
     @State private var loading = true
-    @State private var saving = false
     @State private var error: String?
-    @State private var savedMessage: String?
+    @FocusState private var editing: Bool
 
     private let user = ServerConfig.shared.userName
 
     var body: some View {
-        Form {
+        Section {
             if loading {
-                Section { ProgressView("Loading personal prompt…") }
+                ProgressView()
+            } else if let error {
+                Text(error).foregroundStyle(.red)
+                Button("Try again") { Task { await load() } }
             } else {
-                Section {
-                    Text("Standing instructions are added to every interactive session you start. They follow your identity across devices and are not used for automations.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    TextEditor(text: $prompt)
-                        .frame(minHeight: 180)
-                } header: {
-                    Text("Instructions")
-                } footer: {
-                    Text("Leave this empty to turn off personal instructions.")
-                }
-
-                Section {
-                    Button(saving ? "Saving…" : "Save personal prompt") {
-                        Task { await save() }
-                    }
-                    .disabled(saving || prompt == savedPrompt)
-                    Button("Clear personal prompt", role: .destructive) {
-                        prompt = ""
-                        Task { await save() }
-                    }
-                    .disabled(saving || prompt.isEmpty)
-                    if prompt != savedPrompt, !saving {
-                        Text("Unsaved changes")
-                            .foregroundStyle(.secondary)
-                    }
-                    if let savedMessage {
-                        Text(savedMessage).foregroundStyle(.green)
-                    }
-                }
+                TextEditor(text: $prompt)
+                    .frame(minHeight: 140)
+                    .focused($editing)
             }
-
-            if let error {
-                Section {
-                    Text(error).foregroundStyle(.red)
-                    Button("Try again") { Task { await load() } }
-                }
-            }
+        } header: {
+            Text("Personal prompt")
+        } footer: {
+            Text("Standing instructions added to every session you start, on top of the built-in ones. Saved when you leave this screen; empty turns it off.")
         }
-        .navigationTitle("General")
         .task { await load() }
+        .onChange(of: editing) { _, focused in if !focused { commit() } }
+        .onDisappear { commit() }
+    }
+
+    /// Fire-and-forget — by the time this runs the view may already be gone,
+    /// so there is nothing to report a result to. `savedPrompt` moves first so
+    /// a blur followed by a disappear doesn't send the same body twice.
+    private func commit() {
+        guard !loading, prompt != savedPrompt else { return }
+        let pending = prompt
+        savedPrompt = pending
+        Task { _ = try? await SettingsAPI.setPersonalPrompt(user: user, prompt: pending) }
     }
 
     private func load() async {
@@ -428,20 +411,5 @@ struct PersonalGeneralSettingsView: View {
             self.error = error.localizedDescription
         }
         loading = false
-    }
-
-    private func save() async {
-        saving = true
-        error = nil
-        savedMessage = nil
-        do {
-            let result = try await SettingsAPI.setPersonalPrompt(user: user, prompt: prompt)
-            prompt = result
-            savedPrompt = result
-            savedMessage = result.isEmpty ? "Personal prompt cleared." : "Personal prompt saved."
-        } catch {
-            self.error = error.localizedDescription
-        }
-        saving = false
     }
 }

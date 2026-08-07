@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
 	getNotifSettings,
 	setNotifSettings,
@@ -197,7 +197,6 @@ export type ToolSectionKey =
 
 /** Listed in nav order (SECTIONS below). */
 export type SettingsSectionKey =
-	| "general"
 	| "myAccounts"
 	| "keychain"
 	| "composer"
@@ -226,30 +225,6 @@ const SECTIONS: {
 	group: string;
 	icon: React.ReactNode;
 }[] = [
-	{
-		key: "general",
-		label: "General",
-		group: "Personal",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M3 3.5h10M3 6.5h10M3 9.5h6"
-					strokeLinecap="round"
-				/>
-				<path
-					d="M12.9 9.1l-3.4 3.4-.5 1.5 1.5-.5 3.4-3.4a1 1 0 0 0-1-1z"
-					strokeLinejoin="round"
-				/>
-			</svg>
-		),
-	},
 	{
 		key: "myAccounts",
 		label: "My accounts",
@@ -609,7 +584,6 @@ function SectionPanel({
 			{section === "audit" && <AuditPanel />}
 			{section === "models" && <ModelsPanel />}
 			{section === "connections" && <Connections />}
-			{section === "general" && <PersonalGeneralPanel />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}
 			{section === "prewarming" && <PrewarmingPanel />}
@@ -669,7 +643,7 @@ export function Settings({
 	// Default landing = the first non-tool row in the nav. Tool sections can't be
 	// the default: their panel arrives as `children`, which App only passes on a
 	// tool route, so a bare /settings would render an empty pane.
-	const active = section ?? "general";
+	const active = section ?? "myAccounts";
 
 	return (
 		<div className="settings-page">
@@ -1202,22 +1176,6 @@ function DeskVoicePanel() {
 	);
 }
 
-/** Settings → General (personal): the per-user settings that don't fill a page
- * of their own. A standing prompt is one text box and Desk voice is a toggle
- * plus a key — each was a whole nav row for a single control. */
-function PersonalGeneralPanel() {
-	return (
-		<SettingsPanel>
-			<SettingsHeader
-				title="General"
-				description="Standing instructions for the sessions you start, and how you reach your Desk. Both follow your account rather than this browser."
-			/>
-			<PersonalPromptPanel />
-			<DeskVoicePanel />
-		</SettingsPanel>
-	);
-}
-
 // ── Appearance ─────────────────────────────────────────────────────────────
 
 const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
@@ -1522,8 +1480,8 @@ function PersonalPromptPanel() {
 	const user = getCurrentUser();
 	const [prompt, setPrompt] = useState<string | null>(null);
 	const [savedPrompt, setSavedPrompt] = useState("");
-	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
 
 	useEffect(() => {
 		let alive = true;
@@ -1539,27 +1497,36 @@ function PersonalPromptPanel() {
 		};
 	}, [user]);
 
-	async function save() {
-		if (prompt === null || busy) return;
-		setBusy(true);
+	// There is no Save button: the prompt commits when the box loses focus and
+	// again when the panel goes away, so leaving the page keeps your edit. The
+	// latest values live in a ref because the unmount effect must run once (a
+	// dependency on `prompt` would re-fire the cleanup on every keystroke).
+	const latest = useRef({ prompt, savedPrompt, user });
+	latest.current = { prompt, savedPrompt, user };
+
+	const commit = useCallback(async () => {
+		const { prompt: draft, savedPrompt: saved, user: who } = latest.current;
+		if (draft === null || draft === saved) return;
+		setStatus("saving");
 		try {
-			const r = await savePersonalPrompt(user, prompt);
-			setPrompt(r.prompt);
+			const r = await savePersonalPrompt(who, draft);
 			setSavedPrompt(r.prompt);
-			toast(r.prompt ? "Personal prompt saved" : "Personal prompt cleared", {
-				variant: "success",
-			});
+			setStatus("saved");
 		} catch (e: any) {
+			setStatus("idle");
 			toast(e?.message || "Failed to save personal prompt", {
 				variant: "error",
 			});
-		} finally {
-			setBusy(false);
 		}
-	}
+	}, []);
+
+	useEffect(() => {
+		// Fire-and-forget on the way out — nothing is left to render a result to.
+		return () => void commit();
+	}, [commit]);
 
 	const label = (
-		<SettingsGroupLabel className="mt-0">Personal prompt</SettingsGroupLabel>
+		<SettingsGroupLabel>Personal prompt</SettingsGroupLabel>
 	);
 
 	if (prompt === null)
@@ -1584,25 +1551,20 @@ function PersonalPromptPanel() {
 					rows={10}
 					placeholder='e.g. "Keep answers short. Prefer tables for comparisons. Always mention which files you touched."'
 					value={prompt}
-					onChange={(e) => setPrompt(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
+					onChange={(e) => {
+						setPrompt(e.target.value);
+						setStatus("idle");
 					}}
+					onBlur={() => void commit()}
 				/>
-				<div className="mt-3 flex items-center gap-2">
-					<Button
-						variant="primary"
-						size="sm"
-						disabled={busy || !dirty}
-						onClick={save}
-					>
-						{busy ? "Saving…" : "Save"}
-					</Button>
-					{dirty && !busy && (
-						<span className="text-label font-medium text-faint">
-							Unsaved changes
-						</span>
-					)}
+				<div className="mt-2 h-4 text-label font-medium text-faint">
+					{status === "saving"
+						? "Saving…"
+						: dirty
+							? "Saves when you click away"
+							: status === "saved"
+								? "Saved"
+								: ""}
 				</div>
 			</SettingsSection>
 			<SettingsHint>
@@ -2675,8 +2637,9 @@ function ComposerPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Composer"
-				description="How the message box behaves when you write and send. These follow your account, so they're the same on every device you sign in from."
+				description="How you talk to a session — how the message box behaves, voice, and the standing instructions every session you start begins with. All of it follows your account, so it's the same on every device you sign in from."
 			/>
+			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Default model"
@@ -2794,6 +2757,8 @@ function ComposerPanel() {
 					}
 				/>
 			</SettingCard>
+			<DeskVoicePanel />
+			<PersonalPromptPanel />
 		</SettingsPanel>
 	);
 }

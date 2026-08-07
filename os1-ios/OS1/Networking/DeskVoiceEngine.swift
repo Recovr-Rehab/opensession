@@ -87,6 +87,9 @@ final class DeskVoiceEngine {
 
     private var playerNode: AVAudioPlayerNode?
     private var receiveTask: Task<Void, Never>?
+    private var silenceWatchdog: Task<Void, Never>?
+    /// The voice-processing fallback is one-shot per call.
+    private var vpFallbackDone = false
     private var idleTimer: Task<Void, Never>?
     private var levelTimer: Task<Void, Never>?
     private var transcriptChain: Task<Void, Never>?
@@ -134,19 +137,37 @@ final class DeskVoiceEngine {
         rt.webSocketTask = task
         task.resume()
 
-        do {
-            try configureAudioSession()
-            try startAudioEngine()
-        } catch {
-            rt.webSocketTask = nil
-            task.cancel(with: .goingAway, reason: nil)
-            fail("Could not start audio: \(error.localizedDescription)")
-            return
+        // Injected-audio dev runs skip the audio hardware entirely: the
+        // shared build Macs have no microphone, and the simulator's audio
+        // unit can abort the whole process on init.
+        #if DEBUG
+        let injectedAudio =
+            ProcessInfo.processInfo.environment["OS1_VOICE_INJECT_RAW"] != nil
+        #else
+        let injectedAudio = false
+        #endif
+        if !injectedAudio {
+            do {
+                try configureAudioSession()
+                try startAudioEngine()
+            } catch {
+                rt.webSocketTask = nil
+                task.cancel(with: .goingAway, reason: nil)
+                fail("Could not start audio: \(error.localizedDescription)")
+                return
+            }
         }
 
         state = .listening
         armIdleTimer()
         startLevelSampling()
+        vpFallbackDone = false
+        if !injectedAudio {
+            armSilenceWatchdog()
+        }
+        #if DEBUG
+        injectAudioIfRequested()
+        #endif
 
         receiveTask = Task { [weak self] in
             await self?.receiveLoop(task)
@@ -194,13 +215,28 @@ final class DeskVoiceEngine {
         #endif
     }
 
-    private func startAudioEngine() throws {
+    private func startAudioEngine(voiceProcessing: Bool = true) throws {
         let inputNode = engine.inputNode
         // Echo cancellation is essential once the model's voice is coming
         // out of the speaker while we're still listening — must happen
         // before reading input/output formats, since enabling it changes
-        // them.
-        try? inputNode.setVoiceProcessingEnabled(true)
+        // them. On some devices/routes the voice-processing unit delivers
+        // pure digital silence instead of mic audio; the silence watchdog
+        // detects that and rebuilds the audio path without it.
+        #if targetEnvironment(simulator)
+        // The simulator's voice-processing unit is flaky to the point of
+        // aborting the process inside AURemoteIO — plain IO is fine there.
+        _ = voiceProcessing
+        #else
+        do {
+            try inputNode.setVoiceProcessingEnabled(voiceProcessing)
+        } catch {
+            print("DeskVoiceEngine: setVoiceProcessingEnabled(\(voiceProcessing)) failed: \(error)")
+            // Enable failed → no echo cancellation → same self-echo hazard
+            // as the fallback path.
+            if voiceProcessing { rt.halfDuplex = true }
+        }
+        #endif
 
         let inputFormat = inputNode.outputFormat(forBus: 0)
         guard let uplinkFormat = AVAudioFormat(
@@ -225,6 +261,12 @@ final class DeskVoiceEngine {
             commonFormat: .pcmFormatFloat32, sampleRate: 24_000, channels: 1, interleaved: false
         ) else {
             throw DeskVoiceEngineError.audioSetup
+        }
+        // A rebuild (the watchdog's fallback) re-runs this whole setup; the
+        // previous player must not stay attached to the engine.
+        if let old = playerNode {
+            old.removeTap(onBus: 0)
+            engine.detach(old)
         }
         let player = AVAudioPlayerNode()
         engine.attach(player)
@@ -283,6 +325,11 @@ final class DeskVoiceEngine {
             (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         }.value
         guard let event, let type = event["type"] as? String else { return }
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["OS1_VOICE_LOG"] != nil {
+            print("DeskVoiceEngine: event \(type)")
+        }
+        #endif
 
         switch type {
         case "input_audio_buffer.speech_started":
@@ -437,6 +484,81 @@ final class DeskVoiceEngine {
         }
     }
 
+    // MARK: - Silence watchdog
+
+    /// On some devices/routes, enabling voice processing leaves the mic
+    /// delivering pure digital silence — everything looks connected, but the
+    /// server VAD never hears speech and the call sits deaf on "Listening".
+    /// A real microphone in a real room never produces exact zeros, so a few
+    /// seconds of a flat-zero uplink means the capture path is dead, not that
+    /// the user is quiet — rebuild it without voice processing.
+    private func armSilenceWatchdog() {
+        silenceWatchdog?.cancel()
+        silenceWatchdog = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.checkForSilentUplink()
+        }
+    }
+
+    private func checkForSilentUplink() {
+        guard active, !muted, !vpFallbackDone else { return }
+        guard rt.uplinkPeak.value < 0.001 else { return }
+        vpFallbackDone = true
+        // No voice processing means no echo cancellation: without the gate
+        // the model converses with its own echo (the transcript literally
+        // shows it answering fragments of its previous sentence).
+        rt.halfDuplex = true
+        print("DeskVoiceEngine: uplink is digital silence with voice processing on — rebuilding capture without it (half-duplex)")
+        engine.inputNode.removeTap(onBus: 0)
+        if engine.isRunning {
+            engine.stop()
+        }
+        do {
+            try startAudioEngine(voiceProcessing: false)
+        } catch {
+            fail("Could not restart audio: \(error.localizedDescription)")
+        }
+    }
+
+    #if DEBUG
+    /// Simulator/dev verification without a microphone: stream a raw PCM16
+    /// mono 24kHz file up as if it were mic audio
+    /// (`OS1_VOICE_INJECT_RAW=/path/to.raw`). Debug builds only.
+    private func injectAudioIfRequested() {
+        guard let path = ProcessInfo.processInfo.environment["OS1_VOICE_INJECT_RAW"],
+              !path.isEmpty
+        else { return }
+        guard let data = FileManager.default.contents(atPath: path) else {
+            print("DeskVoiceEngine: injection file unreadable: \(path)")
+            return
+        }
+        print("DeskVoiceEngine: injecting \(data.count) bytes of audio")
+        let rt = self.rt
+        Task.detached {
+            let chunk = 4800
+            var offset = 0
+            while offset < data.count {
+                let end = min(offset + chunk, data.count)
+                rt.send([
+                    "type": "input_audio_buffer.append",
+                    "audio": data.subdata(in: offset..<end).base64EncodedString(),
+                ])
+                offset = end
+                try? await Task.sleep(for: .milliseconds(95))
+            }
+            // A real mic streams continuously; the VAD only closes the turn
+            // once it hears silence, so the harness must supply some.
+            let silence = Data(count: chunk).base64EncodedString()
+            for _ in 0..<30 {
+                rt.send(["type": "input_audio_buffer.append", "audio": silence])
+                try? await Task.sleep(for: .milliseconds(95))
+            }
+            print("DeskVoiceEngine: injection finished")
+        }
+    }
+    #endif
+
     // MARK: - Idle timeout
 
     private func armIdleTimer() {
@@ -466,6 +588,8 @@ final class DeskVoiceEngine {
     private func teardown(resetError: Bool) {
         receiveTask?.cancel()
         receiveTask = nil
+        silenceWatchdog?.cancel()
+        silenceWatchdog = nil
         idleTimer?.cancel()
         idleTimer = nil
         levelTimer?.cancel()
@@ -482,6 +606,7 @@ final class DeskVoiceEngine {
         playerNode = nil
         audioLevel = 0
         rt.resetLevels()
+        rt.halfDuplex = false
 
         rt.playerNode = nil
         rt.uplinkConverter = nil
@@ -532,10 +657,19 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
     /// Set from the main actor, read on the capture thread — a plain `Bool`
     /// load/store, and a frame either side of the flip is inaudible.
     var muted = false
+    /// Set when the call runs without echo cancellation (voice-processing
+    /// fallback). The uplink then goes half-duplex: mic frames stay local
+    /// while the model is audibly speaking, because the speaker's output
+    /// would otherwise re-enter the mic and barge in on the model itself.
+    var halfDuplex = false
 
     private let scheduledCount = LockedCounter()
+    private let lastDrainAt = LockedTime()
     private let inputLevel = LockedLevel()
     private let outputLevel = LockedLevel()
+    /// Loudest sample the uplink has carried this call (0…1) — the silence
+    /// watchdog's evidence that the capture path is alive at all.
+    let uplinkPeak = LockedLevel()
 
     /// Whoever is talking drives the orb: the model while it speaks, the mic
     /// the rest of the time.
@@ -546,6 +680,7 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
     func resetLevels() {
         inputLevel.value = 0
         outputLevel.value = 0
+        uplinkPeak.value = 0
     }
 
     /// Runs on the player's tap thread.
@@ -592,15 +727,19 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
         else { return }
 
         var sum: Float = 0
+        var peak: Float = 0
         for index in 0..<Int(outBuffer.frameLength) {
             let sample = Float(int16[0][index]) / 32_768.0
             sum += sample * sample
+            peak = max(peak, abs(sample))
         }
         inputLevel.value = Self.normalize(sqrt(sum / Float(outBuffer.frameLength)))
+        if peak > uplinkPeak.value { uplinkPeak.value = peak }
 
         // Muted still captures (and still meters, so the level dies visibly) —
-        // it just stops anything leaving the device.
-        guard !muted else { return }
+        // it just stops anything leaving the device. Same for the half-duplex
+        // gate while the model is audibly speaking.
+        guard !muted, !uplinkGated() else { return }
         let byteCount = Int(outBuffer.frameLength) * MemoryLayout<Int16>.size
         let audioData = Data(bytes: UnsafeRawPointer(int16[0]), count: byteCount)
         send(["type": "input_audio_buffer.append", "audio": audioData.base64EncodedString()])
@@ -630,9 +769,19 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
         playerNode.scheduleBuffer(buffer) { [weak self] in
             guard let self else { return }
             if self.scheduledCount.decrementAndGet() <= 0 {
+                self.lastDrainAt.value = CFAbsoluteTimeGetCurrent()
                 self.onPlaybackDrained?()
             }
         }
+    }
+
+    /// Half-duplex gate: true while the model's voice is (or was a moment
+    /// ago) coming out of the speaker. The tail covers the speaker's decay so
+    /// the reopened mic doesn't catch the last syllable's echo.
+    private func uplinkGated() -> Bool {
+        guard halfDuplex else { return false }
+        if scheduledCount.current() > 0 { return true }
+        return CFAbsoluteTimeGetCurrent() - lastDrainAt.value < 0.35
     }
 
     /// Barge-in: drop everything queued so the model's old response stops
@@ -652,6 +801,26 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
               let text = String(data: data, encoding: .utf8)
         else { return }
         webSocketTask.send(.string(text)) { _ in }
+    }
+}
+
+/// A lock-guarded `CFAbsoluteTime`, written from the player-completion
+/// callback and read on the capture thread by the half-duplex gate.
+private final class LockedTime: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: CFAbsoluteTime = 0
+
+    var value: CFAbsoluteTime {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage
+        }
+        set {
+            lock.lock()
+            storage = newValue
+            lock.unlock()
+        }
     }
 }
 
@@ -690,6 +859,13 @@ private final class LockedCounter: @unchecked Sendable {
     func decrementAndGet() -> Int {
         lock.lock()
         value -= 1
+        let result = value
+        lock.unlock()
+        return result
+    }
+
+    func current() -> Int {
+        lock.lock()
         let result = value
         lock.unlock()
         return result

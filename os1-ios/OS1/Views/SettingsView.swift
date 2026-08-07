@@ -58,9 +58,6 @@ struct SettingsView: View {
             // Groups mirror the web nav (src/frontend/components/Settings.tsx):
             // what one person owns first, then what the whole instance does.
             Section("Personal") {
-                settingsLink("General", icon: "slider.horizontal.3") {
-                    PersonalGeneralSettingsView()
-                }
                 settingsLink("Composer", icon: "keyboard") {
                     ComposerSettingsView()
                 }
@@ -130,10 +127,9 @@ struct SettingsView: View {
                     .foregroundStyle(OS1VisualStyle.text)
             } icon: {
                 // Without the tile the glyph carries the row on its own, so it
-                // takes a colour of its own rather than secondary-label gray
-                // or the title's black-on-white, and trades size for weight:
-                // smaller than the title beside it, heavier than it, which
-                // keeps the icon column reading as a column instead of as
+                // trades size for weight — smaller than the title beside it,
+                // heavier than it — which lets the icon column stay neutral
+                // (see `iconTint`) and still read as a column rather than as
                 // dimmer text.
                 Image(systemName: icon)
                     .symbolRenderingMode(.monochrome)

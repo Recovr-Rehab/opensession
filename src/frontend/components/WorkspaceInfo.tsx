@@ -41,7 +41,7 @@ import { formatPrCommentPrompt } from "./PrPanel";
 import { renderMarkdown } from "../lib/markdown";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
 import { personKey } from "../lib/review-queue";
-import { MarkdownBody } from "./MarkdownBody";
+import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import {
 	loadOverview,
 	overviewCache,
@@ -304,9 +304,10 @@ function CommentCard({
 	onOpenTab?: (tab: PanelTab) => void;
 	onAddToInput?: (text: string) => void;
 }) {
+	const repo = useMarkdownRepo();
 	const html = useMemo(
-		() => renderMarkdown(cleanCommentMarkdown(comment.body)),
-		[comment.body],
+		() => renderMarkdown(cleanCommentMarkdown(comment.body), { repo }),
+		[comment.body, repo],
 	);
 	// The one-line label: lead with the comment's title/first words, flattened.
 	const title = useMemo(() => plainComment(comment.body), [comment.body]);
@@ -799,8 +800,11 @@ function AgentReviewCard({
 		: undefined;
 	const reviewMessage = reviewComment?.body.replace(/^<!-- os-review -->\s*/, "");
 	const reviewHtml = useMemo(
-		() => (reviewMessage ? renderMarkdown(cleanCommentMarkdown(reviewMessage)) : ""),
-		[reviewMessage],
+		() =>
+			reviewMessage
+				? renderMarkdown(cleanCommentMarkdown(reviewMessage), { repo })
+				: "",
+		[reviewMessage, repo],
 	);
 
 	// Keep the just-started state latched until a later PR refresh observes the

@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it } from "bun:test";
 import {
   renderMarkdown,
   renderPrCommentMarkdown,
+  setKnownRepos,
   setSessionTitles,
 } from "./markdown";
 
-afterEach(() => setSessionTitles([]));
+afterEach(() => {
+  setSessionTitles([]);
+  setKnownRepos([]);
+});
 
 describe("renderMarkdown session links", () => {
   it("turns a session-id codespan into a link", () => {
@@ -185,6 +189,115 @@ describe("session chip labels", () => {
     ]);
     expect(renderMarkdown(`Delegated to \`${id}\`.`)).toContain(
       ">bks-019f24b5…</a>",
+    );
+  });
+});
+
+describe("renderMarkdown PR mentions", () => {
+  const fusion = { repo: "tella-fusion" };
+
+  it("links a bare #number to the review page for the rendering repo", () => {
+    const html = renderMarkdown("Fixed in #5528, ready to merge.", fusion);
+    expect(html).toContain('class="pr-ref"');
+    expect(html).toContain('href="/pr/tella-fusion/5528"');
+    expect(html).toContain('data-pr-repo="tella-fusion"');
+    expect(html).toContain('data-pr-number="5528"');
+    expect(html).toContain(">#5528</a>");
+  });
+
+  it("carries the GitHub name for the cmd-click escape, when known", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    expect(renderMarkdown("Fixed in #5528.", fusion)).toContain(
+      'data-pr-gh="tellahq/tella-fusion"',
+    );
+    // A repo with no GitHub name still links here; there is just nowhere to
+    // escape to, so the chip carries no target.
+    setKnownRepos([{ id: "tella-fusion" }]);
+    const local = renderMarkdown("Fixed in #5528.", fusion);
+    expect(local).toContain('href="/pr/tella-fusion/5528"');
+    expect(local).not.toContain("data-pr-gh");
+  });
+
+  it("leaves a mention plain when the caller renders without a repo", () => {
+    const html = renderMarkdown("Fixed in #5528, ready to merge.");
+    expect(html).not.toContain("pr-ref");
+    expect(html).toContain("#5528");
+  });
+
+  it("places a qualified mention by its own repo, registered ones only", () => {
+    setKnownRepos([
+      { id: "tella-fusion", ghRepo: "tellahq/tella-fusion" },
+      { id: "opensession", ghRepo: "tellahq/opensession" },
+    ]);
+    const qualified = renderMarkdown("See opensession#128 and #5528.", fusion);
+    expect(qualified).toContain('href="/pr/opensession/128"');
+    expect(qualified).toContain(">opensession#128</a>");
+    // the bare one still belongs to the rendering repo
+    expect(qualified).toContain('href="/pr/tella-fusion/5528"');
+    // owner/repo is the same repo, addressed the GitHub way
+    expect(renderMarkdown("tellahq/opensession#128", fusion)).toContain(
+      'href="/pr/opensession/128"',
+    );
+    // a name this instance doesn't serve stays text — the route can't resolve it
+    const unknown = renderMarkdown("vercel/next.js#1234 is upstream.", fusion);
+    expect(unknown).not.toContain("pr-ref");
+  });
+
+  it("does not fire on the things that merely look like a PR mention", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    for (const src of [
+      "the colour is #123456 in both themes", // 6+ digits: never a mention
+      "em dash entity &#8212; here",
+      "issue ##12 double hash",
+      "`#5528` stays a code chip",
+      "    #5528 in an indented code block",
+      "# 5528 is a heading",
+    ]) {
+      expect(renderMarkdown(src, fusion)).not.toContain("pr-ref");
+    }
+  });
+
+  it("reads mentions as they are actually written in prose", () => {
+    // Sentence-final, parenthesised, inside emphasis, at the start of a line,
+    // and in a list — all the same reference.
+    for (const src of [
+      "Shipped in #5528.",
+      "Shipped (#5528) yesterday",
+      "**#5528** is the one",
+      "#5528 is the one",
+      "- reverts #5528\n- keeps #42",
+    ]) {
+      expect(renderMarkdown(src, fusion)).toContain('data-pr-number="');
+    }
+  });
+
+  it("leaves a URL fragment alone", () => {
+    const html = renderMarkdown(
+      "https://github.com/tellahq/tella-fusion/pull/5528#issuecomment-12345",
+      fusion,
+    );
+    expect(html).not.toContain("pr-ref");
+  });
+
+  it("keeps a mention inside a link's text as text (no nested anchor)", () => {
+    const html = renderMarkdown(
+      "[PR #5528](https://github.com/tellahq/tella-fusion/pull/5528)",
+      fusion,
+    );
+    expect(html).toContain(
+      '<a href="https://github.com/tellahq/tella-fusion/pull/5528"',
+    );
+    expect(html).toContain(">PR #5528</a>");
+    expect(html).not.toContain("pr-ref");
+  });
+
+  it("renders the same source differently per repo (cache is repo-keyed)", () => {
+    const src = "Landed #42.";
+    expect(renderMarkdown(src, { repo: "tella-fusion" })).toContain(
+      'href="/pr/tella-fusion/42"',
+    );
+    expect(renderMarkdown(src, { repo: "opensession" })).toContain(
+      'href="/pr/opensession/42"',
     );
   });
 });

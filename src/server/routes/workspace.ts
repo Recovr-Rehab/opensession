@@ -478,8 +478,11 @@ export async function handleWorkspaceRoutes(
 		// in it too, so the pair actually links up in the tab strip and
 		// sidebar. Read-only sources (slack/linear files) can join an adopted
 		// workspace but can't be stamped themselves.
+		// The Desk is the exception to the healing: it is deliberately
+		// workspace-less for life (session-workspace.ts), so a sibling spun off
+		// from it gets its own workspace and the Desk stays out of the sidebar.
 		let workspaceId = src.workspaceId || null;
-		if (!workspaceId) {
+		if (!workspaceId && !src.desk) {
 			const owned = workspaceOwningWorktree(src.worktreeDir);
 			if (owned) {
 				workspaceId = owned.id;

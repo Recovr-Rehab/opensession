@@ -9060,7 +9060,9 @@ a.workspace-info-check-row {
 
 /* markdown content */
 .markdown p {
-	margin: 0 0 6px;
+	/* 8px on a 14px/24px body ≈ the 0.47em block rhythm the native app uses
+	   (blockSpacing 8 against 17pt). 6px left paragraphs reading as one slab. */
+	margin: 0 0 8px;
 }
 
 .markdown a {
@@ -9156,37 +9158,77 @@ a.workspace-info-check-row {
 	}
 }
 
+/* A pull-request reference (`#5528`) linked into our own review surface by
+   markdown.ts. Lighter than the session chip beside it: no border and no ↗,
+   because the label is five characters of running text, not a whole title,
+   and a sentence can carry several of them. A tinted token instead — enough
+   to read as a destination, quiet enough to sit inside a sentence. Not
+   accent-coloured, for the same reason the session chip isn't: the accent is
+   the alert colour here, and a red #5528 reads as a failure. Not scoped under
+   .markdown: the chip turns up in every surface that renders session
+   markdown, and a few of those containers don't carry that class. It still
+   beats `.markdown a` on equal specificity by sitting later in the file. */
+a.pr-ref {
+	background: var(--hover);
+	color: var(--text);
+	border-radius: calc(5px * var(--rf)); corner-shape: var(--cs);
+	padding: 0.5px 4px;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: background 0.12s ease;
+}
+a.pr-ref:hover {
+	background: var(--hover-strong);
+	/* the token lights up instead — an underline reads as a strike through
+	   its own fill (same call as the session chip) */
+	text-decoration: none;
+}
+
 .markdown ul,
 .markdown ol {
-	margin: 0 0 6px;
+	margin: 0 0 8px;
 	padding-left: 20px;
 }
 .markdown li {
-	margin: 2.5px 0;
+	margin: 3px 0;
 }
 .markdown li > ul,
 .markdown li > ol {
-	margin: 2px 0 0;
+	margin: 3px 0 0;
 }
 
+/* Agent answers carry their structure in h2/h3, so those have to read as
+   section breaks at a glance. Two things were missing: size (h3/h4 were
+   SMALLER than the 14px body, so a heading was distinguishable only by
+   weight) and space above (6px, which collapsed with the previous
+   paragraph's own margin — a heading sat as close to the block it ended as
+   to the one it introduces). The ramp mirrors the native app's, scaled from
+   its 17pt body to ours: +29% / +14% / +7% / body, semibold throughout, with
+   optical tracking tightening as the size grows. Space is asymmetric on
+   purpose — a heading belongs to what follows it. */
 .markdown h1,
 .markdown h2,
 .markdown h3,
 .markdown h4 {
-	margin: 6px 0 1px;
+	margin: 16px 0 4px;
 	line-height: 1.3;
 	font-weight: 600;
+	letter-spacing: -0.012em;
 	color: var(--text);
 }
 .markdown h1 {
-	font-size: 15.5px;
+	font-size: 18px;
+	letter-spacing: -0.018em;
 }
 .markdown h2 {
-	font-size: 14.5px;
+	font-size: 16px;
+	letter-spacing: -0.016em;
 }
-.markdown h3,
+.markdown h3 {
+	font-size: 15px;
+}
 .markdown h4 {
-	font-size: 13.5px;
+	font-size: 14px;
 }
 
 .markdown > :first-child {
@@ -9195,25 +9237,32 @@ a.workspace-info-check-row {
 .markdown > :last-child {
 	margin-bottom: 0;
 }
+/* A subhead directly under its parent heading is one unit, not a new section:
+   drop the full section gap so h2 + h3 don't drift apart. */
+.markdown :is(h1, h2, h3, h4) + :is(h1, h2, h3, h4) {
+	margin-top: 8px;
+}
 
 .markdown blockquote {
 	margin: 2px 0 8px;
 	padding: 3px 12px;
-	border-left: 2px solid rgba(255, 59, 59, 0.4);
+	/* Not the accent: a red rule down the side of a quotation reads as a
+	   warning callout. Same call as the session chip and the PR token. */
+	border-left: 2px solid var(--border-strong);
 	color: var(--text-dim);
 }
 
 .markdown table {
 	border-collapse: collapse;
 	margin: 2px 0 10px;
-	font-size: 12.5px;
+	font-size: 13px;
 	display: block;
 	overflow-x: auto;
 	max-width: 100%;
 }
 .markdown th {
 	text-align: left;
-	font-size: 10.5px;
+	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: -0.01em;
 	color: var(--text-faint);
@@ -13383,12 +13432,24 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.sidebar-ws-ticker {
 		font-size: 12px;
 	}
-	.sidebar-ws-row .sidebar-ws-ticker {
-		flex: 0 0 28px;
-		width: 28px;
+	/* The phone gutter is a 28px column — status dot, repo +, all centred in it
+	   — but the run clock is text, not a glyph: at 12px "mm:ss" measures 30px
+	   and "h:mm:ss" 40px, so a hard 28px box with centred text overflowed on
+	   both sides. The digits hung 2-12px past the edge every icon and every
+	   truncated title lines up on, and that edge moved as a run crossed the
+	   hour. Let the clock size to its digits and pin them to the column edge
+	   instead. The 6px inset is the gutter icons' own padding: they are ~10px
+	   glyphs centred in a 28px tap target, so their ink stops 6px short of the
+	   column — the clock has to stop there too, or it reads as the odd one out
+	   in the same vertical line. */
+	.sidebar-ws-row .sidebar-ws-ticker,
+	.sidebar-ws-row .sidebar-ws-time {
+		flex: 0 0 auto;
+		width: auto;
 		min-width: 28px;
-		justify-content: center;
-		text-align: center;
+		padding-right: 6px;
+		justify-content: flex-end;
+		text-align: right;
 	}
 	.sidebar-item-title,
 	.sidebar-item-rename {

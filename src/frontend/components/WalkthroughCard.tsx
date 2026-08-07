@@ -3,6 +3,7 @@ import type { SessionWalkthrough } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { relativeTime } from "../lib/api";
 import { cn } from "../ui/cn";
+import { useMarkdownRepo } from "./MarkdownBody";
 import { openLightbox, type LightboxItem } from "./MediaLightbox";
 
 /** Stream server-side media (staged under the uploads dir) through the
@@ -24,9 +25,10 @@ export function WalkthroughCard({
 	walkthrough: SessionWalkthrough;
 	variant?: "panel" | "session";
 }) {
+	const repo = useMarkdownRepo();
 	const summaryHtml = useMemo(
-		() => renderMarkdown(walkthrough.summary),
-		[walkthrough.summary],
+		() => renderMarkdown(walkthrough.summary, { repo }),
+		[walkthrough.summary, repo],
 	);
 	// Every still in the card, flattened in render order, so clicking one opens
 	// the shared media lightbox (Escape/arrows/pinch-zoom/download) browsing

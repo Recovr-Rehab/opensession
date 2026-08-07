@@ -148,7 +148,8 @@ enum OS1API {
     /// One file in a session's scratch assets folder — the artifacts an agent
     /// writes with `opensession-assets` (visualizations, reports, sample data).
     /// They live outside every worktree, so nothing here is a repo path.
-    struct SessionAsset: Decodable, Sendable, Equatable, Identifiable {
+    /// `Hashable` so a row can be pushed as a navigation destination.
+    struct SessionAsset: Decodable, Sendable, Hashable, Identifiable {
         let path: String
         let size: Int
         let mtime: String
@@ -247,6 +248,53 @@ enum OS1API {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if body.isEmpty || body == "null" { return nil }
         return try await decodeDetached(PrDetails.self, from: data)
+    }
+
+    // MARK: - Pull request actions
+    //
+    // The three mutations the web PR panel offers, on the same routes. Each
+    // needs a GitHub credential server-side: with web sign-in on that is the
+    // signed-in person's own token, so a 403 here means "connect your GitHub
+    // account", not a bug — the server says so in `error` and APIError.server
+    // carries the sentence through to the panel.
+
+    /// Submit a review on the session's PR. `event` is APPROVE,
+    /// REQUEST_CHANGES or COMMENT; everything but APPROVE needs a summary
+    /// (the server refuses an empty review).
+    static func submitPrReview(
+        sessionId: String,
+        event: String,
+        summary: String
+    ) async throws {
+        struct ReviewResponse: Decodable { let ok: Bool? }
+        var body: [String: Any] = ["event": event]
+        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { body["summary"] = trimmed }
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["user"] = user }
+        let _: ReviewResponse = try await post(
+            "/api/sessions/\(sessionId)/pr-review",
+            body: body
+        )
+    }
+
+    /// Merge the session's PR. `method` is squash (the default), merge or
+    /// rebase; the server refuses a merge a stack layer below still blocks.
+    static func mergePr(sessionId: String, method: String = "squash") async throws {
+        struct MergeResponse: Decodable { let ok: Bool? }
+        let _: MergeResponse = try await post(
+            "/api/sessions/\(sessionId)/pr-merge",
+            body: ["method": method]
+        )
+    }
+
+    /// Close the session's PR without merging it.
+    static func closePr(sessionId: String) async throws {
+        struct CloseResponse: Decodable { let ok: Bool? }
+        let _: CloseResponse = try await post(
+            "/api/sessions/\(sessionId)/pr-close",
+            body: [:]
+        )
     }
 
     struct GitStatus: Decodable, Sendable, Equatable {
