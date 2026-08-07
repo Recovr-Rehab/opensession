@@ -366,15 +366,15 @@ struct PersonalPromptSection: View {
     }
 }
 
-/// Where the two App Intents are explained and handed over to the system.
+/// Where "Start an Agent" is explained and handed over to the system.
 ///
-/// The shortcuts themselves need no setup — an `AppShortcutsProvider` registers
-/// them the moment the app is installed (see `AgentShortcuts`) — but nothing in
-/// the app ever SAYS that, and the one step that is a person's to take (binding
-/// one to the Action Button, which only iOS Settings can do) happens outside
-/// OS1 entirely. So this page is mostly signposting: what each one does, a
-/// `ShortcutsLink` into the Shortcuts app where they live, and the path to the
-/// setting that Apple gives no deep link for.
+/// It needs no setup — an `AppShortcutsProvider` registers it the moment the
+/// app is installed (see `AgentShortcuts`), and the widgets ship with it — but
+/// nothing in the app ever SAYS that, and the steps that are a person's to
+/// take (placing a widget, binding the Action Button, which only iOS Settings
+/// can do) happen outside OS1 entirely. So this page is mostly signposting:
+/// what the shortcut does, where its widgets live, a `ShortcutsLink` into the
+/// Shortcuts app, and the paths Apple gives no deep link for.
 struct ShortcutsSettingsView: View {
     var body: some View {
         Form {
@@ -392,6 +392,31 @@ struct ShortcutsSettingsView: View {
                 // "Shortcuts", and repeating it just pushed the first row down.
                 Text("Installed with the app — no setup needed. Ask Siri for it by name, or find it under OS1 in the Shortcuts app.")
             }
+
+            #if os(iOS)
+            Section {
+                shortcut(
+                    icon: "square.grid.2x2",
+                    title: "Home Screen and Lock Screen",
+                    detail: """
+                    Add the OS1 widget and the whole tile becomes the same \
+                    press.
+                    """
+                )
+                shortcut(
+                    icon: "switch.2",
+                    title: "Control Centre",
+                    detail: """
+                    Swipe down, +, Add a Control, then OS1 — and the Action \
+                    Button's picker lists it under Controls too.
+                    """
+                )
+            } header: {
+                Text("Widgets")
+            } footer: {
+                Text("The widgets run the same shortcut, so they open the composer with the mic listening. They show no session data and work offline.")
+            }
+            #endif
 
             Section {
                 #if os(iOS)

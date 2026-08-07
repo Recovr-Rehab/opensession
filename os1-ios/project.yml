@@ -20,6 +20,9 @@ targets:
     dependencies:
       - package: SwiftStreamingMarkdown
         product: SwiftStreamingMarkdown
+      # Embedded into the app's PlugIns — Home Screen / Lock Screen widget and
+      # the Control Center control, both of which just open "Start an Agent".
+      - target: OS1Widgets
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -56,6 +59,45 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: Apple Distribution
           PROVISIONING_PROFILE_SPECIFIER: OS1 App Store
+  # Widget extension: the Home Screen / Lock Screen widget and the Control
+  # Center control. iOS only — a macOS widget would need its own target, and
+  # the Mac app has no Action Button or Control Center to put one in.
+  OS1Widgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: OS1Widgets
+        excludes:
+          # Referenced as INFOPLIST_FILE below; listing it as a source would
+          # also copy it into the bundle as a resource.
+          - Info.plist
+      # The one file shared with the app. The widget's button and control both
+      # run this intent, and an intent must be compiled into every target that
+      # references it.
+      - path: OS1/Intents/StartAgentIntent.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: OS1Widgets/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tella.os1.widgets
+        DEVELOPMENT_TEAM: 6GUXT43C8B
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        # App Store validation rejects an extension whose version differs from
+        # its host app's. CI passes CURRENT_PROJECT_VERSION on the command
+        # line, which applies to every target, so only the marketing version
+        # has to be kept in step with the OS1 target by hand.
+        CURRENT_PROJECT_VERSION: 2
+        MARKETING_VERSION: 0.1.0
+      configs:
+        # Its own App Store profile: an extension is a separate bundle id, so
+        # the app's profile cannot sign it. CI fetches "OS1 Widgets App Store"
+        # from App Store Connect at build time (see os1-ios-testflight.yml).
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: OS1 Widgets App Store
   OS1Mac:
     type: application
     platform: macOS

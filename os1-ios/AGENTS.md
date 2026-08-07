@@ -85,6 +85,19 @@ TestFlight workflows (`.github/workflows/os1-ios-testflight.yml` and
 filter). There is no separate release step — treat every push as shipping to
 TestFlight.
 
+Every embedded target needs its own App Store provisioning profile, because
+each is its own bundle id. The app's comes from a repository secret; the
+widget extension's ("OS1 Widgets App Store", `dev.tella.os1.widgets`) is
+fetched during the build with `ci/fetch-provisioning-profile.mjs`, using the
+App Store Connect API key the upload job already holds — do the same for any
+further extension rather than adding a secret. Profiles expire a year after
+the signing certificate is issued; the fetch fails loudly with the expiry
+date, and a replacement is one `POST /v1/profiles` away. Adding an extension
+also means adding its bundle id to the `provisioningProfiles` map in the
+workflow's ExportOptions.plist, or the export fails after a green archive —
+verify both steps on a Mac node (`xcodebuild archive -configuration Release`
+then `-exportArchive`) before pushing, since a push IS the release.
+
 ## Performance invariants (learned the hard way — don't regress)
 
 - **Observation granularity is per view `body`.** `SessionViewModel` is

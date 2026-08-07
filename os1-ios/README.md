@@ -135,6 +135,17 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   in OS1"), Spotlight, and the Action Button's shortcut picker (iPhone
   Settings > Action Button > Shortcut > OS1 > Start an Agent). Settings >
   Shortcuts inside the app signposts all of it.
+- **Widgets** (`OS1Widgets/`, its own iOS app-extension target) — the same
+  press from three more places: a Home Screen widget (systemSmall), a Lock
+  Screen one (accessoryCircular/accessoryRectangular), and a Control Center
+  control, which is also what the Action Button's picker lists under Controls
+  — so binding it needs no shortcut at all. Every one of them runs
+  `StartAgentIntent`, the file the extension shares with the app. The
+  extension holds no token and shares no container with the app: it is a door,
+  not a dashboard, so a widget can never show stale sessions or fail offline.
+  A second bundle id means a second App Store profile ("OS1 Widgets App
+  Store"), which CI fetches from App Store Connect at build time
+  (`ci/fetch-provisioning-profile.mjs`) rather than carrying as a secret.
 - **Connection care** — client-initiated pings every 20s (the server never
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.
