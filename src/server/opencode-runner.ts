@@ -2620,6 +2620,102 @@ function teardownOpencodeRunRegistries(ctx: {
   }
 }
 
+/**
+ * Read the turn's final assistant message out of the messages list and mirror
+ * any text parts the SSE pump missed into the transcript + the pending event
+ * queue. Shared tail of runOpencodeAttempt and tryReattachOpencodeRun (the
+ * emittedText dedup set keeps already-streamed parts from double-appending).
+ */
+function collectFinalAssistantText(
+  list: Array<{ info: any; parts: any[] }>,
+  ctx: {
+    ocSessionId: string;
+    model: string;
+    emittedText: Set<string>;
+    pending: StreamEvent[];
+  }
+): { lastAssistant: { info: any; parts: any[] } | undefined; info: any; textOut: string } {
+  const { ocSessionId, model, emittedText, pending } = ctx;
+  const lastAssistant = latestTurnAssistant(list);
+  const info = lastAssistant?.info;
+  const parts = lastAssistant?.parts || [];
+  // Edge: a turn can end right on the autocompact summary (the trigger is a
+  // user-role message, so latestTurnAssistant lands on the summary). Its
+  // text is the compaction handoff, not the model's reply.
+  const finalIsCompaction = isCompactionMessageInfo(info);
+  const textOut = parts
+    .filter((pt) => pt.type === "text" && !pt.synthetic && pt.text)
+    .map((pt) => {
+      if (!emittedText.has(pt.id)) {
+        emittedText.add(pt.id);
+        appendOpencodeTranscript(ocSessionId, [
+          finalIsCompaction
+            ? transcriptLineCompactionSummary(pt.text, pt.id)
+            : transcriptLineAssistantText(pt.text, pt.id, undefined, model),
+        ]);
+        if (!finalIsCompaction) pending.push({ type: "text_chunk", text: pt.text });
+      }
+      return finalIsCompaction ? "" : pt.text;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  return { lastAssistant, info, textOut };
+}
+
+/**
+ * Terminal success emit, shared by both drain paths: compute usage from the
+ * final assistant info, audit the `result` turn event, and build the
+ * usage_snapshot + done events for the caller to yield (in that order).
+ */
+function buildTurnResultEvents(ctx: {
+  info: any;
+  list: Array<{ info: any; parts: any[] }>;
+  textOut: string;
+  ocSessionId: string;
+  model: string;
+  providerID: string;
+  turnEvent: (fields: Record<string, unknown>) => void;
+}): StreamEvent[] {
+  const { info, list, textOut } = ctx;
+  const tokens = info?.tokens;
+  const usage: TurnUsage | undefined = tokens
+    ? {
+        costUsd: info?.cost,
+        inputTokens: tokens.input || 0,
+        outputTokens: tokens.output || 0,
+        cacheReadTokens: tokens.cache?.read || 0,
+        cacheCreationTokens: tokens.cache?.write || 0,
+        contextTokens:
+          (tokens.input || 0) + (tokens.cache?.read || 0) + (tokens.cache?.write || 0),
+      }
+    : undefined;
+  const userTurns = list.filter((message) => message.info?.role === "user").length;
+  ctx.turnEvent({
+    direction: "out",
+    kind: "result",
+    result_subtype: "success",
+    is_error: false,
+    input_tokens: tokens?.input,
+    output_tokens: tokens?.output,
+    cache_read_input_tokens: tokens?.cache?.read,
+    total_cost_usd: info?.cost,
+    ...summarizeText(textOut),
+  });
+  const events: StreamEvent[] = [];
+  if (usage) events.push({ type: "usage_snapshot", usage });
+  events.push({
+    type: "done",
+    sessionId: ctx.ocSessionId,
+    result: textOut || EMPTY_COMPLETION_RESULT,
+    provider: PROVIDER,
+    model: ctx.model,
+    usage,
+    cacheMissWarning:
+      (usage && isLikelyPromptCacheMiss(usage, userTurns, ctx.providerID)) || undefined,
+  });
+  return events;
+}
+
 export async function* runOpencode(
   opts: RunAgentOpts & { allowOpencode?: boolean; forceSharedServer?: boolean },
   model: string
@@ -4779,29 +4875,12 @@ async function* runOpencodeAttempt(
     reachedTerminal = true;
     const msgs = await client.session.messages({ path: { id: ocSessionId }, ...q });
     const list = (msgs.data || []) as Array<{ info: any; parts: any[] }>;
-    const lastAssistant = latestTurnAssistant(list);
-    const info = lastAssistant?.info;
-    const parts = lastAssistant?.parts || [];
-    // Edge: a turn can end right on the autocompact summary (the trigger is a
-    // user-role message, so latestTurnAssistant lands on the summary). Its
-    // text is the compaction handoff, not the model's reply.
-    const finalIsCompaction = isCompactionMessageInfo(info);
-    const textOut = parts
-      .filter((pt) => pt.type === "text" && !pt.synthetic && pt.text)
-      .map((pt) => {
-        if (!emittedText.has(pt.id)) {
-          emittedText.add(pt.id);
-          appendOpencodeTranscript(ocSessionId, [
-            finalIsCompaction
-              ? transcriptLineCompactionSummary(pt.text, pt.id)
-              : transcriptLineAssistantText(pt.text, pt.id, undefined, model),
-          ]);
-          if (!finalIsCompaction) pending.push({ type: "text_chunk", text: pt.text });
-        }
-        return finalIsCompaction ? "" : pt.text;
-      })
-      .filter(Boolean)
-      .join("\n\n");
+    const { lastAssistant, info, textOut } = collectFinalAssistantText(list, {
+      ocSessionId,
+      model,
+      emittedText,
+      pending,
+    });
     while (pending.length) yield pending.shift()!;
 
     const errMessage =
@@ -4941,42 +5020,17 @@ async function* runOpencodeAttempt(
       return;
     }
 
-    const tokens = info?.tokens;
-    const usage: TurnUsage | undefined = tokens
-      ? {
-          costUsd: info?.cost,
-          inputTokens: tokens.input || 0,
-          outputTokens: tokens.output || 0,
-          cacheReadTokens: tokens.cache?.read || 0,
-          cacheCreationTokens: tokens.cache?.write || 0,
-          contextTokens:
-            (tokens.input || 0) + (tokens.cache?.read || 0) + (tokens.cache?.write || 0),
-        }
-      : undefined;
-    const userTurns = list.filter((message) => message.info?.role === "user").length;
-    turnEvent({
-      direction: "out",
-      kind: "result",
-      result_subtype: "success",
-      is_error: false,
-      input_tokens: tokens?.input,
-      output_tokens: tokens?.output,
-      cache_read_input_tokens: tokens?.cache?.read,
-      total_cost_usd: info?.cost,
-      ...summarizeText(textOut),
+    const resultEvents = buildTurnResultEvents({
+      info,
+      list,
+      textOut,
+      ocSessionId,
+      model,
+      providerID: parsed.providerID,
+      turnEvent,
     });
     bridgeRunEnd("success");
-    if (usage) yield { type: "usage_snapshot", usage };
-    yield {
-      type: "done",
-      sessionId: ocSessionId,
-      result: textOut || EMPTY_COMPLETION_RESULT,
-      provider: PROVIDER,
-      model,
-      usage,
-      cacheMissWarning:
-        (usage && isLikelyPromptCacheMiss(usage, userTurns, parsed.providerID)) || undefined,
-    };
+    for (const ev of resultEvents) yield ev;
   } catch (e: any) {
     if (!abortController.signal.aborted) {
       reachedTerminal = true;
@@ -5723,28 +5777,12 @@ export async function tryReattachOpencodeRun(
         signal: AbortSignal.timeout(10_000),
       });
       const list = (msgs.data || []) as Array<{ info: any; parts: any[] }>;
-      const lastAssistant = latestTurnAssistant(list);
-      const info = lastAssistant?.info;
-      const parts = lastAssistant?.parts || [];
-      // Edge: a turn can end right on the autocompact summary — see the
-      // master-copy final read.
-      const finalIsCompaction = isCompactionMessageInfo(info);
-      const textOut = parts
-        .filter((pt) => pt.type === "text" && !pt.synthetic && pt.text)
-        .map((pt) => {
-          if (!emittedText.has(pt.id)) {
-            emittedText.add(pt.id);
-            appendOpencodeTranscript(ocSessionId!, [
-              finalIsCompaction
-                ? transcriptLineCompactionSummary(pt.text, pt.id)
-                : transcriptLineAssistantText(pt.text, pt.id, undefined, model),
-            ]);
-            if (!finalIsCompaction) pending.push({ type: "text_chunk", text: pt.text });
-          }
-          return finalIsCompaction ? "" : pt.text;
-        })
-        .filter(Boolean)
-        .join("\n\n");
+      const { lastAssistant, info, textOut } = collectFinalAssistantText(list, {
+        ocSessionId: ocSessionId!,
+        model,
+        emittedText,
+        pending,
+      });
       while (pending.length) yield pending.shift()!;
 
       const errMessage =
@@ -5783,46 +5821,16 @@ export async function tryReattachOpencodeRun(
         return;
       }
 
-      const tokens = info?.tokens;
-      const usage: TurnUsage | undefined = tokens
-        ? {
-            costUsd: info?.cost,
-            inputTokens: tokens.input || 0,
-            outputTokens: tokens.output || 0,
-            cacheReadTokens: tokens.cache?.read || 0,
-            cacheCreationTokens: tokens.cache?.write || 0,
-            contextTokens:
-              (tokens.input || 0) + (tokens.cache?.read || 0) + (tokens.cache?.write || 0),
-          }
-        : undefined;
-      const userTurns = list.filter((message) => message.info?.role === "user").length;
-      turnEvent({
-        direction: "out",
-        kind: "result",
-        result_subtype: "success",
-        is_error: false,
-        input_tokens: tokens?.input,
-        output_tokens: tokens?.output,
-        cache_read_input_tokens: tokens?.cache?.read,
-        total_cost_usd: info?.cost,
-        ...summarizeText(textOut),
-      });
-      if (usage) yield { type: "usage_snapshot", usage };
-      yield {
-        type: "done",
-        sessionId: ocSessionId!,
-        result: textOut || EMPTY_COMPLETION_RESULT,
-        provider: PROVIDER,
+      const resultEvents = buildTurnResultEvents({
+        info,
+        list,
+        textOut,
+        ocSessionId: ocSessionId!,
         model,
-        usage,
-        cacheMissWarning:
-          (usage &&
-            isLikelyPromptCacheMiss(
-              usage,
-              userTurns,
-              parseOpencodeModel(model)?.providerID || "",
-            )) || undefined,
-      };
+        providerID: parseOpencodeModel(model)?.providerID || "",
+        turnEvent,
+      });
+      for (const ev of resultEvents) yield ev;
     } catch (e: any) {
       if (!abortController.signal.aborted) {
         const message = e?.message || String(e);
