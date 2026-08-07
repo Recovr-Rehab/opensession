@@ -935,14 +935,18 @@ private struct ScrollToLatestPill: View {
             )
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            // Opaque, not just glass: the pill floats over the transcript, and
-            // clear glass over body text left the label barely readable.
-            .background(OS1VisualStyle.background.opacity(0.75), in: Capsule())
-            .background(.thickMaterial, in: Capsule())
-            .glassSurface(in: Capsule(), interactive: true)
+            // A solid control surface, deliberately neither glass nor material:
+            // both sample what is behind them, so a dark code block or image
+            // scrolling under the pill dragged it toward its dark appearance
+            // while the label kept its light-mode colour. The pill travels over
+            // arbitrary content, so it keeps one appearance and earns its lift
+            // from the hairline and shadow instead — the same opaque treatment
+            // the web pill wears.
+            .background(OS1VisualStyle.panel, in: Capsule())
             .overlay {
                 Capsule().stroke(OS1VisualStyle.border, lineWidth: 0.5)
             }
+            .shadow(color: .black.opacity(0.12), radius: 6, y: 1)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
