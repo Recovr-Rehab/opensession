@@ -13438,11 +13438,16 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	   both sides. The digits hung 2-12px past the edge every icon and every
 	   truncated title lines up on, and that edge moved as a run crossed the
 	   hour. Let the clock size to its digits and pin them to the column edge
-	   instead — the same right edge the desktop ticker uses. */
-	.sidebar-ws-row .sidebar-ws-ticker {
+	   instead. The 6px inset is the gutter icons' own padding: they are ~10px
+	   glyphs centred in a 28px tap target, so their ink stops 6px short of the
+	   column — the clock has to stop there too, or it reads as the odd one out
+	   in the same vertical line. */
+	.sidebar-ws-row .sidebar-ws-ticker,
+	.sidebar-ws-row .sidebar-ws-time {
 		flex: 0 0 auto;
 		width: auto;
 		min-width: 28px;
+		padding-right: 6px;
 		justify-content: flex-end;
 		text-align: right;
 	}
