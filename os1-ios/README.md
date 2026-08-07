@@ -118,6 +118,16 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   sentence in the panel rather than a status code. It is
   pushed as a panel (`PrPanelView(chrome: .pushed)` drops its own navigation
   stack and Done button); the sheet form is what the Mac still uses.
+- **Action Button / Siri — "Start an Agent"** — an App Intent
+  (`Intents/StartAgentIntent.swift`) that creates a session and starts its
+  opening run WITHOUT launching the app, so one press of the iPhone's Action
+  Button (Settings > Action Button > Shortcut > Start an Agent) is enough to
+  hand an idea over. It asks for the idea, takes repo and model from what the
+  composer used last (both overridable as shortcut parameters, alongside
+  code/ask mode), confirms with the session's title, and returns the session's
+  URL so a shortcut can chain into "Open URLs". For a keyboard-free capture,
+  build a shortcut of [Dictate Text] → [Start an Agent] and bind THAT. It also
+  registers Siri phrases ("Start an agent in OS1") via `AgentShortcuts`.
 - **Connection care** — client-initiated pings every 20s (the server never
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.
