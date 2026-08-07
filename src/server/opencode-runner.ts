@@ -2588,6 +2588,38 @@ export function makeSubagentStallGuard(
   };
 }
 
+/**
+ * Shared end-of-run registry teardown for the finally blocks of
+ * runOpencodeAttempt and tryReattachOpencodeRun: releases the abort/steer
+ * registrations, the detached-run marker, the shared-server ocSession
+ * mapping, the run-rpc token, and the server entry's active-run hold.
+ * Journal clearing stays at the call sites — the two paths gate it
+ * differently (rotation retries keep the record).
+ */
+function teardownOpencodeRunRegistries(ctx: {
+  registeredKeys: Set<string>;
+  runKey: string;
+  /** Non-empty = the oc session id registered in run-rpc's ocSession registry. */
+  ocSessionRegistered: string;
+  rpcTokenRegistered: boolean;
+  entry: OpencodeServerEntry | undefined;
+}): void {
+  for (const key of ctx.registeredKeys) {
+    activeOpencodeRuns.delete(key);
+    activeOpencodeSteers.delete(key);
+  }
+  detachedRunKeys.delete(ctx.runKey);
+  if (ctx.ocSessionRegistered) unregisterOcSessionContext(ctx.ocSessionRegistered);
+  if (ctx.rpcTokenRegistered && ctx.entry) unregisterRunToken(ctx.entry.rpcToken);
+  if (ctx.entry) {
+    ctx.entry.activeRuns = Math.max(0, ctx.entry.activeRuns - 1);
+    ctx.entry.lastUsed = Date.now();
+    // Shared server whose config changed mid-flight: the last run out
+    // turns off the lights.
+    reapDrainedServer(ctx.entry);
+  }
+}
+
 export async function* runOpencode(
   opts: RunAgentOpts & { allowOpencode?: boolean; forceSharedServer?: boolean },
   model: string
@@ -4972,20 +5004,13 @@ async function* runOpencodeAttempt(
     // Backstop for paths that never reached an explicit close (cancel, early
     // return, generator torn down mid-drain) — no-op if already ended.
     bridgeRunEnd(abortController.signal.aborted ? "cancelled" : "abandoned");
-    for (const key of registeredKeys) {
-      activeOpencodeRuns.delete(key);
-      activeOpencodeSteers.delete(key);
-    }
-    detachedRunKeys.delete(runKey);
-    if (ocSessionRegistered) unregisterOcSessionContext(ocSessionRegistered);
-    if (rpcTokenRegistered && entry) unregisterRunToken(entry.rpcToken);
-    if (entry) {
-      entry.activeRuns = Math.max(0, entry.activeRuns - 1);
-      entry.lastUsed = Date.now();
-      // Shared server whose config changed mid-flight: the last run out
-      // turns off the lights.
-      reapDrainedServer(entry);
-    }
+    teardownOpencodeRunRegistries({
+      registeredKeys,
+      runKey,
+      ocSessionRegistered,
+      rpcTokenRegistered,
+      entry,
+    });
     // Keep the journal across an account-rotation retry (the wrapper reruns
     // the same runKey immediately); cleared for real on the final attempt —
     // and ONLY when a terminal path actually ran (or the user cancelled,
@@ -5809,16 +5834,13 @@ export async function tryReattachOpencodeRun(
       if (abortController.signal.aborted) {
         turnEvent({ direction: "out", kind: "cancelled" });
       }
-      for (const key of registeredKeys) {
-        activeOpencodeRuns.delete(key);
-        activeOpencodeSteers.delete(key);
-      }
-      detachedRunKeys.delete(runKey);
-      if (ocSessionRegistered) unregisterOcSessionContext(ocSessionRegistered);
-      if (rpcTokenRegistered) unregisterRunToken(server.rpcToken);
-      server.activeRuns = Math.max(0, server.activeRuns - 1);
-      server.lastUsed = Date.now();
-      reapDrainedServer(server);
+      teardownOpencodeRunRegistries({
+        registeredKeys,
+        runKey,
+        ocSessionRegistered,
+        rpcTokenRegistered,
+        entry: server,
+      });
       if (reachedTerminal || abortController.signal.aborted) journalClear(runKey);
     }
   }
