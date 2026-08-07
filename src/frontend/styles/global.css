@@ -317,9 +317,17 @@ html[data-theme="light"] .markdown code {
 	background: rgba(0, 0, 0, 0.06);
 	color: #953b39;
 }
+/* A code block is a well: it has to read as sunk BELOW whatever it sits on.
+   In dark that's free — #0c0c10 is below every surface in the ramp. Light has
+   no absolute that works on both containers a `.markdown` block gets: an
+   assistant turn paints on --bg (#fff), but a user or teammate turn paints on
+   the bubble (--bg-panel #f0f0f0 / the teal wash), and the old #f6f8fa was
+   LIGHTER than the bubble — so a pasted snippet read as raised in light and
+   sunk in dark. Translucent ink instead, the same trick as --hover: one value
+   that lands a fixed step below any surface it's dropped on. */
 html[data-theme="light"] .markdown pre {
-	background: #f6f8fa;
-	border-color: #d8dee4;
+	background: rgba(0, 0, 0, 0.055);
+	border-color: rgba(0, 0, 0, 0.1);
 	color: #1f2328;
 }
 html[data-theme="light"] .markdown pre code {
