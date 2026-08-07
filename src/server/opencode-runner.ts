@@ -243,24 +243,20 @@ import {
 // existing imports, docs, and security notes stay valid. poolWaitMsFor was
 // private here and is deliberately not re-exported (imported above for use).
 export {
-  OPENCODE_MODEL_PREFIX,
   parseOpencodeModel,
   INTERACTIVE_KINDS,
   isUnattendedKind,
   baseJournalKind,
-  SHARED_INPROCESS_SERVERS,
   sharedOpencodeEligible,
   sharedServerKey,
   opencodeGateReason,
   type OpencodeRunPolicy,
-  LOCAL_WORKSPACE_TOOL_IDS,
   opencodeDeniedToolIds,
   opencodeRunPolicy,
   buildOpencodeMcpConfig,
   proxyOpencodeMcpConfigs,
   remoteOpencodeMcpConfigs,
   inProcessOpencodeMcpConfigs,
-  opencodeMcpFromPrebuiltProxies,
   readLocalInstructions,
 } from "./opencode-policy";
 import {
@@ -424,7 +420,7 @@ export const OPENCODE_STATE_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode`;
  *  OPENSESSION_OC_DB_SHARD=0 reverts to opencode's default DB locations. */
 const SHARD_DB_DIR = `${OPENCODE_STATE_DIR}/db`;
 
-export function opencodeDbShardActive(): boolean {
+function opencodeDbShardActive(): boolean {
   const v = (process.env.OPENSESSION_OC_DB_SHARD || "").trim().toLowerCase();
   return v !== "0" && v !== "false";
 }
@@ -593,7 +589,7 @@ async function pruneOrphanedAssistantTail(
  *  model's own reply (and never be pushed to stream consumers like the Slack
  *  loop). NOTE: user messages carry `summary` as a diffs OBJECT — gate on
  *  role + `summary === true`, never truthiness. */
-export function isCompactionMessageInfo(info: unknown): boolean {
+function isCompactionMessageInfo(info: unknown): boolean {
   const m = info as { role?: string; summary?: unknown; mode?: string; agent?: string } | null;
   return (
     !!m &&
@@ -668,7 +664,7 @@ export const MERIDIAN_CFG_ROOT = `${stateDir("opencode")}/meridian-cfg`;
  */
 export const MERIDIAN_SESSION_ROOT = `${stateDir("opencode")}/meridian-sessions`;
 
-export function meridianSessionDir(serverKey: string, accountId: string): string {
+function meridianSessionDir(serverKey: string, accountId: string): string {
   return `${MERIDIAN_SESSION_ROOT}/${serverKey.replace(/[^A-Za-z0-9._-]/g, "_")}/${accountId}`;
 }
 
@@ -719,7 +715,7 @@ function seedMeridianSessionDir(dir: string): void {
  * picks it up when the next meridian server (and its proxy) spawns.
  */
 let meridianProxyScrubInstalled = false;
-export function ensureMeridianProxyScrub(): void {
+function ensureMeridianProxyScrub(): void {
   if (meridianProxyScrubInstalled) return;
   meridianProxyScrubInstalled = true;
   try {
@@ -1152,7 +1148,7 @@ export function steerOpencodeRun(id: string, text: string, images?: ImageInput[]
  * installation). Writes elsewhere fail at GitHub's side with 403 "Resource
  * not accessible", for every code path including raw API calls the shims
  * could never see. */
-export function opencodeEnv(author?: GitIdentity | null): Record<string, string> {
+function opencodeEnv(author?: GitIdentity | null): Record<string, string> {
   const basePath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   return {
     PATH: basePath,
@@ -1744,7 +1740,7 @@ export async function reconnectSharedInProcessMcp(
 // layer is otherwise blind to. claude-accounts consumes this through the
 // provider registered below (injection, not an import: this module imports
 // claude-accounts, so the dependency can't point the other way).
-export function meridianQuotaEndpoints(): { accountId: string; url: string; key: string }[] {
+function meridianQuotaEndpoints(): { accountId: string; url: string; key: string }[] {
   const out: { accountId: string; url: string; key: string; lastUsed: number }[] = [];
   for (const e of servers.values()) {
     if (!e.meridianKey || !e.meridianPort || !e.accountId) continue;
@@ -2161,7 +2157,7 @@ async function adoptDetachedOpencodeServersInner(): Promise<number> {
  * (ticker below): a leak can mint at any time, and an unreaped scope also
  * pins its worktree against the disk-cleanup cron ("live process" skip).
  */
-export function reapOrphanedDetachedScopes(): number {
+function reapOrphanedDetachedScopes(): number {
   if (!opencodeDetachActive()) return 0;
   try {
     const known = new Set(readDetachedRegistry().map((r) => r.unit));
