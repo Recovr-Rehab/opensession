@@ -1006,15 +1006,18 @@ html.wco .app-body.sidebar-collapsed
 }
 .app-logo-image {
 	display: block;
-	/* Sized so the MARK measures 40px — the same as the bar buttons opposite
-	   it (.mobile-search-btn, a 40px circle), because this is the same kind
-	   of control and belongs on their size. The box has to run bigger than
-	   that: unlike a repo icon this asset isn't trimmed (it's also the
-	   favicon and the og:image, which want their padding), and it carries
-	   its artwork on 80% of its canvas — so 50 × 0.8 = 40px of ink. The 10px
-	   of overflow past the button is transparent margin and touches nothing. */
-	width: 50px;
-	height: 50px;
+	/* Sized so the MARK measures ~42px against the 40px bar buttons opposite
+	   it (.mobile-bar-btn circles) — a hair over their size rather than
+	   equal to it. Those are bordered discs on a filled surface; this is a
+	   bare mark whose left half is near-white, so matched box for box it
+	   reads as the smaller object. Only a hair, though: 44 overshot and read
+	   as the loudest thing in the bar. The box runs bigger again — unlike a
+	   repo icon this asset isn't trimmed (it's also the favicon and the
+	   og:image, which want their padding) and carries its artwork on 80% of
+	   its canvas, so 52 × 0.8 ≈ 42px of ink. The overflow past the button is
+	   transparent margin and touches nothing. */
+	width: 52px;
+	height: 52px;
 }
 @keyframes kitt-scan {
 	from {
