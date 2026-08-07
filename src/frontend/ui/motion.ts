@@ -6,10 +6,39 @@
 
 import { MotionGlobalConfig, type Transition } from "motion/react";
 
+/**
+ * Duration tokens, in seconds. These mirror `--dur-micro` / `--dur` /
+ * `--dur-lg` in styles/global.css one-for-one — the same three numbers picked
+ * by travel distance, so a Motion spring and a CSS transition on neighbouring
+ * elements land together instead of one trailing the other. Change one, change
+ * both.
+ */
+export const duration = {
+	/** In-place state change: colour, opacity, a caret flip. */
+	micro: 0.15,
+	/** The default. Small anchored movement — popups, chips, short slides. */
+	base: 0.2,
+	/** Spatial: sheets, drawers, the settings pager. */
+	large: 0.28,
+} as const;
+
+/**
+ * The one easing curve, mirroring `--ease`. Motion takes a bezier as a 4-tuple,
+ * so this is literally the same cubic-bezier the stylesheet uses; reach for it
+ * on `type: "tween"` transitions.
+ *
+ * Springs below use `bounce: 0`, which is critically damped — it decelerates
+ * into its resting value without overshoot, which is the same shape this curve
+ * describes. That is what lets CSS and Motion read as one system rather than
+ * two. The native OS1 app makes the same choice: one `.snappy` spring,
+ * `extraBounce: 0`, everywhere.
+ */
+export const ease: [number, number, number, number] = [0.32, 0.72, 0, 1];
+
 /** Snappy pop for small anchored popups (tooltips, menus, popovers). */
 export const popupTransition: Transition = {
 	type: "spring",
-	duration: 0.18,
+	duration: duration.base,
 	bounce: 0,
 };
 
@@ -22,20 +51,24 @@ export const popupTransition: Transition = {
 export const popupMotion = {
 	initial: { opacity: 0, scale: 0.96 },
 	animate: { opacity: 1, scale: 1 },
-	exit: { opacity: 0, transition: { duration: 0.1 } },
+	exit: { opacity: 0, transition: { duration: duration.micro } },
 	transition: popupTransition,
 } as const;
 
 /**
  * Morph for the mobile composer collapsing to / expanding from its single-row
- * resting pill. Gentle spring with a hint of bounce so the shape change reads
- * as a settle, not a snap. Used as the `layout` transition on the composer and
- * the enter/exit of its toolbar chips.
+ * resting pill. The composer's shape change is the longest travel in the app,
+ * so it takes the large duration — but the same critically-damped spring as
+ * everything else. It used to carry `bounce: 0.14`; the overshoot made it the
+ * one control that moved differently from its neighbours, and dropping it is
+ * what puts the composer in the same system as the CSS transitions around it.
+ * Used as the `layout` transition on the composer and the enter/exit of its
+ * toolbar chips.
  */
 export const composerMorph: Transition = {
 	type: "spring",
-	duration: 0.32,
-	bounce: 0.14,
+	duration: duration.large,
+	bounce: 0,
 };
 
 /**

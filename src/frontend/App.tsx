@@ -5,6 +5,7 @@ import { setKnownRepos, setSessionTitles } from "./lib/markdown";
 import { repoLabel } from "./lib/repo-label";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { MotionConfig } from "motion/react";
 import { MarkdownRepoProvider } from "./components/MarkdownBody";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
@@ -3979,13 +3980,22 @@ if (!embeddedDemo) {
 	// The preview interstitial renders INSTEAD of the app (and outside UserGate —
 	// it must work in cold-storage contexts like the iOS PWA's in-app browser).
 	const previewWaitSessionId = matchPreviewWaitRoute(location.pathname);
+	// `reducedMotion="user"` makes every `motion.*` component honour the OS
+	// setting. Motion's default is "never", so without this the CSS blanket in
+	// global.css would quietly cover only half the app — Motion animates inline
+	// styles off the main thread, where a `transition-duration` override can't
+	// reach it. "user" (rather than forcing it off) is also the right shape:
+	// Motion keeps opacity and drops transform/layout, which is the "gentler,
+	// not zero" behaviour this preference actually asks for.
 	createRoot(document.getElementById("root")!).render(
-		previewWaitSessionId ? (
-			<PreviewWait sessionId={previewWaitSessionId} />
-		) : (
-			<TooltipProvider>
-				<App />
-			</TooltipProvider>
-		),
+		<MotionConfig reducedMotion="user">
+			{previewWaitSessionId ? (
+				<PreviewWait sessionId={previewWaitSessionId} />
+			) : (
+				<TooltipProvider>
+					<App />
+				</TooltipProvider>
+			)}
+		</MotionConfig>,
 	);
 }

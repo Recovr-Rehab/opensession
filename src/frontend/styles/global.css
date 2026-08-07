@@ -159,6 +159,134 @@ html[data-theme="light"] {
 	--tool-skill: #0f766e;
 }
 
+/* ── Motion ──────────────────────────────────────────────────
+   One curve, three durations. The native OS1 app runs effectively a single
+   spring everywhere — `.snappy(duration: 0.18–0.28, extraBounce: 0)` — and the
+   web UI now matches it: one strong ease-out, no bounce, and the duration
+   picked by how far the thing travels rather than by which component it is.
+
+   --ease is the Ionic/iOS drawer curve. It decelerates hard into the end
+   position, so movement is visible the instant it starts (the moment the user
+   is watching most closely) and settles without overshoot. It is the primary
+   token: use it for enters, exits, movement, hovers and colour swaps alike.
+   The only deliberate exceptions are `linear` for constant motion (spinners,
+   progress fills, marquees), where any easing would read as stuttering, and
+   `ease-in-out` on the infinite breathing pulses, where the loop has no start
+   or end to accelerate away from. Never `ease-in` on UI.
+
+   Durations are chosen by travel distance, not by component:
+     --dur-micro  in-place state changes — hover washes, colour, opacity,
+                  a caret flip. Nothing moves more than a couple of px.
+     --dur        the default. Small anchored movement: popups, chips,
+                  carets, a control sliding a short distance.
+     --dur-lg     spatial changes that cross the screen — sheets, drawers,
+                  the settings pager, the sidebar opening.
+
+   Nothing below --dur-micro: under ~120ms a transition stops reading as
+   motion and reads as a jump with a smear on it, which is worse than no
+   transition at all. If something wants to be faster than --dur-micro, it
+   wants no transition — delete it instead. */
+:root {
+	--ease: cubic-bezier(0.32, 0.72, 0, 1);
+	--dur-micro: 0.15s;
+	--dur: 0.2s;
+	--dur-lg: 0.28s;
+}
+
+/* Reduced motion. One blanket rule rather than a guard per animation, so the
+   default is fail-safe: anything added later is covered without anyone having
+   to remember. It also reaches the Tailwind `transition-*` utilities in the
+   components, which no per-animation guard ever could.
+
+   The exceptions below are the motion that IS the information. A spinner or a
+   pulsing status dot is the only thing on screen saying "this is happening
+   right now"; freezing it doesn't calm the interface, it makes a live session
+   look hung. Both are also safe under this preference for the reason the
+   preference exists — they're small, fixed in place, and loop, so there is no
+   travel across the viewport to trigger vestibular discomfort. What the
+   preference removes is things flying, sliding, popping and washing about,
+   which is exactly what the blanket above takes out.
+
+   Deliberately NOT excepted, though they loop:
+     .app-logo::after   brand shimmer — decoration. Its existing guard parks it
+                        at a fixed offset so the logo still looks intentional.
+     .staging-shimmer   the skeleton block already says "loading"; the
+                        travelling highlight on top of it is decoration, and it
+                        is the one looping thing here that actually translates.
+     .jump-latest-*     an attention-getter on an already-visible button.
+                        Grabbing at the eye is precisely what this preference
+                        is asking us to stop doing.
+     .composer-agents-dot  keeping the existing explicit choice to stop it.
+     .pixel-spinner     the decorative pixel loader — snakes, ripples and
+                        bounces that travel across the block. However fun, it
+                        is the single most motion-heavy thing in the app and
+                        the clearest thing this preference is asking us to
+                        drop; the pixel grid still reads as a graphic at rest.
+
+   The exceptions restate their durations literally rather than trying to undo
+   the blanket with `revert` — `revert` rolls back to the *origin* below the
+   author one, i.e. the UA's `0s`, which would freeze exactly the indicators we
+   are trying to keep alive. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition-duration: 0.01ms !important;
+		transition-delay: 0ms !important;
+		animation-duration: 0.01ms !important;
+		animation-delay: 0ms !important;
+		animation-iteration-count: 1 !important;
+		scroll-behavior: auto !important;
+	}
+
+	/* Progress spinners — constant rotation, the sole "working" signal. */
+	.staging-spinner,
+	.wi-check-spin,
+	.ss-searching {
+		animation-duration: 0.7s !important;
+		animation-iteration-count: infinite !important;
+	}
+	.restart-spinner,
+	.voice-spinner {
+		animation-duration: 0.8s !important;
+		animation-iteration-count: infinite !important;
+	}
+	.note-spinner {
+		animation-duration: 0.6s !important;
+		animation-iteration-count: infinite !important;
+	}
+
+	/* Status pulses — opacity breathing that encodes live session state
+	   (running vs waiting vs idle). The rule for this preference is "gentler,
+	   not zero: keep opacity, drop movement", and these are pure opacity. */
+	.sidebar-status-running,
+	.session-tab-dot,
+	.working-dot,
+	.pr-check-mark-pending,
+	.prc-mark-pending,
+	.rv-check-dot-pending,
+	.terminal-running,
+	.pulse-dot {
+		animation-duration: 1.4s !important;
+		animation-iteration-count: infinite !important;
+	}
+	.sidebar-status-waiting,
+	.session-tab-dot-waiting,
+	.msg-sending .msg-label-user {
+		animation-duration: 1.2s !important;
+		animation-iteration-count: infinite !important;
+	}
+	.subagent-live-dot,
+	.pr-bar-checking {
+		animation-duration: 1.6s !important;
+		animation-iteration-count: infinite !important;
+	}
+	.msg-streaming .msg-body-assistant::after {
+		animation-duration: 1s !important;
+		animation-iteration-count: infinite !important;
+	}
+}
+
 /* Phones: the composer is the bottom-most thing on screen, so its shadow has
    only the gap under it to fall into — and in mobile Safari (browser toolbar
    below, so no safe-area inset) that gap is a few px, far less than the ~32px
