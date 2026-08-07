@@ -418,6 +418,35 @@ final class SessionViewModel {
         }
     }
 
+    // ── Pull request actions ──
+    //
+    // Each mutation refreshes the PR afterwards rather than patching the local
+    // copy: merging changes state, checks and the review decision at once, and
+    // the panel is already built to render whatever the route returns. Errors
+    // propagate — the panel shows the server's own sentence.
+
+    /// Submit a review (APPROVE / REQUEST_CHANGES / COMMENT) on this session's PR.
+    func submitPrReview(event: String, summary: String) async throws {
+        try await OS1API.submitPrReview(
+            sessionId: session.id,
+            event: event,
+            summary: summary
+        )
+        await refreshPr()
+    }
+
+    /// Merge this session's PR — squash unless another method is asked for.
+    func mergePr(method: String = "squash") async throws {
+        try await OS1API.mergePr(sessionId: session.id, method: method)
+        await refreshPr()
+    }
+
+    /// Close this session's PR without merging it.
+    func closePr() async throws {
+        try await OS1API.closePr(sessionId: session.id)
+        await refreshPr()
+    }
+
     /// Called when the app returns to the foreground. iOS suspends the socket
     /// while backgrounded and it often comes back half-open: sends "succeed"
     /// locally, nothing arrives, and the ping deadline takes tens of seconds

@@ -104,9 +104,18 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
 - **AskUserQuestion** — blocking questions render as an inline card with option
   buttons + free-text answer, wired to `answer_question`.
 - **PR panel** — sessions with a pull request expose a row in the title-opened
-  workspace sheet and the overflow menu; it opens a read-only panel with state,
-  review decision, conflicts, every check with its status, and reviewers, via
-  `GET /api/sessions/:id/pr`. Actions (merge/review) stay on the web UI. It is
+  workspace sheet and the overflow menu; it opens a panel with state, review
+  decision, conflicts, every check with its status, and reviewers, via
+  `GET /api/sessions/:id/pr`. While the PR is open it also carries the web
+  panel's actions, on the same routes: **Review** (approve / request changes /
+  comment with a summary, plus the "squash and merge after approving"
+  shortcut, `POST …/pr-review`), **Merge** (squash, merge commit or rebase,
+  behind a confirmation that names what it would land on top of — conflicts,
+  failing checks, a draft, requested changes — `POST …/pr-merge`), and
+  **Close pull request** (`POST …/pr-close`). Each needs a GitHub credential
+  server-side, which with web sign-in on is the signed-in person's own token,
+  so an unconnected account gets the server's "connect your GitHub account"
+  sentence in the panel rather than a status code. It is
   pushed as a panel (`PrPanelView(chrome: .pushed)` drops its own navigation
   stack and Done button); the sheet form is what the Mac still uses.
 - **Connection care** — client-initiated pings every 20s (the server never

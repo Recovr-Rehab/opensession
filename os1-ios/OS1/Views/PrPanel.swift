@@ -45,8 +45,9 @@ extension PrDetails.Summary {
 }
 
 /// The PR details sheet: title, state and review badges, branch/line stats,
-/// conflict warning, every check with its status, and the reviewer list.
-/// Read-only by design — actions (merge, review, comment) stay on the web UI.
+/// conflict warning, every check with its status, the reviewer list — and,
+/// while the PR is open, the same three actions the web panel offers: submit a
+/// review, merge, close.
 struct PrPanelView: View {
     var viewModel: SessionViewModel
     /// How this is being shown. `.pushed` brings no chrome of its own: the
@@ -55,7 +56,22 @@ struct PrPanelView: View {
     var chrome: Chrome = .sheet
     @Environment(\.dismiss) private var dismiss
 
+    /// The action in flight, if any. One at a time: the section disables while
+    /// it runs, so this doubles as "which row shows the spinner". Reviewing has
+    /// no entry here — the review sheet owns its own submit state.
+    @State private var busy: PrAction?
+    /// The server's own sentence when an action failed (a GitHub error, or
+    /// "Connect your GitHub account…" when this person hasn't).
+    @State private var actionError: String?
+    @State private var reviewing = false
+    /// Merge method awaiting confirmation — merging is the one action here
+    /// that can't be taken back, so it always passes through a dialog.
+    @State private var pendingMerge: String?
+    @State private var confirmingClose = false
+
     enum Chrome { case sheet, pushed }
+
+    enum PrAction { case merge, close }
 
     var body: some View {
         Group {
@@ -98,6 +114,7 @@ struct PrPanelView: View {
         if let pr = viewModel.prDetails {
             List {
                 overviewSection(pr)
+                actionsSection(pr)
                 checksSection(pr)
                 reviewersSection(pr)
             }
@@ -107,6 +124,41 @@ struct PrPanelView: View {
             .background(OS1VisualStyle.background)
             #endif
             .refreshable { await viewModel.refreshPr() }
+            .sheet(isPresented: $reviewing) {
+                PrReviewSheet(canMerge: pr.isOpen) { event, summary, mergeAfter in
+                    try await viewModel.submitPrReview(event: event, summary: summary)
+                    if mergeAfter { try await viewModel.mergePr() }
+                }
+            }
+            .confirmationDialog(
+                mergeConfirmTitle(pr),
+                isPresented: Binding(
+                    get: { pendingMerge != nil },
+                    set: { if !$0 { pendingMerge = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button(mergeButtonLabel(pendingMerge ?? "squash")) {
+                    let method = pendingMerge ?? "squash"
+                    pendingMerge = nil
+                    run(.merge) { try await viewModel.mergePr(method: method) }
+                }
+                Button("Cancel", role: .cancel) { pendingMerge = nil }
+            } message: {
+                Text(mergeConfirmMessage(pr))
+            }
+            .confirmationDialog(
+                "Close this pull request?",
+                isPresented: $confirmingClose,
+                titleVisibility: .visible
+            ) {
+                Button("Close pull request", role: .destructive) {
+                    run(.close) { try await viewModel.closePr() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The branch keeps its commits — the pull request can be reopened on GitHub.")
+            }
         } else if viewModel.prLoadFailed {
             ContentUnavailableView {
                 Label("Couldn't load the pull request", systemImage: "exclamationmark.triangle")
@@ -160,6 +212,108 @@ struct PrPanelView: View {
                 }
             }
         }
+    }
+
+    /// Review / merge / close, only while the PR is open — a merged or closed
+    /// PR has nothing here to do, and GitHub would refuse anyway.
+    @ViewBuilder
+    private func actionsSection(_ pr: PrDetails) -> some View {
+        if pr.isOpen {
+            Section {
+                Button {
+                    actionError = nil
+                    reviewing = true
+                } label: {
+                    actionRow("Review", systemImage: "checkmark.bubble")
+                }
+                Menu {
+                    Button("Squash and merge") { pendingMerge = "squash" }
+                    Button("Create a merge commit") { pendingMerge = "merge" }
+                    Button("Rebase and merge") { pendingMerge = "rebase" }
+                } label: {
+                    actionRow("Merge", systemImage: "arrow.triangle.merge", spinning: busy == .merge)
+                }
+                Button(role: .destructive) {
+                    actionError = nil
+                    confirmingClose = true
+                } label: {
+                    actionRow("Close pull request", systemImage: "xmark.circle", destructive: true)
+                }
+            } header: {
+                Text("Actions")
+            } footer: {
+                if let actionError {
+                    Text(actionError)
+                        .foregroundStyle(.red)
+                }
+            }
+            .disabled(busy != nil)
+        }
+    }
+
+    private func actionRow(
+        _ title: String,
+        systemImage: String,
+        spinning: Bool = false,
+        destructive: Bool = false
+    ) -> some View {
+        HStack {
+            Label(title, systemImage: systemImage)
+                .foregroundStyle(destructive ? Color.red : Color.accentColor)
+            Spacer(minLength: 8)
+            if spinning {
+                ProgressView().controlSize(.small)
+            }
+        }
+    }
+
+    /// Run one action, keeping its failure in the panel: the server answers a
+    /// refusal (conflicts, a stack layer still open, no GitHub credential) with
+    /// a sentence meant for a person, so show that rather than a status code.
+    private func run(_ action: PrAction, _ work: @escaping () async throws -> Void) {
+        guard busy == nil else { return }
+        busy = action
+        actionError = nil
+        Task {
+            do {
+                try await work()
+            } catch {
+                actionError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+            busy = nil
+        }
+    }
+
+    private func mergeButtonLabel(_ method: String) -> String {
+        switch method {
+        case "merge": "Create a merge commit"
+        case "rebase": "Rebase and merge"
+        default: "Squash and merge"
+        }
+    }
+
+    private func mergeConfirmTitle(_ pr: PrDetails) -> String {
+        "Merge PR #\(pr.number)?"
+    }
+
+    /// Name what a merge would land on top of. GitHub is the authority — the
+    /// server doesn't pre-empt it — so these are warnings, not blocks.
+    private func mergeConfirmMessage(_ pr: PrDetails) -> String {
+        var warnings: [String] = []
+        if pr.mergeable == "CONFLICTING" { warnings.append("it has conflicts") }
+        if (pr.checks ?? []).contains(where: { $0.rank == .failure }) {
+            warnings.append("checks are failing")
+        } else if (pr.checks ?? []).contains(where: { $0.rank == .pending }) {
+            warnings.append("checks are still running")
+        }
+        if pr.isDraft == true { warnings.append("it's still a draft") }
+        if pr.reviewDecision == "CHANGES_REQUESTED" {
+            warnings.append("changes were requested")
+        }
+        let base = pr.baseRefName ?? "the base branch"
+        guard !warnings.isEmpty else { return "This merges into \(base)." }
+        return "This merges into \(base) even though \(warnings.joined(separator: ", "))."
     }
 
     @ViewBuilder
@@ -289,5 +443,108 @@ struct PrPanelView: View {
         guard secs > 0 else { return nil }
         if secs < 60 { return "\(secs)s" }
         return "\(Int((Double(secs) / 60).rounded()))m"
+    }
+}
+
+/// Submit a review: the event, an optional summary, and — approving — the web
+/// panel's "merge right after" shortcut, which is what a phone review usually
+/// wants (approve and land it, without a second trip into the panel).
+///
+/// A failure keeps the sheet open with the text intact; only a success
+/// dismisses, since a review body is real typing to lose.
+private struct PrReviewSheet: View {
+    /// False once the PR can no longer be merged — hides the shortcut.
+    var canMerge: Bool
+    var submit: (String, String, Bool) async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var event = "APPROVE"
+    @State private var summary = ""
+    @State private var mergeAfter = false
+    @State private var submitting = false
+    @State private var errorText: String?
+    @FocusState private var summaryFocused: Bool
+
+    /// GitHub takes a bare approval, but a comment or a change request with no
+    /// body is nothing to post — the server refuses it too.
+    private var canSubmit: Bool {
+        event == "APPROVE"
+            || !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker("Review", selection: $event) {
+                        Text("Approve").tag("APPROVE")
+                        Text("Request changes").tag("REQUEST_CHANGES")
+                        Text("Comment").tag("COMMENT")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+                Section("Summary") {
+                    TextEditor(text: $summary)
+                        .frame(minHeight: 120)
+                        .focused($summaryFocused)
+                        .overlay(alignment: .topLeading) {
+                            if summary.isEmpty {
+                                Text(event == "APPROVE" ? "Optional" : "Required")
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.top, 8)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                }
+                if canMerge && event == "APPROVE" {
+                    Section {
+                        Toggle("Squash and merge after approving", isOn: $mergeAfter)
+                    }
+                }
+                if let errorText {
+                    Section {
+                        Text(errorText).foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Review")
+            .inlineTitleBarCompat()
+            .toolbar {
+                ToolbarItem(placement: .topLeadingCompat) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topTrailingCompat) {
+                    if submitting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Submit") { send() }
+                            .disabled(!canSubmit)
+                    }
+                }
+            }
+            .disabled(submitting)
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 420)
+        #endif
+    }
+
+    private func send() {
+        guard !submitting else { return }
+        submitting = true
+        errorText = nil
+        summaryFocused = false
+        let payload = (event, summary, mergeAfter && event == "APPROVE" && canMerge)
+        Task {
+            do {
+                try await submit(payload.0, payload.1, payload.2)
+                dismiss()
+            } catch {
+                errorText = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+            submitting = false
+        }
     }
 }

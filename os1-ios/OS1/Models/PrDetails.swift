@@ -75,6 +75,13 @@ extension PrDetails {
         case merged, closed, draft, failing, pending, passing
     }
 
+    /// Still actionable: not merged and not closed. A server old enough to omit
+    /// `state` counts as open — the actions it gates all fail loudly server-side
+    /// rather than doing the wrong thing.
+    var isOpen: Bool {
+        state != "MERGED" && state != "CLOSED"
+    }
+
     var summary: Summary {
         switch state ?? "" {
         case "MERGED": return .merged
