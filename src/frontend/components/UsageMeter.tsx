@@ -124,7 +124,10 @@ export function UsageMeter({
 				delay={200}
 				closeDelay={100}
 				className={cn(
-					"group flex min-h-8 items-center gap-1.5 rounded-control px-1.5 py-1 text-xs font-medium",
+					// A pill, like the model readout it sits beside: both are text you
+				// can open, not plates you press, and the toolbar reads better for
+				// having one quiet shape rather than another small box.
+				"group flex min-h-8 items-center gap-1.5 rounded-full px-1.5 py-1 text-xs font-medium",
 					"text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
 					"cursor-pointer select-none outline-none transition-colors",
 					className,

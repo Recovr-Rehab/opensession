@@ -10980,19 +10980,17 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text-faint);
 	pointer-events: none;
 }
-/* The one filled control in the toolbar. It used to be a 50% disc — the only
-   circular control anywhere in the app, and (with the model pill's 999px) one
-   of two shapes the composer alone used. It takes the shared control corner
-   now, the same calc(10px * var(--rf)) the Button primitive holds across its
-   whole size scale and that the icon buttons beside it already paint their
-   hover wash at. What makes it the send button is the fill, not the circle:
-   the ink/red plates, the scale tick and the per-state hover language below
-   are all unchanged. The resting phone pill keeps the disc — see
-   .composer-min, whose container is itself a 999px pill. */
+/* The one filled control in the toolbar, and the one place a circle is right.
+   It was briefly folded onto the shared control corner on the argument that
+   nothing else in the app is round — which had it backwards. The disc is the
+   composer's signature: it is the only control whose whole job is "commit
+   this", and as a squircle the saturated stop plate reads as a red brick
+   sitting in the field rather than a button. Roundness is what keeps a
+   full-strength fill from feeling heavy. Consistency buys nothing here. */
 .composer-send {
 	width: 32px;
 	height: 32px;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
+	border-radius: 50%;
 	background: var(--accent);
 	color: var(--on-accent);
 	border: none;
@@ -11021,13 +11019,13 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text-dim);
 	border: 1px solid var(--border-strong);
 }
-/* Colours unchanged; the ring comes down to the app's one border weight (1px).
-   A 2px edge was the only one in the composer, and on a 32px control it read
-   as a heavier control rather than a differently-stated one. */
+/* The queue state is a ring rather than a plate, so it needs the weight to
+   register at 32px — at 1px it read as a disabled send rather than a different
+   one. */
 .composer-send-queue-main {
 	background: var(--bg-raised);
 	color: var(--accent);
-	border: 1px solid var(--accent);
+	border: 2px solid var(--accent);
 }
 .composer-send-interrupt {
 	background: var(--red-soft);
@@ -11058,7 +11056,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 .composer-send-split.has-menu .composer-send {
 	width: 34px;
-	border-radius: calc(10px * var(--rf)) 0 0 calc(10px * var(--rf)); corner-shape: var(--cs);
+	border-radius: calc(14px * var(--rf)) 0 0 calc(14px * var(--rf)); corner-shape: var(--cs);
 }
 .composer-send-split.has-menu .composer-send:not(:disabled):hover {
 	/* No scale on a fused half — it would tear the seam open. */
@@ -15286,13 +15284,17 @@ html[data-theme="light"] .md-mermaid {
 }
 
 /* The model/effort control (composer toolbar + new-session palette footer —
-   both are ModelEffortSelect, this class has no other caller). Its 999px
-   corner was the only one on a session page, and its hover MATERIALISED a
-   full-strength border out of nothing: the trigger sets border-transparent at
-   rest ("quiet pill: no outline at rest, hover state only"), so the ring
-   appeared on hover instead of brightening. Now it speaks the same two words
-   as the icon button beside it — shared control corner, --hover wash — and its
-   own stated intent actually holds. */
+   both are ModelEffortSelect, this class has no other caller). It stays a pill:
+   it is a text readout you can change, not a plate you press, and it sits
+   beside the cost readout, which is the same kind of thing and the same shape.
+   Squaring it off (and the readout with it) left the toolbar reading as a row
+   of small boxes.
+
+   Its hover DID need fixing, and that part stays: the trigger sets
+   border-transparent at rest ("quiet pill: no outline at rest, hover state
+   only"), so a border-colour hover materialised a full-strength ring out of
+   nothing instead of brightening. It paints --hover now, the same wash as the
+   icon button beside it, which is what that comment always meant. */
 .palette-pill {
 	position: relative;
 	display: inline-flex;
@@ -15301,7 +15303,7 @@ html[data-theme="light"] .md-mermaid {
 	min-height: 32px;
 	box-sizing: border-box;
 	border: 1px solid var(--border);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
+	border-radius: 999px;
 	padding: 5px 11px;
 	color: var(--text-dim);
 	font-size: 12px;
@@ -16941,21 +16943,22 @@ html.wco .settings-sidenav {
 		width: 40px;
 		height: 40px;
 	}
-	/* ...but a 40px thumb TARGET is not a 40px control. The icon buttons already
-	   paint their 32px wash inside a 40px box (.palette-icon-btn::before); the
-	   send button is filled, so it does the same with padding +
-	   background-clip. Without this it was the one control on a phone toolbar
-	   painting 8px taller than its neighbours — model pill 32, + 32, mic 32,
-	   send 40. Was scoped to the minimized pill; the expanded phone composer
-	   had the same mismatch. */
-	.composer-send {
+	/* Inside the 50px RESTING pill a 40px disc leaves 5px of air above and
+	   below — a red blob against the hairline + and mic glyphs beside it. There
+	   only, keep the target and shrink the fill: padding + background-clip
+	   paints the disc at 32px without moving the hit area (the
+	   .palette-icon-btn trick, done with the background since these buttons are
+	   filled). The EXPANDED phone composer keeps the full 40px plate — it is
+	   the primary thumb action, and matching it to its neighbours there just
+	   made the one button you reach for smaller. */
+	.composer.composer-min .composer-send {
 		padding: 4px;
 		background-clip: content-box;
 	}
 	/* The arrow comes down with the disc — a 24px glyph all but touches the
 	   smaller plate's edge. The stop square is a 10px mark inside its 24px box,
 	   so it already sits in proportion and keeps its size. */
-	.composer-send:not(.composer-stop) svg {
+	.composer.composer-min .composer-send:not(.composer-stop) svg {
 		width: 20px;
 		height: 20px;
 	}
