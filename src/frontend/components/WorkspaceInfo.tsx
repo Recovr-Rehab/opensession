@@ -33,7 +33,6 @@ import { cn } from "../ui/cn";
 import type {
 	DiffFile,
 	GitStatusInfo,
-	PrCheck,
 	PrDetails,
 	UnifiedSession,
 } from "../lib/types";
@@ -48,6 +47,12 @@ import {
 	type OverviewSessionRef,
 } from "../lib/workspace-overview";
 import { summarizeChecks } from "./PrStatusBar";
+import {
+	type CheckVisual,
+	checkStatusMeta,
+	checkToneClass,
+} from "../lib/pr-checks";
+import { CheckStatusIcon } from "./CheckStatusIcon";
 import { openLightbox } from "./MediaLightbox";
 import { repoLabel } from "./RepoTile";
 import { SandboxBadge } from "./SandboxBadge";
@@ -481,100 +486,6 @@ function FileRow({
 				</Popover.Popup>
 			)}
 		</Popover.Root>
-	);
-}
-
-type CheckVisual = "success" | "failure" | "pending" | "skipped" | "neutral";
-
-function checkStatusMeta(check: PrCheck): { kind: CheckVisual; label: string } {
-	const running = check.status !== "COMPLETED" && check.status !== "";
-	if (
-		running ||
-		check.conclusion === "PENDING" ||
-		check.conclusion === "EXPECTED"
-	)
-		return { kind: "pending", label: running ? "Running" : "Queued" };
-	switch (check.conclusion) {
-		case "SUCCESS":
-			return { kind: "success", label: "Succeeded" };
-		case "FAILURE":
-			return { kind: "failure", label: "Failed" };
-		case "TIMED_OUT":
-			return { kind: "failure", label: "Timed out" };
-		case "ERROR":
-			return { kind: "failure", label: "Error" };
-		case "ACTION_REQUIRED":
-			return { kind: "failure", label: "Action required" };
-		case "CANCELLED":
-			return { kind: "neutral", label: "Cancelled" };
-		case "SKIPPED":
-			return { kind: "skipped", label: "Skipped" };
-		case "NEUTRAL":
-			return { kind: "neutral", label: "Neutral" };
-		default:
-			return { kind: "neutral", label: check.conclusion || "Pending" };
-	}
-}
-
-function checkToneClass(kind: CheckVisual): string {
-	switch (kind) {
-		case "success":
-			return "text-green";
-		case "failure":
-			return "text-red";
-		case "pending":
-			return "text-yellow";
-		default:
-			return "text-dim";
-	}
-}
-
-function CheckStatusIcon({ kind }: { kind: CheckVisual }) {
-	if (kind === "pending")
-		return (
-			<span
-				className="m-[1.5px] block size-[13px] animate-spin rounded-full border border-current/30 border-t-current"
-				aria-hidden
-			/>
-		);
-	if (kind === "success")
-		return (
-			<svg className="block size-4" viewBox="0 0 16 16" aria-hidden>
-				<circle cx="8" cy="8" r="8" fill="currentColor" />
-				<path
-					d="M4.4 8.3l2.3 2.3 4.9-4.9"
-					fill="none"
-					stroke="#fff"
-					strokeWidth="1.7"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-				/>
-			</svg>
-		);
-	if (kind === "failure")
-		return (
-			<svg className="block size-4" viewBox="0 0 16 16" aria-hidden>
-				<circle cx="8" cy="8" r="8" fill="currentColor" />
-				<path
-					d="M5.4 5.4l5.2 5.2M10.6 5.4l-5.2 5.2"
-					stroke="#fff"
-					strokeWidth="1.7"
-					strokeLinecap="round"
-				/>
-			</svg>
-		);
-	return (
-		<svg className="block size-4" viewBox="0 0 16 16" aria-hidden>
-			<circle
-				cx="8"
-				cy="8"
-				r="7"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-				strokeDasharray="2.4 2.2"
-			/>
-		</svg>
 	);
 }
 
