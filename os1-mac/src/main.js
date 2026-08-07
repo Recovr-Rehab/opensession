@@ -265,6 +265,54 @@ function openExternal(url) {
   shell.openExternal(url);
 }
 
+// ---- Microphone -------------------------------------------------------------
+// Dictation needs two grants: this shell's permission handler above, and macOS
+// itself. macOS only ever asks once — after a "Don't Allow" it answers every
+// later request instantly and silently, which the web app can only report as a
+// bare "Microphone permission denied". Say what actually happened and offer the
+// one place that can undo it.
+let micDialogOpen = false;
+
+function openMicSettings() {
+  shell.openExternal(
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+  );
+}
+
+async function explainMicDenied() {
+  if (micDialogOpen) return;
+  micDialogOpen = true;
+  try {
+    const { response } = await dialog.showMessageBox(win && !win.isDestroyed() ? win : null, {
+      type: "info",
+      message: "macOS is blocking the microphone",
+      detail:
+        "Dictation needs microphone access, and macOS has it turned off for OS¹.\n\n" +
+        "Open System Settings → Privacy & Security → Microphone, switch OS¹ on, " +
+        "then quit and reopen OS¹.",
+      buttons: ["Open System Settings", "Not now"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) openMicSettings();
+  } finally {
+    micDialogOpen = false;
+  }
+}
+
+async function micAccessAllowed() {
+  if (process.platform !== "darwin") return true;
+  const status = systemPreferences.getMediaAccessStatus("microphone");
+  if (status === "granted" || status === "unknown") return true;
+  // The system prompt only appears while the answer is still open. Declining it
+  // is a deliberate no, so that path doesn't get the settings nudge.
+  if (status === "not-determined") {
+    return systemPreferences.askForMediaAccess("microphone");
+  }
+  void explainMicDenied();
+  return false;
+}
+
 // os1://session/abc → <configured instance>/session/abc; app links pass through.
 function deepLinkToUrl(raw) {
   try {
@@ -593,11 +641,19 @@ app.whenReady().then(async () => {
     .clearStorageData({ storages: ["serviceworkers", "cachestorage"] })
     .catch(() => {});
 
-  // Remote content gets browser-level permissions only.
+  // Remote content gets browser-level permissions only. Dictation (the
+  // composer's mic button) arrives here as a "media" request and is handed to
+  // macOS; everything else outside the allowlist is refused.
   session.defaultSession.setPermissionRequestHandler(
-    (wc, permission, callback) => {
+    async (wc, permission, callback, details) => {
       const allowed = ["notifications", "clipboard-sanitized-write", "fullscreen"];
-      callback(allowed.includes(permission) && inWindow(wc.getURL()));
+      if (!inWindow(wc.getURL())) return callback(false);
+      if (permission === "media") {
+        // Audio only. A request that also wants the camera isn't dictation.
+        if (details?.mediaTypes?.includes("video")) return callback(false);
+        return callback(await micAccessAllowed());
+      }
+      callback(allowed.includes(permission));
     },
   );
 

@@ -63,6 +63,11 @@ mac:
       arch: [arm64]
   extendInfo:
     CFBundleIconName: AppIcon
+    # Without a usage description macOS never shows the microphone prompt, so
+    # dictation fails as "denied" on the first try. This string is what the
+    # system prompt shows. Pairs with com.apple.security.device.audio-input in
+    # the entitlements.
+    NSMicrophoneUsageDescription: OS¹ uses the microphone to dictate prompts into the composer.
     CFBundleURLTypes:
       - CFBundleURLName: OS¹ deep link
         CFBundleURLSchemes: [os1]
