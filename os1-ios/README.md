@@ -88,6 +88,15 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   sends `cancel` for the watched session. The floating glass composer uses a
   progressive material fade so transcript content recedes cleanly beneath it;
   its full surface focuses the field and keeps a comfortable keyboard gap.
+- **Dictation** — the composer's mic (left of send, every session) is speech
+  to text, not a call: `Dictation.swift` runs `SFSpeechRecognizer` over an
+  `AVAudioEngine` tap and streams the utterance into the draft, appended to
+  whatever was already typed. It asks for on-device recognition wherever the
+  hardware supports it, since drafts carry customer and ticket detail that the
+  server-side route would send to Apple. The recognizer object is owned by
+  `SessionInputBar`, not the button: a long dictation wraps the composer to
+  its two-row layout, which swaps the branch the button renders in and would
+  otherwise destroy its state mid-sentence.
 - **Session creation** — a full-height prompt editor with image attachments and
   a compact single-row iOS toolbar for repository, mode, and model settings.
 - **AskUserQuestion** — blocking questions render as an inline card with option
@@ -112,8 +121,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   everything the session view already does — streaming, tool folds, questions
   — works there too. Voice mode is opt-in per device via the "Desk voice"
   toggle in Appearance settings (cross-device `desk-voice` ui-pref); when on,
-  a mic in the Desk composer (left of send) or in the sheet header starts a
-  live call brokered by the
+  the mic in the sheet header starts a live call brokered by the
   server over a raw WebSocket to OpenAI's Realtime API (`DeskVoiceEngine`) —
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
@@ -125,10 +133,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   Minimizing (the chevron) leaves the call running and returns you to the Desk
   transcript, which fills in as turns finalize; either lit mic — composer or
   header — comes back to the call, and hanging up is the only thing that ends
-  it. The composer mic (`ComposerVoiceButton`) renders only where the
-  environment carries a `DeskVoiceEngine`, which is the Desk alone, so no
-  other session's composer grows a control voice can't serve: the server
-  resolves every voice call to the Desk session.
+  it. A call is always the DESK's — `desk-voice.ts` resolves one with
+  `ensureDeskSession(user)` whichever session is on screen — so it is offered
+  only there, and never from a composer.
   Mute is local — capture and metering continue, frames stop leaving the
   device. The orb's level is sampled off the realtime audio threads at ~15Hz
   rather than pushed per buffer, and honors Reduce Motion.
