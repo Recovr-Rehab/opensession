@@ -156,6 +156,31 @@ interface Props {
   askMode?: boolean;
 }
 
+/**
+ * The expanded box's resting corner, resolved from `--composer-radius` in
+ * global.css. Motion writes `borderRadius` inline to morph between the phone's
+ * resting pill and the expanded box, so the number has to exist in JS — but it
+ * shouldn't be a SECOND copy of the token (the old inline `32` had drifted
+ * from the stylesheet's own value, and the phone breakpoint restated a third).
+ * Read through a throwaway element rather than `getPropertyValue`: an
+ * unregistered custom property computes to its token stream, so we'd get the
+ * literal `calc(18px * 1.35)` instead of a length. `--rf` is a `@supports`
+ * switch, so the answer can't change within a page's life — resolve it once.
+ */
+let composerRadiusPx: number | null = null;
+function composerRadius(): number {
+  if (composerRadiusPx !== null) return composerRadiusPx;
+  if (typeof document === "undefined") return 24;
+  const probe = document.createElement("div");
+  probe.style.cssText =
+    "position:absolute;visibility:hidden;width:100px;height:100px;border-radius:var(--composer-radius)";
+  document.body.appendChild(probe);
+  const px = parseFloat(getComputedStyle(probe).borderTopLeftRadius);
+  probe.remove();
+  composerRadiusPx = Number.isFinite(px) && px > 0 ? px : 24;
+  return composerRadiusPx;
+}
+
 /** The writing surface for a composer that isn't in its ordinary state: a flat
  *  tint plus a 45° hatch that fades out downwards, so the box settles into its
  *  toolbar instead of hatching all the way to the edge. Shared shape with the
@@ -657,14 +682,17 @@ export function Composer({
       {attached}
       <motion.div
         layout
-        // Fuller rounding in the expanded state on phones so the box's corners
-        // don't read as square against the iPhone's screen rounding; pill when
-        // collapsed. Expanded composers round to 32px so their corners follow
-        // the circular toolbar buttons more closely. initial={false}: adopt the
-        // target radius instantly on mount — otherwise Motion animates from the
-        // stylesheet value on load, a visible radius morph.
+        // Pill when collapsed, --composer-radius when expanded (see
+        // composerRadius above) — the same corner the queue flap and the
+        // mention popup use, so the surfaces that tuck under and hang off this
+        // box share its edge. It used to be a hardcoded 32, which made the
+        // composer the only surface on a session page rounder than 18.9px, and
+        // the toolbar buttons it was cut to follow are no longer circles.
+        // initial={false}: adopt the target radius instantly on mount —
+        // otherwise Motion animates from the stylesheet value on load, a
+        // visible radius morph.
         initial={false}
-        animate={{ borderRadius: minimized ? 999 : 32 }}
+        animate={{ borderRadius: minimized ? 999 : composerRadius() }}
         transition={composerMorph}
         className={`composer ${disabled ? "composer-disabled" : ""} ${minimized ? "composer-min" : ""}`}
         style={askMode ? tintedSurface("var(--green)", 7, 4, 30) : undefined}
@@ -889,8 +917,12 @@ export function Composer({
                     // surface this marker always sits on. Slightly stronger
                     // than that rule's 16/24 for exactly that reason: here the
                     // wash is the same ink as the surface under it.
+                    // `rounded-control`, not the pill it used to be: this chip
+                    // stands next to the model pill and the icon buttons, and
+                    // three different corners in one 88px row is what made the
+                    // toolbar read as assembled rather than designed.
                     className={cn(
-                      "inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-meta font-medium transition-colors",
+                      "inline-flex min-h-8 items-center gap-1.5 rounded-control px-2.5 text-meta font-medium transition-colors",
                       "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)]",
                     )}
                     {...tapProps(() => setMenu("add"))}

@@ -35,6 +35,14 @@
 	--control-surface: #292929;
 	--control-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 	--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.16), 0 14px 36px rgba(0, 0, 0, 0.2);
+	/* The composer box's corner. It lives here, not on .composer, because the
+	   expand/collapse morph is driven from Composer.tsx — Motion writes the
+	   radius inline, so it has to be able to READ the resting value rather than
+	   carry a second copy of it. Same corner as the surfaces physically
+	   attached to the composer (the queue flap, the mention popup): the box
+	   used to sit at 64px (32px inline from Motion), the only surface on a
+	   session page rounder than 18.9px. */
+	--composer-radius: calc(18px * var(--rf));
 	--bg-panel: #262626;
 	--bg-hover: #2e2e2e;
 	--bg-active: #353535;
@@ -10259,7 +10267,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	position: relative;
 	background: var(--control-surface);
 	border: 1px solid var(--border);
-	border-radius: calc(64px * var(--rf)); corner-shape: var(--cs);
+	border-radius: var(--composer-radius); corner-shape: var(--cs);
 	box-shadow: var(--composer-shadow);
 	/* Symmetric horizontal padding: the old extra 2px on the left stacked with
 	   the leading icon button's own glyph inset and left the field visibly
@@ -10710,11 +10718,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .composer.composer-min .composer-pop-wrap:has(.composer-add-btn) {
 	order: 1;
 }
-/* Round the + button's target area in the minimized pill so its hover circle
-   matches the round mic/send buttons and nestles into the pill's rounded left
-   corner (the full toolbar keeps the 8px square). */
 .composer.composer-min .composer-add-btn {
-	border-radius: 50%;
 	/* The pill insets everything by 4px; the expanded field's optical pull
 	   would hang the button off its rounded left end. */
 	margin-left: 0;
@@ -10734,22 +10738,27 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .composer.composer-min .composer-stop {
 	order: 4;
 }
-/* The phone rules give send/stop a 40px thumb target, which inside the 50px
-   resting pill paints as a filled disc with 5px of air above and below — a red
-   blob against the hairline + and mic glyphs beside it. Keep the target and
-   shrink only the fill: padding + background-clip paints the disc at 32px
-   without moving the hit area (the .palette-icon-btn trick, done with the
-   background instead of a pseudo-element since these buttons are filled). */
-.composer.composer-min .composer-send {
-	padding: 4px;
-	background-clip: content-box;
-}
-/* The send arrow has to come down with the disc — the phone's 24px glyph all
-   but touches the smaller circle's edge. The stop square is a 10px mark inside
-   its 24px box, so it already sits in proportion and keeps its size. */
-.composer.composer-min .composer-send:not(.composer-stop) svg {
-	width: 20px;
-	height: 20px;
+/* The one place the composer keeps circles, deliberately: this resting state IS
+   a 999px pill (Motion animates the box to it), and its + / mic / send sit
+   flush in its rounded ends — a squircle inside a pill end reads as a mistake.
+   Round buttons stay round for exactly as long as their container is round; the
+   shared control corner returns the moment it expands, carried by the
+   border-radius transition on each control.
+
+   `corner-shape: round` is load-bearing, not decoration. Everything in the
+   composer now inherits `var(--cs)` (squircle where supported), and a squircle
+   at 50% is a lobed blob, not a circle. Previously only the "+" was rounded
+   here (and it WAS getting the blob, since .palette-icon-btn carries --cs)
+   while the mic stayed square — so the resting pill held three different
+   shapes. The fill-shrinking rule that used to live here now covers every
+   phone composer, expanded or not (see the phone block). */
+.composer.composer-min .composer-send,
+.composer.composer-min .palette-icon-btn,
+/* The icon buttons paint on an inset pseudo-element, so the wash needs the
+   same treatment or a circular button hovers into a squircle. */
+.composer.composer-min .palette-icon-btn::before {
+	border-radius: 50%;
+	corner-shape: round;
 }
 .composer.composer-min .composer-spacer {
 	display: none;
@@ -10964,10 +10973,19 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text-faint);
 	pointer-events: none;
 }
+/* The one filled control in the toolbar. It used to be a 50% disc — the only
+   circular control anywhere in the app, and (with the model pill's 999px) one
+   of two shapes the composer alone used. It takes the shared control corner
+   now, the same calc(10px * var(--rf)) the Button primitive holds across its
+   whole size scale and that the icon buttons beside it already paint their
+   hover wash at. What makes it the send button is the fill, not the circle:
+   the ink/red plates, the scale tick and the per-state hover language below
+   are all unchanged. The resting phone pill keeps the disc — see
+   .composer-min, whose container is itself a 999px pill. */
 .composer-send {
 	width: 32px;
 	height: 32px;
-	border-radius: 50%;
+	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
 	background: var(--accent);
 	color: var(--on-accent);
 	border: none;
@@ -10980,6 +10998,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	flex-shrink: 0;
 	transition:
 		filter var(--dur-micro) var(--ease),
+		border-radius var(--dur-micro) var(--ease),
 		transform var(--dur-micro) var(--ease);
 }
 .composer-send:disabled {
@@ -10995,10 +11014,13 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text-dim);
 	border: 1px solid var(--border-strong);
 }
+/* Colours unchanged; the ring comes down to the app's one border weight (1px).
+   A 2px edge was the only one in the composer, and on a 32px control it read
+   as a heavier control rather than a differently-stated one. */
 .composer-send-queue-main {
 	background: var(--bg-raised);
 	color: var(--accent);
-	border: 2px solid var(--accent);
+	border: 1px solid var(--accent);
 }
 .composer-send-interrupt {
 	background: var(--red-soft);
@@ -11029,7 +11051,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 .composer-send-split.has-menu .composer-send {
 	width: 34px;
-	border-radius: calc(14px * var(--rf)) 0 0 calc(14px * var(--rf)); corner-shape: var(--cs);
+	border-radius: calc(10px * var(--rf)) 0 0 calc(10px * var(--rf)); corner-shape: var(--cs);
 }
 .composer-send-split.has-menu .composer-send:not(:disabled):hover {
 	/* No scale on a fused half — it would tear the seam open. */
@@ -14418,7 +14440,7 @@ html[data-theme="light"] .md-mermaid {
    circle is its own edge. Pull the button (not its wrapper, which the menu
    anchors to) back out so the glyph sits about where the send circle does.
    Stops short of full symmetry: the hover wash has to stay inside the field's
-   32px corner. */
+   corner (--composer-radius). */
 .composer-toolbar .composer-add-btn {
 	margin-left: -6px;
 }
@@ -15256,6 +15278,14 @@ html[data-theme="light"] .md-mermaid {
 	flex-shrink: 0;
 }
 
+/* The model/effort control (composer toolbar + new-session palette footer —
+   both are ModelEffortSelect, this class has no other caller). Its 999px
+   corner was the only one on a session page, and its hover MATERIALISED a
+   full-strength border out of nothing: the trigger sets border-transparent at
+   rest ("quiet pill: no outline at rest, hover state only"), so the ring
+   appeared on hover instead of brightening. Now it speaks the same two words
+   as the icon button beside it — shared control corner, --hover wash — and its
+   own stated intent actually holds. */
 .palette-pill {
 	position: relative;
 	display: inline-flex;
@@ -15264,18 +15294,19 @@ html[data-theme="light"] .md-mermaid {
 	min-height: 32px;
 	box-sizing: border-box;
 	border: 1px solid var(--border);
-	border-radius: 999px;
+	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
 	padding: 5px 11px;
 	color: var(--text-dim);
 	font-size: 12px;
 	font-weight: 500;
 	max-width: 180px;
 	transition:
+		background var(--dur-micro) var(--ease),
 		border-color var(--dur-micro) var(--ease),
 		color var(--dur-micro) var(--ease);
 }
 .palette-pill:hover {
-	border-color: var(--text-faint);
+	background: var(--hover);
 	color: var(--text);
 }
 .palette-pill-label {
@@ -15384,7 +15415,10 @@ html[data-theme="light"] .md-mermaid {
 	justify-content: center;
 	width: 40px;
 	height: 40px;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
+	/* The box agrees with the wash it paints (::before, below) and with the
+	   shared control corner. It was calc(8px * var(--rf)) — a third radius,
+	   visible on the focus ring, which followed neither. */
+	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
 	border: 1px solid transparent;
 	background: none;
 	color: var(--text-dim);
@@ -16808,8 +16842,9 @@ html.wco .settings-sidenav {
    its default and stays out of the composer, and the new-session
    palette hides repo/base/model/effort behind the sliders toggle. */
 @media (max-width: 720px) {
+	/* The corner is --composer-radius now (:root), which is the value this
+	   block used to restate — desktop was the odd one out at 64px/32px. */
 	.composer {
-		border-radius: calc(18px * var(--rf)); corner-shape: var(--cs);
 		padding: 10px 12px 9px;
 		--composer-inset-left: 13px;
 	}
@@ -16846,6 +16881,24 @@ html.wco .settings-sidenav {
 	.composer-send {
 		width: 40px;
 		height: 40px;
+	}
+	/* ...but a 40px thumb TARGET is not a 40px control. The icon buttons already
+	   paint their 32px wash inside a 40px box (.palette-icon-btn::before); the
+	   send button is filled, so it does the same with padding +
+	   background-clip. Without this it was the one control on a phone toolbar
+	   painting 8px taller than its neighbours — model pill 32, + 32, mic 32,
+	   send 40. Was scoped to the minimized pill; the expanded phone composer
+	   had the same mismatch. */
+	.composer-send {
+		padding: 4px;
+		background-clip: content-box;
+	}
+	/* The arrow comes down with the disc — a 24px glyph all but touches the
+	   smaller plate's edge. The stop square is a 10px mark inside its 24px box,
+	   so it already sits in proportion and keeps its size. */
+	.composer-send:not(.composer-stop) svg {
+		width: 20px;
+		height: 20px;
 	}
 
 	/* Opening the advanced options adds two more controls to the palette's
