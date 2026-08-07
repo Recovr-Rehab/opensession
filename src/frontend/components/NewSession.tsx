@@ -243,7 +243,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // Phones open on just the prompt — repo/base/model/effort have sensible
   // defaults and hide behind the sliders toggle until you actually need them.
   const isPhone = useIsPhone();
-  // "Send messages with" (Settings → Composer). The session composer honors it,
+  // "Send messages with" (Settings → Preferences). The session composer honors it,
   // so this field has to as well — otherwise Enter silently does nothing here
   // while the Create button advertises ↩.
   const [sendKey, setSendKey] = useState(getSendKeyPref);
@@ -447,7 +447,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             return m.models.some((item) => item.id === current) ? current : "";
           }
           // Untouched picker: preselect the user's own default-model pref
-          // (Settings → Composer) when it's set and still selectable; "" (no
+          // (Settings → Preferences) when it's set and still selectable; "" (no
           // preference) keeps the workspace default.
           const pref = getDefaultModelPref();
           return pref && m.models.some((item) => item.id === pref) ? pref : "";

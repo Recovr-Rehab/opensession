@@ -1,4 +1,4 @@
-// Vim mode for the composer (Settings → Composer, default off). Stored
+// Vim mode for the composer (Settings → Preferences, default off). Stored
 // server-side per user (ui-prefs) so it follows you across devices, with a
 // localStorage copy as the synchronous cache — the same hydrate pattern as
 // lib/turn-activity: reads stay sync (right on first paint), the server

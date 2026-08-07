@@ -305,10 +305,10 @@ export function Composer({
     draftKey ? loadDraft(draftKey).text : "",
   );
   const isPhone = useIsPhone();
-  // "Send messages with" preference (Settings → Composer): Enter or ⌘/Ctrl+Enter.
+  // "Send messages with" preference (Settings → Preferences): Enter or ⌘/Ctrl+Enter.
   const [sendKey, setSendKey] = useState(getSendKeyPref);
   useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
-  // Follow-up behavior preferences (Settings → Composer): what each send
+  // Follow-up behavior preferences (Settings → Preferences): what each send
   // gesture — plain Enter/the send button vs ⌘/Ctrl+Enter — does while the
   // run is busy. Both configurable; defaults queue/steer.
   const [busySendPrefs, setBusySendPrefsState] = useState(getBusySendPrefs);
@@ -330,7 +330,7 @@ export function Composer({
       window.removeEventListener("blur", clearModifier);
     };
   }, []);
-  // Vim mode preference (Settings → Composer, default off).
+  // Vim mode preference (Settings → Preferences, default off).
   const [vimEnabled, setVimEnabled] = useState(getVimModePref);
   useEffect(() => onVimModeChanged(() => setVimEnabled(getVimModePref())), []);
   const isControlled = value !== undefined;
@@ -445,7 +445,7 @@ export function Composer({
     };
   }
 
-  // Modal editing on the draft (Settings → Composer → Vim mode). The engine
+  // Modal editing on the draft (Settings → Preferences → Vim mode). The engine
   // consumes keys in normal/visual modes; insert mode only claims Escape.
   const vim = useVimMode({
     enabled: vimEnabled,
@@ -627,7 +627,7 @@ export function Composer({
       if (insideOpenFence(text, caret)) return; // let the newline land
     }
     // While a run is busy, ⌘/Ctrl+Enter does its own configured follow-up
-    // action (Settings → Composer, default steer: fold into the running turn
+    // action (Settings → Preferences, default steer: fold into the running turn
     // now, WITHOUT stopping it). Only when plain Enter is the send key —
     // otherwise ⌘/Ctrl+Enter already means "send".
     if (
@@ -973,7 +973,7 @@ export function Composer({
             </Tooltip>
           )}
           {/* One busy-send button: the Enter follow-up preference (Settings →
-              Composer, default queue) picks its busy action; holding
+              Preferences, default queue) picks its busy action; holding
               Command/Ctrl switches to the ⌘/Ctrl+Enter preference (default
               steer). Niche actions such as scheduling live under the + menu. */}
           {showSend && (

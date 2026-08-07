@@ -1,5 +1,5 @@
 // A small modal-editing engine for the composer textarea ("vim mode",
-// Settings → Composer, default off). Pure: it never touches the DOM — the
+// Settings → Preferences, default off). Pure: it never touches the DOM — the
 // useVimMode hook feeds it keydowns plus the current { text, selection } and
 // applies the returned document/selection/mode. That keeps the whole thing
 // unit-testable and keeps the textarea React-controlled (edits flow through

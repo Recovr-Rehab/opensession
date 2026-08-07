@@ -215,7 +215,7 @@ function isToolView(view: string): view is ToolView {
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"myAccounts",
 	"keychain",
-	"composer",
+	"preferences",
 	"notifications",
 	"appearance",
 	"setup",
@@ -235,9 +235,10 @@ const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
 	warmPreviews: "prewarming",
 	previewPool: "prewarming",
 	workspace: "setup",
-	general: "composer",
-	personalPrompt: "composer",
-	deskVoice: "composer",
+	general: "preferences",
+	personalPrompt: "preferences",
+	deskVoice: "preferences",
+	composer: "preferences",
 };
 
 function parseRoute(pathname: string): Route {

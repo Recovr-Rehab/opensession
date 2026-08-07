@@ -1,4 +1,4 @@
-// Per-user default model for NEW sessions (Settings → Composer): what the
+// Per-user default model for NEW sessions (Settings → Preferences): what the
 // New-session palette (and the workspace/support first-session composers)
 // preselect for this user. "" = no preference — fall back to the workspace's
 // interactive default from GET /api/models. Stored server-side per user

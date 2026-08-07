@@ -55,7 +55,7 @@ export const TurnBlock = React.memo(function TurnBlock({
   const tools = items.filter((it) => it.type === "tool_use");
   const messages = items.filter((it) => it.type === "assistant");
 
-  // Default fold state follows the preference (Settings → Appearance) and
+  // Default fold state follows the preference (Settings → Preferences) and
   // nothing else. The default stays folded, even during a live turn. "auto"
   // is the opt-in mode that opens only the turn fold while it is working, and
   // folds it again the moment the turn settles — a failed step or a screenshot

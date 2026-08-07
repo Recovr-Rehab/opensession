@@ -1,4 +1,4 @@
-// Follow-up behavior while a run is busy (Settings → Composer): two prefs, one
+// Follow-up behavior while a run is busy (Settings → Preferences): two prefs, one
 // per send gesture — what plain Enter (and the send button) does, and what
 // ⌘/Ctrl+Enter does. Defaults queue/steer keep the classic split; set both to
 // steer to always fold into the live turn. "queue" holds the message until the

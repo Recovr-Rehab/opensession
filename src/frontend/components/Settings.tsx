@@ -199,7 +199,7 @@ export type ToolSectionKey =
 export type SettingsSectionKey =
 	| "myAccounts"
 	| "keychain"
-	| "composer"
+	| "preferences"
 	| "notifications"
 	| "appearance"
 	| "setup"
@@ -262,8 +262,8 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "composer",
-		label: "Composer",
+		key: "preferences",
+		label: "Preferences",
 		group: "Personal",
 		icon: (
 			<svg
@@ -274,11 +274,9 @@ const SECTIONS: {
 				stroke="currentColor"
 				strokeWidth="1.4"
 			>
-				<rect x="1.75" y="4.25" width="12.5" height="7.5" rx="1.2" />
-				<path
-					d="M4 6.8h.01M6.7 6.8h.01M9.4 6.8h.01M12.1 6.8h.01M5 9.5h6"
-					strokeLinecap="round"
-				/>
+				<path d="M2.5 4.5h11M2.5 11.5h11" strokeLinecap="round" />
+				<circle cx="6" cy="4.5" r="1.7" fill="var(--bg-panel)" />
+				<circle cx="10.5" cy="11.5" r="1.7" fill="var(--bg-panel)" />
 			</svg>
 		),
 	},
@@ -578,7 +576,7 @@ function SectionPanel({
 		<>
 			{TOOL_SECTIONS.has(section) && children}
 			{section === "notifications" && <NotificationsPanel />}
-			{section === "composer" && <ComposerPanel />}
+			{section === "preferences" && <PreferencesPanel />}
 			{section === "appearance" && <AppearancePanel />}
 			{section === "setup" && <SetupPanel />}
 			{section === "audit" && <AuditPanel />}
@@ -2601,8 +2599,13 @@ function AuditPanel() {
 	);
 }
 
-/** Composer preferences — per-browser, like theme (lib/send-key). */
-function ComposerPanel() {
+/**
+ * How working with a session behaves for you: the composer keys, what a
+ * follow-up does mid-run, and how much of a turn's work the transcript shows.
+ * Everything here is per user (ui-prefs), so it follows you across devices —
+ * purely visual choices (theme, sidebar) live in Appearance instead.
+ */
+function PreferencesPanel() {
 	const [sendKey, setSendKey] = useState<SendKeyPref>(getSendKeyPref);
 	const [busySend, setBusySend] = useState<BusySendPrefs>(getBusySendPrefs);
 	const [vimMode, setVimMode] = useState<boolean>(getVimModePref);
@@ -2627,6 +2630,12 @@ function ComposerPanel() {
 		() => onDefaultModelPrefChanged(() => setModelPref(getDefaultModelPref())),
 		[],
 	);
+	const [turnActivity, setTurnActivity] =
+		useState<TurnActivityPref>(getTurnActivityPref);
+	useEffect(
+		() => onTurnActivityChanged(() => setTurnActivity(getTurnActivityPref())),
+		[],
+	);
 	useEffect(() => {
 		fetchModels()
 			.then((m) => setModelOptions(m.models))
@@ -2636,8 +2645,8 @@ function ComposerPanel() {
 	return (
 		<SettingsPanel>
 			<SettingsHeader
-				title="Composer"
-				description="How you talk to a session — how the message box behaves, voice, and the standing instructions every session you start begins with. All of it follows your account, so it's the same on every device you sign in from."
+				title="Preferences"
+				description="How you work with a session — how the message box behaves, how much of a turn's work the transcript shows, voice, and the standing instructions every session you start begins with. All of it follows your account, so it's the same on every device you sign in from."
 			/>
 			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
@@ -2757,6 +2766,27 @@ function ComposerPanel() {
 					}
 				/>
 			</SettingCard>
+
+			<SettingsGroupLabel>Transcript</SettingsGroupLabel>
+			<SettingCard>
+				<SettingRow
+					title="Tool calls & messages"
+					desc="How each turn's working — tool calls and in-between messages — folds in the session. Work stays folded by default; expanding a turn does not open its individual tool inputs."
+					control={
+						<Select
+							label="Tool calls & messages"
+							value={turnActivity}
+							options={[
+								{ value: "collapsed", label: "Always folded" },
+								{ value: "auto", label: "Expand while running" },
+								{ value: "expanded", label: "Always expanded" },
+							]}
+							onChange={setTurnActivityPref}
+						/>
+					}
+				/>
+			</SettingCard>
+
 			<DeskVoicePanel />
 			<PersonalPromptPanel />
 		</SettingsPanel>
@@ -2822,18 +2852,12 @@ function AppearancePanel() {
 			),
 		[],
 	);
-	const [turnActivity, setTurnActivity] =
-		useState<TurnActivityPref>(getTurnActivityPref);
-	useEffect(
-		() => onTurnActivityChanged(() => setTurnActivity(getTurnActivityPref())),
-		[],
-	);
 
 	return (
 		<SettingsPanel>
 			<SettingsHeader
 				title="Appearance"
-				description="How this app looks, and what the sidebar shows. Theme and the tool toggles are per browser; sidebar order, feeds and transcript density follow your account everywhere."
+				description="How this app looks, and what the sidebar shows. Theme and the tool toggles are per browser; sidebar order and feeds follow your account everywhere."
 			/>
 			<SettingsGroupLabel>Theme</SettingsGroupLabel>
 			<SettingsSection>
@@ -2856,28 +2880,6 @@ function AppearancePanel() {
 						: `Always ${pref} mode.`}
 				</div>
 			</SettingsSection>
-
-			<SettingsGroupLabel>
-				Session
-			</SettingsGroupLabel>
-			<SettingCard>
-				<SettingRow
-					title="Tool calls & messages"
-					desc="How each turn's working — tool calls and in-between messages — folds in the session. Work stays folded by default; expanding a turn does not open its individual tool inputs."
-					control={
-						<Select
-							label="Tool calls & messages"
-							value={turnActivity}
-							options={[
-								{ value: "collapsed", label: "Always folded" },
-								{ value: "auto", label: "Expand while running" },
-								{ value: "expanded", label: "Always expanded" },
-							]}
-							onChange={setTurnActivityPref}
-						/>
-					}
-				/>
-			</SettingCard>
 
 			<SettingsGroupLabel>
 				Sidebar
