@@ -51,6 +51,9 @@ export interface PrHostCapabilities {
 	reviewComments: boolean;
 	prCreate: boolean;
 	images: boolean;
+	/** Git notes on commits (surfaced in the commits tab). code.storage only —
+	 *  GitHub has no notes API, so its commit entries never carry them. */
+	commitNotes: boolean;
 }
 
 /** One row of the bulk `gh pr list` refresh (sessions.ts). `latestReviews`
@@ -189,6 +192,7 @@ export const githubPrHost: PrHost = {
 		reviewComments: true,
 		prCreate: true,
 		images: true,
+		commitNotes: false,
 	},
 
 	getPrDetails: (branch, repo) => getPrDetails(branch, repo),
@@ -292,17 +296,20 @@ export const githubPrHost: PrHost = {
 };
 
 /** code.storage: no CI, no reviewer accounts, no viewed state, no stacks, no
- *  review-comment threads, no image-blob API — but "PRs" (branch-vs-default
- *  reviews) can be created. Shared with the csPrHost implementation so the
- *  lazy dispatch below can answer capabilities without loading it. */
+ *  image-blob API — but "PRs" (branch-vs-default reviews) can be created, and
+ *  review comments work, backed by git notes on the branch's commits
+ *  (codestorage/pr-host.ts), as do commit-note annotations. Shared with the
+ *  csPrHost implementation so the lazy dispatch below can answer capabilities
+ *  without loading it. */
 export const CODESTORAGE_CAPABILITIES: PrHostCapabilities = {
 	checks: false,
 	reviewers: false,
 	viewedState: false,
 	stacks: false,
-	reviewComments: false,
+	reviewComments: true,
 	prCreate: true,
 	images: false,
+	commitNotes: true,
 };
 
 // The code.storage host loads lazily: GitHub-only instances never import it,

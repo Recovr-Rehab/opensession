@@ -1356,7 +1356,7 @@ export function PrPanel({
                   deployments={checkSummary.deployments}
                 />
               ) : diffView === "commits" ? (
-                <CommitsView commits={pr.commits || []} />
+                <CommitsView commits={pr.commits || []} showNotes={caps.commitNotes} />
               ) : diffView === "conversation" ? (
                 <ConversationView
                   author={pr.author}
@@ -2183,7 +2183,15 @@ function ChecksView({
   );
 }
 
-function CommitsView({ commits }: { commits: PrCommit[] }) {
+function CommitsView({
+  commits,
+  showNotes,
+}: {
+  commits: PrCommit[];
+  /** capabilities.commitNotes — git-notes annotations exist on this host
+   *  (code.storage). GitHub payloads never carry notes and never set this. */
+  showNotes?: boolean;
+}) {
   return (
     <div className="mx-auto max-w-[760px]">
       <div className="mb-6">
@@ -2219,6 +2227,19 @@ function CommitsView({ commits }: { commits: PrCommit[] }) {
                   {commit.author}
                   {commit.authoredDate ? ` committed ${new Date(commit.authoredDate).toLocaleString()}` : ""}
                 </div>
+                {showNotes && !!commit.notes?.length && (
+                  <div className="mt-2 grid gap-1.5">
+                    {commit.notes.map((note) => (
+                      <div
+                        className="rounded-sm border border-line bg-surface px-2.5 py-1.5 text-meta leading-relaxed text-dim"
+                        key={note.ref}
+                      >
+                        <span className="mr-1.5 font-medium text-faint">{note.ref}</span>
+                        <span className="whitespace-pre-wrap">{note.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <code className="shrink-0 rounded-sm border border-line bg-surface px-2 py-1 text-meta text-dim">
                 {commit.oid.slice(0, 7)}

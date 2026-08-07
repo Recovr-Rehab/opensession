@@ -67,6 +67,10 @@ const ALL_CAPABILITIES: PrHostCapabilities = {
 	reviewComments: true,
 	prCreate: true,
 	images: true,
+	// Off in the fallback: absent capabilities means GitHub, which has no
+	// commit-notes concept — only a payload that explicitly says "yes"
+	// (code.storage) turns the annotation block on.
+	commitNotes: false,
 };
 
 /**

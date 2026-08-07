@@ -42,7 +42,15 @@ type Query = Record<string, string | number | boolean | string[] | undefined>;
 
 async function csFetch(
   path: string,
-  opts: { scopes: CsScope[]; repo?: string; method?: string; query?: Query; body?: unknown },
+  opts: {
+    scopes: CsScope[];
+    repo?: string;
+    method?: string;
+    query?: Query;
+    body?: unknown;
+    /** Return the 404 response instead of throwing (absence-is-an-answer reads). */
+    allow404?: boolean;
+  },
 ): Promise<Response> {
   const cfg = requireConfig();
   const url = new URL(cfg.apiBase + path);
@@ -61,6 +69,7 @@ async function csFetch(
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) {
+    if (opts.allow404 && res.status === 404) return res;
     // RFC 9457 problem details with a legacy `error` mirror of `detail`.
     let detail = "";
     try {
@@ -199,6 +208,35 @@ export interface CsCreatedRepo {
   repo_id: string;
   http_url: string;
   message: string;
+}
+
+/** A git note read back for one object (GET /repos/{repo}/notes). */
+export interface CsNote {
+  /** The commit (or other object) SHA the note is attached to. */
+  sha: string;
+  /** The note content. */
+  note: string;
+  /** Current SHA of the notes ref the note was read from. */
+  ref_sha: string;
+}
+
+/** Result of a notes write/delete, including the resulting notes-ref state. */
+export interface CsNoteWriteResult {
+  sha: string;
+  /** Canonical full ref, e.g. "refs/notes/reviews". */
+  target_ref: string;
+  new_ref_sha: string;
+  base_commit?: string;
+  result: { success: boolean; status: string; message?: string };
+}
+
+/** One notes ref under refs/notes/ (GET /repos/{repo}/notes/refs). */
+export interface CsNotesRef {
+  /** Full notes ref name, e.g. "refs/notes/reviews". */
+  ref: string;
+  /** Current tip SHA of the notes ref. */
+  sha: string;
+  cursor: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +446,102 @@ export async function getBranchDiff(
     query: { branch: head, base, path: opts?.paths },
   });
   return (await res.json()) as CsBranchDiff;
+}
+
+/**
+ * POST /repos/{repo}/notes (git:write) — create or append a git note on a
+ * commit. `add` fails if a note already exists on the ref; `append` extends
+ * it (and creates it when absent). A bare `ref` like "reviews" is namespaced
+ * under refs/notes/ by the service; omitted = refs/notes/commits.
+ */
+export async function writeNote(
+  repoId: string,
+  opts: {
+    sha: string;
+    note: string;
+    action?: "add" | "append";
+    ref?: string;
+    /** Signature for the notes commit. */
+    author?: { name: string; email: string };
+    /** Optional compare-and-swap guard on the notes ref. */
+    expectedRefSha?: string;
+  },
+): Promise<CsNoteWriteResult> {
+  const res = await csFetch(`${repoPath(repoId)}/notes`, {
+    scopes: ["git:write"],
+    repo: repoId,
+    method: "POST",
+    body: {
+      sha: opts.sha,
+      note: opts.note,
+      action: opts.action ?? "add",
+      ...(opts.ref ? { ref: opts.ref } : {}),
+      ...(opts.author ? { author: opts.author } : {}),
+      ...(opts.expectedRefSha ? { expected_ref_sha: opts.expectedRefSha } : {}),
+    },
+  });
+  return (await res.json()) as CsNoteWriteResult;
+}
+
+/** GET /repos/{repo}/notes (git:read). null when the object has no note on
+ *  the ref (404 — absence is a normal answer, not a failure). */
+export async function getNote(
+  repoId: string,
+  sha: string,
+  ref?: string,
+): Promise<CsNote | null> {
+  const res = await csFetch(`${repoPath(repoId)}/notes`, {
+    scopes: ["git:read"],
+    repo: repoId,
+    query: { sha, ref },
+    allow404: true,
+  });
+  if (res.status === 404) return null;
+  return (await res.json()) as CsNote;
+}
+
+/** DELETE /repos/{repo}/notes (git:write) — remove the note on a ref. */
+export async function deleteNote(
+  repoId: string,
+  sha: string,
+  opts?: { ref?: string; author?: { name: string; email: string } },
+): Promise<CsNoteWriteResult> {
+  const res = await csFetch(`${repoPath(repoId)}/notes`, {
+    scopes: ["git:write"],
+    repo: repoId,
+    method: "DELETE",
+    body: {
+      sha,
+      ...(opts?.ref ? { ref: opts.ref } : {}),
+      ...(opts?.author ? { author: opts.author } : {}),
+    },
+  });
+  return (await res.json()) as CsNoteWriteResult;
+}
+
+/** GET /repos/{repo}/notes/refs (git:read) — notes refs under a prefix
+ *  (default: everything under refs/notes/). Follows cursors. */
+export async function listNotesRefs(
+  repoId: string,
+  prefix?: string,
+): Promise<CsNotesRef[]> {
+  const refs: CsNotesRef[] = [];
+  let cursor: string | undefined;
+  do {
+    const res = await csFetch(`${repoPath(repoId)}/notes/refs`, {
+      scopes: ["git:read"],
+      repo: repoId,
+      query: { prefix, cursor, limit: 100 },
+    });
+    const page = (await res.json()) as {
+      refs: CsNotesRef[];
+      has_more: boolean;
+      next_cursor?: string;
+    };
+    refs.push(...page.refs);
+    cursor = page.has_more ? page.next_cursor : undefined;
+  } while (cursor);
+  return refs;
 }
 
 /** GET /repos/{repo}/file (git:read). Returns the blob as UTF-8 text. */

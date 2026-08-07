@@ -8,16 +8,24 @@
  * PR identity: DTOs key on a numeric PR number, so each branch gets a stable
  * synthetic one — 32-bit FNV-1a of the branch name, masked positive — and the
  * number↔branch mapping is re-derived from the live branch list, never
- * persisted. Comments/reviews/reviewers/checks/stacks don't exist on the
- * host; those methods answer a clear unsupported error and the capability
- * flags (CODESTORAGE_CAPABILITIES) let the UI hide the surfaces.
+ * persisted.
+ *
+ * Comments and reviews have no host concept either, so they're backed by git
+ * notes on a dedicated ref (COMMENTS_REF): each comment is one JSON line
+ * appended to the note on the branch's tip commit at post time, and details
+ * reads aggregate the notes across the branch's commits back into the flat
+ * PrComment conversation. A review is just a comment with a verdict prefix.
+ * Reviewer lists/checks/stacks stay unsupported: those methods answer a clear
+ * error and the capability flags (CODESTORAGE_CAPABILITIES) hide the surfaces.
  */
 import { audited } from "../audit";
 import { codeStorageConfig, personaName } from "../config";
 import type { GithubCredential } from "../github-auth";
 import type {
 	MutationPrMeta,
+	PrComment,
 	PrCommit,
+	PrCommitNote,
 	PrDetails,
 	PrDiffData,
 	PrFile,
@@ -27,11 +35,14 @@ import {
 	deleteBranch,
 	getBranchDiff,
 	getCommit,
+	getNote,
 	getRepo as getCsRepo,
 	listBranches,
 	listCommits,
+	listNotesRefs,
 	mergeBranch,
 	previewMerge,
+	writeNote,
 	type CsBranch,
 	type CsBranchDiff,
 	type CsCommit,
@@ -112,11 +123,40 @@ async function findBranch(repoId: string, branch: string): Promise<CsBranch | nu
 	return branches.find((b) => b.name === branch) ?? null;
 }
 
+/** The branch's current tip SHA; null when the branch doesn't exist (or the
+ *  default branch — never a PR). Mutation preflight for the comment paths. */
+async function branchTipSha(repoId: string, branch: string): Promise<string | null> {
+	if (branch === (await defaultBranchOf(repoId))) return null;
+	const head = await findBranch(repoId, branch);
+	if (!head) return null;
+	if (head.head_sha) return head.head_sha;
+	const tip = await getCommit(repoId, branch).catch(() => null);
+	return tip?.sha || null;
+}
+
+// Which notes namespaces exist at all (one refs-list call per repo per TTL):
+// most repos have none, and this collapses the per-commit note fetches below
+// to zero requests in that common case. Best-effort — a failed listing reads
+// as "no notes" until the next refresh.
+const notesRefsCache = new Map<string, { refs: Set<string>; ts: number }>();
+async function existingNotesRefs(repoId: string): Promise<Set<string>> {
+	const hit = notesRefsCache.get(repoId);
+	if (hit && Date.now() - hit.ts < TTL) return hit.refs;
+	const refs = new Set(
+		(await listNotesRefs(repoId).catch(() => [])).map((r) =>
+			r.ref.replace(/^refs\/notes\//, ""),
+		),
+	);
+	notesRefsCache.set(repoId, { refs, ts: Date.now() });
+	return refs;
+}
+
 function invalidate(repoId: string, branch: string): void {
 	const key = cacheKey(repoId, branch);
 	detailsCache.delete(key);
 	diffCache.delete(key);
 	branchesCache.delete(repoId);
+	notesRefsCache.delete(repoId);
 }
 
 // ── Shaping helpers ──────────────────────────────────────────────────────────
@@ -185,12 +225,133 @@ async function mapLimit<T, R>(
 	return out;
 }
 
-// The merge API requires an author for merge-commit strategies; code.storage
-// has no user accounts, so it's derived from the acting credential's principal.
+// code.storage has no user accounts — the acting identity is the credential's
+// principal (or the instance persona), used as comment author and, slugged
+// into a noreply address, as the author the merge/notes APIs require.
+function actingPrincipal(credential?: GithubCredential): string {
+	return credential?.principal?.replace(/^user:/, "") || personaName();
+}
+
 function mergeAuthor(credential?: GithubCredential): { name: string; email: string } {
-	const name = credential?.principal?.replace(/^user:/, "") || personaName();
+	const name = actingPrincipal(credential);
 	const slug = name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-") || "opensession";
 	return { name, email: `${slug}@noreply.code.storage` };
+}
+
+/** A branch whose tip IS the merge base is fully contained in the default
+ *  branch — merged (fast-forward or via merge commit), nothing ahead. */
+function isMergedBranch(headSha: string | undefined, diff: CsBranchDiff): boolean {
+	return !!headSha && diff.merge_base_sha === headSha;
+}
+
+// ── Notes-backed comments ────────────────────────────────────────────────────
+
+/** The dedicated notes ref review comments live in. Each comment is one JSON
+ *  line (CsCommentLine) appended to the note on the branch tip at post time. */
+const COMMENTS_REF = "opensession-comments";
+
+/** Note namespaces surfaced as commit annotations in the commits tab. The
+ *  comments ref is deliberately not one of them — those render as the
+ *  conversation, not as raw notes. */
+const COMMIT_NOTE_REFS = ["commits", "reviews", "ci"];
+
+interface CsCommentLine {
+	id: string;
+	/** Acting credential principal at post time. */
+	author: string;
+	body: string;
+	createdAt: string;
+	/** File anchor for inline review comments (threading is flat). */
+	path?: string;
+	line?: number;
+}
+
+/** Append comments to the note on a commit — one JSON line each, framed with
+ *  newlines on both sides so successive appends stay one-per-line whatever
+ *  separator (if any) the server inserts between note bodies. `append`
+ *  creates the note when absent. */
+function appendComments(
+	repoId: string,
+	sha: string,
+	comments: CsCommentLine[],
+	credential?: GithubCredential,
+): Promise<unknown> {
+	return writeNote(repoId, {
+		sha,
+		note: `\n${comments.map((comment) => JSON.stringify(comment)).join("\n")}\n`,
+		action: "append",
+		ref: COMMENTS_REF,
+		author: mergeAuthor(credential),
+	});
+}
+
+function parseCommentLines(note: string): CsCommentLine[] {
+	const out: CsCommentLine[] = [];
+	for (const raw of note.split("\n")) {
+		const line = raw.trim();
+		if (!line.startsWith("{")) continue;
+		try {
+			const parsed = JSON.parse(line) as CsCommentLine;
+			if (parsed && typeof parsed.body === "string") out.push(parsed);
+		} catch {}
+	}
+	return out;
+}
+
+/** Flatten a stored comment into the PrComment conversation shape. Inline
+ *  comments keep their anchor as a `path:line` prefix (threads stay flat). */
+function toStoredComment(comment: CsCommentLine): PrComment {
+	const anchor = comment.path
+		? `\`${comment.path}${comment.line ? `:${comment.line}` : ""}\` — `
+		: "";
+	return {
+		author: comment.author || "",
+		body: anchor + comment.body,
+		createdAt: comment.createdAt || undefined,
+	};
+}
+
+/**
+ * The branch's conversation: comment notes aggregated across its commits
+ * (each was appended to whatever the tip was at post time), oldest first.
+ * Best-effort per commit — a missing note (404 → null) or failed read is
+ * simply "no comments there".
+ */
+async function commentsFor(repoId: string, shas: string[]): Promise<PrComment[]> {
+	if (!shas.length || !(await existingNotesRefs(repoId)).has(COMMENTS_REF)) return [];
+	const notes = await mapLimit(shas, 4, (sha) =>
+		getNote(repoId, sha, COMMENTS_REF).catch(() => null),
+	);
+	const lines = notes.flatMap((note) => (note ? parseCommentLines(note.note) : []));
+	lines.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+	return lines.map(toStoredComment);
+}
+
+/** Commit annotations for the commits tab: notes in the common namespaces,
+ *  fetched per displayed commit (concurrency-capped, best-effort — failures
+ *  read as no note, so the field just stays absent). */
+async function commitNotesFor(
+	repoId: string,
+	shas: string[],
+): Promise<Map<string, PrCommitNote[]>> {
+	const out = new Map<string, PrCommitNote[]>();
+	const existing = await existingNotesRefs(repoId);
+	const refs = COMMIT_NOTE_REFS.filter((ref) => existing.has(ref));
+	if (!shas.length || !refs.length) return out;
+	const jobs = shas.flatMap((sha) => refs.map((ref) => ({ sha, ref })));
+	const notes = await mapLimit(jobs, 6, async ({ sha, ref }) => ({
+		sha,
+		ref,
+		note: await getNote(repoId, sha, ref).catch(() => null),
+	}));
+	for (const { sha, ref, note } of notes) {
+		const text = note?.note.trim();
+		if (!text) continue;
+		const list = out.get(sha) ?? [];
+		list.push({ ref, text });
+		out.set(sha, list);
+	}
+	return out;
 }
 
 // ── The branch → PR-shape reads ──────────────────────────────────────────────
@@ -209,13 +370,29 @@ async function fetchDetails(branch: string, repoId: string): Promise<PrDetails |
 		(head.head_sha
 			? await getCommit(repoId, head.head_sha).catch(() => null)
 			: null);
+	// A tip contained in the default branch = the change landed. The host keeps
+	// no merged/closed distinction (a deleted branch is simply gone), so a
+	// surviving fully-merged branch honestly reads MERGED, not OPEN.
+	const merged = isMergedBranch(head.head_sha, diff);
 	// Conflict probe — best-effort: an UNKNOWN answer just defers to the merge.
 	let mergeable = "UNKNOWN";
-	try {
-		const preview = await previewMerge(repoId, branch, base);
-		if (preview.status === "clean") mergeable = "MERGEABLE";
-		else if (preview.status === "conflicted") mergeable = "CONFLICTING";
-	} catch {}
+	if (!merged)
+		try {
+			const preview = await previewMerge(repoId, branch, base);
+			if (preview.status === "clean") mergeable = "MERGEABLE";
+			else if (preview.status === "conflicted") mergeable = "CONFLICTING";
+		} catch {}
+
+	// Notes reads: the conversation aggregates comment notes across the
+	// branch's commits (each was posted onto the then-current tip — for a
+	// merged branch that tip is the merge base, outside `commits`), and the
+	// commits tab gets per-commit annotations from the common namespaces.
+	const noteShas = commits.map((commit) => commit.sha);
+	if (head.head_sha && !noteShas.includes(head.head_sha)) noteShas.push(head.head_sha);
+	const [comments, commitNotes] = await Promise.all([
+		commentsFor(repoId, noteShas),
+		commitNotesFor(repoId, commits.map((commit) => commit.sha)),
+	]);
 
 	const { headline, body } = splitMessage(tip?.message);
 	const files = buildFiles(diff);
@@ -223,7 +400,7 @@ async function fetchDetails(branch: string, repoId: string): Promise<PrDetails |
 		number: csPrNumber(branch),
 		title: headline || branch,
 		url: csUrl(repoId),
-		state: "OPEN",
+		state: merged ? "MERGED" : "OPEN",
 		isDraft: false,
 		baseRefName: base,
 		headRefName: branch,
@@ -235,8 +412,12 @@ async function fetchDetails(branch: string, repoId: string): Promise<PrDetails |
 		author: tip?.author_name || "",
 		body,
 		checks: [],
-		comments: [],
-		commits: [...commits].reverse().map(toPrCommit), // oldest first, like gh
+		comments,
+		// Oldest first, like gh; notes attach only where a namespace has one.
+		commits: [...commits].reverse().map((commit) => {
+			const notes = commitNotes.get(commit.sha);
+			return notes?.length ? { ...toPrCommit(commit), notes } : toPrCommit(commit);
+		}),
 		files,
 		reviewers: [],
 		mergeable,
@@ -345,8 +526,97 @@ export const csPrHost: PrHost = {
 		};
 	},
 
-	postPrComment: async () => unsupported("Commenting"),
-	submitPrReview: async () => unsupported("Submitting a review"),
+	// One comment = one JSON line appended to the note on the current branch
+	// tip. Inline anchors (path/line) are carried in the line; the flat
+	// conversation renders them as a prefix.
+	async postPrComment(branch, input, repo, credential) {
+		try {
+			const tipSha = await branchTipSha(repo, branch);
+			if (!tipSha) return { error: "No PR found for this branch" };
+			await appendComments(
+				repo,
+				tipSha,
+				[
+					{
+						id: crypto.randomUUID(),
+						author: actingPrincipal(credential),
+						body: input.body,
+						createdAt: new Date().toISOString(),
+						...(input.path ? { path: input.path } : {}),
+						...(input.line ? { line: input.line } : {}),
+					},
+				],
+				credential,
+			);
+			invalidate(repo, branch);
+			return { ok: true, url: csUrl(repo) };
+		} catch (e) {
+			return { error: errorMessage(e).slice(0, 300) };
+		}
+	},
+
+	// A review is stored the same way: the summary becomes a comment with a
+	// verdict prefix (APPROVE/REQUEST_CHANGES), each inline comment its own
+	// line. Nothing on the host tracks approval state — the verdict is purely
+	// conversational. Audited like the GitHub review path.
+	async submitPrReview(branch, input, repo, credential) {
+		try {
+			if (!input.comments.length && !input.body?.trim()) {
+				return { error: "Nothing to submit" };
+			}
+			const tipSha = await branchTipSha(repo, branch);
+			if (!tipSha) return { error: "No PR found for this branch" };
+			const author = actingPrincipal(credential);
+			const createdAt = new Date().toISOString();
+			const lines: CsCommentLine[] = [];
+			const summary = input.body?.trim() || "";
+			const verdict = input.event === "COMMENT" ? "" : input.event;
+			if (verdict || summary) {
+				lines.push({
+					id: crypto.randomUUID(),
+					author,
+					body: verdict ? (summary ? `${verdict}: ${summary}` : verdict) : summary,
+					createdAt,
+				});
+			}
+			for (const comment of input.comments) {
+				lines.push({
+					id: crypto.randomUUID(),
+					author,
+					body: comment.body,
+					createdAt,
+					path: comment.path,
+					line: comment.line,
+				});
+			}
+			return await audited(
+				{
+					context: "reviews",
+					action: "pr_review",
+					args: {
+						host: "codestorage",
+						branch,
+						number: csPrNumber(branch),
+						event: input.event,
+						comments: input.comments.length,
+						credential: credential?.principal,
+					},
+				},
+				async () => {
+					try {
+						await appendComments(repo, tipSha, lines, credential);
+					} catch (e) {
+						return { error: errorMessage(e).slice(0, 300) } as const;
+					}
+					invalidate(repo, branch);
+					return { ok: true, url: csUrl(repo) } as const;
+				},
+			);
+		} catch (e) {
+			return { error: errorMessage(e).slice(0, 300) };
+		}
+	},
+
 	editPrReviewers: async () => unsupported("Requesting reviewers"),
 	updatePrBody: async () => unsupported("Editing a PR description"),
 
@@ -463,7 +733,7 @@ export const csPrHost: PrHost = {
 					// cut) are not open changes: without this filter a merge whose
 					// branch deletion failed, or an externally merged branch, would
 					// re-list as an open PR forever.
-					if (b.head_sha && diff.merge_base_sha === b.head_sha) return null;
+					if (isMergedBranch(b.head_sha, diff)) return null;
 					if (!diff.files.length && !(diff.filtered_files?.length || 0)) return null;
 					const { headline, body } = splitMessage(tip?.message);
 					return {

@@ -533,19 +533,31 @@ export interface PrReviewer {
 	isTeam?: boolean;
 }
 
+/** A git note attached to a commit, labeled by its notes ref namespace. */
+export interface PrCommitNote {
+	/** Short ref name, e.g. "commits", "reviews", "ci". */
+	ref: string;
+	text: string;
+}
+
 export interface PrCommit {
 	oid: string;
 	messageHeadline: string;
 	messageBody?: string;
 	authoredDate?: string;
 	author: string;
+	/** Git notes on the commit — only hosts with `capabilities.commitNotes`
+	 *  (code.storage) populate this; GitHub commit entries never carry it. */
+	notes?: PrCommitNote[];
 }
 
 /**
  * What the PR's host supports (mirrors server/pr-host.ts). GitHub supports
- * everything; code.storage "PRs" are bare branches with no checks, reviewers,
- * review comments, viewed state, stacks, or avatar images. Absent on a payload
- * (GitHub, or a cache entry written before this field existed) means all true.
+ * everything except commit notes; code.storage "PRs" are bare branches with
+ * no checks, reviewers, viewed state, stacks, or avatar images — but with
+ * git-notes-backed review comments and commit notes. Absent on a payload
+ * (GitHub, or a cache entry written before this field existed) means the
+ * GitHub set.
  */
 export interface PrHostCapabilities {
 	checks: boolean;
@@ -555,6 +567,8 @@ export interface PrHostCapabilities {
 	reviewComments: boolean;
 	prCreate: boolean;
 	images: boolean;
+	/** Git notes shown under commits in the commits tab (code.storage only). */
+	commitNotes: boolean;
 }
 
 export interface PrDetails {

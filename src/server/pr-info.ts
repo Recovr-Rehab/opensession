@@ -71,12 +71,22 @@ export interface PrReviewer {
   isTeam?: boolean;
 }
 
+/** A git note attached to a commit, labeled by its notes ref namespace. */
+export interface PrCommitNote {
+  /** Short ref name, e.g. "commits", "reviews", "ci". */
+  ref: string;
+  text: string;
+}
+
 export interface PrCommit {
   oid: string;
   messageHeadline: string;
   messageBody?: string;
   authoredDate?: string;
   author: string;
+  /** Git notes on the commit in the common namespaces. Only populated by
+   *  hosts with `capabilities.commitNotes` (code.storage) — never GitHub. */
+  notes?: PrCommitNote[];
 }
 
 export interface PrDetails {

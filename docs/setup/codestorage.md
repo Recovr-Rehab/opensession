@@ -127,13 +127,22 @@ where PRs themselves are the feature:
   do). The source branch is always deleted after a successful merge — on this
   host the branch IS the change request, so a surviving branch would re-list
   as an open change.
+- **Review comments and reviews**, backed by git notes: each comment is one
+  JSON line appended to a note on the branch's tip commit (dedicated
+  `opensession-comments` notes ref), and the conversation aggregates those
+  notes across the branch's commits. A review is a comment with a verdict
+  prefix (`APPROVE`/`REQUEST_CHANGES`) — purely conversational, nothing on
+  the host gates merges on it. Inline comments keep their `path:line` anchor
+  as a prefix; threading is flat.
+- **Notes on commits**: the review UI's commits tab shows git notes from the
+  common namespaces (`commits`, `reviews`, `ci`) under each commit.
 - Agent prompts adapt: sessions are told to push their branch — "a pushed
   branch IS the change request" — instead of `gh pr create`.
 
 Not supported, because the concepts don't exist upstream (no PR model):
 
 - Checks/CI status — code.storage runs no checks.
-- Requested reviewers, approvals, review threads.
+- Requested reviewers / reviewer lists; approvals never gate a merge.
 - Per-file viewed state tied to a PR.
 - Stacked PRs / `gh stack`.
 - The `gh` CLI in general — it only speaks GitHub.
@@ -205,7 +214,8 @@ Notes:
 
 - `src/server/codestorage/auth.ts` — JWT minting (WebCrypto), remote URLs.
 - `src/server/codestorage/client.ts` — REST client: repos, branches, merge +
-  preview, commits, diffs (branch diff = the PR-diff equivalent), files.
+  preview, commits, diffs (branch diff = the PR-diff equivalent), files, git
+  notes (write/read/delete/list-refs).
 - `src/server/codestorage/remote.ts` — `parseCsRemote` (incl. `+ephemeral`
   remotes), per-checkout
   credential-helper wiring (URL-scoped, never touches github.com flows),
