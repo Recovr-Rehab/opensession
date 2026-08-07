@@ -208,9 +208,20 @@ struct ToolCallRow: View {
                     }
                 }
                 if !item.mediaSources.isEmpty {
+                    let gallery = item.mediaSources.enumerated().map { index, source in
+                        PreviewImage(
+                            id: "\(index)",
+                            source: .conversation(source: source, sessionId: sessionId)
+                        )
+                    }
                     HStack(spacing: 6) {
-                        ForEach(Array(item.mediaSources.enumerated()), id: \.offset) { _, source in
-                            ConversationImage(source: source, sessionId: sessionId)
+                        ForEach(Array(item.mediaSources.enumerated()), id: \.offset) { index, source in
+                            ConversationImage(
+                                source: source,
+                                sessionId: sessionId,
+                                gallery: gallery,
+                                galleryIndex: index
+                            )
                                 .frame(width: 120, height: 120)
                                 .clipShape(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)

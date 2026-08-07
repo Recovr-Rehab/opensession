@@ -27,7 +27,7 @@ struct WalkthroughCard: View {
                 MarkdownBody(walkthrough.summary)
             }
             ForEach(walkthrough.stills) { shot in
-                WalkthroughShotView(shot: shot)
+                WalkthroughShotView(shot: shot, gallery: gallery)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -40,6 +40,25 @@ struct WalkthroughCard: View {
         // It ends in media where its neighbours end in text, so it needs more
         // room after it than between ordinary blocks.
         .padding(.bottom, 6)
+    }
+
+    /// Every still in the card, in reading order, so opening one pages
+    /// before → after → the next pair. Comparing the two is the whole point of
+    /// a walkthrough, and a viewer that shows one picture makes you close it to
+    /// see the other.
+    private var gallery: [PreviewImage] {
+        walkthrough.stills.flatMap { shot in
+            [("Before", shot.before), ("After", shot.after)].compactMap { side, path in
+                guard let path else { return nil }
+                return PreviewImage(
+                    id: path,
+                    source: .media(path: path),
+                    label: [shot.caption, side]
+                        .compactMap { $0?.isEmpty == false ? $0 : nil }
+                        .joined(separator: " — ")
+                )
+            }
+        }
     }
 
     private var header: some View {
@@ -89,6 +108,8 @@ private struct WalkthroughVideo: View {
 /// two half-width screenshots are too small to show what changed.
 private struct WalkthroughShotView: View {
     let shot: WalkthroughShot
+    /// All the card's stills; each still finds itself in it by path.
+    let gallery: [PreviewImage]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -111,7 +132,11 @@ private struct WalkthroughShotView: View {
             Text(label)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(OS1VisualStyle.textFaint)
-            MediaImage(path: path)
+            MediaImage(
+                path: path,
+                gallery: gallery,
+                galleryIndex: gallery.firstIndex { $0.id == path } ?? 0
+            )
         }
     }
 }
@@ -120,6 +145,8 @@ private struct WalkthroughShotView: View {
 /// the same full-screen viewer transcript images use.
 private struct MediaImage: View {
     let path: String
+    var gallery: [PreviewImage] = []
+    var galleryIndex: Int = 0
 
     @State private var data: Data?
     /// The still's own aspect ratio. `DataImage` renders `scaledToFill`, which
@@ -133,7 +160,7 @@ private struct MediaImage: View {
     var body: some View {
         Group {
             if let data {
-                ExpandableDataImage(data: data)
+                ExpandableDataImage(data: data, gallery: gallery, galleryIndex: galleryIndex)
                     .aspectRatio(ratio ?? 16 / 9, contentMode: .fit)
                     // A tall screenshot would otherwise take the whole screen
                     // and bury the rest of the walkthrough under it.

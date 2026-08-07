@@ -169,6 +169,10 @@ export function openGalleryFrom(el: Element) {
 	const items: LightboxItem[] = nodes.map((n) => ({
 		kind: n.tagName === "VIDEO" ? "video" : "image",
 		src: (n as HTMLImageElement | HTMLVideoElement).src,
+		// Markdown alt text is the only description these carry; captioning the
+		// viewer with it beats a bare counter once you are paging through a
+		// dozen screenshots.
+		sessionTitle: (n as HTMLImageElement).alt?.trim() || undefined,
 	}));
 	if (items.length === 0) return;
 	openLightbox(items, Math.max(0, nodes.indexOf(el)), el);
@@ -421,21 +425,35 @@ const DOUBLE_TAP_SCALE = 2.5;
  * are written straight to the img style (no per-move re-render). A clean tap
  * on the backdrop area of the wrapper closes — unless it's the first half of a
  * double-tap on the image, which zooms instead.
+ *
+ * At the fit scale a horizontal drag pages to the neighbouring item instead:
+ * the picture follows the finger and either carries on to the next one or
+ * springs back, which is how every photo viewer on a phone behaves. It only
+ * arms once the drag is decidedly horizontal, so a pinch or a vertical flick
+ * never steals a page turn, and zoomed in the same drag pans the photo.
  */
 function ZoomableImage({
 	src,
 	onTapBackdrop,
 	onZoomChange,
+	onSwipe,
+	enterFrom = 0,
 	viewTransitionName,
 }: {
 	src: string;
 	onTapBackdrop: () => void;
 	onZoomChange: (zoomed: boolean) => void;
+	/** Page to the previous (-1) / next (+1) item; absent when there is one. */
+	onSwipe?: (direction: -1 | 1) => void;
+	/** Direction the previous item left in, so this one enters from the far
+	 * side; 0 for the first item shown. */
+	enterFrom?: -1 | 0 | 1;
 	viewTransitionName?: string;
 }) {
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement>(null);
 	const t = useRef({ s: 1, tx: 0, ty: 0 });
+	const swipeX = useRef(0);
 	const pointers = useRef(new Map<number, { x: number; y: number }>());
 	const gesture = useRef<{
 		moved: boolean;
@@ -446,6 +464,8 @@ function ZoomableImage({
 		d0: number;
 		m0: { x: number; y: number };
 		pinched: boolean;
+		/** null while the drag's intent is still undecided. */
+		swiping: boolean | null;
 	} | null>(null);
 	const lastTap = useRef<{ at: number; x: number; y: number } | null>(null);
 	const [zoomed, setZoomed] = useState(false);
@@ -464,6 +484,33 @@ function ZoomableImage({
 			onZoomChange(nextZoomed);
 		}
 	}
+
+	/** The page-drag offset, written to the wrapper so it composes with the
+	 * img's own zoom transform instead of fighting it. */
+	function applySwipe(dx: number, animate = false) {
+		swipeX.current = dx;
+		const wrap = wrapRef.current;
+		if (!wrap) return;
+		wrap.style.transition = animate
+			? "transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.24s ease-out"
+			: "none";
+		wrap.style.transform = dx ? `translateX(${dx}px)` : "";
+		// A touch of fade sells the hand-off; the picture stays legible enough
+		// to see what you are dragging towards.
+		wrap.style.opacity = dx ? String(1 - Math.min(Math.abs(dx) / 900, 0.3)) : "1";
+	}
+
+	// The item is keyed by src, so a page turn mounts a fresh surface: slide it
+	// in from the side the drag was heading, which is the only cue that the
+	// picture changed rather than reloaded.
+	useEffect(() => {
+		const wrap = wrapRef.current;
+		if (!enterFrom || !wrap) return;
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+		applySwipe(enterFrom * Math.min(140, window.innerWidth * 0.25));
+		const frame = requestAnimationFrame(() => applySwipe(0, true));
+		return () => cancelAnimationFrame(frame);
+	}, [enterFrom, src]);
 
 	/** The img's layout (untransformed) viewport rect — transform-origin is 0 0,
 	 * so the rendered top-left is layout top-left + current translation. */
@@ -533,7 +580,10 @@ function ZoomableImage({
 				d0: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
 				m0: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 },
 				pinched: true,
+				swiping: false,
 			};
+			// A second finger means this was never a page turn.
+			if (swipeX.current) applySwipe(0, true);
 		} else if (pts.length === 1) {
 			gesture.current = {
 				moved: false,
@@ -544,6 +594,7 @@ function ZoomableImage({
 				d0: 0,
 				m0: pts[0],
 				pinched: false,
+				swiping: null,
 			};
 		}
 	}
@@ -573,6 +624,15 @@ function ZoomableImage({
 			if (t.current.s > 1 && !g.pinched) {
 				t.current = clamp({ s: g.t0.s, tx: g.t0.tx + dx, ty: g.t0.ty + dy });
 				apply();
+			} else if (onSwipe && !g.pinched && t.current.s === 1) {
+				// Decide once, at the threshold: a drag that starts out mostly
+				// sideways pages, anything else is left alone (a vertical flick
+				// on the backdrop, a hesitant press) so the intent can't flip
+				// mid-gesture.
+				if (g.swiping === null && Math.hypot(dx, dy) > 8) {
+					g.swiping = Math.abs(dx) > Math.abs(dy) * 1.2;
+				}
+				if (g.swiping) applySwipe(dx);
 			}
 		}
 	}
@@ -593,6 +653,23 @@ function ZoomableImage({
 			return;
 		}
 		if (remaining.length > 0) return;
+		// A page drag resolves on its own terms: past a fifth of the screen, or
+		// a flick of any size, hands over to the neighbouring item — otherwise
+		// the picture slides back and nothing changed.
+		if (g.swiping) {
+			const dx = p.x - g.p0.x;
+			const speed = Math.abs(dx) / Math.max(1, performance.now() - g.downAt);
+			gesture.current = null;
+			if (
+				Math.abs(dx) > Math.min(120, window.innerWidth * 0.2) ||
+				(speed > 0.45 && Math.abs(dx) > 24)
+			) {
+				onSwipe?.(dx < 0 ? 1 : -1);
+			} else {
+				applySwipe(0, true);
+			}
+			return;
+		}
 		// Last pointer up — settle back inside bounds (animated) and check taps.
 		if (t.current.s <= 1.05) {
 			t.current = { s: 1, tx: 0, ty: 0 };
@@ -681,15 +758,21 @@ function MediaLightbox({
 	const item = items[index];
 	const many = items.length > 1;
 	const [imageZoomed, setImageZoomed] = useState(false);
+	// Which way the last page turn went, so the arriving item slides in from
+	// the side it came from — set by the arrows and the keyboard too, not just
+	// by the drag, so every route through the gallery reads the same.
+	const [direction, setDirection] = useState<-1 | 0 | 1>(0);
 	const dialogRef = useRef<HTMLDivElement>(null);
 	const closeRef = useRef<HTMLButtonElement>(null);
 	const reduceMotion = useReducedMotion();
 	const prev = () => {
 		setImageZoomed(false);
+		setDirection(-1);
 		onIndex((index - 1 + items.length) % items.length);
 	};
 	const next = () => {
 		setImageZoomed(false);
+		setDirection(1);
 		onIndex((index + 1) % items.length);
 	};
 	const requestClose = () => onClose(!imageZoomed);
@@ -834,6 +917,8 @@ function MediaLightbox({
 							src={item.src}
 							onTapBackdrop={requestClose}
 							onZoomChange={setImageZoomed}
+							onSwipe={many ? (d) => (d === 1 ? next() : prev()) : undefined}
+							enterFrom={direction}
 							viewTransitionName={heroTransitionName}
 						/>
 					) : (
@@ -862,35 +947,45 @@ function MediaLightbox({
 				)}
 			</div>
 
+			{/* What you are looking at gets its own line directly under the
+			    picture, in plain white — sharing one row with the actions is how
+			    a "Before"/"After" label ends up read as another link. The scrim
+			    keeps it legible when a zoomed photo spreads underneath. */}
 			<div
-				className="z-10 flex items-center justify-center gap-3 px-4 pb-4 pt-1 text-xs text-white/70"
+				className="z-10 flex flex-col items-center gap-1 bg-gradient-to-t from-black/75 to-transparent px-4 pb-4 pt-4"
 				onMouseDown={(e) => {
 					if (e.target === e.currentTarget) requestClose();
 				}}
 			>
-				{many && (
-					<span className="tabular-nums">
-						{index + 1} / {items.length}
-					</span>
+				{caption && (
+					<div className="max-w-full truncate text-center text-sm font-medium text-white">
+						{caption}
+					</div>
 				)}
-				{caption && <span className="min-w-0 truncate">{caption}</span>}
-				<button
-					type="button"
-					onClick={() => void downloadItem(item)}
-					className="shrink-0 cursor-pointer border-0 bg-transparent p-0 text-xs text-white/70 hover:text-white hover:underline"
-				>
-					Download
-				</button>
-				{!item.src.startsWith("data:") && (
-					<a
-						href={item.src}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="shrink-0 text-white/70 hover:text-white hover:underline"
+				<div className="flex items-center gap-3 text-xs text-white/60">
+					{many && (
+						<span className="tabular-nums">
+							{index + 1} / {items.length}
+						</span>
+					)}
+					<button
+						type="button"
+						onClick={() => void downloadItem(item)}
+						className="shrink-0 cursor-pointer border-0 bg-transparent p-0 text-xs text-white/60 hover:text-white hover:underline"
 					>
-						Open ↗
-					</a>
-				)}
+						Download
+					</button>
+					{!item.src.startsWith("data:") && (
+						<a
+							href={item.src}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="shrink-0 text-white/60 hover:text-white hover:underline"
+						>
+							Open ↗
+						</a>
+					)}
+				</div>
 			</div>
 		</motion.div>
 	);

@@ -249,11 +249,27 @@ private struct ConversationImageRow: View {
     let sources: [String]
     let sessionId: String
 
+    /// The row is the group: opening one of several images pages through the
+    /// rest rather than making you close and tap the next thumbnail.
+    private var gallery: [PreviewImage] {
+        sources.enumerated().map { index, source in
+            PreviewImage(
+                id: "\(index)",
+                source: .conversation(source: source, sessionId: sessionId)
+            )
+        }
+    }
+
     var body: some View {
         if !sources.isEmpty {
             HStack(spacing: 6) {
-                ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
-                    ConversationImage(source: source, sessionId: sessionId)
+                ForEach(Array(sources.enumerated()), id: \.offset) { index, source in
+                    ConversationImage(
+                        source: source,
+                        sessionId: sessionId,
+                        gallery: gallery,
+                        galleryIndex: index
+                    )
                         .frame(width: 96, height: 96)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }

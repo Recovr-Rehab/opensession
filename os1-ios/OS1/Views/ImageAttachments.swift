@@ -86,6 +86,31 @@ struct AttachImagesButton: View {
     }
 }
 
+/// One picture in a full-screen gallery: where its bytes come from, and the
+/// label shown under it. Opening any image opens the whole group it belongs
+/// to — the images of one message, the stills of one walkthrough — because a
+/// viewer that can only ever show the picture you tapped makes you close and
+/// re-open it to compare a before with its after.
+struct PreviewImage: Identifiable, Equatable {
+    enum Source: Equatable {
+        case data(Data)
+        case conversation(source: String, sessionId: String)
+        case media(path: String)
+    }
+
+    let id: String
+    let source: Source
+    /// What this picture is, shown at the bottom of the viewer: a walkthrough's
+    /// "Before"/"After", a markdown image's alt text.
+    var label: String?
+
+    init(id: String, source: Source, label: String? = nil) {
+        self.id = id
+        self.source = source
+        self.label = label
+    }
+}
+
 /// Horizontal strip of attached-image thumbnails, each removable — and, on
 /// iOS, tappable to check what was actually attached before sending it. At
 /// 56pt a screenshot is unreadable, so the thumbnail alone can't answer "is
@@ -97,6 +122,10 @@ struct AttachedImagesRow: View {
 
     #if os(iOS)
     @State private var previewing: AttachedImage?
+
+    private var gallery: [PreviewImage] {
+        images.map { PreviewImage(id: $0.id, source: .data($0.jpegData)) }
+    }
     #endif
 
     var body: some View {
@@ -124,7 +153,10 @@ struct AttachedImagesRow: View {
         // `item:` rather than a bool: the sheet renders the image it was
         // opened with even if the strip changes underneath it.
         .fullScreenCover(item: $previewing) { image in
-            FullScreenImagePreview(data: image.jpegData)
+            FullScreenImagePreview(
+                items: gallery,
+                index: images.firstIndex(of: image) ?? 0
+            )
         }
         #endif
     }
@@ -203,13 +235,25 @@ struct DataImage: View {
 /// viewer on tap, but keep the ✕ as their primary interaction.
 struct ExpandableDataImage: View {
     let data: Data
+    /// The group this picture belongs to, and where it sits in it. Empty means
+    /// it stands alone — the viewer then shows just this one.
+    var gallery: [PreviewImage] = []
+    var galleryIndex: Int = 0
 
     #if os(iOS)
     @State private var previewPresented = false
+
+    private var items: [PreviewImage] {
+        gallery.isEmpty
+            ? [PreviewImage(id: "single", source: .data(data))]
+            : gallery
+    }
     #endif
 
-    init(data: Data) {
+    init(data: Data, gallery: [PreviewImage] = [], galleryIndex: Int = 0) {
         self.data = data
+        self.gallery = gallery
+        self.galleryIndex = galleryIndex
     }
 
     init?(dataURL: String) {
@@ -234,7 +278,7 @@ struct ExpandableDataImage: View {
         // touches with it — so the zoom has to happen in place.
         .pinchToPeek(data)
         .fullScreenCover(isPresented: $previewPresented) {
-            FullScreenImagePreview(data: data)
+            FullScreenImagePreview(items: items, index: gallery.isEmpty ? 0 : galleryIndex)
         }
         #else
         DataImage(data: data)
@@ -247,21 +291,32 @@ struct ExpandableDataImage: View {
 struct ConversationImage: View {
     let source: String
     let sessionId: String
+    /// The other images of the same message/tool result, so the viewer can
+    /// page across them.
+    var gallery: [PreviewImage] = []
+    var galleryIndex: Int = 0
 
     @State private var data: Data?
     @State private var failed = false
     @State private var retryCount = 0
 
-    init(source: String, sessionId: String) {
+    init(
+        source: String,
+        sessionId: String,
+        gallery: [PreviewImage] = [],
+        galleryIndex: Int = 0
+    ) {
         self.source = source
         self.sessionId = sessionId
+        self.gallery = gallery
+        self.galleryIndex = galleryIndex
         _data = State(initialValue: DataImage.decode(dataURL: source))
     }
 
     var body: some View {
         Group {
             if let data {
-                ExpandableDataImage(data: data)
+                ExpandableDataImage(data: data, gallery: gallery, galleryIndex: galleryIndex)
             } else if failed {
                 Button {
                     retryCount += 1
@@ -301,18 +356,32 @@ struct ConversationImage: View {
 }
 
 #if os(iOS)
+/// The full-screen viewer: one picture at a time, swiping sideways to the rest
+/// of its group and down to dismiss. Paging is a `TabView` rather than a
+/// hand-rolled gesture so it carries the platform's own rubber-banding and
+/// interruptible tracking; at the fit scale the zoom view hands horizontal
+/// drags straight to it (see `ZoomScrollView.zoomDidChange`), and zoomed in it
+/// keeps them to pan the photo.
 private struct FullScreenImagePreview: View {
-    private let image: UIImage?
+    let items: [PreviewImage]
 
     @Environment(\.dismiss) private var dismiss
+    @State private var index: Int
     @State private var dragOffset: CGSize = .zero
 
-    init(data: Data) {
-        image = UIImage(data: data)
+    init(items: [PreviewImage], index: Int) {
+        self.items = items
+        _index = State(initialValue: min(max(index, 0), max(items.count - 1, 0)))
     }
 
     private var dismissalProgress: CGFloat {
         min(abs(dragOffset.height) / 280, 1)
+    }
+
+    private var label: String? {
+        guard items.indices.contains(index) else { return nil }
+        let label = items[index].label
+        return (label?.isEmpty ?? true) ? nil : label
     }
 
     var body: some View {
@@ -321,25 +390,29 @@ private struct FullScreenImagePreview: View {
                 .opacity(1 - dismissalProgress * 0.55)
                 .ignoresSafeArea()
 
-            if let image {
-                ZoomableImage(
-                    image: image,
-                    onDragChanged: { dragOffset = $0 },
-                    onDragEnded: { translation, projected in
-                        if abs(translation.height) > 100 || abs(projected.height) > 220 {
-                            dismiss()
-                        } else {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                dragOffset = .zero
+            TabView(selection: $index) {
+                ForEach(Array(items.enumerated()), id: \.offset) { position, item in
+                    PreviewPage(
+                        item: item,
+                        onDragChanged: { dragOffset = $0 },
+                        onDragEnded: { translation, projected in
+                            if abs(translation.height) > 100 || abs(projected.height) > 220 {
+                                dismiss()
+                            } else {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    dragOffset = .zero
+                                }
                             }
-                        }
-                    },
-                    onEscape: { dismiss() }
-                )
-                .offset(x: dragOffset.width * 0.08, y: dragOffset.height)
-                .scaleEffect(1 - dismissalProgress * 0.08)
-                .ignoresSafeArea()
+                        },
+                        onEscape: { dismiss() }
+                    )
+                    .tag(position)
+                }
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .offset(x: dragOffset.width * 0.08, y: dragOffset.height)
+            .scaleEffect(1 - dismissalProgress * 0.08)
+            .ignoresSafeArea()
 
             Button {
                 dismiss()
@@ -354,7 +427,106 @@ private struct FullScreenImagePreview: View {
             .accessibilityLabel("Close image")
             .padding(16)
         }
+        .overlay(alignment: .bottom) { caption }
         .statusBarHidden()
+    }
+
+    /// What you are looking at, at the bottom of the picture: the label first,
+    /// the position in the group under it. Over a scrim, because a screenshot
+    /// is as likely to be white there as black. It fades out with the
+    /// dismissal drag so the photo leaves alone.
+    @ViewBuilder private var caption: some View {
+        if label != nil || items.count > 1 {
+            VStack(spacing: 3) {
+                if let label {
+                    Text(label)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+                if items.count > 1 {
+                    Text("\(index + 1) of \(items.count)")
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.65))
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 44)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity)
+            // The scrim has to be dark under the text and gone above it: most
+            // of what this viewer shows is a screenshot of a light UI, and a
+            // gradient that only reaches half strength at the baseline leaves
+            // white type on near-white pixels.
+            .background(
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0), location: 0),
+                        .init(color: .black.opacity(0.5), location: 0.25),
+                        .init(color: .black.opacity(0.82), location: 0.5),
+                        .init(color: .black.opacity(0.9), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .opacity(1 - dismissalProgress)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+/// One page of the viewer: resolves its bytes — already in hand, a transcript
+/// image, or a staged walkthrough still — and hands them to the zoom surface.
+private struct PreviewPage: View {
+    let item: PreviewImage
+    let onDragChanged: (CGSize) -> Void
+    let onDragEnded: (_ translation: CGSize, _ projected: CGSize) -> Void
+    let onEscape: () -> Void
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                ZoomableImage(
+                    image: image,
+                    onDragChanged: onDragChanged,
+                    onDragEnded: onDragEnded,
+                    onEscape: onEscape
+                )
+            } else if failed {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.white.opacity(0.5))
+            } else {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(.white)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .task(id: item.id) {
+            guard image == nil else { return }
+            switch item.source {
+            case .data(let data):
+                image = UIImage(data: data)
+            case .conversation(let source, let sessionId):
+                let loaded = try? await OS1API.conversationImage(
+                    source: source, sessionId: sessionId
+                )
+                image = loaded.flatMap(UIImage.init(data:))
+            case .media(let path):
+                let loaded = try? await OS1API.media(path: path)
+                image = loaded.flatMap(UIImage.init(data:))
+            }
+            failed = image == nil
+        }
     }
 }
 
@@ -511,6 +683,8 @@ final class ZoomScrollView: UIScrollView {
 
     private var laidOutBounds: CGSize = .zero
     private var laidOutImage: CGSize = .zero
+    /// The pager this page sits in, while it is being held still.
+    private weak var lockedPager: UIScrollView?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -562,10 +736,47 @@ final class ZoomScrollView: UIScrollView {
 
     /// Called on every zoom change: the image only bounces once there is
     /// somewhere to pan, so at the fit scale a vertical drag belongs entirely
-    /// to the dismissal gesture.
+    /// to the dismissal gesture — and its horizontal drag to the pager around
+    /// it, which is why the scroll view's own pan steps aside there. The pinch
+    /// recognizer is left alone (disabling `isScrollEnabled` would be the
+    /// blunter way to do this), so zooming back in still works.
     func zoomDidChange() {
         bounces = !isZoomedOut
+        panGestureRecognizer.isEnabled = !isZoomedOut
+        // …and the pager steps aside in return once the photo is zoomed:
+        // otherwise a sideways drag turns the page instead of panning, and the
+        // page it lands back on is a fresh view at the fit scale, so the zoom
+        // silently disappears. Zoom out to page again — the same trade Photos
+        // makes.
+        setPagingEnabled(isZoomedOut)
         centerContent()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // Leaving while zoomed in must not leave the pager frozen behind us.
+        if window == nil { setPagingEnabled(true) }
+    }
+
+    private func setPagingEnabled(_ enabled: Bool) {
+        if enabled {
+            lockedPager?.isScrollEnabled = true
+            lockedPager = nil
+        } else if lockedPager == nil, let pager = enclosingScrollView() {
+            pager.isScrollEnabled = false
+            lockedPager = pager
+        }
+    }
+
+    /// The nearest scroll view above this one — the pager, when the viewer is
+    /// showing a group rather than a single picture.
+    private func enclosingScrollView() -> UIScrollView? {
+        var next = superview
+        while let view = next {
+            if let scroll = view as? UIScrollView { return scroll }
+            next = view.superview
+        }
+        return nil
     }
 
     private func centerContent() {
