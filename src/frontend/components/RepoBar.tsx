@@ -154,7 +154,7 @@ export function RepoBar({
     variant === "menu-row" ? (
       // ⋯ overflow menu row (phone): matches the other menu items' shape.
       <Menu.Trigger
-        className="flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-md border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+        className="flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-control border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
         title="Repo — switch or attach another"
       >
         <RepoTile name={primary} size={18} />

@@ -26,7 +26,7 @@ function shortModel(model: string | undefined, models: ModelOption[]): string | 
 }
 
 const chip =
-	"inline-flex max-w-[220px] items-center gap-1 rounded-md border border-line px-2 py-[3px] text-xs font-medium text-dim transition-colors hover:bg-hover hover:text-fg";
+	"inline-flex max-w-[220px] items-center gap-1 rounded-control border border-line px-2 py-[3px] text-xs font-medium text-dim transition-colors hover:bg-hover hover:text-fg";
 
 export function SessionRelations({
 	parent,

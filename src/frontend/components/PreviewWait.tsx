@@ -147,7 +147,7 @@ export function PreviewWait({ sessionId }: { sessionId: string }) {
 					</div>
 					<a
 						href={backHref}
-						className="rounded-md border border-line-strong px-3.5 py-1.5 text-[13px] font-semibold text-fg no-underline hover:border-accent hover:bg-accent-soft"
+						className="rounded-control border border-line-strong px-3.5 py-1.5 text-[13px] font-semibold text-fg no-underline hover:border-accent hover:bg-accent-soft"
 					>
 						{state === "gone" ? "Open " + PRODUCT_NAME : "Back to the session"}
 					</a>

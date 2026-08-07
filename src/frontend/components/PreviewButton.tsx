@@ -42,7 +42,7 @@ const spinnerClass =
   "size-[10px] shrink-0 rounded-full border border-line-strong border-t-accent animate-[preview-spin_0.7s_linear_infinite]";
 
 const popoverActionClass =
-  "w-full rounded-sm border border-[rgba(248,81,73,0.4)] bg-transparent px-2.5 py-[5px] text-xs font-semibold text-red disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent hover:bg-[rgba(248,81,73,0.12)]";
+  "w-full rounded-control border border-[rgba(248,81,73,0.4)] bg-transparent px-2.5 py-[5px] text-xs font-semibold text-red disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent hover:bg-[rgba(248,81,73,0.12)]";
 
 /**
  * Header control for a session's local dev server ("Preview"). When the

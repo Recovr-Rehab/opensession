@@ -628,7 +628,7 @@ function ChecksChip({
 				closeDelay={120}
 				type="button"
 				className={cn(
-					"mt-1.5 inline-flex w-fit cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1 text-label font-semibold leading-[1.35] transition-colors hover:brightness-110",
+					"mt-1.5 inline-flex w-fit cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-control border px-2.5 py-1 text-label font-semibold leading-[1.35] transition-colors hover:brightness-110",
 					aggregate.className,
 				)}
 				onClick={onOpenChecks}
