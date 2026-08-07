@@ -26,7 +26,17 @@
  * al), with the repository root's dependencies installed first (the bundler
  * resolves the server's imports from them).
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 const OS1_ROOT = resolve(import.meta.dir, "..");
@@ -125,7 +135,6 @@ if (install.exitCode !== 0) throw new Error("bun install failed in the sidecar")
 // would only bloat the app bundle.
 const anthropicDir = join(OUT, "node_modules", "@anthropic-ai");
 if (existsSync(anthropicDir)) {
-  const { readdirSync } = await import("node:fs");
   for (const entry of readdirSync(anthropicDir)) {
     if (/^claude-(code|agent-sdk)-.+/.test(entry)) {
       rmSync(join(anthropicDir, entry), { recursive: true, force: true });
@@ -133,6 +142,29 @@ if (existsSync(anthropicDir)) {
     }
   }
 }
+
+// Those platform packages are what .bin/claude pointed at, so pruning them
+// leaves the symlink dangling. electron-builder stats every entry it copies and
+// fails the whole packaging step on the first broken one, with nothing but an
+// ENOENT to go on. Nothing here runs a bin script — the runner resolves
+// packages programmatically and takes Claude from MERIDIAN_CLAUDE_PATH — so a
+// link with no target is only debris.
+function removeDanglingLinks(dir: string): void {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const entryPath = join(dir, entry.name);
+    // A symlinked directory reports isSymbolicLink(), not isDirectory(), so
+    // this never follows one and can't loop.
+    if (entry.isSymbolicLink()) {
+      if (!existsSync(entryPath)) {
+        unlinkSync(entryPath);
+        console.log(`[sidecar] removed dangling symlink ${relative(OUT, entryPath)}`);
+      }
+    } else if (entry.isDirectory()) {
+      removeDanglingLinks(entryPath);
+    }
+  }
+}
+if (existsSync(join(OUT, "node_modules"))) removeDanglingLinks(join(OUT, "node_modules"));
 
 // Sanity: the exact resolutions the runner performs at run time — and that
 // they land INSIDE the sidecar. Bun.resolveSync walks parent directories, so
