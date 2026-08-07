@@ -35,26 +35,6 @@ export const duration = {
  */
 export const ease: [number, number, number, number] = [0.32, 0.72, 0, 1];
 
-/** Snappy pop for small anchored popups (tooltips, menus, popovers). */
-export const popupTransition: Transition = {
-	type: "spring",
-	duration: duration.base,
-	bounce: 0,
-};
-
-/**
- * Enter/exit for anchored popups, tuned to read like the old tt-in keyframes
- * (fade + slight scale from the anchor side). Pair with
- * `style={{ transformOrigin: "var(--transform-origin)" }}` on Base UI popups —
- * the Positioner sets that variable to face the anchor.
- */
-export const popupMotion = {
-	initial: { opacity: 0, scale: 0.96 },
-	animate: { opacity: 1, scale: 1 },
-	exit: { opacity: 0, transition: { duration: duration.micro } },
-	transition: popupTransition,
-} as const;
-
 /**
  * Morph for the mobile composer collapsing to / expanding from its single-row
  * resting pill. The composer's shape change is the longest travel in the app,

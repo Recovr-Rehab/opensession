@@ -78,18 +78,6 @@ export function onNotifSettingsChanged(handler: () => void): () => void {
 	return () => window.removeEventListener(CHANGE_EVENT, handler);
 }
 
-// Back-compat shim for the old single on/off alerts flag (Sidebar's toggle).
-// "Enabled" == alerting is not fully off; toggling off sets when:"off", toggling
-// on restores the default "unfocused". Kept additive so it doesn't disturb the
-// in-flight notifications refactor.
-export function alertsEnabled(): boolean {
-	return getNotifSettings().when !== "off";
-}
-
-export function setAlertsEnabled(on: boolean): void {
-	setNotifSettings({ when: on ? "unfocused" : "off" });
-}
-
 let audioCtx: AudioContext | null = null;
 
 // An AudioContext can't start without a user gesture, and asking for Notification

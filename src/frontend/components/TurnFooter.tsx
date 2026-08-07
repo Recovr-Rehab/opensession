@@ -446,10 +446,6 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
   }
 }
 
-export function touchedFileFromTool(entry: TranscriptEntry): TouchedFile | null {
-  return touchedFilesFromTool(entry)[0] || null;
-}
-
 /** All files a turn's tool calls edited, merged per path in first-touch order. */
 export function collectTouchedFiles(items: TranscriptEntry[]): TouchedFile[] {
   return mergeTouchedFiles(

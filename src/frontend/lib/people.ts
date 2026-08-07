@@ -28,17 +28,6 @@ export function getPeople(): Person[] {
 	return people;
 }
 
-/** Picker first names for the roster. */
-export function getPeopleNames(): string[] {
-	return getPeople().map((p) => p.name);
-}
-
-export function personByName(name?: string | null): Person | undefined {
-	if (!name) return undefined;
-	const first = name.trim().split(/\s+/)[0]?.toLowerCase();
-	return people.find((p) => p.name.toLowerCase() === first);
-}
-
 let inflight: Promise<void> | null = null;
 export function ensurePeople(): Promise<void> {
 	if (fetched) return Promise.resolve();

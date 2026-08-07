@@ -30,11 +30,6 @@ function write(map: OrderMap): void {
 	window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
-/** The saved id order for a workspace, or [] if none has been set. */
-export function getTabOrder(workspaceId: string): string[] {
-	return read()[workspaceId] ?? [];
-}
-
 /**
  * Order `ids` (a workspace's live session ids, in their natural createdAt order)
  * by the saved arrangement: saved ids first in saved order, then any id not in

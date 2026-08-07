@@ -11,11 +11,6 @@ export function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export async function filesToDataUrls(files: FileList | File[]): Promise<string[]> {
-  const imgs = Array.from(files).filter((f) => f.type.startsWith("image/"));
-  return Promise.all(imgs.map(readFileAsDataUrl));
-}
-
 /**
  * A non-image attachment. Big files are streamed to disk over the HTTP upload
  * endpoint and carry the server's staged `path` (what the next turn sends);

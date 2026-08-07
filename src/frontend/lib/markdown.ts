@@ -173,11 +173,6 @@ function prMentionRepo(qualifier: string | undefined): string | null {
   return knownRepos.has(id) ? id : null;
 }
 
-/** `owner/name` on GitHub for a registered repo id, when we know it. */
-export function githubRepoFor(repo: string | undefined): string | undefined {
-  return repo ? knownRepos.get(repo) : undefined;
-}
-
 function prMentionLink(repo: string, number: string, label: string): string {
   const href = `${BASE_PATH}/pr/${encodeURIComponent(repo)}/${number}`;
   // `data-pr-gh` is the escape hatch, not the destination: a plain click

@@ -52,10 +52,6 @@ export function getTabColors(): Record<string, string> {
 	return cache;
 }
 
-export function getTabColor(id: string): string | undefined {
-	return cache[id];
-}
-
 /** Set (or, with `null`/unknown key, clear) a session's tab color. */
 export function setTabColor(
 	id: string,

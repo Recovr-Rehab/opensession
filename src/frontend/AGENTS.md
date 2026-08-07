@@ -84,6 +84,10 @@ language instead of introducing a new local style for each feature.
 
 - Follow the existing React 19 patterns. Do not add `useMemo` or `useCallback`
   by default; let the React Compiler handle routine optimization.
+- Keep component files component-only: put non-component helpers/constants in
+  `lib/` or `ui/` modules, because mixed component+helper exports disqualify a
+  module from React Fast Refresh and downgrade every edit to a full page
+  reload.
 - Keep state close to where it is used. Do not add a new context, store, or
   abstraction for state that belongs to one component tree.
 - Run `bun run typecheck` and the relevant `bun test` targets after code

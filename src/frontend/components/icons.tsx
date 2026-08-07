@@ -77,14 +77,6 @@ export function IconArrowDown(p: IconProps) {
   );
 }
 
-export function IconMinus(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path {...stroke} d="M5.75 12h12.5" />
-    </Svg>
-  );
-}
-
 export function IconMic(p: IconProps) {
   return (
     <Svg {...p}>
@@ -563,19 +555,6 @@ export function IconWrench(p: IconProps) {
   );
 }
 
-export function IconImage(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path
-        {...stroke}
-        d="M6.75 4.75H17.25C18.3546 4.75 19.25 5.64543 19.25 6.75V17.25C19.25 18.3546 18.3546 19.25 17.25 19.25H6.75C5.64543 19.25 4.75 18.3546 4.75 17.25V6.75C4.75 5.64543 5.64543 4.75 6.75 4.75Z"
-      />
-      <path {...stroke} d="M4.75 16.25L9 11.75L13 15.25L15.5 12.75L19.25 16.25" />
-      <circle cx="14.5" cy="8.5" r="1.25" stroke="currentColor" strokeWidth="1.5" />
-    </Svg>
-  );
-}
-
 export function IconExpand(p: IconProps) {
   return (
     <Svg {...p}>
@@ -805,19 +784,6 @@ export function IconGitMerge(p: IconProps) {
   );
 }
 
-export function IconReviewNodes(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <circle {...stroke} cx="7" cy="6.5" r="1.75" />
-      <circle {...stroke} cx="7" cy="17.5" r="1.75" />
-      <circle {...stroke} cx="17" cy="17.5" r="1.75" />
-      <path {...stroke} d="M7 8.25V15.75" />
-      <path {...stroke} d="M17 15.75V12.25C17 11.1454 16.1046 10.25 15 10.25H10.25" />
-      <path {...stroke} d="M12 8.25L10.25 10.25L12 12.25" />
-    </Svg>
-  );
-}
-
 // An eye — "needs your eyes" / review. Distinct from the git-node PR glyphs.
 export function IconEye(p: IconProps) {
   return (
@@ -892,20 +858,6 @@ export function IconLink(p: IconProps) {
         d="M7.25 10.75L6 12C4.34315 13.6569 4.34315 16.3431 6 18V18C7.65685 19.6569 10.3431 19.6569 12 18L13.25 16.75"
       />
       <path {...stroke} d="M14.25 9.75L9.75 14.25" />
-    </Svg>
-  );
-}
-
-// Arrow rising out of a tray: share.
-export function IconShare(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path {...stroke} d="M12 13.25V4.75" />
-      <path {...stroke} d="M8.75 7.75L12 4.5L15.25 7.75" />
-      <path
-        {...stroke}
-        d="M8.25 9.75H6.75C5.64543 9.75 4.75 10.6454 4.75 11.75V17.25C4.75 18.3546 5.64543 19.25 6.75 19.25H17.25C18.3546 19.25 19.25 18.3546 19.25 17.25V11.75C19.25 10.6454 18.3546 9.75 17.25 9.75H15.75"
-      />
     </Svg>
   );
 }

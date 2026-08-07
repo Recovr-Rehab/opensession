@@ -66,16 +66,8 @@ export function setSidebarToolVisible(id: SidebarToolId, visible: boolean) {
 	writeHiddenSidebarTools(hidden);
 }
 
-export function showAllSidebarTools() {
-	writeHiddenSidebarTools(new Set());
-}
-
 export function hideAllSidebarTools() {
 	writeHiddenSidebarTools(new Set(SIDEBAR_TOOL_IDS));
-}
-
-export function areAllSidebarToolsHidden() {
-	return readHiddenSidebarTools().size === SIDEBAR_TOOL_IDS.length;
 }
 
 export function onSidebarToolsChanged(listener: () => void) {

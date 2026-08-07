@@ -134,15 +134,6 @@ async function request<T>(
 	return (await res.json().catch(() => null)) as T;
 }
 
-/**
- * Raw JSON text of the sessions list. useSessions polls this so it can compare
- * the response text against the previous poll and skip the state update (and
- * the app-wide re-render) entirely when nothing changed.
- */
-export async function fetchSessionsText(): Promise<string> {
-	return (await fetchSessionsSnapshot()).text ?? "[]";
-}
-
 export async function fetchSessionsSnapshot(
 	opts: { etag?: string | null; signal?: AbortSignal } = {},
 ): Promise<{
@@ -206,12 +197,6 @@ export async function deleteSessionAssetApi(
 		method: "POST",
 		body: { path },
 		label: "Failed to delete asset",
-	});
-}
-
-export async function fetchSessions(): Promise<UnifiedSession[]> {
-	return request<UnifiedSession[]>("/sessions", {
-		label: "Failed to fetch sessions",
 	});
 }
 
@@ -649,19 +634,6 @@ export async function fetchWorkspaces(): Promise<Workspace[]> {
 	}
 }
 
-export async function createWorkspaceApi(input: {
-	name: string;
-	repo?: string;
-	color?: string;
-	user: string;
-}): Promise<Workspace> {
-	const body = await request<{ workspace: Workspace }>("/workspaces", {
-		method: "POST",
-		body: input,
-	});
-	return body.workspace;
-}
-
 export async function updateWorkspaceApi(
 	id: string,
 	patch: {
@@ -719,17 +691,6 @@ export async function promoteSessionApi(
 		`/sessions/${encodeURIComponent(sessionId)}/promote`,
 		{ method: "POST", body: opts || {} },
 	);
-}
-
-/** Move a session into a workspace (or `null` to make it standalone). */
-export async function setSessionWorkspaceApi(
-	sessionId: string,
-	workspaceId: string | null,
-): Promise<void> {
-	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/workspace`, {
-		method: "POST",
-		body: { workspaceId },
-	});
 }
 
 export interface AttachedRepo {
@@ -1118,18 +1079,6 @@ export async function fetchPrDiffGroups(
 	});
 }
 
-export async function fetchPrPreviewDiffGroups(
-	repo: string,
-	files: import("./types").PrFile[],
-	patch: string,
-): Promise<{ groups: import("./types").DiffFileGroup[] | null }> {
-	return request(`/pr-preview-diff-groups?repo=${encodeURIComponent(repo)}`, {
-		method: "POST",
-		body: { files, patch },
-		label: "Failed to organize changed files",
-	});
-}
-
 /**
  * Discard one file's changes in a session worktree (hover action on a diff
  * row). Resets the file to its base-branch state so it drops out of the diff.
@@ -1316,25 +1265,6 @@ export async function fetchPrPreviewGuide(repo: string, branch: string) {
 	return request<any>(
 		`/pr-preview-guide?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`,
 		{ label: "Failed to fetch review guide" },
-	);
-}
-
-export async function postPrCommentApi(
-	sessionId: string,
-	payload: {
-		text: string;
-		user: string;
-		path?: string;
-		line?: number;
-		startLine?: number;
-		side?: "RIGHT" | "LEFT";
-		repo?: string;
-		branch?: string;
-	},
-) {
-	return request<{ ok: true; url?: string }>(
-		`/sessions/${encodeURIComponent(sessionId)}/pr-comment`,
-		{ method: "POST", body: payload },
 	);
 }
 
@@ -1547,26 +1477,6 @@ export async function fetchModels(cloud = false): Promise<{
 }> {
 	return request<{ models: ModelOption[]; default: string }>(`/models${cloud ? "?cloud=1" : ""}`, {
 		label: "Failed to fetch models",
-	});
-}
-
-/** One append block of the session system prompt (claude_code preset + these). */
-export interface SystemPromptPart {
-	title: string;
-	text: string;
-}
-
-export async function fetchSystemPrompt(
-	mode: "ask" | "code",
-	user?: string,
-): Promise<{
-	preset: string;
-	settingSources: string[];
-	parts: SystemPromptPart[];
-}> {
-	const u = user ? `&user=${encodeURIComponent(user)}` : "";
-	return request(`/system-prompt?mode=${mode}${u}`, {
-		label: "Failed to fetch system prompt",
 	});
 }
 
@@ -1796,45 +1706,6 @@ export async function deleteScheduledPromptApi(id: string): Promise<void> {
 	await request<void>(`/scheduled-prompts/${encodeURIComponent(id)}`, {
 		method: "DELETE",
 		label: "Failed to delete scheduled prompt",
-	});
-}
-
-// ── Human asks (waiting-on-teammates board) ──
-
-export interface HumanAskView {
-	id: string;
-	sessionId: string;
-	createdBy: string;
-	person: { slackId: string; name: string };
-	question: string;
-	options?: string[];
-	mode: "block" | "async";
-	state: "scheduled" | "delivered" | "answered" | "timeout" | "cancelled";
-	answer?: string;
-	answeredBy?: string;
-	createdAt: string;
-	deliveredAt?: string;
-	answeredAt?: string;
-}
-
-export async function fetchHumanAsks(all = false): Promise<HumanAskView[]> {
-	const data = await request<{ asks?: HumanAskView[] }>(
-		`/human-asks${all ? "?all=1" : ""}`,
-		{ label: "Failed to fetch asks" },
-	);
-	return data?.asks ?? [];
-}
-
-export async function nudgeHumanAsk(id: string): Promise<void> {
-	await request<void>(`/human-asks/${encodeURIComponent(id)}/nudge`, {
-		method: "POST",
-	});
-}
-
-export async function cancelHumanAsk(id: string): Promise<void> {
-	await request<void>(`/human-asks/${encodeURIComponent(id)}`, {
-		method: "DELETE",
-		label: "Failed to cancel ask",
 	});
 }
 

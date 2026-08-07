@@ -60,7 +60,7 @@ interface Props {
  * repo-relative ("src/server/chat.ts", not "~/projects/opensession/src/
  * server/chat.ts"). Attached repos carry their project id as a label and keep
  * a "<project>:" prefix, the same form @-mentions use. Context rather than a
- * prop so the preview rows inside TurnBlock/WorkBlock get it for free.
+ * prop so the preview rows inside TurnBlock get it for free.
  */
 export type PathRoot = { dir: string; label?: string };
 const PathRootsContext = createContext<readonly PathRoot[]>([]);
@@ -75,7 +75,7 @@ export function useToolPathRoots(): readonly PathRoot[] {
  * child session id in the result text, but a RUNNING one has no result yet —
  * this map is how the row learns the child id early enough to offer the
  * drill-in while the sub-agent is still working. Context rather than a prop so
- * it skips the memoized TurnBlock/WorkBlock layers.
+ * it skips the memoized TurnBlock layers.
  */
 export type LiveSubagent = { id?: string; status: string };
 const LiveSubagentsContext = createContext<ReadonlyMap<string, LiveSubagent>>(
