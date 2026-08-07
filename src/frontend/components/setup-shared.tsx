@@ -137,6 +137,44 @@ const CHIP_DOTS: Record<ChipTone, string> = {
 	off: "var(--text-faint)",
 };
 
+/** The chip's dot color on its own — the Setup wizard's step rail paints the
+ *  same three states next to a step name rather than a chip label. */
+export function chipDotColor(tone: ChipTone): string {
+	return CHIP_DOTS[tone];
+}
+
+/** The Setup wizard's steps, in order. Lives here rather than in Setup.tsx so
+ *  the checklist can offer a "jump to that step" without importing the wizard
+ *  it is rendered by. */
+export type SetupStepId =
+	| "engine"
+	| "identity"
+	| "repos"
+	| "team"
+	| "integrations"
+	| "github"
+	| "review";
+
+export function integrationState(i: SetupIntegration): {
+	tone: ChipTone;
+	label: string;
+} {
+	if (i.enabled && i.missingRequired.length === 0)
+		return { tone: "on", label: "On" };
+	if (i.enabled) return { tone: "warn", label: "Enabled — missing credentials" };
+	return { tone: "off", label: "Off" };
+}
+
+export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string } {
+	if (g.userPrAuth && g.clientIdConfigured)
+		return {
+			tone: "on",
+			label: g.redirectFlowAvailable ? "Active" : "Active — device flow only",
+		};
+	if (g.userPrAuth) return { tone: "warn", label: "Missing client id" };
+	return { tone: "off", label: "Off" };
+}
+
 /** Does this repo carry what a session needs to provision and boot it on its
  *  own? `start.sh` (or an instance `previewCommand`) is the load-bearing half
  *  — without it the Preview button has nothing to run and an agent can't see

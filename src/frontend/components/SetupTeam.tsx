@@ -23,7 +23,15 @@ import { setupRequest, type TeamMember } from "./setup-shared";
 // member row carries the aliases the matcher resolves through. Add/edit go
 // through a small dialog; remove is an inline two-tap confirm.
 
-export function TeamSection({ onChanged }: { onChanged: () => void | Promise<void> }) {
+export function TeamSection({
+	onChanged,
+	title,
+}: {
+	onChanged: () => void | Promise<void>;
+	/** Group label above the roster. Omitted when the page or wizard step is
+	 *  already titled — then the row carries only the button. */
+	title?: React.ReactNode;
+}) {
 	const [members, setMembers] = useState<TeamMember[] | null>(null);
 	const [loadFailed, setLoadFailed] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);
@@ -51,6 +59,7 @@ export function TeamSection({ onChanged }: { onChanged: () => void | Promise<voi
 	return (
 		<>
 			<SettingsGroupLabel
+				className={title ? undefined : "mt-0"}
 				actions={
 					<Button
 						size="sm"
@@ -64,7 +73,7 @@ export function TeamSection({ onChanged }: { onChanged: () => void | Promise<voi
 					</Button>
 				}
 			>
-				Team
+				{title}
 			</SettingsGroupLabel>
 			<SettingCard>
 				{!members ? (

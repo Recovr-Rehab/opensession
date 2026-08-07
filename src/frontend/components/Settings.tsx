@@ -8,13 +8,17 @@ import { MyAccountsPanel } from "./MyAccounts";
 import { AppearancePanel } from "./settings/AppearancePanel";
 import { AuditPanel } from "./settings/AuditPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
+import { IdentityPanel } from "./settings/IdentityPanel";
+import { IntegrationsPanel } from "./settings/IntegrationsPanel";
 import { KeychainPanel } from "./settings/KeychainPanel";
+import { MembersPanel } from "./settings/MembersPanel";
 import { MemoryPanel } from "./settings/MemoryPanel";
 import { ModelsPanel } from "./settings/ModelsPanel";
 import { NotificationsPanel } from "./settings/NotificationsPanel";
 import { PapercutsPanel } from "./settings/PapercutsPanel";
 import { PreferencesPanel } from "./settings/PreferencesPanel";
 import { PrewarmingPanel } from "./settings/PrewarmingPanel";
+import { ReposPanel } from "./settings/ReposPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { SetupPanel } from "./Setup";
 
@@ -49,7 +53,11 @@ export type SettingsSectionKey =
 	| "notifications"
 	| "appearance"
 	| "setup"
+	| "identity"
+	| "repos"
+	| "members"
 	| "models"
+	| "integrations"
 	| "connections"
 	| "memory"
 	| "prewarming"
@@ -188,6 +196,67 @@ const SECTIONS: {
 		),
 	},
 	{
+		key: "identity",
+		label: "Identity",
+		group: "Workspace",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.5" />
+				<circle cx="6" cy="7" r="1.4" />
+				<path d="M3.9 10.9a2.3 2.3 0 0 1 4.2 0" strokeLinecap="round" />
+				<path d="M10.2 6.6h2.1M10.2 9h2.1" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
+		key: "repos",
+		label: "Repositories",
+		group: "Workspace",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M4.2 2.5h8v11h-8a1.5 1.5 0 0 1 0-3h8"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+				/>
+			</svg>
+		),
+	},
+	{
+		key: "members",
+		label: "Members",
+		group: "Workspace",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<circle cx="6.1" cy="5.6" r="2.3" />
+				<path d="M2.1 12.7a4 4 0 0 1 8 0" strokeLinecap="round" />
+				<path d="M10.6 3.9a2.3 2.3 0 0 1 0 3.4" strokeLinecap="round" />
+				<path d="M11.6 12.7a4 4 0 0 0-1.1-2.8" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
 		key: "models",
 		label: "Models",
 		group: "Workspace",
@@ -204,6 +273,28 @@ const SECTIONS: {
 				<rect x="8.75" y="8.75" width="5" height="5" rx="1" />
 				<circle cx="11.25" cy="4.75" r="2.5" />
 				<path d="M4.75 9.5v1.75a1 1 0 0 0 1 1h1.75" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
+		key: "integrations",
+		label: "Integrations",
+		group: "Workspace",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path d="M6 2.2v3.2M10 2.2v3.2" strokeLinecap="round" />
+				<path
+					d="M3.8 5.4h8.4v2.1a4.2 4.2 0 0 1-8.4 0z"
+					strokeLinejoin="round"
+				/>
+				<path d="M8 11.7v2.1" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -413,9 +504,12 @@ const SECTIONS: {
  * sheet's detail page. Tool panels come in via children (App owns them). */
 function SectionPanel({
 	section,
+	onBack,
 	children,
 }: {
 	section: SettingsSectionKey;
+	/** Leaving settings — the Setup wizard's last step offers it as "Done". */
+	onBack?: () => void;
 	children?: React.ReactNode;
 }) {
 	return (
@@ -424,7 +518,11 @@ function SectionPanel({
 			{section === "notifications" && <NotificationsPanel />}
 			{section === "preferences" && <PreferencesPanel />}
 			{section === "appearance" && <AppearancePanel />}
-			{section === "setup" && <SetupPanel />}
+			{section === "setup" && <SetupPanel onDone={onBack} />}
+			{section === "identity" && <IdentityPanel />}
+			{section === "repos" && <ReposPanel />}
+			{section === "members" && <MembersPanel />}
+			{section === "integrations" && <IntegrationsPanel />}
 			{section === "audit" && <AuditPanel />}
 			{section === "models" && <ModelsPanel />}
 			{section === "connections" && <Connections />}
@@ -536,7 +634,9 @@ export function Settings({
 					<SectionPanel section={active}>{children}</SectionPanel>
 				) : (
 					<div className="settings-panel-frame">
-						<SectionPanel section={active}>{children}</SectionPanel>
+						<SectionPanel section={active} onBack={onBack}>
+							{children}
+						</SectionPanel>
 					</div>
 				)}
 			</div>
@@ -664,7 +764,9 @@ function MobileSettings({
 										<SectionPanel section={shownSection}>{children}</SectionPanel>
 									) : (
 										<div className="settings-panel-frame">
-											<SectionPanel section={shownSection}>{children}</SectionPanel>
+											<SectionPanel section={shownSection} onBack={onBack}>
+												{children}
+											</SectionPanel>
 										</div>
 									)}
 								</div>

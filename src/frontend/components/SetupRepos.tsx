@@ -39,9 +39,13 @@ import {
 export function ReposSection({
 	repos,
 	onChanged,
+	title,
 }: {
 	repos: SetupStatus["repos"];
 	onChanged: () => void | Promise<void>;
+	/** Group label above the list. Omitted when the page or wizard step is
+	 *  already titled "Repositories" — then the row carries only the button. */
+	title?: React.ReactNode;
 }) {
 	const [pickerOpen, setPickerOpen] = useState(false);
 	// Tile appearance rides on the repo list rather than the setup status: the
@@ -58,6 +62,7 @@ export function ReposSection({
 	return (
 		<>
 			<SettingsGroupLabel
+				className={title ? undefined : "mt-0"}
 				actions={
 					<Button
 						size="sm"
@@ -68,7 +73,7 @@ export function ReposSection({
 					</Button>
 				}
 			>
-				Repositories
+				{title}
 			</SettingsGroupLabel>
 			{pickerOpen && <AddRepoPicker onAdded={onChanged} />}
 			<SettingCard>
