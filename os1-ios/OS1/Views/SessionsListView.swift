@@ -49,7 +49,7 @@ struct SessionsListView: View {
     @State private var searchText = ""
     /// Non-nil opens the new-session sheet; carries the per-repo "+" preset.
     @State private var newSessionRequest: NewSessionRequest?
-    /// Parked "New Idea" requests from the Action Button (`CaptureIdeaIntent`).
+    /// Parked "Start an Agent" requests (`StartAgentIntent`, widgets, Siri).
     @State private var quickCapture = QuickCapture.shared
     /// Opening prompts (and images) of just-created sessions, keyed by id —
     /// seeds the conversation view so it renders instantly instead of waiting
@@ -190,9 +190,9 @@ struct SessionsListView: View {
             .onChange(of: viewModel.hasLoaded) {
                 autoOpenFromEnvironment()
             }
-            // "New Idea" from the Action Button (CaptureIdeaIntent). It can run
-            // before this view exists (cold launch) or while it's already on
-            // screen, so both entrances read the parked request.
+            // "Start an Agent" (StartAgentIntent — Action Button, widget,
+            // Siri). It can run before this view exists (cold launch) or while
+            // it's already on screen, so both entrances read the parked request.
             .onAppear { openQuickCapture() }
             .onChange(of: quickCapture.request?.id) { openQuickCapture() }
             .alert(

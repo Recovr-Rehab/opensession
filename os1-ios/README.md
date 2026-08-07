@@ -118,26 +118,23 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   sentence in the panel rather than a status code. It is
   pushed as a panel (`PrPanelView(chrome: .pushed)` drops its own navigation
   stack and Done button); the sheet form is what the Mac still uses.
-- **Action Button / Siri — "Start an Agent"** — an App Intent
-  (`Intents/StartAgentIntent.swift`) that creates a session and starts its
-  opening run WITHOUT launching the app, so one press of the iPhone's Action
-  Button (Settings > Action Button > Shortcut > Start an Agent) is enough to
-  hand an idea over. It asks for the idea, takes repo and model from what the
-  composer used last (both overridable as shortcut parameters, alongside
-  code/ask mode), confirms with the session's title, and returns the session's
-  URL so a shortcut can chain into "Open URLs". For a keyboard-free capture,
-  build a shortcut of [Dictate Text] → [Start an Agent] and bind THAT. It also
-  registers Siri phrases ("Start an agent in OS1") via `AgentShortcuts`.
-- **Action Button — "New Idea"** — the same press into OUR composer instead of
-  the system's text dialog, for ideas that need shaping: `CaptureIdeaIntent`
-  (`openAppWhenRun = true`) brings the app forward and the new-session sheet
-  opens with the mic already listening, so you speak, watch the words land,
-  fix what the recogniser got wrong, and still have repo/mode/model chips and
+- **Action Button / Siri / Spotlight — "Start an Agent"** — one App Intent
+  (`Intents/StartAgentIntent.swift`), and it deliberately OPENS the app
+  (`openAppWhenRun = true`) rather than collecting the idea in the system's
+  text dialog and firing a session off in the background: dictation mishears,
+  and an idea usually wants a glance at which repo and model it is about to
+  run on. The press brings the app forward with the new-session sheet already
+  open and the mic already listening — speak, watch the words land, fix what
+  the recogniser got wrong, and still have the repo/mode/model chips and
   attachments before you send. The intent parks its request on `QuickCapture`
   (it can run before any view exists on a cold launch) and the sessions list
   consumes it once. The mic itself is a `ComposerDictationButton` in the
   sheet's footer — it only auto-starts when speech + mic permission already
   exist, so a first press isn't two system prompts stacked over the composer.
+  `AgentShortcuts` registers it with no setup: Siri phrases ("Start an agent
+  in OS1"), Spotlight, and the Action Button's shortcut picker (iPhone
+  Settings > Action Button > Shortcut > OS1 > Start an Agent). Settings >
+  Shortcuts inside the app signposts all of it.
 - **Connection care** — client-initiated pings every 20s (the server never
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.

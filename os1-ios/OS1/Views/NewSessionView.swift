@@ -23,9 +23,9 @@ struct NewSessionView: View {
     /// workspace.
     var initialWorkspaceId: String?
 
-    /// Open with the mic already listening — the Action Button's "New Idea"
-    /// (see `CaptureIdeaIntent`), where the whole point is to speak before you
-    /// have found the keyboard.
+    /// Open with the mic already listening — the Action Button's "Start an
+    /// Agent" (see `StartAgentIntent`), where the whole point is to speak
+    /// before you have found the keyboard.
     var autoDictate = false
 
     /// Called the moment Start is tapped, with an optimistic session row

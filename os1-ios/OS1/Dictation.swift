@@ -126,7 +126,7 @@ final class Dictation {
     // MARK: - Permissions
 
     /// Both permissions already granted — so a caller that opens the mic on
-    /// its own (the Action Button's "New Idea", `CaptureIdeaIntent`) can hold
+    /// its own (the Action Button's "Start an Agent", `StartAgentIntent`) can hold
     /// off rather than stacking two system prompts over a sheet the person
     /// did not ask for them from. Tapping the mic still asks, as always.
     static var isAuthorized: Bool {

@@ -380,16 +380,8 @@ struct ShortcutsSettingsView: View {
         Form {
             Section {
                 shortcut(
-                    icon: "sparkles",
-                    title: "Start an Agent",
-                    detail: """
-                    Asks for the idea and starts a session on it without opening \
-                    OS1. Repo and model come from what the composer used last.
-                    """
-                )
-                shortcut(
                     icon: "mic",
-                    title: "New Idea",
+                    title: "Start an Agent",
                     detail: """
                     Opens the composer with the mic listening, so you can speak \
                     the idea and still change repo, mode or model before sending.
@@ -398,7 +390,7 @@ struct ShortcutsSettingsView: View {
             } footer: {
                 // No section header: the navigation title above already says
                 // "Shortcuts", and repeating it just pushed the first row down.
-                Text("Both are installed with the app — no setup needed. Ask Siri for either by name, or find them under OS1 in the Shortcuts app.")
+                Text("Installed with the app — no setup needed. Ask Siri for it by name, or find it under OS1 in the Shortcuts app.")
             }
 
             Section {
@@ -419,9 +411,9 @@ struct ShortcutsSettingsView: View {
                 #endif
             } footer: {
                 #if os(iOS)
-                Text("To put one on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → OS1. For dictation straight into a background session, make a shortcut of Dictate Text → Start an Agent and choose that instead.")
+                Text("To put it on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → OS1 → Start an Agent.")
                 #else
-                Text("Run either from Spotlight, or say it to Siri.")
+                Text("Run it from Spotlight, or say it to Siri.")
                 #endif
             }
         }
