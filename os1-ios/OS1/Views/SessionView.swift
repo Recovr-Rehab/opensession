@@ -44,9 +44,10 @@ struct SessionView: View {
     /// block-keyed anchor pointing at nothing.
     @State private var prependAnchorEntryId: String?
 
-    /// How work folds start out: collapsed / expanded / auto (open while the
-    /// turn is live). Shared with the rest of the app's appearance settings.
-    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "collapsed"
+    /// How work folds start out: messages (folded, but the turn's notes still
+    /// read as transcript) / collapsed / expanded / auto (open while the turn
+    /// is live). Set in Settings → Preferences, shared with the web.
+    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "messages"
 
     /// Output arrived while the reader was scrolled up. Turns the return pill
     /// from a navigation aid into a notification.
@@ -170,7 +171,8 @@ struct SessionView: View {
                                             preference: turnActivity
                                         )
                                     },
-                                    expansionState: { viewModel.expansionState(id: $0) }
+                                    expansionState: { viewModel.expansionState(id: $0) },
+                                    showsMessagesWhenFolded: turnActivity == "messages"
                                 )
                                 .id(block.id)
                             }

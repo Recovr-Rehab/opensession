@@ -12,7 +12,7 @@ struct SubagentView: View {
     let worktreeDir: String?
 
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "collapsed"
+    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "messages"
 
     @State private var transcript: SubagentTranscript?
     @State private var blocks: [TranscriptBlock] = []
@@ -82,7 +82,8 @@ struct SubagentView: View {
                         sessionId: sessionId,
                         worktreeDir: worktreeDir,
                         foldState: { folds.fold(for: $0, preference: turnActivity) },
-                        expansionState: { folds.expansion(id: $0) }
+                        expansionState: { folds.expansion(id: $0) },
+                        showsMessagesWhenFolded: turnActivity == "messages"
                     )
                     .id(block.id)
                 }

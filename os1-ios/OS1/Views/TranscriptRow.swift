@@ -12,6 +12,8 @@ struct TranscriptRow: View {
     /// out of the lazy stack.
     let foldState: (WorkTurn) -> TurnFoldState
     let expansionState: (String) -> TurnFoldState
+    /// "Fold tool calls": a folded work turn still shows its notes.
+    var showsMessagesWhenFolded = false
 
     var body: some View {
         switch block {
@@ -40,6 +42,7 @@ struct TranscriptRow: View {
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
                 state: foldState(turn),
+                showsMessagesWhenFolded: showsMessagesWhenFolded,
                 detailState: { expansionState($0.id) }
             )
         case .footer(let footer):

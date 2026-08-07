@@ -1,7 +1,10 @@
 // How a turn's folded work (tool calls + intermediate assistant messages)
-// displays in the session: "collapsed" is the default and keeps work folded;
-// "auto" opens the turn fold while it is running, while "expanded" keeps it
-// open. Individual tool rows are separate disclosures and remain closed.
+// displays in the session. "messages" is the default: the turn's in-between
+// notes read as normal transcript and only the tool calls fold away, because
+// the narration is the part worth reading and a Bash invocation almost never
+// is. "collapsed" folds both; "auto" opens the whole fold while it is running
+// and "expanded" keeps it open. Individual tool rows are separate disclosures
+// and remain closed either way.
 // Stored server-side per user (ui-prefs) so it follows you across devices —
 // MacBook, iPhone Safari and the installed PWA all have separate localStorage,
 // which is why "I set it but it's still collapsed sometimes" happened. The
@@ -12,19 +15,22 @@
 import { fetchUiPrefs, saveUiPrefsApi } from "./api";
 import { getCurrentUser } from "../components/UserPicker";
 
-export type TurnActivityPref = "auto" | "expanded" | "collapsed";
+export type TurnActivityPref = "messages" | "auto" | "expanded" | "collapsed";
 
 const KEY = "opensession-turn-activity";
 const PREF_KEY = "turn-activity"; // key inside the server-side ui-prefs map
 const CHANGE_EVENT = "opensession-turn-activity-changed";
 const USER_CHANGE_EVENT = "opensession-user-changed";
-const DEFAULT_TURN_ACTIVITY_PREF: TurnActivityPref = "collapsed";
+const DEFAULT_TURN_ACTIVITY_PREF: TurnActivityPref = "messages";
+
+function parse(v: string | null | undefined): TurnActivityPref | null {
+	return v === "messages" || v === "auto" || v === "expanded" || v === "collapsed"
+		? v
+		: null;
+}
 
 export function getTurnActivityPref(): TurnActivityPref {
-	const v = localStorage.getItem(KEY);
-	return v === "auto" || v === "expanded" || v === "collapsed"
-		? v
-		: DEFAULT_TURN_ACTIVITY_PREF;
+	return parse(localStorage.getItem(KEY)) ?? DEFAULT_TURN_ACTIVITY_PREF;
 }
 
 function writeLocal(pref: TurnActivityPref) {
@@ -59,8 +65,8 @@ async function hydrate(user: string) {
 		return; // offline/error: keep the local cache
 	}
 	if (writeStamp !== stampAtStart) return; // user changed it mid-fetch
-	const server = prefs[PREF_KEY];
-	if (server === "auto" || server === "expanded" || server === "collapsed") {
+	const server = parse(prefs[PREF_KEY]);
+	if (server) {
 		if (server !== getTurnActivityPref()) {
 			writeLocal(server);
 			window.dispatchEvent(new Event(CHANGE_EVENT));

@@ -2771,13 +2771,14 @@ function PreferencesPanel() {
 			<SettingCard>
 				<SettingRow
 					title="Tool calls & messages"
-					desc="How each turn's working — tool calls and in-between messages — folds in the session. Work stays folded by default; expanding a turn does not open its individual tool inputs."
+					desc="How each turn's working folds in the session. By default the turn's in-between messages read as normal transcript and only its tool calls fold away. Expanding a turn does not open its individual tool inputs."
 					control={
 						<Select
 							label="Tool calls & messages"
 							value={turnActivity}
 							options={[
-								{ value: "collapsed", label: "Always folded" },
+								{ value: "messages", label: "Fold tool calls" },
+								{ value: "collapsed", label: "Fold everything" },
 								{ value: "auto", label: "Expand while running" },
 								{ value: "expanded", label: "Always expanded" },
 							]}

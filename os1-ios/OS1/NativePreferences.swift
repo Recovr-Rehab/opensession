@@ -94,8 +94,8 @@ enum NativePreferences {
             in: defaults
         )
         set(
-            validated(prefs["turn-activity"], allowed: ["auto", "expanded", "collapsed"]),
-            default: "collapsed",
+            validated(prefs["turn-activity"], allowed: ["messages", "auto", "expanded", "collapsed"]),
+            default: "messages",
             key: "os1.appearance.turnActivity",
             resetMissing: changedIdentity,
             in: defaults

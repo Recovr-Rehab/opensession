@@ -10,7 +10,7 @@ struct MacSettingsView: View {
     /// nav and the panes' own navigation titles.
     enum Pane: String, CaseIterable, Identifiable {
         case connection
-        case composer
+        case preferences
         case notifications
         case shortcuts
         case appearance
@@ -30,7 +30,7 @@ struct MacSettingsView: View {
         var title: String {
             switch self {
             case .connection: "Connection"
-            case .composer: "Composer"
+            case .preferences: "Preferences"
             case .notifications: "Notifications"
             case .shortcuts: "Shortcuts"
             case .appearance: "Appearance"
@@ -50,7 +50,7 @@ struct MacSettingsView: View {
         var icon: String {
             switch self {
             case .connection: "server.rack"
-            case .composer: "keyboard"
+            case .preferences: "slider.horizontal.3"
             case .notifications: "bell.badge"
             case .shortcuts: "sparkles"
             case .appearance: "circle.lefthalf.filled"
@@ -68,7 +68,7 @@ struct MacSettingsView: View {
         }
     }
 
-    @State private var selection: Pane? = .composer
+    @State private var selection: Pane? = .preferences
     @State private var authenticationMessage: String?
     @State private var config = ServerConfig.shared
     @AppStorage("os1.appearance") private var appearance = "system"
@@ -84,7 +84,7 @@ struct MacSettingsView: View {
                     paneRow(.connection)
                 }
                 Section("Personal") {
-                    paneRow(.composer)
+                    paneRow(.preferences)
                     paneRow(.notifications)
                     paneRow(.shortcuts)
                     paneRow(.appearance)
@@ -140,9 +140,9 @@ struct MacSettingsView: View {
 
     @ViewBuilder
     private var paneView: some View {
-        switch selection ?? .composer {
+        switch selection ?? .preferences {
         case .connection: MacConnectionSettingsView(authenticationMessage: authenticationMessage)
-        case .composer: ComposerSettingsView()
+        case .preferences: PreferencesSettingsView()
         case .notifications: NotificationsSettingsView()
         case .shortcuts: ShortcutsSettingsView()
         case .appearance: AppearanceSettingsView()

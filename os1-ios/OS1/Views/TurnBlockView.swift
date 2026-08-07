@@ -3,7 +3,7 @@ import SwiftUI
 /// The collapsible work fold: one header line standing in for everything a
 /// turn did before it answered.
 ///
-/// Collapsed is the default because the answer is what people came for. The
+/// Folded is the default because the answer is what people came for. The
 /// header has to carry enough for the fold to be skippable without opening
 /// it — what kind of work (the family glyphs), how much (steps, duration),
 /// whether it went wrong (failures, in red), and what it changed (edited
@@ -13,6 +13,11 @@ struct TurnBlockView: View {
     let sessionId: String
     var worktreeDir: String?
     let state: TurnFoldState
+    /// The "Fold tool calls" preference: the turn's in-between notes keep
+    /// reading as transcript while only its tool calls hide behind the header,
+    /// because the narration is the part worth reading and a shell invocation
+    /// rarely is. Expanding puts the tools back between those same notes.
+    var showsMessagesWhenFolded = false
     /// Resolves each nested tool row's own detail state, which must survive
     /// the row scrolling out of the lazy stack.
     let detailState: (ToolCallItem) -> TurnFoldState
@@ -21,6 +26,13 @@ struct TurnBlockView: View {
 
     private var glyphLimit: Int {
         horizontalSizeClass == .compact ? 4 : 6
+    }
+
+    /// A folded turn that has notes to show. A turn of pure tool calls keeps
+    /// the bare header rather than opening an empty container under it.
+    private var showsNotesOnly: Bool {
+        guard showsMessagesWhenFolded else { return false }
+        return turn.items.contains { if case .message = $0 { true } else { false } }
     }
 
     var body: some View {
@@ -36,7 +48,7 @@ struct TurnBlockView: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityHint(state.expanded ? "Hide the work" : "Show the work")
 
-            if state.expanded {
+            if state.expanded || showsNotesOnly {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(turn.items) { item in
                         switch item {
@@ -46,12 +58,14 @@ struct TurnBlockView: View {
                             MarkdownBody(entry.text, dimmed: true)
                                 .padding(.trailing, 16)
                         case .tool(let call):
-                            ToolCallRow(
-                                item: call,
-                                sessionId: sessionId,
-                                worktreeDir: worktreeDir,
-                                state: detailState(call)
-                            )
+                            if state.expanded {
+                                ToolCallRow(
+                                    item: call,
+                                    sessionId: sessionId,
+                                    worktreeDir: worktreeDir,
+                                    state: detailState(call)
+                                )
+                            }
                         }
                     }
                 }

@@ -56,7 +56,9 @@ export const TurnBlock = React.memo(function TurnBlock({
   const messages = items.filter((it) => it.type === "assistant");
 
   // Default fold state follows the preference (Settings → Preferences) and
-  // nothing else. The default stays folded, even during a live turn. "auto"
+  // nothing else. The default ("messages") folds the tool calls and nothing
+  // else; "collapsed" folds the notes away too. Both stay folded even during
+  // a live turn — the work line's tail reports the running tool. "auto"
   // is the opt-in mode that opens only the turn fold while it is working, and
   // folds it again the moment the turn settles — a failed step or a screenshot
   // inside the turn used to pin it open forever, which is the one thing both
@@ -71,6 +73,11 @@ export const TurnBlock = React.memo(function TurnBlock({
   );
   const defaultExpanded = pref === "auto" ? live : pref === "expanded";
   const [expanded, setExpanded] = useState(defaultExpanded);
+  // "messages" folds the tool calls only: the turn's in-between notes keep
+  // reading as transcript, live and afterwards, while Bash and friends stay
+  // behind the work line. Expanding puts the tools back in place, interleaved
+  // with those same notes, so nothing moves except what appears between them.
+  const messagesInline = pref === "messages" && !expanded;
 
   // Once the user has toggled the fold by hand, their choice wins — the
   // auto-sync below must not reopen/collapse it on a later default change
@@ -178,7 +185,7 @@ export const TurnBlock = React.memo(function TurnBlock({
         )}
       </button>
 
-      {expanded && (
+      {(expanded || messagesInline) && (
         <div className="mt-0.5">
           {sections.map((sec) =>
             sec.kind === "msg" ? (
@@ -187,7 +194,7 @@ export const TurnBlock = React.memo(function TurnBlock({
                 entry={sec.entry}
                 sessionId={sessionId}
               />
-            ) : (
+            ) : messagesInline ? null : (
               <div
                 key={sec.items[0].id}
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}

@@ -58,8 +58,8 @@ struct SettingsView: View {
             // Groups mirror the web nav (src/frontend/components/Settings.tsx):
             // what one person owns first, then what the whole instance does.
             Section("Personal") {
-                settingsLink("Composer", icon: "keyboard") {
-                    ComposerSettingsView()
+                settingsLink("Preferences", icon: "slider.horizontal.3") {
+                    PreferencesSettingsView()
                 }
                 settingsLink("Notifications", icon: "bell") {
                     NotificationsSettingsView()

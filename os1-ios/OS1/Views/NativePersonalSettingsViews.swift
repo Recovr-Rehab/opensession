@@ -47,17 +47,26 @@ struct NotificationsSettingsView: View {
     }
 }
 
-struct ComposerSettingsView: View {
+/// Everything about how you work with a session: the message box, what a
+/// follow-up does mid-run, how much of a turn the transcript shows, voice, and
+/// the standing prompt. All server-side per-user prefs, so it matches the web
+/// (Settings → Preferences). Appearance next door is only what this device
+/// looks like. The `os1.*` AppStorage keys stay under their original names —
+/// they are the offline cache, not a user-facing label.
+struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.defaultModel") private var nativeDefaultModel = ""
     @AppStorage("os1.composer.sendKey") private var nativeSendKey = "enter"
     @AppStorage("os1.composer.busySend") private var nativeBusySend = "queue"
     @AppStorage("os1.composer.busySendMod") private var nativeBusySendMod = "steer"
+    @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "messages"
+    @AppStorage("os1.desk.voice") private var deskVoice = "off"
 
     @State private var models: [SettingsModelOption] = []
     @State private var defaultModel = ""
     @State private var sendKey = "enter"
     @State private var busySend = "queue"
     @State private var busySendMod = "steer"
+    @State private var turnActivity = "messages"
     @State private var loading = true
     @State private var saving = false
     @State private var resaveNeeded = false
@@ -124,16 +133,54 @@ struct ComposerSettingsView: View {
                     Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Touch and hold the send button to use the other one for a single message.")
                     #endif
                 }
+
+                Section {
+                    Picker("Tool calls and messages", selection: $turnActivity) {
+                        Text("Fold tool calls").tag("messages")
+                        Text("Fold everything").tag("collapsed")
+                        Text("Expand while running").tag("auto")
+                        Text("Always expanded").tag("expanded")
+                    }
+                } header: {
+                    Text("Transcript")
+                } footer: {
+                    Text("How each turn's working folds in a session. By default the turn's in-between messages read as normal transcript and only its tool calls fold away. Expanding a turn does not open its individual tool inputs.")
+                }
+
+                Section {
+                    Toggle("Desk voice", isOn: Binding(
+                        get: { deskVoice == "on" },
+                        set: { enabled in
+                            deskVoice = enabled ? "on" : "off"
+                            pushDeskVoice(enabled)
+                        }
+                    ))
+                } footer: {
+                    Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
+                }
             }
             PersonalPromptSection()
         }
-        .navigationTitle("Composer")
+        .navigationTitle("Preferences")
         .task { await load() }
         .onChange(of: defaultModel) { _, _ in commit() }
         .onChange(of: sendKey) { _, _ in commit() }
         .onChange(of: busySend) { _, _ in commit() }
         .onChange(of: busySendMod) { _, _ in commit() }
+        .onChange(of: turnActivity) { _, _ in commit() }
         .onDisappear { commit() }
+    }
+
+    /// Fire-and-forget: the toggle already reflects locally via `@AppStorage`,
+    /// this just lets other devices pick it up.
+    private func pushDeskVoice(_ enabled: Bool) {
+        let user = NativePreferences.context().user
+        Task {
+            _ = try? await SettingsAPI.updateUiPrefs(
+                user: user,
+                prefs: ["desk-voice": enabled ? "on" : "off"]
+            )
+        }
     }
 
     /// Every control writes through on change — there is no Save button, so
@@ -157,11 +204,16 @@ struct ComposerSettingsView: View {
             sendKey = prefs["send-key"] == "mod-enter" ? "mod-enter" : "enter"
             busySend = prefs["busy-send"] == "steer" ? "steer" : "queue"
             busySendMod = prefs["busy-send-mod"] == "queue" ? "queue" : "steer"
+            // Unset (or an unknown value from a newer client) keeps whatever
+            // this device last saw rather than snapping the picker to a
+            // default the account never chose.
+            turnActivity = Self.validTurnActivity(prefs["turn-activity"]) ?? nativeTurnActivity
             #if os(macOS)
             nativeSendKey = sendKey
             #endif
             nativeBusySend = busySend
             nativeBusySendMod = busySendMod
+            nativeTurnActivity = turnActivity
             savedPrefs = currentPrefs
             prefsLoaded = true
         } catch {
@@ -199,12 +251,14 @@ struct ComposerSettingsView: View {
             sendKey = confirmed["send-key"] == "mod-enter" ? "mod-enter" : "enter"
             busySend = confirmed["busy-send"] == "steer" ? "steer" : "queue"
             busySendMod = confirmed["busy-send-mod"] == "queue" ? "queue" : "steer"
+            turnActivity = Self.validTurnActivity(confirmed["turn-activity"]) ?? turnActivity
             nativeDefaultModel = defaultModel
             #if os(macOS)
             nativeSendKey = sendKey
             #endif
             nativeBusySend = busySend
             nativeBusySendMod = busySendMod
+            nativeTurnActivity = turnActivity
             savedPrefs = confirmed
         } catch {
             self.error = error.localizedDescription
@@ -222,21 +276,19 @@ struct ComposerSettingsView: View {
             "send-key": sendKey,
             "busy-send": busySend,
             "busy-send-mod": busySendMod,
+            "turn-activity": turnActivity,
         ]
+    }
+
+    private static func validTurnActivity(_ value: String?) -> String? {
+        ["messages", "auto", "expanded", "collapsed"].contains(value) ? value : nil
     }
 }
 
+/// Only what this device looks like. How much of a session you see, and every
+/// other per-account choice, lives in Preferences — same split as the web.
 struct AppearanceSettingsView: View {
     @AppStorage("os1.appearance") private var appearance = "system"
-    @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "collapsed"
-    @AppStorage("os1.desk.voice") private var deskVoice = "off"
-
-    @State private var turnActivity = "collapsed"
-    @State private var loading = true
-    @State private var saving = false
-    @State private var error: String?
-    @State private var savedTurnActivity = "auto"
-    @State private var prefsLoaded = false
 
     var body: some View {
         Form {
@@ -251,113 +303,12 @@ struct AppearanceSettingsView: View {
             } footer: {
                 Text("The selected native appearance is stored on this device.")
             }
-
-            Section {
-                if loading {
-                    ProgressView("Loading session preferences…")
-                } else {
-                    Picker("Tool calls and messages", selection: $turnActivity) {
-                        Text("Expand while running").tag("auto")
-                        Text("Always expanded").tag("expanded")
-                        Text("Always collapsed").tag("collapsed")
-                    }
-                }
-            } header: {
-                Text("Session")
-            } footer: {
-                Text("Controls how a turn's working activity is folded in a session. Sidebar settings are not shown because the native app has no web sidebar.")
-            }
-
-            Section {
-                Toggle("Desk voice", isOn: Binding(
-                    get: { deskVoice == "on" },
-                    set: { enabled in
-                        deskVoice = enabled ? "on" : "off"
-                        pushDeskVoice(enabled)
-                    }
-                ))
-            } footer: {
-                Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
-            }
-
-            if let error {
-                Section {
-                    Text(error).foregroundStyle(.red)
-                    Button("Try again") { Task { await load() } }
-                }
-            }
         }
         .navigationTitle("Appearance")
-        .task { await load() }
-        .onChange(of: turnActivity) { _, _ in
-            guard prefsLoaded, !saving, turnActivity != savedTurnActivity else { return }
-            Task { await saveTurnActivity() }
-        }
-    }
-
-    /// Fire-and-forget: the toggle is already reflected locally via
-    /// `@AppStorage`, this just lets other devices pick it up.
-    private func pushDeskVoice(_ enabled: Bool) {
-        let user = NativePreferences.context().user
-        Task {
-            _ = try? await SettingsAPI.updateUiPrefs(
-                user: user,
-                prefs: ["desk-voice": enabled ? "on" : "off"]
-            )
-        }
-    }
-
-    private func load() async {
-        loading = true
-        error = nil
-        prefsLoaded = false
-        do {
-            let requestContext = NativePreferences.context()
-            let prefs = try await SettingsAPI.uiPrefs(user: requestContext.user)
-            guard NativePreferences.context() == requestContext else { loading = false; return }
-            if ["auto", "expanded", "collapsed"].contains(prefs["turn-activity"]) {
-                turnActivity = prefs["turn-activity"] ?? "collapsed"
-                nativeTurnActivity = turnActivity
-            } else {
-                turnActivity = nativeTurnActivity
-            }
-            savedTurnActivity = turnActivity
-            prefsLoaded = true
-        } catch {
-            self.error = error.localizedDescription
-        }
-        loading = false
-    }
-
-    /// Writes through on selection, like the Desk voice toggle above it.
-    private func saveTurnActivity() async {
-        saving = true
-        error = nil
-        do {
-            let requestContext = NativePreferences.context()
-            let selected = turnActivity
-            let response = try await SettingsAPI.updateUiPrefs(
-                user: requestContext.user,
-                prefs: ["turn-activity": selected]
-            )
-            var confirmed = response
-            confirmed["turn-activity"] = response["turn-activity"] ?? selected
-            guard NativePreferences.apply(confirmed, for: requestContext) else {
-                self.error = "Connection changed before preferences finished saving."
-                saving = false
-                return
-            }
-            turnActivity = confirmed["turn-activity"] ?? selected
-            nativeTurnActivity = turnActivity
-            savedTurnActivity = turnActivity
-        } catch {
-            self.error = error.localizedDescription
-        }
-        saving = false
     }
 }
 
-/// The standing prompt, shown inside Composer. There is no Save button: it
+/// The standing prompt, shown inside Preferences. There is no Save button: it
 /// commits when the box loses focus and again when the screen goes away, so
 /// leaving keeps your edit — same contract as the web.
 struct PersonalPromptSection: View {

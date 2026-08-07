@@ -158,6 +158,8 @@ struct WorkTurn: Identifiable, Equatable {
         switch preference {
         case "expanded": return true
         case "auto": return isLive
+        // "messages" and "collapsed" both start folded — they differ only in
+        // whether the turn's notes render outside the fold (TurnBlockView).
         default: return false
         }
     }
