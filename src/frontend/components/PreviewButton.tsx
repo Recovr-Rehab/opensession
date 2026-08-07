@@ -253,7 +253,7 @@ export function PreviewButton({
           )}
           {shot && (
             <a
-              className="inline-flex min-h-[26px] items-center justify-center whitespace-nowrap rounded-xs border border-line bg-control px-2.5 text-xs font-[550] text-dim shadow-control transition hover:border-line-strong hover:text-fg active:scale-[0.97]"
+              className="inline-flex min-h-[26px] items-center justify-center whitespace-nowrap rounded-xs border border-line bg-control px-2.5 text-xs font-medium text-dim shadow-control transition hover:border-line-strong hover:text-fg active:scale-[0.97]"
               href={shot}
               download={`preview-${session.id}.png`}
             >

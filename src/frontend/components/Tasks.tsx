@@ -261,7 +261,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
 					<div
 						// Empty reads as a soft, borderless well rather than a card with
 						// nothing in it: rounder, one step lighter, no outline.
-						className="overflow-hidden rounded-[calc(16.5px*var(--rf))] bg-raised px-4"
+						className="overflow-hidden rounded-xl bg-raised px-4"
 					>
 						<EmptyState
 							icon={<IconListChecks size={22} />}

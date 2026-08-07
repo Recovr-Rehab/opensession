@@ -140,7 +140,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 				ref={ref}
 				className={cn(
 					"inline-flex items-center justify-center gap-1 border whitespace-nowrap select-none",
-					"font-[550] transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
+					"font-medium transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
 					// One keyboard focus treatment for every variant. Without it a
 					// Button falls back to the browser's default outline, which
 					// differs per engine and sits tight against the corner; the

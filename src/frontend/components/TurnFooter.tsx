@@ -312,7 +312,7 @@ function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
         "flex flex-shrink-0 items-center justify-center text-meta font-bold leading-none text-white",
         flush
           ? "min-w-6 self-stretch px-1"
-          : "h-5 min-w-5 self-center rounded-[calc(3px*var(--rf))] px-0.5"
+          : "h-5 min-w-5 self-center rounded-xs px-0.5"
       )}
       style={{ background: color }}
     >

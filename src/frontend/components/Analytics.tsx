@@ -218,7 +218,7 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 					<div className="mb-1 text-meta font-semibold text-fg">{shortDate(labels[hover])}</div>
 					{tooltipRows.map((r) => (
 						<div key={r.label} className="flex items-center gap-1.5 whitespace-nowrap text-meta leading-4.5">
-							<span className="size-2 shrink-0 rounded-[calc(1.5px*var(--rf))]" style={{ background: r.color }} />
+							<span className="size-2 shrink-0 rounded-xs" style={{ background: r.color }} />
 							<span className="text-dim">{r.label}</span>
 							<span className="ml-auto pl-3 font-medium tabular-nums text-fg">{formatValue(r.value)}</span>
 						</div>

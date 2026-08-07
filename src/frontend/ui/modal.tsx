@@ -87,7 +87,7 @@ function Content({
 							// (the dictation HUD); `overflow-hidden` keeps the rows'
 							// dividers inside the rounded shell.
 							"relative flex flex-col overflow-hidden outline-none",
-							"rounded-[calc(20px*var(--rf))] border border-line-strong bg-panel",
+							"rounded-xl border border-line-strong bg-panel",
 							"shadow-[0_24px_70px_rgba(0,0,0,0.45)]",
 							// Drops in from just above its resting place, the way a
 							// palette summoned by a keystroke should.

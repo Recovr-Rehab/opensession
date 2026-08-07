@@ -145,7 +145,7 @@ interface Props {
 	liveMedia?: WorkspaceMediaItem[];
 }
 
-const INFO_LABEL_CLASS = "px-1 text-label font-[650] tracking-[-0.01em] text-faint";
+const INFO_LABEL_CLASS = "px-1 text-label font-semibold tracking-[-0.01em] text-faint";
 const INFO_SECTION_CLASS = "grid gap-[5px]";
 const INFO_LIST_CLASS =
 	"grid gap-px overflow-hidden rounded-lg bg-panel p-1";
@@ -345,7 +345,7 @@ function CommentCard({
 				aria-label={`Comment by ${comment.author}`}
 			>
 				{avatar}
-				<span className="min-w-0 flex-1 truncate text-supporting font-[550] leading-[1.35] text-fg">
+				<span className="min-w-0 flex-1 truncate text-supporting font-medium leading-[1.35] text-fg">
 					{title}
 				</span>
 				<span className="shrink-0 text-meta text-faint">
@@ -450,7 +450,7 @@ function FileRow({
 			>
 				<span
 					className={cn(
-						"inline-flex size-[18px] shrink-0 items-center justify-center rounded-[calc(3px*var(--rf))] text-[11px] font-bold",
+						"inline-flex size-[18px] shrink-0 items-center justify-center rounded-xs text-[11px] font-bold",
 						statusBadgeClass(file.status),
 					)}
 				>
@@ -1140,7 +1140,7 @@ function ReviewerChip({
 			<Menu.Root>
 				<Menu.Trigger
 					className={cn(
-						"inline-flex w-fit min-w-0 items-center gap-1 rounded-control border border-line bg-control py-1 pl-2 pr-2.5 text-left text-supporting font-[550] whitespace-nowrap text-dim shadow-control outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg active:scale-[0.96] data-[popup-open]:border-line-strong data-[popup-open]:bg-hover",
+						"inline-flex w-fit min-w-0 items-center gap-1 rounded-control border border-line bg-control py-1 pl-2 pr-2.5 text-left text-supporting font-medium whitespace-nowrap text-dim shadow-control outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg active:scale-[0.96] data-[popup-open]:border-line-strong data-[popup-open]:bg-hover",
 						needsMyReview
 							? "border-red/30 bg-red-soft text-red hover:border-red/50 hover:text-red"
 							: accepted
@@ -1686,7 +1686,7 @@ export function WorkspaceInfo({
 	return (
 		<div className="workspace-info-panel flex flex-col gap-4 px-2 pb-[22px] pt-3">
 			<div className="grid gap-1 px-1">
-				<div className="workspace-info-title selectable text-item-title font-[680] leading-[1.2] text-fg">
+				<div className="workspace-info-title selectable text-item-title font-semibold leading-[1.2] text-fg">
 					{title}
 				</div>
 				{meta && <div className="text-label leading-[1.35] text-faint">{meta}</div>}
@@ -1730,7 +1730,7 @@ export function WorkspaceInfo({
 				<div className="grid gap-4">
 					{comments.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							<div className="flex items-center justify-between gap-2 px-1 text-label font-[650] tracking-[-0.01em] text-faint">
+							<div className="flex items-center justify-between gap-2 px-1 text-label font-semibold tracking-[-0.01em] text-faint">
 								<span>
 									{comments.length} PR comment{comments.length === 1 ? "" : "s"}
 								</span>
@@ -1776,7 +1776,7 @@ export function WorkspaceInfo({
 					)}
 					{changed.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							<div className="flex items-center justify-between gap-2 px-1 text-label font-[650] tracking-[-0.01em] text-faint">
+							<div className="flex items-center justify-between gap-2 px-1 text-label font-semibold tracking-[-0.01em] text-faint">
 								<span>
 									{changed.length} file{changed.length === 1 ? "" : "s"} changed
 								</span>

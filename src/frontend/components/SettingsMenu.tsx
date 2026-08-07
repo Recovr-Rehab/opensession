@@ -371,7 +371,7 @@ export function SettingsMenu({
 					</div>
 				) : (
 					<Menu.SubmenuRoot>
-						<Menu.SubmenuTrigger className="gap-[9px] rounded-[calc(5px*var(--rf))] px-2 py-1.5">
+						<Menu.SubmenuTrigger className="gap-[9px] rounded-sm px-2 py-1.5">
 							<Avatar name={currentUser} />
 							<span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
 								<span className="text-meta font-bold tracking-[-0.01em] text-faint">
@@ -406,7 +406,7 @@ export function SettingsMenu({
 										key={name}
 										value={name}
 										closeOnClick
-										className="gap-[9px] rounded-[calc(5px*var(--rf))] px-2 py-1.5"
+										className="gap-[9px] rounded-sm px-2 py-1.5"
 									>
 										<Avatar name={name} />
 										<span className="min-w-0 flex-1 font-medium">{name}</span>
