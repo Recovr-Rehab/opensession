@@ -243,24 +243,20 @@ import {
 // existing imports, docs, and security notes stay valid. poolWaitMsFor was
 // private here and is deliberately not re-exported (imported above for use).
 export {
-  OPENCODE_MODEL_PREFIX,
   parseOpencodeModel,
   INTERACTIVE_KINDS,
   isUnattendedKind,
   baseJournalKind,
-  SHARED_INPROCESS_SERVERS,
   sharedOpencodeEligible,
   sharedServerKey,
   opencodeGateReason,
   type OpencodeRunPolicy,
-  LOCAL_WORKSPACE_TOOL_IDS,
   opencodeDeniedToolIds,
   opencodeRunPolicy,
   buildOpencodeMcpConfig,
   proxyOpencodeMcpConfigs,
   remoteOpencodeMcpConfigs,
   inProcessOpencodeMcpConfigs,
-  opencodeMcpFromPrebuiltProxies,
   readLocalInstructions,
 } from "./opencode-policy";
 import {
@@ -424,7 +420,7 @@ export const OPENCODE_STATE_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode`;
  *  OPENSESSION_OC_DB_SHARD=0 reverts to opencode's default DB locations. */
 const SHARD_DB_DIR = `${OPENCODE_STATE_DIR}/db`;
 
-export function opencodeDbShardActive(): boolean {
+function opencodeDbShardActive(): boolean {
   const v = (process.env.OPENSESSION_OC_DB_SHARD || "").trim().toLowerCase();
   return v !== "0" && v !== "false";
 }
@@ -593,7 +589,7 @@ async function pruneOrphanedAssistantTail(
  *  model's own reply (and never be pushed to stream consumers like the Slack
  *  loop). NOTE: user messages carry `summary` as a diffs OBJECT — gate on
  *  role + `summary === true`, never truthiness. */
-export function isCompactionMessageInfo(info: unknown): boolean {
+function isCompactionMessageInfo(info: unknown): boolean {
   const m = info as { role?: string; summary?: unknown; mode?: string; agent?: string } | null;
   return (
     !!m &&
@@ -668,7 +664,7 @@ export const MERIDIAN_CFG_ROOT = `${stateDir("opencode")}/meridian-cfg`;
  */
 export const MERIDIAN_SESSION_ROOT = `${stateDir("opencode")}/meridian-sessions`;
 
-export function meridianSessionDir(serverKey: string, accountId: string): string {
+function meridianSessionDir(serverKey: string, accountId: string): string {
   return `${MERIDIAN_SESSION_ROOT}/${serverKey.replace(/[^A-Za-z0-9._-]/g, "_")}/${accountId}`;
 }
 
@@ -719,7 +715,7 @@ function seedMeridianSessionDir(dir: string): void {
  * picks it up when the next meridian server (and its proxy) spawns.
  */
 let meridianProxyScrubInstalled = false;
-export function ensureMeridianProxyScrub(): void {
+function ensureMeridianProxyScrub(): void {
   if (meridianProxyScrubInstalled) return;
   meridianProxyScrubInstalled = true;
   try {
@@ -1152,7 +1148,7 @@ export function steerOpencodeRun(id: string, text: string, images?: ImageInput[]
  * installation). Writes elsewhere fail at GitHub's side with 403 "Resource
  * not accessible", for every code path including raw API calls the shims
  * could never see. */
-export function opencodeEnv(author?: GitIdentity | null): Record<string, string> {
+function opencodeEnv(author?: GitIdentity | null): Record<string, string> {
   const basePath = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
   return {
     PATH: basePath,
@@ -1744,7 +1740,7 @@ export async function reconnectSharedInProcessMcp(
 // layer is otherwise blind to. claude-accounts consumes this through the
 // provider registered below (injection, not an import: this module imports
 // claude-accounts, so the dependency can't point the other way).
-export function meridianQuotaEndpoints(): { accountId: string; url: string; key: string }[] {
+function meridianQuotaEndpoints(): { accountId: string; url: string; key: string }[] {
   const out: { accountId: string; url: string; key: string; lastUsed: number }[] = [];
   for (const e of servers.values()) {
     if (!e.meridianKey || !e.meridianPort || !e.accountId) continue;
@@ -2161,7 +2157,7 @@ async function adoptDetachedOpencodeServersInner(): Promise<number> {
  * (ticker below): a leak can mint at any time, and an unreaped scope also
  * pins its worktree against the disk-cleanup cron ("live process" skip).
  */
-export function reapOrphanedDetachedScopes(): number {
+function reapOrphanedDetachedScopes(): number {
   if (!opencodeDetachActive()) return 0;
   try {
     const known = new Set(readDetachedRegistry().map((r) => r.unit));
@@ -2586,6 +2582,413 @@ export function makeSubagentStallGuard(
       timer = undefined;
     },
   };
+}
+
+/**
+ * Shared end-of-run registry teardown for the finally blocks of
+ * runOpencodeAttempt and tryReattachOpencodeRun: releases the abort/steer
+ * registrations, the detached-run marker, the shared-server ocSession
+ * mapping, the run-rpc token, and the server entry's active-run hold.
+ * Journal clearing stays at the call sites — the two paths gate it
+ * differently (rotation retries keep the record).
+ */
+function teardownOpencodeRunRegistries(ctx: {
+  registeredKeys: Set<string>;
+  runKey: string;
+  /** Non-empty = the oc session id registered in run-rpc's ocSession registry. */
+  ocSessionRegistered: string;
+  rpcTokenRegistered: boolean;
+  entry: OpencodeServerEntry | undefined;
+}): void {
+  for (const key of ctx.registeredKeys) {
+    activeOpencodeRuns.delete(key);
+    activeOpencodeSteers.delete(key);
+  }
+  detachedRunKeys.delete(ctx.runKey);
+  if (ctx.ocSessionRegistered) unregisterOcSessionContext(ctx.ocSessionRegistered);
+  if (ctx.rpcTokenRegistered && ctx.entry) unregisterRunToken(ctx.entry.rpcToken);
+  if (ctx.entry) {
+    ctx.entry.activeRuns = Math.max(0, ctx.entry.activeRuns - 1);
+    ctx.entry.lastUsed = Date.now();
+    // Shared server whose config changed mid-flight: the last run out
+    // turns off the lights.
+    reapDrainedServer(ctx.entry);
+  }
+}
+
+/**
+ * Permission-ask bridge shared by both drain paths (see the block comment at
+ * the primary call site in runOpencodeAttempt for the full policy rationale).
+ * One bridge per run: dedupes ask ids across the SSE pump and the busy-poll
+ * sweep, and serializes surfaced asks so a session shows one card at a time.
+ * Returns the handlePermissionAsk entrypoint. noteAskPending is an accessor
+ * (not the stall guard itself) because the reattach path constructs its stall
+ * guard after this bridge — asks only ever arrive via events, never
+ * synchronously, so the late binding is safe there.
+ */
+function makeOpencodePermissionBridge(ctx: {
+  client: OpencodeClient;
+  entry: OpencodeServerEntry;
+  ocSessionId: string;
+  q: { query?: { directory: string } };
+  unattended: boolean;
+  /** Command-policy gate for bash asks (bashGated / recomputed from the journaled kind). */
+  gated: boolean;
+  sessionId: string | undefined;
+  runKind: string | undefined;
+  onAskUser: RunAgentOpts["onAskUser"];
+  turnEvent: (fields: Record<string, unknown>) => void;
+  noteAskPending: (delta: 1 | -1) => void;
+}): (ask: any, via: string) => void {
+  const { client, entry, ocSessionId, q } = ctx;
+  const repliedPermissionIds = new Set<string>();
+  let permissionAskChain: Promise<void> = Promise.resolve();
+  const replyPermissionAsk = async (permId: string, reply: "once" | "always" | "reject") => {
+    // Legacy reply endpoint first (exists on every server version we run,
+    // 1.17.15 included); fall back to the flat 1.17+ reply route in case a
+    // future server drops the legacy path.
+    const res = await client
+      .postSessionIdPermissionsPermissionId({
+        path: { id: ocSessionId, permissionID: permId },
+        body: { response: reply },
+        ...q,
+      })
+      .catch((e) => ({ error: e }));
+    if ((res as { error?: unknown })?.error) {
+      await fetch(`${entry.url}/permission/${encodeURIComponent(permId)}/reply`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Basic ${btoa(`opencode:${entry.password}`)}`,
+        },
+        body: JSON.stringify({ reply }),
+      }).catch((e) =>
+        console.warn(`[opencode-runner] failed to answer permission ask ${permId}:`, e)
+      );
+    }
+  };
+  const decidePermissionAsk = async (ask: any): Promise<"once" | "always" | "reject"> => {
+    const kind = String(ask?.permission ?? ask?.action ?? "unknown");
+    // Bash asks go to the command policy first (command-policy.ts): a deny
+    // match rejects in every mode; on gated runs an allowed command answers
+    // its own ask. Null ⇒ not bash / interactive ⇒ the flow below decides.
+    const policyReply = bashAskPolicyReply(ask, {
+      unattended: ctx.unattended,
+      gated: ctx.gated,
+      sessionId: ctx.sessionId,
+      runKind: ctx.runKind,
+    });
+    if (policyReply) return policyReply;
+    if (ctx.unattended) return "reject";
+    if (kind === "external_directory") return "once";
+    if (!ctx.onAskUser) return "reject";
+    // Surface on the session's question card and wait for the human.
+    const what = ((ask?.patterns ?? ask?.resources ?? []) as unknown[])
+      .map(String)
+      .join(", ");
+    const meta = ask?.metadata ? JSON.stringify(ask.metadata).slice(0, 300) : "";
+    const answer = await ctx.onAskUser({
+      questions: [
+        {
+          question:
+            `The agent needs permission: **${kind}**` +
+            (what ? ` on \`${what}\`` : "") +
+            (meta && meta !== "{}" ? ` (${meta})` : "") +
+            ". Allow it?",
+          header: "Permission",
+          options: [
+            { label: "Allow", description: "Allow this call once" },
+            { label: "Allow always", description: "Remember for matching future calls" },
+            { label: "Reject", description: "Deny — the agent sees a permission error" },
+          ],
+          multiSelect: false,
+        },
+      ],
+    });
+    if (answer.behavior === "deny") return "reject"; // nobody answered
+    const picked = String(
+      Object.values(
+        (answer.updatedInput as { answers?: Record<string, string> }).answers || {}
+      )[0] || ""
+    ).toLowerCase();
+    if (picked.startsWith("allow always")) return "always";
+    if (picked.startsWith("allow") || picked.startsWith("yes")) return "once";
+    return "reject";
+  };
+  return (ask: any, via: string) => {
+    const permId = String(ask?.id || "");
+    if (!permId || repliedPermissionIds.has(permId)) return;
+    repliedPermissionIds.add(permId);
+    const kind = String(ask?.permission ?? ask?.action ?? "unknown");
+    permissionAskChain = permissionAskChain.then(async () => {
+      // Pause the stall clock: a tool part sits open while its ask waits on
+      // a human, which can legitimately take longer than any stall window.
+      ctx.noteAskPending(1);
+      try {
+        let reply: "once" | "always" | "reject" = "reject";
+        try {
+          reply = await decidePermissionAsk(ask);
+        } catch (e) {
+          console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
+        }
+        console.warn(
+          `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
+        );
+        ctx.turnEvent({
+          direction: "out",
+          kind: "permission_decision",
+          tool_name: kind,
+          decision: reply === "reject" ? "deny" : "allow",
+          reason: ctx.unattended
+            ? "unattended_auto_reject"
+            : kind === "external_directory"
+              ? "interactive_auto_approve"
+              : ctx.onAskUser
+                ? "human_decision"
+                : "no_ask_handler",
+        });
+        await replyPermissionAsk(permId, reply);
+      } finally {
+        ctx.noteAskPending(-1);
+      }
+    });
+  };
+}
+
+/**
+ * Per-run mirror for message.part.updated text/tool parts — the shared core
+ * of both handleEvent ladders: transcript append + turn-event audit +
+ * StreamEvent push, with dedup sets so re-delivered SSE parts (reconnects,
+ * reattach backfill seeds) never double-append. The primary pump keeps its
+ * extra cases (retry parts, reasoning parts) around these calls. The dedup
+ * sets are caller-owned so the reattach path can seed them from the
+ * transcript file and the final-message tail can keep using them.
+ */
+function makePartMirror(ctx: {
+  ocSessionId: string;
+  model: string;
+  turnEvent: (fields: Record<string, unknown>) => void;
+  push: (ev: StreamEvent) => void;
+  steerFn: OpencodeSteerFn;
+  emittedText: Set<string>;
+  compactionMsgs: Set<string>;
+  startedTools: Set<string>;
+  finishedTools: Set<string>;
+}): { mirrorTextPart: (part: any) => void; mirrorToolPart: (part: any) => void } {
+  const {
+    ocSessionId,
+    model,
+    turnEvent,
+    push,
+    steerFn,
+    emittedText,
+    compactionMsgs,
+    startedTools,
+    finishedTools,
+  } = ctx;
+  let envelopeLeakSteers = 0;
+  const mirrorTextPart = (part: any) => {
+    if (part.type === "text" && !part.synthetic && part.time?.end && !emittedText.has(part.id)) {
+      emittedText.add(part.id);
+      if (compactionMsgs.has(part.messageID)) {
+        turnEvent({ direction: "out", kind: "compaction_summary", ...summarizeText(part.text) });
+        appendOpencodeTranscript(ocSessionId, [
+          transcriptLineCompactionSummary(part.text, part.id),
+        ]);
+      } else {
+        turnEvent({ direction: "out", kind: "assistant_text", ...summarizeText(part.text) });
+        appendOpencodeTranscript(ocSessionId, [
+          transcriptLineAssistantText(part.text, part.id, undefined, model),
+        ]);
+        push({ type: "text_chunk", text: part.text });
+        // Assistant text shaped like a tool transcript = the model
+        // narrating tool calls/results it invented (see
+        // looksLikeFabricatedToolTranscript). Correct it in-band before
+        // the fabricated values reach a command.
+        if (looksLikeFabricatedToolTranscript(part.text) && envelopeLeakSteers < 2) {
+          envelopeLeakSteers++;
+          turnEvent({
+            direction: "out",
+            kind: "envelope_leak_detected",
+            ...summarizeText(part.text, 300),
+          });
+          steerFn(ENVELOPE_LEAK_STEER_PROMPT);
+        }
+      }
+    }
+  };
+  const mirrorToolPart = (part: any) => {
+    if (part.type !== "tool") return;
+    const state = part.state;
+    if ((state?.status === "running" || state?.status === "completed" || state?.status === "error") && !startedTools.has(part.id)) {
+      startedTools.add(part.id);
+      turnEvent({
+        direction: "out",
+        kind: "tool_use",
+        tool_name: part.tool,
+        tool_use_id: part.id,
+        ...summarizeText(JSON.stringify(state?.input ?? {}), 500),
+      });
+      appendOpencodeTranscript(ocSessionId, [
+        transcriptLineToolUse(part.id, part.tool || "tool", state?.input),
+      ]);
+      push({ type: "tool_use", toolName: part.tool, toolInput: state?.input, toolUseId: part.id });
+    }
+    if ((state?.status === "completed" || state?.status === "error") && !finishedTools.has(part.id)) {
+      finishedTools.add(part.id);
+      const result = state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
+      const images = opencodeToolResultImages(part);
+      turnEvent({
+        direction: "in",
+        kind: "tool_result",
+        tool_use_id: part.id,
+        is_error: state.status === "error",
+        ...summarizeText(result),
+      });
+      appendOpencodeTranscript(ocSessionId, [
+        transcriptLineToolResult(
+          part.id,
+          result,
+          state.status === "error",
+          undefined,
+          images,
+        ),
+      ]);
+      push({
+        type: "tool_result",
+        toolUseId: part.id,
+        content: result.length > 500 ? result.slice(0, 500) + "..." : result,
+        ...(images.length ? { images } : {}),
+      });
+    }
+  };
+  return { mirrorTextPart, mirrorToolPart };
+}
+
+/**
+ * SSE event pump with reconnect (Bun's fetch aborts responses idle >300s;
+ * quiet stretches during long tool calls hit that), shared by both drain
+ * paths. stopped/idle are accessors, not snapshots — they read the caller's
+ * live drain state on every check, preserving the original closure reads.
+ */
+async function runSseEventPump(opts: {
+  client: OpencodeClient;
+  query: { query: { directory: string } } | undefined;
+  handleEvent: (ev: any) => Promise<void>;
+  stopped: () => boolean;
+  idle: () => boolean;
+}): Promise<void> {
+  while (!opts.stopped() && !opts.idle()) {
+    try {
+      const sub = await opts.client.event.subscribe(opts.query as any);
+      for await (const ev of sub.stream as AsyncGenerator<any>) {
+        if (opts.stopped()) return;
+        await opts.handleEvent(ev);
+        if (opts.idle()) return;
+      }
+    } catch {
+      // stream dropped — fall through to reconnect
+    }
+    if (!opts.stopped() && !opts.idle()) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+}
+
+/**
+ * Read the turn's final assistant message out of the messages list and mirror
+ * any text parts the SSE pump missed into the transcript + the pending event
+ * queue. Shared tail of runOpencodeAttempt and tryReattachOpencodeRun (the
+ * emittedText dedup set keeps already-streamed parts from double-appending).
+ */
+function collectFinalAssistantText(
+  list: Array<{ info: any; parts: any[] }>,
+  ctx: {
+    ocSessionId: string;
+    model: string;
+    emittedText: Set<string>;
+    pending: StreamEvent[];
+  }
+): { lastAssistant: { info: any; parts: any[] } | undefined; info: any; textOut: string } {
+  const { ocSessionId, model, emittedText, pending } = ctx;
+  const lastAssistant = latestTurnAssistant(list);
+  const info = lastAssistant?.info;
+  const parts = lastAssistant?.parts || [];
+  // Edge: a turn can end right on the autocompact summary (the trigger is a
+  // user-role message, so latestTurnAssistant lands on the summary). Its
+  // text is the compaction handoff, not the model's reply.
+  const finalIsCompaction = isCompactionMessageInfo(info);
+  const textOut = parts
+    .filter((pt) => pt.type === "text" && !pt.synthetic && pt.text)
+    .map((pt) => {
+      if (!emittedText.has(pt.id)) {
+        emittedText.add(pt.id);
+        appendOpencodeTranscript(ocSessionId, [
+          finalIsCompaction
+            ? transcriptLineCompactionSummary(pt.text, pt.id)
+            : transcriptLineAssistantText(pt.text, pt.id, undefined, model),
+        ]);
+        if (!finalIsCompaction) pending.push({ type: "text_chunk", text: pt.text });
+      }
+      return finalIsCompaction ? "" : pt.text;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  return { lastAssistant, info, textOut };
+}
+
+/**
+ * Terminal success emit, shared by both drain paths: compute usage from the
+ * final assistant info, audit the `result` turn event, and build the
+ * usage_snapshot + done events for the caller to yield (in that order).
+ */
+function buildTurnResultEvents(ctx: {
+  info: any;
+  list: Array<{ info: any; parts: any[] }>;
+  textOut: string;
+  ocSessionId: string;
+  model: string;
+  providerID: string;
+  turnEvent: (fields: Record<string, unknown>) => void;
+}): StreamEvent[] {
+  const { info, list, textOut } = ctx;
+  const tokens = info?.tokens;
+  const usage: TurnUsage | undefined = tokens
+    ? {
+        costUsd: info?.cost,
+        inputTokens: tokens.input || 0,
+        outputTokens: tokens.output || 0,
+        cacheReadTokens: tokens.cache?.read || 0,
+        cacheCreationTokens: tokens.cache?.write || 0,
+        contextTokens:
+          (tokens.input || 0) + (tokens.cache?.read || 0) + (tokens.cache?.write || 0),
+      }
+    : undefined;
+  const userTurns = list.filter((message) => message.info?.role === "user").length;
+  ctx.turnEvent({
+    direction: "out",
+    kind: "result",
+    result_subtype: "success",
+    is_error: false,
+    input_tokens: tokens?.input,
+    output_tokens: tokens?.output,
+    cache_read_input_tokens: tokens?.cache?.read,
+    total_cost_usd: info?.cost,
+    ...summarizeText(textOut),
+  });
+  const events: StreamEvent[] = [];
+  if (usage) events.push({ type: "usage_snapshot", usage });
+  events.push({
+    type: "done",
+    sessionId: ctx.ocSessionId,
+    result: textOut || EMPTY_COMPLETION_RESULT,
+    provider: PROVIDER,
+    model: ctx.model,
+    usage,
+    cacheMissWarning:
+      (usage && isLikelyPromptCacheMiss(usage, userTurns, ctx.providerID)) || undefined,
+  });
+  return events;
 }
 
 export async function* runOpencode(
@@ -3784,7 +4187,6 @@ async function* runOpencodeAttempt(
     });
     const startedTools = new Set<string>();
     const finishedTools = new Set<string>();
-    let envelopeLeakSteers = 0;
     let sawFirstOutput = false;
     const stallGuard = makeSubagentStallGuard(ocSessionId, (info) => {
       if (idle || runFailure || abortController.signal.aborted) return;
@@ -3848,6 +4250,17 @@ async function* runOpencodeAttempt(
       wake?.();
     };
     failRun = signalDone;
+    const { mirrorTextPart, mirrorToolPart } = makePartMirror({
+      ocSessionId,
+      model,
+      turnEvent,
+      push,
+      steerFn,
+      emittedText,
+      compactionMsgs,
+      startedTools,
+      finishedTools,
+    });
 
     // opencode retries provider stream errors internally (exponential backoff,
     // silent from the outside) — RetryPart / session.status "retry" events are
@@ -4031,119 +4444,20 @@ async function* runOpencodeAttempt(
     // pipeline); no answer ⇒ reject. Deduped because the SSE pump and the
     // poll sweep can both see the same ask; surfaced asks are serialized so a
     // session shows one card at a time (pendingAsks holds one per session).
-    const repliedPermissionIds = new Set<string>();
-    let permissionAskChain: Promise<void> = Promise.resolve();
-    const replyPermissionAsk = async (permId: string, reply: "once" | "always" | "reject") => {
-      // Legacy reply endpoint first (exists on every server version we run,
-      // 1.17.15 included); fall back to the flat 1.17+ reply route in case a
-      // future server drops the legacy path.
-      const res = await client
-        .postSessionIdPermissionsPermissionId({
-          path: { id: ocSessionId, permissionID: permId },
-          body: { response: reply },
-          ...q,
-        })
-        .catch((e) => ({ error: e }));
-      if ((res as { error?: unknown })?.error) {
-        await fetch(`${entry!.url}/permission/${encodeURIComponent(permId)}/reply`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            Authorization: `Basic ${btoa(`opencode:${entry!.password}`)}`,
-          },
-          body: JSON.stringify({ reply }),
-        }).catch((e) =>
-          console.warn(`[opencode-runner] failed to answer permission ask ${permId}:`, e)
-        );
-      }
-    };
-    const decidePermissionAsk = async (ask: any): Promise<"once" | "always" | "reject"> => {
-      const kind = String(ask?.permission ?? ask?.action ?? "unknown");
-      // Bash asks go to the command policy first (command-policy.ts): a deny
-      // match rejects in every mode; on gated runs an allowed command answers
-      // its own ask. Null ⇒ not bash / interactive ⇒ the flow below decides.
-      const policyReply = bashAskPolicyReply(ask, {
-        unattended: policy.unattended,
-        gated: bashGated,
-        sessionId: journal?.osSessionId,
-        runKind: journal?.kind,
-      });
-      if (policyReply) return policyReply;
-      if (policy.unattended) return "reject";
-      if (kind === "external_directory") return "once";
-      if (!opts.onAskUser) return "reject";
-      // Surface on the session's question card and wait for the human.
-      const what = ((ask?.patterns ?? ask?.resources ?? []) as unknown[])
-        .map(String)
-        .join(", ");
-      const meta = ask?.metadata ? JSON.stringify(ask.metadata).slice(0, 300) : "";
-      const answer = await opts.onAskUser({
-        questions: [
-          {
-            question:
-              `The agent needs permission: **${kind}**` +
-              (what ? ` on \`${what}\`` : "") +
-              (meta && meta !== "{}" ? ` (${meta})` : "") +
-              ". Allow it?",
-            header: "Permission",
-            options: [
-              { label: "Allow", description: "Allow this call once" },
-              { label: "Allow always", description: "Remember for matching future calls" },
-              { label: "Reject", description: "Deny — the agent sees a permission error" },
-            ],
-            multiSelect: false,
-          },
-        ],
-      });
-      if (answer.behavior === "deny") return "reject"; // nobody answered
-      const picked = String(
-        Object.values(
-          (answer.updatedInput as { answers?: Record<string, string> }).answers || {}
-        )[0] || ""
-      ).toLowerCase();
-      if (picked.startsWith("allow always")) return "always";
-      if (picked.startsWith("allow") || picked.startsWith("yes")) return "once";
-      return "reject";
-    };
-    const handlePermissionAsk = (ask: any, via: string) => {
-      const permId = String(ask?.id || "");
-      if (!permId || repliedPermissionIds.has(permId)) return;
-      repliedPermissionIds.add(permId);
-      const kind = String(ask?.permission ?? ask?.action ?? "unknown");
-      permissionAskChain = permissionAskChain.then(async () => {
-        // Pause the stall clock: a tool part sits open while its ask waits on
-        // a human, which can legitimately take longer than any stall window.
-        stallGuard.noteAskPending(1);
-        try {
-          let reply: "once" | "always" | "reject" = "reject";
-          try {
-            reply = await decidePermissionAsk(ask);
-          } catch (e) {
-            console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
-          }
-          console.warn(
-            `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
-          );
-          turnEvent({
-            direction: "out",
-            kind: "permission_decision",
-            tool_name: kind,
-            decision: reply === "reject" ? "deny" : "allow",
-            reason:
-              policy.unattended
-                ? "unattended_auto_reject"
-                : kind === "external_directory"
-                  ? "interactive_auto_approve"
-                  : opts.onAskUser
-                    ? "human_decision"
-                    : "no_ask_handler",
-          });
-          await replyPermissionAsk(permId, reply);
-        } finally {
-          stallGuard.noteAskPending(-1);
-        }
-      });
-    };
+    // Machinery lives in makeOpencodePermissionBridge (shared with reattach).
+    const handlePermissionAsk = makeOpencodePermissionBridge({
+      client,
+      entry: entry!,
+      ocSessionId,
+      q,
+      unattended: policy.unattended,
+      gated: bashGated,
+      sessionId: journal?.osSessionId,
+      runKind: journal?.kind,
+      onAskUser: opts.onAskUser,
+      turnEvent,
+      noteAskPending: (delta) => stallGuard.noteAskPending(delta),
+    });
 
     const handleEvent = async (ev: any) => {
       const p = ev?.properties;
@@ -4168,82 +4482,12 @@ async function* runOpencodeAttempt(
           }
           if (part.sessionID !== ocSessionId) return;
           if (part.type === "tool") stallGuard.noteTool(part);
-          if (part.type === "text" && !part.synthetic && part.time?.end && !emittedText.has(part.id)) {
-            emittedText.add(part.id);
-            if (compactionMsgs.has(part.messageID)) {
-              turnEvent({ direction: "out", kind: "compaction_summary", ...summarizeText(part.text) });
-              appendOpencodeTranscript(ocSessionId, [
-                transcriptLineCompactionSummary(part.text, part.id),
-              ]);
-            } else {
-              turnEvent({ direction: "out", kind: "assistant_text", ...summarizeText(part.text) });
-              appendOpencodeTranscript(ocSessionId, [
-                transcriptLineAssistantText(part.text, part.id, undefined, model),
-              ]);
-              push({ type: "text_chunk", text: part.text });
-              // Assistant text shaped like a tool transcript = the model
-              // narrating tool calls/results it invented (see
-              // looksLikeFabricatedToolTranscript). Correct it in-band before
-              // the fabricated values reach a command.
-              if (looksLikeFabricatedToolTranscript(part.text) && envelopeLeakSteers < 2) {
-                envelopeLeakSteers++;
-                turnEvent({
-                  direction: "out",
-                  kind: "envelope_leak_detected",
-                  ...summarizeText(part.text, 300),
-                });
-                steerFn(ENVELOPE_LEAK_STEER_PROMPT);
-              }
-            }
-          }
+          mirrorTextPart(part);
           if (part.type === "reasoning" && part.time?.end && !emittedText.has(part.id)) {
             emittedText.add(part.id);
             turnEvent({ direction: "out", kind: "assistant_thinking", ...summarizeText(part.text) });
           }
-          if (part.type === "tool") {
-            const state = part.state;
-            if ((state?.status === "running" || state?.status === "completed" || state?.status === "error") && !startedTools.has(part.id)) {
-              startedTools.add(part.id);
-              turnEvent({
-                direction: "out",
-                kind: "tool_use",
-                tool_name: part.tool,
-                tool_use_id: part.id,
-                ...summarizeText(JSON.stringify(state?.input ?? {}), 500),
-              });
-              appendOpencodeTranscript(ocSessionId, [
-                transcriptLineToolUse(part.id, part.tool || "tool", state?.input),
-              ]);
-              push({ type: "tool_use", toolName: part.tool, toolInput: state?.input, toolUseId: part.id });
-            }
-            if ((state?.status === "completed" || state?.status === "error") && !finishedTools.has(part.id)) {
-              finishedTools.add(part.id);
-              const result = state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
-              const images = opencodeToolResultImages(part);
-              turnEvent({
-                direction: "in",
-                kind: "tool_result",
-                tool_use_id: part.id,
-                is_error: state.status === "error",
-                ...summarizeText(result),
-              });
-              appendOpencodeTranscript(ocSessionId, [
-                transcriptLineToolResult(
-                  part.id,
-                  result,
-                  state.status === "error",
-                  undefined,
-                  images,
-                ),
-              ]);
-              push({
-                type: "tool_result",
-                toolUseId: part.id,
-                content: result.length > 500 ? result.slice(0, 500) + "..." : result,
-                ...(images.length ? { images } : {}),
-              });
-            }
-          }
+          mirrorToolPart(part);
           return;
         }
         case "message.updated": {
@@ -4293,28 +4537,16 @@ async function* runOpencodeAttempt(
     };
 
     let pumpStopped = false;
-    const pump = (async () => {
-      while (!pumpStopped && !abortController.signal.aborted && !idle) {
-        try {
-          // Shared servers: the event stream is DIRECTORY-scoped (verified live
-          // 2026-07-09 — a global subscribe sees only lifecycle events), so
-          // subscribe to this run's directory instance.
-          const sub = await client.event.subscribe(
-            (dirQuery ? { query: dirQuery } : undefined) as any
-          );
-          for await (const ev of sub.stream as AsyncGenerator<any>) {
-            if (pumpStopped || abortController.signal.aborted) return;
-            await handleEvent(ev);
-            if (idle) return;
-          }
-        } catch {
-          // stream dropped — fall through to reconnect
-        }
-        if (!pumpStopped && !idle && !abortController.signal.aborted) {
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-      }
-    })();
+    // Shared servers: the event stream is DIRECTORY-scoped (verified live
+    // 2026-07-09 — a global subscribe sees only lifecycle events), so
+    // subscribe to this run's directory instance.
+    const pump = runSseEventPump({
+      client,
+      query: dirQuery ? { query: dirQuery } : undefined,
+      handleEvent,
+      stopped: () => pumpStopped || abortController.signal.aborted,
+      idle: () => idle,
+    });
 
     // Fire the prompt without holding an HTTP response open for the whole
     // turn (prompt_async returns 204 immediately; completion arrives as
@@ -4747,29 +4979,12 @@ async function* runOpencodeAttempt(
     reachedTerminal = true;
     const msgs = await client.session.messages({ path: { id: ocSessionId }, ...q });
     const list = (msgs.data || []) as Array<{ info: any; parts: any[] }>;
-    const lastAssistant = latestTurnAssistant(list);
-    const info = lastAssistant?.info;
-    const parts = lastAssistant?.parts || [];
-    // Edge: a turn can end right on the autocompact summary (the trigger is a
-    // user-role message, so latestTurnAssistant lands on the summary). Its
-    // text is the compaction handoff, not the model's reply.
-    const finalIsCompaction = isCompactionMessageInfo(info);
-    const textOut = parts
-      .filter((pt) => pt.type === "text" && !pt.synthetic && pt.text)
-      .map((pt) => {
-        if (!emittedText.has(pt.id)) {
-          emittedText.add(pt.id);
-          appendOpencodeTranscript(ocSessionId, [
-            finalIsCompaction
-              ? transcriptLineCompactionSummary(pt.text, pt.id)
-              : transcriptLineAssistantText(pt.text, pt.id, undefined, model),
-          ]);
-          if (!finalIsCompaction) pending.push({ type: "text_chunk", text: pt.text });
-        }
-        return finalIsCompaction ? "" : pt.text;
-      })
-      .filter(Boolean)
-      .join("\n\n");
+    const { lastAssistant, info, textOut } = collectFinalAssistantText(list, {
+      ocSessionId,
+      model,
+      emittedText,
+      pending,
+    });
     while (pending.length) yield pending.shift()!;
 
     const errMessage =
@@ -4909,42 +5124,17 @@ async function* runOpencodeAttempt(
       return;
     }
 
-    const tokens = info?.tokens;
-    const usage: TurnUsage | undefined = tokens
-      ? {
-          costUsd: info?.cost,
-          inputTokens: tokens.input || 0,
-          outputTokens: tokens.output || 0,
-          cacheReadTokens: tokens.cache?.read || 0,
-          cacheCreationTokens: tokens.cache?.write || 0,
-          contextTokens:
-            (tokens.input || 0) + (tokens.cache?.read || 0) + (tokens.cache?.write || 0),
-        }
-      : undefined;
-    const userTurns = list.filter((message) => message.info?.role === "user").length;
-    turnEvent({
-      direction: "out",
-      kind: "result",
-      result_subtype: "success",
-      is_error: false,
-      input_tokens: tokens?.input,
-      output_tokens: tokens?.output,
-      cache_read_input_tokens: tokens?.cache?.read,
-      total_cost_usd: info?.cost,
-      ...summarizeText(textOut),
+    const resultEvents = buildTurnResultEvents({
+      info,
+      list,
+      textOut,
+      ocSessionId,
+      model,
+      providerID: parsed.providerID,
+      turnEvent,
     });
     bridgeRunEnd("success");
-    if (usage) yield { type: "usage_snapshot", usage };
-    yield {
-      type: "done",
-      sessionId: ocSessionId,
-      result: textOut || EMPTY_COMPLETION_RESULT,
-      provider: PROVIDER,
-      model,
-      usage,
-      cacheMissWarning:
-        (usage && isLikelyPromptCacheMiss(usage, userTurns, parsed.providerID)) || undefined,
-    };
+    for (const ev of resultEvents) yield ev;
   } catch (e: any) {
     if (!abortController.signal.aborted) {
       reachedTerminal = true;
@@ -4972,20 +5162,13 @@ async function* runOpencodeAttempt(
     // Backstop for paths that never reached an explicit close (cancel, early
     // return, generator torn down mid-drain) — no-op if already ended.
     bridgeRunEnd(abortController.signal.aborted ? "cancelled" : "abandoned");
-    for (const key of registeredKeys) {
-      activeOpencodeRuns.delete(key);
-      activeOpencodeSteers.delete(key);
-    }
-    detachedRunKeys.delete(runKey);
-    if (ocSessionRegistered) unregisterOcSessionContext(ocSessionRegistered);
-    if (rpcTokenRegistered && entry) unregisterRunToken(entry.rpcToken);
-    if (entry) {
-      entry.activeRuns = Math.max(0, entry.activeRuns - 1);
-      entry.lastUsed = Date.now();
-      // Shared server whose config changed mid-flight: the last run out
-      // turns off the lights.
-      reapDrainedServer(entry);
-    }
+    teardownOpencodeRunRegistries({
+      registeredKeys,
+      runKey,
+      ocSessionRegistered,
+      rpcTokenRegistered,
+      entry,
+    });
     // Keep the journal across an account-rotation retry (the wrapper reruns
     // the same runKey immediately); cleared for real on the final attempt —
     // and ONLY when a terminal path actually ran (or the user cancelled,
@@ -5219,7 +5402,6 @@ export async function tryReattachOpencodeRun(
       });
       const startedTools = new Set<string>();
       const finishedTools = new Set<string>();
-      let envelopeLeakSteers = 0;
       for (const uuid of seenUuids) {
         if (uuid.endsWith("-use")) startedTools.add(uuid.slice(0, -4));
         else if (uuid.endsWith("-result")) finishedTools.add(uuid.slice(0, -7));
@@ -5238,6 +5420,17 @@ export async function tryReattachOpencodeRun(
         idle = true;
         wake?.();
       };
+      const { mirrorTextPart, mirrorToolPart } = makePartMirror({
+        ocSessionId: ocSessionId!,
+        model,
+        turnEvent,
+        push,
+        steerFn,
+        emittedText,
+        compactionMsgs,
+        startedTools,
+        finishedTools,
+      });
       abortController.signal.addEventListener("abort", () => {
         void client.session.abort({ path: { id: ocSessionId! }, ...q }).catch(() => {});
         signalDone();
@@ -5263,114 +5456,25 @@ export async function tryReattachOpencodeRun(
         confirmTools: run.confirmTools,
         journalKind: run.kind,
       });
-      const repliedPermissionIds = new Set<string>();
-      let permissionAskChain: Promise<void> = Promise.resolve();
-      const replyPermissionAsk = async (permId: string, reply: "once" | "always" | "reject") => {
-        const res = await client
-          .postSessionIdPermissionsPermissionId({
-            path: { id: ocSessionId!, permissionID: permId },
-            body: { response: reply },
-            ...q,
-          })
-          .catch((e) => ({ error: e }));
-        if ((res as { error?: unknown })?.error) {
-          await fetch(`${server.url}/permission/${encodeURIComponent(permId)}/reply`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              Authorization: `Basic ${btoa(`opencode:${server.password}`)}`,
-            },
-            body: JSON.stringify({ reply }),
-          }).catch((e) =>
-            console.warn(`[opencode-runner] failed to answer permission ask ${permId}:`, e)
-          );
-        }
-      };
-      const decidePermissionAsk = async (ask: any): Promise<"once" | "always" | "reject"> => {
-        const kind = String(ask?.permission ?? ask?.action ?? "unknown");
-        // Same command-policy-first order as the master bridge. The gated
-        // flag is recomputed from the journaled kind/mode because a reattach
-        // adopts a server whose config (bash "*" ask included) it did not
-        // write — the two must agree or an adopted run's asks all reject.
-        const policyReply = bashAskPolicyReply(ask, {
-          unattended: policy.unattended,
-          gated: isUnattendedKind(baseJournalKind(run.kind)) && run.mode !== "ask",
-          sessionId: run.osSessionId,
-          runKind: run.kind,
-        });
-        if (policyReply) return policyReply;
-        if (policy.unattended) return "reject";
-        if (kind === "external_directory") return "once";
-        if (!handlers.onAskUser) return "reject";
-        const what = ((ask?.patterns ?? ask?.resources ?? []) as unknown[]).map(String).join(", ");
-        const meta = ask?.metadata ? JSON.stringify(ask.metadata).slice(0, 300) : "";
-        const answer = await handlers.onAskUser({
-          questions: [
-            {
-              question:
-                `The agent needs permission: **${kind}**` +
-                (what ? ` on \`${what}\`` : "") +
-                (meta && meta !== "{}" ? ` (${meta})` : "") +
-                ". Allow it?",
-              header: "Permission",
-              options: [
-                { label: "Allow", description: "Allow this call once" },
-                { label: "Allow always", description: "Remember for matching future calls" },
-                { label: "Reject", description: "Deny — the agent sees a permission error" },
-              ],
-              multiSelect: false,
-            },
-          ],
-        });
-        if (answer.behavior === "deny") return "reject";
-        const picked = String(
-          Object.values(
-            (answer.updatedInput as { answers?: Record<string, string> }).answers || {}
-          )[0] || ""
-        ).toLowerCase();
-        if (picked.startsWith("allow always")) return "always";
-        if (picked.startsWith("allow") || picked.startsWith("yes")) return "once";
-        return "reject";
-      };
-      const handlePermissionAsk = (ask: any, via: string) => {
-        const permId = String(ask?.id || "");
-        if (!permId || repliedPermissionIds.has(permId)) return;
-        repliedPermissionIds.add(permId);
-        const kind = String(ask?.permission ?? ask?.action ?? "unknown");
-        permissionAskChain = permissionAskChain.then(async () => {
-          // Pause the stall clock while the ask waits on a human — same
-          // reasoning as the primary path. (Called only after stallGuard
-          // below is initialized: asks arrive via events, not synchronously.)
-          stallGuard.noteAskPending(1);
-          try {
-            let reply: "once" | "always" | "reject" = "reject";
-            try {
-              reply = await decidePermissionAsk(ask);
-            } catch (e) {
-              console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
-            }
-            console.warn(
-              `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
-            );
-            turnEvent({
-              direction: "out",
-              kind: "permission_decision",
-              tool_name: kind,
-              decision: reply === "reject" ? "deny" : "allow",
-              reason: policy.unattended
-                ? "unattended_auto_reject"
-                : kind === "external_directory"
-                  ? "interactive_auto_approve"
-                  : handlers.onAskUser
-                    ? "human_decision"
-                    : "no_ask_handler",
-            });
-            await replyPermissionAsk(permId, reply);
-          } finally {
-            stallGuard.noteAskPending(-1);
-          }
-        });
-      };
+      // Shared bridge machinery (makeOpencodePermissionBridge). The gated
+      // flag is recomputed from the journaled kind/mode because a reattach
+      // adopts a server whose config (bash "*" ask included) it did not
+      // write — the two must agree or an adopted run's asks all reject.
+      // noteAskPending resolves stallGuard lazily: it's declared below, and
+      // asks arrive via events only, never synchronously.
+      const handlePermissionAsk = makeOpencodePermissionBridge({
+        client,
+        entry: server,
+        ocSessionId: ocSessionId!,
+        q,
+        unattended: policy.unattended,
+        gated: isUnattendedKind(baseJournalKind(run.kind)) && run.mode !== "ask",
+        sessionId: run.osSessionId,
+        runKind: run.kind,
+        onAskUser: handlers.onAskUser,
+        turnEvent,
+        noteAskPending: (delta) => stallGuard.noteAskPending(delta),
+      });
 
       // Same mid-turn task-subagent stall guard as the primary path: a
       // reattached turn can hang on a wedged subagent request identically. No
@@ -5426,95 +5530,8 @@ export async function tryReattachOpencodeRun(
             const part = p?.part;
             if (!part || part.sessionID !== ocSessionId) return;
             if (part.type === "tool") stallGuard.noteTool(part);
-            if (
-              part.type === "text" &&
-              !part.synthetic &&
-              part.time?.end &&
-              !emittedText.has(part.id)
-            ) {
-              emittedText.add(part.id);
-              if (compactionMsgs.has(part.messageID)) {
-                turnEvent({ direction: "out", kind: "compaction_summary", ...summarizeText(part.text) });
-                appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineCompactionSummary(part.text, part.id),
-                ]);
-              } else {
-                turnEvent({ direction: "out", kind: "assistant_text", ...summarizeText(part.text) });
-                appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineAssistantText(part.text, part.id, undefined, model),
-                ]);
-                push({ type: "text_chunk", text: part.text });
-                // Same fabricated-transcript correction as the primary pump —
-                // a reattached turn can derail the same way.
-                if (looksLikeFabricatedToolTranscript(part.text) && envelopeLeakSteers < 2) {
-                  envelopeLeakSteers++;
-                  turnEvent({
-                    direction: "out",
-                    kind: "envelope_leak_detected",
-                    ...summarizeText(part.text, 300),
-                  });
-                  steerFn(ENVELOPE_LEAK_STEER_PROMPT);
-                }
-              }
-            }
-            if (part.type === "tool") {
-              const state = part.state;
-              if (
-                (state?.status === "running" ||
-                  state?.status === "completed" ||
-                  state?.status === "error") &&
-                !startedTools.has(part.id)
-              ) {
-                startedTools.add(part.id);
-                turnEvent({
-                  direction: "out",
-                  kind: "tool_use",
-                  tool_name: part.tool,
-                  tool_use_id: part.id,
-                  ...summarizeText(JSON.stringify(state?.input ?? {}), 500),
-                });
-                appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineToolUse(part.id, part.tool || "tool", state?.input),
-                ]);
-                push({
-                  type: "tool_use",
-                  toolName: part.tool,
-                  toolInput: state?.input,
-                  toolUseId: part.id,
-                });
-              }
-              if (
-                (state?.status === "completed" || state?.status === "error") &&
-                !finishedTools.has(part.id)
-              ) {
-                finishedTools.add(part.id);
-                const result =
-                  state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
-                const images = opencodeToolResultImages(part);
-                turnEvent({
-                  direction: "in",
-                  kind: "tool_result",
-                  tool_use_id: part.id,
-                  is_error: state.status === "error",
-                  ...summarizeText(result),
-                });
-                appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineToolResult(
-                    part.id,
-                    result,
-                    state.status === "error",
-                    undefined,
-                    images,
-                  ),
-                ]);
-                push({
-                  type: "tool_result",
-                  toolUseId: part.id,
-                  content: result.length > 500 ? result.slice(0, 500) + "..." : result,
-                  ...(images.length ? { images } : {}),
-                });
-              }
-            }
+            mirrorTextPart(part);
+            mirrorToolPart(part);
             return;
           }
           case "message.updated": {
@@ -5546,25 +5563,13 @@ export async function tryReattachOpencodeRun(
 
       let pumpStopped = false;
       const pump = busy
-        ? (async () => {
-            while (!pumpStopped && !abortController.signal.aborted && !idle) {
-              try {
-                const sub = await client.event.subscribe(
-                  (shared ? { query: { directory: run.cwd } } : undefined) as any
-                );
-                for await (const ev of sub.stream as AsyncGenerator<any>) {
-                  if (pumpStopped || abortController.signal.aborted) return;
-                  await handleEvent(ev);
-                  if (idle) return;
-                }
-              } catch {
-                // stream dropped — fall through to reconnect
-              }
-              if (!pumpStopped && !idle && !abortController.signal.aborted) {
-                await new Promise((r) => setTimeout(r, 1000));
-              }
-            }
-          })()
+        ? runSseEventPump({
+            client,
+            query: shared ? { query: { directory: run.cwd } } : undefined,
+            handleEvent,
+            stopped: () => pumpStopped || abortController.signal.aborted,
+            idle: () => idle,
+          })
         : Promise.resolve();
 
       // Wall-clock deadline: what's LEFT of the original turn budget (floor 5
@@ -5698,28 +5703,12 @@ export async function tryReattachOpencodeRun(
         signal: AbortSignal.timeout(10_000),
       });
       const list = (msgs.data || []) as Array<{ info: any; parts: any[] }>;
-      const lastAssistant = latestTurnAssistant(list);
-      const info = lastAssistant?.info;
-      const parts = lastAssistant?.parts || [];
-      // Edge: a turn can end right on the autocompact summary — see the
-      // master-copy final read.
-      const finalIsCompaction = isCompactionMessageInfo(info);
-      const textOut = parts
-        .filter((pt) => pt.type === "text" && !pt.synthetic && pt.text)
-        .map((pt) => {
-          if (!emittedText.has(pt.id)) {
-            emittedText.add(pt.id);
-            appendOpencodeTranscript(ocSessionId!, [
-              finalIsCompaction
-                ? transcriptLineCompactionSummary(pt.text, pt.id)
-                : transcriptLineAssistantText(pt.text, pt.id, undefined, model),
-            ]);
-            if (!finalIsCompaction) pending.push({ type: "text_chunk", text: pt.text });
-          }
-          return finalIsCompaction ? "" : pt.text;
-        })
-        .filter(Boolean)
-        .join("\n\n");
+      const { lastAssistant, info, textOut } = collectFinalAssistantText(list, {
+        ocSessionId: ocSessionId!,
+        model,
+        emittedText,
+        pending,
+      });
       while (pending.length) yield pending.shift()!;
 
       const errMessage =
@@ -5758,46 +5747,16 @@ export async function tryReattachOpencodeRun(
         return;
       }
 
-      const tokens = info?.tokens;
-      const usage: TurnUsage | undefined = tokens
-        ? {
-            costUsd: info?.cost,
-            inputTokens: tokens.input || 0,
-            outputTokens: tokens.output || 0,
-            cacheReadTokens: tokens.cache?.read || 0,
-            cacheCreationTokens: tokens.cache?.write || 0,
-            contextTokens:
-              (tokens.input || 0) + (tokens.cache?.read || 0) + (tokens.cache?.write || 0),
-          }
-        : undefined;
-      const userTurns = list.filter((message) => message.info?.role === "user").length;
-      turnEvent({
-        direction: "out",
-        kind: "result",
-        result_subtype: "success",
-        is_error: false,
-        input_tokens: tokens?.input,
-        output_tokens: tokens?.output,
-        cache_read_input_tokens: tokens?.cache?.read,
-        total_cost_usd: info?.cost,
-        ...summarizeText(textOut),
-      });
-      if (usage) yield { type: "usage_snapshot", usage };
-      yield {
-        type: "done",
-        sessionId: ocSessionId!,
-        result: textOut || EMPTY_COMPLETION_RESULT,
-        provider: PROVIDER,
+      const resultEvents = buildTurnResultEvents({
+        info,
+        list,
+        textOut,
+        ocSessionId: ocSessionId!,
         model,
-        usage,
-        cacheMissWarning:
-          (usage &&
-            isLikelyPromptCacheMiss(
-              usage,
-              userTurns,
-              parseOpencodeModel(model)?.providerID || "",
-            )) || undefined,
-      };
+        providerID: parseOpencodeModel(model)?.providerID || "",
+        turnEvent,
+      });
+      for (const ev of resultEvents) yield ev;
     } catch (e: any) {
       if (!abortController.signal.aborted) {
         const message = e?.message || String(e);
@@ -5809,16 +5768,13 @@ export async function tryReattachOpencodeRun(
       if (abortController.signal.aborted) {
         turnEvent({ direction: "out", kind: "cancelled" });
       }
-      for (const key of registeredKeys) {
-        activeOpencodeRuns.delete(key);
-        activeOpencodeSteers.delete(key);
-      }
-      detachedRunKeys.delete(runKey);
-      if (ocSessionRegistered) unregisterOcSessionContext(ocSessionRegistered);
-      if (rpcTokenRegistered) unregisterRunToken(server.rpcToken);
-      server.activeRuns = Math.max(0, server.activeRuns - 1);
-      server.lastUsed = Date.now();
-      reapDrainedServer(server);
+      teardownOpencodeRunRegistries({
+        registeredKeys,
+        runKey,
+        ocSessionRegistered,
+        rpcTokenRegistered,
+        entry: server,
+      });
       if (reachedTerminal || abortController.signal.aborted) journalClear(runKey);
     }
   }
