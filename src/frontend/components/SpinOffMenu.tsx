@@ -6,6 +6,7 @@ import { Modal } from "../ui/modal";
 import { IconBranches, IconChevronRight } from "./icons";
 import type { UnifiedSession, TranscriptEntry } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
+import { fieldClasses } from "../ui/input";
 
 type Flavor = "build" | "learnings" | "analyze";
 
@@ -116,8 +117,12 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
     "flex-col items-start gap-0.5 rounded-none border-b border-line px-3.5 py-2.5 last:border-b-0";
 
   const fieldLabelCls = "flex flex-col gap-1.5 text-sm font-medium text-fg";
-  const fieldCls =
-    "w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-fg outline-none placeholder:text-faint focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]";
+  // The menu's own field look — the primitive's corner/fill/focus, plus the
+  // accent halo this surface authored.
+  const fieldCls = fieldClasses(
+    "lg",
+    "border-line-strong text-sm focus:shadow-[0_0_0_3px_var(--accent-soft)]",
+  );
 
   const flavorMeta: Record<Flavor, { title: string; description: string }> = {
     build: {

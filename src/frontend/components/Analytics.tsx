@@ -406,6 +406,11 @@ export function Analytics() {
 		return { labels, kindSeries, kindValues, modelSeries, modelValues, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, maxModelOutput, rq, reviewSeries, reviewValues, splitDate };
 	}, [data]);
 
+	// Deliberately NOT ui/input's field: these two sit inside the range row
+	// beside the 7d/14d/30d/90d segmented control, which is its own hand-rolled
+	// 30px `rounded-md` group. Plating the dates alone makes them the odd pair
+	// in their own row — the row should move together, once the segmented
+	// control has a primitive of its own.
 	const dateInput =
 		"rounded-md border border-line bg-panel px-2 py-1.5 text-control-label text-fg [color-scheme:inherit]";
 

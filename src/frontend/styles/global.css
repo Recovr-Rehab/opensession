@@ -11728,24 +11728,12 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	flex: 1;
 }
 
-.automation-form input,
-.automation-form textarea,
-.automation-form select {
-	background: var(--bg-raised);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	padding: 8px 11px;
-	font-size: 13px;
-	outline: none;
-}
-.automation-form input:focus,
-.automation-form textarea:focus,
-.automation-form select:focus {
-	border-color: var(--accent);
-}
+/* The fields themselves are ui/input's primitive now (Automations, Goals,
+   Actions, Security all render <Input>/<Select>/<Textarea>), so this block's
+   own plate is gone — it was a 7px corner against the form's 10px buttons.
+   Only the line-height stays: a multi-line brief needs paragraph leading, and
+   the utility scale doesn't set one. */
 .automation-form textarea {
-	resize: vertical;
 	line-height: 1.5;
 }
 

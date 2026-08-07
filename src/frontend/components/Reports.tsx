@@ -13,6 +13,7 @@ import { parseNewSessionLink, type NewSessionPrefill } from "../lib/new-session-
 import { Button } from "../ui/button";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { IconChevronLeft, IconChevronRight, IconFile, IconLink } from "./icons";
+import { Select } from "../ui/input";
 
 interface Props {
 	selectedAutomationId?: string;
@@ -191,14 +192,15 @@ export function Reports({
 									<h2 className="m-0 mt-1 px-1 text-base font-semibold leading-snug text-fg">{selected.title}</h2>
 									<p className="m-0 mt-1 px-1 text-xs leading-5 text-dim line-clamp-2">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
 									<div className="mt-2.5 flex items-center gap-2 px-1">
-										<select
+										<Select
+											size="sm"
 											aria-label="Report history"
-											className="min-w-0 flex-1 rounded-md border border-line bg-panel px-2 py-1.5 text-xs text-fg"
+											className="min-h-[30px] min-w-0 flex-1"
 											value={selected.id}
 											onChange={(event) => onSelect(selected.automationId, event.target.value)}
 										>
 											{history.map((report) => <option key={report.id} value={report.id}>{formatDate(report.createdAt, true)}</option>)}
-										</select>
+										</Select>
 										{selected.sessionId && <Button size="sm" className="min-h-[30px] shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
 										<Button size="sm" className="min-h-[30px] w-[30px] shrink-0" icon={<CopyCheck copied={copied} size={15} idle={<IconLink size={15} />} />} aria-label="Share report" onClick={shareSelected} />
 									</div>
@@ -214,14 +216,15 @@ export function Reports({
 								</div>
 								<Button size="sm" className="min-h-[30px] w-[30px] shrink-0" icon={<CopyCheck copied={copied} size={15} idle={<IconLink size={15} />} />} aria-label="Share report" title="Share report" onClick={shareSelected} />
 								{selected.sessionId && <Button size="sm" className="min-h-[30px] shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
-								<select
+								<Select
+									size="sm"
 									aria-label="Report history"
-									className="max-w-[190px] shrink-0 rounded-md border border-line bg-panel px-2 py-1.5 text-xs text-fg"
+									className="min-h-[30px] w-auto max-w-[190px] shrink-0"
 									value={selected.id}
 									onChange={(event) => onSelect(selected.automationId, event.target.value)}
 								>
 									{history.map((report) => <option key={report.id} value={report.id}>{formatDate(report.createdAt, true)}</option>)}
-								</select>
+								</Select>
 							</header>
 						)
 					)}

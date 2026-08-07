@@ -57,6 +57,7 @@ import { useMarkdownRepo } from "./MarkdownBody";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
 import { providerFromUrl, avatarUrl, prCapabilities, type Provider } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
+import { Input, Textarea } from "../ui/input";
 import {
   IconCheck,
   IconMessage,
@@ -1614,8 +1615,9 @@ export function PrPanel({
                   ×
                 </button>
               </div>
-              <textarea
-                className="h-20 w-full resize-none rounded-sm border border-line bg-surface p-2.5 text-xs text-fg outline-none focus:border-line-strong"
+              <Textarea
+                size="sm"
+                className="h-20 resize-none p-2.5"
                 placeholder="Review summary (optional for approval)…"
                 value={summary}
                 onChange={(event) => setSummary(event.target.value)}
@@ -2066,8 +2068,9 @@ export function PrPanel({
 
               {reviewOpen && (
                 <div className="mt-3 flex flex-col gap-3">
-                  <textarea
-                    className="min-h-[84px] w-full resize-y rounded-sm border border-line bg-panel px-3 py-2 text-xs text-fg outline-none focus:border-line-strong"
+                  <Textarea
+                    size="sm"
+                    className="min-h-[84px] px-3"
                     rows={3}
                     placeholder="Overall review summary (optional)…"
                     value={summary}
@@ -2409,9 +2412,10 @@ function LinkPrControl({
         void submit();
       }}
     >
-      <input
+      <Input
         autoFocus
-        className="min-w-0 flex-1 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-fg outline-none placeholder:text-faint focus:border-line-strong"
+        size="sm"
+        className="min-w-0 flex-1"
         placeholder="Paste a GitHub PR URL…"
         value={val}
         onChange={(e) => setVal(e.target.value)}

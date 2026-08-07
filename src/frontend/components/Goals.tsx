@@ -19,6 +19,7 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert } from "../ui/state";
 
@@ -584,7 +585,7 @@ function GoalForm({
 
       <label>
         Name
-        <input
+        <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Rank #1: screen recording software"
@@ -593,7 +594,7 @@ function GoalForm({
 
       <label>
         Mission
-        <textarea
+        <Textarea
           value={mission}
           onChange={(e) => setMission(e.target.value)}
           rows={12}
@@ -604,26 +605,26 @@ function GoalForm({
       <div className="automation-form-row">
         <label>
           Mode
-          <select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
+          <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
             <option value="ask">Ask — read-only research/measure</option>
             <option value="code">Code — persistent worktree, can open PRs</option>
-          </select>
+          </Select>
         </label>
 
         <label>
           Repo (code mode)
-          <select value={repo} onChange={(e) => setRepo(e.target.value)}>
+          <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
             {repos.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label || repoLabel(item.id)}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label>
           Model
-          <select value={model} onChange={(e) => setModel(e.target.value)}>
+          <Select value={model} onChange={(e) => setModel(e.target.value)}>
             <option value="">Default{defaultModel ? ` — ${defaultModel}` : ""}</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
@@ -631,12 +632,12 @@ function GoalForm({
                 {accountPoolSuffix(m)}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label>
           Fallback (all accounts hit limits)
-          <select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
+          <Select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
             <option value="">None — fail instead</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
@@ -644,14 +645,14 @@ function GoalForm({
                 {accountPoolSuffix(m)}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
 
       <div className="automation-form-row">
         <label>
           MCP servers (comma-separated; blank = all)
-          <input
+          <Input
             value={mcpServers}
             onChange={(e) => setMcpServers(e.target.value)}
             placeholder="ahrefs, slack"
@@ -661,7 +662,7 @@ function GoalForm({
 
         <label>
           Min minutes between wakes
-          <input
+          <Input
             type="number"
             value={minWakeMinutes}
             onChange={(e) => setMinWakeMinutes(e.target.value)}
@@ -671,7 +672,7 @@ function GoalForm({
 
         <label>
           Max wakes (safety cap; blank = none)
-          <input
+          <Input
             type="number"
             value={maxWakes}
             onChange={(e) => setMaxWakes(e.target.value)}

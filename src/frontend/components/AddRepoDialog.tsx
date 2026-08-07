@@ -3,6 +3,7 @@ import { registerRepoApi, type RepoInfo } from "../lib/api";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import { IconFolderPlus } from "./icons";
+import { fieldClasses } from "../ui/input";
 
 type AddMode = "clone" | "path";
 
@@ -101,7 +102,13 @@ export function AddRepoDialog({
 						<input
 							ref={inputRef}
 							type="text"
-							className="h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-fg outline-none placeholder:text-faint focus:border-accent focus:shadow-[0_0_0_3px_var(--accent-soft)]"
+							/* Raw element for the ref; optics from the field primitive. The
+							   40px height is the dialog's own — this is the modal's single
+							   affordance and has no control beside it to match. */
+							className={fieldClasses(
+								"lg",
+								"h-10 border-line-strong text-sm focus:shadow-[0_0_0_3px_var(--accent-soft)]",
+							)}
 							value={value}
 							onChange={(event) =>
 								mode === "clone"

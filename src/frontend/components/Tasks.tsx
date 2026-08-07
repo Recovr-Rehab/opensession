@@ -9,6 +9,7 @@ import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
 import { getCurrentUser } from "./UserPicker";
 import { IconCheck, IconListChecks, IconX } from "./icons";
+import { Input } from "../ui/input";
 
 interface TasksProps {
 	addHandler: (handler: (message: WSServerMessage) => void) => () => void;
@@ -222,14 +223,16 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
 						void addTask();
 					}}
 				>
-					<input
-						className="min-h-10 min-w-0 flex-1 rounded-md border border-line bg-control px-3 text-control-label text-fg outline-none placeholder:text-faint focus:border-line-strong"
+					<Input
+						size="lg"
+						className="min-w-0 flex-1"
 						value={draft}
 						placeholder="Add a task"
 						onChange={(event) => setDraft(event.target.value)}
 					/>
 					<Button
 						type="submit"
+						size="lg"
 						variant="primary"
 						disabled={!draft.trim() || adding}
 					>

@@ -15,6 +15,7 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { Input, Select, Textarea } from "../ui/input";
 import { PageSection } from "../ui/page";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert } from "../ui/state";
@@ -331,7 +332,7 @@ function RunForm({
           {input.label || input.name}
           {input.required ? " *" : ""}
           {input.type === "select" ? (
-            <select
+            <Select
               value={values[input.name] ?? ""}
               onChange={(e) => setValues((v) => ({ ...v, [input.name]: e.target.value }))}
             >
@@ -341,17 +342,17 @@ function RunForm({
                   {o}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : input.type === "boolean" ? (
-            <select
+            <Select
               value={values[input.name] ?? ""}
               onChange={(e) => setValues((v) => ({ ...v, [input.name]: e.target.value }))}
             >
               <option value="">false</option>
               <option value="true">true</option>
-            </select>
+            </Select>
           ) : (
-            <input
+            <Input
               className="mono-input"
               type={input.type === "number" ? "number" : "text"}
               value={values[input.name] ?? ""}
@@ -470,12 +471,12 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
 
       <label>
         Name
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Run maintenance task" />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Run maintenance task" />
       </label>
 
       <label>
         Description (optional)
-        <input
+        <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe what this action does"
@@ -484,25 +485,25 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
 
       <label>
         Type
-        <select value={kind} onChange={(e) => setKind(e.target.value as "repo" | "mcp")}>
+        <Select value={kind} onChange={(e) => setKind(e.target.value as "repo" | "mcp")}>
           <option value="repo">Repo script — run a script from a repo</option>
           <option value="mcp">MCP tool — call a tool on an MCP server</option>
-        </select>
+        </Select>
       </label>
 
       {kind === "repo" ? (
         <div className="automation-form-row">
           <label>
             Repo
-            <select value={repo} onChange={(e) => setRepo(e.target.value)}>
+            <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
               {repos.map((item) => (
                 <option key={item.id} value={item.id}>{item.label || repoLabel(item.id)}</option>
               ))}
-            </select>
+            </Select>
           </label>
           <label style={{ flex: 2 }}>
             Script path (relative to repo root)
-            <input
+            <Input
               className="mono-input"
               value={scriptPath}
               onChange={(e) => setScriptPath(e.target.value)}
@@ -512,17 +513,17 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </label>
           <label>
             Arg mode
-            <select value={argMode} onChange={(e) => setArgMode(e.target.value as "positional" | "env")}>
+            <Select value={argMode} onChange={(e) => setArgMode(e.target.value as "positional" | "env")}>
               <option value="positional">Positional ($1 $2 …)</option>
               <option value="env">Env vars (NAME=… )</option>
-            </select>
+            </Select>
           </label>
         </div>
       ) : (
         <div className="automation-form-row">
           <label style={{ flex: 2 }}>
             MCP server
-            <input
+            <Input
               className="mono-input"
               value={mcpServer}
               onChange={(e) => setMcpServer(e.target.value)}
@@ -531,7 +532,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </label>
           <label style={{ flex: 2 }}>
             Tool name
-            <input
+            <Input
               className="mono-input"
               value={toolName}
               onChange={(e) => setToolName(e.target.value)}
@@ -569,7 +570,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
         <div className="automation-form-row" key={idx} style={{ alignItems: "flex-end" }}>
           <label>
             Variable name
-            <input
+            <Input
               className="mono-input"
               value={input.name}
               onChange={(e) => updateInput(idx, { name: e.target.value })}
@@ -578,7 +579,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </label>
           <label>
             Label
-            <input
+            <Input
               value={input.label || ""}
               onChange={(e) => updateInput(idx, { label: e.target.value })}
               placeholder="Story ID"
@@ -586,7 +587,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </label>
           <label>
             Type
-            <select
+            <Select
               value={input.type}
               onChange={(e) => updateInput(idx, { type: e.target.value as ActionInputType })}
             >
@@ -595,7 +596,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
                   {t}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label style={{ flex: "0 0 auto" }}>
             Required

@@ -9,6 +9,7 @@ import { IconPlus, IconTrash } from "./icons";
 import { SectionHeading } from "./Connections";
 import { SettingCard, rowMenuTriggerClasses } from "../ui/settings";
 import type { FeedDescriptor, Project } from "../lib/types";
+import { fieldClasses } from "../ui/input";
 
 /**
  * Connections → Projects. A *project* is a source of work with its own sidebar
@@ -78,8 +79,7 @@ function suggestMap(sample: Record<string, any>) {
 
 // ── component ────────────────────────────────────────────────────────────────
 
-const inputCls =
-	"w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-control-label text-fg outline-none focus:border-faint";
+const inputCls = fieldClasses("md");
 const labelCls = "mb-1 mt-3 block text-meta font-semibold text-faint";
 
 export function ProjectsSection() {

@@ -8,6 +8,7 @@ import { TranscriptBlocks } from "./TranscriptBlocks";
 import { useFileMentions } from "./useFileMentions";
 import { IconArrowUp } from "./icons";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
+import { fieldClasses } from "../ui/input";
 
 interface DeskConversationProps {
 	sessionId: string;
@@ -284,9 +285,14 @@ export function DeskConversation({
 				ref={mentions.inputWrapRef}
 			>
 				{mentions.popup}
+				{/* Raw element for the ref — the field's optics still come from the
+				    primitive via fieldClasses. */}
 				<textarea
 					ref={textareaRef}
-					className="max-h-40 min-h-[36px] flex-1 resize-none rounded-md border border-line bg-surface px-2 py-1.5 text-[13px] font-medium text-fg outline-none placeholder:text-dim focus:border-fg/30"
+					className={fieldClasses(
+						"sm",
+						"max-h-40 min-h-[36px] flex-1 resize-none py-1.5 font-medium placeholder:text-dim",
+					)}
 					rows={1}
 					value={draft}
 					placeholder={

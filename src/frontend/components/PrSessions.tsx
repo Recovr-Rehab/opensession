@@ -4,6 +4,7 @@ import { relativeTime } from "../lib/api";
 import { sessionPath } from "../lib/share-link";
 import { Button } from "../ui/button";
 import { getCurrentUser } from "./UserPicker";
+import { Input } from "../ui/input";
 
 /**
  * Sessions related to a PR: primarily via the server-enriched `prs` refs
@@ -197,8 +198,8 @@ export function PrSessionsList({
 						handleStart();
 					}}
 				>
-					<input
-						className="min-w-0 flex-1 rounded-sm border border-line bg-surface px-2.5 py-2 text-xs text-fg outline-none placeholder:text-faint focus:border-line-strong"
+					<Input
+						className="min-w-0 flex-1"
 						placeholder="Start a new session on this PR…"
 						value={prompt}
 						onChange={(e) => setPrompt(e.target.value)}

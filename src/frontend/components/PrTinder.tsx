@@ -21,6 +21,7 @@ import { DEFAULT_REPO_ID } from "../lib/brand";
 import { renderMarkdown } from "../lib/markdown";
 import { providerFromUrl } from "../lib/provider";
 import { useCurrentUser } from "./UserPicker";
+import { Textarea } from "../ui/input";
 
 /**
  * PR Tinder — a swipe deck over tella-fusion's open PRs, one card at a time:
@@ -790,7 +791,7 @@ function CommentPanel({
 			className="absolute inset-x-4 bottom-24 z-30 mx-auto w-auto max-w-[600px] rounded-lg border border-line-strong bg-panel p-3 shadow-[0_10px_34px_rgba(0,0,0,0.4)] sm:inset-x-auto sm:left-1/2 sm:w-[600px] sm:-translate-x-1/2"
 			onPointerDownCapture={(e) => e.stopPropagation()}
 		>
-			<textarea
+			<Textarea
 				autoFocus
 				rows={3}
 				value={text}
@@ -802,7 +803,7 @@ function CommentPanel({
 						if (text.trim()) onSubmit(text.trim());
 					}
 				}}
-				className="w-full resize-none appearance-none rounded-md border border-line bg-surface px-3 py-2 text-sm leading-relaxed text-fg outline-none [-webkit-appearance:none] placeholder:text-faint focus:border-line-strong"
+				className="resize-none appearance-none px-3 leading-relaxed [-webkit-appearance:none]"
 			/>
 			<div className="mt-2 flex justify-end gap-2">
 				<button

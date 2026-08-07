@@ -17,6 +17,7 @@ import { getCurrentUser } from "./UserPicker";
 import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert } from "../ui/state";
 
@@ -430,26 +431,26 @@ function NewScanModal({
         {scope === "single" && (
           <label>
             Select repository
-            <select value={repo} onChange={(e) => setRepo(e.target.value)}>
+            <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
               {repos.map((r) => (
                 <option key={r} value={r}>
                   {repoLabel(r)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
 
         <label>
           Scan profile
-          <select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
+          <Select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
             <option value="">None — default threat model</option>
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
           {profiles.length === 0 && (
             <span className="mt-1 text-meta text-faint">
               No scan profiles yet — profiles customize how scans analyze your
@@ -460,7 +461,7 @@ function NewScanModal({
 
         <label>
           Instructions for this scan (optional)
-          <textarea
+          <Textarea
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             rows={3}
@@ -470,7 +471,7 @@ function NewScanModal({
 
         <label>
           Repeats
-          <select
+          <Select
             value={canRecur ? recurrence : "none"}
             onChange={(e) => setRecurrence(e.target.value as any)}
             disabled={!canRecur}
@@ -478,7 +479,7 @@ function NewScanModal({
             <option value="none">Does not repeat</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
-          </select>
+          </Select>
           {!singleRepo && (
             <span className="mt-1 text-meta text-faint">
               Recurring and interactive scans support one repository at a time.
@@ -584,7 +585,7 @@ function ProfileModal({
 
         <label>
           Name
-          <input
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Payments-focused, strict"
@@ -593,7 +594,7 @@ function ProfileModal({
 
         <label>
           Threat model — how should scans analyze the code?
-          <textarea
+          <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             rows={8}

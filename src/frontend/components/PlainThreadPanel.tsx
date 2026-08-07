@@ -26,6 +26,7 @@ import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { useCurrentUser } from "./UserPicker";
 import { cn } from "../ui/cn";
 import { PLAIN_WORKSPACE_ID, PRODUCT_NAME } from "../lib/brand";
+import { Textarea } from "../ui/input";
 
 interface Props {
 	sessionId: string;
@@ -590,8 +591,9 @@ export function PlainReplyBox({
 					<span className="text-meta font-semibold text-green">Sent ✓</span>
 				)}
 			</div>
-			<textarea
-				className="plain-reply-textarea w-full min-h-[128px] resize-y rounded-md border border-line bg-surface text-fg text-[13px] leading-normal p-2 focus:outline-none focus:border-line-strong placeholder:text-faint"
+			<Textarea
+				size="sm"
+				className="plain-reply-textarea min-h-[128px] p-2 leading-normal"
 				placeholder={
 					kind === "note"
 						? "Internal note for the team (English)…"

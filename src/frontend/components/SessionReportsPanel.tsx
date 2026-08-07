@@ -6,6 +6,7 @@ import {
 } from "../lib/api";
 import type { ReportMeta, WSServerMessage } from "../lib/types";
 import { parseNewSessionLink, type NewSessionPrefill } from "../lib/new-session-link";
+import { Select } from "../ui/input";
 
 export function useSessionReports(
 	sessionId: string,
@@ -95,9 +96,10 @@ export function SessionReportsPanel({
 					</a>
 				</div>
 				{reports.length > 1 && (
-					<select
+					<Select
+						size="sm"
 						aria-label="Report from this session"
-						className="mt-2 w-full rounded-md border border-line bg-panel px-2 py-1.5 text-xs text-fg"
+						className="mt-2"
 						value={reportKey(selected)}
 						onChange={(event) => setSelectedKey(event.target.value)}
 					>
@@ -106,7 +108,7 @@ export function SessionReportsPanel({
 								{report.title} · {formatDate(report.createdAt)}
 							</option>
 						))}
-					</select>
+					</Select>
 				)}
 				{selected.summary && (
 					<p className="m-0 mt-2 text-label leading-5 text-dim">

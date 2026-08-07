@@ -21,6 +21,7 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert } from "../ui/state";
 
@@ -870,7 +871,7 @@ function TypeChooser({
 
       <div className="flex flex-col gap-1.5">
         <div className="text-dim text-label">Or describe it and {AGENT_NAME} drafts the automation:</div>
-        <textarea
+        <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           onKeyDown={(e) => {
@@ -984,6 +985,8 @@ function McpPicker({
       </div>
       <div className="bg-surface border border-line rounded-panel overflow-hidden">
         <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+          {/* Chrome-less on purpose: the picker's own panel is the surface, so
+              a second well inside it would read as a box in a box. */}
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -1185,7 +1188,7 @@ function AutomationForm({
 
       <label>
         Automation name
-        <input
+        <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={isWatch ? "Support channel triage" : "Daily PR review sweep"}
@@ -1195,7 +1198,7 @@ function AutomationForm({
       {isWatch ? (
         <label>
           Slack channel — what channel should {AGENT_NAME} watch?
-          <input
+          <Input
             value={watchChannel}
             onChange={(e) => setWatchChannel(e.target.value)}
             placeholder="C0123456789 (channel id)"
@@ -1218,18 +1221,18 @@ function AutomationForm({
           <div className="bg-surface border border-line rounded-panel px-3 py-2.5 flex flex-col gap-2.5">
             <label style={{ marginBottom: 0 }}>
               Schedule
-              <select value={preset} onChange={(e) => setPreset(e.target.value)}>
+              <Select value={preset} onChange={(e) => setPreset(e.target.value)}>
                 {PRESETS.map((p) => (
                   <option key={p.label} value={p.cron}>
                     {p.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             {preset === CUSTOM && (
               <label style={{ marginBottom: 0 }}>
                 Cron expression (UTC)
-                <input
+                <Input
                   value={customCron}
                   onChange={(e) => setCustomCron(e.target.value)}
                   placeholder="0 16 * * 1-5"
@@ -1239,14 +1242,14 @@ function AutomationForm({
             )}
             <label style={{ marginBottom: 0 }}>
               Internal event
-              <select value={eventKey} onChange={(e) => setEventKey(e.target.value)}>
+              <Select value={eventKey} onChange={(e) => setEventKey(e.target.value)}>
                 <option value="">None</option>
                 {EVENT_OPTIONS.map((o) => (
                   <option key={o.key} value={o.key}>
                     {o.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <div className="text-meta text-faint">
               Every automation also gets a secret webhook URL you can POST to —
@@ -1258,7 +1261,7 @@ function AutomationForm({
 
       <label>
         Instructions — what {AGENT_NAME} does {isWatch ? "with each message" : "when triggers activate"}
-        <textarea
+        <Textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           rows={6}
@@ -1286,15 +1289,15 @@ function AutomationForm({
         <div className="automation-form-row">
           <label>
             Mode
-            <select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
+            <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
               <option value="ask">Ask — read-only on main</option>
               <option value="code">Code — fresh worktree per run</option>
-            </select>
+            </Select>
           </label>
 
           <label>
             Model
-            <select value={model} onChange={(e) => setModel(e.target.value)}>
+            <Select value={model} onChange={(e) => setModel(e.target.value)}>
               <option value="">Default{defaultModel ? ` — ${defaultModel}` : ""}</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -1302,12 +1305,12 @@ function AutomationForm({
                   {accountPoolSuffix(m)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <label>
             Fallback (when all accounts hit usage limits)
-            <select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
+            <Select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
               <option value="">None — fail instead of falling back</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -1315,12 +1318,12 @@ function AutomationForm({
                   {accountPoolSuffix(m)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <label title="Pin runs to one account from the selected model's provider pool.">
             Provider account
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               <option value="">Auto — shared pool rotation</option>
               {eligibleAccounts.map((x) => (
                 <option key={x.id} value={x.id}>
@@ -1328,31 +1331,31 @@ function AutomationForm({
                   {x.owner ? ` — ${x.owner}'s` : ""}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           {accountId && (
             <label title="This account only: when it's out of usage, runs switch to the fallback model — never the shared pool — so this account's limits are the automation's cost ceiling. Prefer it: exhausted runs rotate into the shared pool instead.">
               When the pinned account is out of usage
-              <select
+              <Select
                 value={accountStrict ? "strict" : "pool"}
                 onChange={(e) => setAccountStrict(e.target.value === "strict")}
               >
                 <option value="strict">This account only — fall back by model (cost cap)</option>
                 <option value="pool">Prefer it — fall back to the shared pool</option>
-              </select>
+              </Select>
             </label>
           )}
 
           <label title="Usage-credits are pay-as-you-go spend past the subscription's included limits. Only takes effect on accounts with extra usage enabled at claude.ai — and their monthly credit cap still bounds the spend.">
             Usage credits
-            <select
+            <Select
               value={usageCredits ? "allow" : "never"}
               onChange={(e) => setUsageCredits(e.target.value === "allow")}
             >
               <option value="never">Never — stop / fall back at the limit</option>
               <option value="allow">Allowed — keep going on paid credits</option>
-            </select>
+            </Select>
           </label>
         </div>
       )}
