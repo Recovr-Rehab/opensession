@@ -26,6 +26,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   github: "GitHub",
   "grafana-poller": "Grafana Poller",
   incident: "incident.io",
+  codestorage: "Code Storage",
 };
 
 export function displayName(name: string): string {

@@ -25,6 +25,8 @@ export class CodeStorageIntegration implements AgentModule {
 
   health(): Record<string, unknown> {
     const cfg = codeStorageConfig();
-    return cfg ? { configured: true, org: cfg.org } : { configured: false };
+    return cfg
+      ? { status: "operational", configured: true, org: cfg.org }
+      : { status: "unconfigured", configured: false };
   }
 }

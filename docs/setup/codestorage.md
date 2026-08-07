@@ -41,7 +41,17 @@ token per fetch/push, so no long-lived secret is ever written to git config.
 
 ## Configure
 
-In `~/.opensession/config.json`:
+**From the UI (no config-file editing):** Settings → Connections → the
+"Code Storage" card. Enter the org identifier, paste the PKCS8 PEM private
+key, and Connect — the key is written to `~/.opensession/codestorage.pem`
+(mode 0600), `integrations.codestorage` is persisted, a webhook secret is
+generated, and the connection is validated with a live repo-list call
+(`POST /api/setup/codestorage/connect`). The card then shows the webhook
+receiver info (path, secret, last delivery) and a Disconnect button
+(`POST /api/setup/codestorage/disconnect` — removes the config, leaves the
+key file). `GET /api/setup/codestorage/status` backs the card.
+
+Or by hand, in `~/.opensession/config.json`:
 
 ```json
 {
@@ -130,13 +140,19 @@ Not supported, because the concepts don't exist upstream (no PR model):
 
 ## Webhooks
 
-Set `integrations.codestorage.webhookSecret` and point a code.storage webhook
-subscription (push events) at `POST /codestorage/webhook` on the webhook
-server (port 3848 behind your TLS proxy — same placement as
-`/github/webhook`). Deliveries are HMAC-verified (`X-Pierre-Signature`,
-5-minute replay tolerance) and rejected until the secret is configured. A
-`push` drops the cached branch-review state for the pushed branch so the UI
-re-reads code.storage immediately instead of waiting out polling TTLs.
+Point a code.storage webhook subscription (push + repo.sync events) at
+`POST /codestorage/webhook` on the webhook server (port 3848 behind your TLS
+proxy — same placement as `/github/webhook`). The HMAC secret
+(`integrations.codestorage.webhookSecret`) is generated automatically on the
+first connect/status call and shown (with copy/reveal) on the Connections
+card — paste it into the Pierre dashboard → Webhooks. Deliveries are
+HMAC-verified (`X-Pierre-Signature`, 5-minute replay tolerance) and rejected
+until the secret is configured. A `push` drops the cached branch-review state
+for the pushed branch (and broadcasts `pr_updated` to open tabs) so the UI
+re-reads code.storage immediately instead of waiting out polling TTLs;
+`repo.sync.failed` records a per-repo warning surfaced on the card until the
+next `repo.sync.succeeded`. The card also shows last-delivery metadata
+(event, time, invalid-signature warnings) from the status endpoint.
 
 ## Pieces (for developers)
 
@@ -148,5 +164,8 @@ re-reads code.storage immediately instead of waiting out polling TTLs.
   registration clones (`cloneCsCheckout`) and boot adoption
   (`adoptCsCheckouts`).
 - `src/server/codestorage/webhook.ts` — `POST /codestorage/webhook` (HMAC
-  verification + push → PR-cache invalidation).
+  verification, push → PR-cache invalidation + `pr_updated` broadcast,
+  sync-failure warnings, last-delivery metadata).
+- `src/server/routes/setup-codestorage.ts` — the UI connect flow
+  (`/api/setup/codestorage/{connect,status,disconnect}`).
 - `scripts/cs-credential.ts` — the git credential helper itself.

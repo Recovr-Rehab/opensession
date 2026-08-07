@@ -28,7 +28,7 @@ export interface MintCsJwtOptions {
   sub?: string;
 }
 
-type ImportedKey = { key: CryptoKey; alg: "ES256" | "RS256" };
+export type ImportedKey = { key: CryptoKey; alg: "ES256" | "RS256" };
 
 // Key import is not free (PEM decode + WebCrypto import per mint otherwise);
 // cache by path+mtime like the config cache so key rotation is picked up.
@@ -41,13 +41,14 @@ function pemToDer(pem: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-async function importPrivateKey(path: string): Promise<ImportedKey> {
-  const st = statSync(path);
-  if (keyCache && keyCache.path === path && keyCache.mtimeMs === st.mtimeMs) {
-    return keyCache.imported;
-  }
-  const der = pemToDer(readFileSync(path, "utf-8"));
-  let imported: ImportedKey;
+/**
+ * Import a PKCS8 PEM private key via WebCrypto — ES256 (P-256) first, RS256
+ * fallback, matching mintCsJwt's algorithm detection. Exported so the setup
+ * flow (routes/setup-codestorage.ts) can validate a pasted key with the exact
+ * logic that will later sign JWTs with it. Throws when the PEM is neither.
+ */
+export async function importPkcs8Pem(pem: string): Promise<ImportedKey> {
+  const der = pemToDer(pem);
   try {
     const key = await crypto.subtle.importKey(
       "pkcs8",
@@ -56,7 +57,7 @@ async function importPrivateKey(path: string): Promise<ImportedKey> {
       false,
       ["sign"],
     );
-    imported = { key, alg: "ES256" };
+    return { key, alg: "ES256" };
   } catch {
     const key = await crypto.subtle.importKey(
       "pkcs8",
@@ -65,8 +66,16 @@ async function importPrivateKey(path: string): Promise<ImportedKey> {
       false,
       ["sign"],
     );
-    imported = { key, alg: "RS256" };
+    return { key, alg: "RS256" };
   }
+}
+
+async function importPrivateKey(path: string): Promise<ImportedKey> {
+  const st = statSync(path);
+  if (keyCache && keyCache.path === path && keyCache.mtimeMs === st.mtimeMs) {
+    return keyCache.imported;
+  }
+  const imported = await importPkcs8Pem(readFileSync(path, "utf-8"));
   keyCache = { path, mtimeMs: st.mtimeMs, imported };
   return imported;
 }

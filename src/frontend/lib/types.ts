@@ -684,10 +684,19 @@ export type WSServerMessage =
 	// A silent server-side auto-push published the session's local commits (repo
 	// id for multi-repo sessions) — the PR status header refetches on this.
 	| { type: "git_pushed"; sessionId: string; repo?: string }
-	// A GitHub webhook reported PR/review/check activity on a branch — PR views
-	// showing that branch refetch immediately instead of waiting out their
-	// poll interval (`repo` is a registered repo id).
-	| { type: "pr_updated"; repo: string; ghRepo: string; branch: string; number?: number }
+	// A git-host webhook reported PR/review/check activity on a branch — PR
+	// views showing that branch refetch immediately instead of waiting out
+	// their poll interval (`repo` is a registered repo id). GitHub deliveries
+	// carry `ghRepo` (+ `number` when known); code.storage pushes carry
+	// `csRepo` — consumers match on repo/branch, which both hosts send.
+	| {
+			type: "pr_updated";
+			repo: string;
+			ghRepo?: string;
+			csRepo?: string;
+			branch: string;
+			number?: number;
+	  }
 	// The session's scratch assets folder changed (agent wrote/deleted a
 	// file) — the Assets tab refetches its tree on this.
 	| { type: "assets_changed"; sessionId: string }

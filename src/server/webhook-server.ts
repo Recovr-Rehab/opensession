@@ -15,6 +15,20 @@ const WEBHOOK_HOST = "127.0.0.1";
 /** Combined route table: "POST /slack/events" → handler */
 let routeTable = new Map<string, (req: Request, url: URL) => Promise<Response>>();
 
+/**
+ * Register a route after boot — for an integration configured live from the
+ * web UI, whose AgentModule (and getRoutes()) only loads on the next restart
+ * (e.g. code.storage connected via /api/setup/codestorage/connect). Existing
+ * keys win: boot-time registration is authoritative, so calling this for an
+ * already-served route is a no-op.
+ */
+export function addWebhookRoute(
+  key: string,
+  handler: (req: Request, url: URL) => Promise<Response>,
+): void {
+  if (!routeTable.has(key)) routeTable.set(key, handler);
+}
+
 /** Active agent modules for health reporting */
 let activeAgents: AgentModule[] = [];
 

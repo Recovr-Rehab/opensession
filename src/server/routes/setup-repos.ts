@@ -156,6 +156,14 @@ let csRepoListCache: {
   payload: { source: "org"; repos: PickerRepo[] };
 } | null = null;
 
+/** Drop the cached org repo list — the connect/disconnect flow
+ *  (setup-codestorage.ts) calls this so the setup wizard's code.storage
+ *  section reflects the new connection immediately instead of serving a
+ *  stale (pre-connect or pre-disconnect) probe for up to 60s. */
+export function invalidateCsRepoListCache(): void {
+  csRepoListCache = null;
+}
+
 /** Registered csRepo paths, lowercased, for the picker's `registered` flag. */
 function registeredCsRepos(): Set<string> {
   return new Set(

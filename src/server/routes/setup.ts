@@ -24,6 +24,7 @@
 import { audit } from "../audit";
 import type { IntegrationSpec } from "../integrations/registry";
 import type { RouteContext } from "./context";
+import { handleSetupCodestorageRoutes } from "./setup-codestorage";
 import { handleSetupRepoRoutes } from "./setup-repos";
 import { handleSetupTeamRoutes } from "./setup-team";
 
@@ -398,8 +399,11 @@ export async function handleSetupRoutes(
     return Response.json({ restarting: true });
   }
 
-  // ── Sibling modules: /api/setup/team*, /api/setup/{github/repos,repos} ───
+  // ── Sibling modules: /api/setup/team*, /api/setup/{github/repos,repos},
+  //    /api/setup/codestorage/{connect,status,disconnect} ───────────────────
   return (
-    (await handleSetupTeamRoutes(ctx)) ?? (await handleSetupRepoRoutes(ctx))
+    (await handleSetupTeamRoutes(ctx)) ??
+    (await handleSetupRepoRoutes(ctx)) ??
+    (await handleSetupCodestorageRoutes(ctx))
   );
 }

@@ -23,6 +23,13 @@ import { IconDotsHorizontal, IconTrash, IconSliders, IconHistory, IconPlus } fro
 import { IconTile, displayName } from "./BrandTile";
 import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { ProjectsSection } from "./ProjectsSection";
+import {
+  connectCodeStorage,
+  disconnectCodeStorage,
+  fetchCodeStorageStatus,
+  relativeTime,
+  type CodeStorageStatus,
+} from "../lib/api";
 
 interface McpConnection {
   name: string;
@@ -78,6 +85,7 @@ const AGENT_BLURBS: Record<string, string> = {
   stripe: "Inbound billing events",
   "grafana-poller": "Polls Grafana alerts into sessions",
   github: "Inbound repository events",
+  codestorage: "Branch pushes & sync events from code.storage",
 };
 
 function LockIcon({ size = 12 }: { size?: number }) {
@@ -430,6 +438,8 @@ export function Connections() {
 
           <GithubAccounts />
 
+          <CodeStorageCard />
+
           <ProjectsSection />
 
           <PlainRouter />
@@ -678,6 +688,236 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
               </div>
             );
           })}
+      </SettingCard>
+    </>
+  );
+}
+
+/**
+ * code.storage (Pierre) — connect the org + signing key entirely from this
+ * card, no config-file editing. Disconnected: org + pasted PKCS8 PEM →
+ * POST /api/setup/codestorage/connect. Connected: repo count (or the server's
+ * precise error), plus the webhook receiver info the Pierre dashboard needs
+ * (path, HMAC secret) and live delivery status from GET status.
+ */
+function CodeStorageCard() {
+  const [status, setStatus] = useState<CodeStorageStatus | null>(null);
+  const [org, setOrg] = useState("");
+  const [pem, setPem] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [showSecret, setShowSecret] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setStatus(await fetchCodeStorageStatus());
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Keep the delivery status live while the card shows the webhook section.
+  useEffect(() => {
+    if (!status?.configured) return;
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [status?.configured, load]);
+
+  async function connect() {
+    setConnecting(true);
+    setError(null);
+    setNote(null);
+    try {
+      const res = await connectCodeStorage(org.trim(), pem);
+      setPem("");
+      setNote(
+        `Connected — ${res.repoCount} repo${res.repoCount === 1 ? "" : "s"} visible. Register them under Settings → Setup → Repositories.`,
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setConnecting(false);
+      await load();
+    }
+  }
+
+  async function disconnect() {
+    if (
+      !confirm(
+        "Disconnect code.storage? Sessions on code.storage repos lose push/pull until you reconnect. The key file stays on disk.",
+      )
+    )
+      return;
+    setError(null);
+    try {
+      const res = await disconnectCodeStorage();
+      setNote(res.note || "Disconnected.");
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  function copy(value: string, which: string) {
+    navigator.clipboard?.writeText(value).then(() => {
+      setCopied(which);
+      setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
+    });
+  }
+
+  if (!status) return null;
+  const connected = status.configured;
+  const wh = status.webhook;
+  const last = wh?.lastDelivery ?? null;
+
+  return (
+    <>
+      <SectionHeading>Code Storage — branch-based repo host</SectionHeading>
+      {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+      <SettingCard>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <IconTile name="codestorage" size={30} />
+          <div className="min-w-0 flex-1">
+            <div className="text-body font-medium text-fg">code.storage (Pierre)</div>
+            <div className="text-label leading-snug text-dim">
+              {!connected
+                ? "Host repos on code.storage — sessions review branch diffs instead of PRs. Paste the org's signing key to connect; nothing else to configure."
+                : status.error
+                  ? `Configured for org "${status.org}", but the last check failed.`
+                  : `Connected to org "${status.org}"${
+                      typeof status.repoCount === "number"
+                        ? ` — ${status.repoCount} repo${status.repoCount === 1 ? "" : "s"} visible`
+                        : ""
+                    }. Register repos under Settings → Setup → Repositories.`}
+            </div>
+          </div>
+          <StatusChip
+            label={connected ? (status.error ? "Error" : "Connected") : "Not connected"}
+            dot={
+              connected
+                ? status.error
+                  ? "var(--red)"
+                  : "var(--green)"
+                : "var(--line-strong, var(--text-faint))"
+            }
+          />
+          {connected && (
+            <Button
+              size="sm"
+              className="flex-shrink-0 hover:border-red hover:text-red"
+              onClick={disconnect}
+            >
+              Disconnect
+            </Button>
+          )}
+        </div>
+
+        {note && <div className="px-4 py-2.5 text-label text-dim">{note}</div>}
+
+        {!connected ? (
+          <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
+            <SettingsFormRow>
+              <SettingsField>
+                Organization
+                <input
+                  className={settingsInputClass}
+                  value={org}
+                  onChange={(e) => setOrg(e.target.value)}
+                  placeholder="acme"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  aria-label="code.storage organization"
+                />
+              </SettingsField>
+            </SettingsFormRow>
+            <SettingsField>
+              Private key (PKCS8 PEM — its public half is registered with the org in the
+              Pierre dashboard)
+              <textarea
+                className={cn(settingsInputClass, "resize-y font-mono")}
+                value={pem}
+                onChange={(e) => setPem(e.target.value)}
+                rows={5}
+                spellCheck={false}
+                placeholder={"-----BEGIN PRIVATE KEY-----\n…"}
+                aria-label="code.storage private key PEM"
+              />
+            </SettingsField>
+            <div className="flex items-center gap-2.5">
+              <Button
+                variant="primary"
+                disabled={connecting || !org.trim() || !pem.trim()}
+                onClick={connect}
+              >
+                {connecting ? "Connecting…" : "Connect"}
+              </Button>
+              <span className="text-meta text-faint">
+                The key is stored on this server (mode 0600) and never leaves it.
+              </span>
+            </div>
+          </div>
+        ) : (
+          <>
+            {status.error && (
+              <div className="border-t border-line px-4 py-2.5 text-label leading-snug text-red">
+                {status.error}
+              </div>
+            )}
+            {wh && (
+              <div className="flex flex-col gap-2 border-t border-line px-4 py-3">
+                <div className="text-label font-medium text-fg">Webhook receiver</div>
+                <div className="flex flex-wrap items-center gap-2 text-label text-dim">
+                  <code className="rounded-sm bg-active px-1.5 py-0.5 font-mono text-fg">
+                    POST {wh.path}
+                  </code>
+                  <span>
+                    on the webhook server (127.0.0.1:{wh.port}, behind your TLS proxy)
+                  </span>
+                  <Button size="sm" variant="ghost" onClick={() => copy(wh.path, "path")}>
+                    {copied === "path" ? "Copied" : "Copy path"}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-label text-dim">
+                  <span>Secret</span>
+                  <code className="max-w-[340px] truncate rounded-sm bg-active px-1.5 py-0.5 font-mono text-fg">
+                    {showSecret ? wh.secret : "••••••••••••••••"}
+                  </code>
+                  <Button size="sm" variant="ghost" onClick={() => setShowSecret((s) => !s)}>
+                    {showSecret ? "Hide" : "Reveal"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => copy(wh.secret, "secret")}>
+                    {copied === "secret" ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+                <div className="text-meta leading-snug text-faint">
+                  Paste your public URL for this path plus the secret into the Pierre
+                  dashboard → Webhooks, subscribed to push and repo.sync events.
+                </div>
+                <div
+                  className={cn(
+                    "text-meta",
+                    last && !last.ok ? "text-red" : "text-faint",
+                  )}
+                >
+                  {!last
+                    ? "No deliveries received yet."
+                    : last.ok
+                      ? `Last event: ${last.event}${last.ref ? ` ${last.ref}` : ""}${last.repo ? ` (${last.repo})` : ""}, ${relativeTime(last.at)}`
+                      : `Last delivery rejected (${last.error}), ${relativeTime(last.at)} — check that the secret in the Pierre dashboard matches.`}
+                </div>
+                {wh.syncFailures.map((f) => (
+                  <div key={f.repo} className="text-meta text-red">
+                    Sync failing for {f.repo}: {f.error} ({relativeTime(f.at)})
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </SettingCard>
     </>
   );
