@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mergeTranscriptEntries, orderTranscriptEntries } from "./transcript-state";
+import {
+	mergeTranscriptEntries,
+	normalizeLegacyVoiceToolEntries,
+	orderTranscriptEntries,
+} from "./transcript-state";
 import type { TranscriptEntry } from "./types";
 
 function entry(
@@ -77,5 +81,33 @@ describe("transcript client state", () => {
 			"old",
 			"new",
 		]);
+	});
+
+	test("normalizes legacy Desk voice actions into linked tool entries", () => {
+		const timestamp = "2026-08-07T12:00:00.000Z";
+		const legacy: TranscriptEntry[] = [
+			{
+				id: "voice-tu-call-1",
+				type: "tool_use",
+				toolName: "steer_session",
+				content: '{"id":"os-1","message":"continue"}',
+				timestamp,
+			},
+			{
+				id: "voice-tr-call-1",
+				type: "tool_result",
+				content: '{"status":"steered"}',
+				timestamp,
+			},
+		];
+		const normalized = normalizeLegacyVoiceToolEntries(legacy);
+
+		expect(normalized[0]).toMatchObject({
+			toolUseId: "voice-tu-call-1",
+			toolInput: { id: "os-1", message: "continue" },
+		});
+		expect(normalized[1].toolUseId).toBe("voice-tu-call-1");
+		expect(normalizeLegacyVoiceToolEntries(legacy)[0]).toBe(normalized[0]);
+		expect(normalizeLegacyVoiceToolEntries(normalized)[0]).toBe(normalized[0]);
 	});
 });

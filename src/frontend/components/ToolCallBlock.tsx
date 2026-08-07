@@ -4,6 +4,7 @@ import { langForFile, langForGrep } from "../lib/lang";
 import { currentPlanItem, parsePlanItems, planDoneCount } from "../lib/todo-plan";
 import { PlanChecklist } from "./PlanChecklist";
 import { resolveEntryImageSrc } from "../lib/osBlob";
+import { BASE_PATH } from "../lib/base";
 import { cn } from "../ui/cn";
 import { openGalleryFrom } from "./MediaLightbox";
 import {
@@ -53,6 +54,61 @@ interface Props {
   /** Lets os-blob: image markers (transcript-v2 bounded entries) resolve to
    *  the transcript-image route. Optional — without it markers pass through. */
   sessionId?: string;
+}
+
+type FullEntryDetail = Pick<TranscriptEntry, "content" | "toolInput" | "images">;
+
+function useHydratedTranscriptEntry(
+  target: TranscriptEntry | undefined,
+  enabled: boolean,
+  sessionId: string | undefined,
+  legacyVoiceInput = false
+): TranscriptEntry | null {
+  const [hydrated, setHydrated] = useState<{
+    sessionId: string;
+    source: TranscriptEntry;
+    entry: TranscriptEntry;
+  } | null>(null);
+  const current =
+    hydrated && hydrated.sessionId === sessionId && hydrated.source === target
+      ? hydrated.entry
+      : null;
+
+  useEffect(() => {
+    if (!enabled || !sessionId || !target || current) return;
+    const controller = new AbortController();
+    void fetch(
+      `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/entry/${encodeURIComponent(target.id)}`,
+      { signal: controller.signal }
+    )
+      .then(async (res) => {
+        if (!res.ok) return;
+        const detail = (await res.json()) as FullEntryDetail;
+        let toolInput = detail.toolInput;
+        if (legacyVoiceInput && toolInput === undefined && detail.content) {
+          try {
+            toolInput = JSON.parse(detail.content);
+          } catch {
+            toolInput = detail.content;
+          }
+        }
+        setHydrated({
+          sessionId,
+          source: target,
+          entry: {
+            ...target,
+            ...detail,
+            ...(toolInput !== undefined ? { toolInput } : {}),
+          },
+        });
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        // Keep the bounded transcript row visible if full-detail loading fails.
+      });
+    return () => controller.abort();
+  }, [current, enabled, legacyVoiceInput, sessionId, target]);
+  return current;
 }
 
 /**
@@ -445,10 +501,27 @@ function RunningToolDuration({ entry }: { entry: TranscriptEntry }) {
 }
 
 export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionId }: Props) {
-  const hasMedia = Boolean(result?.images?.length || result?.videos?.length);
+  const entryNeedsHydration = entry.contentClamped || isBoundedToolInput(entry.toolInput);
+  const resultNeedsHydration = Boolean(result?.contentClamped);
   // Default closed for text-only output, but auto-open when media arrives
   // (covers both initial render and the live tool_result streaming in later).
-  const [expanded, setExpanded] = useState(hasMedia);
+  const [expanded, setExpanded] = useState(
+    Boolean(result?.images?.length || result?.videos?.length)
+  );
+  const fullEntry = useHydratedTranscriptEntry(
+    entry,
+    expanded && Boolean(entryNeedsHydration),
+    sessionId,
+    entry.id.startsWith("voice-tu-")
+  );
+  const fullResult = useHydratedTranscriptEntry(
+    result,
+    expanded && resultNeedsHydration,
+    sessionId
+  );
+  const shownInput = fullEntry?.toolInput ?? entry.toolInput;
+  const shownResult = fullResult ?? result;
+  const hasMedia = Boolean(shownResult?.images?.length || shownResult?.videos?.length);
   useEffect(() => {
     if (hasMedia) setExpanded(true);
   }, [hasMedia]);
@@ -456,13 +529,13 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   const canonical = canonicalToolName(toolName);
   const roots = useToolPathRoots();
   const mcp = parseMcpTool(toolName);
-  const summary = toolSummary(toolName, entry.toolInput, entry.content, roots);
+  const summary = toolSummary(toolName, shownInput, entry.content, roots);
   const isFileTool = canonical === "Read" || canonical === "Edit" || canonical === "Write";
-  const lineStats = toolLineStats(toolName, entry.toolInput);
+  const lineStats = toolLineStats(toolName, shownInput);
   const duration = stepDuration(entry, result);
-  const failed = Boolean(result?.isError);
-  const inputNode = expanded ? toolInputNode(canonical, entry.toolInput) : null;
-  const resultContent = visibleResultContent(result?.content, hasMedia, failed);
+  const failed = Boolean(shownResult?.isError);
+  const inputNode = expanded ? toolInputNode(canonical, shownInput) : null;
+  const resultContent = visibleResultContent(shownResult?.content, hasMedia, failed);
   const mediaOnly = hasMedia && !resultContent && !inputNode;
 
   // A Task/Agent call whose sub-agent transcript we can open in the sidebar.
@@ -595,7 +668,8 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
           )}
         >
           {inputNode && <div className="p-1.5">{inputNode}</div>}
-          {result && (resultContent || result.images?.length || result.videos?.length) && (
+          {shownResult &&
+            (resultContent || shownResult.images?.length || shownResult.videos?.length) && (
             <>
               {resultContent && (
                 <div
@@ -615,12 +689,12 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
               >
                 {resultContent && (
                   <div className="tool-code-surface">
-                    {renderResultContent(canonical, entry.toolInput, resultContent)}
+                    {renderResultContent(canonical, shownInput, resultContent)}
                   </div>
                 )}
-                {result.images && result.images.length > 0 && (
+                {shownResult.images && shownResult.images.length > 0 && (
                   <div className={cn("tool-result-images", !resultContent && "!mt-0")}>
-                    {result.images.map((raw, i) => {
+                    {shownResult.images.map((raw, i) => {
                       const src = resolveEntryImageSrc(raw, sessionId);
                       return (
                         <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="md-image-link">
@@ -635,9 +709,9 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
                     })}
                   </div>
                 )}
-                {result.videos && result.videos.length > 0 && (
+                {shownResult.videos && shownResult.videos.length > 0 && (
                   <div className="tool-result-videos">
-                    {result.videos.map((src, i) => (
+                    {shownResult.videos.map((src, i) => (
                       <div key={i} className="md-video-wrap">
                         <video className="md-video" src={src} controls playsInline preload="metadata" />
                         <button
@@ -709,7 +783,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
     if (diff) {
       return (
         <div className="tool-code-surface">
-          <CodeHighlight code={truncate(diff, 4000)} lang="diff" />
+          <ExpandableCode code={diff} lang="diff" />
         </div>
       );
     }
@@ -718,8 +792,8 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
   if (toolName === "Write" && typeof inp.content === "string") {
     return (
       <div className="tool-code-surface">
-        <CodeHighlight
-          code={truncate(inp.content, 4000)}
+        <ExpandableCode
+          code={inp.content}
           lang={langForFile(filePathOf(inp)) || "markdown"}
         />
       </div>
@@ -749,7 +823,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
 
   const text = formatInput(input);
   if (!text) return null;
-  return <pre className="tool-pre tool-code-surface">{truncate(text, 4000)}</pre>;
+  return <ExpandablePre text={text} className="tool-pre tool-code-surface" />;
 }
 
 /**
@@ -759,7 +833,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
  * so file-list output stays plain).
  */
 function renderResultContent(toolName: string, input: unknown, content: string) {
-  const text = truncate(content, 2000);
+  const text = content;
   const lang =
     toolName === "Read"
       ? langForFile(filePathOf((input || {}) as Record<string, unknown>))
@@ -767,13 +841,99 @@ function renderResultContent(toolName: string, input: unknown, content: string) 
         ? langForGrep(input)
         : null;
   if (lang) {
-    return <CodeHighlight code={text} lang={lang} gutter requireGutter={toolName === "Grep"} />;
+    return (
+      <ExpandableCode
+        code={text}
+        lang={lang}
+        gutter
+        requireGutter={toolName === "Grep"}
+      />
+    );
   }
   // Unified diffs (git diff/show in Bash output) highlight as diff
   if (toolName === "Bash" && (text.startsWith("diff --git") || /^@@ -\d/m.test(text))) {
-    return <CodeHighlight code={text} lang="diff" />;
+    return <ExpandableCode code={text} lang="diff" />;
   }
-  return <pre className="tool-pre">{text}</pre>;
+  return <ExpandablePre text={text} className="tool-pre" />;
+}
+
+const TOOL_DETAIL_PREVIEW_CHARS = 32 * 1024;
+
+function detailPreview(text: string): string {
+  if (text.length <= TOOL_DETAIL_PREVIEW_CHARS) return text;
+  const slice = text.slice(0, TOOL_DETAIL_PREVIEW_CHARS);
+  const newline = slice.lastIndexOf("\n");
+  return `${newline > TOOL_DETAIL_PREVIEW_CHARS / 2 ? slice.slice(0, newline) : slice}\n…`;
+}
+
+function DetailDisclosure({
+  expanded,
+  length,
+  onClick,
+}: {
+  expanded: boolean;
+  length: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      className="mt-1 rounded-control border-0 bg-transparent px-1.5 py-1 font-sans text-meta font-medium text-faint hover:bg-hover/40 hover:text-fg"
+      onClick={onClick}
+    >
+      {expanded ? "Show preview" : `Show full detail · ${Math.round(length / 1024)} KB`}
+    </button>
+  );
+}
+
+function ExpandableCode(props: {
+  code: string;
+  lang: string;
+  gutter?: boolean;
+  requireGutter?: boolean;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const long = props.code.length > TOOL_DETAIL_PREVIEW_CHARS;
+  return (
+    <>
+      <CodeHighlight {...props} code={showAll ? props.code : detailPreview(props.code)} />
+      {long && (
+        <DetailDisclosure
+          expanded={showAll}
+          length={props.code.length}
+          onClick={() => setShowAll(!showAll)}
+        />
+      )}
+    </>
+  );
+}
+
+function ExpandablePre({ text, className }: { text: string; className: string }) {
+  const [showAll, setShowAll] = useState(false);
+  const long = text.length > TOOL_DETAIL_PREVIEW_CHARS;
+  return (
+    <>
+      <pre className={className}>{showAll ? text : detailPreview(text)}</pre>
+      {long && (
+        <DetailDisclosure
+          expanded={showAll}
+          length={text.length}
+          onClick={() => setShowAll(!showAll)}
+        />
+      )}
+    </>
+  );
+}
+
+function isBoundedToolInput(input: unknown): boolean {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const value = input as Record<string, unknown>;
+  return (
+    typeof value.toolName === "string" &&
+    typeof value.byteSize === "number" &&
+    Array.isArray(value.keys)
+  );
 }
 
 /**

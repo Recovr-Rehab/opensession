@@ -62,3 +62,48 @@ export function mergeTranscriptEntries(
 	}
 	return v2 ? orderTranscriptEntries(next) : next;
 }
+
+const normalizedLegacyVoiceEntries = new WeakMap<
+	TranscriptEntry,
+	TranscriptEntry
+>();
+
+/** Voice actions written before linked tool entries were introduced stored the
+ * input in `content` and omitted toolUseId on both rows. Normalize that durable
+ * legacy shape so the shared transcript renderer can pair and disclose it. */
+export function normalizeLegacyVoiceToolEntries(
+	entries: TranscriptEntry[],
+): TranscriptEntry[] {
+	return entries.map((entry) => {
+		const cached = normalizedLegacyVoiceEntries.get(entry);
+		if (cached) return cached;
+		if (entry.type === "tool_use" && entry.id.startsWith("voice-tu-")) {
+			let toolInput = entry.toolInput;
+			if (toolInput === undefined) {
+				try {
+					toolInput = JSON.parse(entry.content);
+				} catch {
+					toolInput = entry.content;
+				}
+			}
+			if (entry.toolUseId && entry.toolInput !== undefined) return entry;
+			const normalized = {
+				...entry,
+				toolUseId: entry.toolUseId ?? entry.id,
+				toolInput,
+			};
+			normalizedLegacyVoiceEntries.set(entry, normalized);
+			return normalized;
+		}
+		if (entry.type === "tool_result" && entry.id.startsWith("voice-tr-")) {
+			if (entry.toolUseId) return entry;
+			const normalized = {
+				...entry,
+				toolUseId: `voice-tu-${entry.id.slice("voice-tr-".length)}`,
+			};
+			normalizedLegacyVoiceEntries.set(entry, normalized);
+			return normalized;
+		}
+		return entry;
+	});
+}

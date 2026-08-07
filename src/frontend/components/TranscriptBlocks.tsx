@@ -6,6 +6,7 @@ import { TurnFooter, collectTouchedFiles, type TouchedFile } from "./TurnFooter"
 import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
+import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
 
 type RenderBlock =
 	| { kind: "entry"; entry: TranscriptEntry }
@@ -58,9 +59,10 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	sessionId,
 	walkthrough,
 }: Props) {
+	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
 	// Build tool_use → tool_result map
 	const toolResults = new Map<string, TranscriptEntry>();
-	for (const e of entries) {
+	for (const e of renderedEntries) {
 		if (e.type === "tool_result" && e.toolUseId)
 			toolResults.set(e.toolUseId, e);
 	}
@@ -100,7 +102,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 		turn = [];
 	};
 
-	for (const entry of entries) {
+	for (const entry of renderedEntries) {
 		if (entry.type === "tool_result") {
 			continue; // rendered inside turn blocks via toolResults
 		} else if (entry.type === "assistant" || entry.type === "tool_use") {

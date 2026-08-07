@@ -3,6 +3,7 @@ import {
 	buildVoiceSessionConfig,
 	callVoiceMcpTool,
 	DESK_VOICE_TURN_DETECTION,
+	voiceToolTranscriptEntries,
 } from "./desk-voice";
 import { registerSessionControl, type SessionControl } from "./session-control";
 
@@ -79,5 +80,36 @@ describe("Desk voice Realtime session", () => {
 		expect(result.found).toBe(true);
 		expect(result.result.content[0].text).toContain("os-alex");
 		expect(result.result.content[0].text).not.toContain("os-other");
+	});
+
+	test("persists voice actions as linked, complete tool calls", () => {
+		const output = { sessions: ["x".repeat(40_000)] };
+		const entries = voiceToolTranscriptEntries(
+			"call-1",
+			"list_sessions",
+			{ createdBy: "Alex" },
+			output,
+			"2026-08-07T12:00:00.000Z",
+		);
+
+		expect(entries[0]).toMatchObject({
+			id: "voice-tu-call-1",
+			type: "tool_use",
+			toolUseId: "voice-tu-call-1",
+			toolInput: { createdBy: "Alex" },
+		});
+		expect(entries[1]).toMatchObject({
+			id: "voice-tr-call-1",
+			type: "tool_result",
+			toolUseId: "voice-tu-call-1",
+		});
+		expect(entries[1].content).toBe(JSON.stringify(output));
+		expect(entries[1].content.length).toBeGreaterThan(40_000);
+		expect(
+			voiceToolTranscriptEntries("call-2", "list_sessions", {}, {
+				isError: true,
+				content: [{ type: "text", text: "failed" }],
+			})[1].isError,
+		).toBe(true);
 	});
 });

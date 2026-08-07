@@ -525,23 +525,10 @@ export function mirrorVoiceToolCall(
 	result: unknown,
 ): void {
 	const { sessionId } = ensureDeskSession(user);
-	const now = new Date().toISOString();
-	transcriptStore().appendTranscriptEvents(sessionId, [
-		{
-			id: `voice-tu-${callId}`,
-			type: "tool_use",
-			toolName: name,
-			content: JSON.stringify(args),
-			timestamp: now,
-		},
-		{
-			id: `voice-tr-${callId}`,
-			type: "tool_result",
-			toolName: name,
-			content: truncate(JSON.stringify(result) ?? "", 2000),
-			timestamp: now,
-		},
-	]);
+	transcriptStore().appendTranscriptEvents(
+		sessionId,
+		voiceToolTranscriptEntries(callId, name, args, result),
+	);
 	appendHandoff(sessionId, [
 		{
 			id: `voice-act-${callId}`,
@@ -549,4 +536,39 @@ export function mirrorVoiceToolCall(
 			text: `${name}(${truncate(JSON.stringify(args), 200)}) → ${truncate(JSON.stringify(result) ?? "", 300)}`,
 		},
 	]);
+}
+
+export function voiceToolTranscriptEntries(
+	callId: string,
+	name: string,
+	args: Record<string, unknown>,
+	result: unknown,
+	timestamp = new Date().toISOString(),
+): TranscriptEntry[] {
+	const toolUseId = `voice-tu-${callId}`;
+	const failed =
+		result !== null &&
+		typeof result === "object" &&
+		((result as { isError?: unknown }).isError === true ||
+			typeof (result as { error?: unknown }).error === "string");
+	return [
+		{
+			id: toolUseId,
+			type: "tool_use",
+			toolName: name,
+			toolUseId,
+			toolInput: args,
+			content: `Using ${name}`,
+			timestamp,
+		},
+		{
+			id: `voice-tr-${callId}`,
+			type: "tool_result",
+			toolName: name,
+			toolUseId,
+			content: JSON.stringify(result) ?? "",
+			timestamp,
+			...(failed ? { isError: true } : {}),
+		},
+	];
 }
