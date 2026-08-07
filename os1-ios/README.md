@@ -90,15 +90,15 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   sends `cancel` for the watched session. The floating glass composer uses a
   progressive material fade so transcript content recedes cleanly beneath it;
   its full surface focuses the field and keeps a comfortable keyboard gap.
-- **Dictation** — the composer's mic (left of send, every session) is speech
-  to text, not a call: `Dictation.swift` runs `SFSpeechRecognizer` over an
-  `AVAudioEngine` tap and streams the utterance into the draft, appended to
-  whatever was already typed. It asks for on-device recognition wherever the
-  hardware supports it, since drafts carry customer and ticket detail that the
-  server-side route would send to Apple. The recognizer object is owned by
-  `SessionInputBar`, not the button: a long dictation wraps the composer to
-  its two-row layout, which swaps the branch the button renders in and would
-  otherwise destroy its state mid-sentence.
+- **Dictation** — the composer's mic (first of the trailing controls, ahead of
+  stop, every session) is speech to text, not a call: `Dictation.swift` runs
+  `SFSpeechRecognizer` over an `AVAudioEngine` tap and streams the utterance
+  into the draft, appended to whatever was already typed. It asks for
+  on-device recognition wherever the hardware supports it, since drafts carry
+  customer and ticket detail that the server-side route would send to Apple.
+  The recognizer object is owned by `SessionInputBar`, not the button: a long
+  dictation wraps the composer to its two-row layout, which swaps the branch
+  the button renders in and would otherwise destroy its state mid-sentence.
 - **Session creation** — a full-height prompt editor with image attachments and
   a compact single-row iOS toolbar for repository, mode, and model settings.
 - **AskUserQuestion** — blocking questions render as an inline card with option
