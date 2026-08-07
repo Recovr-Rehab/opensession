@@ -436,11 +436,39 @@ enum OS1API {
         /// so no two repos share one. Absent on servers older than the
         /// assignment, where the tile falls back to its own hash.
         let color: String?
+        /// Whether that color was chosen for the repo rather than assigned.
+        let colorChosen: Bool?
+        /// Whether the tile paints art rather than the letter.
+        let hasIcon: Bool?
+        /// Changes when that art does — hung off the icon URL so a replaced
+        /// icon isn't served from the cache the old one is sitting in.
+        let iconRev: Double?
 
         private enum CodingKeys: String, CodingKey {
             case id, ghRepo, label, defaultBranch, sharedCheckout, color
+            case colorChosen, hasIcon, iconRev
             case isDefault = "default"
         }
+    }
+
+    /// Set a repo's tile color, or fetch/clear its icon. `color` and `icon`
+    /// are three-state: absent leaves that half alone, `.some(nil)` clears it.
+    @discardableResult
+    static func setRepoAppearance(
+        id: String,
+        color: String?? = nil,
+        icon: String?? = nil
+    ) async throws -> RepoAppearance {
+        var body: [String: Any] = [:]
+        if let color { body["color"] = color ?? NSNull() }
+        if let icon { body["icon"] = icon ?? NSNull() }
+        return try await post("/api/repos/\(id)/appearance", body: body)
+    }
+
+    struct RepoAppearance: Decodable, Sendable {
+        let color: String?
+        let hasIcon: Bool
+        let iconRev: Double?
     }
 
     /// Repos a new session can target.

@@ -82,6 +82,9 @@ struct SettingsView: View {
                 settingsLink("Memory", icon: "brain") {
                     MemorySettingsView()
                 }
+                settingsLink("Repositories", icon: "shippingbox") {
+                    RepositoriesSettingsView()
+                }
             }
 
             Section("Automation") {

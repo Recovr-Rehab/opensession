@@ -129,13 +129,23 @@ final class RepoTilePalette {
     ]
 
     private var assigned: [String: Color] = [:]
+    /// When each repo's icon last changed. Icons are cacheable and URLCache
+    /// outlives a launch, so replacing one from Settings would otherwise keep
+    /// painting the old picture until the stored copy went stale.
+    private(set) var iconRevisions: [String: Int] = [:]
 
     /// Record what the server assigned. Repos it didn't color (an older
     /// server) keep the hashed fallback rather than losing their tile.
     func remember(_ repos: [OS1API.RepoInfo]) {
         for repo in repos {
-            guard let hex = repo.color, let color = Self.parse(hex) else { continue }
-            assigned[repo.id] = color
+            if let hex = repo.color, let color = Self.parse(hex) {
+                assigned[repo.id] = color
+            }
+            if let rev = repo.iconRev {
+                iconRevisions[repo.id] = Int(rev)
+            } else {
+                iconRevisions.removeValue(forKey: repo.id)
+            }
         }
     }
 
@@ -162,7 +172,9 @@ final class RepoTilePalette {
     }
 }
 
-private extension Color {
+extension Color {
+    /// A palette entry as a Color. Not private: the repo-tile editor paints
+    /// the same swatches this tile does.
     init(rgb: UInt32) {
         self.init(
             .sRGB,
@@ -192,6 +204,7 @@ struct RepoTile: View {
 
     private var color: Color { RepoTilePalette.shared.color(for: name) }
 
+    @MainActor
     private var iconURL: URL? { Self.iconURL(for: name) }
 
     /// Bumped when the icons behind /repo-icon are redrawn — keep it in step
@@ -202,11 +215,18 @@ struct RepoTile: View {
     /// org's mark has to stop asking for the copy on disk.
     private static let iconVersion = 3
 
+    @MainActor
     private static func iconURL(for name: String) -> URL? {
         var url = ServerConfig.shared.baseURL?
             .appendingPathComponent("repo-icon")
             .appendingPathComponent("\(name).png")
-        url?.append(queryItems: [URLQueryItem(name: "v", value: "\(iconVersion)")])
+        var query = [URLQueryItem(name: "v", value: "\(iconVersion)")]
+        // An icon replaced from Settings is a different picture at the same
+        // path; its revision is what tells the cache that.
+        if let rev = RepoTilePalette.shared.iconRevisions[name] {
+            query.append(URLQueryItem(name: "r", value: "\(rev)"))
+        }
+        url?.append(queryItems: query)
         return url
     }
 
