@@ -995,11 +995,9 @@ struct SessionsListView: View {
     #endif
 
     /// Inbox rows name their repo — nothing above them does, since the flat
-    /// list has no repo bands. The tile is the scan cue; the name is what
-    /// actually identifies the repo, because a repo without its own icon
-    /// falls back to its OWNER's mark and every repo in one org then wears
-    /// the same tile. Dropped when the list is already one repo (a repo
-    /// filter, or an instance with a single repo), where it would just repeat.
+    /// list has no repo bands. Dropped when the list is already one repo (a
+    /// repo filter, or an instance with a single repo), where it would only
+    /// repeat itself.
     private var inboxRowRepoName: Bool {
         repoFilter == "all" && availableRepos.count > 1
     }
@@ -1676,11 +1674,12 @@ struct SessionRow: View {
     /// sidebar's `.sidebar-item-unread`: one session with activity past your read
     /// mark bolds the whole workspace. Empty falls back to `session` alone.
     var sessions: [Session] = []
-    /// Set in Inbox mode, where the flat list has no repo band above the row:
-    /// the row wears the repo's tile itself, and — when the list spans repos
-    /// (`showsRepoName`) — spells the name out on a second line, since
-    /// identical tiles are the norm (repos without their own icon all fall
-    /// back to their owner's mark).
+    /// Set in Inbox mode, where the flat list has no repo band above the row.
+    /// The row names its repo in the trailing column when the list spans
+    /// repos (`showsRepoName`). It's the NAME rather than the repo tile the
+    /// web sidebar's Inbox uses, because a repo without its own icon falls
+    /// back to its owner's mark: on a one-org instance most rows would wear
+    /// the same tile, and a column of identical marks identifies nothing.
     var repo: String? = nil
     var showsRepoName = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -1718,64 +1717,46 @@ struct SessionRow: View {
     /// Mac sidebar rows are compact and body-sized like Finder/System
     /// Settings; iOS keeps the roomier touch metrics.
     private var content: some View {
-        // The mark sits beside the title, not beside the pair, so a two-line
-        // row doesn't float it into the gap between the lines.
-        HStack(alignment: namesRepoBelow ? .top : .center, spacing: 9) {
+        HStack(spacing: 9) {
             statusMark
                 .frame(width: markSize, height: markSize)
-            if let repo, !namesRepoBelow {
-                RepoTile(name: repo, size: tileSize)
+            Text(rowTitle)
+                #if os(iOS)
+                // The web sidebar's phone type, exactly: 16px titles (callout)
+                // in medium, dimmed — and, when the row has activity you
+                // haven't read, semibold at full strength. Same Slack-style
+                // pair as `.sidebar-item-title` / `.sidebar-item-unread`.
+                .font(.callout.weight(unread ? .semibold : .medium))
+                .foregroundStyle(unread ? OS1VisualStyle.text : OS1VisualStyle.textDim)
+                #else
+                .font(.body.weight(unread ? .semibold : .regular))
+                .foregroundStyle(.primary)
+                #endif
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if namesRepo, let repo {
+                Text(RepoTile.label(for: repo))
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
+                    .layoutPriority(1)
             }
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 9) {
-                    Text(rowTitle)
-                        #if os(iOS)
-                        // The web sidebar's phone type, exactly: 16px titles
-                        // (callout) in medium, dimmed — and, when the row has
-                        // activity you haven't read, semibold at full
-                        // strength. Same Slack-style pair as
-                        // `.sidebar-item-title` / `.sidebar-item-unread`.
-                        .font(.callout.weight(unread ? .semibold : .medium))
-                        .foregroundStyle(unread ? OS1VisualStyle.text : OS1VisualStyle.textDim)
-                        #else
-                        .font(.body.weight(unread ? .semibold : .regular))
-                        .foregroundStyle(.primary)
-                        #endif
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if showsClock {
-                        WorkspaceRunElapsedLabel(since: session.runStartedDate)
-                            #if os(iOS)
-                            // The repo header's "+" is an 18pt glyph centred in
-                            // a 30pt tap target, so its ink stops ~8pt inside
-                            // the shared 16pt row margin (minus the digits' own
-                            // side bearing). Without this pad the running clock
-                            // juts past the plus above it instead of sharing
-                            // its column.
-                            .padding(.trailing, 7)
-                            #endif
-                    }
-                }
-                // The repo goes UNDER the title rather than beside it: a name
-                // in the row's trailing slot ate the width the title needs,
-                // and the truncation cost more than the second line does.
-                if let repo, namesRepoBelow {
-                    HStack(spacing: 5) {
-                        RepoTile(name: repo, size: metaTileSize)
-                        Text(RepoTile.label(for: repo))
-                            .font(.caption)
-                            .foregroundStyle(OS1VisualStyle.textFaint)
-                            .lineLimit(1)
-                    }
-                }
+            if showsClock {
+                WorkspaceRunElapsedLabel(since: session.runStartedDate)
+                    #if os(iOS)
+                    // The repo header's "+" is an 18pt glyph centred in a 30pt
+                    // tap target, so its ink stops ~8pt inside the shared 16pt
+                    // row margin (minus the digits' own side bearing). Without
+                    // this pad the running clock juts past the plus above it
+                    // instead of sharing its column.
+                    .padding(.trailing, 7)
+                    #endif
             }
         }
         #if os(iOS)
         // 13, not 11: the list no longer imposes a 44pt minimum row height,
-        // so the row's own padding is what keeps its touch target. A two-line
-        // row already clears that on its own, so it trims the padding back
-        // rather than standing a third taller than everything around it.
-        .padding(.vertical, namesRepoBelow ? 9 : 13)
+        // so the row's own padding is what keeps its touch target.
+        .padding(.vertical, 13)
         #else
         .padding(.vertical, 3)
         #endif
@@ -1803,30 +1784,14 @@ struct SessionRow: View {
         #endif
     }
 
-    /// Whether this row spells its repo out on a second line — Inbox mode
-    /// across more than one repo. An accessibility type size drops the meta
-    /// line instead of stacking two oversized ones.
-    private var namesRepoBelow: Bool {
-        repo != nil && showsRepoName && !dynamicTypeSize.isAccessibilitySize
-    }
-
-    /// The Inbox row's repo tile: a step under the status mark beside it, so
-    /// it reads as the row's label rather than a second status. The meta line
-    /// takes a smaller one again — there it sits with caption-sized text.
-    private var tileSize: CGFloat {
-        #if os(iOS)
-        18
-        #else
-        13
-        #endif
-    }
-
-    private var metaTileSize: CGFloat {
-        #if os(iOS)
-        14
-        #else
-        11
-        #endif
+    /// Whether this row names its repo: Inbox mode across more than one repo,
+    /// where nothing above the row says which repo it belongs to. A running
+    /// row spends the same trailing slot on its clock — the more urgent of
+    /// the two — and an accessibility type size drops the name rather than
+    /// squeezing the title to nothing.
+    private var namesRepo: Bool {
+        repo != nil && showsRepoName && !showsClock
+            && !dynamicTypeSize.isAccessibilitySize
     }
 
     private var showsClock: Bool {
