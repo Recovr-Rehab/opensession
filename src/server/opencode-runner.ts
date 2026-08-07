@@ -264,6 +264,7 @@ import {
   backfillOpencodeTranscriptGap,
   ensureOpencodeTranscriptFile,
   opencodeOpenTaskSnapshot,
+  opencodeTurnActivitySnapshot,
   opencodeTurnLooksCompleted,
   recordBksSessionFor,
   recordOpencodeDbFor,
@@ -2439,8 +2440,32 @@ const TOOL_STALL_MS = (() => {
   return Number.isFinite(n) && n > 0 ? Math.max(300_000, n) : 1_200_000;
 })();
 
+/**
+ * Request-silence lane (rides the same family clock). A turn with NO open
+ * tool, NO task child and no permission ask pending is by definition inside a
+ * provider request — between one step's finish and the next, the model must
+ * be streaming — so total silence that long means the request died without
+ * ever surfacing an error. The other lanes can't see this shape: the tool and
+ * task lanes need something open, and the provider-retry lane needs retry
+ * events — but opencode's backoff grows past an hour, and a service restart
+ * resets the runner-side streak, so a wedged turn can sit one-retry-short
+ * forever (2026-08-07 os-019fdcbe: session limit hit mid-turn at 15:21,
+ * retries 68 min apart, three restarts each reset the streak — the turn sat
+ * "busy" for 2h19m until a human interrupted). Healthy generation always
+ * streams parts (text and reasoning deltas both reset the clock), so the only
+ * legitimately quiet state this long is a human-held permission ask, which
+ * pauses the clock. Kill switch / tuning: OPENSESSION_REQUEST_STALL_MS
+ * (0 disables; floor 5 min).
+ */
+const REQUEST_STALL_MS = (() => {
+  const raw = process.env.OPENSESSION_REQUEST_STALL_MS;
+  if (raw === "0") return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.max(300_000, n) : 1_200_000;
+})();
+
 export type StallInfo = {
-  kind: "task" | "tool";
+  kind: "task" | "tool" | "request";
   quietMs: number;
   openTaskIds: string[];
   /** Open non-task tool calls, e.g. `bash: setsid -f google-chrome …`. */
@@ -2458,7 +2483,11 @@ export function makeSubagentStallGuard(
   let lastFamilyEventAt = Date.now();
   let timer: ReturnType<typeof setInterval> | undefined;
   return {
-    /** Restore task-family state from OpenCode's SQLite store after restart. */
+    /** Restore task-family state from OpenCode's SQLite store after restart.
+     *  The silence clock seeds from persisted activity even with no open
+     *  tasks: a reattached turn that was already quiet for 40 minutes must
+     *  not get a fresh clock, or every restart re-arms the wedge
+     *  (2026-08-07 os-019fdcbe). */
     seed(
       tasks: Array<{ id: string; childSessionId?: string }>,
       persistedLastActivityAt: number | null
@@ -2467,7 +2496,7 @@ export function makeSubagentStallGuard(
         openTasks.set(task.id, persistedLastActivityAt ?? Date.now());
         if (task.childSessionId) childSessions.add(task.childSessionId);
       }
-      if (tasks.length && persistedLastActivityAt !== null) {
+      if (persistedLastActivityAt !== null) {
         lastFamilyEventAt = persistedLastActivityAt;
       }
     },
@@ -2566,10 +2595,18 @@ export function makeSubagentStallGuard(
           openToolLabels: [...openTools.values()],
         };
       }
+      if (
+        REQUEST_STALL_MS &&
+        !openTasks.size &&
+        !openTools.size &&
+        quietMs >= REQUEST_STALL_MS
+      ) {
+        return { kind: "request", quietMs, openTaskIds: [], openToolLabels: [] };
+      }
       return null;
     },
     start() {
-      if ((!SUBAGENT_STALL_MS && !TOOL_STALL_MS) || timer) return;
+      if ((!SUBAGENT_STALL_MS && !TOOL_STALL_MS && !REQUEST_STALL_MS) || timer) return;
       timer = setInterval(() => {
         const verdict = this.evaluate();
         if (!verdict) return;
@@ -4217,12 +4254,16 @@ async function* runOpencodeAttempt(
       // server drain-respawn + one automatic retry that re-prompts the session.
       livenessWedged = true;
       runFailure =
-        `opencode task subagent produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
-        `on account "${bridgeAccountLabel}" — the engine bridge wedged mid-turn ` +
-        "(new requests hang while established streams keep flowing); aborting";
+        info.kind === "request"
+          ? `opencode turn produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
+            `on account "${bridgeAccountLabel}" with no tool running — the provider request ` +
+            "died without surfacing an error (wedged bridge or silent retry backoff); aborting"
+          : `opencode task subagent produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
+            `on account "${bridgeAccountLabel}" — the engine bridge wedged mid-turn ` +
+            "(new requests hang while established streams keep flowing); aborting";
       turnEvent({
         direction: "out",
-        kind: "subagent_stall",
+        kind: info.kind === "request" ? "request_stall" : "subagent_stall",
         tool_use_id: info.openTaskIds.join(","),
         quiet_ms: info.quietMs,
       });
@@ -5205,6 +5246,16 @@ async function* runOpencodeAttempt(
  * (an engine failure here surfaces as a plain error — the next human send
  * goes through the full path).
  *
+ * "Busy" is verified against the store before adopting: a turn whose last
+ * persisted write is older than the request-stall window with no tool part
+ * open is a dead provider request wearing a busy status — reattach aborts it
+ * and returns null so the continuation re-prompt (with rotation) recovers it.
+ * Once attached, the pump carries a condensed provider-retry lane: a
+ * mid-turn Claude usage-limit/subscription fault sidelines the account and
+ * ends the turn with a clear error (no rotation machinery here), and a retry
+ * streak with no output between fires the same stall backstop as the master
+ * copy.
+ *
  * Mirror continuity: dedup sets are seeded from the transcript file's uuids
  * and the restart gap is backfilled from opencode's SQLite store
  * (backfillOpencodeTranscriptGap) before the pump starts, so pre-restart
@@ -5274,6 +5325,52 @@ export async function tryReattachOpencodeRun(
   const shared = !!entry.shared;
   const q = shared ? { query: { directory: run.cwd } } : {};
   const client = clientFor(entry);
+  if (busy && REQUEST_STALL_MS) {
+    // "Busy" is the engine's turn state machine, not proof of life: a provider
+    // request stuck in opencode's silent retry backoff reports busy for hours
+    // while persisting nothing (2026-08-07 os-019fdcbe: account hit its Claude
+    // session limit mid-turn; retries 68 min apart kept the turn "busy" 2h19m,
+    // and every restart reattached to it). A turn with no tool part open whose
+    // last persisted write is older than the request-stall window is dead —
+    // abort it and decline the reattach, so the caller's continuation
+    // re-prompt drives a fresh turn through the full path (account rotation
+    // included, which is exactly what a limit-capped account needs).
+    const activity = opencodeTurnActivitySnapshot(ocSessionId);
+    const quietMs =
+      activity?.lastActivityAt != null ? Date.now() - activity.lastActivityAt : 0;
+    if (
+      activity &&
+      activity.lastActivityAt != null &&
+      activity.openToolCount === 0 &&
+      quietMs >= REQUEST_STALL_MS
+    ) {
+      audit({
+        msg: "claude_turn_event",
+        provider: PROVIDER,
+        run_key: runKey,
+        session_id: run.osSessionId,
+        run_kind: `${run.kind || "run"}-reattach`,
+        claude_session_id: ocSessionId,
+        direction: "in",
+        kind: "reattach_dead_turn",
+        quiet_ms: quietMs,
+        summary:
+          `declined reattach: engine reports busy but the turn persisted nothing for ` +
+          `${Math.round(quietMs / 60_000)} min with no tool running — aborting the dead turn ` +
+          "and falling back to the continuation re-prompt",
+      });
+      appendOpencodeTranscript(ocSessionId, [
+        transcriptLineRunnerNotice(
+          `The engine turn made no progress for ${Math.round(quietMs / 60_000)} minutes ` +
+            "(stuck provider request) — restarting it fresh.",
+        ),
+      ]);
+      try {
+        await client.session.abort({ path: { id: ocSessionId }, ...q });
+      } catch {}
+      return null;
+    }
+  }
   if (!busy && opencodeTurnLooksCompleted(ocSessionId) === false) {
     // The server reports idle but the store's trailing message never
     // completed. Shared serverKeys survive drain-respawns, so this probe can
@@ -5500,12 +5597,16 @@ export async function tryReattachOpencodeRun(
           return;
         }
         runFailure =
-          `opencode task subagent produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
-          "— the engine bridge wedged mid-turn; ending the reattached turn " +
-          "(engine state preserved; send again to continue)";
+          info.kind === "request"
+            ? `opencode turn produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
+              "with no tool running — the provider request died without surfacing an error; " +
+              "ending the reattached turn (engine state preserved; send again to continue)"
+            : `opencode task subagent produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
+              "— the engine bridge wedged mid-turn; ending the reattached turn " +
+              "(engine state preserved; send again to continue)";
         turnEvent({
           direction: "out",
-          kind: "subagent_stall",
+          kind: info.kind === "request" ? "request_stall" : "subagent_stall",
           tool_use_id: info.openTaskIds.join(","),
           quiet_ms: info.quietMs,
         });
@@ -5521,17 +5622,121 @@ export async function tryReattachOpencodeRun(
           tool_use_id: persistedTasks.tasks.map((task) => task.id).join(","),
           last_activity_at: persistedTasks.lastActivityAt,
         });
+      } else if (busy) {
+        // No open tasks, but the silence clock must still carry across the
+        // restart: a turn already quiet for 40 minutes getting a fresh clock
+        // on every reattach is how the request-stall lane stays permanently
+        // one-window-short (2026-08-07 os-019fdcbe, three restarts).
+        const activity = opencodeTurnActivitySnapshot(ocSessionId!);
+        if (activity?.lastActivityAt != null) {
+          stallGuard.seed([], activity.lastActivityAt);
+        }
       }
+
+      // Provider-retry visibility (condensed noteProviderRetry — the master
+      // copy carries the full rotation machinery; this path cannot rotate, so
+      // a classified account-level fault ends the turn with the account
+      // sidelined and a clear error instead of silently retrying forever).
+      // Before this lane the reattach pump had NO retry handling at all: a
+      // limit-capped account just kept the turn "busy" through opencode's
+      // hour-long backoff (the 2026-08-07 wedge).
+      let retryStreak = 0;
+      let retryStreakAt = 0;
+      let retryStreakUpstreamIdleOnly = true;
+      const accountLabel =
+        (server.accountId && getAccountById(server.accountId)?.name) ||
+        server.accountId ||
+        serverKey!;
+      const modelId = model.split("/").pop() || model;
+      const failTurn = (message: string) => {
+        if (runFailure || idle) return;
+        runFailure = message;
+        void client.session.abort({ path: { id: ocSessionId! }, ...q }).catch(() => {});
+        signalDone();
+      };
+      const noteProviderRetry = (attempt: number, message: string) => {
+        if (!message) return;
+        turnEvent({
+          direction: "out",
+          kind: "provider_retry",
+          retry_attempt: attempt,
+          error: message.slice(0, 500),
+        });
+        const subIssue = isClaudeSubscriptionError(message);
+        if (
+          server.accountId &&
+          (isClaudeUsageLimitError(message, true) || subIssue)
+        ) {
+          // Account-level and dead on retry — sideline it so new picks skip
+          // it, and end the turn now: the next send rotates onto a healthy
+          // account through the full path.
+          markExhausted(server.accountId, modelId);
+          failTurn(
+            `${subIssue ? "Claude subscription issue" : "Claude usage limit"} on account ` +
+              `"${accountLabel}" hit mid-turn: ${message.slice(0, 300)} — the account is ` +
+              "sidelined; send again to continue on another account",
+          );
+          return;
+        }
+        if (retryStreak === 0) {
+          retryStreakAt = Date.now();
+          retryStreakUpstreamIdleOnly = true;
+        }
+        retryStreak++;
+        if (!isUpstreamIdleStallError(message)) retryStreakUpstreamIdleOnly = false;
+        if (!PROVIDER_STALL_MS) return;
+        const minRetries = retryStreakUpstreamIdleOnly
+          ? Math.max(2, PROVIDER_STALL_MIN_RETRIES - 1)
+          : PROVIDER_STALL_MIN_RETRIES;
+        const windowMs = retryStreakUpstreamIdleOnly
+          ? PROVIDER_STALL_MS / 2
+          : PROVIDER_STALL_MS;
+        const stalledMs = Date.now() - retryStreakAt;
+        if (retryStreak < minRetries || stalledMs < windowMs) return;
+        turnEvent({
+          direction: "out",
+          kind: "provider_stall",
+          retry_attempt: retryStreak,
+          quiet_ms: stalledMs,
+          error: message.slice(0, 200),
+        });
+        failTurn(
+          `opencode run made no progress for ${Math.round(stalledMs / 60_000)} min on account ` +
+            `"${accountLabel}": ${retryStreak} provider retries with no output in between ` +
+            `(last: ${message.slice(0, 200)}); ending the reattached turn — send again to continue`,
+        );
+      };
+
       const handleEvent = async (ev: any) => {
         const p = ev?.properties;
         stallGuard.noteEvent(ev);
         switch (ev?.type) {
           case "message.part.updated": {
             const part = p?.part;
-            if (!part || part.sessionID !== ocSessionId) return;
+            if (!part) return;
+            if (part.type === "retry") {
+              // Family-wide, like the master copy: a task child's provider
+              // retries are the parent turn's stall.
+              if (stallGuard.isFamily(part.sessionID)) {
+                noteProviderRetry(
+                  Number(part.attempt) || 0,
+                  String(part.error?.data?.message || part.error?.name || "")
+                );
+              }
+              return;
+            }
+            if (part.sessionID !== ocSessionId) return;
             if (part.type === "tool") stallGuard.noteTool(part);
             mirrorTextPart(part);
             mirrorToolPart(part);
+            return;
+          }
+          case "session.status": {
+            if (!stallGuard.isFamily(p?.sessionID)) return;
+            const st = p?.status;
+            if (st?.type === "retry") {
+              noteProviderRetry(Number(st.attempt) || 0, String(st.message || ""));
+            }
             return;
           }
           case "message.updated": {

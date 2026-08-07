@@ -36,6 +36,7 @@ const {
   transcriptLineForEntry,
   opencodeToolResultImages,
   opencodeOpenTaskSnapshot,
+  opencodeTurnActivitySnapshot,
   opencodeTurnLooksCompleted,
 } = mod;
 const { parseJsonlLines } = await import("./jsonl-parser");
@@ -207,6 +208,77 @@ describe("restart task-state recovery", () => {
       );
     finished.close();
     expect(opencodeTurnLooksCompleted(sessionId)).toBe(true);
+  });
+});
+
+// Regression test for the 2026-08-07 os-019fdcbe wedge: session.status "busy"
+// is the engine's turn state machine, not proof of life — reattach needs the
+// store's word on when the turn last actually wrote something, and whether a
+// tool part is still open (open tool/ask = legitimately quiet).
+describe("opencodeTurnActivitySnapshot", () => {
+  test("reports last persisted write and open tool count for the trailing turn", () => {
+    const sessionId = "ses_activity";
+    const t0 = 1783501000000;
+    const db = new Database(dbPath);
+    db.query("INSERT INTO session VALUES (?, 'p', 't', ?, ?)").run(sessionId, t0, t0);
+    db.query("INSERT INTO message VALUES (?, ?, ?, ?, ?)").run(
+      "msg_act",
+      sessionId,
+      t0,
+      t0,
+      JSON.stringify({ role: "assistant", time: { created: t0 } })
+    );
+    const insP = db.query("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)");
+    insP.run("prt_act_text", "msg_act", sessionId, t0, t0 + 4000,
+      JSON.stringify({ type: "text", text: "working…" }));
+    insP.run("prt_act_tool", "msg_act", sessionId, t0 + 1000, t0 + 9000,
+      JSON.stringify({ type: "tool", tool: "bash", state: { status: "running", input: { command: "sleep 600" } } }));
+    db.close();
+
+    // Open tool: quiet is legitimate, and the newest part write wins.
+    expect(opencodeTurnActivitySnapshot(sessionId)).toEqual({
+      lastActivityAt: t0 + 9000,
+      openToolCount: 1,
+      role: "assistant",
+    });
+
+    // Tool completes; the dead-turn shape is now "assistant trailing message,
+    // nothing open, last write far in the past".
+    const done = new Database(dbPath);
+    done.query("UPDATE part SET data = ? WHERE id = ?").run(
+      JSON.stringify({ type: "tool", tool: "bash", state: { status: "completed", output: "" } }),
+      "prt_act_tool"
+    );
+    done.close();
+    expect(opencodeTurnActivitySnapshot(sessionId)).toEqual({
+      lastActivityAt: t0 + 9000,
+      openToolCount: 0,
+      role: "assistant",
+    });
+  });
+
+  test("a trailing user message reports its own write time (request in flight)", () => {
+    const sessionId = "ses_activity_user";
+    const t0 = 1783502000000;
+    const db = new Database(dbPath);
+    db.query("INSERT INTO session VALUES (?, 'p', 't', ?, ?)").run(sessionId, t0, t0);
+    db.query("INSERT INTO message VALUES (?, ?, ?, ?, ?)").run(
+      "msg_act_u",
+      sessionId,
+      t0,
+      t0,
+      JSON.stringify({ role: "user", time: { created: t0 } })
+    );
+    db.close();
+    expect(opencodeTurnActivitySnapshot(sessionId)).toEqual({
+      lastActivityAt: t0,
+      openToolCount: 0,
+      role: "user",
+    });
+  });
+
+  test("returns null for unknown sessions", () => {
+    expect(opencodeTurnActivitySnapshot("ses_missing_activity")).toBeNull();
   });
 });
 

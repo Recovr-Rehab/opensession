@@ -1134,6 +1134,93 @@ export function opencodeOpenTaskSnapshot(
   }
 }
 
+export interface OpencodeTurnActivity {
+  /** Most recent persisted write for the trailing message (ms epoch), or null. */
+  lastActivityAt: number | null;
+  /** pending/running tool parts (task and non-task) in the trailing message. */
+  openToolCount: number;
+  role: "user" | "assistant" | null;
+}
+
+/**
+ * How recently this session's trailing turn actually moved, straight from the
+ * store. `session.status` "busy" only means the engine's turn state machine
+ * hasn't finished — a provider request stuck in opencode's silent retry
+ * backoff reports busy for hours while writing nothing. Healthy turns persist
+ * part updates continuously (text/reasoning deltas, tool state), so a busy
+ * turn whose last persisted write is far in the past with no tool part open
+ * is dead, not slow. Reattach uses this to refuse adopting such a turn
+ * (2026-08-07 os-019fdcbe: limit-capped account, 2h19m of "busy" silence
+ * across three restarts).
+ */
+export function opencodeTurnActivitySnapshot(
+  sessionId: string | null | undefined
+): OpencodeTurnActivity | null {
+  if (!sessionId) return null;
+  const dbPath = resolveOpencodeDbFor(sessionId);
+  if (!existsSync(dbPath)) return null;
+  let db: Database;
+  try {
+    db = new Database(dbPath, { readonly: true });
+  } catch {
+    return null;
+  }
+  try {
+    const row = db
+      .query(
+        "SELECT id, data, time_created, time_updated FROM message WHERE session_id = ? ORDER BY time_created DESC, id DESC LIMIT 1"
+      )
+      .get(sessionId) as {
+        id: string;
+        data: string;
+        time_created: number | null;
+        time_updated: number | null;
+      } | null;
+    if (!row) return null;
+    const data = JSON.parse(row.data) as MessageData;
+    const role = data.role === "user" || data.role === "assistant" ? data.role : null;
+    let lastActivityAt: number | null = null;
+    const bump = (candidate: unknown) => {
+      if (
+        typeof candidate === "number" &&
+        (lastActivityAt === null || candidate > lastActivityAt)
+      ) {
+        lastActivityAt = candidate;
+      }
+    };
+    bump(row.time_created);
+    bump(row.time_updated);
+    let openToolCount = 0;
+    const parts = db
+      .query(
+        "SELECT time_created, time_updated, data FROM part WHERE session_id = ? AND message_id = ?"
+      )
+      .all(sessionId, row.id) as Array<{
+        time_created: number | null;
+        time_updated: number | null;
+        data: string;
+      }>;
+    for (const part of parts) {
+      bump(part.time_created);
+      bump(part.time_updated);
+      try {
+        const p = JSON.parse(part.data) as PartData;
+        if (
+          p.type === "tool" &&
+          (p.state?.status === "pending" || p.state?.status === "running")
+        ) {
+          openToolCount++;
+        }
+      } catch {}
+    }
+    return { lastActivityAt, openToolCount, role };
+  } catch {
+    return null;
+  } finally {
+    db.close();
+  }
+}
+
 /**
  * Did this session's LAST engine turn end cleanly? Reads the store directly:
  * true  = trailing message is an assistant message with `time.completed`;

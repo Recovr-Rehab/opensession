@@ -115,12 +115,14 @@ describe("makeSubagentStallGuard.evaluate (tool stalls)", () => {
 		expect(verdict?.openToolLabels.join("")).toContain("bash: setsid -f google-chrome");
 	});
 
-	test("a completed tool no longer fires", () => {
+	test("a completed tool no longer fires the tool lane", () => {
 		const guard = makeGuard();
 		const t0 = Date.now();
 		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "running" } });
 		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "completed" } });
-		expect(guard.evaluate(t0 + TOOL_WINDOW * 2)).toBeNull();
+		// Nothing open + total silence is the REQUEST lane's territory now
+		// (between steps the model must be streaming), not a clean bill.
+		expect(guard.evaluate(t0 + TOOL_WINDOW * 2)?.kind).toBe("request");
 	});
 
 	test("an open task fires the task lane first, ahead of the tool lane", () => {
@@ -159,5 +161,55 @@ describe("makeSubagentStallGuard.evaluate (tool stalls)", () => {
 		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "running" } });
 		guard.noteEvent(partEvent(PARENT, { id: "prt-x", type: "text", text: "still going" }));
 		expect(guard.evaluate(t0 + TOOL_WINDOW - 60_000)).toBeNull();
+	});
+});
+
+// Regression tests for the 2026-08-07 os-019fdcbe wedge: the account hit its
+// Claude session limit mid-turn, opencode retried with an hour-plus backoff,
+// and the turn sat "busy" for 2h19m with NOTHING open — no task, no tool, no
+// visible retry streak after each restart reset the counter. A turn with
+// nothing open is inside a provider request by definition; total silence that
+// long means the request is dead.
+describe("makeSubagentStallGuard.evaluate (request stalls)", () => {
+	const REQUEST_WINDOW = 1_200_000; // REQUEST_STALL_MS default
+
+	test("nothing open + total silence fires kind=request after the window", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		expect(guard.evaluate(t0 + REQUEST_WINDOW - 60_000)).toBeNull();
+		const verdict = guard.evaluate(t0 + REQUEST_WINDOW + 60_000);
+		expect(verdict?.kind).toBe("request");
+		expect(verdict?.openTaskIds).toEqual([]);
+		expect(verdict?.openToolLabels).toEqual([]);
+	});
+
+	test("an open tool keeps the request lane out (the tool lane owns it)", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "running" } });
+		expect(guard.evaluate(t0 + REQUEST_WINDOW + 60_000)?.kind).toBe("tool");
+	});
+
+	test("a pending permission ask pauses the request lane too", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteAskPending(1);
+		expect(guard.evaluate(t0 + REQUEST_WINDOW * 3)).toBeNull();
+	});
+
+	test("content resets the request clock", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteEvent(partEvent(PARENT, { id: "prt-y", type: "text", text: "…" }));
+		expect(guard.evaluate(t0 + REQUEST_WINDOW - 60_000)).toBeNull();
+	});
+
+	test("seed() carries the silence clock across a restart even with no tasks", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		// The turn was already quiet for two windows when the service restarted;
+		// a fresh clock here is how three restarts kept re-arming the wedge.
+		guard.seed([], t0 - REQUEST_WINDOW * 2);
+		expect(guard.evaluate(t0)?.kind).toBe("request");
 	});
 });
