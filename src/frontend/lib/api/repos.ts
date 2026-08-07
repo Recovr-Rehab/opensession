@@ -1,0 +1,132 @@
+import { ApiError, request } from "./request";
+import { rememberRepoColors } from "../repo-colors";
+
+export interface RepoInfo {
+	id: string;
+	label?: string;
+	description?: string;
+	ghRepo?: string;
+	defaultBranch: string;
+	sharedCheckout: boolean;
+	default?: boolean;
+	/** This repo's letter-tile color, assigned across the registered set. */
+	color?: string;
+	/** Whether that color was chosen for the repo rather than assigned. */
+	colorChosen?: boolean;
+	/** Whether the tile paints art rather than the letter. */
+	hasIcon?: boolean;
+	/** Changes when that art does, so a replaced icon isn't served stale. */
+	iconRev?: number | null;
+}
+
+/** Set a repo's tile color, or fetch/clear its icon (Settings → Setup). */
+export async function setRepoAppearanceApi(
+	id: string,
+	patch: { color?: string | null; icon?: "github" | null },
+): Promise<{ color: string | null; hasIcon: boolean; iconRev: number | null }> {
+	return request(`/repos/${encodeURIComponent(id)}/appearance`, {
+		method: "POST",
+		body: patch,
+		label: "Failed to update the repository tile",
+	});
+}
+
+const REPO_FETCH_RETRY_DELAYS_MS = [250, 750, 1_500];
+
+export async function fetchRepos(cloud = false): Promise<RepoInfo[]> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			const data = await request<{ repos?: RepoInfo[] }>(
+				`/repos${cloud ? "?cloud=1" : ""}`,
+				{ label: "Failed to load repositories" },
+			);
+			// Recorded here rather than at the call sites: every tile reads the
+			// assignment, and the tile takes a repo id, not a RepoInfo.
+			rememberRepoColors(data?.repos ?? []);
+			return data?.repos ?? [];
+		} catch (error) {
+			const retryDelay = REPO_FETCH_RETRY_DELAYS_MS[attempt];
+			const transient = !(error instanceof ApiError) || error.status >= 500;
+			if (!transient || retryDelay === undefined) throw error;
+			await new Promise((resolve) => setTimeout(resolve, retryDelay));
+		}
+	}
+}
+
+export async function registerRepoApi(input: {
+	url?: string;
+	path?: string;
+}): Promise<RepoInfo> {
+	return request<RepoInfo>("/repos", {
+		method: "POST",
+		body: input,
+		label: "Failed to add repository",
+	});
+}
+
+export interface AttachedRepo {
+	repo: string;
+	branch: string;
+	dir: string;
+}
+
+export async function attachRepoApi(
+	sessionId: string,
+	repo: string,
+	branch?: string,
+): Promise<AttachedRepo[]> {
+	const body = await request<{ attachedRepos: AttachedRepo[] }>(
+		`/sessions/${encodeURIComponent(sessionId)}/attach-repo`,
+		{ method: "POST", body: { repo, ...(branch ? { branch } : {}) } },
+	);
+	return body.attachedRepos;
+}
+
+export async function detachRepoApi(
+	sessionId: string,
+	repo: string,
+): Promise<AttachedRepo[]> {
+	const body = await request<{ attachedRepos: AttachedRepo[] }>(
+		`/sessions/${encodeURIComponent(sessionId)}/detach-repo`,
+		{ method: "POST", body: { repo } },
+	);
+	return body.attachedRepos;
+}
+
+// Can this session switch its primary repo, and does it already have work?
+// `switchable` is false only for ask sessions; `hasWork` means the UI should
+// confirm first (the current changes stay in the old worktree, not carried over).
+export async function fetchRepoSwitchable(
+	sessionId: string,
+): Promise<{ switchable: boolean; hasWork: boolean }> {
+	try {
+		const body = await request<{ switchable?: boolean; hasWork?: boolean }>(
+			`/sessions/${encodeURIComponent(sessionId)}/repo-switchable`,
+		);
+		return { switchable: !!body?.switchable, hasWork: !!body?.hasWork };
+	} catch (e) {
+		console.warn("fetchRepoSwitchable failed:", e);
+		return { switchable: false, hasWork: false };
+	}
+}
+
+// Switch the session's PRIMARY repo (wrong repo picked at creation). Returns the
+// new primary repo + branch; the next prompt runs from the new worktree. Pass
+// force to switch past existing work (it stays in the old worktree on disk).
+export async function switchPrimaryRepoApi(
+	sessionId: string,
+	repo: string,
+	force = false,
+): Promise<{ repo: string; branch: string; worktreeDir: string }> {
+	return request<{ repo: string; branch: string; worktreeDir: string }>(
+		`/sessions/${encodeURIComponent(sessionId)}/switch-primary-repo`,
+		{ method: "POST", body: { repo, force } },
+	);
+}
+
+export async function fetchWorktrees(repo?: string) {
+	const qs = repo ? `?repo=${encodeURIComponent(repo)}` : "";
+	return request<any>(`/worktrees${qs}`, {
+		label: "Failed to fetch worktrees",
+	});
+}

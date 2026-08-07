@@ -1,0 +1,381 @@
+import { ApiError, BASE, request } from "./request";
+import type {
+	UnifiedSession,
+} from "../types";
+
+export async function fetchSessionsSnapshot(
+	opts: { etag?: string | null; signal?: AbortSignal } = {},
+): Promise<{
+	text: string | null;
+	etag: string | null;
+	notModified: boolean;
+	cloudUnreachable: boolean;
+}> {
+	const res = await fetch(`${BASE}/sessions`, {
+		signal: opts.signal,
+		headers: opts.etag ? { "If-None-Match": opts.etag } : undefined,
+	});
+	const cloudUnreachable =
+		res.headers.get("X-OpenSession-Cloud-Unreachable") === "true";
+	if (res.status === 304) {
+		return {
+			text: null,
+			etag: res.headers.get("ETag") || opts.etag || null,
+			notModified: true,
+			cloudUnreachable,
+		};
+	}
+	if (!res.ok)
+		throw new ApiError(`Failed to fetch sessions: ${res.status}`, res.status);
+	return {
+		text: await res.text(),
+		etag: res.headers.get("ETag"),
+		notModified: false,
+		cloudUnreachable,
+	};
+}
+
+// ── Session assets (scratch folder previewed in the Assets tab) ─────────────
+
+export interface SessionAssetFile {
+	path: string;
+	size: number;
+	mtime: string;
+}
+
+export async function fetchSessionAssets(
+	sessionId: string,
+): Promise<{ dir: string; files: SessionAssetFile[] }> {
+	return request(`/sessions/${encodeURIComponent(sessionId)}/assets`, {
+		label: "Failed to load assets",
+	});
+}
+
+/** Direct URL of one asset (iframe/img/video src). Path-based so relative
+ *  references inside a previewed HTML asset resolve to sibling assets. */
+export function sessionAssetRawUrl(sessionId: string, path: string): string {
+	const rel = path.split("/").map(encodeURIComponent).join("/");
+	return `${BASE}/sessions/${encodeURIComponent(sessionId)}/assets/raw/${rel}`;
+}
+
+export async function deleteSessionAssetApi(
+	sessionId: string,
+	path: string,
+): Promise<void> {
+	await request(`/sessions/${encodeURIComponent(sessionId)}/assets/delete`, {
+		method: "POST",
+		body: { path },
+		label: "Failed to delete asset",
+	});
+}
+
+export interface TranscriptMatch {
+	id: string;
+	snippet: string;
+}
+
+/** Full-text search across session transcripts (⌘K "search in conversations"). */
+export async function searchTranscripts(
+	q: string,
+	signal?: AbortSignal,
+): Promise<TranscriptMatch[]> {
+	const data = await request<{ matches?: TranscriptMatch[] }>(
+		`/sessions/search?q=${encodeURIComponent(q)}`,
+		{ signal, label: "Transcript search failed" },
+	);
+	return data?.matches ?? [];
+}
+
+export async function fetchTranscript(sessionId: string) {
+	return request<any>(
+		`/sessions/${encodeURIComponent(sessionId)}/transcript`,
+		{ label: "Failed to fetch transcript" },
+	);
+}
+
+export interface SubagentTranscript {
+	meta: {
+		agentId: string;
+		agentType?: string;
+		model?: string;
+		description?: string;
+		toolUseId?: string;
+		spawnDepth?: number;
+	};
+	entries: import("../types").TranscriptEntry[];
+	sessionRunning: boolean;
+}
+
+export async function fetchSubagent(
+	sessionId: string,
+	agentId: string,
+): Promise<SubagentTranscript> {
+	return request<SubagentTranscript>(
+		`/sessions/${encodeURIComponent(sessionId)}/subagent/${encodeURIComponent(agentId)}`,
+		{ label: "Failed to fetch sub-agent" },
+	);
+}
+
+/** One sub-agent a session spawned directly (opencode task-tool child or
+ *  Claude-SDK Task agent) — mirrors the server's SessionSubagentSnapshot
+ *  (opencode-subagents.ts). Feeds the Agents tab's sub-agents card. */
+export interface SessionSubagentSnapshot {
+	/** Drill-in key for fetchSubagent; absent while a spawn is still pending. */
+	id?: string;
+	/** The spawning Task call's tool_use id — links this snapshot to its
+	 *  transcript row so the UI can offer the drill-in mid-run. */
+	toolUseId?: string;
+	agentType?: string;
+	label: string;
+	status: "pending" | "running" | "done" | "error";
+	/** Epoch ms. */
+	startedAt?: number;
+	endedAt?: number;
+	model?: string;
+	tokensOut?: number;
+	source: "opencode" | "sdk";
+}
+
+export async function fetchSessionSubagents(sessionId: string): Promise<{
+	subagents: SessionSubagentSnapshot[];
+	sessionRunning: boolean;
+}> {
+	return request(
+		`/sessions/${encodeURIComponent(sessionId)}/subagents`,
+		{ label: "Failed to fetch sub-agents" },
+	);
+}
+
+/** A single "@"-mention suggestion. `insert` is what lands in the textarea. */
+export interface FileMention {
+	/** Repo-relative path (files) or session title (sessions), for display. */
+	display: string;
+	/** Text inserted after the "@": path, `repo:path`, or `session:<id>`. */
+	insert: string;
+	/** Repo label, set only when more than one repo is searched (cross-repo). */
+	repo?: string;
+	/** Entry type; absent means a file. */
+	kind?: "session" | "skill" | "dir" | "person";
+	/** Subtitle for non-file entries (e.g. a session's branch, a skill's description). */
+	sub?: string;
+}
+
+/**
+ * File suggestions for "@"-mention autocomplete in the composer. Searches the
+ * session's primary checkout plus any attached repos when `sessionId` is given;
+ * otherwise the given `repo`'s checkout (used by the New-session prompt, which
+ * has no session yet), falling back to the default repo.
+ */
+export async function fetchFileMentions(
+	query: string,
+	sessionId?: string,
+	repo?: string,
+): Promise<FileMention[]> {
+	const params = new URLSearchParams({ q: query });
+	if (sessionId) params.set("session", sessionId);
+	else if (repo) params.set("repo", repo);
+	try {
+		const data = await request<{ files?: FileMention[] }>(
+			`/files?${params.toString()}`,
+		);
+		return data?.files ?? [];
+	} catch (e) {
+		console.warn("fetchFileMentions failed:", e);
+		return [];
+	}
+}
+
+/**
+ * Skill/command suggestions for the "/" trigger in the composer. Lists what a
+ * Claude run in the session's checkout would see (user + project skills and
+ * commands); `repo` is the fallback for composers with no session yet.
+ */
+export async function fetchSkillMentions(
+	query: string,
+	sessionId?: string,
+	repo?: string,
+): Promise<FileMention[]> {
+	const params = new URLSearchParams({ q: query });
+	if (sessionId) params.set("session", sessionId);
+	else if (repo) params.set("repo", repo);
+	try {
+		const data = await request<{
+			skills?: Array<{ name: string; description: string; source: string }>;
+		}>(`/skills?${params.toString()}`);
+		return (data?.skills ?? []).map((s) => ({
+			display: s.name,
+			insert: s.name,
+			kind: "skill" as const,
+			sub: s.description,
+		}));
+	} catch (e) {
+		console.warn("fetchSkillMentions failed:", e);
+		return [];
+	}
+}
+
+/**
+ * Start a new sibling session in the source session's workspace. Returns the new
+ * session's id plus its full session object (so the caller can render it
+ * immediately, without waiting for the next sessions poll); it has no run yet —
+ * its first prompt starts fresh. `mode` picks the worktree relationship: share
+ * the workspace worktree (default), stack a new worktree branched off it, or
+ * ask (no worktree).
+ */
+export async function newSessionApi(
+	sourceId: string,
+	user: string,
+	mode?: "share" | "stack" | "ask",
+): Promise<{ id: string; session: UnifiedSession | null }> {
+	const body = await request<{ id: string; session?: UnifiedSession }>(
+		`/sessions/${encodeURIComponent(sourceId)}/new-session`,
+		{ method: "POST", body: { user, ...(mode ? { mode } : {}) } },
+	);
+	return { id: body.id, session: body.session || null };
+}
+
+/**
+ * Promote an ask session to code: create a worktree and attach it (also
+ * materializes the workspace's worktree if it doesn't own one yet). Returns the
+ * new branch + worktree dir.
+ */
+export async function promoteSessionApi(
+	sessionId: string,
+	opts?: { branch?: string; repo?: string },
+): Promise<{ branch: string; worktreeDir: string }> {
+	return request<{ branch: string; worktreeDir: string }>(
+		`/sessions/${encodeURIComponent(sessionId)}/promote`,
+		{ method: "POST", body: opts || {} },
+	);
+}
+
+export async function deleteSessionApi(
+	sessionId: string,
+	cleanWorktree: boolean,
+): Promise<void> {
+	const params = cleanWorktree ? "?worktree=true" : "";
+	await request<void>(`/sessions/${encodeURIComponent(sessionId)}${params}`, {
+		method: "DELETE",
+		label: "Failed to delete",
+	});
+}
+
+export class SessionUpgradeError extends ApiError {
+	uncommittedFiles: string[];
+
+	constructor(message: string, status: number, uncommittedFiles: string[] = []) {
+		super(message, status);
+		this.name = "SessionUpgradeError";
+		this.uncommittedFiles = uncommittedFiles;
+	}
+}
+
+export async function upgradeSessionApi(
+	sessionId: string,
+): Promise<{ id: string; url: string }> {
+	const res = await fetch(
+		`${BASE}/sessions/${encodeURIComponent(sessionId)}/upgrade`,
+		{ method: "POST" },
+	);
+	const body = (await res.json().catch(() => null)) as {
+		id?: string;
+		url?: string;
+		error?: string;
+		uncommittedFiles?: unknown;
+	} | null;
+	// Import completed even if the local archive marker failed. The returned
+	// destination is authoritative and lets the user continue in cloud.
+	if (body?.id && body.url) return { id: body.id, url: body.url };
+	if (!res.ok) {
+		throw new SessionUpgradeError(
+			body?.error || `Failed to move session: ${res.status}`,
+			res.status,
+			Array.isArray(body?.uncommittedFiles)
+				? body.uncommittedFiles.filter(
+						(file): file is string => typeof file === "string",
+					)
+				: [],
+		);
+	}
+	throw new SessionUpgradeError("Cloud upgrade returned an invalid response", 502);
+}
+
+/** Returns `stoppedRun: true` when archiving gracefully stopped an in-flight,
+ * process-owned turn (so callers can surface a "stopped the running turn"
+ * notice). Always false on unarchive and for idle/external sessions. */
+export async function archiveSessionApi(
+	sessionId: string,
+	archived: boolean,
+): Promise<{ stoppedRun: boolean }> {
+	const res = await request<{ ok?: boolean; stoppedRun?: boolean } | null>(
+		`/sessions/${encodeURIComponent(sessionId)}/archive`,
+		{
+			method: "POST",
+			body: { archived },
+			label: "Failed to update archive state",
+		},
+	);
+	return { stoppedRun: !!res?.stoppedRun };
+}
+
+/** Set a manual display title for a session; empty string clears the rename. */
+export async function renameSessionApi(
+	sessionId: string,
+	title: string,
+): Promise<void> {
+	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/title`, {
+		method: "PUT",
+		body: { title },
+		label: "Failed to rename session",
+	});
+}
+
+/**
+ * Pin a session into a sidebar lane (needsinput/inprogress/review/merged/pending),
+ * or pass null to clear the override back to the derived lane.
+ */
+export async function setSessionStatusApi(
+	sessionId: string,
+	status:
+		| "needsinput"
+		| "inprogress"
+		| "review"
+		| "merged"
+		| "pending"
+		| null,
+): Promise<void> {
+	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/status`, {
+		method: "PUT",
+		body: { status },
+		label: "Failed to change session status",
+	});
+}
+
+/**
+ * Ask a teammate to review this session (surfaces it in a "Needs review" band
+ * at the top of their sidebar + pushes a notification); null clears the request.
+ */
+export async function setSessionReviewerApi(
+	sessionId: string,
+	reviewer: string | null,
+	by: string,
+): Promise<void> {
+	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/review`, {
+		method: "PUT",
+		body: { reviewer, by },
+		label: "Failed to set reviewer",
+	});
+}
+
+/** Mark the session's review request accepted (reviewer signed off) or reopen it. */
+export async function acceptReviewApi(
+	sessionId: string,
+	accept: boolean,
+	by: string,
+): Promise<void> {
+	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/review`, {
+		method: "PUT",
+		body: { accept, by },
+		label: "Failed to update review",
+	});
+}
