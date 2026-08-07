@@ -8,6 +8,7 @@
 
 import { requestUser, type RouteContext } from "./context";
 import { searchRepoEntries } from "../file-index";
+import { assignRepoTileColors } from "../repo-tile-colors";
 import { runSessionPrompt } from "../run-session";
 import { type Sandbox, hasRemoteWorkspace, workspaceExecFor } from "../sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "../sandbox/config";
@@ -232,6 +233,11 @@ export async function handleWorkspaceRoutes(
 
 	// Repos available to attach / start a session against.
 	if (path === "/api/repos" && req.method === "GET") {
+		// `color` is the repo's fallback tile: assigned across the whole set so
+		// no two registered repos wear the same one, which is what lets a tile
+		// stand in for a repo where there's no room to name it. Clients hash
+		// their own for anything not listed here.
+		const colors = assignRepoTileColors(Object.keys(REPOS));
 		return Response.json({
 			repos: Object.values(REPOS).map((p) => ({
 				id: p.id,
@@ -241,6 +247,7 @@ export async function handleWorkspaceRoutes(
 				defaultBranch: p.defaultBranch,
 				sharedCheckout: !!p.sharedCheckout,
 				default: !!p.default,
+				color: colors[p.id],
 			})),
 		});
 	}

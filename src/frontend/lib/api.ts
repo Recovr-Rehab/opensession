@@ -1,4 +1,5 @@
 import { BASE_PATH } from "./base";
+import { rememberRepoColors } from "./repo-colors";
 import type {
 	UnifiedSession,
 	PlainThread,
@@ -581,6 +582,8 @@ export interface RepoInfo {
 	defaultBranch: string;
 	sharedCheckout: boolean;
 	default?: boolean;
+	/** This repo's letter-tile color, assigned across the registered set. */
+	color?: string;
 }
 
 const REPO_FETCH_RETRY_DELAYS_MS = [250, 750, 1_500];
@@ -592,6 +595,9 @@ export async function fetchRepos(cloud = false): Promise<RepoInfo[]> {
 				`/repos${cloud ? "?cloud=1" : ""}`,
 				{ label: "Failed to load repositories" },
 			);
+			// Recorded here rather than at the call sites: every tile reads the
+			// assignment, and the tile takes a repo id, not a RepoInfo.
+			rememberRepoColors(data?.repos ?? []);
 			return data?.repos ?? [];
 		} catch (error) {
 			const retryDelay = REPO_FETCH_RETRY_DELAYS_MS[attempt];

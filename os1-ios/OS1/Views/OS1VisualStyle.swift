@@ -95,6 +95,85 @@ enum OS1VisualStyle {
     #endif
 }
 
+/// The color a repo's letter tile wears.
+///
+/// The server assigns one per registered repo across the whole set, so no two
+/// of them match — the tile can then stand in for a repo where there's no room
+/// to name it, which is what the Inbox rows rely on. Those assignments arrive
+/// with the repo list (`OS1API.repos()`); the palette and hash here are the
+/// fallback for an id the server never listed, mirrored from
+/// src/server/repo-tile-colors.ts. Keep the three copies (there, the web tile,
+/// here) in step or one surface paints a repo a color the others don't.
+@MainActor
+@Observable
+final class RepoTilePalette {
+    static let shared = RepoTilePalette()
+
+    static let colors: [UInt32] = [
+        0xe883_6b,  // coral
+        0x6ba5_e8,  // blue
+        0x8ed9_9c,  // green
+        0xe8c4_6b,  // amber
+        0xc06b_e8,  // purple
+        0x6be8_d2,  // teal
+        0xe86b_9c,  // pink
+        0xa3b8_6b,  // olive
+        0xe8a5_6b,  // orange
+        0x6b7f_e8,  // indigo
+        0x8ed9_6b,  // lime
+        0x6bd2_e8,  // cyan
+        0x9c6b_e8,  // violet
+        0x6bd9_a5,  // spring
+        0xe86b_d2,  // magenta
+        0xc9d9_6b,  // citron
+    ]
+
+    private var assigned: [String: Color] = [:]
+
+    /// Record what the server assigned. Repos it didn't color (an older
+    /// server) keep the hashed fallback rather than losing their tile.
+    func remember(_ repos: [OS1API.RepoInfo]) {
+        for repo in repos {
+            guard let hex = repo.color, let color = Self.parse(hex) else { continue }
+            assigned[repo.id] = color
+        }
+    }
+
+    func color(for name: String) -> Color {
+        assigned[name] ?? Color(rgb: Self.colors[Self.hashIndex(name)])
+    }
+
+    /// FNV-1a over the lowercased id, walked as UTF-16 so it matches the
+    /// JavaScript original code unit for code unit.
+    private static func hashIndex(_ name: String) -> Int {
+        var hash: UInt32 = 0x811c_9dc5
+        for unit in name.lowercased().utf16 {
+            hash ^= UInt32(unit)
+            hash = hash &* 0x0100_0193
+        }
+        return Int(hash % UInt32(colors.count))
+    }
+
+    private static func parse(_ hex: String) -> Color? {
+        var text = hex
+        if text.hasPrefix("#") { text.removeFirst() }
+        guard text.count == 6, let rgb = UInt32(text, radix: 16) else { return nil }
+        return Color(rgb: rgb)
+    }
+}
+
+private extension Color {
+    init(rgb: UInt32) {
+        self.init(
+            .sRGB,
+            red: Double((rgb >> 16) & 0xff) / 255,
+            green: Double((rgb >> 8) & 0xff) / 255,
+            blue: Double(rgb & 0xff) / 255,
+            opacity: 1
+        )
+    }
+}
+
 /// Compact repository identity used in repo headers and the conversation title.
 /// Its stable single-letter swatch mirrors the web fallback tile.
 struct RepoTile: View {
@@ -111,30 +190,17 @@ struct RepoTile: View {
         return String(name.prefix(1)).uppercased()
     }
 
-    private var color: Color {
-        let palette: [Color] = [
-            Color(red: 0.91, green: 0.51, blue: 0.42),
-            Color(red: 0.42, green: 0.65, blue: 0.91),
-            Color(red: 0.56, green: 0.85, blue: 0.61),
-            Color(red: 0.91, green: 0.77, blue: 0.42),
-            Color(red: 0.75, green: 0.42, blue: 0.91),
-            Color(red: 0.42, green: 0.91, blue: 0.82),
-            Color(red: 0.91, green: 0.42, blue: 0.61),
-            Color(red: 0.64, green: 0.72, blue: 0.42),
-        ]
-        let hash = name.lowercased().unicodeScalars.reduce(Int32(0)) {
-            $0 &* 31 &+ Int32($1.value)
-        }
-        return palette[Int(hash.magnitude) % palette.count]
-    }
+    private var color: Color { RepoTilePalette.shared.color(for: name) }
 
     private var iconURL: URL? { Self.iconURL(for: name) }
 
     /// Bumped when the icons behind /repo-icon are redrawn — keep it in step
     /// with ICON_VERSION in the web tile. The response is cacheable and
     /// URLCache survives an app update, so without a new URL a freshly
-    /// installed build would keep painting the art the old one cached.
-    private static let iconVersion = 2
+    /// installed build would keep painting the art the old one cached. 3
+    /// dropped the owner/org-avatar fallback, so a repo that was wearing its
+    /// org's mark has to stop asking for the copy on disk.
+    private static let iconVersion = 3
 
     private static func iconURL(for name: String) -> URL? {
         var url = ServerConfig.shared.baseURL?

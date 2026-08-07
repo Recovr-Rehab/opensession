@@ -12,39 +12,6 @@ import { configuredIntegration, configuredRepos, productName } from "../config";
 import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend } from "../frontend-build";
 import { isLocalProfile } from "../profile";
 
-// GitHub owner avatars for the repo-icon route, fetched once and kept warm for
-// a day. Avatar PNGs are public and served off GitHub's CDN (not the API
-// quota); on a fetch failure we serve the stale copy so tiles don't flicker
-// back to letter swatches when github.com hiccups.
-const avatarCache = new Map<
-	string,
-	{ at: number; bytes: ArrayBuffer; type: string }
->();
-const AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
-
-async function ownerAvatar(
-	owner: string,
-): Promise<{ bytes: ArrayBuffer; type: string } | null> {
-	const cached = avatarCache.get(owner);
-	if (cached && Date.now() - cached.at < AVATAR_TTL_MS) return cached;
-	try {
-		const res = await fetch(
-			`https://github.com/${encodeURIComponent(owner)}.png?size=128`,
-			{ redirect: "follow", signal: AbortSignal.timeout(5000) },
-		);
-		if (!res.ok) return cached ?? null;
-		const entry = {
-			at: Date.now(),
-			bytes: await res.arrayBuffer(),
-			type: res.headers.get("content-type") || "image/png",
-		};
-		avatarCache.set(owner, entry);
-		return entry;
-	} catch {
-		return cached ?? null;
-	}
-}
-
 /** A tile icon that lives on disk, or undefined when the file isn't there. */
 function localIcon(iconPath: string): Response | undefined {
 	if (!existsSync(iconPath)) return undefined;
@@ -106,10 +73,19 @@ export async function handleStaticAssetsRoutes(
 		);
 	}
 
-	// Per-repo icons for the RepoTile UI: a repo's configured `icon` PNG when
-	// set, else its owner's local mark, else the repo's GitHub org avatar,
-	// fetched server-side and cached. Unregistered ids 404 — the client falls
-	// back to its colored letter tile.
+	// Per-repo icons for the RepoTile UI: a repo's configured `icon` PNG, and
+	// nothing else. Anything without one 404s and the client paints its
+	// colored letter tile instead.
+	//
+	// There used to be two fallbacks under that — the owner's local mark, then
+	// the repo's GitHub org avatar. Both are marks for the OWNER, not the
+	// repo, so every repo in one org wore the same tile: on this instance
+	// seven of eight served identical bytes, which made the tile useless as a
+	// way to tell repos apart and cost the phone's Inbox rows a whole second
+	// line to spell the repo out. An icon is now opt-in per repo (`icon` in
+	// the repo's config entry, absolute or relative to its checkout) and the
+	// default is a color and a letter — the color assigned across the
+	// registered set (see repo-tile-colors.ts) so no two of them match.
 	//
 	// Every icon served from src/frontend is drawn to the same proportions
 	// (artwork on ~80% of a square canvas, corners rounded to match the tile's
@@ -127,8 +103,8 @@ export async function handleStaticAssetsRoutes(
 			const generic = localIcon(`${FRONTEND_SRC}/${id}-icon.png`);
 			if (generic) return generic;
 		}
-		// A repo's optional `icon` (absolute path, or relative to its checkout)
-		// overrides the owner and org-avatar defaults below.
+		// A repo's optional `icon` (absolute path, or relative to its
+		// checkout). No icon, no tile art — the letter tile is the default.
 		const repo = configuredRepos()[id];
 		if (repo?.icon) {
 			const configured = localIcon(
@@ -136,25 +112,7 @@ export async function handleStaticAssetsRoutes(
 			);
 			if (configured) return configured;
 		}
-		const owner = repo?.ghRepo?.split("/")[0];
-		if (!owner) return new Response("Not found", { status: 404 });
-		// An owner's own mark, as `owner-<owner>-icon.png`. Worth having
-		// because a GitHub avatar is uploaded art with whatever padding its
-		// author chose — tellahq's leaves 38% of its canvas empty — so the
-		// repos that fall through to it would wear tiles that read smaller
-		// than every icon beside them.
-		if (/^[a-z0-9][a-z0-9-]{0,38}$/i.test(owner)) {
-			const ownerIcon = localIcon(`${FRONTEND_SRC}/owner-${owner}-icon.png`);
-			if (ownerIcon) return ownerIcon;
-		}
-		const icon = await ownerAvatar(owner);
-		if (!icon) return new Response("Not found", { status: 404 });
-		return new Response(icon.bytes, {
-			headers: {
-				"Content-Type": icon.type,
-				"Cache-Control": "public, max-age=86400",
-			},
-		});
+		return new Response("Not found", { status: 404 });
 	}
 
 	// Service worker (Web Push + app-shell cache). Must precede the hashed-asset

@@ -1682,11 +1682,11 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	color: #fff;
 	flex-shrink: 0;
 }
-/* Image variant: /repo-icon/<id>.png (a product mark where the repo or its
-   owner ships one, else the GitHub org avatar). The img fills the tile and
-   inherits its rounding; no colored backing so icons with transparency sit on
-   the surface itself. Every icon the route serves is drawn to the same
-   proportions, so no per-icon trim is needed here. */
+/* Image variant: /repo-icon/<id>.png, served only for a repo given an icon of
+   its own (everything else wears the colored letter above). The img fills the
+   tile and inherits its rounding; no colored backing so icons with
+   transparency sit on the surface itself. Every icon the route serves is drawn
+   to the same proportions, so no per-icon trim is needed here. */
 .repo-tile--img {
 	background: none;
 }

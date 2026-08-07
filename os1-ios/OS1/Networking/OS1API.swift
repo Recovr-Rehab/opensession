@@ -432,9 +432,13 @@ enum OS1API {
         let defaultBranch: String?
         let sharedCheckout: Bool?
         let isDefault: Bool?
+        /// This repo's letter-tile color, assigned across the registered set
+        /// so no two repos share one. Absent on servers older than the
+        /// assignment, where the tile falls back to its own hash.
+        let color: String?
 
         private enum CodingKeys: String, CodingKey {
-            case id, ghRepo, label, defaultBranch, sharedCheckout
+            case id, ghRepo, label, defaultBranch, sharedCheckout, color
             case isDefault = "default"
         }
     }
@@ -443,6 +447,10 @@ enum OS1API {
     static func repos() async throws -> [RepoInfo] {
         struct ReposResponse: Decodable { let repos: [RepoInfo] }
         let response: ReposResponse = try await get("/api/repos")
+        // Recorded on the way through rather than at the call sites: every
+        // tile in the app wants the assignment, and a tile is handed a repo
+        // id, not a RepoInfo.
+        await RepoTilePalette.shared.remember(response.repos)
         return response.repos
     }
 
