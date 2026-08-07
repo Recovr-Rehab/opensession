@@ -144,6 +144,7 @@ import {
 	type SwipeAction,
 	type SwipeState,
 } from "../lib/sidebar-swipe";
+import { isApple } from "../lib/platform";
 import {
 	KNOWN_PEOPLE,
 	MINE_STATUS_META,
@@ -3846,11 +3847,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</Tooltip>
 						<Tooltip
 							label="New session"
-							shortcut={
-								/Mac|iPhone|iPad|iPod/.test(navigator.platform)
-									? ["⌘", "N"]
-									: ["Ctrl", "N"]
-							}
+							shortcut={isApple ? ["⌘", "N"] : ["Ctrl", "N"]}
 						>
 						<button
 							className="sidebar-new-btn inline-flex items-center justify-center"

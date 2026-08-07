@@ -2,9 +2,9 @@
 // and platform-aware labels. Deliberately side-effect-free (unit-tested) —
 // the stored per-user preference itself lives in lib/send-key-pref.
 
-export type SendKeyPref = "enter" | "mod-enter";
+import { isApple } from "./platform";
 
-const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+export type SendKeyPref = "enter" | "mod-enter";
 
 /** Platform-aware display label for the modifier combo ("⌘ Enter" / "Ctrl Enter"). */
 export const MOD_ENTER_LABEL = isApple ? "⌘ Enter" : "Ctrl Enter";

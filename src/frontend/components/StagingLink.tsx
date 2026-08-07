@@ -11,13 +11,12 @@ import { toast } from "../ui/toast";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { IconArrowUpRight, IconGlobe } from "./icons";
 import { checkClass, isDeployment } from "./PrPanel";
+import { isApple } from "../lib/platform";
 
 // Keyboard hint for the open-staging chord (SessionViewer owns the handler —
 // this component mounts once per layout variant, so a listener here would
 // register multiple times).
-const OPEN_CHORD = /Mac|iPhone|iPad|iPod/.test(navigator.platform)
-	? "⌘O"
-	: "Ctrl+O";
+const OPEN_CHORD = isApple ? "⌘O" : "Ctrl+O";
 
 /**
  * Header link to the PR's preview environment (the Vercel preview at

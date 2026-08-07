@@ -155,6 +155,7 @@ import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import { sessionHasWorkspace } from "../lib/session-workspace";
+import { isApple, isChromium } from "../lib/platform";
 import {
 	getSessionPanelTab,
 	saveSessionPanelTab,
@@ -381,8 +382,6 @@ type PanelTab =
 	| "assets"
 	| "reports";
 
-const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-const isChromium = /Chrome|Chromium|CriOS|Edg|OPR/.test(navigator.userAgent);
 const archiveShortcutLabel = isChromium
 	? isApple
 		? "⌘⇧A"
