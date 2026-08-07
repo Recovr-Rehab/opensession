@@ -158,6 +158,9 @@ async function registerRepo(input: { url?: string; path?: string; csRepoId?: str
       const parsed = parseCsRemote(input.url!);
       // A code.storage URL only takes the JWT-authed path when the signing
       // key is configured; otherwise it clones like any other https remote.
+      // A pasted `+ephemeral` URL parses to the base repo (parseCsRemote
+      // strips the ref-namespace suffix), so it registers the repo itself —
+      // never a broken `<repoId>+ephemeral` entry.
       if (parsed && codeStorageConfig()) csClone = parsed;
       else cloneFrom = input.url;
     }

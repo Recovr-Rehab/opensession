@@ -15,6 +15,7 @@
  */
 
 import { mintCsJwt } from "../src/server/codestorage/auth";
+import { csRepoClaimFromPath } from "../src/server/codestorage/remote";
 import { codeStorageConfig } from "../src/server/config";
 
 const action = process.argv[2];
@@ -29,7 +30,9 @@ for (const line of (await Bun.stdin.text()).split("\n")) {
 
 const host = attrs.host || "";
 const org = host.endsWith(".code.storage") ? host.slice(0, -".code.storage".length) : "";
-const repoId = (attrs.path || "").replace(/^\/+/, "").replace(/\.git$/, "");
+// Strips "/", ".git", and a "+ephemeral" ref-namespace suffix — ephemeral
+// remotes (…/<repoId>+ephemeral.git) authenticate as the base repo.
+const repoId = csRepoClaimFromPath(attrs.path || "");
 
 if (attrs.protocol !== "https" || !org || org.includes(".") || !repoId || !codeStorageConfig()) {
   process.exit(0);

@@ -107,19 +107,27 @@ export async function mintCsJwt(opts: MintCsJwtOptions): Promise<string> {
   return `${signingInput}.${Buffer.from(sig).toString("base64url")}`;
 }
 
-/** Credential-free HTTPS remote for a code.storage repo. */
-export function remoteUrl(org: string, repoId: string): string {
-  return `https://${org}.code.storage/${repoId}.git`;
+/**
+ * Credential-free HTTPS remote for a code.storage repo. `ephemeral: true`
+ * targets the repo's disposable ref namespace (`…/<repoId>+ephemeral.git` —
+ * https://code.storage/docs/guides/ephemeral-branches.md).
+ */
+export function remoteUrl(org: string, repoId: string, opts?: { ephemeral?: boolean }): string {
+  return `https://${org}.code.storage/${repoId}${opts?.ephemeral ? "+ephemeral" : ""}.git`;
 }
 
 /**
  * HTTPS remote with embedded credentials (username literally "t", password a
  * freshly minted JWT). Prefer the credential helper (remote.ts) for anything
- * long-lived — this URL carries a token that expires.
+ * long-lived — this URL carries a token that expires. `ephemeral: true`
+ * appends `+ephemeral` before `.git`; the JWT `repo` claim stays the bare
+ * repoId either way — an ephemeral remote is the same repository behind a
+ * different ref namespace (the auth docs scope tokens per repository and say
+ * nothing about a namespace suffix in the claim, so bare is the assumption).
  */
 export async function authedRemoteUrl(
   repoId: string,
-  opts?: { org?: string; scopes?: CsScope[]; ttlSeconds?: number },
+  opts?: { org?: string; scopes?: CsScope[]; ttlSeconds?: number; ephemeral?: boolean },
 ): Promise<string> {
   const cfg = codeStorageConfig();
   if (!cfg) throw new Error("code.storage is not configured (integrations.codeStorage)");
@@ -130,5 +138,5 @@ export async function authedRemoteUrl(
     scopes: opts?.scopes ?? ["git:read", "git:write"],
     ttlSeconds: opts?.ttlSeconds,
   });
-  return `https://t:${jwt}@${org}.code.storage/${repoId}.git`;
+  return `https://t:${jwt}@${org}.code.storage/${repoId}${opts?.ephemeral ? "+ephemeral" : ""}.git`;
 }

@@ -154,12 +154,60 @@ re-reads code.storage immediately instead of waiting out polling TTLs;
 next `repo.sync.succeeded`. The card also shows last-delivery metadata
 (event, time, invalid-signature warnings) from the status endpoint.
 
+## Comments (git notes)
+
+code.storage has no comment or review-thread model, but it supports [git
+notes](https://code.storage/docs/guides/git-notes.md): text attached to a
+commit without changing the commit or the tree, readable and writable through
+the notes REST API under isolated ref namespaces (`refs/notes/<ref>`). That is
+the natural place for review commentary on this host — a note on the branch
+head travels with the repo itself (no side database), needs only the same
+per-repo JWT (`git:write` to write, `git:read` to read), and stays invisible
+to normal clones unless the notes ref is fetched explicitly. Keep Open
+Session's notes under a dedicated ref (an `opensession/…` namespace) so they
+never collide with other systems' note streams (CI status, agent traces).
+
+## Ephemeral branches
+
+[Ephemeral branches](https://code.storage/docs/guides/ephemeral-branches.md)
+are a disposable ref namespace on the same repository — previews, CI
+artifacts, experiments — reached by inserting `+ephemeral` before `.git` in
+the remote URL. On a registered checkout this just works, because the
+credential helper's scope is host-wide and it mints the JWT for the base repo
+(the `+ephemeral` suffix selects a ref namespace, not a different repository):
+
+```sh
+git remote add ephemeral https://acme.code.storage/acme/widget+ephemeral.git
+git push ephemeral my-preview
+git pull ephemeral my-preview
+```
+
+Promotion (ephemeral → real) is plain git — fetch the ephemeral ref, push it
+to origin:
+
+```sh
+git fetch ephemeral my-preview:my-preview
+git push origin my-preview
+```
+
+Notes:
+
+- Ephemeral branches are fully isolated from normal branches until promoted,
+  and (on GitHub-synced repos) never mirror to GitHub.
+- We deliberately do **not** surface ephemeral branches in the review list —
+  on this host a branch IS a change request, and ephemeral refs are exactly
+  the branches that aren't one yet.
+- Registration paths treat a pasted `…+ephemeral.git` URL as the base repo
+  (`parseCsRemote` strips the suffix), so you can't register a broken
+  `<repoId>+ephemeral` entry by accident.
+
 ## Pieces (for developers)
 
 - `src/server/codestorage/auth.ts` — JWT minting (WebCrypto), remote URLs.
 - `src/server/codestorage/client.ts` — REST client: repos, branches, merge +
   preview, commits, diffs (branch diff = the PR-diff equivalent), files.
-- `src/server/codestorage/remote.ts` — `parseCsRemote`, per-checkout
+- `src/server/codestorage/remote.ts` — `parseCsRemote` (incl. `+ephemeral`
+  remotes), per-checkout
   credential-helper wiring (URL-scoped, never touches github.com flows),
   registration clones (`cloneCsCheckout`) and boot adoption
   (`adoptCsCheckouts`).

@@ -48,7 +48,11 @@ async function detectCsRepo(dir: string): Promise<{ org: string; repoId: string 
   const { code, stdout } = await run(["git", "-C", dir, "remote", "get-url", "origin"]);
   if (code !== 0) return undefined;
   const match = stdout.trim().match(CS_ORIGIN_RE);
-  return match ? { org: match[1], repoId: match[2] } : undefined;
+  if (!match) return undefined;
+  // An ephemeral remote (…/<repoId>+ephemeral.git) is the same repo's
+  // disposable ref namespace — register against the base repo id.
+  const repoId = match[2].replace(/\+ephemeral$/, "");
+  return repoId ? { org: match[1], repoId } : undefined;
 }
 
 async function list(): Promise<number> {

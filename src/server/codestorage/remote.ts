@@ -10,7 +10,10 @@
  * list for that context — or an inherited persisting helper (osxkeychain,
  * `credential.helper store`) would both answer first with a stale JWT after
  * expiry and get our short-lived JWTs `approve`d into it at rest. The scope
- * only matches https://<org>.code.storage, never github.com flows.
+ * only matches https://<org>.code.storage, never github.com flows. The scope
+ * is host-wide (no path in the config key), so it also covers ephemeral
+ * remotes (`…/<repoId>+ephemeral.git`) on the same host — one wired checkout
+ * authenticates both its origin and any `ephemeral` remote it adds.
  */
 
 import { $ } from "bun";
@@ -25,13 +28,39 @@ const CREDENTIAL_SCRIPT = resolvePath(import.meta.dir, "../../../scripts/cs-cred
 // Multi-label hosts (api.<org>.code.storage) deliberately don't match.
 const CS_REMOTE_RE = /^https:\/\/(?:t:[^@]*@)?([A-Za-z0-9][A-Za-z0-9-]*)\.code\.storage\/(.+?)(?:\.git)?\/?$/;
 
-/** Recognize a code.storage remote URL → {org, repoId}, or null. */
-export function parseCsRemote(url: string): { org: string; repoId: string } | null {
+/**
+ * Recognize a code.storage remote URL → {org, repoId}, or null.
+ *
+ * The ephemeral-branches remote form (`…/<repoId>+ephemeral.git`, see
+ * https://code.storage/docs/guides/ephemeral-branches.md) resolves to the SAME
+ * repo — `+ephemeral` selects a disposable ref namespace, not a different
+ * repository — so it parses to the base {org, repoId} with `ephemeral: true`.
+ */
+export function parseCsRemote(
+  url: string,
+): { org: string; repoId: string; ephemeral?: boolean } | null {
   const m = url.trim().match(CS_REMOTE_RE);
   if (!m) return null;
-  const [, org, repoId] = m;
-  if (!org || !repoId) return null;
-  return { org, repoId };
+  const [, org, rawRepoId] = m;
+  if (!org || !rawRepoId) return null;
+  const ephemeral = rawRepoId.endsWith("+ephemeral");
+  const repoId = ephemeral ? rawRepoId.slice(0, -"+ephemeral".length) : rawRepoId;
+  if (!repoId) return null;
+  return ephemeral ? { org, repoId, ephemeral: true } : { org, repoId };
+}
+
+/**
+ * JWT `repo` claim from a git credential request path ("/<repoId>.git" or
+ * "/<repoId>+ephemeral.git"). Ephemeral remotes are the same repo behind a
+ * different ref namespace, so the claim is always the bare repoId — the
+ * code.storage auth docs scope tokens per repository, not per namespace.
+ * Shared with scripts/cs-credential.ts.
+ */
+export function csRepoClaimFromPath(path: string): string {
+  return path
+    .replace(/^\/+/, "")
+    .replace(/\.git$/, "")
+    .replace(/\+ephemeral$/, "");
 }
 
 /**
