@@ -134,10 +134,20 @@ if (existsSync(anthropicDir)) {
   }
 }
 
-// Sanity: the exact resolutions the runner performs at run time.
-Bun.resolveSync("opencode-with-claude", OUT);
-Bun.resolveSync("@rynfar/meridian", OUT);
-Bun.resolveSync("@rynfar/meridian-plugin-opencode-scrub", OUT);
+// Sanity: the exact resolutions the runner performs at run time — and that
+// they land INSIDE the sidecar. Bun.resolveSync walks parent directories, so
+// on its own it resolves happily from the repository's own node_modules and
+// passes with a sidecar that installed nothing. The packaged app has no parent
+// to fall back on.
+const sidecarModules = join(OUT, "node_modules");
+for (const name of bridgePackages) {
+  const resolved = Bun.resolveSync(name, OUT);
+  if (!resolved.startsWith(sidecarModules)) {
+    throw new Error(
+      `${name} resolved to ${resolved}, outside the sidecar — its own node_modules is missing`,
+    );
+  }
+}
 for (const file of ["opensession.js", "mcp-proxy.js", "opencode-plugin-session-tag.js"]) {
   if (!existsSync(join(OUT, file))) throw new Error(`sidecar is missing ${file}`);
 }
