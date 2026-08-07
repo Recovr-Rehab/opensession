@@ -25,6 +25,13 @@ struct DeskSheet: View {
             content
         }
         .task {
+            #if DEBUG
+            // Dev loop: start the call on open (`OS1_VOICE_AUTOSTART=1`) so
+            // simulator voice runs need no UI driving.
+            if ProcessInfo.processInfo.environment["OS1_VOICE_AUTOSTART"] != nil {
+                engine.open()
+            }
+            #endif
             await load()
         }
         .onDisappear { engine.stop() }

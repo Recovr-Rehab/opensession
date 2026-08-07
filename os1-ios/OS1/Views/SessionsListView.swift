@@ -394,6 +394,15 @@ struct SessionsListView: View {
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
                 }
+                .onAppear {
+                    #if DEBUG
+                    // Dev loop: open the Desk on launch so simulator voice
+                    // runs need no UI driving (`OS1_VOICE_AUTOSTART=1`).
+                    if ProcessInfo.processInfo.environment["OS1_VOICE_AUTOSTART"] != nil {
+                        showDesk = true
+                    }
+                    #endif
+                }
                 .sheet(item: $newSessionRequest) { request in
                     NewSessionView(
                         initialRepo: request.repo,
