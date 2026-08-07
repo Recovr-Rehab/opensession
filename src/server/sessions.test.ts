@@ -74,6 +74,10 @@ afterAll(async () => {
 	if (priorCodexHome !== undefined) {
 		(await import("./codex-accounts")).__setCodexHomeForTest(priorCodexHome);
 	}
+	// The review-cache test reseeded the shared PR cache from this file's
+	// scratch snapshot; reload it from the restored state root so later test
+	// files see the same data they would have before this file ran.
+	(await import("./pr-cache")).loadPrCacheSnapshot();
 	rmSync(home, { recursive: true, force: true });
 });
 
@@ -309,6 +313,10 @@ describe("getAllSessions", () => {
 		});
 
 		const sessionsModule = await import(`./sessions.ts?test=${crypto.randomUUID()}`);
+		// The PR cache lives in pr-cache.ts, which the cache-busting query on
+		// sessions.ts does NOT reload — reseed the shared instance so it picks up
+		// the snapshot written above (same pattern as the demo boot reseed).
+		sessionsModule.loadPrCacheSnapshot();
 		sessionsModule.markCachedPrReviewed(
 			"tellahq/backstage",
 			"review-cache",

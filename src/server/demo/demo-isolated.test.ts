@@ -99,9 +99,13 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
     expect(result.sessionIds.length).toBeGreaterThanOrEqual(8);
 
     // The real reader (cache-busted so it re-reads the repointed sessions dir).
-    const { getAllSessions } = await import(
+    const { getAllSessions, loadPrCacheSnapshot } = await import(
       `../sessions.ts?test=${crypto.randomUUID()}`
     );
+    // The PR bulk cache lives in pr-cache.ts, which the cache-busting query
+    // does NOT reload — reseed it from the snapshot the generator just wrote
+    // (the same explicit reseed the real demo boot does).
+    loadPrCacheSnapshot();
     const sessions = getAllSessions();
     const byId = new Map(sessions.map((s: { id: string }) => [s.id, s]));
     for (const id of result.sessionIds) {
