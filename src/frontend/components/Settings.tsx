@@ -741,7 +741,7 @@ function MobileSettings({
 					<div className="relative flex h-11 shrink-0 items-center justify-center px-3">
 						{detail && (
 							<button
-								className="absolute left-1 flex items-center gap-0.5 rounded-md border-none bg-transparent px-2 py-2 text-control-label font-medium text-accent"
+								className="absolute left-1 flex items-center gap-0.5 rounded-control border-none bg-transparent px-2 py-2 text-control-label font-medium text-accent"
 								onClick={() => onShowRoot?.()}
 							>
 								<IconChevronLeft size={22} />

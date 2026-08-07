@@ -84,7 +84,7 @@ export function PreviewPane({
 					Open in browser
 				</Button>
 				<button
-					className="rounded-md border border-line-strong px-2.5 py-1 text-label font-medium text-dim transition-colors hover:border-red-400 hover:text-red-500 disabled:opacity-40"
+					className="rounded-control border border-line-strong px-2.5 py-1 text-label font-medium text-dim transition-colors hover:border-red-400 hover:text-red-500 disabled:opacity-40"
 					disabled={stopping || (!status?.running && !status?.starting)}
 					onClick={stop}
 					title="Stop the dev server and release its container"

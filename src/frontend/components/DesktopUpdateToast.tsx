@@ -85,7 +85,7 @@ export function DesktopUpdateToast() {
 						<button
 							aria-label="Dismiss"
 							title="Dismiss"
-							className="-mr-2 -mt-2 grid size-8 shrink-0 cursor-pointer place-items-center rounded-md text-dim hover:text-fg"
+							className="-mr-2 -mt-2 grid size-8 shrink-0 cursor-pointer place-items-center rounded-control text-dim hover:text-fg"
 							onClick={() => setDismissedKey(key)}
 						>
 							<IconX size={20} />

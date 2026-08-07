@@ -279,7 +279,7 @@ function OverviewStrip({
       onClick={onOpenAnalytics}
       title={stats ? "Open Analytics" : "Analytics are loading"}
       aria-busy={!stats}
-      className="group mt-6 grid w-full cursor-pointer grid-cols-5 overflow-hidden rounded-xl bg-raised p-0 text-left outline-none transition-[background,box-shadow] hover:bg-panel focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] max-[860px]:grid-cols-3 max-[560px]:grid-cols-2"
+      className="group mt-6 grid w-full cursor-pointer grid-cols-5 overflow-hidden rounded-control bg-raised p-0 text-left outline-none transition-[background,box-shadow] hover:bg-panel focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] max-[860px]:grid-cols-3 max-[560px]:grid-cols-2"
     >
       <StatCell
         value={fmtCompact(running)}
@@ -526,7 +526,7 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
                   <span className="text-control-label text-faint max-[860px]:hidden">Everyone</span>
                 ) : (
                   <button
-                    className="flex items-center gap-1 rounded-md border-0 bg-transparent p-1 text-control-label text-dim hover:bg-hover hover:text-fg max-[860px]:hidden"
+                    className="flex items-center gap-1 rounded-control border-0 bg-transparent p-1 text-control-label text-dim hover:bg-hover hover:text-fg max-[860px]:hidden"
                     onClick={() => setPerson("all")}
                     title="Show everyone"
                   >
@@ -673,7 +673,7 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
                         return (
                         <button
                           key={row.key}
-                          className="group grid w-full grid-cols-[22px_24px_minmax(0,1fr)_130px_44px] items-center gap-2 rounded-lg border-0 bg-transparent px-2 py-2.5 text-left text-dim hover:bg-hover hover:text-fg max-[720px]:grid-cols-[22px_24px_minmax(0,1fr)_40px]"
+                          className="group grid w-full grid-cols-[22px_24px_minmax(0,1fr)_130px_44px] items-center gap-2 rounded-control border-0 bg-transparent px-2 py-2.5 text-left text-dim hover:bg-hover hover:text-fg max-[720px]:grid-cols-[22px_24px_minmax(0,1fr)_40px]"
                           onClick={() =>
                             row.session ? onSelect(row.session) : row.url && window.open(row.url, "_blank", "noopener")
                           }

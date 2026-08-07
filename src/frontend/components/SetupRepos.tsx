@@ -174,7 +174,7 @@ function RepoTileButton({
 								aria-label={color}
 								aria-pressed={active}
 								className={cn(
-									"h-6 w-6 rounded-md outline-none transition-transform",
+									"h-6 w-6 rounded-control outline-none transition-transform",
 									"hover:scale-110 focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
 									active && "ring-2 ring-fg ring-offset-2 ring-offset-panel",
 								)}

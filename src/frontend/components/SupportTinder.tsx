@@ -336,7 +336,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 			    same phone-only back chevron. */}
 			<div className="deck-header flex w-full items-center justify-between px-4 py-3">
 				<button
-					className="hidden h-8 w-8 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg max-[720px]:flex"
+					className="hidden h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg max-[720px]:flex"
 					onClick={onExit}
 					title="Back (Esc)"
 					aria-label="Back"
@@ -361,7 +361,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 				{/* ml-auto: with the chevron hidden this is the row's only in-flow
 				    child, and justify-between alone would pack it against the left. */}
 				<button
-					className="ml-auto flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
+					className="ml-auto flex h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
 					onClick={undoLast}
 					disabled={historyLen === 0 || busy}
 					title="Undo last action (z)"
@@ -426,7 +426,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 			{deck !== null && !done && !error && (
 				<div className="flex w-full max-w-[640px] items-stretch gap-2.5 px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
 					<button
-						className="flex items-center justify-center rounded-lg border border-red/40 bg-red-soft px-4 py-3 text-sm font-semibold text-red hover:border-red/70 disabled:opacity-50"
+						className="flex items-center justify-center rounded-control border border-red/40 bg-red-soft px-4 py-3 text-sm font-semibold text-red hover:border-red/70 disabled:opacity-50"
 						onClick={spam}
 						disabled={busy}
 						title="Mark customer as spam, closes the thread (← or s) — undo available"
@@ -434,7 +434,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						Spam
 					</button>
 					<button
-						className="flex-1 rounded-lg border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-green disabled:opacity-50"
+						className="flex-1 rounded-control border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-green disabled:opacity-50"
 						onClick={markDone}
 						disabled={busy}
 						title="Mark this thread Done (d) — undo available"
@@ -442,7 +442,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						Done
 					</button>
 					<button
-						className="flex-1 rounded-lg border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-fg disabled:opacity-50"
+						className="flex-1 rounded-control border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-fg disabled:opacity-50"
 						onClick={openSession}
 						disabled={opening}
 						title="Open the ticket's opensession session — starts triage if none exists (e)"
@@ -450,7 +450,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						{opening ? "Opening…" : "Session"}
 					</button>
 					<button
-						className="flex-1 rounded-lg border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-fg"
+						className="flex-1 rounded-control border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-fg"
 						onClick={() =>
 							card && window.open(plainThreadUrl(card.id), "_blank", "noopener")
 						}
@@ -459,7 +459,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						Plain
 					</button>
 					<button
-						className="flex-1 rounded-lg bg-green px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
+						className="flex-1 rounded-control bg-green px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
 						onClick={skip}
 						title="Skip — leave the ticket as-is (→ or k)"
 					>
@@ -635,7 +635,7 @@ function DeckDone({
 					: "No Todo tickets right now."}
 			</div>
 			<button
-				className="mt-2 rounded-lg bg-panel px-4 py-2.5 text-sm font-semibold text-fg hover:bg-surface"
+				className="mt-2 rounded-control bg-panel px-4 py-2.5 text-sm font-semibold text-fg hover:bg-surface"
 				onClick={onExit}
 			>
 				Done

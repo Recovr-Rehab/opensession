@@ -146,7 +146,7 @@ export const TurnBlock = React.memo(function TurnBlock({
         // Baseline, not centre: this row mixes its 14px title with 13px meta
         // runs, and centring aligns boxes rather than text. The chevron carries
         // no baseline of its own, so it keeps centring individually.
-        className="mx-auto flex w-full max-w-[var(--session-col)] min-w-0 cursor-pointer items-baseline gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+        className="mx-auto flex w-full max-w-[var(--session-col)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-1 py-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
       >
         <span
           className={cn(

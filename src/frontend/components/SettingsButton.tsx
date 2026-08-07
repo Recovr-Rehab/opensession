@@ -40,7 +40,7 @@ export function SettingsButton({
 		<Tooltip label="Settings">
 			<button
 				aria-label="Open settings"
-				className="flex shrink-0 items-center rounded-md border-none bg-transparent p-1 text-fg hover:bg-hover"
+				className="flex shrink-0 items-center rounded-control border-none bg-transparent p-1 text-fg hover:bg-hover"
 				onClick={() => onOpenSettings?.()}
 			>
 				<span className="relative inline-flex shrink-0">

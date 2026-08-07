@@ -241,7 +241,7 @@ export function CopyableCode({ value }: { value: string }) {
 	return (
 		<button
 			type="button"
-			className="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-surface py-0.5 pl-1.5 pr-1 text-left font-mono text-[0.92em] text-fg transition-colors hover:bg-active"
+			className="inline-flex max-w-full items-center gap-1.5 rounded-control bg-surface py-0.5 pl-1.5 pr-1 text-left font-mono text-[0.92em] text-fg transition-colors hover:bg-active"
 			onClick={() => copy(value, { toast: "Copied" })}
 			title="Copy"
 		>

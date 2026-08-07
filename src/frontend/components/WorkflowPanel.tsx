@@ -313,7 +313,7 @@ function SubagentsCard({
 						<button
 							key={s.id ?? `pending-${i}`}
 							className={cn(
-								"flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left transition-colors",
+								"flex w-full items-center gap-2 rounded-control px-2 py-1 text-left transition-colors",
 								openable ? "hover:bg-hover" : "cursor-default",
 							)}
 							onClick={() => {
@@ -713,7 +713,7 @@ const AgentRow = React.memo(function AgentRow({
 	return (
 		<>
 			<button
-				className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left transition-colors hover:bg-hover"
+				className="flex w-full items-center gap-2 rounded-control px-2 py-1 text-left transition-colors hover:bg-hover"
 				onClick={() => onToggle(a.seq)}
 			>
 				<StatusMark status={a.status} />

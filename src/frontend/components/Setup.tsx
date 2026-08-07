@@ -307,7 +307,7 @@ function EnvVarField({
 				{envVar.present && (
 					<button
 						type="button"
-						className="focus-ring shrink-0 rounded-sm text-meta font-medium text-faint underline underline-offset-2 transition-colors hover:text-fg"
+						className="focus-ring shrink-0 rounded-control text-meta font-medium text-faint underline underline-offset-2 transition-colors hover:text-fg"
 						onClick={onToggleClear}
 					>
 						{cleared ? "Keep" : "Clear"}

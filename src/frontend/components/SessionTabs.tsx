@@ -461,7 +461,7 @@ export function SessionTabs({
 						<span className="shrink-0 text-meta text-faint">{relativeTime(s.lastActivity)}</span>
 						<button
 							type="button"
-							className="flex shrink-0 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0.5 text-dim hover:text-fg"
+							className="flex shrink-0 cursor-pointer items-center rounded-control border-0 bg-transparent p-0.5 text-dim hover:text-fg"
 							aria-label="Restore session"
 							title="Restore to tabs"
 							onClick={(e) => {

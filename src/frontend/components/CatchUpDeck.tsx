@@ -229,7 +229,7 @@ export function CatchUpDeck({
 			    collapsed-sidebar controls. Esc still leaves the deck. */}
 			<div className="deck-header flex w-full items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
 				<button
-					className="hidden h-10 w-10 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg max-[720px]:flex"
+					className="hidden h-10 w-10 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg max-[720px]:flex"
 					onClick={onExit}
 					title="Back"
 					aria-label="Back"
@@ -251,7 +251,7 @@ export function CatchUpDeck({
 				    the row's only in-flow child (the counter is absolutely centered),
 				    and justify-between would pack it against the left edge. */}
 				<button
-					className="ml-auto flex h-10 w-10 items-center justify-center rounded-md bg-transparent text-dim hover:bg-panel hover:text-fg"
+					className="ml-auto flex h-10 w-10 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg"
 					onClick={onNewWorkspace}
 					title="New workspace (⌘N)"
 					aria-label="New workspace"

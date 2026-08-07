@@ -121,7 +121,7 @@ export function WalkthroughCard({
 										</figcaption>
 									<button
 										type="button"
-										className="block w-full cursor-zoom-in rounded-md border-0 bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+										className="block w-full cursor-zoom-in rounded-control border-0 bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 										aria-label={`Open ${side} image preview`}
 										onClick={(event) =>
 											openLightbox(

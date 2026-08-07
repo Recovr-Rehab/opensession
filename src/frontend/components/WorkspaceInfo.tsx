@@ -315,7 +315,7 @@ function CommentCard({
 	const addBtn = onAddToInput && (
 		<button
 			type="button"
-			className="absolute right-1.5 top-1/2 z-[1] -translate-y-1/2 rounded-md border border-line-strong bg-panel px-2 py-0.5 text-[11px] font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
+			className="absolute right-1.5 top-1/2 z-[1] -translate-y-1/2 rounded-control border border-line-strong bg-panel px-2 py-0.5 text-[11px] font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
 			onClick={(e) => {
 				e.stopPropagation();
 				onAddToInput(formatPrCommentPrompt(comment, pr));
@@ -1737,7 +1737,7 @@ export function WorkspaceInfo({
 								{onAddToInput && (
 									<button
 										type="button"
-										className="rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] font-semibold text-dim transition-colors hover:border-line-strong hover:bg-hover hover:text-fg"
+										className="rounded-control border border-line bg-surface px-2 py-0.5 text-[11px] font-semibold text-dim transition-colors hover:border-line-strong hover:bg-hover hover:text-fg"
 										onClick={() =>
 											onAddToInput(formatFixCommentsPrompt(comments, pr!))
 										}
@@ -1838,7 +1838,7 @@ export function WorkspaceInfo({
 											openLightbox(media, i, event.currentTarget)
 										}
 										className={cn(
-											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-md border border-line bg-surface transition-colors hover:border-line-strong hover:bg-hover",
+											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-control border border-line bg-surface transition-colors hover:border-line-strong hover:bg-hover",
 											media.length === 1 ? "w-full" : "w-[76%]",
 										)}
 										title={[m.sessionTitle, new Date(m.at).toLocaleString()]
@@ -1893,7 +1893,7 @@ export function WorkspaceInfo({
 										type="button"
 										onClick={() => onOpenAsset?.(a.path)}
 										title={`Open ${a.path}`}
-										className="flex w-full min-w-0 items-center gap-2 rounded-md px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover"
+										className="flex w-full min-w-0 items-center gap-2 rounded-control px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover"
 									>
 										<IconFile size={14} className="shrink-0 text-faint" />
 										<span className="min-w-0 flex-1 truncate">{a.path}</span>

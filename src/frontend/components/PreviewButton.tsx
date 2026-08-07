@@ -442,7 +442,7 @@ export function PreviewButton({
           <Popover.Trigger
             render={
               <button
-                className="flex w-8 shrink-0 items-center justify-center rounded-md rounded-l-none text-faint outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg"
+                className="flex w-8 shrink-0 items-center justify-center rounded-control rounded-l-none text-faint outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg"
                 title="Dev services"
                 aria-label="Dev services"
               >

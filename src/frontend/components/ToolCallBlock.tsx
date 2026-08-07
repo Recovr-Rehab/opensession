@@ -497,7 +497,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
           // the 11px trailing meta all ride this row, and centring aligns
           // their boxes rather than their text. Items with no text baseline
           // (the glyph, the spinner, the failure mark) opt back into centring.
-          "group flex w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-md border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors",
+          "group flex w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors",
           "hover:bg-hover/40"
         )}
       >
