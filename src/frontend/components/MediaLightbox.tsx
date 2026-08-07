@@ -70,17 +70,19 @@ html[data-lightbox-transition="closing"]::view-transition-new(root) {
 }
 
 html[data-lightbox-transition="opening"]::view-transition-new(root) {
-  animation: lightbox-root-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: lightbox-root-in var(--dur) var(--ease) both;
 }
 
+/* Exit is a tier faster than the enter: opening is the deliberate act and can
+   take its time, closing is the system getting out of the way. */
 html[data-lightbox-transition="closing"]::view-transition-old(root) {
-  animation: lightbox-root-out 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: lightbox-root-out var(--dur-micro) var(--ease) both;
 }
 
 ::view-transition-group(${HERO_TRANSITION_NAME}) {
   z-index: 401;
-  animation-duration: 360ms;
-  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  animation-duration: var(--dur-lg);
+  animation-timing-function: var(--ease);
 }
 
 ::view-transition-old(${HERO_TRANSITION_NAME}),

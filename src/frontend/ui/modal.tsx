@@ -91,7 +91,7 @@ function Content({
 							"shadow-[0_24px_70px_rgba(0,0,0,0.45)]",
 							// Drops in from just above its resting place, the way a
 							// palette summoned by a keystroke should.
-							"origin-top transition-[transform,opacity] duration-[130ms] ease-out",
+							"origin-top transition-[transform,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]",
 							"data-[starting-style]:-translate-y-1.5 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0",
 							"data-[ending-style]:-translate-y-1.5 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0",
 							widthClassName ?? "w-[min(820px,100%)]",
@@ -105,7 +105,7 @@ function Content({
 							"rounded-2xl border border-line bg-raised",
 							"p-6 shadow-[0_18px_50px_rgba(0,0,0,0.20),0_2px_8px_rgba(0,0,0,0.08)]",
 							"flex flex-col gap-4",
-							"origin-center transition-[transform,opacity] duration-150 ease-out",
+							"origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
 							"data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
 							"data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0",
 						],
@@ -127,8 +127,8 @@ function Content({
 					// always floated above them (the caret-anchored mention popup at
 					// 10500, the modal tier at 10000) keeps doing so.
 					palette
-						? "z-[6000] bg-black/42 backdrop-blur-[3px] duration-[120ms]"
-						: "z-[10000] bg-black/25 backdrop-blur-[1px] duration-150",
+						? "z-[6000] bg-black/42 backdrop-blur-[3px] duration-[var(--dur-micro)]"
+						: "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
 					// `palette-backdrop` rides along purely as a runtime marker:
 					// SessionViewer (⌘P) and Sidebar (archive chord) suppress their
 					// window-level shortcuts via

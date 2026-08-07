@@ -180,7 +180,13 @@ html[data-theme="light"] {
      --dur        the default. Small anchored movement: popups, chips,
                   carets, a control sliding a short distance.
      --dur-lg     spatial changes that cross the screen — sheets, drawers,
-                  the settings pager, the sidebar opening.
+                  the settings pager.
+
+   Two things deliberately sit outside the scale. `linear` stays on the voice
+   waveform, which is driven by live audio amplitude rather than by a UI state
+   change — easing a signal would misreport it. And the 1ms `animation`
+   declarations on scroll-timeline elements are inert sentinels, not durations:
+   the scroll position drives their progress, so they never elapse.
 
    Nothing below --dur-micro: under ~120ms a transition stops reading as
    motion and reads as a jump with a smear on it, which is worse than no
@@ -1224,7 +1230,9 @@ html[data-platform="windows"] .workspace-shell {
 	border-radius: calc(11px * var(--rf)); corner-shape: var(--cs);
 	color: var(--text-faint);
 	cursor: pointer;
-	transition: color 0.12s, background 0.12s;
+	transition:
+		color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease);
 }
 .sidebar-toggle-btn:hover,
 .sidebar-reopen:hover {
@@ -1265,7 +1273,7 @@ html[data-platform="windows"] .workspace-shell {
 	width: 2px;
 	height: 100%;
 	background: transparent;
-	transition: background 0.14s ease;
+	transition: background var(--dur-micro) var(--ease);
 }
 .sidebar-resize:hover::after {
 	background: var(--border-strong);
@@ -1509,7 +1517,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	animation: hovercard-in 0.09s ease-out;
+	animation: hovercard-in var(--dur-micro) var(--ease);
 }
 
 .filter-row {
@@ -1570,7 +1578,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	padding: 5px;
 	max-height: 60vh;
 	overflow-y: auto;
-	animation: hovercard-in 0.09s ease-out;
+	animation: hovercard-in var(--dur-micro) var(--ease);
 }
 .mini-select-item {
 	display: flex;
@@ -1772,7 +1780,10 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	color: var(--text-faint);
 	opacity: 0;
 	cursor: pointer;
-	transition: opacity 0.15s ease, color 0.12s ease, background 0.12s ease;
+	transition:
+		opacity var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease);
 }
 .sidebar-repo-head:hover .sidebar-repo-new {
 	opacity: 1;
@@ -1946,7 +1957,9 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	color: var(--text-faint);
 	flex-shrink: 0;
 	opacity: 0;
-	transition: transform 0.15s ease, opacity 0.15s ease;
+	transition:
+		transform var(--dur-micro) var(--ease),
+		opacity var(--dur-micro) var(--ease);
 }
 .sidebar-group-header:hover .sidebar-group-chevron {
 	color: var(--text);
@@ -2220,7 +2233,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	position: relative;
 	z-index: 1;
 	transform: translateX(var(--swipe-x, 0));
-	transition: transform 210ms cubic-bezier(0.22, 1, 0.36, 1);
+	transition: transform var(--dur) var(--ease);
 	touch-action: pan-y;
 	/* No will-change here: it promoted EVERY sidebar row to its own compositor
 	   layer (dozens of retina-sized layers just sitting in the list), a real
@@ -2245,7 +2258,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--accent-soft);
 }
 .sidebar-swipe-row.is-open > .sidebar-item {
-	transition-duration: 180ms;
+	transition-duration: var(--dur-micro);
 }
 .sidebar-swipe-row.is-dragging > .sidebar-item,
 .sidebar-swipe-row.is-dragging > .sidebar-swipe-action {
@@ -2271,7 +2284,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	color: white;
 	font-size: 11px;
 	font-weight: 600;
-	transition: width 210ms cubic-bezier(0.22, 1, 0.36, 1);
+	transition: width var(--dur) var(--ease);
 	will-change: width;
 }
 .sidebar-swipe-action--archive {
@@ -2370,7 +2383,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	inset: 0;
 	z-index: 4000;
 	background: rgba(0, 0, 0, 0.4);
-	animation: sheet-fade 160ms ease;
+	animation: sheet-fade var(--dur) var(--ease);
 }
 .mobile-action-sheet {
 	position: fixed;
@@ -2383,7 +2396,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	border-top-right-radius: 16px;
 	padding: 6px 10px calc(14px + env(safe-area-inset-bottom));
 	box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
-	animation: sheet-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+	animation: sheet-up var(--dur) var(--ease);
 }
 @keyframes sheet-fade {
 	from {
@@ -2973,8 +2986,8 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	cursor: pointer;
 	white-space: nowrap;
 	transition:
-		background 0.14s ease,
-		color 0.14s ease;
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .session-tab:hover {
 	color: var(--text);
@@ -3131,8 +3144,8 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	bottom: 8px;
 	z-index: 5;
 	pointer-events: none;
-	animation: tab-drop-slot-in 0.12s ease-out;
-	transition: left 0.18s cubic-bezier(0.2, 0, 0, 1);
+	animation: tab-drop-slot-in var(--dur-micro) var(--ease);
+	transition: left var(--dur) var(--ease);
 }
 .session-tab-drop-slot::after {
 	content: "";
@@ -3262,7 +3275,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	border: 1px solid rgba(255, 255, 255, 0.15);
 	padding: 0;
 	cursor: pointer;
-	transition: transform 0.1s ease;
+	transition: transform var(--dur-micro) var(--ease);
 }
 .tab-color-swatch:hover {
 	transform: scale(1.18);
@@ -3314,7 +3327,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.session-tab-pin {
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity 0.12s ease;
+		transition: opacity var(--dur-micro) var(--ease);
 	}
 	.session-tab:hover .session-tab-pin,
 	.session-tab-active .session-tab-pin {
@@ -3352,7 +3365,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.session-tab-close {
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity 0.12s ease;
+		transition: opacity var(--dur-micro) var(--ease);
 	}
 	.session-tab:hover .session-tab-close,
 	.session-tab-active .session-tab-close {
@@ -3399,7 +3412,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.session-tab-history {
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity 0.12s ease;
+		transition: opacity var(--dur-micro) var(--ease);
 	}
 	/* Keyboard users get the same reveal on focus — hover can't be the only way
 	   to reach the control — and both stay put while their menu is open. */
@@ -3515,7 +3528,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--border);
 	cursor: col-resize;
 	touch-action: none;
-	transition: background 0.12s ease;
+	transition: background var(--dur-micro) var(--ease);
 }
 /* Grab area only: wider than the hairline, spilling over both panes without
    taking any layout width of its own. */
@@ -3636,7 +3649,9 @@ body.resizing-tab-split {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	transition: background 0.12s ease, color 0.12s ease;
+	transition:
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .source-automation:hover {
 	background: var(--hover);
@@ -3651,7 +3666,9 @@ body.resizing-tab-split {
 	border: 0;
 	cursor: pointer;
 	line-height: 1.2;
-	transition: background 0.12s ease, color 0.12s ease;
+	transition:
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .archived-chip:hover:not(:disabled) {
 	background: var(--hover);
@@ -4405,7 +4422,7 @@ html.wco .viewer-branch {
 	width: 2px;
 	height: 100%;
 	background: transparent;
-	transition: background 0.14s ease;
+	transition: background var(--dur-micro) var(--ease);
 }
 .panel-resize:hover::after {
 	background: var(--border-strong);
@@ -4447,8 +4464,8 @@ body.resizing-panel .panel-resize::after {
 	flex-shrink: 0;
 	white-space: nowrap;
 	transition:
-		background 0.14s ease,
-		color 0.14s ease;
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .panel-tab:hover {
 	color: var(--text);
@@ -4568,7 +4585,10 @@ body.resizing-panel .panel-resize::after {
 	border: 1px solid transparent;
 	cursor: pointer;
 	white-space: nowrap;
-	transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+	transition:
+		background-color var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .wi-chip-icon {
 	display: inline-flex;
@@ -4749,9 +4769,9 @@ body.resizing-panel .panel-resize::after {
 	letter-spacing: -0.01em;
 	cursor: pointer;
 	transition:
-		color 0.12s ease,
-		border-color 0.12s ease,
-		background 0.12s ease;
+		color var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease);
 }
 .workspace-info-fix:hover {
 	color: var(--text);
@@ -4832,7 +4852,7 @@ img.workspace-info-comment-avatar {
 	font-weight: 600;
 	cursor: pointer;
 	opacity: 0;
-	transition: opacity 0.12s ease;
+	transition: opacity var(--dur-micro) var(--ease);
 }
 .workspace-info-comment:hover .workspace-info-comment-add {
 	opacity: 1;
@@ -5563,7 +5583,7 @@ a.workspace-info-check-row {
 .diff-file-caret {
 	color: var(--text-faint);
 	flex-shrink: 0;
-	transition: transform 0.12s ease;
+	transition: transform var(--dur-micro) var(--ease);
 }
 .diff-file-caret-open {
 	transform: rotate(90deg);
@@ -5617,7 +5637,10 @@ a.workspace-info-check-row {
 	user-select: none;
 	opacity: 0;
 	pointer-events: none;
-	transition: color 0.1s ease, background 0.1s ease, opacity 0.1s ease;
+	transition:
+		color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease),
+		opacity var(--dur-micro) var(--ease);
 }
 .diff-file-header:hover .diff-file-copy,
 .diff-file-copy:focus-visible,
@@ -5689,7 +5712,10 @@ a.workspace-info-check-row {
 	cursor: pointer;
 	opacity: 0;
 	pointer-events: none;
-	transition: color 0.1s ease, background 0.1s ease, opacity 0.1s ease;
+	transition:
+		color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease),
+		opacity var(--dur-micro) var(--ease);
 }
 .diff-file-header:hover .diff-file-discard,
 .diff-file-discard:focus-visible,
@@ -5728,7 +5754,10 @@ a.workspace-info-check-row {
 	cursor: pointer;
 	opacity: 0;
 	pointer-events: none;
-	transition: color 0.1s ease, background 0.1s ease, opacity 0.1s ease;
+	transition:
+		color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease),
+		opacity var(--dur-micro) var(--ease);
 }
 .diff-file-header:hover .diff-file-edit,
 .diff-file-edit:focus-visible {
@@ -6247,7 +6276,7 @@ a.workspace-info-check-row {
 	text-decoration: none;
 	white-space: nowrap;
 	cursor: pointer;
-	transition: background-color 120ms ease;
+	transition: background-color var(--dur-micro) var(--ease);
 }
 .pr-num-chip:hover {
 	background: color-mix(in srgb, currentColor 12%, transparent);
@@ -6267,7 +6296,9 @@ a.workspace-info-check-row {
 	background: var(--control-surface);
 	box-shadow: var(--control-shadow);
 	text-decoration: none;
-	transition: background-color 120ms ease, scale 120ms ease;
+	transition:
+		background-color var(--dur-micro) var(--ease),
+		scale var(--dur-micro) var(--ease);
 }
 .pr-num-chip-external:hover {
 	background: color-mix(in srgb, currentColor 12%, transparent);
@@ -6503,11 +6534,11 @@ a.workspace-info-check-row {
 	/* Same whisper as every other button — one shadow across the tool. */
 	box-shadow: var(--control-shadow);
 	transition:
-		background-color 150ms ease,
-		border-color 150ms ease,
-		color 150ms ease,
-		filter 150ms ease,
-		transform 150ms ease;
+		background-color var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease),
+		filter var(--dur-micro) var(--ease),
+		transform var(--dur-micro) var(--ease);
 	will-change: transform;
 }
 .pr-bar-btn-icon {
@@ -6850,7 +6881,7 @@ a.workspace-info-check-row {
 	font-size: 13.5px;
 	border-top: 0;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	transition: background 0.12s ease;
+	transition: background var(--dur-micro) var(--ease);
 }
 .pr-check:hover {
 	background: var(--hover);
@@ -7001,7 +7032,10 @@ a.workspace-info-check-row {
 	grid-column: auto;
 	grid-row: auto;
 	opacity: 0;
-	transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+	transition:
+		opacity var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .pr-comment-row:hover .pr-comment-add,
 .pr-comment-add:focus-visible {
@@ -7510,7 +7544,7 @@ a.workspace-info-check-row {
 	font: inherit;
 	color: var(--text);
 	text-align: left;
-	transition: background 0.12s ease;
+	transition: background var(--dur-micro) var(--ease);
 }
 .prc-summary-row:hover {
 	background: var(--hover);
@@ -7924,8 +7958,8 @@ a.workspace-info-check-row {
 	width: 240px;
 	color: var(--text-faint);
 	transition:
-		border-color 0.12s,
-		background 0.12s;
+		border-color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease);
 }
 .reviews-search:focus-within {
 	border-color: var(--border-strong);
@@ -7966,7 +8000,7 @@ a.workspace-info-check-row {
 	font-weight: 500;
 	color: var(--text-dim);
 	cursor: pointer;
-	transition: color 0.12s;
+	transition: color var(--dur-micro) var(--ease);
 }
 .reviews-tab:hover {
 	color: var(--text);
@@ -8096,7 +8130,7 @@ a.workspace-info-check-row {
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
 	color: var(--text-faint);
 	opacity: 0;
-	transition: opacity 0.12s;
+	transition: opacity var(--dur-micro) var(--ease);
 }
 .reviews-row:hover .rv-open-gh,
 .rv-open-gh:focus-visible {
@@ -8689,8 +8723,8 @@ a.workspace-info-check-row {
 	padding: 5px 14px;
 	cursor: pointer;
 	transition:
-		background 0.12s,
-		color 0.12s;
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .load-history-btn:hover:not(:disabled) {
 	background: var(--hover);
@@ -8733,10 +8767,10 @@ a.workspace-info-check-row {
 	box-shadow: var(--control-shadow);
 	cursor: pointer;
 	z-index: 5;
-	animation: jump-rise 0.18s ease-out;
+	animation: jump-rise var(--dur) var(--ease);
 	transition:
-		background 0.12s,
-		border-color 0.12s;
+		background var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease);
 }
 .jump-latest:hover {
 	border-color: var(--accent);
@@ -9014,7 +9048,7 @@ a.workspace-info-check-row {
 	corner-shape: squircle;
 	border: 1px solid var(--border);
 	background: var(--bg-panel);
-	animation: update-toast-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+	animation: update-toast-in var(--dur-lg) var(--ease);
 }
 .update-toast-body {
 	display: flex;
@@ -9065,7 +9099,7 @@ a.workspace-info-check-row {
 	font-weight: 600;
 	line-height: 1;
 	cursor: pointer;
-	transition: background 0.12s ease;
+	transition: background var(--dur-micro) var(--ease);
 }
 .update-toast-refresh:hover {
 	background: color-mix(in srgb, var(--red) 85%, black);
@@ -9113,8 +9147,8 @@ a.workspace-info-check-row {
 	font-weight: 600;
 	line-height: 1;
 	cursor: pointer;
-	transition: background 0.12s ease;
-	animation: update-toast-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+	transition: background var(--dur-micro) var(--ease);
+	animation: update-toast-in var(--dur-lg) var(--ease);
 }
 .update-pill:hover {
 	background: color-mix(in srgb, var(--red) 85%, black);
@@ -9289,8 +9323,8 @@ a.workspace-info-check-row {
 	text-decoration: none;
 	white-space: nowrap;
 	transition:
-		background 0.12s ease,
-		border-color 0.12s ease;
+		background var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease);
 }
 /* No title on hand, so the label is a shortened id — monospace, like any other
    identifier in the transcript. */
@@ -9338,7 +9372,7 @@ a.pr-ref {
 	padding: 0.5px 4px;
 	text-decoration: none;
 	white-space: nowrap;
-	transition: background 0.12s ease;
+	transition: background var(--dur-micro) var(--ease);
 }
 a.pr-ref:hover {
 	background: var(--hover-strong);
@@ -9472,7 +9506,7 @@ a.pr-ref:hover {
 	color: var(--text-faint);
 	font-size: 17px;
 	line-height: 1;
-	transition: transform 0.12s ease;
+	transition: transform var(--dur-micro) var(--ease);
 }
 .markdown .md-details[open] > summary::before {
 	transform: rotate(90deg);
@@ -9524,7 +9558,7 @@ a.pr-ref:hover {
 	border: 1px solid var(--border-strong);
 	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
 	padding: 12px;
-	transition: border-color 0.15s;
+	transition: border-color var(--dur-micro) var(--ease);
 }
 .ask-box:focus-within {
 	border-color: var(--accent);
@@ -10132,8 +10166,8 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	   left edge up with the composer's instead of with the control. */
 	--composer-inset-left: 15px;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--dur-micro) var(--ease),
+		box-shadow var(--dur-micro) var(--ease);
 }
 /* No accent (red) focus highlight — it read as an error/active state. The
    composer keeps its resting border on focus; the blinking caret is affordance
@@ -10230,7 +10264,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .composer-agents-caret {
 	flex: none;
 	color: var(--text-faint);
-	transition: transform 0.18s ease;
+	transition: transform var(--dur) var(--ease);
 }
 .composer-agents-caret.is-open {
 	transform: rotate(180deg);
@@ -10787,8 +10821,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	font-size: 12px;
 	max-width: 240px;
 	transition:
-		border-color 0.15s,
-		color 0.15s;
+		border-color var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .composer-model:hover {
 	border-color: var(--text-faint);
@@ -10832,8 +10866,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	justify-content: center;
 	flex-shrink: 0;
 	transition:
-		filter 0.15s,
-		transform 0.1s;
+		filter var(--dur-micro) var(--ease),
+		transform var(--dur-micro) var(--ease);
 }
 .composer-send:disabled {
 	opacity: 0.35;
@@ -10911,7 +10945,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	background: var(--accent);
 	color: #fff;
 	cursor: pointer;
-	transition: filter 0.15s;
+	transition: filter var(--dur-micro) var(--ease);
 }
 /* Thin inset divider between the two halves (short of the top/bottom edges,
    Slack-style) rather than a full-height seam. */
@@ -10933,7 +10967,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	cursor: default;
 }
 .composer-send-caret svg {
-	transition: transform 0.15s;
+	transition: transform var(--dur-micro) var(--ease);
 }
 .composer-send-caret.is-open svg {
 	transform: rotate(180deg);
@@ -11129,7 +11163,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	font-size: 13px;
 	font-weight: 600;
 	cursor: pointer;
-	transition: filter 0.12s;
+	transition: filter var(--dur-micro) var(--ease);
 }
 .composer-schedule-submit:not(:disabled):hover {
 	filter: brightness(1.1);
@@ -11194,9 +11228,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	font-weight: 500;
 	cursor: pointer;
 	transition:
-		color 0.12s ease,
-		background 0.12s ease,
-		border-color 0.12s ease;
+		color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease);
 }
 .btn-cancel-icon {
 	width: 8px;
@@ -11477,7 +11511,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	position: relative;
 	flex-shrink: 0;
 	padding: 0;
-	transition: background 0.15s;
+	transition: background var(--dur-micro) var(--ease);
 }
 .auto-toggle-knob {
 	position: absolute;
@@ -11488,8 +11522,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border-radius: 50%;
 	background: var(--text-faint);
 	transition:
-		transform 0.15s,
-		background 0.15s;
+		transform var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease);
 }
 .auto-toggle-on {
 	background: var(--green-soft);
@@ -12331,7 +12365,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		z-index: 30;
 		width: min(320px, 88vw);
 		transform: translateX(-100%);
-		transition: transform 0.18s ease;
+		transition: transform var(--dur) var(--ease);
 		box-shadow: 12px 0 32px rgba(0, 0, 0, 0.5);
 	}
 	.wiki-nav-open {
@@ -12363,7 +12397,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		overflow: hidden;
 		z-index: 50;
 		box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
-		animation: sheet-up 260ms cubic-bezier(0.32, 0.72, 0, 1);
+		animation: sheet-up var(--dur-lg) var(--ease);
 	}
 	.panel-overlay {
 		inset: 0;
@@ -12456,7 +12490,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		inset: 0;
 		z-index: 10;
 		transform: translateX(100%);
-		transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+		transition: transform var(--dur-lg) var(--ease);
 		background: var(--bg);
 		/* How much room the pane's OWN chrome (docked tab strip, transcript and
 		   view-pane top padding) must leave for the top bar. The pane is
@@ -12508,7 +12542,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		cursor: pointer;
 		-webkit-tap-highlight-color: transparent;
 		touch-action: manipulation;
-		transition: opacity 0.18s ease;
+		transition: opacity var(--dur) var(--ease);
 	}
 	.mobile-back svg {
 		flex-shrink: 0;
@@ -12738,7 +12772,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		padding: 0 0 max(16px, env(safe-area-inset-bottom, 0px));
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		animation: session-info-in 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+		animation: session-info-in var(--dur) var(--ease);
 	}
 	@keyframes session-info-in {
 		from {
@@ -12760,7 +12794,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		padding: env(safe-area-inset-top, 0px) 8px 0;
 		border-bottom: 1px solid transparent;
 		background: transparent;
-		transition: background-color 0.18s ease, border-color 0.18s ease;
+		transition:
+			background-color var(--dur) var(--ease),
+			border-color var(--dur) var(--ease);
 	}
 	.session-info-topbar-scrolled {
 		border-bottom-color: var(--border);
@@ -12792,7 +12828,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		opacity: 0;
 		transform: translateY(5px);
 		pointer-events: none;
-		transition: opacity 0.18s ease, transform 0.18s ease;
+		transition:
+			opacity var(--dur) var(--ease),
+			transform var(--dur) var(--ease);
 	}
 	.session-info-topbar-scrolled .session-info-topbar-title {
 		opacity: 1;
@@ -13051,7 +13089,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		-webkit-tap-highlight-color: transparent;
 		touch-action: manipulation;
 		/* iOS press feel: dim instantly on touch-down, ease back on release. */
-		transition: opacity 0.18s ease;
+		transition: opacity var(--dur) var(--ease);
 	}
 	.mobile-search-btn::after {
 		content: "";
@@ -13232,7 +13270,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	   the layout never reflows and nothing jumps. */
 	.app-header-overlay,
 	.session-tabs {
-		transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+		transition: transform var(--dur-lg) var(--ease);
 	}
 	body.chrome-collapsed .app-header-overlay {
 		transform: translateY(-100%);
@@ -13892,8 +13930,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		-webkit-tap-highlight-color: transparent;
 		touch-action: manipulation;
 		transition:
-			opacity 0.18s ease,
-			color 0.12s ease;
+			opacity var(--dur) var(--ease),
+			color var(--dur-micro) var(--ease);
 	}
 	.mobile-filter-btn::after {
 		content: "";
@@ -14390,7 +14428,7 @@ html[data-theme="light"] .md-mermaid {
 .acct-usage-fill {
 	height: 100%;
 	border-radius: calc(3px * var(--rf)); corner-shape: var(--cs);
-	transition: width 0.3s ease;
+	transition: width var(--dur-lg) var(--ease);
 }
 .acct-usage-green {
 	background: #34d399;
@@ -14667,7 +14705,7 @@ html[data-theme="light"] .md-mermaid {
 }
 .note-prompt-caret {
 	display: inline-block;
-	transition: transform 0.12s ease;
+	transition: transform var(--dur-micro) var(--ease);
 }
 .note-prompt-caret.open {
 	transform: rotate(90deg);
@@ -14927,11 +14965,13 @@ html[data-theme="light"] .md-mermaid {
 	align-items: flex-start;
 	justify-content: center;
 	padding: 11vh 16px 16px;
-	animation: palette-fade 0.12s ease-out;
-}
-@keyframes palette-fade {
-	from { opacity: 0; }
-	to { opacity: 1; }
+	/* The 0.12s `palette-fade` keyframe that used to live here is gone: this
+	   element is the shared Modal's backdrop (ui/modal.tsx adds the class), and
+	   that already runs an opacity transition on it via Base UI's
+	   [data-starting-style]. The two were animating the same property at the
+	   same time, and the keyframe was the worse of the pair — it only covered
+	   the enter, so the exit was the transition's alone. One fade, and it is
+	   interruptible, which a keyframe is not. */
 }
 .palette-card {
 	/* Anchors the dictation overlay (VoiceInput). */
@@ -14944,11 +14984,6 @@ html[data-theme="light"] .md-mermaid {
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
-	animation: palette-pop 0.13s ease-out;
-}
-@keyframes palette-pop {
-	from { transform: translateY(-6px) scale(0.99); opacity: 0; }
-	to { transform: none; opacity: 1; }
 }
 
 .palette-header {
@@ -14973,7 +15008,9 @@ html[data-theme="light"] .md-mermaid {
 	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
 	cursor: pointer;
 	max-width: 46%;
-	transition: background 0.12s, color 0.12s;
+	transition:
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .palette-trigger:hover {
 	background: var(--hover);
@@ -15114,7 +15151,9 @@ html[data-theme="light"] .md-mermaid {
 	font-size: 12.5px;
 	font-weight: 500;
 	max-width: 180px;
-	transition: border-color 0.12s, color 0.12s;
+	transition:
+		border-color var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .palette-pill:hover {
 	border-color: var(--text-faint);
@@ -15205,7 +15244,9 @@ html[data-theme="light"] .md-mermaid {
 	cursor: pointer;
 	font-size: 13px;
 	color: var(--text-dim);
-	transition: background 0.12s, color 0.12s;
+	transition:
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 	user-select: none;
 }
 .palette-mcp-checkbox-compact:hover {
@@ -15230,7 +15271,7 @@ html[data-theme="light"] .md-mermaid {
 	color: var(--text-dim);
 	font-size: 14px;
 	cursor: pointer;
-	transition: color 0.12s;
+	transition: color var(--dur-micro) var(--ease);
 }
 /* Hover and on states paint on an inset pseudo-element rather than the button
    box: the button keeps its 40px pointer target on every viewport, but the wash
@@ -15243,7 +15284,9 @@ html[data-theme="light"] .md-mermaid {
 	inset: 4px;
 	z-index: 0;
 	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	transition: background 0.12s, box-shadow 0.12s;
+	transition:
+		background var(--dur-micro) var(--ease),
+		box-shadow var(--dur-micro) var(--ease);
 }
 /* Keep the glyph (and the goal/note label) above that wash — the pseudo-element
    is positioned, so it would otherwise paint over static in-flow content. */
@@ -15299,7 +15342,9 @@ html[data-theme="light"] .md-mermaid {
 	font-size: 13px;
 	font-weight: 600;
 	cursor: pointer;
-	transition: filter 0.12s, opacity 0.12s;
+	transition:
+		filter var(--dur-micro) var(--ease),
+		opacity var(--dur-micro) var(--ease);
 }
 html[data-theme="light"] .palette-card .palette-create {
 	background: var(--text);
@@ -15336,7 +15381,7 @@ html[data-theme="light"] .palette-card .palette-create {
 	cursor: pointer;
 }
 .palette-create-caret svg {
-	transition: transform 0.15s;
+	transition: transform var(--dur-micro) var(--ease);
 }
 .palette-create-caret.is-open svg {
 	transform: rotate(180deg);
@@ -15366,7 +15411,7 @@ html[data-theme="light"] .palette-card .palette-create {
 	color: var(--text);
 	text-align: left;
 	cursor: pointer;
-	transition: background 0.1s;
+	transition: background var(--dur-micro) var(--ease);
 }
 .palette-create-menu-item:hover {
 	background: var(--hover);
@@ -15474,7 +15519,9 @@ html[data-theme="light"] .palette-card .palette-create {
 	font-size: 12.5px;
 	color: var(--text-dim);
 	cursor: pointer;
-	transition: border-color 0.12s, color 0.12s;
+	transition:
+		border-color var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 .ss-pill:hover {
 	color: var(--text);
@@ -15895,7 +15942,7 @@ html.wco .settings-sidenav {
 	background: var(--bg-active);
 	position: relative;
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background var(--dur-micro) var(--ease);
 }
 .ui-switch.on {
 	background: var(--accent);
@@ -15909,7 +15956,7 @@ html.wco .settings-sidenav {
 	border-radius: 50%;
 	background: #fff;
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-	transition: transform 0.15s ease;
+	transition: transform var(--dur-micro) var(--ease);
 }
 .ui-switch.on .ui-switch-knob {
 	transform: translateX(16px);
@@ -15972,7 +16019,9 @@ html.wco .settings-sidenav {
 	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
 	overflow: hidden;
 	border: 2px solid var(--border);
-	transition: border-color 0.12s ease, box-shadow 0.12s ease;
+	transition:
+		border-color var(--dur-micro) var(--ease),
+		box-shadow var(--dur-micro) var(--ease);
 }
 .theme-card:hover .theme-swatch {
 	border-color: var(--text-faint);
@@ -16156,7 +16205,7 @@ html.wco .settings-sidenav {
 	.turn-footer-time {
 		display: block;
 		opacity: 0;
-		transition: opacity 0.12s ease;
+		transition: opacity var(--dur-micro) var(--ease);
 	}
 	.msg-user-own {
 		/* Keeps the timestamp clear of the following transcript block. */
@@ -16502,7 +16551,7 @@ html.wco .settings-sidenav {
 			0 2px 6px rgba(0, 0, 0, 0.18);
 		/* Above the root list; below the action sheet (4000) and palettes (6000). */
 		z-index: 500;
-		transition: transform 0.12s ease;
+		transition: transform var(--dur-micro) var(--ease);
 	}
 	.mobile-fab:active {
 		transform: scale(0.92);
@@ -16575,7 +16624,9 @@ html.wco .settings-sidenav {
 	color: var(--text-dim);
 	flex-shrink: 0;
 	cursor: pointer;
-	transition: color 0.12s, background 0.12s;
+	transition:
+		color var(--dur-micro) var(--ease),
+		background var(--dur-micro) var(--ease);
 }
 .voice-glyph:hover {
 	background: var(--hover);
@@ -16716,9 +16767,9 @@ html.wco .settings-sidenav {
   border-radius: calc(1px * var(--rf)); corner-shape: var(--cs);
   background: color-mix(in srgb, currentColor 35%, transparent);
   transition:
-    background 0.15s,
-    box-shadow 0.15s,
-    opacity 0.15s;
+  	background var(--dur-micro) var(--ease),
+  	box-shadow var(--dur-micro) var(--ease),
+  	opacity var(--dur-micro) var(--ease);
   animation-duration: 1.4s;
   animation-iteration-count: infinite;
   animation-timing-function: ease-out;
@@ -17879,8 +17930,8 @@ html.wco .settings-sidenav {
 	font-weight: 600;
 	cursor: pointer;
 	transition:
-		background 0.14s ease,
-		border-color 0.14s ease;
+		background var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease);
 }
 .workspace-info-review-btn:hover {
 	background: var(--hover);

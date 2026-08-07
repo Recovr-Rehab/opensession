@@ -139,6 +139,21 @@
 	   expands to the WCAG-friendly 44px touch convention on coarse pointers. */
 	--spacing-hit-target: 40px;
 	--spacing-hit-target-touch: 44px;
+
+	/* Motion. Without these the utility layer runs its own motion system: a
+	   bare `transition-colors` emits Tailwind's stock cubic-bezier(0.4, 0, 0.2, 1),
+	   so the ~40 components using it were easing differently from the
+	   stylesheet rule right next to them — which is most of what made the app
+	   feel like several apps. Pointing the defaults at the same tokens fixes
+	   every one of those call sites without touching a single component.
+
+	   `ease-out` and `ease-in-out` are remapped onto --ease too. That is not a
+	   downgrade: --ease IS a strong ease-out, considerably stronger than the
+	   stock curves, and the point of the exercise is that the app has one. */
+	--default-transition-duration: var(--dur-micro);
+	--default-transition-timing-function: var(--ease);
+	--ease-out: var(--ease);
+	--ease-in-out: var(--ease);
 }
 
 /* One keyboard-focus treatment for raw controls. It intentionally does not

@@ -732,7 +732,7 @@ function MobileSettings({
 	const detail = section ?? null;
 	const shownSection = detail ?? lastSection;
 	const shownLabel = SECTIONS.find((s) => s.key === shownSection)?.label;
-	const pageEase = "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]";
+	const pageEase = "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]";
 
 	return (
 		<BottomSheet onClose={onBack} label="Settings" className="settings-sheet h-[93dvh]">

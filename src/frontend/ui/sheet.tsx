@@ -228,7 +228,7 @@ export function ResponsiveDialog({
 					"absolute inset-0 bg-black/45",
 					animated && [
 						"transition-opacity",
-						phone ? "duration-300" : "duration-150",
+						phone ? "duration-[var(--dur-lg)]" : "duration-[var(--dur)]",
 						shown ? "opacity-100" : "opacity-0",
 					],
 				)}
@@ -245,11 +245,11 @@ export function ResponsiveDialog({
 					animated &&
 						(phone
 							? [
-									"transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+									"transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]",
 									shown ? "translate-y-0" : "translate-y-full",
 								]
 							: [
-									"origin-center transition-[transform,opacity] duration-150 ease-out",
+									"origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
 									shown ? "scale-100 opacity-100" : "scale-[0.96] opacity-0",
 								]),
 					phone ? sheetClassName : modalClassName,
