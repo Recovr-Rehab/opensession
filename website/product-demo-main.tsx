@@ -58,9 +58,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-mobile",
 		claudeSessionId: "demo-mobile",
 		source: "opensession",
-		branch: "kent/mobile-navigation",
+		branch: "alex/mobile-navigation",
 		worktreeDir: "/workspace/mobile",
-		startedBy: "Kent",
+		startedBy: "Alex",
 		title: "Improve mobile navigation",
 		lastActivity: "2026-08-04T11:20:00.000Z",
 		createdAt: "2026-08-04T08:45:00.000Z",
@@ -76,9 +76,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-shortcuts",
 		claudeSessionId: "demo-shortcuts",
 		source: "opensession",
-		branch: "jaap/keyboard-shortcuts",
+		branch: "alex/keyboard-shortcuts",
 		worktreeDir: "/workspace/shortcuts",
-		startedBy: "Jaap",
+		startedBy: "Alex",
 		title: "Ship keyboard shortcuts",
 		lastActivity: "2026-08-04T10:55:00.000Z",
 		createdAt: "2026-08-04T07:30:00.000Z",
@@ -99,9 +99,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-search",
 		claudeSessionId: "demo-search",
 		source: "opensession",
-		branch: "grant/faster-session-search",
+		branch: "alex/faster-session-search",
 		worktreeDir: "/workspace/search",
-		startedBy: "Grant",
+		startedBy: "Alex",
 		title: "Make session search instant",
 		lastActivity: "2026-08-04T10:31:00.000Z",
 		createdAt: "2026-08-04T06:54:00.000Z",
@@ -116,9 +116,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-release",
 		claudeSessionId: "demo-release",
 		source: "opensession",
-		branch: "louise/release-notes",
+		branch: "alex/release-notes",
 		worktreeDir: "/workspace/release",
-		startedBy: "Louise",
+		startedBy: "Alex",
 		title: "Draft the weekly release notes",
 		lastActivity: "2026-08-04T09:42:00.000Z",
 		createdAt: "2026-08-04T06:10:00.000Z",
@@ -129,6 +129,12 @@ const sessions: UnifiedSession[] = [
 		workspaceId: "project-release",
 		model: "openai/gpt-5.6-sol",
 	},
+];
+
+const demoPresence = [
+	{ user: "Kent", sessionId: activeSessionId },
+	{ user: "Jaap", sessionId: activeSessionId },
+	{ user: "Louise", sessionId: "bks-demo-checkout" },
 ];
 
 const transcripts: Record<string, TranscriptEntry[]> = {
@@ -454,10 +460,6 @@ localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
 localStorage.setItem(
-	"opensession-sidebar-order:alex",
-	JSON.stringify(["people", "workspaces", "automations"]),
-);
-localStorage.setItem(
 	"opensession-sidebar-hidden-tools",
 	JSON.stringify([
 		"tasks",
@@ -499,7 +501,7 @@ function ProductDemoApp() {
 
 	return (
 		<TooltipProvider>
-			<App serviceWorker={false} />
+			<App serviceWorker={false} initialTeamViewing={demoPresence} />
 		</TooltipProvider>
 	);
 }
