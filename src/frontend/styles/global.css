@@ -9060,7 +9060,9 @@ a.workspace-info-check-row {
 
 /* markdown content */
 .markdown p {
-	margin: 0 0 6px;
+	/* 8px on a 14px/24px body ≈ the 0.47em block rhythm the native app uses
+	   (blockSpacing 8 against 17pt). 6px left paragraphs reading as one slab. */
+	margin: 0 0 8px;
 }
 
 .markdown a {
@@ -9184,35 +9186,49 @@ a.pr-ref:hover {
 
 .markdown ul,
 .markdown ol {
-	margin: 0 0 6px;
+	margin: 0 0 8px;
 	padding-left: 20px;
 }
 .markdown li {
-	margin: 2.5px 0;
+	margin: 3px 0;
 }
 .markdown li > ul,
 .markdown li > ol {
-	margin: 2px 0 0;
+	margin: 3px 0 0;
 }
 
+/* Agent answers carry their structure in h2/h3, so those have to read as
+   section breaks at a glance. Two things were missing: size (h3/h4 were
+   SMALLER than the 14px body, so a heading was distinguishable only by
+   weight) and space above (6px, which collapsed with the previous
+   paragraph's own margin — a heading sat as close to the block it ended as
+   to the one it introduces). The ramp mirrors the native app's, scaled from
+   its 17pt body to ours: +29% / +14% / +7% / body, semibold throughout, with
+   optical tracking tightening as the size grows. Space is asymmetric on
+   purpose — a heading belongs to what follows it. */
 .markdown h1,
 .markdown h2,
 .markdown h3,
 .markdown h4 {
-	margin: 6px 0 1px;
+	margin: 16px 0 4px;
 	line-height: 1.3;
 	font-weight: 600;
+	letter-spacing: -0.012em;
 	color: var(--text);
 }
 .markdown h1 {
-	font-size: 15.5px;
+	font-size: 18px;
+	letter-spacing: -0.018em;
 }
 .markdown h2 {
-	font-size: 14.5px;
+	font-size: 16px;
+	letter-spacing: -0.016em;
 }
-.markdown h3,
+.markdown h3 {
+	font-size: 15px;
+}
 .markdown h4 {
-	font-size: 13.5px;
+	font-size: 14px;
 }
 
 .markdown > :first-child {
@@ -9221,25 +9237,32 @@ a.pr-ref:hover {
 .markdown > :last-child {
 	margin-bottom: 0;
 }
+/* A subhead directly under its parent heading is one unit, not a new section:
+   drop the full section gap so h2 + h3 don't drift apart. */
+.markdown :is(h1, h2, h3, h4) + :is(h1, h2, h3, h4) {
+	margin-top: 8px;
+}
 
 .markdown blockquote {
 	margin: 2px 0 8px;
 	padding: 3px 12px;
-	border-left: 2px solid rgba(255, 59, 59, 0.4);
+	/* Not the accent: a red rule down the side of a quotation reads as a
+	   warning callout. Same call as the session chip and the PR token. */
+	border-left: 2px solid var(--border-strong);
 	color: var(--text-dim);
 }
 
 .markdown table {
 	border-collapse: collapse;
 	margin: 2px 0 10px;
-	font-size: 12.5px;
+	font-size: 13px;
 	display: block;
 	overflow-x: auto;
 	max-width: 100%;
 }
 .markdown th {
 	text-align: left;
-	font-size: 10.5px;
+	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: -0.01em;
 	color: var(--text-faint);
