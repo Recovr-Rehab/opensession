@@ -4,14 +4,16 @@ import SwiftUI
 /// Sessions list, mirroring the web sidebar's organization: group by Status
 /// (In progress / Needs input / In review / Done / Backlog), by Repo, by Repo
 /// and Status, by Repo and Inbox (each repo's rows banded by activity, the
-/// web's Inbox mode nested per repo), or a flat Recent list — plus a repo
-/// filter, sort, and search.
+/// web's Inbox mode nested per repo), by Inbox (one flat activity-banded list
+/// across every repo), or a flat Recent list — plus a repo filter, sort, and
+/// search.
 /// The grouping/filter choices persist like the web's filter popover does.
 struct SessionsListView: View {
     enum GroupBy: String, CaseIterable {
         case status, repo
         case repoStatus = "repo-status"
         case repoInbox = "repo-inbox"
+        case inbox
         case recent
 
         var label: String {
@@ -20,6 +22,7 @@ struct SessionsListView: View {
             case .repo: "Repo"
             case .repoStatus: "Repo and status"
             case .repoInbox: "Repo and inbox"
+            case .inbox: "Inbox"
             case .recent: "Recently active"
             }
         }
@@ -772,6 +775,18 @@ struct SessionsListView: View {
                     repo: $0
                 )
             }
+        case .inbox:
+            // One flat list across every repo, banded like an email inbox:
+            // Needs action first, then by when the row last moved. Repo
+            // identity moves onto the rows themselves (see `sessionRow`).
+            return SessionsListViewModel.inboxBands(workspaces).map { band in
+                SessionGroup(
+                    id: "inbox-\(band.band.rawValue)",
+                    title: band.band.label,
+                    workspaces: band.workspaces,
+                    repo: nil
+                )
+            }
         case .status:
             return Session.Lane.allCases.compactMap { lane in
                 let inLane = workspaces.filter { $0.lane == lane }
@@ -979,10 +994,21 @@ struct SessionsListView: View {
     }
     #endif
 
+    /// Inbox rows name their repo — nothing above them does, since the flat
+    /// list has no repo bands. The tile is the scan cue; the name is what
+    /// actually identifies the repo, because a repo without its own icon
+    /// falls back to its OWNER's mark and every repo in one org then wears
+    /// the same tile. Dropped when the list is already one repo (a repo
+    /// filter, or an instance with a single repo), where it would just repeat.
+    private var inboxRowRepoName: Bool {
+        repoFilter == "all" && availableRepos.count > 1
+    }
+
     @ViewBuilder
     private func sessionRow(_ workspace: SidebarWorkspace) -> some View {
         let session = workspace.mainSession
         let canArchive = !workspace.isOptimistic
+        let repo = groupBy == .inbox ? workspace.effectiveRepo : nil
         #if os(macOS)
         // Selection drives the detail column; select by id so rows replaced
         // by polling (fresh struct values every refresh) keep the selection.
@@ -992,6 +1018,8 @@ struct SessionsListView: View {
             session: workspace.statusSession,
             title: workspace.title,
             sessions: workspace.sessions,
+            repo: repo,
+            showsRepoName: inboxRowRepoName,
             onArchive: canArchive ? { archive(workspace) } : nil
         )
         .tag(session.id)
@@ -1004,7 +1032,9 @@ struct SessionsListView: View {
             SessionRow(
                 session: workspace.statusSession,
                 title: workspace.title,
-                sessions: workspace.sessions
+                sessions: workspace.sessions,
+                repo: repo,
+                showsRepoName: inboxRowRepoName
             )
         }
         .buttonStyle(.plain)
@@ -1646,6 +1676,12 @@ struct SessionRow: View {
     /// sidebar's `.sidebar-item-unread`: one session with activity past your read
     /// mark bolds the whole workspace. Empty falls back to `session` alone.
     var sessions: [Session] = []
+    /// Set in Inbox mode, where the flat list has no repo band above the row:
+    /// the row wears the repo's tile itself, and its name too when the list
+    /// spans repos (`showsRepoName`) — identical tiles are the norm, since
+    /// repos without their own icon all fall back to their owner's mark.
+    var repo: String? = nil
+    var showsRepoName = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mac: hover-revealed archive button (nil hides it).
     var onArchive: (() -> Void)? = nil
@@ -1684,6 +1720,9 @@ struct SessionRow: View {
         HStack(spacing: 9) {
             statusMark
                 .frame(width: markSize, height: markSize)
+            if let repo {
+                RepoTile(name: repo, size: tileSize)
+            }
             Text(rowTitle)
                 #if os(iOS)
                 // The web sidebar's phone type, exactly: 16px titles (callout)
@@ -1698,7 +1737,19 @@ struct SessionRow: View {
                 #endif
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if session.lane == .inProgress && showsElapsedTime {
+            // The repo's name rides the row's trailing slot rather than
+            // sitting in front of the title, so titles stay in one column
+            // whatever their repo is called. A running row spends that slot
+            // on its clock instead — the more urgent of the two, and the tile
+            // (plus VoiceOver) still names the repo.
+            if let repo, showsRepoName, !showsClock, !dynamicTypeSize.isAccessibilitySize {
+                Text(RepoTile.label(for: repo))
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+            }
+            if showsClock {
                 WorkspaceRunElapsedLabel(since: session.runStartedDate)
                     #if os(iOS)
                     // The repo header's "+" is an 18pt glyph centred in a 30pt
@@ -1739,6 +1790,20 @@ struct SessionRow: View {
         #else
         14
         #endif
+    }
+
+    /// The Inbox row's repo tile: a step under the status mark beside it, so
+    /// it reads as the row's label rather than a second status.
+    private var tileSize: CGFloat {
+        #if os(iOS)
+        18
+        #else
+        13
+        #endif
+    }
+
+    private var showsClock: Bool {
+        session.lane == .inProgress && showsElapsedTime
     }
 
     private var rowTitle: String {
