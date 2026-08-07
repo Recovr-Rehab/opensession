@@ -212,6 +212,9 @@ struct SessionView: View {
                     // lazy rows settle. The pin releases when the person scrolls
                     // up to read, so new output does not yank them back.
                     .softScrollEdges()
+                    #if os(iOS)
+                    .transcriptTopWash()
+                    #endif
                     .defaultScrollAnchor(.bottom)
                     .defaultScrollAnchor(.bottom, for: .sizeChanges)
                     .scrollDismissesKeyboardCompat()
@@ -1279,8 +1282,8 @@ struct TabPill: Identifiable, Equatable {
 /// navigation bar. Not one bar: each tab is its own capsule with its own
 /// surface, so the row reads as chips over the session rather than a second band
 /// of chrome. The transcript passes BEHIND them (the strip is attached as a
-/// `safeAreaBar`) and dissolves through the soft scroll edge effect plus
-/// `tabStripTopWash`.
+/// `safeAreaBar`) and dissolves through the soft scroll edge effect plus the
+/// `transcriptTopWash` the transcript itself carries.
 ///
 /// The active tab is centered when the strip opens, while horizontal overflow
 /// remains native touch scrolling.
@@ -1316,7 +1319,6 @@ private struct SessionTabBar: View {
             // No top padding: the pills are the session's own chrome rather than
             // a second band, so they ride tight under the navigation bar.
             .padding(.bottom, 4)
-            .tabStripTopWash()
             .onAppear {
                 proxy.scrollTo(activeId, anchor: .center)
             }

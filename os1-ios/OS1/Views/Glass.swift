@@ -88,49 +88,57 @@ extension View {
         }
     }
 
-    /// The top counterpart of `composerBottomWash`, under the floating tab
-    /// strip. The strip is a bar (`safeAreaBar`), so the transcript travels
-    /// behind it; the soft scroll edge effect fades what passes under the
-    /// navigation bar, but rows emerging just below the strip — and the ones
-    /// in the rails beside it — stayed crisp against the floating glass.
+    /// The top counterpart of `composerBottomWash`. The transcript travels
+    /// behind the navigation bar and — when a workspace has more than one tab —
+    /// behind the floating tab strip as well. The soft scroll edge effect BLURS
+    /// what passes under them but does not tint it, so a dark row (a terminal
+    /// block, a code fence) stayed dark and legible right under the status bar:
+    /// the fade read as broken. This ramps everything under the top chrome into
+    /// the page colour, and keeps ramping for a stretch below it so the
+    /// transcript emerges instead of starting at a cut.
     ///
-    /// It hangs off the STRIP for the same layout reason the bottom wash hangs
-    /// off the composer: an overlay on the scroll view is laid out inside the
-    /// safe area the bar has already inset, so it would paint below the strip
-    /// instead of across it.
+    /// It hangs off the TRANSCRIPT rather than the strip — the strip only exists
+    /// when a workspace has two or more tabs, and the nav bar needs the wash
+    /// either way. An overlay on the scroll view is laid out inside the safe
+    /// area the bars have already inset, which is exactly where the ramp
+    /// belongs; `ignoresSafeArea` then lets the veil above it climb back over
+    /// the bars to the top of the screen. The bars themselves are drawn by
+    /// ancestors, so their glass still floats above this.
     ///
     /// - Parameters:
-    ///   - ramp: how far BELOW the strip the dissolve runs. Negative bottom
-    ///     padding is what lets it hang out over the transcript; the strip's
-    ///     own height above it is held at full veil, so the transcript has already
-    ///     gone quiet by the time it reaches the glass.
-    ///   - veil: the wash's MAXIMUM opacity. Deliberately short of 1, matching
-    ///     the composer: the transcript should still be faintly there behind the
-    ///     strip rather than stopping at a hard edge.
-    func tabStripTopWash(
-        ramp: CGFloat = 48,
-        veil: Double = 0.62
+    ///   - ramp: how far BELOW the top chrome the dissolve runs.
+    ///   - veil: the wash's MAXIMUM opacity, held over the whole inset.
+    ///     Deliberately short of 1, matching the composer: the transcript should
+    ///     still be faintly there behind the glass rather than stopping at a
+    ///     hard edge.
+    func transcriptTopWash(
+        ramp: CGFloat = 96,
+        veil: Double = 0.82
     ) -> some View {
-        background(alignment: .top) {
-            VStack(spacing: 0) {
-                // Fills the strip's own height — the flexible element, so this
-                // adapts if the strip grows with Dynamic Type.
-                OS1VisualStyle.background.opacity(veil)
-                // Weighted stops for the same reason as the composer's: a
-                // linear ramp only reaches full veil on its very last row,
-                // which left rows legible right up against the glass.
-                LinearGradient(
-                    stops: [
-                        .init(color: OS1VisualStyle.background.opacity(veil), location: 0),
-                        .init(color: OS1VisualStyle.background.opacity(veil * 0.55), location: 0.35),
-                        .init(color: OS1VisualStyle.background.opacity(0), location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: ramp)
+        overlay(alignment: .top) {
+            GeometryReader { geometry in
+                VStack(spacing: 0) {
+                    // The bars' own band, held at full veil.
+                    OS1VisualStyle.background.opacity(veil)
+                        .frame(height: geometry.safeAreaInsets.top)
+                    // Weighted stops for the same reason as the composer's: a
+                    // straight ramp only reaches full veil on its very last
+                    // row, which left rows legible right up against the glass.
+                    LinearGradient(
+                        stops: [
+                            .init(color: OS1VisualStyle.background.opacity(veil), location: 0),
+                            .init(color: OS1VisualStyle.background.opacity(veil * 0.88), location: 0.22),
+                            .init(color: OS1VisualStyle.background.opacity(veil * 0.5), location: 0.55),
+                            .init(color: OS1VisualStyle.background.opacity(0), location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: ramp)
+                    Spacer(minLength: 0)
+                }
             }
-            .padding(.bottom, -ramp)
+            .ignoresSafeArea(edges: .top)
             .allowsHitTesting(false)
         }
     }
