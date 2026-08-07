@@ -13,6 +13,7 @@ import type {
 	Workspace,
 	AnalyticsSummary,
 	OsReview,
+	PrHostCapabilities,
 } from "./types";
 
 const BASE = `${BASE_PATH}/api`;
@@ -234,6 +235,8 @@ export interface OpenPr {
 	reviewActive?: boolean;
 	/** What the last automated review concluded. Absent until one has run. */
 	osReview?: OsReview;
+	/** What the repo's PR host supports; absent means everything (GitHub). */
+	capabilities?: PrHostCapabilities;
 }
 
 /** Every open PR in the repo, attributed to teammates by GitHub author. */

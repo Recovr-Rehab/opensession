@@ -54,7 +54,7 @@ import { SelectionToSession } from "./SelectionToSession";
 import { getCurrentUser } from "./UserPicker";
 import { renderMarkdown, renderPrCommentMarkdown } from "../lib/markdown";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
-import { providerFromUrl, avatarUrl, type Provider } from "../lib/provider";
+import { providerFromUrl, avatarUrl, prCapabilities, type Provider } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import {
   IconCheck,
@@ -859,6 +859,16 @@ export function PrPanel({
     return stripped ? renderMarkdown(stripped) : "";
   }, [pr?.body]);
   const provider = useMemo(() => providerFromUrl(pr?.url), [pr?.url]);
+  // Host capability gating: absent (GitHub, older cache entries) means all
+  // true, so nothing GitHub-shaped ever disappears. code.storage payloads
+  // carry an explicit set (no checks/reviewers/comments/viewed state/stacks).
+  const caps = prCapabilities(pr?.capabilities);
+
+  // Landing on the checks tab of a PR whose host has none (tab switch from a
+  // GitHub PR, a stale focusTarget) would strand the view on a hidden tab.
+  useEffect(() => {
+    if (!caps.checks && diffView === "checks") setDiffView("diff");
+  }, [caps.checks, diffView]);
 
   // Only offer the expand toggle when the clamped description is actually taller
   // than its collapsed height — a two-line PR body shouldn't get a "Show more".
@@ -910,6 +920,9 @@ export function PrPanel({
     },
     [prBase, prHead, activeRepoId],
   );
+  // The pr-image endpoint serves blobs through the GitHub API — on hosts
+  // without it, image files fall back to the plain binary-diff placeholder.
+  const imageSrcs = caps.images ? prImageSrcs : undefined;
 
   // In-place edit mode on the review canvas. Only targets backed by one of the
   // session's own worktrees qualify (primary/attached repos — their worktree is
@@ -965,9 +978,11 @@ export function PrPanel({
 
   // GitHub "Viewed" state: fetched per PR (and refetched when the head moves,
   // since a push flips changed files to DIRTY = unviewed on GitHub's side).
+  // Hosts without viewed state never fetch — prViewed stays unset, so the
+  // checkboxes stay hidden.
   const viewedKey = diff ? `${activeRepoId || "pr"}#${diff.number}` : null;
   useEffect(() => {
-    if (!viewedKey || !diff) return;
+    if (!caps.viewedState || !viewedKey || !diff) return;
     let live = true;
     fetchPrViewedFiles(activeRepoId, diff.number, getCurrentUser())
       .then((res) => {
@@ -980,7 +995,7 @@ export function PrPanel({
     return () => {
       live = false;
     };
-  }, [viewedKey, diff?.headRefOid]);
+  }, [viewedKey, diff?.headRefOid, caps.viewedState]);
 
   const handleToggleViewed = useCallback((path: string, next: boolean) => {
     const info = prViewedRef.current;
@@ -1232,7 +1247,9 @@ export function PrPanel({
 
           {/* Where this PR sits in its chain of layers — directly under Git
               status, because it reframes what that status means. */}
-          <StackSection pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
+          {caps.stacks && (
+            <StackSection pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
+          )}
 
           {/* The row's bottom line is an inset shadow, not a border: the active tab
               covers it with its own surface-coloured bottom border while sitting
@@ -1248,7 +1265,9 @@ export function PrPanel({
               ["commits", "Commits", pr.commits?.length || 0, <CommitIcon />],
               ["checks", "Checks", checkSummary.total, <IconCheck size={17} />],
               ["diff", "Files changed", files.length, <IconFile size={17} />],
-            ] as const).map(([key, label, count, icon]) => {
+            ] as const)
+              .filter(([key]) => key !== "checks" || caps.checks)
+              .map(([key, label, count, icon]) => {
               const activeTab = key === "diff" ? diffView === "diff" || diffView === "guide" : diffView === key;
               return (
                 <button
@@ -1378,12 +1397,14 @@ export function PrPanel({
                       defaultExpandedFiles={Infinity}
                       viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
                       onToggleViewed={handleToggleViewed}
+                      disabled={!caps.reviewComments}
+                      disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                       submitLabel="Add comment"
                       placeholder={`Comment on #${diff.number} — added to your pending review…`}
                       pendingComments={pending}
                       onRemovePending={handleRemovePending}
                       onSubmit={handleAddPending}
-                      imageSrcs={prImageSrcs}
+                      imageSrcs={imageSrcs}
                       editFile={editFile}
                     />
                   </>
@@ -1435,13 +1456,15 @@ export function PrPanel({
                             diffStyle={diffStyle}
                             defaultExpandedFiles={Infinity}
                             viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
-                      onToggleViewed={handleToggleViewed}
+                            onToggleViewed={handleToggleViewed}
+                            disabled={!caps.reviewComments}
+                            disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                             submitLabel="Add comment"
                             placeholder={`Comment on #${diff.number} — added to your pending review…`}
                             pendingComments={pending}
                             onRemovePending={handleRemovePending}
                             onSubmit={handleAddPending}
-                            imageSrcs={prImageSrcs}
+                            imageSrcs={imageSrcs}
                             editFile={editFile}
                           />
                         )}
@@ -1455,13 +1478,15 @@ export function PrPanel({
                   diffStyle={diffStyle}
                   defaultExpandedFiles={Infinity}
                   viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
-                      onToggleViewed={handleToggleViewed}
+                  onToggleViewed={handleToggleViewed}
+                  disabled={!caps.reviewComments}
+                  disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                   submitLabel="Add comment"
                   placeholder={`Comment on #${diff.number} — added to your pending review…`}
                   pendingComments={pending}
                   onRemovePending={handleRemovePending}
                   onSubmit={handleAddPending}
-                  imageSrcs={prImageSrcs}
+                  imageSrcs={imageSrcs}
                   editFile={editFile}
                 />
               )}
@@ -1513,15 +1538,20 @@ export function PrPanel({
                 ? "Approved and merged"
                 : reviewDone
                   ? "Review submitted"
-                  : pending.length > 0
-                    ? `${pending.length} pending comment${pending.length === 1 ? "" : "s"}`
-                    : "No pending comments"}
+                  : !caps.reviewComments
+                    ? "Review"
+                    : pending.length > 0
+                      ? `${pending.length} pending comment${pending.length === 1 ? "" : "s"}`
+                      : "No pending comments"}
             </div>
             <div
               className={`mt-0.5 truncate text-meta ${closeError ? "text-red" : "text-faint"}`}
               title={closeError || undefined}
             >
-              {closeError || "Comments are sent together when you finish the review"}
+              {closeError ||
+                (caps.reviewComments
+                  ? "Comments are sent together when you finish the review"
+                  : `${provider.name} has no reviews — merge or close when you're done`)}
             </div>
           </div>
           <div className="pointer-events-auto ml-3 flex shrink-0 gap-2">
@@ -1547,7 +1577,7 @@ export function PrPanel({
                 {closing ? "Closing…" : confirmClose ? "Confirm close" : "Close"}
               </Button>
             )}
-            {pr.state === "OPEN" && !pr.isDraft && (
+            {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && (
               <Button
                 variant="success"
                 className="text-xs"
@@ -1699,7 +1729,9 @@ export function PrPanel({
           {/* Stack map — where this PR sits in its chain of layers. Above Git
               status because it reframes everything below it: the diff, the
               base branch, and whether a merge is even in order yet. */}
-          <StackCard pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
+          {caps.stacks && (
+            <StackCard pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
+          )}
 
           <PrCard title="Git status">
             <GitStatusRows
@@ -1734,7 +1766,7 @@ export function PrPanel({
           )}
 
           {/* Reviewers card */}
-          {reviewers.length > 0 && (
+          {caps.reviewers && reviewers.length > 0 && (
             <PrCard title="Reviewers">
               {reviewers.map((r) => (
                 <ReviewerRow key={r.login} reviewer={r} provider={provider} />
@@ -1743,7 +1775,7 @@ export function PrPanel({
           )}
 
           {/* Checks card — one rollup row like Linear; the full list is opt-in. */}
-          {pr.checks.length > 0 && (
+          {caps.checks && pr.checks.length > 0 && (
             <PrCard title="Checks">
               <button
                 className="prc-summary-row"
@@ -1926,7 +1958,9 @@ export function PrPanel({
                 ))}
               </div>
               <div className="text-right text-meta text-faint">
-                Review — comments stay pending until you submit
+                {caps.reviewComments
+                  ? "Review — comments stay pending until you submit"
+                  : `Read-only — ${provider.name} has no review comments`}
                 {reviewDone &&
                   (reviewDone === "submitted" ? (
                     <span className="ml-2 text-green">review submitted ✓</span>
@@ -1965,13 +1999,15 @@ export function PrPanel({
                         patch={section.patch}
                         defaultExpandedFiles={Infinity}
                         viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
-                      onToggleViewed={handleToggleViewed}
+                        onToggleViewed={handleToggleViewed}
+                        disabled={!caps.reviewComments}
+                        disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                         submitLabel="Add comment"
                         placeholder={`Comment on #${diff.number} — added to your pending review…`}
                         pendingComments={pending}
                         onRemovePending={handleRemovePending}
                         onSubmit={handleAddPending}
-                        imageSrcs={prImageSrcs}
+                        imageSrcs={imageSrcs}
                       />
                     )}
                   </div>
@@ -1982,15 +2018,17 @@ export function PrPanel({
                 patch={diff.patch}
                 defaultExpandedFiles={Infinity}
                 viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
-                      onToggleViewed={handleToggleViewed}
+                onToggleViewed={handleToggleViewed}
                 groups={diffGroups?.oid === diff.headRefOid ? diffGroups.groups || undefined : undefined}
                 groupsLoading={diffGroupsLoading}
+                disabled={!caps.reviewComments}
+                disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                 submitLabel="Add comment"
                 placeholder={`Comment on #${diff.number} — added to your pending review…`}
                 pendingComments={pending}
                 onRemovePending={handleRemovePending}
                 onSubmit={handleAddPending}
-                imageSrcs={prImageSrcs}
+                imageSrcs={imageSrcs}
               />
             )}
           </div>

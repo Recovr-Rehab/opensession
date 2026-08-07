@@ -35,6 +35,7 @@ describe("integration registry", () => {
       "stripe",
       "grafana",
       "github",
+      "codestorage",
     ]);
   });
 

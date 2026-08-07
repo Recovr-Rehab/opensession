@@ -8,18 +8,8 @@
 
 import { requestUser, type RouteContext } from "./context";
 import { defaultRepo, personaName } from "../config";
-import {
-	cachedPrDetailsForSession,
-	closePr,
-	getPrDetails,
-	getPrDiff,
-	invalidatePrInfo,
-	mergePr,
-	postPrComment,
-	prMetaForBranch,
-	reconcilePrDetails,
-	submitPrReview,
-} from "../pr-info";
+import { hostRepoId, prHostFor } from "../pr-host";
+import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
 import { linkPrStack } from "../pr-stack";
 import { closeTinderPr, commentTinderPr, deleteTinderComment, getSeenPrs, labelTinderPr, listTinderLabels, listTinderPrs, markPrSeen, markPrUnseen, reopenTinderPr } from "../pr-tinder";
 import { findSession, invalidateSessionsCache } from "../session-cache";
@@ -270,6 +260,7 @@ export async function handlePrRoutes(
 		if (!target) return Response.json(null);
 		const repoId =
 			url.searchParams.get("repo") || session.repo || defaultRepo().id;
+		const host = prHostFor(getRepo(target.repoId));
 		const fallback = cachedPrDetailsForSession(session, repoId, target.branch);
 		// The branch this session stacked on, for the panel's "link this stack"
 		// action. Only for the session's OWN branch — an attached or linked PR is
@@ -284,6 +275,7 @@ export async function handlePrRoutes(
 			details
 				? {
 						...details,
+						capabilities: host.capabilities,
 						...(stackBase ? { stackBase } : {}),
 						...getPrReviewStatus(
 							details.number,
@@ -296,7 +288,7 @@ export async function handlePrRoutes(
 			async () =>
 				withReview(
 					reconcilePrDetails(
-						await getPrDetails(target.branch, target.ghRepo),
+						await host.getPrDetails(target.branch, target.ghRepo),
 						fallback,
 					),
 				),
@@ -321,7 +313,9 @@ export async function handlePrRoutes(
 			url.searchParams.get("branch"),
 		);
 		if (!target) return Response.json(null);
-		return prApiResponse(() => getPrDiff(target.branch, target.ghRepo));
+		return prApiResponse(() =>
+			prHostFor(getRepo(target.repoId)).getPrDiff(target.branch, target.ghRepo),
+		);
 	}
 
 	// AI-powered file categories for the PR Changes view. Kept separate from
@@ -469,14 +463,18 @@ export async function handlePrRoutes(
 		if (!branch)
 			return Response.json({ error: "branch required" }, { status: 400 });
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
-		return prApiResponse(() => getPrDetails(branch, repo.ghRepo));
+		const host = prHostFor(repo);
+		return prApiResponse(async () => {
+			const details = await host.getPrDetails(branch, hostRepoId(repo));
+			return details ? { ...details, capabilities: host.capabilities } : null;
+		});
 	}
 	if (path === "/api/pr-preview-diff" && req.method === "GET") {
 		const branch = url.searchParams.get("branch") || "";
 		if (!branch)
 			return Response.json({ error: "branch required" }, { status: 400 });
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
-		return prApiResponse(() => getPrDiff(branch, repo.ghRepo));
+		return prApiResponse(() => prHostFor(repo).getPrDiff(branch, hostRepoId(repo)));
 	}
 	if (path === "/api/pr-preview-diff-groups" && req.method === "POST") {
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
@@ -486,7 +484,7 @@ export async function handlePrRoutes(
 			return Response.json({ error: "Invalid diff metadata" }, { status: 400 });
 		const { getDiffFileGroups } = await import("../diff-groups");
 		return Response.json({
-			groups: await getDiffFileGroups(repo.ghRepo, input.files, input.patch),
+			groups: await getDiffFileGroups(hostRepoId(repo), input.files, input.patch),
 		});
 	}
 	// Session-less review guide for the preview's Guide tab — getReviewGuide
@@ -497,7 +495,7 @@ export async function handlePrRoutes(
 			return Response.json({ error: "branch required" }, { status: 400 });
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
 		const { getReviewGuide } = await import("../../server/review-guide");
-		return prApiResponse(() => getReviewGuide(branch, repo.ghRepo));
+		return prApiResponse(() => getReviewGuide(branch, hostRepoId(repo)));
 	}
 	if (path === "/api/pr-preview-review" && req.method === "POST") {
 		const credential = githubMutationCredential(ctx);
@@ -520,7 +518,7 @@ export async function handlePrRoutes(
 			return Response.json({ error: "Nothing to submit" }, { status: 400 });
 		const user = requestUser(ctx, body?.user) || "Someone";
 		const summary = body?.summary?.trim();
-		const result = await submitPrReview(
+		const result = await prHostFor(repo).submitPrReview(
 			branch,
 			{
 				event,
@@ -538,7 +536,7 @@ export async function handlePrRoutes(
 						body: `**${user}**: ${c.text.trim()}`,
 					})),
 			},
-			repo.ghRepo,
+			hostRepoId(repo),
 			credential,
 		);
 		if ("error" in result) return Response.json(result, { status: 502 });
@@ -546,7 +544,7 @@ export async function handlePrRoutes(
 		const reviewer =
 			githubLoginToPersonKey(credentialLogin) ||
 			user.trim().split(/\s+/)[0]?.toLowerCase();
-		if (reviewer) markCachedPrReviewed(repo.ghRepo, branch, reviewer, event);
+		if (reviewer) markCachedPrReviewed(hostRepoId(repo), branch, reviewer, event);
 		invalidateSessionsCache();
 		return Response.json(result);
 	}
@@ -563,14 +561,14 @@ export async function handlePrRoutes(
 				? body.method
 				: "squash";
 		try {
-			const result = await mergePr(
+			const result = await prHostFor(repo).mergePr(
 				branch,
 				{ method, deleteBranch: !!body.deleteBranch, force: !!body.force },
-				repo.ghRepo,
+				hostRepoId(repo),
 				credential,
 			);
 			if ("error" in result) return Response.json(result, { status: 502 });
-			markCachedPrMerged(repo.ghRepo, branch);
+			markCachedPrMerged(hostRepoId(repo), branch);
 			invalidateSessionsCache();
 			return Response.json(result);
 		} catch (e: any) {
@@ -588,9 +586,9 @@ export async function handlePrRoutes(
 		if (!branch)
 			return Response.json({ error: "branch required" }, { status: 400 });
 		const repo = getRepo(body?.repo || undefined);
-		const result = await closePr(branch, repo.ghRepo, credential);
+		const result = await prHostFor(repo).closePr(branch, hostRepoId(repo), credential);
 		if ("error" in result) return Response.json(result, { status: 502 });
-		markCachedPrClosed(repo.ghRepo, result.number);
+		markCachedPrClosed(hostRepoId(repo), result.number);
 		invalidateSessionsCache();
 		return Response.json(result);
 	}
@@ -620,7 +618,7 @@ export async function handlePrRoutes(
 			);
 
 		const user = requestUser(ctx, body.user) || "Someone";
-		const result = await postPrComment(
+		const result = await prHostFor(getRepo(target.repoId)).postPrComment(
 			target.branch,
 			{
 				body: `**${user}** via ${personaName()}:\n\n${body.text.trim()}`,
@@ -676,7 +674,7 @@ export async function handlePrRoutes(
 		const reviewBody = summary
 			? `**${user}** via ${personaName()}:\n\n${summary}`
 			: `Review by **${user}** via ${personaName()}.`;
-		const result = await submitPrReview(
+		const result = await prHostFor(getRepo(target.repoId)).submitPrReview(
 			target.branch,
 			{
 				event,
@@ -731,7 +729,7 @@ export async function handlePrRoutes(
 				? body.method
 				: "squash";
 		try {
-			const result = await mergePr(
+			const result = await prHostFor(getRepo(target.repoId)).mergePr(
 				target.branch,
 				{ method, deleteBranch: !!body.deleteBranch, force: !!body.force },
 				target.ghRepo,
@@ -786,11 +784,13 @@ export async function handlePrRoutes(
 				{ error: "This session's worktree is gone — nothing to link from" },
 				{ status: 400 },
 			);
-		const ghRepo = getRepo(stackedOn.repo || session.repo).ghRepo;
+		const stackRepo = getRepo(stackedOn.repo || session.repo);
+		const ghRepo = stackRepo.ghRepo;
+		const host = prHostFor(stackRepo);
 		try {
 			const [own, base] = await Promise.all([
-				prMetaForBranch(session.branch, ghRepo, credential),
-				prMetaForBranch(stackedOn.branch, ghRepo, credential),
+				host.prMetaForBranch(session.branch, ghRepo, credential),
+				host.prMetaForBranch(stackedOn.branch, ghRepo, credential),
 			]);
 			// Both layers must already exist as PRs: we pass URLs precisely so
 			// that gh never pushes a branch or opens a PR on our behalf.
@@ -811,8 +811,8 @@ export async function handlePrRoutes(
 			);
 			if ("error" in result) return Response.json(result, { status: 502 });
 			// Both panels should show the stack on their next poll, not in 5 min.
-			invalidatePrInfo(ghRepo, session.branch);
-			invalidatePrInfo(ghRepo, stackedOn.branch);
+			host.invalidatePrInfo(ghRepo, session.branch);
+			host.invalidatePrInfo(ghRepo, stackedOn.branch);
 			return Response.json({ ok: true });
 		} catch (e: any) {
 			return Response.json({ error: e.message || String(e) }, { status: 502 });
@@ -840,7 +840,11 @@ export async function handlePrRoutes(
 				{ error: "No branch/PR for that repo" },
 				{ status: 400 },
 			);
-		const result = await closePr(target.branch, target.ghRepo, credential);
+		const result = await prHostFor(getRepo(target.repoId)).closePr(
+			target.branch,
+			target.ghRepo,
+			credential,
+		);
 		if ("error" in result) return Response.json(result, { status: 502 });
 		markCachedPrClosed(target.ghRepo, result.number);
 		invalidateSessionsCache();
@@ -883,7 +887,10 @@ export async function handlePrRoutes(
 
 		let details;
 		try {
-			details = await getPrDetails(target.branch, target.ghRepo);
+			details = await prHostFor(getRepo(target.repoId)).getPrDetails(
+				target.branch,
+				target.ghRepo,
+			);
 		} catch (e: any) {
 			return Response.json(
 				{ error: e?.message || "GitHub's pull request API is unavailable right now." },

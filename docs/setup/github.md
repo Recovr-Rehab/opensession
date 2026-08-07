@@ -3,7 +3,8 @@
 The GitHub integration has three parts: a PAT the PR agent posts with, a
 webhook intake on the [webhook server](install.md#webhook-server), and the
 `gh` CLI for PR operations from sessions. The deploy script (last section)
-is optional and replaceable.
+is optional and replaceable. (Repos don't have to live on GitHub — see
+[codestorage.md](codestorage.md) for code.storage as an alternative host.)
 
 ## The bot account (machine user)
 

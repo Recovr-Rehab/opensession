@@ -27,6 +27,7 @@
  */
 
 import type { AgentModule } from "../../agents/types";
+import { codeStorageConfig } from "../config";
 
 /** Passed to integrations that need to poke core state when they act. */
 export type IntegrationContext = {
@@ -198,6 +199,24 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     load: async (ctx) => {
       const { GithubAgent } = await import("../../agents/github/index");
       return new GithubAgent({ onSessionInvalidate: ctx.onSessionInvalidate });
+    },
+  },
+  {
+    id: "codestorage",
+    label: "code.storage",
+    doc: "docs/setup/codestorage.md",
+    enableFlag: "ENABLE_CODESTORAGE",
+    // No credentials in env: the customer-signed JWT key lives at
+    // `integrations.codeStorage.privateKeyPath`, so config presence is the
+    // only requirement.
+    env: [],
+    links: [{ label: "code.storage docs", url: "https://code.storage/docs" }],
+    // The agent module is a no-op shell; the real support (repo host, JWT
+    // minting, REST client) activates on config presence alone.
+    requires: () => codeStorageConfig() !== null,
+    load: async () => {
+      const { CodeStorageIntegration } = await import("../codestorage/integration");
+      return new CodeStorageIntegration();
     },
   },
 ];

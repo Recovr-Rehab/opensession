@@ -7,7 +7,13 @@ import {
   rmSync,
 } from "fs";
 import { basename } from "path";
-import { configPath, configuredRepos, type RepoSection } from "../config";
+import { codeStorageConfig, configPath, configuredRepos, type RepoSection } from "../config";
+import { getRepo as getCsRepo } from "../codestorage/client";
+import {
+  cloneCsCheckout,
+  ensureCsCredentialHelper,
+  parseCsRemote,
+} from "../codestorage/remote";
 import { rawConfig, withConfigMutationLock } from "../config-mutation";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { isLocalProfile, localProfileRoot } from "../profile";
@@ -92,6 +98,8 @@ export async function inspectRepo(repoPath: string): Promise<{
   path: string;
   defaultBranch: string;
   ghRepo?: string;
+  /** Present when origin is a code.storage remote. */
+  cs?: { org: string; repoId: string };
 }> {
   const root = await git(["rev-parse", "--show-toplevel"], repoPath);
   if (root.exitCode !== 0 || !root.stdout) {
@@ -106,28 +114,54 @@ export async function inspectRepo(repoPath: string): Promise<{
   const defaultBranch = remoteHead.stdout.replace(/^origin\//, "") || current.stdout;
   if (!defaultBranch) throw new Error("Repository must have a checked-out branch");
   const origin = await git(["remote", "get-url", "origin"], path);
+  const cs = origin.exitCode === 0 ? parseCsRemote(origin.stdout) : null;
   return {
     path,
     defaultBranch,
     ...(origin.exitCode === 0
       ? { ghRepo: githubRepoFromRemote(origin.stdout) }
       : {}),
+    ...(cs ? { cs } : {}),
   };
 }
 
-async function registerRepo(input: { url?: string; path?: string }) {
-  if (!!input.url === !!input.path) {
-    throw new Error("Provide exactly one of url or path");
+/** code.storage repo path, e.g. "acme/widget" — reaches an https URL only. */
+const CS_REPO_ID_RE = /^[\w.-]+(?:\/[\w.-]+)*$/;
+
+async function registerRepo(input: { url?: string; path?: string; csRepoId?: string }) {
+  if ([input.url, input.path, input.csRepoId].filter(Boolean).length !== 1) {
+    throw new Error("Provide exactly one of url, path, or repoId");
   }
 
   let requestedName: string;
   let checkoutPath: string;
   let clonedCheckout = false;
-  if (input.url) {
-    if (!localCloneUrlAllowed(input.url)) {
-      throw new Error("Clone URL must use HTTPS, SSH, or file://");
+  // Set when the clone came from code.storage (the inspect-based detection
+  // below covers {path} adoption; this covers fresh clones authoritatively).
+  let csClone: { org: string; repoId: string } | null = null;
+  if (input.url || input.csRepoId) {
+    let cloneFrom: string | undefined;
+    if (input.csRepoId) {
+      // Registration by bare repo id: resolve through the REST API (validates
+      // existence and canonicalizes the path), then clone the derived remote.
+      const cfg = codeStorageConfig();
+      if (!cfg) throw new Error("code.storage is not configured (integrations.codeStorage)");
+      if (!CS_REPO_ID_RE.test(input.csRepoId)) {
+        throw new Error("repoId must be a code.storage repo path (e.g. acme/widget)");
+      }
+      const resolved = await getCsRepo(input.csRepoId);
+      csClone = { org: cfg.org, repoId: resolved.url || input.csRepoId };
+    } else {
+      if (!localCloneUrlAllowed(input.url!)) {
+        throw new Error("Clone URL must use HTTPS, SSH, or file://");
+      }
+      const parsed = parseCsRemote(input.url!);
+      // A code.storage URL only takes the JWT-authed path when the signing
+      // key is configured; otherwise it clones like any other https remote.
+      if (parsed && codeStorageConfig()) csClone = parsed;
+      else cloneFrom = input.url;
     }
-    requestedName = repoName(input.url);
+    requestedName = repoName(csClone ? csClone.repoId : input.url!);
     const id = localRepoId(requestedName);
     if (configuredRepos()[id]) throw new Error(`Repository id already registered: ${id}`);
     checkoutPath = `${localProfileRoot()}/repos/${id}`;
@@ -136,11 +170,17 @@ async function registerRepo(input: { url?: string; path?: string }) {
     }
     mkdirSync(`${localProfileRoot()}/repos`, { recursive: true });
     try {
-      const cloned = await git(["clone", "--", input.url, checkoutPath], undefined, {
-        clone: true,
-      });
-      if (cloned.exitCode !== 0) {
-        throw new Error(cloned.stderr || "git clone failed");
+      if (csClone) {
+        // Clones with a short-lived JWT, persists the bare remote, and wires
+        // the credential helper so ambient git fetch/push keeps working.
+        await cloneCsCheckout(csClone.repoId, checkoutPath, csClone.org);
+      } else {
+        const cloned = await git(["clone", "--", cloneFrom!, checkoutPath], undefined, {
+          clone: true,
+        });
+        if (cloned.exitCode !== 0) {
+          throw new Error(cloned.stderr || "git clone failed");
+        }
       }
       clonedCheckout = true;
     } catch (error) {
@@ -156,6 +196,12 @@ async function registerRepo(input: { url?: string; path?: string }) {
 
   try {
     const inspected = await inspectRepo(checkoutPath);
+    const cs = csClone ?? inspected.cs ?? null;
+    // Adoption of an existing code.storage checkout registered by {path}:
+    // wire the credential helper there too (idempotent; needs the key).
+    if (cs && !csClone && codeStorageConfig()) {
+      await ensureCsCredentialHelper(inspected.path, cs.org);
+    }
     const id = localRepoId(requestedName);
     const current = configuredRepos();
     const config = rawConfig();
@@ -168,6 +214,7 @@ async function registerRepo(input: { url?: string; path?: string }) {
         wtPrefix: id,
         defaultBranch: inspected.defaultBranch,
         ...(inspected.ghRepo ? { ghRepo: inspected.ghRepo } : {}),
+        ...(cs ? { host: "codestorage" as const, csRepo: cs.repoId } : {}),
         ...(Object.keys(current).length === 0 ? { default: true } : {}),
       },
     };
@@ -241,6 +288,8 @@ export async function handleLocalReposRoutes(
     const body = (await req.json().catch(() => null)) as {
       url?: unknown;
       path?: unknown;
+      source?: unknown;
+      repoId?: unknown;
     } | null;
     try {
       const repo = await withRepoMutationLock(() =>
@@ -250,6 +299,11 @@ export async function handleLocalReposRoutes(
             : {}),
           ...(typeof body?.path === "string" && body.path.trim()
             ? { path: body.path.trim() }
+            : {}),
+          ...(body?.source === "codestorage" &&
+          typeof body?.repoId === "string" &&
+          body.repoId.trim()
+            ? { csRepoId: body.repoId.trim() }
             : {}),
         }),
       );

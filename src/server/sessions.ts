@@ -29,8 +29,8 @@ import { activeRunRecords } from "./run-journal";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { prWorkspaceReader, sessionPrBranch } from "./session-pr-target";
 import { isLockHeld, readPrState, type LastReviewState } from "../agents/github/state";
-import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg, botGhToken } from "./github-limit";
-import { fetchWithTimeout } from "./shared/fetch-with-timeout";
+import { ghRateLimited } from "./github-limit";
+import { ghJson, hostRepoId, prHostFor, type BulkPr, type PrHostCapabilities } from "./pr-host";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   cachedReviewTeamLogins,
@@ -1004,12 +1004,16 @@ export function sessionRefFromPrBody(
 }
 function prRepos() {
 	return Object.values(configuredRepos())
-		.filter((repo) => repo.ghRepo && repo.prCache !== false)
+		.filter((repo) => hostRepoId(repo) && repo.prCache !== false)
 		.map((repo) => ({
 			id: repo.id,
-			ghRepo: repo.ghRepo,
+			// The host-side repo identifier (field keeps its historical name — it
+			// keys probe cursors and cache tombstones): GitHub owner/name, or the
+			// code.storage repo id for host: "codestorage" rows.
+			ghRepo: hostRepoId(repo),
 			openLimit: repo.prCacheOpenLimit ?? 100,
 			recentLimit: repo.prCacheRecentLimit ?? 500,
+			host: prHostFor(repo),
 		}));
 }
 
@@ -1422,58 +1426,20 @@ export function applyPrWebhookToBulkCache(
 // serving its stale (possibly disk-seeded) snapshot until GitHub's reset.
 
 // ── Cheap change detection for the bulk refresh ──────────────────────────────
-// Before burning the expensive GraphQL `gh pr list` calls (the notifier drives
-// a refresh every minute around the clock, even with zero users), ask REST
-// whether anything changed at all: a conditional GET (If-None-Match) on the
-// most recently updated PR answers 304 when the repo's PR set is untouched —
-// and GitHub documents that 304s on conditional requests don't count against
-// the rate limit, so an idle instance polls for free. Some mutations may not
-// bump a PR's updatedAt, so a full GraphQL refresh still runs at least every
-// PROBE_MAX_SKIP_MS as a safety net.
-// Coalesce changes in these active repos: their ETags can change many times per
-// minute, while one full sweep costs hundreds of GraphQL points. REST still
-// notices changes every minute, but GraphQL refreshes at most every 10m. The
-// 30m maximum catches rare mutations that do not change `updated_at` at all.
+// Before burning the expensive bulk list calls (the notifier drives a refresh
+// every minute around the clock, even with zero users), ask the host's cheap
+// change probe (PrHost.changedSince — for GitHub a conditional REST GET whose
+// 304s don't count against the rate limit, so an idle instance polls for
+// free) whether anything changed at all. Some mutations may not bump a PR's
+// updatedAt, so a full refresh still runs at least every PROBE_MAX_SKIP_MS as
+// a safety net.
+// Coalesce changes in these active repos: their cursors can change many times
+// per minute, while one full sweep costs hundreds of GraphQL points. The probe
+// still notices changes every minute, but the full refresh runs at most every
+// 10m. The 30m maximum catches rare mutations that do not change `updated_at`
+// at all.
 const MIN_FULL_REFRESH_MS = 10 * 60_000;
 const PROBE_MAX_SKIP_MS = 30 * 60_000;
-
-async function repoPrsUnchanged(ghRepo: string): Promise<boolean> {
-  const token = await botGhToken();
-  if (!token) return false;
-  const etag = probeEtags.get(ghRepo);
-  try {
-    const resp = await fetchWithTimeout(
-      `https://api.github.com/repos/${ghRepo}/pulls?state=all&sort=updated&direction=desc&per_page=1`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          ...(etag ? { "If-None-Match": etag } : {}),
-        },
-      },
-    );
-    if (resp.status === 304) return true;
-    if (resp.ok) {
-      const fresh = resp.headers.get("etag");
-      if (fresh) probeEtags.set(ghRepo, fresh);
-    } else {
-      const body = await resp.text().catch(() => "");
-      if (
-        (resp.status === 403 || resp.status === 429) &&
-        (resp.headers.get("x-ratelimit-remaining") === "0" || isGhRateLimitMsg(body))
-      ) {
-        const reset = Number(resp.headers.get("x-ratelimit-reset")) * 1000;
-        noteGhRateLimited("pr-cache-rest", Number.isFinite(reset) ? reset : undefined);
-      }
-      return false;
-    }
-    await resp.text().catch(() => {}); // drain so the socket frees
-    return false;
-  } catch {
-    return false;
-  }
-}
 
 // GitHub only populates a PR's `reviewDecision` when branch protection *requires*
 // a review. tella-fusion has no such rule, so reviewDecision comes back "" even
@@ -1538,25 +1504,6 @@ function footerPrsFor(
   return out;
 }
 
-async function ghJson<T>(args: string[]): Promise<T | null> {
-  if (ghRateLimited()) return null;
-  try {
-    const proc = Bun.spawn(["gh", ...args], { stdout: "pipe", stderr: "pipe" });
-    const [raw, err] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-    if ((await proc.exited) !== 0) {
-      if (isGhRateLimitMsg(err)) noteGhRateLimited("pr-cache");
-      return null;
-    }
-    if (!raw.trim()) return null;
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
 export function refreshPrCache(): Promise<Set<string>> {
   if (prRefreshPromise) return prRefreshPromise;
   prRefreshPromise = refreshPrCacheInner().finally(() => {
@@ -1576,40 +1523,11 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
     return freshRepos;
   }
   try {
-    type BulkPr = {
-      headRefName: string; headRefOid?: string; url: string; state: string; number: number; title: string;
-      isDraft: boolean; additions: number; deletions: number; changedFiles: number;
-      reviewDecision: string; author?: { login?: string; name?: string }; updatedAt: string;
-      createdAt: string;
-      reviewRequests?: Array<{ login?: string; name?: string; slug?: string }>;
-      assignees?: Array<{ login?: string }>;
-      // MERGEABLE | CONFLICTING | UNKNOWN. GitHub computes this asynchronously,
-      // so a freshly-pushed PR reads UNKNOWN until the background probe lands —
-      // the 60s SWR refresh picks up the real value. `mergeable` is a cheap PR
-      // enum (unlike statusCheckRollup), so it's safe to add to the bulk list;
-      // mergeStateStatus is NOT a `gh pr list` field (detail-only), don't add it.
-      mergeable?: string;
-      // Only requested on the open-PR query (see below), absent on recentAll.
-      latestReviews?: Array<{ state?: string; author?: { login?: string } }>;
-      // Ditto: the body is only read for its session-attribution footer and is
-      // never cached (toInfo keeps the parsed id, drops the text), so paying
-      // for it across the much larger recent-history window buys nothing.
-      body?: string;
-    };
-    const FIELDS =
-      "headRefName,headRefOid,url,state,number,title,isDraft,additions,deletions,changedFiles,reviewDecision,author,createdAt,updatedAt,reviewRequests,assignees,mergeable";
-
     // A session's branch is matched against open PRs, so we must see EVERY open
-    // PR — not just the newest N. Fusion carries 200+ open PRs at a time, so a
-    // single `--state all --limit 200` window silently drops older open ones
-    // (the bug where a real PR wouldn't show on its session). Split it:
-    //   - `--state open` with a generous limit → all open PRs (the live
-    //     matches), carrying latestReviews so review state (an approval GitHub
-    //     won't report via reviewDecision — see deriveReviewDecision) needs no
-    //     third query; latestReviews is cheap (~2 GraphQL points across the
-    //     full open window)
-    //   - `--state all` window → recently merged/closed (Reviews "merged" view +
-    //     sessions whose PR just landed)
+    // PR — not just the newest N (the host's listOpenPrs is authoritative for
+    // the live set; listRecentPrs covers recently merged/closed for the
+    // Reviews "merged" view + sessions whose PR just landed). The BulkPr row
+    // shape and the GitHub `gh pr list` queries live in pr-host.ts.
     const next = new Map<string, Map<string, PrInfo>>();
     // The sweep only owns the repos it polls (prRepos: a ghRepo, prCache not
     // disabled). Rows for any OTHER repo — a repo opted out of the bulk cache,
@@ -1629,7 +1547,12 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
       const stale = prCache.data.get(repo.id);
       const refreshAge = Date.now() - (lastFullRefresh.get(repo.id) || 0);
       if (stale && refreshAge < PROBE_MAX_SKIP_MS) {
-        if (await repoPrsUnchanged(repo.ghRepo)) {
+        const probe = await repo.host.changedSince(
+          repo.ghRepo,
+          probeEtags.get(repo.ghRepo),
+        );
+        if (probe.cursor) probeEtags.set(repo.ghRepo, probe.cursor);
+        if (!probe.changed) {
           next.set(repo.id, stale);
           freshRepos.add(repo.id);
           continue;
@@ -1643,10 +1566,9 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
         if (stale) next.set(repo.id, stale);
         continue;
       }
-      const openPrs = await ghJson<BulkPr[]>([
-        "pr", "list", "--repo", repo.ghRepo, "--state", "open",
-        "--limit", String(repo.openLimit), "--json", `${FIELDS},latestReviews,body`,
-      ]);
+      const openPrs = await repo.host.listOpenPrs(repo.ghRepo, {
+        limit: repo.openLimit,
+      });
 
       if (!openPrs) {
         // The open list is authoritative. A successful recent-history query
@@ -1673,14 +1595,9 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
           if (logins) teamLoginsBySlug.set(slug, logins);
         }),
       );
-      // sort:updated-desc, not gh's default creation order: a PR created long
-      // ago that merges today must enter this window immediately, or the sweep
-      // drops its row and the session renders as having no PR at all.
-      const recentAll = await ghJson<BulkPr[]>([
-        "pr", "list", "--repo", repo.ghRepo, "--state", "all",
-        "--search", "sort:updated-desc",
-        "--limit", String(repo.recentLimit), "--json", FIELDS,
-      ]);
+      const recentAll = await repo.host.listRecentPrs(repo.ghRepo, {
+        limit: repo.recentLimit,
+      });
       freshRepos.add(repo.id);
       lastFullRefresh.set(repo.id, Date.now());
 
@@ -1843,6 +1760,9 @@ export interface OpenPrEntry {
 	/** What the last automated review concluded, so the queue can show the
 	 *  score without opening the PR. Absent until one has run. */
 	osReview?: OsReviewSummary;
+	/** What the repo's PR host supports (GitHub: everything) — one shared
+	 *  object per repo, so the list UI can hide host-less surfaces per row. */
+	capabilities?: PrHostCapabilities;
 }
 
 export interface RecentPrEntry extends Omit<OpenPrEntry, "reviewActive" | "osReview"> {
@@ -1855,8 +1775,11 @@ export interface RecentPrEntry extends Omit<OpenPrEntry, "reviewActive" | "osRev
 export function getRecentPrs(): RecentPrEntry[] {
 	const out: RecentPrEntry[] = [];
 	for (const [repoId, byBranch] of getPrsByRepo()) {
+		const repoCfg = configuredRepos()[repoId];
+		const capabilities = repoCfg ? prHostFor(repoCfg).capabilities : undefined;
 		for (const [branch, pr] of byBranch) {
 			out.push({
+				capabilities,
 				repo: repoId,
 				branch,
 				url: pr.url,
@@ -1916,6 +1839,8 @@ export async function getRecentPrsForPerson(person: string): Promise<RecentPrEnt
 	);
 	let complete = true;
 	for (const repo of prRepos()) {
+		// Author search is a gh-ism; code.storage has no user accounts to search.
+		if (configuredRepos()[repo.id]?.host === "codestorage") continue;
 		const prs = await ghJson<PersonPr[]>([
 			"pr", "list", "--repo", repo.ghRepo, "--state", "all",
 			"--search", `author:${login} OR assignee:${login}`,
@@ -1994,11 +1919,14 @@ export function getPrReviewStatus(
 export function getOpenPrs(): OpenPrEntry[] {
 	const out: OpenPrEntry[] = [];
 	for (const [repoId, byBranch] of getPrsByRepo()) {
-		const ghRepo = configuredRepos()[repoId]?.ghRepo;
+		const repoCfg = configuredRepos()[repoId];
+		const ghRepo = repoCfg?.ghRepo;
+		const capabilities = repoCfg ? prHostFor(repoCfg).capabilities : undefined;
 		for (const [branch, pr] of byBranch) {
 			if (pr.state !== "OPEN") continue;
 			const review = getPrReviewStatus(pr.number, ghRepo, pr.headRefOid);
 			out.push({
+				capabilities,
 				repo: repoId,
 				branch,
 				url: pr.url,

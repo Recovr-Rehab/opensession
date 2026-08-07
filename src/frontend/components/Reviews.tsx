@@ -409,12 +409,21 @@ export function Reviews({
                   <span className="rv-c-author" role="cell">
                     {s.prAuthor ? (
                       <>
-                        <img
-                          className="rv-avatar"
-                          src={avatarUrl(s.prAuthor, providerFromUrl(s.prUrl), 40) || ""}
-                          alt=""
-                          loading="lazy"
-                        />
+                        {(() => {
+                          // Hosts without user avatars (code.storage) fall back
+                          // to an initial instead of a broken <img src="">.
+                          const src = avatarUrl(s.prAuthor, providerFromUrl(s.prUrl), 40);
+                          return src ? (
+                            <img className="rv-avatar" src={src} alt="" loading="lazy" />
+                          ) : (
+                            <span
+                              className="rv-avatar inline-flex items-center justify-center text-meta font-semibold text-faint"
+                              aria-hidden
+                            >
+                              {s.prAuthor.charAt(0).toUpperCase()}
+                            </span>
+                          );
+                        })()}
                         <span className="rv-author-name">{s.prAuthor}</span>
                       </>
                     ) : (

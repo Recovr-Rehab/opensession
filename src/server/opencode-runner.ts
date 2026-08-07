@@ -3686,6 +3686,19 @@ async function* runOpencodeAttempt(
       isAsk,
       isScratch,
       reposNote: opts.reposNote,
+      // Host-aware PR-flow instructions: code.storage repos have no PRs, so
+      // the agent is told to push its branch instead of `gh pr create`.
+      // Unregistered cwds (repoForPath throws) keep the GitHub default.
+      // Dynamic import: a static "./worktree" edge here creates a module-init
+      // cycle (worktree → preview → … → this file) that TDZ-crashes on load.
+      repoHost: await (async () => {
+        if (isScratch) return undefined;
+        try {
+          return (await import("./worktree")).repoForPath(cwd).host;
+        } catch {
+          return undefined;
+        }
+      })(),
       // Per-session servers boot in `cwd`, so their environment block is
       // already right; only the pool needs the correction.
       cwd: shared ? cwd : undefined,

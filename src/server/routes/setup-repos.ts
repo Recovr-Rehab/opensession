@@ -14,7 +14,9 @@
 
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { audit } from "../audit";
-import { configuredRepos, type RepoSection } from "../config";
+import { codeStorageConfig, configuredRepos, type RepoSection } from "../config";
+import { getRepo as getCsRepo, listRepos as listCsRepos } from "../codestorage/client";
+import { cloneCsCheckout } from "../codestorage/remote";
 import {
   persistRawConfig,
   rawConfig,
@@ -146,6 +148,41 @@ async function listReposViaInstallations(token: string): Promise<PickerRepo[] | 
   return repos.slice(0, REPO_LIST_CAP);
 }
 
+// ── code.storage repo listing ────────────────────────────────────────────────
+
+/** Same 60s snappiness as the GitHub cache; one org per instance, one slot. */
+let csRepoListCache: {
+  at: number;
+  payload: { source: "org"; repos: PickerRepo[] };
+} | null = null;
+
+/** Registered csRepo paths, lowercased, for the picker's `registered` flag. */
+function registeredCsRepos(): Set<string> {
+  return new Set(
+    Object.values(configuredRepos())
+      .filter((r) => r.host === "codestorage")
+      .map((r) => (r.csRepo || "").toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/** Everything the org's signing key can see. Mirrors the /setup/github/repos
+ *  shape so the wizard renders either host with the same component. */
+async function listCodestorageRepos(): Promise<PickerRepo[]> {
+  const registered = registeredCsRepos();
+  const repos = await listCsRepos();
+  return repos
+    .map((r) => ({
+      fullName: r.url || r.repo_id,
+      // No public/private concept — repos are only reachable with an org JWT.
+      private: true,
+      defaultBranch: r.default_branch || "main",
+      registered: registered.has((r.url || r.repo_id).toLowerCase()),
+      ...(typeof r.created_at === "string" ? { pushedAt: r.created_at } : {}),
+    }))
+    .slice(0, REPO_LIST_CAP);
+}
+
 // ── Server-side clone + register ─────────────────────────────────────────────
 
 async function runCommand(
@@ -236,6 +273,68 @@ async function registerGithubRepo(input: {
   }
 }
 
+/** code.storage repo path, e.g. "acme/widget" — only ever reaches an https
+ *  URL (and the array-spawned git argv behind `--`). */
+export const CS_REPO_ID_RE = /^[\w.-]+(?:\/[\w.-]+)*$/;
+
+export function validCsRepoId(value: unknown): value is string {
+  return typeof value === "string" && CS_REPO_ID_RE.test(value);
+}
+
+async function registerCodestorageRepo(input: {
+  repoId: string;
+  id?: string;
+}): Promise<RepoSection & { id: string }> {
+  const cfg = codeStorageConfig();
+  if (!cfg) throw new Error("code.storage is not configured (integrations.codeStorage)");
+  // Resolve through the REST API: validates existence and canonicalizes the
+  // repo path before anything touches disk or config.
+  const resolved = await getCsRepo(input.repoId);
+  const csRepo = resolved.url || input.repoId;
+  const name = csRepo.split("/").pop() || csRepo;
+  const id = localRepoId(input.id?.trim() || name);
+  if (configuredRepos()[id]) {
+    const err = new Error(`Repository id already registered: ${id}`);
+    (err as any).status = 409;
+    throw err;
+  }
+  const root = checkoutsRoot();
+  const dest = `${root}/${id}`;
+  if (existsSync(dest)) {
+    throw new Error(`Clone destination already exists: ${dest}`);
+  }
+  mkdirSync(root, { recursive: true });
+  try {
+    // Clones with a short-lived JWT, persists the credential-free remote, and
+    // wires the URL-scoped credential helper for ambient git fetch/push.
+    await cloneCsCheckout(csRepo, dest);
+    const inspected = await inspectRepo(dest);
+    const config = rawConfig();
+    const repos = {
+      ...((config.repos && typeof config.repos === "object" && !Array.isArray(config.repos)
+        ? config.repos
+        : {}) as Record<string, RepoSection>),
+    };
+    const entry: RepoSection = {
+      label: name,
+      repo: inspected.path,
+      wtPrefix: id,
+      defaultBranch: inspected.defaultBranch || resolved.default_branch || "main",
+      host: "codestorage",
+      csRepo,
+      ...(Object.keys(configuredRepos()).length === 0 ? { default: true } : {}),
+    };
+    repos[id] = entry;
+    config.repos = repos;
+    persistRawConfig(config);
+    audit({ kind: "setup_repo_register", repo: csRepo, id, path: inspected.path });
+    return { id, ...entry };
+  } catch (error) {
+    rmSync(dest, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 export async function handleSetupRepoRoutes(
@@ -285,11 +384,72 @@ export async function handleSetupRepoRoutes(
     }
   }
 
+  if (path === "/api/setup/codestorage/repos" && req.method === "GET") {
+    // Same well-formed empty answer as the GitHub route when unconfigured, so
+    // the wizard can probe both hosts unconditionally.
+    if (!codeStorageConfig()) return Response.json({ source: null, repos: [] });
+    if (csRepoListCache && Date.now() - csRepoListCache.at < REPO_CACHE_TTL_MS) {
+      return Response.json(csRepoListCache.payload);
+    }
+    try {
+      const repos = await listCodestorageRepos();
+      repos.sort((a, b) => (b.pushedAt || "").localeCompare(a.pushedAt || ""));
+      const payload = {
+        source: "org" as const,
+        repos: repos.map(({ pushedAt: _pushedAt, ...repo }) => repo),
+      };
+      csRepoListCache = { at: Date.now(), payload };
+      return Response.json(payload);
+    } catch (e) {
+      return Response.json(
+        { error: e instanceof Error ? e.message : String(e) },
+        { status: 502 },
+      );
+    }
+  }
+
   if (path === "/api/setup/repos" && req.method === "POST") {
     const body = (await req.json().catch(() => null)) as {
+      source?: unknown;
       fullName?: unknown;
+      repoId?: unknown;
       id?: unknown;
     } | null;
+    if (body?.source === "codestorage") {
+      // Accepts the id under either key so the wizard can reuse its GitHub
+      // submit shape ({fullName}) unchanged.
+      const repoId = body?.repoId ?? body?.fullName;
+      if (!validCsRepoId(repoId)) {
+        return Response.json(
+          { error: "repoId must be a code.storage repo path (e.g. acme/widget)" },
+          { status: 400 },
+        );
+      }
+      if (body?.id !== undefined && (typeof body.id !== "string" || !body.id.trim())) {
+        return Response.json({ error: "id must be a non-empty string" }, { status: 400 });
+      }
+      if (!codeStorageConfig()) {
+        return Response.json(
+          { error: "code.storage is not configured (integrations.codeStorage)" },
+          { status: 400 },
+        );
+      }
+      try {
+        const repo = await withConfigMutationLock(() =>
+          registerCodestorageRepo({
+            repoId,
+            ...(typeof body!.id === "string" ? { id: body!.id } : {}),
+          }),
+        );
+        return Response.json(repo, { status: 201 });
+      } catch (e) {
+        const status = (e as any)?.status === 409 ? 409 : 400;
+        return Response.json(
+          { error: e instanceof Error ? e.message : String(e) },
+          { status },
+        );
+      }
+    }
     if (!validGithubFullName(body?.fullName)) {
       return Response.json(
         { error: "fullName must be a GitHub owner/name" },

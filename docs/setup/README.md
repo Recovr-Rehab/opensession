@@ -119,6 +119,7 @@ when adding anything that touches this.
 | [../../recipes/README.md](../../recipes/README.md) | bundled automation recipes, and what belongs in the repo |
 | [slack.md](slack.md) | Slack app, token, scopes, event intake, admin gating |
 | [github.md](github.md) | GitHub token, webhook server, PR agent, deploy pipeline |
+| [codestorage.md](codestorage.md) | code.storage as an alternative git host — signing key, repos, branch reviews |
 | [linear.md](linear.md) | Linear OAuth app, webhooks, the Linear agent |
 | [plain.md](plain.md) | Plain support tickets, the triage automation |
 | [integrations-misc.md](integrations-misc.md) | Stripe, WorkOS, Grafana/Sentry/Tinybird, web push, voice |

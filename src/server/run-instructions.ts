@@ -41,6 +41,10 @@ export function buildRunInstructions(input: {
    *  GitHub account, so the body line + assignee are how the human shows up. */
   user?: string;
   author?: GitIdentity | null;
+  /** Backing git host of the session's primary repo; undefined = GitHub.
+   *  "codestorage" swaps the PR-flow instructions for push-the-branch ones
+   *  (code.storage has no PRs — a pushed branch is the change request). */
+  repoHost?: "github" | "codestorage";
   /** Set when this run carries the owner's own GitHub token (github-auth.ts):
    *  PRs are authored by them directly, so skip the bot-attribution assignee. */
   githubUserLogin?: string | null;
@@ -291,7 +295,16 @@ export function buildRunInstructions(input: {
     );
   }
   if (input.reposNote) parts.push(input.reposNote);
-  if (!input.isAsk && !input.isScratch && input.osSessionId) {
+  if (!input.isAsk && !input.isScratch && input.osSessionId && input.repoHost === "codestorage") {
+    parts.push(
+      "## Shipping changes on Code Storage\nThis session's repo is hosted on Code Storage, " +
+        "not GitHub: there is no gh CLI and no pull requests — a pushed branch IS the change " +
+        "request. Commit and push your branch with `git push -u origin <branch>`; reviewers " +
+        "see the branch's diff against the default branch in the session's Changes tab and " +
+        "merge it from there. Never merge your branch into the default branch yourself, and " +
+        "never try `gh pr create` — it has nothing to talk to here."
+    );
+  } else if (!input.isAsk && !input.isScratch && input.osSessionId) {
     const link = `${UI_BASE}/session/${input.osSessionId}`;
     const requester = input.author?.name || null;
     const login = githubLoginFor(input.user || input.author?.name);
@@ -348,15 +361,21 @@ export function buildRunInstructions(input: {
         "writeup (what changed, root cause for fixes, how you verified it). Record media " +
         "first and pass absolute file paths; they are copied to durable " +
         "storage. It renders inline in the session where you publish it (video and all) and " +
-        "in the session's Review tab, and is mirrored into the PR " +
-        "description; if you publish before the PR exists, call it again after `gh pr create` " +
-        "so it lands there too. Use the repository's own preview lifecycle or configured " +
-        "preview command to capture the change. Skip it for pure refactors, backend-only " +
-        "changes, or trivial tweaks — a walkthrough should demonstrate something a human can see. When a " +
-        "screenshot belongs in the PR conversation itself (review evidence, a visual bug " +
-        "report), use `comment_on_pr_with_images` instead: it serves the images from our " +
-        "own public host so they render inline in the PR comment for the team — never " +
-        "commit screenshots to the PR branch."
+        "in the session's Review tab" +
+        (input.repoHost === "codestorage"
+          ? ". Use the repository's own preview lifecycle or configured " +
+            "preview command to capture the change. Skip it for pure refactors, backend-only " +
+            "changes, or trivial tweaks — a walkthrough should demonstrate something a human can see. " +
+            "Never commit screenshots to your branch."
+          : ", and is mirrored into the PR " +
+            "description; if you publish before the PR exists, call it again after `gh pr create` " +
+            "so it lands there too. Use the repository's own preview lifecycle or configured " +
+            "preview command to capture the change. Skip it for pure refactors, backend-only " +
+            "changes, or trivial tweaks — a walkthrough should demonstrate something a human can see. When a " +
+            "screenshot belongs in the PR conversation itself (review evidence, a visual bug " +
+            "report), use `comment_on_pr_with_images` instead: it serves the images from our " +
+            "own public host so they render inline in the PR comment for the team — never " +
+            "commit screenshots to the PR branch.")
     );
   }
   if (inproc["opensession-turn"]) {

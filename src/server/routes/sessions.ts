@@ -56,7 +56,8 @@ import { getSubagentTranscript } from "../subagents";
 import { setTitleOverride } from "../title-overrides";
 import { buildWorkspaceOverview, resolveTranscriptImage } from "../workspace-overview";
 import { type Workspace, deleteWorkspace, getWorkspace } from "../workspaces";
-import { removeWorktree, repoForPath } from "../worktree";
+import { prHostFor } from "../pr-host";
+import { getRepo, removeWorktree, repoForPath } from "../worktree";
 import { preparingWorkspaces } from "../ws-hub";
 import { existsSync } from "fs";
 import { mergedCloudSessions } from "../cloud-proxy";
@@ -760,10 +761,16 @@ export async function handleSessionsRoutes(
 				? githubLoginFor(prevReviewer)
 				: null;
 		const target = resolvePrTarget(session, body?.repo);
+		// Hosts without a reviewer concept (code.storage) have nothing to mirror
+		// onto — the internal review request stands on its own there instead of
+		// dying on the host round-trip. GitHub repos are unaffected (always true).
+		const hostReviewers = target
+			? prHostFor(getRepo(target.repoId)).capabilities.reviewers
+			: false;
 		// Whether the reviewer actually reached GitHub's list — false when there
 		// was no PR to mirror onto, which the push marker below depends on.
 		let mirroredToGithub = false;
-		if (target && (addLogin || removeLogin)) {
+		if (target && hostReviewers && (addLogin || removeLogin)) {
 			const credential = githubMutationCredential(ctx);
 			// No personal credential only actually blocks this when there is a PR
 			// to mirror onto: `target` comes from branch metadata alone, so most

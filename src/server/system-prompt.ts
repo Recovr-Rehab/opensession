@@ -23,6 +23,10 @@ export function buildSystemPromptParts(opts: {
 	user?: string;
 	/** Whether the run gets the in-process opensession-admin/sessions/repos MCP tools. */
 	interactiveTools: boolean;
+	/** Backing git host of the session's repo; undefined = GitHub. "codestorage"
+	 *  swaps the PR-attribution part for push-the-branch instructions
+	 *  (code.storage has no PRs — a pushed branch is the change request). */
+	repoHost?: "github" | "codestorage";
 }): SystemPromptPart[] {
 	const name = personaName();
 	const parts: SystemPromptPart[] = [];
@@ -40,7 +44,18 @@ export function buildSystemPromptParts(opts: {
 	if (opts.reposNote) {
 		parts.push({ title: "Repos", text: opts.reposNote });
 	}
-	if (!opts.isAsk && opts.sessionLink) {
+	if (!opts.isAsk && opts.sessionLink && opts.repoHost === "codestorage") {
+		parts.push({
+			title: "Shipping changes on Code Storage",
+			text:
+				"## Shipping changes on Code Storage\nThis repo is hosted on Code Storage, not " +
+				"GitHub: there is no gh CLI and no pull requests — a pushed branch IS the change " +
+				"request. Commit and push your branch with `git push -u origin <branch>`; " +
+				"reviewers see the branch's diff against the default branch and merge it from " +
+				"there. Never merge your branch into the default branch yourself, and never try " +
+				"`gh pr create` — it has nothing to talk to here.",
+		});
+	} else if (!opts.isAsk && opts.sessionLink) {
 		const requester = gitIdentityFor(opts.user)?.name || null;
 		const login = githubLoginFor(opts.user);
 		const footer = requester

@@ -541,6 +541,22 @@ export interface PrCommit {
 	author: string;
 }
 
+/**
+ * What the PR's host supports (mirrors server/pr-host.ts). GitHub supports
+ * everything; code.storage "PRs" are bare branches with no checks, reviewers,
+ * review comments, viewed state, stacks, or avatar images. Absent on a payload
+ * (GitHub, or a cache entry written before this field existed) means all true.
+ */
+export interface PrHostCapabilities {
+	checks: boolean;
+	reviewers: boolean;
+	viewedState: boolean;
+	stacks: boolean;
+	reviewComments: boolean;
+	prCreate: boolean;
+	images: boolean;
+}
+
 export interface PrDetails {
 	number: number;
 	title: string;
@@ -582,6 +598,8 @@ export interface PrDetails {
 	osReview?: OsReview;
 	/** An automated review is currently running for this PR. */
 	reviewActive?: boolean;
+	/** What the repo's PR host supports; absent means everything (GitHub). */
+	capabilities?: PrHostCapabilities;
 }
 
 /** One PR in a GitHub stack (see server/pr-stack.ts), trunk-most first. */

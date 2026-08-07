@@ -37,6 +37,7 @@ import {
 } from "./session-cache";
 import type { AttachedRepo, LinkedPr, StackedOn, UnifiedSession } from "./types";
 import { defaultRepo } from "./config";
+import { hostRepoId } from "./pr-host";
 
 export interface SessionRepoContext {
 	repo: string;
@@ -128,8 +129,12 @@ export function buildBranchNote(session: {
 		"## Branch discipline (shared worktree)",
 		`You are working in \`${session.worktreeDir}\` on branch \`${session.branch}\`. Other sessions in this workspace share this exact worktree and branch — commits you don't recognize are their work, not noise.`,
 		`Stay on \`${session.branch}\`: never create or switch branches, and never rebase away, reset, or cherry-pick around sibling commits. Commit your changes on this branch and push with \`git push origin ${session.branch}\`.`,
-		`This workspace keeps ONE pull request: if an open PR for \`${session.branch}\` already exists, pushing updates it — do not open another. Only run \`gh pr create\` when the branch has no open PR. Never merge.`,
-		"Only deviate from this (separate branch or separate PR) when the user explicitly asks for it.",
+		repo.host === "codestorage"
+			? `Commit and push your branch with \`git push -u origin ${session.branch}\` — this repo is hosted on Code Storage; there is no gh CLI and no pull requests; a pushed branch IS the change request. Never merge it into the default branch yourself.`
+			: `This workspace keeps ONE pull request: if an open PR for \`${session.branch}\` already exists, pushing updates it — do not open another. Only run \`gh pr create\` when the branch has no open PR. Never merge.`,
+		repo.host === "codestorage"
+			? "Only deviate from this (a separate branch) when the user explicitly asks for it."
+			: "Only deviate from this (separate branch or separate PR) when the user explicitly asks for it.",
 	].join("\n");
 }
 
@@ -144,10 +149,27 @@ export function buildBranchNote(session: {
 export function buildStackNote(session: {
 	mode?: "ask" | "code" | "scratch";
 	branch?: string | null;
+	worktreeDir?: string | null;
 	stackedOn?: StackedOn;
 }): string | undefined {
 	const base = session.stackedOn?.branch;
 	if (!base || session.mode !== "code" || !session.branch) return undefined;
+	// Code Storage has no PRs and no stacks — the stacked relationship is purely
+	// a branch cut from another branch, so the note reduces to push discipline.
+	let csHosted = false;
+	if (session.worktreeDir) {
+		try {
+			csHosted = repoForPath(session.worktreeDir).host === "codestorage";
+		} catch {}
+	}
+	if (csHosted) {
+		return [
+			"## Stacked branch",
+			`This branch was cut from \`${base}\` (another session's branch), not from the trunk — its commits sit ON TOP of that work, and a diff against the trunk would show both.`,
+			`Commit and push your branch with \`git push -u origin ${session.branch}\` — this repo is hosted on Code Storage; there is no gh CLI and no pull requests; a pushed branch IS the change request. When reviewing the diff, compare against \`${base}\`, not the default branch.`,
+			`Never merge \`${base}\` into this branch to "catch up" — it moves under you as its own review updates — and never merge either branch yourself; the human merges.`,
+		].join("\n");
+	}
 	return [
 		"## Stacked branch",
 		`This branch was cut from \`${base}\` (another session's branch), not from the trunk — its commits sit ON TOP of that work, and a diff against the trunk would show both.`,
@@ -279,16 +301,17 @@ export async function memoryNoteFor(
 }
 
 /**
- * Resolve which GitHub repo + branch a PR operation targets. With no `repo`
+ * Resolve which host repo + branch a PR operation targets. With no `repo`
  * query (or the primary project's id) it's the session's primary branch; an
  * attached project id targets that repo on its attached branch. Returns null
- * when there's no branch to act on.
+ * when there's no branch to act on. `ghRepo` is the host-side repo identifier
+ * (hostRepoId — GitHub owner/name, or the code.storage repo id).
  */
 export function resolvePrTarget(
 	session: UnifiedSession,
 	repoId?: string | null,
 	branch?: string | null,
-): { ghRepo: string; branch: string } | null {
+): { ghRepo: string; branch: string; repoId: string } | null {
 	const primaryBranch = sessionPrBranch(session);
 	const primaryRepo =
 		session.repo ||
@@ -312,24 +335,26 @@ export function resolvePrTarget(
 		);
 		const isPrimary = repoId === primaryRepo && branch === primaryBranch;
 		if (!lp && !att && !found && !isPrimary) return null;
-		return { ghRepo: getRepo(repoId).ghRepo, branch };
+		return { ghRepo: hostRepoId(getRepo(repoId)), branch, repoId };
 	}
 	if (!repoId || repoId === primaryRepo) {
 		if (!primaryBranch) return null;
 		return {
-			ghRepo: getRepo(primaryRepo).ghRepo,
+			ghRepo: hostRepoId(getRepo(primaryRepo)),
 			branch: primaryBranch,
+			repoId: primaryRepo,
 		};
 	}
 	const att = (session.attachedRepos || []).find(
 		(r) => r.repo === repoId,
 	);
-	if (att) return { ghRepo: getRepo(att.repo).ghRepo, branch: att.branch };
+	if (att)
+		return { ghRepo: hostRepoId(getRepo(att.repo)), branch: att.branch, repoId: att.repo };
 	const lp =
 		(session.linkedPrs || []).find((r) => r.repo === repoId) ||
 		(session.prs || []).find((r) => r.repo === repoId);
 	if (!lp) return null;
-	return { ghRepo: getRepo(lp.repo).ghRepo, branch: lp.branch };
+	return { ghRepo: hostRepoId(getRepo(lp.repo)), branch: lp.branch, repoId: lp.repo };
 }
 
 /**
@@ -548,15 +573,23 @@ export async function linkPr(
 
 	if (!repoId) throw new Error("Pass a PR URL or a repo id");
 	const repo = REPOS[repoId];
-	if (!repo?.ghRepo) throw new Error(`Unknown repo "${repoId}"`);
+	const hostRepo = repo ? hostRepoId(repo) : "";
+	if (!repo || !hostRepo) throw new Error(`Unknown repo "${repoId}"`);
 	if (!number && !branch)
 		throw new Error("Pass a PR URL, a PR number, or a branch");
 
-	// Resolve through gh: number → head branch (required — the PR pipeline is
-	// branch-keyed), branch → number/url/title (best-effort label enrichment).
-	const resolved = await ghPrView(repo.ghRepo, number ? String(number) : branch!);
+	// Resolve through the host: number → head branch (required — the PR
+	// pipeline is branch-keyed), branch → number/url/title (best-effort label
+	// enrichment). GitHub asks gh; code.storage resolves the branch (or its
+	// synthetic number) against the live branch list.
+	const resolved =
+		repo.host === "codestorage"
+			? await import("./codestorage/pr-host").then((m) =>
+					m.csPrView(hostRepo, number ? { number } : { branch: branch! }),
+				)
+			: await ghPrView(hostRepo, number ? String(number) : branch!);
 	if (number && !resolved)
-		throw new Error(`Couldn't find PR #${number} in ${repo.ghRepo}`);
+		throw new Error(`Couldn't find PR #${number} in ${hostRepo}`);
 	if (resolved) {
 		branch = resolved.branch;
 		number = resolved.number;

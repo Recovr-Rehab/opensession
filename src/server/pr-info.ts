@@ -15,6 +15,9 @@ import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg } from "./github-lim
 import { serviceGithubCredential, type GithubCredential } from "./github-auth";
 import { githubAppEnv } from "./github-app";
 import { getPrStack, unmergedLayersBelow, type PrStack } from "./pr-stack";
+// Type-only: pr-host.ts imports this module at runtime; the reverse edge must
+// stay erased or the two would cycle.
+import type { PrHostCapabilities } from "./pr-host";
 import type { OsReviewSummary, UnifiedSession } from "./types";
 
 export interface PrCheck {
@@ -113,6 +116,9 @@ export interface PrDetails {
   osReview?: OsReviewSummary;
   /** An automated review is currently running for this PR. */
   reviewActive?: boolean;
+  /** What the repo's PR host supports (GitHub: everything) — set by the PR
+   *  routes so the frontend can hide surfaces a host has no concept of. */
+  capabilities?: PrHostCapabilities;
 }
 
 /**

@@ -20,6 +20,8 @@ type RepoEntry = {
   wtPrefix?: string;
   defaultBranch?: string;
   ghRepo?: string;
+  host?: "github" | "codestorage";
+  csRepo?: string;
   default?: boolean;
 };
 
@@ -36,6 +38,19 @@ async function detectGhRepo(dir: string): Promise<string | undefined> {
   return match?.[1];
 }
 
+// https://<org>.code.storage/<repoId>(.git) — mirrors CS_REMOTE_RE in
+// src/server/codestorage/remote.ts (kept local so the CLI stays server-free).
+const CS_ORIGIN_RE =
+  /^https:\/\/(?:t:[^@]*@)?([A-Za-z0-9][A-Za-z0-9-]*)\.code\.storage\/(.+?)(?:\.git)?\/?$/;
+
+/** {org, repoId} from a code.storage remote URL, or undefined. */
+async function detectCsRepo(dir: string): Promise<{ org: string; repoId: string } | undefined> {
+  const { code, stdout } = await run(["git", "-C", dir, "remote", "get-url", "origin"]);
+  if (code !== 0) return undefined;
+  const match = stdout.trim().match(CS_ORIGIN_RE);
+  return match ? { org: match[1], repoId: match[2] } : undefined;
+}
+
 async function list(): Promise<number> {
   const config = await readConfig();
   if (!config) {
@@ -50,7 +65,13 @@ async function list(): Promise<number> {
     return 0;
   }
   for (const [id, entry] of Object.entries(repos)) {
-    const details = [entry.repo, entry.ghRepo && `github:${entry.ghRepo}`, entry.defaultBranch]
+    const details = [
+      entry.repo,
+      entry.host === "codestorage"
+        ? entry.csRepo && `codestorage:${entry.csRepo}`
+        : entry.ghRepo && `github:${entry.ghRepo}`,
+      entry.defaultBranch,
+    ]
       .filter(Boolean)
       .join("  ");
     ok(`${id}${entry.default ? " (default)" : ""}`, details);
@@ -76,6 +97,7 @@ async function add(spec?: string): Promise<number> {
 
   let checkout: string;
   let ghRepo: string | undefined;
+  let csRepo: { org: string; repoId: string } | undefined;
 
   if (isLocal) {
     checkout = resolve(spec.replace(/^~(?=\/|$)/, HOME));
@@ -84,6 +106,7 @@ async function add(spec?: string): Promise<number> {
       return 1;
     }
     ghRepo = await detectGhRepo(checkout);
+    if (!ghRepo) csRepo = await detectCsRepo(checkout);
   } else if (/^[\w.-]+\/[\w.-]+$/.test(spec)) {
     heading(`Cloning ${spec}`);
     // gh (not raw git) so private repos work with whatever `gh auth login`
@@ -125,14 +148,26 @@ async function add(spec?: string): Promise<number> {
     defaultBranch: await detectBranch(checkout),
   };
   if (ghRepo) entry.ghRepo = ghRepo;
+  if (csRepo) {
+    entry.host = "codestorage";
+    entry.csRepo = csRepo.repoId;
+  }
   if (!Object.values(repos).some((r) => r.default)) entry.default = true;
 
   repos[id] = entry;
   await writeConfig(config);
   wrote(CONFIG_PATH, `+ repos.${id}`);
   info(dim("  live on the next config re-read — no restart needed"));
-  if (!ghRepo) {
-    info(dim("  no github.com origin detected, so PR operations are off for this repo"));
+  if (csRepo) {
+    info(
+      dim(
+        `  code.storage origin detected (org ${csRepo.org}) — branch-based reviews, no PRs;\n` +
+          "  configure integrations.codestorage (org + privateKeyPath) so pushes can authenticate,\n" +
+          "  see docs/setup/codestorage.md",
+      ),
+    );
+  } else if (!ghRepo) {
+    info(dim("  no github.com or code.storage origin detected, so PR operations are off for this repo"));
   }
   return 0;
 }

@@ -77,6 +77,12 @@ export interface RepoSection {
   wtPrefix?: string;
   defaultBranch?: string;
   ghRepo?: string;
+  /** Git host backing this repo. Absent/"github" = GitHub (the default,
+   *  unchanged behavior); "codestorage" = code.storage (needs `csRepo` and
+   *  `integrations.codeStorage`). */
+  host?: "github" | "codestorage";
+  /** code.storage repo id/path (the JWT `repo` claim), e.g. "acme/widget". */
+  csRepo?: string;
   sharedCheckout?: boolean;
   /** Marks this repo as the instance default (see defaultRepo()). */
   default?: boolean;
@@ -207,6 +213,10 @@ export interface Repo {
   defaultBranch: string;
   /** GitHub `owner/name` for PR operations (gh CLI). */
   ghRepo: string;
+  /** Backing git host; undefined means GitHub (see RepoSection.host). */
+  host?: "github" | "codestorage";
+  /** code.storage repo id/path when host is "codestorage". */
+  csRepo?: string;
   // When true, code sessions run directly in the main checkout on the default
   // branch instead of an isolated worktree. Open Session is self-hosting from its
   // main checkout; sessions share one tree and commit straight to the default
@@ -306,6 +316,10 @@ function defined<T extends Record<string, unknown>>(o: T): Partial<T> {
 function parseRepoSection(v: unknown): RepoSection | undefined {
   const o = obj(v);
   if (!o) return undefined;
+  const rawHost = str(o.host);
+  // Unknown host values are dropped → the repo stays a plain GitHub repo.
+  const host: RepoSection["host"] =
+    rawHost === "github" || rawHost === "codestorage" ? rawHost : undefined;
   return defined({
     label: str(o.label),
     description: str(o.description),
@@ -313,6 +327,8 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
     wtPrefix: str(o.wtPrefix),
     defaultBranch: str(o.defaultBranch),
     ghRepo: str(o.ghRepo),
+    host,
+    csRepo: str(o.csRepo),
     sharedCheckout: bool(o.sharedCheckout),
     default: bool(o.default),
     icon: str(o.icon),
@@ -579,6 +595,8 @@ export function configuredRepos(): Record<string, Repo> {
         ghRepo: entry.ghRepo || "",
         ...defined({
           description: entry.description,
+          host: entry.host,
+          csRepo: entry.csRepo,
           sharedCheckout: entry.sharedCheckout,
           default: entry.default,
           icon: entry.icon,
@@ -748,4 +766,40 @@ export function plainApiUrl(): string {
   return typeof v === "string" && v.trim()
     ? v.trim()
     : "https://core-api.uk.plain.com/graphql/v1";
+}
+
+/** code.storage host settings (`integrations.codeStorage`), resolved. */
+export interface CodeStorageConfig {
+  /** Organization identifier — the JWT `iss` and the remote-host subdomain. */
+  org: string;
+  /** PKCS8 PEM private key used to sign JWTs (ES256 or RS256). */
+  privateKeyPath: string;
+  /** REST base including the `/api` suffix. */
+  apiBase: string;
+  /** HMAC secret for inbound `POST /codestorage/webhook` deliveries. */
+  webhookSecret?: string;
+}
+
+/**
+ * Null until both `org` and `privateKeyPath` are set — every code.storage
+ * code path (JWT minting, REST client, credential helper) is inert then.
+ * The lowercase `integrations.codestorage` spelling is accepted too, matching
+ * the registry id.
+ */
+export function codeStorageConfig(): CodeStorageConfig | null {
+  const raw = {
+    ...configuredIntegration("codestorage"),
+    ...configuredIntegration("codeStorage"),
+  };
+  const org = str(raw.org);
+  const privateKeyPath = str(raw.privateKeyPath);
+  if (!org || !privateKeyPath) return null;
+  const apiBase = str(raw.apiBase) || `https://api.${org}.code.storage/api`;
+  const webhookSecret = str(raw.webhookSecret);
+  return {
+    org,
+    privateKeyPath,
+    apiBase: apiBase.replace(/\/+$/, ""),
+    ...(webhookSecret ? { webhookSecret } : {}),
+  };
 }

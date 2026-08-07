@@ -62,7 +62,7 @@ export function AddRepoDialog({
 				<Modal.Header
 					icon={<IconFolderPlus size={22} />}
 					title="Add repository"
-					description="Clone a Git repository, or register a checkout already on this Mac."
+					description="Clone a Git repository (GitHub or a code.storage remote), or register a checkout already on this Mac."
 				/>
 
 				<div
@@ -110,7 +110,7 @@ export function AddRepoDialog({
 							}
 							placeholder={
 								mode === "clone"
-									? "git@github.com:owner/repository.git"
+									? "git@github.com:owner/repo.git or https://org.code.storage/repo.git"
 									: "/Users/you/code/repository"
 							}
 							disabled={adding}

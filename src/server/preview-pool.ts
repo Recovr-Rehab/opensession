@@ -49,7 +49,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { getAgentAwsEnv } from "./aws-creds";
-import { configuredRepos, type Repo } from "./config";
+import { codeStorageConfig, configuredRepos, type Repo } from "./config";
+import { authedRemoteUrl } from "./codestorage/auth";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
@@ -763,7 +764,13 @@ async function refreshContainerCreds(target: string | PoolContainer): Promise<bo
   return r.ok;
 }
 
-function cloneUrlFor(repo: Repo): string | null {
+async function cloneUrlFor(repo: Repo): Promise<string | null> {
+  if (repo.host === "codestorage") {
+    // Short-lived by design: pool fetches use the URL immediately, and the
+    // default 1h TTL covers even a slow golden build's clone.
+    if (!repo.csRepo || !codeStorageConfig()) return null;
+    return authedRemoteUrl(repo.csRepo);
+  }
   if (!repo.ghRepo) return null;
   const cred = sandboxConfig().cloneCredential;
   if (cred?.type === "https-token" && cred.token) {
@@ -925,7 +932,7 @@ async function warmRoutesPool(repo: Repo, c: PoolContainer): Promise<void> {
  * so every shared boot/converge script works unchanged.
  */
 async function spawnDaytonaWarm(repo: Repo): Promise<void> {
-  const cloneUrl = cloneUrlFor(repo);
+  const cloneUrl = await cloneUrlFor(repo);
   if (!cloneUrl) {
     return console.warn(`[preview-pool] ${repo.id}: daytona backend needs a ghRepo + cloneCredential`);
   }
@@ -1116,7 +1123,7 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<void> {
   }
   const started = Date.now();
   const name = `os-preview-goldenbuild-${repoId}`;
-  const cloneUrl = cloneUrlFor(repo);
+  const cloneUrl = await cloneUrlFor(repo);
   console.log(`[preview-pool] ${repoId}: building golden image at ${sha.slice(0, 10)}`);
   const fail = async (msg: string) => {
     console.warn(`[preview-pool] ${repoId}: golden build failed: ${msg.slice(0, 800)}`);
@@ -1260,7 +1267,7 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
   const { previewHost, httpsPortFor } = await import("./preview");
   const host = await previewHost();
   const previewUrl = `https://${host}:${httpsPortFor(hostPort)}`;
-  const cloneUrl = cloneUrlFor(repo);
+  const cloneUrl = await cloneUrlFor(repo);
 
   patchContainer(repo.id, name, {
     name, repoId: repo.id, state: "warming", hostPort, bootSha: "", createdAt: new Date().toISOString(),
@@ -1635,7 +1642,7 @@ async function doConverge(
     (await poolExec(c, `git -C ${WORKSPACE} cat-file -e ${sha}`)).ok;
 
   if (!(await inContainer(head))) {
-    const cloneUrl = cloneUrlFor(repo);
+    const cloneUrl = await cloneUrlFor(repo);
     let fetched = false;
     if (cloneUrl) {
       const r = await poolExec(

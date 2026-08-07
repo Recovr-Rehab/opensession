@@ -59,6 +59,8 @@ import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
 import { RESUME_CONTINUATION_PROMPT } from "../../agent-runner";
 import { accountsForRemoteUpload } from "../../claude-accounts";
 import { audit } from "../../audit";
+import { authedRemoteUrl } from "../../codestorage/auth";
+import { parseCsRemote } from "../../codestorage/remote";
 import { listCodexAccounts } from "../../codex-accounts";
 import { readOpencodeBridgeConfig } from "../../opencode-config";
 import {
@@ -332,8 +334,22 @@ export async function remoteCloneUrl(repo: {
   id: string;
   repo: string;
   ghRepo?: string;
+  host?: "github" | "codestorage";
+  csRepo?: string;
 }): Promise<string> {
   const origin = await hostGit(["remote", "get-url", "origin"], repo.repo);
+  if (repo.host === "codestorage") {
+    const csRepoId = repo.csRepo || (origin ? parseCsRemote(origin)?.repoId : undefined);
+    if (!csRepoId) {
+      throw new Error(
+        `repo ${repo.id} is code.storage-hosted but has neither csRepo nor a code.storage origin`,
+      );
+    }
+    // 24h TTL: the URL is persisted as the sandbox's remote, and later
+    // fetches/pushes during the sandbox's life reuse it (mirrors the
+    // long-lived-token preference for GitHub below).
+    return authedRemoteUrl(csRepoId, { ttlSeconds: 24 * 3600 });
+  }
   const https = (origin && toHttpsUrl(origin)) || (repo.ghRepo ? `https://github.com/${repo.ghRepo}.git` : null);
   if (!https) {
     throw new Error(

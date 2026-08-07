@@ -638,6 +638,17 @@ if (!g.__opensessionBooted) {
 		);
 	}
 
+	// code.storage-hosted repos: make sure existing main checkouts have the
+	// URL-scoped credential helper wired, so ambient git fetch/push mints fresh
+	// JWTs. Idempotent (read-before-write) and a no-op unless
+	// integrations.codeStorage is configured; runs in every boot mode because
+	// registration isn't the only way a checkout appears.
+	void import("./src/server/codestorage/remote")
+		.then((m) => m.adoptCsCheckouts())
+		.catch((e) =>
+			console.error("[codestorage] checkout credential adoption failed:", e),
+		);
+
 	// Resume Claude runs a previous process left in-flight (restart/crash), then
 	// wake any session that finished its turn during the shutdown drain (so the
 	// journal no longer held it). Together these wake every session that was

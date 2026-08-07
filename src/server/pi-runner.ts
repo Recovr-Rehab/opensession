@@ -1484,6 +1484,17 @@ export async function* runPi(
       isAsk,
       isScratch,
       reposNote: opts.reposNote,
+      // Same host-awareness as the opencode runner: code.storage repos get
+      // push-the-branch instructions instead of `gh pr create`. Dynamic import
+      // to avoid a static module-init cycle through "./worktree".
+      repoHost: await (async () => {
+        if (isScratch) return undefined;
+        try {
+          return (await import("./worktree")).repoForPath(cwd).host;
+        } catch {
+          return undefined;
+        }
+      })(),
       localInstructions: readLocalInstructions(cwd),
       inProcessMcp: opts.inProcessMcp,
       osSessionId: journal?.osSessionId,
