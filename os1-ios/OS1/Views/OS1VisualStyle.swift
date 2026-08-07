@@ -197,6 +197,10 @@ struct RepoTile: View {
         name == "backstage" ? "opensession" : name  // legacy repo id on older instances
     }
 
+    /// How much of the tile an icon fills. Keep in step with the web tile's
+    /// `.repo-tile--img img` scale.
+    private static let artScale: CGFloat = 0.88
+
     private var letter: String {
         if name == "backstage" { return "O" }
         return String(name.prefix(1)).uppercased()
@@ -262,6 +266,12 @@ struct RepoTile: View {
                 image
                     .resizable()
                     .scaledToFill()
+                    // Art sits a little inside the tile — the same 0.88 the
+                    // web tile uses (.repo-tile--img img). Every icon is
+                    // cropped to its artwork server-side, so this is the one
+                    // place its size is decided, and at the full box art read
+                    // heavier than the lettered tiles beside it.
+                    .scaleEffect(Self.artScale)
             } else {
                 Text(letter)
                     .font(.system(size: size * 0.6, weight: .bold, design: .rounded))

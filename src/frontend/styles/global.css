@@ -1703,6 +1703,13 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	height: 100%;
 	object-fit: cover;
 	border-radius: inherit;
+	/* Art sits a little inside the tile. The route crops every icon to its
+	   artwork (png-trim.ts), so this is now the one place the size is decided
+	   rather than something each icon's own padding settles — a letter tile's
+	   ink is its glyph, well inside its square, and art at the full box read
+	   heavier than the letters beside it. Scale rather than a smaller box:
+	   the radius scales with it, so the corners stay right. */
+	transform: scale(0.88);
 }
 .sidebar-list {
 	flex: none;
