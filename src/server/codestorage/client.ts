@@ -239,6 +239,16 @@ export interface CsNotesRef {
   cursor: string;
 }
 
+/** One tree entry (GET /repos/{repo}/files). */
+export interface CsTreeEntry {
+  /** Repository-rooted path. */
+  path: string;
+  /** "blob", "tree", "symlink", or "submodule". */
+  type: string;
+  /** Six-digit git mode. */
+  mode: string;
+}
+
 // ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
@@ -542,6 +552,39 @@ export async function listNotesRefs(
     cursor = page.has_more ? page.next_cursor : undefined;
   } while (cursor);
   return refs;
+}
+
+/** GET /repos/{repo}/files (git:read) — tree entries at a branch, tag, or
+ *  commit (any commit SHA works, including a notes ref's tip). Follows
+ *  cursors up to `maxEntries`. */
+export async function listFiles(
+  repoId: string,
+  opts?: { ref?: string; path?: string; recursive?: boolean; maxEntries?: number },
+): Promise<CsTreeEntry[]> {
+  const max = opts?.maxEntries ?? 5000;
+  const entries: CsTreeEntry[] = [];
+  let cursor: string | undefined;
+  do {
+    const res = await csFetch(`${repoPath(repoId)}/files`, {
+      scopes: ["git:read"],
+      repo: repoId,
+      query: {
+        ref: opts?.ref,
+        path: opts?.path,
+        ...(opts?.recursive ? { recursive: true } : {}),
+        cursor,
+        limit: 1000,
+      },
+    });
+    const page = (await res.json()) as {
+      entries: CsTreeEntry[];
+      has_more: boolean;
+      next_cursor?: string;
+    };
+    entries.push(...page.entries);
+    cursor = page.has_more && entries.length < max ? page.next_cursor : undefined;
+  } while (cursor);
+  return entries.slice(0, max);
 }
 
 /** GET /repos/{repo}/file (git:read). Returns the blob as UTF-8 text. */

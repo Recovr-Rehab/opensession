@@ -11,10 +11,11 @@
  * persisted.
  *
  * Comments and reviews have no host concept either, so they're backed by git
- * notes on a dedicated ref (COMMENTS_REF): each comment is one JSON line
- * appended to the note on the branch's tip commit at post time, and details
- * reads aggregate the notes across the branch's commits back into the flat
- * PrComment conversation. A review is just a comment with a verdict prefix.
+ * notes on a dedicated ref (COMMENTS_REF): each comment is one branch-tagged
+ * JSON line appended to the note on the branch's tip commit at post time, and
+ * details reads aggregate the ref's notes by branch tag back into the flat
+ * PrComment conversation (so a force-push or merge-base advance can't orphan
+ * them). A review is just a comment with a verdict prefix.
  * Reviewer lists/checks/stacks stay unsupported: those methods answer a clear
  * error and the capability flags (CODESTORAGE_CAPABILITIES) hide the surfaces.
  */
@@ -39,6 +40,7 @@ import {
 	getRepo as getCsRepo,
 	listBranches,
 	listCommits,
+	listFiles,
 	listNotesRefs,
 	mergeBranch,
 	previewMerge,
@@ -124,27 +126,31 @@ async function findBranch(repoId: string, branch: string): Promise<CsBranch | nu
 }
 
 /** The branch's current tip SHA; null when the branch doesn't exist (or the
- *  default branch — never a PR). Mutation preflight for the comment paths. */
+ *  default branch — never a PR). Mutation preflight for the comment paths —
+ *  reads the branch list fresh so a comment isn't appended to a tip the
+ *  cache doesn't know was just replaced. */
 async function branchTipSha(repoId: string, branch: string): Promise<string | null> {
 	if (branch === (await defaultBranchOf(repoId))) return null;
-	const head = await findBranch(repoId, branch);
+	const head = (await branchesFor(repoId, 0)).find((b) => b.name === branch) ?? null;
 	if (!head) return null;
 	if (head.head_sha) return head.head_sha;
 	const tip = await getCommit(repoId, branch).catch(() => null);
 	return tip?.sha || null;
 }
 
-// Which notes namespaces exist at all (one refs-list call per repo per TTL):
-// most repos have none, and this collapses the per-commit note fetches below
-// to zero requests in that common case. Best-effort — a failed listing reads
-// as "no notes" until the next refresh.
-const notesRefsCache = new Map<string, { refs: Set<string>; ts: number }>();
-async function existingNotesRefs(repoId: string): Promise<Set<string>> {
+// Which notes namespaces exist at all, and their tip SHAs (one refs-list call
+// per repo per TTL): most repos have none, and this collapses the per-commit
+// note fetches below to zero requests in that common case. A failed listing
+// PROPAGATES (and is never cached): "the notes backend is unreachable" must
+// surface as an error, not render as an empty conversation that then sits in
+// the details cache looking like "no comments".
+const notesRefsCache = new Map<string, { refs: Map<string, string>; ts: number }>();
+async function existingNotesRefs(repoId: string): Promise<Map<string, string>> {
 	const hit = notesRefsCache.get(repoId);
 	if (hit && Date.now() - hit.ts < TTL) return hit.refs;
-	const refs = new Set(
-		(await listNotesRefs(repoId).catch(() => [])).map((r) =>
-			r.ref.replace(/^refs\/notes\//, ""),
+	const refs = new Map(
+		(await listNotesRefs(repoId)).map(
+			(r) => [r.ref.replace(/^refs\/notes\//, ""), r.sha] as const,
 		),
 	);
 	notesRefsCache.set(repoId, { refs, ts: Date.now() });
@@ -261,6 +267,11 @@ interface CsCommentLine {
 	author: string;
 	body: string;
 	createdAt: string;
+	/** Branch the comment was posted on — the aggregation key, so a comment
+	 *  survives its commit being orphaned (force-push, rebase, merge-base
+	 *  advance, >1-page histories). Absent on legacy lines, which are matched
+	 *  by commit reachability instead. */
+	branch?: string;
 	/** File anchor for inline review comments (threading is flat). */
 	path?: string;
 	line?: number;
@@ -285,14 +296,31 @@ function appendComments(
 	});
 }
 
+/** Parse note text back into comment lines. Anyone with git:write can push
+ *  arbitrary bytes onto the notes ref, so every field is validated — a line
+ *  with a non-string createdAt/author (or any other malformed shape) must
+ *  degrade, never crash the conversation render. */
 function parseCommentLines(note: string): CsCommentLine[] {
 	const out: CsCommentLine[] = [];
 	for (const raw of note.split("\n")) {
 		const line = raw.trim();
 		if (!line.startsWith("{")) continue;
 		try {
-			const parsed = JSON.parse(line) as CsCommentLine;
-			if (parsed && typeof parsed.body === "string") out.push(parsed);
+			const parsed = JSON.parse(line) as Record<string, unknown>;
+			if (!parsed || typeof parsed !== "object" || typeof parsed.body !== "string") continue;
+			out.push({
+				id: typeof parsed.id === "string" ? parsed.id : "",
+				author: typeof parsed.author === "string" ? parsed.author : "",
+				body: parsed.body,
+				createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : "",
+				...(typeof parsed.branch === "string" && parsed.branch
+					? { branch: parsed.branch }
+					: {}),
+				...(typeof parsed.path === "string" && parsed.path ? { path: parsed.path } : {}),
+				...(typeof parsed.line === "number" && Number.isFinite(parsed.line)
+					? { line: parsed.line }
+					: {}),
+			});
 		} catch {}
 	}
 	return out;
@@ -311,18 +339,65 @@ function toStoredComment(comment: CsCommentLine): PrComment {
 	};
 }
 
+/** Hard cap on annotated commits read per repo — a runaway ref stops costing
+ *  requests here; older anchors past the cap drop out with a warning. */
+const MAX_COMMENT_NOTES = 500;
+
 /**
- * The branch's conversation: comment notes aggregated across its commits
- * (each was appended to whatever the tip was at post time), oldest first.
- * Best-effort per commit — a missing note (404 → null) or failed read is
- * simply "no comments there".
+ * Every comment line in the repo's COMMENTS_REF, tagged with the commit each
+ * note is anchored to. The notes ref's tip is itself a commit whose tree
+ * names every annotated object (fanout dirs collapse to the sha), so listing
+ * that tree finds comments even on commits a force-push orphaned or a merge
+ * base left behind — commits-since-merge-base can't. Cached by the notes
+ * ref's tip SHA: any note write moves it, so the cache self-invalidates.
+ * Failures propagate (see existingNotesRefs) — never an empty answer.
  */
-async function commentsFor(repoId: string, shas: string[]): Promise<PrComment[]> {
-	if (!shas.length || !(await existingNotesRefs(repoId)).has(COMMENTS_REF)) return [];
-	const notes = await mapLimit(shas, 4, (sha) =>
-		getNote(repoId, sha, COMMENTS_REF).catch(() => null),
+const commentLinesCache = new Map<
+	string,
+	{ refSha: string; lines: (CsCommentLine & { sha: string })[] }
+>();
+async function allCommentLines(
+	repoId: string,
+	refSha: string,
+): Promise<(CsCommentLine & { sha: string })[]> {
+	const hit = commentLinesCache.get(repoId);
+	if (hit && hit.refSha === refSha) return hit.lines;
+	const entries = await listFiles(repoId, { ref: refSha, recursive: true });
+	const shas = entries
+		.filter((entry) => entry.type === "blob")
+		.map((entry) => entry.path.replace(/\//g, ""))
+		.filter((sha) => /^[0-9a-f]{40,64}$/.test(sha));
+	if (shas.length > MAX_COMMENT_NOTES)
+		console.warn(
+			`[cs-pr] ${repoId}: ${shas.length} commented commits in ${COMMENTS_REF}; reading newest ${MAX_COMMENT_NOTES}`,
+		);
+	const notes = await mapLimit(shas.slice(0, MAX_COMMENT_NOTES), 4, async (sha) => ({
+		sha,
+		note: await getNote(repoId, sha, COMMENTS_REF),
+	}));
+	const lines = notes.flatMap(({ sha, note }) =>
+		note ? parseCommentLines(note.note).map((line) => ({ ...line, sha })) : [],
 	);
-	const lines = notes.flatMap((note) => (note ? parseCommentLines(note.note) : []));
+	commentLinesCache.set(repoId, { refSha, lines });
+	return lines;
+}
+
+/**
+ * The branch's conversation, oldest first: lines that carry a `branch` tag
+ * match by name (immune to history rewrites); legacy untagged lines match by
+ * the reachable-commit set they were readable through before.
+ */
+async function commentsFor(
+	repoId: string,
+	branch: string,
+	shas: string[],
+): Promise<PrComment[]> {
+	const refSha = (await existingNotesRefs(repoId)).get(COMMENTS_REF);
+	if (!refSha) return [];
+	const reachable = new Set(shas);
+	const lines = (await allCommentLines(repoId, refSha)).filter((line) =>
+		line.branch ? line.branch === branch : reachable.has(line.sha),
+	);
 	lines.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 	return lines.map(toStoredComment);
 }
@@ -383,14 +458,15 @@ async function fetchDetails(branch: string, repoId: string): Promise<PrDetails |
 			else if (preview.status === "conflicted") mergeable = "CONFLICTING";
 		} catch {}
 
-	// Notes reads: the conversation aggregates comment notes across the
-	// branch's commits (each was posted onto the then-current tip — for a
-	// merged branch that tip is the merge base, outside `commits`), and the
-	// commits tab gets per-commit annotations from the common namespaces.
+	// Notes reads: the conversation aggregates the repo's comment notes by
+	// branch tag (legacy untagged lines match through this reachable-commit
+	// set — for a merged branch the posted-on tip is the merge base, outside
+	// `commits`, hence the head_sha add), and the commits tab gets per-commit
+	// annotations from the common namespaces.
 	const noteShas = commits.map((commit) => commit.sha);
 	if (head.head_sha && !noteShas.includes(head.head_sha)) noteShas.push(head.head_sha);
 	const [comments, commitNotes] = await Promise.all([
-		commentsFor(repoId, noteShas),
+		commentsFor(repoId, branch, noteShas),
 		commitNotesFor(repoId, commits.map((commit) => commit.sha)),
 	]);
 
@@ -542,6 +618,7 @@ export const csPrHost: PrHost = {
 						author: actingPrincipal(credential),
 						body: input.body,
 						createdAt: new Date().toISOString(),
+						branch,
 						...(input.path ? { path: input.path } : {}),
 						...(input.line ? { line: input.line } : {}),
 					},
@@ -577,6 +654,7 @@ export const csPrHost: PrHost = {
 					author,
 					body: verdict ? (summary ? `${verdict}: ${summary}` : verdict) : summary,
 					createdAt,
+					branch,
 				});
 			}
 			for (const comment of input.comments) {
@@ -585,6 +663,7 @@ export const csPrHost: PrHost = {
 					author,
 					body: comment.body,
 					createdAt,
+					branch,
 					path: comment.path,
 					line: comment.line,
 				});

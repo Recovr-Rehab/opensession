@@ -904,11 +904,20 @@ function CodeStorageCard() {
                   )}
                 >
                   {!last
-                    ? "No deliveries received yet."
+                    ? "No verified deliveries received yet."
                     : last.ok
                       ? `Last event: ${last.event}${last.ref ? ` ${last.ref}` : ""}${last.repo ? ` (${last.repo})` : ""}, ${relativeTime(last.at)}`
-                      : `Last delivery rejected (${last.error}), ${relativeTime(last.at)} — check that the secret in the Pierre dashboard matches.`}
+                      : `Last delivery failed (${last.error}), ${relativeTime(last.at)}`}
                 </div>
+                {wh.lastRejected && (
+                  <div className="text-meta leading-snug text-red">
+                    {wh.rejectedCount} unauthenticated request
+                    {wh.rejectedCount === 1 ? "" : "s"} rejected ({wh.lastRejected.error}
+                    ), last {relativeTime(wh.lastRejected.at)} — if these are your Pierre
+                    deliveries, check that the secret in the dashboard matches; otherwise
+                    it's internet noise and verified deliveries above are unaffected.
+                  </div>
+                )}
                 {wh.syncFailures.map((f) => (
                   <div key={f.repo} className="text-meta text-red">
                     Sync failing for {f.repo}: {f.error} ({relativeTime(f.at)})

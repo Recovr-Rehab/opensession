@@ -2790,6 +2790,10 @@ export interface CodeStorageWebhookInfo {
 	/** HMAC secret to paste into the Pierre dashboard. */
 	secret: string;
 	lastDelivery: CodeStorageDelivery | null;
+	/** Last rejected (unauthenticated) request — tracked apart from verified
+	 *  deliveries so scanners can't overwrite the delivery health. */
+	lastRejected: CodeStorageDelivery | null;
+	rejectedCount: number;
 	/** Outstanding repo.sync.failed warnings. */
 	syncFailures: CodeStorageSyncFailure[];
 }

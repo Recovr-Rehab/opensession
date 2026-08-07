@@ -260,6 +260,8 @@ export async function handleSetupCodestorageRoutes(
         port: configuredServer().webhookPort,
         secret: cfg.webhookSecret ?? "",
         lastDelivery: wh.lastDelivery,
+        lastRejected: wh.lastRejected,
+        rejectedCount: wh.rejectedCount,
         syncFailures: Object.entries(wh.syncFailures).map(([repo, f]) => ({
           repo,
           ...f,

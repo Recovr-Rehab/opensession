@@ -128,9 +128,10 @@ where PRs themselves are the feature:
   host the branch IS the change request, so a surviving branch would re-list
   as an open change.
 - **Review comments and reviews**, backed by git notes: each comment is one
-  JSON line appended to a note on the branch's tip commit (dedicated
-  `opensession-comments` notes ref), and the conversation aggregates those
-  notes across the branch's commits. A review is a comment with a verdict
+  branch-tagged JSON line appended to a note on the branch's tip commit
+  (dedicated `opensession-comments` notes ref), and the conversation
+  aggregates the ref's notes by branch tag — so comments survive force-pushes
+  and merge-base advances. A review is a comment with a verdict
   prefix (`APPROVE`/`REQUEST_CHANGES`) — purely conversational, nothing on
   the host gates merges on it. Inline comments keep their `path:line` anchor
   as a prefix; threading is flat.
