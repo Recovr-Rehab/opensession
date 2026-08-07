@@ -98,6 +98,16 @@
 	   global.css gives every `rounded-*` class `corner-shape: squircle`, so it
 	   needs no entry in the @supports block below. */
 	--radius-control: calc(10px * var(--rf));
+	/* The corner of a full-width selectable ROW in a left rail — a session in
+	   the sidebar, a section in settings' side nav, a person, a tool. One step
+	   softer than a control, because a row is a surface you land on rather than
+	   a thing you press. global.css authors it as `calc(12px * var(--rf))` on
+	   .sidebar-item and .settings-sidenav-item; naming it here is what stops a
+	   Tailwind-authored row reaching for `rounded-lg` (18.9px) or `rounded-panel`
+	   (also 18.9px) and landing a third of a corner away from the rows it is
+	   stacked against. There is no 12px step in the scale below, which is
+	   precisely why those rows had drifted. */
+	--radius-row: calc(12px * var(--rf));
 
 	/* global.css sets html { font-size: 14px }, which silently shrinks every
 	   rem-based utility to 87.5% of its px design value (p-3 → 10.5px). Anchor

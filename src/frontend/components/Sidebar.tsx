@@ -5101,7 +5101,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// credited a "wayyy too big" complaint, but no such
 								// request exists in the session record — don't treat the
 								// current numbers as a stated preference.
-								"w-full gap-[9px] rounded-lg bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[3px] text-control-label font-medium text-dim hover:bg-hover hover:text-fg",
+								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[3px] text-control-label font-medium text-dim hover:bg-hover hover:text-fg",
 							!isPhone && tool.active && "bg-active text-fg",
 						);
 						const rowBody = (
@@ -6200,7 +6200,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									return (
 										<button
 											key={p.name}
-											className={`sidebar-people-row flex items-center gap-[9px] w-full min-w-0 text-left border-0 cursor-pointer rounded-lg pl-[12px] pr-2 py-[5px] max-[720px]:py-2 ${
+											className={`sidebar-people-row flex items-center gap-[9px] w-full min-w-0 text-left border-0 cursor-pointer rounded-row pl-[12px] pr-2 py-[5px] max-[720px]:py-2 ${
 												selected
 													? "bg-active"
 													: "bg-transparent hover:bg-hover"
