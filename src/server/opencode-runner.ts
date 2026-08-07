@@ -2760,6 +2760,146 @@ function makeOpencodePermissionBridge(ctx: {
 }
 
 /**
+ * Per-run mirror for message.part.updated text/tool parts — the shared core
+ * of both handleEvent ladders: transcript append + turn-event audit +
+ * StreamEvent push, with dedup sets so re-delivered SSE parts (reconnects,
+ * reattach backfill seeds) never double-append. The primary pump keeps its
+ * extra cases (retry parts, reasoning parts) around these calls. The dedup
+ * sets are caller-owned so the reattach path can seed them from the
+ * transcript file and the final-message tail can keep using them.
+ */
+function makePartMirror(ctx: {
+  ocSessionId: string;
+  model: string;
+  turnEvent: (fields: Record<string, unknown>) => void;
+  push: (ev: StreamEvent) => void;
+  steerFn: OpencodeSteerFn;
+  emittedText: Set<string>;
+  compactionMsgs: Set<string>;
+  startedTools: Set<string>;
+  finishedTools: Set<string>;
+}): { mirrorTextPart: (part: any) => void; mirrorToolPart: (part: any) => void } {
+  const {
+    ocSessionId,
+    model,
+    turnEvent,
+    push,
+    steerFn,
+    emittedText,
+    compactionMsgs,
+    startedTools,
+    finishedTools,
+  } = ctx;
+  let envelopeLeakSteers = 0;
+  const mirrorTextPart = (part: any) => {
+    if (part.type === "text" && !part.synthetic && part.time?.end && !emittedText.has(part.id)) {
+      emittedText.add(part.id);
+      if (compactionMsgs.has(part.messageID)) {
+        turnEvent({ direction: "out", kind: "compaction_summary", ...summarizeText(part.text) });
+        appendOpencodeTranscript(ocSessionId, [
+          transcriptLineCompactionSummary(part.text, part.id),
+        ]);
+      } else {
+        turnEvent({ direction: "out", kind: "assistant_text", ...summarizeText(part.text) });
+        appendOpencodeTranscript(ocSessionId, [
+          transcriptLineAssistantText(part.text, part.id, undefined, model),
+        ]);
+        push({ type: "text_chunk", text: part.text });
+        // Assistant text shaped like a tool transcript = the model
+        // narrating tool calls/results it invented (see
+        // looksLikeFabricatedToolTranscript). Correct it in-band before
+        // the fabricated values reach a command.
+        if (looksLikeFabricatedToolTranscript(part.text) && envelopeLeakSteers < 2) {
+          envelopeLeakSteers++;
+          turnEvent({
+            direction: "out",
+            kind: "envelope_leak_detected",
+            ...summarizeText(part.text, 300),
+          });
+          steerFn(ENVELOPE_LEAK_STEER_PROMPT);
+        }
+      }
+    }
+  };
+  const mirrorToolPart = (part: any) => {
+    if (part.type !== "tool") return;
+    const state = part.state;
+    if ((state?.status === "running" || state?.status === "completed" || state?.status === "error") && !startedTools.has(part.id)) {
+      startedTools.add(part.id);
+      turnEvent({
+        direction: "out",
+        kind: "tool_use",
+        tool_name: part.tool,
+        tool_use_id: part.id,
+        ...summarizeText(JSON.stringify(state?.input ?? {}), 500),
+      });
+      appendOpencodeTranscript(ocSessionId, [
+        transcriptLineToolUse(part.id, part.tool || "tool", state?.input),
+      ]);
+      push({ type: "tool_use", toolName: part.tool, toolInput: state?.input, toolUseId: part.id });
+    }
+    if ((state?.status === "completed" || state?.status === "error") && !finishedTools.has(part.id)) {
+      finishedTools.add(part.id);
+      const result = state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
+      const images = opencodeToolResultImages(part);
+      turnEvent({
+        direction: "in",
+        kind: "tool_result",
+        tool_use_id: part.id,
+        is_error: state.status === "error",
+        ...summarizeText(result),
+      });
+      appendOpencodeTranscript(ocSessionId, [
+        transcriptLineToolResult(
+          part.id,
+          result,
+          state.status === "error",
+          undefined,
+          images,
+        ),
+      ]);
+      push({
+        type: "tool_result",
+        toolUseId: part.id,
+        content: result.length > 500 ? result.slice(0, 500) + "..." : result,
+        ...(images.length ? { images } : {}),
+      });
+    }
+  };
+  return { mirrorTextPart, mirrorToolPart };
+}
+
+/**
+ * SSE event pump with reconnect (Bun's fetch aborts responses idle >300s;
+ * quiet stretches during long tool calls hit that), shared by both drain
+ * paths. stopped/idle are accessors, not snapshots — they read the caller's
+ * live drain state on every check, preserving the original closure reads.
+ */
+async function runSseEventPump(opts: {
+  client: OpencodeClient;
+  query: { query: { directory: string } } | undefined;
+  handleEvent: (ev: any) => Promise<void>;
+  stopped: () => boolean;
+  idle: () => boolean;
+}): Promise<void> {
+  while (!opts.stopped() && !opts.idle()) {
+    try {
+      const sub = await opts.client.event.subscribe(opts.query as any);
+      for await (const ev of sub.stream as AsyncGenerator<any>) {
+        if (opts.stopped()) return;
+        await opts.handleEvent(ev);
+        if (opts.idle()) return;
+      }
+    } catch {
+      // stream dropped — fall through to reconnect
+    }
+    if (!opts.stopped() && !opts.idle()) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+}
+
+/**
  * Read the turn's final assistant message out of the messages list and mirror
  * any text parts the SSE pump missed into the transcript + the pending event
  * queue. Shared tail of runOpencodeAttempt and tryReattachOpencodeRun (the
@@ -4051,7 +4191,6 @@ async function* runOpencodeAttempt(
     });
     const startedTools = new Set<string>();
     const finishedTools = new Set<string>();
-    let envelopeLeakSteers = 0;
     let sawFirstOutput = false;
     const stallGuard = makeSubagentStallGuard(ocSessionId, (info) => {
       if (idle || runFailure || abortController.signal.aborted) return;
@@ -4115,6 +4254,17 @@ async function* runOpencodeAttempt(
       wake?.();
     };
     failRun = signalDone;
+    const { mirrorTextPart, mirrorToolPart } = makePartMirror({
+      ocSessionId,
+      model,
+      turnEvent,
+      push,
+      steerFn,
+      emittedText,
+      compactionMsgs,
+      startedTools,
+      finishedTools,
+    });
 
     // opencode retries provider stream errors internally (exponential backoff,
     // silent from the outside) — RetryPart / session.status "retry" events are
@@ -4336,82 +4486,12 @@ async function* runOpencodeAttempt(
           }
           if (part.sessionID !== ocSessionId) return;
           if (part.type === "tool") stallGuard.noteTool(part);
-          if (part.type === "text" && !part.synthetic && part.time?.end && !emittedText.has(part.id)) {
-            emittedText.add(part.id);
-            if (compactionMsgs.has(part.messageID)) {
-              turnEvent({ direction: "out", kind: "compaction_summary", ...summarizeText(part.text) });
-              appendOpencodeTranscript(ocSessionId, [
-                transcriptLineCompactionSummary(part.text, part.id),
-              ]);
-            } else {
-              turnEvent({ direction: "out", kind: "assistant_text", ...summarizeText(part.text) });
-              appendOpencodeTranscript(ocSessionId, [
-                transcriptLineAssistantText(part.text, part.id, undefined, model),
-              ]);
-              push({ type: "text_chunk", text: part.text });
-              // Assistant text shaped like a tool transcript = the model
-              // narrating tool calls/results it invented (see
-              // looksLikeFabricatedToolTranscript). Correct it in-band before
-              // the fabricated values reach a command.
-              if (looksLikeFabricatedToolTranscript(part.text) && envelopeLeakSteers < 2) {
-                envelopeLeakSteers++;
-                turnEvent({
-                  direction: "out",
-                  kind: "envelope_leak_detected",
-                  ...summarizeText(part.text, 300),
-                });
-                steerFn(ENVELOPE_LEAK_STEER_PROMPT);
-              }
-            }
-          }
+          mirrorTextPart(part);
           if (part.type === "reasoning" && part.time?.end && !emittedText.has(part.id)) {
             emittedText.add(part.id);
             turnEvent({ direction: "out", kind: "assistant_thinking", ...summarizeText(part.text) });
           }
-          if (part.type === "tool") {
-            const state = part.state;
-            if ((state?.status === "running" || state?.status === "completed" || state?.status === "error") && !startedTools.has(part.id)) {
-              startedTools.add(part.id);
-              turnEvent({
-                direction: "out",
-                kind: "tool_use",
-                tool_name: part.tool,
-                tool_use_id: part.id,
-                ...summarizeText(JSON.stringify(state?.input ?? {}), 500),
-              });
-              appendOpencodeTranscript(ocSessionId, [
-                transcriptLineToolUse(part.id, part.tool || "tool", state?.input),
-              ]);
-              push({ type: "tool_use", toolName: part.tool, toolInput: state?.input, toolUseId: part.id });
-            }
-            if ((state?.status === "completed" || state?.status === "error") && !finishedTools.has(part.id)) {
-              finishedTools.add(part.id);
-              const result = state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
-              const images = opencodeToolResultImages(part);
-              turnEvent({
-                direction: "in",
-                kind: "tool_result",
-                tool_use_id: part.id,
-                is_error: state.status === "error",
-                ...summarizeText(result),
-              });
-              appendOpencodeTranscript(ocSessionId, [
-                transcriptLineToolResult(
-                  part.id,
-                  result,
-                  state.status === "error",
-                  undefined,
-                  images,
-                ),
-              ]);
-              push({
-                type: "tool_result",
-                toolUseId: part.id,
-                content: result.length > 500 ? result.slice(0, 500) + "..." : result,
-                ...(images.length ? { images } : {}),
-              });
-            }
-          }
+          mirrorToolPart(part);
           return;
         }
         case "message.updated": {
@@ -4461,28 +4541,16 @@ async function* runOpencodeAttempt(
     };
 
     let pumpStopped = false;
-    const pump = (async () => {
-      while (!pumpStopped && !abortController.signal.aborted && !idle) {
-        try {
-          // Shared servers: the event stream is DIRECTORY-scoped (verified live
-          // 2026-07-09 — a global subscribe sees only lifecycle events), so
-          // subscribe to this run's directory instance.
-          const sub = await client.event.subscribe(
-            (dirQuery ? { query: dirQuery } : undefined) as any
-          );
-          for await (const ev of sub.stream as AsyncGenerator<any>) {
-            if (pumpStopped || abortController.signal.aborted) return;
-            await handleEvent(ev);
-            if (idle) return;
-          }
-        } catch {
-          // stream dropped — fall through to reconnect
-        }
-        if (!pumpStopped && !idle && !abortController.signal.aborted) {
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-      }
-    })();
+    // Shared servers: the event stream is DIRECTORY-scoped (verified live
+    // 2026-07-09 — a global subscribe sees only lifecycle events), so
+    // subscribe to this run's directory instance.
+    const pump = runSseEventPump({
+      client,
+      query: dirQuery ? { query: dirQuery } : undefined,
+      handleEvent,
+      stopped: () => pumpStopped || abortController.signal.aborted,
+      idle: () => idle,
+    });
 
     // Fire the prompt without holding an HTTP response open for the whole
     // turn (prompt_async returns 204 immediately; completion arrives as
@@ -5338,7 +5406,6 @@ export async function tryReattachOpencodeRun(
       });
       const startedTools = new Set<string>();
       const finishedTools = new Set<string>();
-      let envelopeLeakSteers = 0;
       for (const uuid of seenUuids) {
         if (uuid.endsWith("-use")) startedTools.add(uuid.slice(0, -4));
         else if (uuid.endsWith("-result")) finishedTools.add(uuid.slice(0, -7));
@@ -5357,6 +5424,17 @@ export async function tryReattachOpencodeRun(
         idle = true;
         wake?.();
       };
+      const { mirrorTextPart, mirrorToolPart } = makePartMirror({
+        ocSessionId: ocSessionId!,
+        model,
+        turnEvent,
+        push,
+        steerFn,
+        emittedText,
+        compactionMsgs,
+        startedTools,
+        finishedTools,
+      });
       abortController.signal.addEventListener("abort", () => {
         void client.session.abort({ path: { id: ocSessionId! }, ...q }).catch(() => {});
         signalDone();
@@ -5456,95 +5534,8 @@ export async function tryReattachOpencodeRun(
             const part = p?.part;
             if (!part || part.sessionID !== ocSessionId) return;
             if (part.type === "tool") stallGuard.noteTool(part);
-            if (
-              part.type === "text" &&
-              !part.synthetic &&
-              part.time?.end &&
-              !emittedText.has(part.id)
-            ) {
-              emittedText.add(part.id);
-              if (compactionMsgs.has(part.messageID)) {
-                turnEvent({ direction: "out", kind: "compaction_summary", ...summarizeText(part.text) });
-                appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineCompactionSummary(part.text, part.id),
-                ]);
-              } else {
-                turnEvent({ direction: "out", kind: "assistant_text", ...summarizeText(part.text) });
-                appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineAssistantText(part.text, part.id, undefined, model),
-                ]);
-                push({ type: "text_chunk", text: part.text });
-                // Same fabricated-transcript correction as the primary pump —
-                // a reattached turn can derail the same way.
-                if (looksLikeFabricatedToolTranscript(part.text) && envelopeLeakSteers < 2) {
-                  envelopeLeakSteers++;
-                  turnEvent({
-                    direction: "out",
-                    kind: "envelope_leak_detected",
-                    ...summarizeText(part.text, 300),
-                  });
-                  steerFn(ENVELOPE_LEAK_STEER_PROMPT);
-                }
-              }
-            }
-            if (part.type === "tool") {
-              const state = part.state;
-              if (
-                (state?.status === "running" ||
-                  state?.status === "completed" ||
-                  state?.status === "error") &&
-                !startedTools.has(part.id)
-              ) {
-                startedTools.add(part.id);
-                turnEvent({
-                  direction: "out",
-                  kind: "tool_use",
-                  tool_name: part.tool,
-                  tool_use_id: part.id,
-                  ...summarizeText(JSON.stringify(state?.input ?? {}), 500),
-                });
-                appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineToolUse(part.id, part.tool || "tool", state?.input),
-                ]);
-                push({
-                  type: "tool_use",
-                  toolName: part.tool,
-                  toolInput: state?.input,
-                  toolUseId: part.id,
-                });
-              }
-              if (
-                (state?.status === "completed" || state?.status === "error") &&
-                !finishedTools.has(part.id)
-              ) {
-                finishedTools.add(part.id);
-                const result =
-                  state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
-                const images = opencodeToolResultImages(part);
-                turnEvent({
-                  direction: "in",
-                  kind: "tool_result",
-                  tool_use_id: part.id,
-                  is_error: state.status === "error",
-                  ...summarizeText(result),
-                });
-                appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineToolResult(
-                    part.id,
-                    result,
-                    state.status === "error",
-                    undefined,
-                    images,
-                  ),
-                ]);
-                push({
-                  type: "tool_result",
-                  toolUseId: part.id,
-                  content: result.length > 500 ? result.slice(0, 500) + "..." : result,
-                  ...(images.length ? { images } : {}),
-                });
-              }
-            }
+            mirrorTextPart(part);
+            mirrorToolPart(part);
             return;
           }
           case "message.updated": {
@@ -5576,25 +5567,13 @@ export async function tryReattachOpencodeRun(
 
       let pumpStopped = false;
       const pump = busy
-        ? (async () => {
-            while (!pumpStopped && !abortController.signal.aborted && !idle) {
-              try {
-                const sub = await client.event.subscribe(
-                  (shared ? { query: { directory: run.cwd } } : undefined) as any
-                );
-                for await (const ev of sub.stream as AsyncGenerator<any>) {
-                  if (pumpStopped || abortController.signal.aborted) return;
-                  await handleEvent(ev);
-                  if (idle) return;
-                }
-              } catch {
-                // stream dropped — fall through to reconnect
-              }
-              if (!pumpStopped && !idle && !abortController.signal.aborted) {
-                await new Promise((r) => setTimeout(r, 1000));
-              }
-            }
-          })()
+        ? runSseEventPump({
+            client,
+            query: shared ? { query: { directory: run.cwd } } : undefined,
+            handleEvent,
+            stopped: () => pumpStopped || abortController.signal.aborted,
+            idle: () => idle,
+          })
         : Promise.resolve();
 
       // Wall-clock deadline: what's LEFT of the original turn budget (floor 5
