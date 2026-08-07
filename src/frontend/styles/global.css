@@ -52,6 +52,38 @@
 	--border: #333333;
 	--border-strong: #464646;
 	--top-divider: color-mix(in srgb, var(--border) 68%, transparent);
+	/* Scroll-edge wash — how the transcript meets fixed chrome (the session
+	   header, the composer), ported from the native app's Glass.swift
+	   (composerBottomWash / tabStripTopWash). Two ideas come across.
+	   First: separate chrome from content with a VEIL of the page colour, not a
+	   1px rule — a row dissolves into the bar instead of being sliced by a line.
+	   Second, and the part that actually does the work: the stops are
+	   deliberately NON-LINEAR. A plain two-colour ramp only reaches full
+	   strength on its very last row, so text stays legible right up against the
+	   chrome and the edge still reads as a cut. The veil here is at 55% by four
+	   tenths of the ramp and full by eight tenths, holding for the last fifth —
+	   the native app's stop distribution exactly (`veil * 0.55` then `veil`).
+	   So a row has already gone quiet well before it meets the bar.
+	   One deliberate deviation: there the veil tops out at 0.62, because the
+	   transcript genuinely continues under floating glass and should stay
+	   faintly present. Every edge here ends at a scroll container's CLIP, so
+	   leaving 38% at the boundary would paint half-visible text that then
+	   vanishes on a hard line — the worst of both. The ceiling is the full page
+	   colour instead; the shape, which is what sells it, is unchanged.
+	   Derived from --bg, so both themes get the right wash from one definition. */
+	--wash-depth: 56px;
+	--wash-down: linear-gradient(
+		to bottom,
+		transparent 0,
+		color-mix(in srgb, var(--bg) 55%, transparent) 40%,
+		var(--bg) 80%
+	);
+	--wash-up: linear-gradient(
+		to top,
+		transparent 0,
+		color-mix(in srgb, var(--bg) 55%, transparent) 40%,
+		var(--bg) 80%
+	);
 	--text: #e9e9e9;
 	--text-dim: #a2a2a2;
 	--text-faint: #767676;
@@ -3579,13 +3611,24 @@ body.resizing-tab-split {
 	   growing with its tallest button. */
 	height: var(--desktop-header-h);
 	padding: 0 16px;
-	border-bottom: 1px solid var(--top-divider);
+	/* No hairline under the bar. The header already shares the session body's
+	   colour, so at the top of a transcript there is nothing to divide — and once
+	   there IS content above, the scroll-edge wash below (.viewer-messages-region
+	   ::before) does the separating, the way the native app's nav bar does. A rule
+	   that is drawn whether or not anything passes under it is the thing this
+	   replaces. Restored below for engines without scroll-driven animations,
+	   which never get the wash. */
 	/* Match the session body (white in light) rather than the lifted topbar tint, so
 	   the whole top region reads as one clean surface the transcript dissolves
 	   into under the floating pills. */
 	background: var(--bg);
 	flex-shrink: 0;
 	min-width: 0;
+}
+@supports not (animation-timeline: scroll()) {
+	.viewer-header {
+		border-bottom: 1px solid var(--top-divider);
+	}
 }
 
 .viewer-title {
@@ -8604,8 +8647,14 @@ a.workspace-info-check-row {
 	/* Bottom inset lifts the newest row clear of the composer, which floats up
 	   over the transcript (see .viewer-input). The row stays full-strength; only
 	   rows scrolled down behind the composer fade — and they fade in the
-	   composer's backdrop, not here. */
-	padding: 18px 20px 8px;
+	   composer's own wash, not here.
+	   The inset is the WASH's depth, not the overlap's: with the old 8px the
+	   newest row sat 11px above the composer, so 45 of the wash's 56px lay over
+	   the line you are actually reading while a reply streams. Clearing the full
+	   ramp is what makes a soft edge affordable — it is also what the native
+	   app's bar does, insetting the scroll content by its own height so only
+	   what travels behind it is ever dimmed. */
+	padding: 18px 20px var(--wash-depth);
 	min-height: 0;
 	/* Keep the reader's place when content loads/expands above them (principle 12):
      the browser anchors scroll to on-screen content instead of jumping. */
@@ -8630,15 +8679,22 @@ a.workspace-info-check-row {
 }
 
 /* ── Scroll-aware edge fades ─────────────────────────────── */
-/* Content scrolled past an edge dissolves into the page background, and each
-   fade appears only when there IS content past that edge — driven entirely by
-   a CSS scroll timeline, so there are no JS scroll listeners and no React
-   re-renders. Desktop only: on phones the transcript already fades under the
-   floating header pills via its mask-image, and the composer backdrop handles
-   the bottom on every viewport. Browsers without scroll-driven animations
-   (and the base state) keep opacity 0, so this degrades to today's look; the
-   fades track scroll position rather than animating over time, so they're
-   left active under prefers-reduced-motion. */
+/* Content scrolled past the TOP edge dissolves into the header, and the wash
+   appears only when there IS content up there — driven entirely by a CSS
+   scroll timeline, so there are no JS scroll listeners and no React
+   re-renders. This is what replaces the header's hairline: at the top of a
+   transcript nothing passes under the bar and there is nothing to divide.
+   Desktop only: on phones the transcript fades under the floating header pills
+   via its own mask-image instead.
+   The BOTTOM edge is not here — it belongs to the composer, which floats up
+   over the transcript on every viewport and paints one wash of its own
+   (.viewer-input::before). There used to be a second, scroll-driven ::after
+   fade stacked underneath it; two veils on one edge is one too many, and the
+   composer's is the one that also covers the resting state.
+   Browsers without scroll-driven animations keep opacity 0 and get the
+   hairline back (see .viewer-header); the wash tracks scroll position rather
+   than animating over time, so it stays active under prefers-reduced-motion —
+   nothing moves that wouldn't move anyway. */
 @media (min-width: 721px) {
 	@supports (animation-timeline: scroll()) {
 		.viewer-messages-region {
@@ -8647,35 +8703,29 @@ a.workspace-info-check-row {
 		.viewer-messages {
 			scroll-timeline: --viewer-session-scroll y;
 		}
-		.viewer-messages-region::before,
-		.viewer-messages-region::after {
+		.viewer-messages-region::before {
 			content: "";
 			position: absolute;
 			left: 0;
 			right: 0;
-			height: 40px;
+			top: 0;
+			height: var(--wash-depth);
 			pointer-events: none;
 			/* Above the transcript's flow content, but below the composer
 			   (.viewer-input, z-index 1, later sibling wins the tie) and the
 			   jump-latest pill (z-index 5). */
 			z-index: 1;
 			opacity: 0;
+			/* Full page colour at the bar, gone by the bottom of the ramp — and
+			   non-linear on the way, so a row has faded well before it reaches
+			   the header rather than only on its last line. */
+			background: var(--wash-up);
+			animation-name: session-edge-fade-in;
 			animation-duration: 1ms; /* inert — the scroll timeline drives progress */
 			animation-fill-mode: both;
 			animation-timeline: --viewer-session-scroll;
-		}
-		.viewer-messages-region::before {
-			top: 0;
-			background: linear-gradient(to bottom, var(--bg), transparent);
-			animation-name: session-edge-fade-in;
 			/* Fully in after a couple of lines of scroll-back. */
 			animation-range: 0 56px;
-		}
-		.viewer-messages-region::after {
-			bottom: 0;
-			background: linear-gradient(to top, var(--bg), transparent);
-			animation-name: session-edge-fade-out;
-			animation-range: calc(100% - 56px) 100%;
 		}
 	}
 }
@@ -8685,14 +8735,6 @@ a.workspace-info-check-row {
 	}
 	to {
 		opacity: 1;
-	}
-}
-@keyframes session-edge-fade-out {
-	from {
-		opacity: 1;
-	}
-	to {
-		opacity: 0;
 	}
 }
 
@@ -10077,15 +10119,35 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	z-index: 1;
 	margin-top: calc(-1 * var(--session-under));
 	flex-shrink: 0;
-	/* The backdrop IS the fade: transparent at the top of the overlap so the
-	   transcript shows through crisp, ramping to the solid page bg by the time a
-	   row reaches the composer — rows dissolve behind it, not on the readable
-	   content row above it. */
-	background: linear-gradient(to bottom, transparent 0, var(--bg) var(--session-under));
+	/* Opaque from the composer's top edge down; the dissolve above it lives on
+	   ::before. The overlap band (--session-under) is behind this fill, so the
+	   sliver of transcript that the scroll container still renders there is
+	   covered rather than half-showing through the composer's padding. */
+	background: var(--bg);
 	/* Top padding is deliberately SMALLER than the negative margin (--session-under),
 	   so the composer box rises a few px above where the transcript ends — the last
 	   row tucks slightly UNDER the input instead of leaving a gap. */
 	padding: 4px 20px 14px;
+}
+/* The transcript's bottom scroll edge. It hangs off the COMPOSER rather than
+   the scroll container for the same reason the native app hangs its wash off
+   the bar: an overlay inside the scroll box is laid out inside the inset the
+   composer has already taken, so it paints in the wrong place — and the
+   composer is the thing content actually disappears behind. bottom: 100% puts
+   the ramp's end exactly on the composer's top edge, so the veil reaches full
+   page colour right where the box begins and the fill below carries on
+   seamlessly. --wash-down is non-linear (see :root): a row is already quiet
+   about two thirds of the way down instead of only on its last line. */
+.viewer-input::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 100%;
+	height: var(--wash-depth);
+	/* It lies over the transcript — selecting and scrolling must go through it. */
+	pointer-events: none;
+	background: var(--wash-down);
 }
 
 .viewer-input-row {
@@ -10668,7 +10730,16 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	color: var(--text);
 	font-size: 14px;
 	line-height: 1.55;
-	min-height: 128px;
+	/* Rests at ONE line and grows with the draft (the auto-grow effect in
+	   Composer.tsx measures scrollHeight for a non-empty draft and clears the
+	   inline height for an empty one, so the floor is whatever this rule says).
+	   It used to be a 128px floor: an empty composer was a ~5-line void with a
+	   placeholder marooned at the top of it, and a one-line reply left four
+	   lines of dead space under the text. Phones already rested at one line —
+	   this brings the desktop in line with them and with the native app, whose
+	   field is a single row until you give it more. Growth stops at the cap
+	   below and the field scrolls internally after that. */
+	min-height: 0;
 	max-height: 320px;
 	padding: 2px 0 4px;
 	font-family: inherit;
@@ -13186,6 +13257,12 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	   they always line up. */
 	.viewer-session {
 		--session-under: 16px;
+		/* Shorter wash than the desktop's 56px: the resting pill is only ~50px
+		   tall and sits near the screen edge, so a full-depth veil would reach
+		   further up the transcript than the chrome it belongs to. Set on the
+		   session (not the composer) so the transcript's matching bottom inset
+		   reads the same number. */
+		--wash-depth: 40px;
 	}
 	/* Sit the pill just above the composer's top edge — a small fixed lift, not
 	   keyed to --session-under (that pushed it too far up over the transcript). */
@@ -13205,18 +13282,28 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		   multi-session workspace (set on .detail-pane below), so the first row
 		   starts just below the bar rather than under it. */
 		padding: calc(var(--pane-header-h) + var(--strip-clearance, 0px) + 8px) 12px
-			8px;
+			var(--wash-depth);
 		/* Dissolve the transcript into the header as it scrolls up under the
 		   floating pills; below them the docked tab bar (when shown) is opaque
-		   and clips the rest under its soft shadow. */
+		   and clips the rest under its soft shadow.
+		   Same non-linear distribution as --wash-down, mirrored into mask alpha
+		   (alpha = 1 − veil, measured from the bar downwards): hidden for the
+		   first fifth, 45% by three fifths, full at the bar height. The old
+		   straight ramp left a row perfectly legible a few px under the pills —
+		   it only got quiet on its final line — which is the same "reads as a
+		   cut" problem the hairlines had. */
 		-webkit-mask-image: linear-gradient(
 			to bottom,
 			transparent 0,
+			transparent calc(var(--pane-header-h) * 0.2),
+			rgba(0, 0, 0, 0.45) calc(var(--pane-header-h) * 0.6),
 			#000 var(--pane-header-h)
 		);
 		mask-image: linear-gradient(
 			to bottom,
 			transparent 0,
+			transparent calc(var(--pane-header-h) * 0.2),
+			rgba(0, 0, 0, 0.45) calc(var(--pane-header-h) * 0.6),
 			#000 var(--pane-header-h)
 		);
 	}
@@ -13230,15 +13317,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		position: relative;
 		z-index: 1;
 		margin-top: calc(-1 * var(--session-under));
-		/* The backdrop IS the fade: transparent at the top of the overlap so the
-		   transcript shows through crisp, ramping to the solid page bg by the time
-		   a row reaches the pill — rows dissolve behind the composer, not on the
-		   readable content row above it. */
-		background: linear-gradient(
-			to bottom,
-			transparent 0,
-			var(--bg) var(--session-under)
-		);
+		/* Opaque from the composer's top edge down; the dissolve above it is the
+		   shared ::before wash (see the desktop rule). */
+		background: var(--bg);
 		/* Top padding is deliberately SMALLER than the negative margin (--session-under),
 		   so the composer rises a few px above where the transcript ends — the last
 		   row tucks slightly UNDER the input instead of leaving a gap. */

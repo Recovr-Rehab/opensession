@@ -410,6 +410,31 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     };
   }, [relayout]);
 
+  // The container can change height with no content change at all: the composer
+  // grows a line as the reader types, the queue flap folds out, a panel opens.
+  // relayout() only runs on content changes, so a following reader was silently
+  // left behind — every line typed pushed the live edge further below the fold
+  // (measured: ~22px of drift per line, accumulating). Re-glue on the
+  // container's own resize instead. Guarded to following/pinned readers so a
+  // resize never moves someone who is deliberately reading history, and never
+  // announces "new messages" for content that didn't arrive.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let first = true;
+    const ro = new ResizeObserver(() => {
+      // The observer fires once on observe(); that initial callback describes
+      // the mount, not a resize.
+      if (first) {
+        first = false;
+        return;
+      }
+      if (followingRef.current || pinnedRef.current) relayout();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [relayout]);
+
   // While a turn is pinned, keyboard open/close (visual-viewport pan/resize on
   // iOS) moves the visible window without any content change — re-seat the pin
   // so the turn stays at TOP_GAP below what the reader actually sees.
