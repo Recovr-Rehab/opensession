@@ -13409,12 +13409,19 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.sidebar-ws-ticker {
 		font-size: 12px;
 	}
+	/* The phone gutter is a 28px column — status dot, repo +, all centred in it
+	   — but the run clock is text, not a glyph: at 12px "mm:ss" measures 30px
+	   and "h:mm:ss" 40px, so a hard 28px box with centred text overflowed on
+	   both sides. The digits hung 2-12px past the edge every icon and every
+	   truncated title lines up on, and that edge moved as a run crossed the
+	   hour. Let the clock size to its digits and pin them to the column edge
+	   instead — the same right edge the desktop ticker uses. */
 	.sidebar-ws-row .sidebar-ws-ticker {
-		flex: 0 0 28px;
-		width: 28px;
+		flex: 0 0 auto;
+		width: auto;
 		min-width: 28px;
-		justify-content: center;
-		text-align: center;
+		justify-content: flex-end;
+		text-align: right;
 	}
 	.sidebar-item-title,
 	.sidebar-item-rename {
