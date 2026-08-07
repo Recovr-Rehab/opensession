@@ -1,0 +1,157 @@
+import { request } from "./request";
+
+// ── Pins (per-user pinned tabs) ──
+
+export async function fetchPins(user: string): Promise<string[]> {
+	const body = await request<{ pins?: string[] }>(
+		`/pins?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch pins" },
+	);
+	return Array.isArray(body?.pins) ? body.pins : [];
+}
+
+export async function savePinsApi(
+	user: string,
+	pins: string[],
+): Promise<string[]> {
+	const body = await request<{ pins?: string[] }>("/pins", {
+		method: "PUT",
+		body: { user, pins },
+		label: "Failed to save pins",
+	});
+	return Array.isArray(body?.pins) ? body.pins : pins;
+}
+
+// ── Reads (per-user unread marks; server mirror of localStorage) ──
+
+export async function saveReadsApi(
+	user: string,
+	reads: Record<string, string>,
+): Promise<void> {
+	await request<{ reads?: Record<string, string> }>("/reads", {
+		method: "PUT",
+		body: { user, reads },
+		label: "Failed to save reads",
+	});
+}
+
+// ── UI prefs (per-user cross-device view preferences) ──
+
+export async function fetchUiPrefs(
+	user: string,
+): Promise<Record<string, string>> {
+	const body = await request<{ prefs?: Record<string, string> }>(
+		`/ui-prefs?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch UI prefs" },
+	);
+	return body?.prefs && typeof body.prefs === "object" ? body.prefs : {};
+}
+
+/** Merge a patch into the user's server-side prefs (null value deletes). */
+export async function saveUiPrefsApi(
+	user: string,
+	prefs: Record<string, string | null>,
+): Promise<Record<string, string>> {
+	const body = await request<{ prefs?: Record<string, string> }>("/ui-prefs", {
+		method: "PUT",
+		body: { user, prefs },
+		label: "Failed to save UI prefs",
+	});
+	return body?.prefs && typeof body.prefs === "object" ? body.prefs : {};
+}
+
+// ── Lanes (per-user sidebar status lanes) ──
+
+export async function fetchLanes(
+	user: string,
+): Promise<Record<string, string>> {
+	const body = await request<{ lanes?: Record<string, string> }>(
+		`/lanes?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch lanes" },
+	);
+	return body?.lanes && typeof body.lanes === "object" ? body.lanes : {};
+}
+
+export async function saveLanesApi(
+	user: string,
+	lanes: Record<string, string>,
+): Promise<Record<string, string>> {
+	const body = await request<{ lanes?: Record<string, string> }>("/lanes", {
+		method: "PUT",
+		body: { user, lanes },
+		label: "Failed to save lanes",
+	});
+	return body?.lanes && typeof body.lanes === "object" ? body.lanes : lanes;
+}
+
+// ── Snoozes (per-user workspace snoozes) ──
+
+export async function fetchSnoozes(
+	user: string,
+): Promise<Record<string, string>> {
+	const body = await request<{ snoozes?: Record<string, string> }>(
+		`/snoozes?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch snoozes" },
+	);
+	return body?.snoozes && typeof body.snoozes === "object" ? body.snoozes : {};
+}
+
+export async function saveSnoozesApi(
+	user: string,
+	snoozes: Record<string, string>,
+): Promise<Record<string, string>> {
+	const body = await request<{ snoozes?: Record<string, string> }>(
+		"/snoozes",
+		{ method: "PUT", body: { user, snoozes }, label: "Failed to save snoozes" },
+	);
+	return body?.snoozes && typeof body.snoozes === "object"
+		? body.snoozes
+		: snoozes;
+}
+
+// ── Hides (per-user sidebar hides) ──
+
+export async function fetchHides(
+	user: string,
+): Promise<Record<string, string>> {
+	const body = await request<{ hides?: Record<string, string> }>(
+		`/hides?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch hides" },
+	);
+	return body?.hides && typeof body.hides === "object" ? body.hides : {};
+}
+
+export async function saveHidesApi(
+	user: string,
+	hides: Record<string, string>,
+): Promise<Record<string, string>> {
+	const body = await request<{ hides?: Record<string, string> }>("/hides", {
+		method: "PUT",
+		body: { user, hides },
+		label: "Failed to save hides",
+	});
+	return body?.hides && typeof body.hides === "object" ? body.hides : hides;
+}
+
+// ── Tab colors (per-user session tab colors) ──
+
+export async function fetchTabColors(
+	user: string,
+): Promise<Record<string, string>> {
+	const body = await request<{ colors?: Record<string, string> }>(
+		`/tab-colors?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch tab colors" },
+	);
+	return body?.colors && typeof body.colors === "object" ? body.colors : {};
+}
+
+export async function saveTabColorsApi(
+	user: string,
+	colors: Record<string, string>,
+): Promise<Record<string, string>> {
+	const body = await request<{ colors?: Record<string, string> }>(
+		"/tab-colors",
+		{ method: "PUT", body: { user, colors }, label: "Failed to save tab colors" },
+	);
+	return body?.colors && typeof body.colors === "object" ? body.colors : colors;
+}

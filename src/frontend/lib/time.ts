@@ -49,3 +49,15 @@ export function elapsedClock(fromMs: number, nowMs: number = Date.now()): string
 	const pad = (n: number) => String(n).padStart(2, "0");
 	return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
+
+/** Coarse relative age for prewarming/papercuts status lines ("just now",
+ * "5m ago", "3h ago", "2d ago"; "never" without a timestamp). */
+export function warmAgo(iso?: string): string {
+	if (!iso) return "never";
+	const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+	if (mins < 1) return "just now";
+	if (mins < 60) return `${mins}m ago`;
+	const hours = Math.round(mins / 60);
+	if (hours < 48) return `${hours}h ago`;
+	return `${Math.round(hours / 24)}d ago`;
+}
