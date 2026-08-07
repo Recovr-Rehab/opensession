@@ -145,16 +145,30 @@ struct DeskVoiceCallView: View {
     }
 
     private var status: some View {
-        Text(engine.state == .error ? (engine.errorMessage ?? engine.state.label) : statusText)
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(
-                engine.state == .error ? OS1VisualStyle.red : OS1VisualStyle.textDim
-            )
-            .multilineTextAlignment(.center)
-            .lineLimit(2)
-            .padding(.top, 28)
-            .animation(.easeInOut(duration: 0.2), value: statusText)
-            .accessibilityAddTraits(.updatesFrequently)
+        VStack(spacing: 6) {
+            Text(engine.state == .error ? (engine.errorMessage ?? engine.state.label) : statusText)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(
+                    engine.state == .error ? OS1VisualStyle.red : OS1VisualStyle.textDim
+                )
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .animation(.easeInOut(duration: 0.2), value: statusText)
+                .accessibilityAddTraits(.updatesFrequently)
+
+            // "Listening" that never hears anything is the one failure the
+            // status line can't express — the call really is up. This is where
+            // that says so instead of leaving the screen looking healthy.
+            if let hint = engine.hint, engine.state != .error {
+                Text(hint)
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.yellow)
+                    .multilineTextAlignment(.center)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.top, 28)
+        .animation(.easeInOut(duration: 0.2), value: engine.hint)
     }
 
     private var statusText: String {

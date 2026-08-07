@@ -696,6 +696,18 @@ enum OS1API {
         let _: OkResponse = try await post("/api/desk/voice/transcript", body: body)
     }
 
+    /// One audio-free line about how a voice call went (counters only — no
+    /// audio, no transcript). A call that fails does so on the user's device
+    /// with nothing to inspect; this is what makes the next report of one
+    /// answerable. Best effort by design: the caller ignores failures.
+    static func deskVoiceDiag(_ report: [String: Any]) async throws {
+        struct OkResponse: Decodable, Sendable { let ok: Bool? }
+        var body = report
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["user"] = user }
+        let _: OkResponse = try await post("/api/desk/voice/diag", body: body)
+    }
+
     private static func post<T: Decodable & Sendable>(
         _ path: String,
         body: [String: Any]

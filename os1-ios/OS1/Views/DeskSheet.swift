@@ -34,10 +34,18 @@ struct DeskSheet: View {
             #endif
             await load()
         }
-        .onDisappear { engine.stop() }
+        .onDisappear {
+            // A full-screen cover takes its presenter off screen, so this
+            // fires when the CALL opens — hanging up the call it just
+            // presented. Only a sheet that is really going away stops it.
+            if !engine.callPresented { engine.stop() }
+        }
         .onChange(of: scenePhase) { _, phase in
-            // A backgrounded app must never hold the mic open.
-            if phase != .active { engine.stop() }
+            // A backgrounded app must never hold the mic open. `.inactive` is
+            // not backgrounded — it's the app switcher, a notification banner,
+            // Control Center — and killing a live call for those is how a
+            // glance at the notification shade silently ends a conversation.
+            if phase == .background { engine.stop() }
         }
         .fullScreenCoverCompat(isPresented: $engine.callPresented) {
             DeskVoiceCallView(engine: engine)

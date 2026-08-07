@@ -15,11 +15,14 @@
  */
 
 import {
+	appendFileSync,
 	chmodSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
 	rmSync,
+	statSync,
+	writeFileSync,
 } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -394,6 +397,41 @@ export async function executeVoiceTool(
 		}
 		default:
 			return { error: `unknown tool ${name}` };
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Call diagnostics. A voice call fails on the user's device, silently and with
+// nothing to inspect afterwards — "it just says Listening" is all a report can
+// say. Clients post one audio-free line of counters when a call ends (never
+// audio, never transcript text), which is what makes such a report answerable:
+// whether the socket ever came up, whether the microphone produced anything,
+// how often the capture path had to be rebuilt.
+
+const DIAG_PATH = `${DIR}/voice-diag.jsonl`;
+/** Keep the tail bounded — this is a debugging aid, not a data store. */
+const DIAG_MAX_BYTES = 256 * 1024;
+
+export function recordVoiceDiag(
+	user: string,
+	report: Record<string, unknown>,
+): void {
+	const { user: _user, ...rest } = report;
+	const line = JSON.stringify({
+		at: new Date().toISOString(),
+		user,
+		...rest,
+	});
+	console.log(`[desk-voice] call diagnostics ${line}`);
+	try {
+		mkdirSync(DIR, { recursive: true });
+		if (existsSync(DIAG_PATH) && statSync(DIAG_PATH).size > DIAG_MAX_BYTES) {
+			const kept = readFileSync(DIAG_PATH, "utf-8").split("\n").slice(-200);
+			writeFileSync(DIAG_PATH, kept.join("\n"));
+		}
+		appendFileSync(DIAG_PATH, `${line}\n`);
+	} catch (e) {
+		console.error("[desk-voice] failed to record diagnostics:", e);
 	}
 }
 

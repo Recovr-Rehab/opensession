@@ -13,6 +13,7 @@ import {
 	mintVoiceSecret,
 	mirrorVoiceEntries,
 	mirrorVoiceToolCall,
+	recordVoiceDiag,
 	setVoiceKey,
 	voiceKeyConfigured,
 	voiceKeyMasked,
@@ -113,6 +114,16 @@ export async function handleDeskVoiceRoutes(
 			)
 			.slice(0, 20);
 		mirrorVoiceEntries(user, entries);
+		return Response.json({ ok: true });
+	}
+
+	if (path === "/api/desk/voice/diag" && req.method === "POST") {
+		const body = await req.json().catch(() => null);
+		if (!body || typeof body !== "object")
+			return Response.json({ error: "expected an object" }, { status: 400 });
+		const user = requestUser(ctx, (body as { user?: string }).user);
+		if (!user) return Response.json({ error: "missing user" }, { status: 400 });
+		recordVoiceDiag(user, body as Record<string, unknown>);
 		return Response.json({ ok: true });
 	}
 

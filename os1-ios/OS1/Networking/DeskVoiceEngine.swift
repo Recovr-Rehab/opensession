@@ -41,11 +41,24 @@ struct DeskVoiceCaption: Equatable {
 /// up as base64 PCM16 frames, model audio streams down the same way, and tool
 /// calls / transcripts relay through our own server (`desk-voice.ts`) so the
 /// real OpenAI key never reaches the client.
+///
+/// Everything that can go wrong here goes wrong SILENTLY — a socket that never
+/// finishes its handshake, a capture tap that stops delivering after an audio
+/// route change, a voice-processing unit that hands back digital silence. Each
+/// one leaves a call that looks perfectly healthy and simply never hears
+/// anything, so this class treats "connected" and "hearing the microphone" as
+/// claims that have to keep proving themselves: the state only reaches
+/// `.listening` once the far end has spoken to us, and a health ticker rebuilds
+/// (or, failing that, reports) a capture path that has gone quiet.
 @MainActor
 @Observable
 final class DeskVoiceEngine {
     private(set) var state: DeskVoiceState = .idle
     private(set) var errorMessage: String?
+    /// A non-fatal note under the status — "the call is up but I can't hear
+    /// you". Fatal problems use `errorMessage` and end the call; this is for
+    /// the ones where continuing is still worth a try.
+    private(set) var hint: String?
 
     /// Smoothed 0…1 loudness for the call orb: the mic while we're listening,
     /// the model's own voice while it speaks. Sampled off the realtime audio
@@ -78,8 +91,17 @@ final class DeskVoiceEngine {
 
     /// Realtime minutes are expensive; an abandoned call must die on its own.
     private static let idleTimeout: Duration = .seconds(180)
+    /// How long the far end gets to say anything at all before we call the
+    /// connection dead. A hung TLS/WebSocket handshake never throws, so
+    /// without this the call sits on "Connecting…" forever.
+    private static let connectTimeout: Duration = .seconds(12)
+    /// Uplink health is judged over windows this long.
+    private static let healthInterval: Duration = .milliseconds(2_000)
 
-    private let engine = AVAudioEngine()
+    /// Rebuilt whenever the capture path has to be re-created (see
+    /// `recoverCapture`) — toggling voice processing on an engine that has
+    /// already run is not reliable, a fresh one always is.
+    private var engine = AVAudioEngine()
     /// State the Core Audio realtime tap/render callbacks touch — those run
     /// off the main actor and can't hop to it per frame, so this lives in a
     /// small `@unchecked Sendable` box rather than on `self`.
@@ -87,12 +109,28 @@ final class DeskVoiceEngine {
 
     private var playerNode: AVAudioPlayerNode?
     private var receiveTask: Task<Void, Never>?
-    private var silenceWatchdog: Task<Void, Never>?
-    /// The voice-processing fallback is one-shot per call.
-    private var vpFallbackDone = false
+    private var healthTicker: Task<Void, Never>?
+    private var connectTimer: Task<Void, Never>?
     private var idleTimer: Task<Void, Never>?
     private var levelTimer: Task<Void, Never>?
     private var transcriptChain: Task<Void, Never>?
+    private var audioObservers: [NSObjectProtocol] = []
+    /// The voice-processing fallback is one-shot per call.
+    private var vpFallbackDone = false
+    /// Consecutive health windows whose uplink carried nothing at all.
+    private var silentWindows = 0
+    /// Capture rebuilds this call, capped so a genuinely broken audio stack
+    /// can't turn into a rebuild loop.
+    private var captureRebuilds = 0
+    private var failedRebuilds = 0
+    private var lastCaptureRebuild: Date?
+    /// Set once the far end has said anything — proof the socket is real.
+    private var farEndAlive = false
+    /// Set once the far end reports hearing speech. Until then a silent uplink
+    /// is suspicious; afterwards it just means the user stopped talking.
+    private var heardSpeech = false
+    /// Dev/simulator runs that stream a file instead of using the microphone.
+    private var injectedAudio = false
     /// Transcript item the streaming caption is currently accumulating, so a
     /// delta for a new item starts a fresh line instead of appending to the
     /// last one.
@@ -100,22 +138,43 @@ final class DeskVoiceEngine {
     /// Distinguishes an intentional `stop()` from the socket dying under us —
     /// only the latter should flip `state` to `.error`.
     private var stopping = false
+    /// Bumped by every `start()`/`stop()`. `start()` suspends twice (mic
+    /// permission, minting the secret); without a generation check a `stop()`
+    /// landing in one of those gaps is undone by the rest of `start()`, which
+    /// resurrects a call nothing is watching.
+    private var generation = 0
+    /// Counters for the end-of-call diagnostics beacon.
+    private var callStartedAt = Date()
+    private var eventsReceived = 0
 
     func start() async {
         guard state == .idle || state == .error else { return }
+        generation &+= 1
+        let generation = self.generation
         errorMessage = nil
+        hint = nil
         stopping = false
         caption = nil
         captionItemId = nil
         audioLevel = 0
         muted = false
+        vpFallbackDone = false
+        silentWindows = 0
+        captureRebuilds = 0
+        failedRebuilds = 0
+        lastCaptureRebuild = nil
+        farEndAlive = false
+        heardSpeech = false
+        eventsReceived = 0
+        callStartedAt = Date()
+
+        state = .connecting
 
         guard await requestMicPermission() else {
             fail("Microphone access is off. Enable it for OS1 in Settings to start a voice call.")
             return
         }
-
-        state = .connecting
+        guard generation == self.generation else { return }
 
         let secret: OS1API.DeskVoiceSecret
         do {
@@ -124,6 +183,7 @@ final class DeskVoiceEngine {
             fail(error.localizedDescription)
             return
         }
+        guard generation == self.generation else { return }
 
         var components = URLComponents(string: "wss://api.openai.com/v1/realtime")
         components?.queryItems = [URLQueryItem(name: "model", value: secret.model)]
@@ -137,45 +197,42 @@ final class DeskVoiceEngine {
         rt.webSocketTask = task
         task.resume()
 
+        // Receiving starts BEFORE the audio hardware: `session.created` is what
+        // promotes the call to `.listening`, and audio setup can take a moment.
+        receiveTask = Task { [weak self] in
+            await self?.receiveLoop(task)
+        }
+        armConnectTimer()
+
         // Injected-audio dev runs skip the audio hardware entirely: the
         // shared build Macs have no microphone, and the simulator's audio
         // unit can abort the whole process on init.
         #if DEBUG
-        let injectedAudio =
-            ProcessInfo.processInfo.environment["OS1_VOICE_INJECT_RAW"] != nil
+        injectedAudio = ProcessInfo.processInfo.environment["OS1_VOICE_INJECT_RAW"] != nil
         #else
-        let injectedAudio = false
+        injectedAudio = false
         #endif
         if !injectedAudio {
             do {
                 try configureAudioSession()
-                try startAudioEngine()
+                try buildAudioPath()
             } catch {
-                rt.webSocketTask = nil
-                task.cancel(with: .goingAway, reason: nil)
                 fail("Could not start audio: \(error.localizedDescription)")
                 return
             }
+            observeAudioDisruptions()
+            startHealthTicker()
         }
 
-        state = .listening
-        armIdleTimer()
         startLevelSampling()
-        vpFallbackDone = false
-        if !injectedAudio {
-            armSilenceWatchdog()
-        }
         #if DEBUG
         injectAudioIfRequested()
         #endif
-
-        receiveTask = Task { [weak self] in
-            await self?.receiveLoop(task)
-        }
     }
 
     func stop() {
         guard state != .idle else { return }
+        generation &+= 1
         stopping = true
         teardown(resetError: true)
     }
@@ -215,45 +272,67 @@ final class DeskVoiceEngine {
         #endif
     }
 
-    private func startAudioEngine(voiceProcessing: Bool = true) throws {
+    /// Build a complete capture + playback graph on a NEW `AVAudioEngine`.
+    /// Rebuilding from scratch (rather than toggling voice processing and
+    /// re-installing taps on the engine that just failed) is what makes the
+    /// recovery paths below dependable: an engine that has already started
+    /// keeps its old IO unit's state, and turning voice processing back off on
+    /// one is exactly the operation that tends to fail.
+    private func buildAudioPath(voiceProcessing: Bool = true) throws {
+        tearDownAudio()
+
+        let engine = AVAudioEngine()
+        self.engine = engine
         let inputNode = engine.inputNode
+
         // Echo cancellation is essential once the model's voice is coming
-        // out of the speaker while we're still listening — must happen
-        // before reading input/output formats, since enabling it changes
-        // them. On some devices/routes the voice-processing unit delivers
-        // pure digital silence instead of mic audio; the silence watchdog
-        // detects that and rebuilds the audio path without it.
+        // out of the speaker while we're still listening. On some
+        // devices/routes the voice-processing unit delivers pure digital
+        // silence instead of mic audio; the health ticker detects that and
+        // rebuilds the path with `voiceProcessing: false`, which on a fresh
+        // engine means simply never switching it on.
         #if targetEnvironment(simulator)
         // The simulator's voice-processing unit is flaky to the point of
         // aborting the process inside AURemoteIO — plain IO is fine there.
         _ = voiceProcessing
         #else
-        do {
-            try inputNode.setVoiceProcessingEnabled(voiceProcessing)
-        } catch {
-            print("DeskVoiceEngine: setVoiceProcessingEnabled(\(voiceProcessing)) failed: \(error)")
-            // Enable failed → no echo cancellation → same self-echo hazard
-            // as the fallback path.
-            if voiceProcessing { rt.halfDuplex = true }
+        if voiceProcessing {
+            do {
+                try inputNode.setVoiceProcessingEnabled(true)
+                rt.halfDuplex = false
+            } catch {
+                print("DeskVoiceEngine: setVoiceProcessingEnabled(true) failed: \(error)")
+                // No echo cancellation → the model would converse with its own
+                // echo, so the uplink has to go half-duplex instead.
+                rt.halfDuplex = true
+            }
+        } else {
+            rt.halfDuplex = true
         }
         #endif
 
-        let inputFormat = inputNode.outputFormat(forBus: 0)
         guard let uplinkFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16, sampleRate: 24_000, channels: 1, interleaved: true
         ) else {
             throw DeskVoiceEngineError.audioSetup
         }
-        guard let converter = AVAudioConverter(from: inputFormat, to: uplinkFormat) else {
-            throw DeskVoiceEngineError.audioSetup
-        }
-        rt.uplinkConverter = converter
         rt.uplinkFormat = uplinkFormat
 
-        // ~0.1s of frames at the input's native rate per tap callback.
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            // A zero format means the input hardware isn't available (an
+            // active phone call, a route that's still settling). Failing here
+            // is better than installing a tap that can never fire.
+            throw DeskVoiceEngineError.noInput
+        }
+        // ~0.1s of frames at the input's native rate per tap callback. The tap
+        // takes a nil format on purpose: the node's real format can change
+        // between here and `engine.start()` (enabling voice processing, a
+        // route settling), and pinning the format we read a moment ago either
+        // throws at start or yields a tap that never delivers.
         let bufferSize = AVAudioFrameCount(inputFormat.sampleRate * 0.1)
         let rt = self.rt
-        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: nil) { buffer, _ in
             rt.handleCapturedBuffer(buffer)
         }
 
@@ -261,12 +340,6 @@ final class DeskVoiceEngine {
             commonFormat: .pcmFormatFloat32, sampleRate: 24_000, channels: 1, interleaved: false
         ) else {
             throw DeskVoiceEngineError.audioSetup
-        }
-        // A rebuild (the watchdog's fallback) re-runs this whole setup; the
-        // previous player must not stay attached to the engine.
-        if let old = playerNode {
-            old.removeTap(onBus: 0)
-            engine.detach(old)
         }
         let player = AVAudioPlayerNode()
         engine.attach(player)
@@ -290,6 +363,118 @@ final class DeskVoiceEngine {
         engine.prepare()
         try engine.start()
         player.play()
+        rt.resetWindow()
+    }
+
+    /// Drop the current graph. Safe to call when there isn't one.
+    private func tearDownAudio() {
+        engine.inputNode.removeTap(onBus: 0)
+        playerNode?.removeTap(onBus: 0)
+        if engine.isRunning {
+            engine.stop()
+        }
+        playerNode?.stop()
+        if let player = playerNode {
+            engine.detach(player)
+        }
+        playerNode = nil
+        rt.playerNode = nil
+        rt.resetPlaybackQueue()
+    }
+
+    // MARK: - Route / configuration recovery
+
+    /// The two notifications that silently kill a running capture tap.
+    ///
+    /// `AVAudioEngineConfigurationChange` is posted when the engine's own
+    /// graph is invalidated — the engine stops itself and the installed taps
+    /// stop firing, which is precisely the "connected but deaf" call we're
+    /// chasing. It fires on a real device in the first seconds of a call
+    /// (activating the session, voice processing coming up, the route moving
+    /// to the speaker) and essentially never in the simulator, which is why
+    /// this was invisible in dev.
+    private func observeAudioDisruptions() {
+        let center = NotificationCenter.default
+        audioObservers.append(
+            center.addObserver(
+                forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.recoverCaptureIfStopped(reason: "engine configuration changed")
+                }
+            }
+        )
+        #if os(iOS)
+        audioObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+            ) { [weak self] note in
+                let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+                let reason = AVAudioSession.RouteChangeReason(rawValue: raw)
+                // Only the reasons that actually swap hardware under us —
+                // a category change we made ourselves isn't one of them.
+                guard reason == .newDeviceAvailable
+                    || reason == .oldDeviceUnavailable
+                    || reason == .override
+                    || reason == .routeConfigurationChange
+                else { return }
+                MainActor.assumeIsolated {
+                    self?.recoverCaptureIfStopped(reason: "audio route changed")
+                }
+            }
+        )
+        audioObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+            ) { [weak self] note in
+                let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt ?? 0
+                guard AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+                MainActor.assumeIsolated {
+                    self?.recoverCaptureIfStopped(reason: "interruption ended")
+                }
+            }
+        )
+        #endif
+    }
+
+    /// A disruption only forces a rebuild when it actually stopped the engine
+    /// (which is what the system does on a configuration change). If the
+    /// engine survived, the health ticker below decides — it watches whether
+    /// buffers are still arriving, which is the thing that actually matters,
+    /// and avoids tearing down a working call every time a notification fires.
+    private func recoverCaptureIfStopped(reason: String) {
+        guard active, !injectedAudio, !engine.isRunning else { return }
+        recoverCapture(reason: reason)
+    }
+
+    /// Rebuild the audio path mid-call. Debounced, because a single route
+    /// change can post several notifications and our own rebuild posts one
+    /// more, and capped so a permanently broken audio stack reports itself
+    /// instead of spinning.
+    private func recoverCapture(reason: String, disableVoiceProcessing: Bool = false) {
+        guard active, !injectedAudio else { return }
+        if let last = lastCaptureRebuild, Date().timeIntervalSince(last) < 1.5 { return }
+        guard captureRebuilds < 6 else {
+            showHint("The microphone keeps dropping out. Try ending the call and starting it again.")
+            return
+        }
+        captureRebuilds += 1
+        lastCaptureRebuild = Date()
+        if disableVoiceProcessing { vpFallbackDone = true }
+        print("DeskVoiceEngine: rebuilding capture (\(reason), voiceProcessing: \(!vpFallbackDone))")
+
+        do {
+            try configureAudioSession()
+            try buildAudioPath(voiceProcessing: !vpFallbackDone)
+            failedRebuilds = 0
+            silentWindows = 0
+        } catch {
+            failedRebuilds += 1
+            print("DeskVoiceEngine: capture rebuild failed: \(error)")
+            if failedRebuilds >= 3 {
+                fail("Could not restart audio: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - WebSocket receive loop
@@ -325,6 +510,8 @@ final class DeskVoiceEngine {
             (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         }.value
         guard let event, let type = event["type"] as? String else { return }
+        eventsReceived += 1
+        noteFarEndAlive()
         #if DEBUG
         if ProcessInfo.processInfo.environment["OS1_VOICE_LOG"] != nil {
             print("DeskVoiceEngine: event \(type)")
@@ -336,6 +523,8 @@ final class DeskVoiceEngine {
             // The server cancels its own in-flight response; dropping queued
             // local playback so the model doesn't keep talking over us is
             // our job.
+            heardSpeech = true
+            clearHint()
             rt.stopPlayback()
             state = .listening
             armIdleTimer()
@@ -387,6 +576,21 @@ final class DeskVoiceEngine {
 
         default:
             break
+        }
+    }
+
+    /// First word from the far end: the socket is genuinely up, so the call
+    /// can leave "Connecting…". Anything the server says counts — waiting for
+    /// one specific event type would strand the call if that name ever
+    /// changes, and every event equally proves the connection is real.
+    private func noteFarEndAlive() {
+        guard !farEndAlive else { return }
+        farEndAlive = true
+        connectTimer?.cancel()
+        connectTimer = nil
+        if state == .connecting {
+            state = .listening
+            armIdleTimer()
         }
     }
 
@@ -484,41 +688,89 @@ final class DeskVoiceEngine {
         }
     }
 
-    // MARK: - Silence watchdog
+    // MARK: - Connection + uplink health
 
-    /// On some devices/routes, enabling voice processing leaves the mic
-    /// delivering pure digital silence — everything looks connected, but the
-    /// server VAD never hears speech and the call sits deaf on "Listening".
-    /// A real microphone in a real room never produces exact zeros, so a few
-    /// seconds of a flat-zero uplink means the capture path is dead, not that
-    /// the user is quiet — rebuild it without voice processing.
-    private func armSilenceWatchdog() {
-        silenceWatchdog?.cancel()
-        silenceWatchdog = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3))
+    private func armConnectTimer() {
+        connectTimer?.cancel()
+        connectTimer = Task { [weak self] in
+            try? await Task.sleep(for: Self.connectTimeout)
             guard !Task.isCancelled else { return }
-            self?.checkForSilentUplink()
+            self?.connectTimedOut()
         }
     }
 
-    private func checkForSilentUplink() {
-        guard active, !muted, !vpFallbackDone else { return }
-        guard rt.uplinkPeak.value < 0.001 else { return }
-        vpFallbackDone = true
-        // No voice processing means no echo cancellation: without the gate
-        // the model converses with its own echo (the transcript literally
-        // shows it answering fragments of its previous sentence).
-        rt.halfDuplex = true
-        print("DeskVoiceEngine: uplink is digital silence with voice processing on — rebuilding capture without it (half-duplex)")
-        engine.inputNode.removeTap(onBus: 0)
-        if engine.isRunning {
-            engine.stop()
+    private func connectTimedOut() {
+        guard active, !farEndAlive else { return }
+        fail("Couldn't reach the voice service — the connection never came up.")
+    }
+
+    /// Rolling uplink health, judged every couple of seconds for the whole
+    /// call rather than once at the start. Two distinct failures hide behind
+    /// the same "Listening" screen and only a rolling check catches both:
+    /// a tap that never fires (the graph died — rebuild it) and a tap that
+    /// fires but carries pure digital silence (voice processing eating the
+    /// mic — rebuild it without). A peak measured over the whole call, as the
+    /// first version of this did, cannot see either one happen mid-call.
+    private func startHealthTicker() {
+        healthTicker?.cancel()
+        rt.resetWindow()
+        healthTicker = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.healthInterval)
+                guard !Task.isCancelled, let self, self.active else { return }
+                self.checkUplinkHealth()
+            }
         }
-        do {
-            try startAudioEngine(voiceProcessing: false)
-        } catch {
-            fail("Could not restart audio: \(error.localizedDescription)")
+    }
+
+    private func checkUplinkHealth() {
+        let window = rt.takeWindow()
+
+        // Sends that fail are invisible otherwise — the completion handler is
+        // the only place URLSession reports them.
+        if window.sendFailures >= 5 {
+            fail("Lost the connection to the voice service.")
+            return
         }
+
+        // Muted or listening to the model: the uplink is meant to be quiet.
+        guard !muted, state != .speaking, state != .action else {
+            silentWindows = 0
+            return
+        }
+
+        if window.buffers == 0 {
+            // The capture tap stopped firing. Nothing recovers on its own.
+            recoverCapture(reason: "capture tap delivered no buffers")
+            return
+        }
+
+        // A live analogue path never produces a whole window of exact zeros,
+        // even in a silent room — that is a dead capture chain, not a quiet
+        // user, so it's safe to act on without a level threshold that would
+        // misfire on someone who simply isn't talking.
+        if window.nonZeroSamples == 0 {
+            silentWindows += 1
+            if silentWindows == 2 && !vpFallbackDone {
+                recoverCapture(
+                    reason: "uplink is digital silence", disableVoiceProcessing: true
+                )
+            } else if silentWindows >= 5 {
+                showHint("Not hearing your microphone — check that nothing else is using it.")
+            }
+        } else {
+            silentWindows = 0
+            if !heardSpeech { clearHint() }
+        }
+    }
+
+    private func showHint(_ message: String) {
+        guard hint != message else { return }
+        hint = message
+    }
+
+    private func clearHint() {
+        if hint != nil { hint = nil }
     }
 
     #if DEBUG
@@ -575,6 +827,34 @@ final class DeskVoiceEngine {
         stop()
     }
 
+    // MARK: - Diagnostics
+
+    /// One compact, audio-free line per call, posted best-effort. A voice call
+    /// that fails does so on the user's device with nothing to look at; these
+    /// counters are what turn the next "it just says Listening" report into
+    /// something answerable.
+    private func reportDiagnostics(outcome: String) {
+        guard !injectedAudio else { return }
+        let stats = rt.lifetimeStats()
+        let report: [String: Any] = [
+            "outcome": outcome,
+            "seconds": Int(Date().timeIntervalSince(callStartedAt)),
+            "connected": farEndAlive,
+            "events": eventsReceived,
+            "heardSpeech": heardSpeech,
+            "framesCaptured": stats.buffers,
+            "framesSent": stats.sent,
+            "sendFailures": stats.sendFailures,
+            "uplinkPeak": Double(round(1_000 * stats.peak) / 1_000),
+            "captureRebuilds": captureRebuilds,
+            "voiceProcessingFallback": vpFallbackDone,
+            "halfDuplex": rt.halfDuplex,
+            "error": errorMessage ?? "",
+            "hint": hint ?? "",
+        ]
+        Task { try? await OS1API.deskVoiceDiag(report) }
+    }
+
     // MARK: - Teardown
 
     private func fail(_ message: String) {
@@ -586,10 +866,14 @@ final class DeskVoiceEngine {
     /// Shared by `stop()` and the error path — must be safe to call more
     /// than once (deinit-safety: everything here is idempotent).
     private func teardown(resetError: Bool) {
+        reportDiagnostics(outcome: resetError ? "ended" : "failed")
+
         receiveTask?.cancel()
         receiveTask = nil
-        silenceWatchdog?.cancel()
-        silenceWatchdog = nil
+        healthTicker?.cancel()
+        healthTicker = nil
+        connectTimer?.cancel()
+        connectTimer = nil
         idleTimer?.cancel()
         idleTimer = nil
         levelTimer?.cancel()
@@ -597,19 +881,16 @@ final class DeskVoiceEngine {
         transcriptChain?.cancel()
         transcriptChain = nil
 
-        engine.inputNode.removeTap(onBus: 0)
-        playerNode?.removeTap(onBus: 0)
-        if engine.isRunning {
-            engine.stop()
+        for observer in audioObservers {
+            NotificationCenter.default.removeObserver(observer)
         }
-        playerNode?.stop()
-        playerNode = nil
+        audioObservers = []
+
+        tearDownAudio()
         audioLevel = 0
         rt.resetLevels()
         rt.halfDuplex = false
 
-        rt.playerNode = nil
-        rt.uplinkConverter = nil
         rt.uplinkFormat = nil
         rt.playbackFormat = nil
         rt.onPlaybackDrained = nil
@@ -623,6 +904,7 @@ final class DeskVoiceEngine {
         if resetError {
             state = .idle
             errorMessage = nil
+            hint = nil
             caption = nil
             captionItemId = nil
             muted = false
@@ -637,17 +919,25 @@ final class DeskVoiceEngine {
 
 private enum DeskVoiceEngineError: Error {
     case audioSetup
+    case noInput
+}
+
+extension DeskVoiceEngineError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .audioSetup: "the audio format could not be created"
+        case .noInput: "no microphone input is available right now"
+        }
+    }
 }
 
 /// Mutable state the Core Audio realtime tap and player-completion callbacks
 /// touch, kept off the `@MainActor` so those callbacks never need to hop.
 /// `@unchecked Sendable` is deliberate: `webSocketTask.send` is documented
-/// thread-safe, the converter/format properties are set once before the tap
-/// starts and only read from it afterward, and `scheduledCount` is guarded by
-/// its own lock.
+/// thread-safe, the converter is created and used only on the capture thread,
+/// and every counter is guarded by its own lock.
 private final class DeskVoiceAudioBridge: @unchecked Sendable {
     var webSocketTask: URLSessionWebSocketTask?
-    var uplinkConverter: AVAudioConverter?
     var uplinkFormat: AVAudioFormat?
     var playerNode: AVAudioPlayerNode?
     var playbackFormat: AVAudioFormat?
@@ -663,13 +953,18 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
     /// would otherwise re-enter the mic and barge in on the model itself.
     var halfDuplex = false
 
+    /// Created lazily from the format the tap actually hands us. Reading the
+    /// input node's format up front and converting from that is wrong the
+    /// moment anything changes the route underneath the call — the buffers
+    /// then arrive in a format the converter was never built for.
+    private var converter: AVAudioConverter?
+    private var converterInputFormat: AVAudioFormat?
+
     private let scheduledCount = LockedCounter()
     private let lastDrainAt = LockedTime()
     private let inputLevel = LockedLevel()
     private let outputLevel = LockedLevel()
-    /// Loudest sample the uplink has carried this call (0…1) — the silence
-    /// watchdog's evidence that the capture path is alive at all.
-    let uplinkPeak = LockedLevel()
+    private let stats = LockedUplinkStats()
 
     /// Whoever is talking drives the orb: the model while it speaks, the mic
     /// the rest of the time.
@@ -680,8 +975,11 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
     func resetLevels() {
         inputLevel.value = 0
         outputLevel.value = 0
-        uplinkPeak.value = 0
     }
+
+    func resetWindow() { stats.resetWindow() }
+    func takeWindow() -> UplinkWindow { stats.takeWindow() }
+    func lifetimeStats() -> UplinkTotals { stats.totals() }
 
     /// Runs on the player's tap thread.
     func noteOutputLevel(_ buffer: AVAudioPCMBuffer) {
@@ -705,7 +1003,13 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
     /// 24kHz and ship it upstream. Server-side VAD handles turn-taking, so
     /// this only ever appends; it never sends a commit.
     func handleCapturedBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard let converter = uplinkConverter, let uplinkFormat else { return }
+        guard let uplinkFormat else { return }
+        if converterInputFormat?.isEqual(buffer.format) != true {
+            converter = AVAudioConverter(from: buffer.format, to: uplinkFormat)
+            converterInputFormat = buffer.format
+        }
+        guard let converter else { return }
+
         let ratio = uplinkFormat.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 16
         guard let outBuffer = AVAudioPCMBuffer(pcmFormat: uplinkFormat, frameCapacity: capacity) else { return }
@@ -728,13 +1032,16 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
 
         var sum: Float = 0
         var peak: Float = 0
+        var nonZero = 0
         for index in 0..<Int(outBuffer.frameLength) {
-            let sample = Float(int16[0][index]) / 32_768.0
+            let raw = int16[0][index]
+            if raw != 0 { nonZero += 1 }
+            let sample = Float(raw) / 32_768.0
             sum += sample * sample
             peak = max(peak, abs(sample))
         }
         inputLevel.value = Self.normalize(sqrt(sum / Float(outBuffer.frameLength)))
-        if peak > uplinkPeak.value { uplinkPeak.value = peak }
+        stats.noteCaptured(peak: peak, nonZeroSamples: nonZero)
 
         // Muted still captures (and still meters, so the level dies visibly) —
         // it just stops anything leaving the device. Same for the half-duplex
@@ -742,6 +1049,7 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
         guard !muted, !uplinkGated() else { return }
         let byteCount = Int(outBuffer.frameLength) * MemoryLayout<Int16>.size
         let audioData = Data(bytes: UnsafeRawPointer(int16[0]), count: byteCount)
+        stats.noteSent()
         send(["type": "input_audio_buffer.append", "audio": audioData.base64EncodedString()])
     }
 
@@ -795,12 +1103,89 @@ private final class DeskVoiceAudioBridge: @unchecked Sendable {
         playerNode?.play()
     }
 
+    /// A rebuilt graph gets a new player node; anything counted against the
+    /// old one would otherwise keep the half-duplex gate shut forever.
+    func resetPlaybackQueue() {
+        scheduledCount.reset()
+        outputLevel.value = 0
+    }
+
     func send(_ frame: [String: Any]) {
         guard let webSocketTask,
               let data = try? JSONSerialization.data(withJSONObject: frame),
               let text = String(data: data, encoding: .utf8)
         else { return }
-        webSocketTask.send(.string(text)) { _ in }
+        webSocketTask.send(.string(text)) { [weak self] error in
+            guard error != nil else { return }
+            self?.stats.noteSendFailure()
+        }
+    }
+}
+
+/// One health window's worth of uplink activity.
+private struct UplinkWindow {
+    var buffers: Int
+    var nonZeroSamples: Int
+    var peak: Float
+    var sendFailures: Int
+}
+
+/// Whole-call totals, for the diagnostics beacon.
+private struct UplinkTotals {
+    var buffers: Int
+    var sent: Int
+    var sendFailures: Int
+    var peak: Float
+}
+
+/// Uplink counters, written from the realtime capture thread and the socket's
+/// completion handlers, read by the health ticker on the main actor.
+private final class LockedUplinkStats: @unchecked Sendable {
+    private let lock = NSLock()
+    private var window = UplinkWindow(buffers: 0, nonZeroSamples: 0, peak: 0, sendFailures: 0)
+    private var lifetime = UplinkTotals(buffers: 0, sent: 0, sendFailures: 0, peak: 0)
+
+    func noteCaptured(peak: Float, nonZeroSamples: Int) {
+        lock.lock()
+        window.buffers += 1
+        window.nonZeroSamples += nonZeroSamples
+        window.peak = max(window.peak, peak)
+        lifetime.buffers += 1
+        lifetime.peak = max(lifetime.peak, peak)
+        lock.unlock()
+    }
+
+    func noteSent() {
+        lock.lock()
+        lifetime.sent += 1
+        lock.unlock()
+    }
+
+    func noteSendFailure() {
+        lock.lock()
+        window.sendFailures += 1
+        lifetime.sendFailures += 1
+        lock.unlock()
+    }
+
+    func takeWindow() -> UplinkWindow {
+        lock.lock()
+        let snapshot = window
+        window = UplinkWindow(buffers: 0, nonZeroSamples: 0, peak: 0, sendFailures: 0)
+        lock.unlock()
+        return snapshot
+    }
+
+    func resetWindow() {
+        lock.lock()
+        window = UplinkWindow(buffers: 0, nonZeroSamples: 0, peak: 0, sendFailures: 0)
+        lock.unlock()
+    }
+
+    func totals() -> UplinkTotals {
+        lock.lock()
+        defer { lock.unlock() }
+        return lifetime
     }
 }
 
