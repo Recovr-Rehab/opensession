@@ -636,7 +636,7 @@ export function PreviewButton({
             className={cn(
               splitSegmentBase,
               "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-dim",
-              "cursor-pointer hover:relative hover:z-[1] hover:border-accent hover:bg-accent-soft hover:text-fg",
+              "cursor-pointer hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-fg",
             )}
             onClick={start}
             title="Start the dev server and preview this session"
@@ -654,7 +654,7 @@ export function PreviewButton({
             "-ml-px px-2 py-1",
             running
               ? "text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))] hover:relative hover:z-[1] hover:border-[rgba(63,185,80,0.5)] hover:bg-[rgba(63,185,80,0.12)] hover:text-green"
-              : "hover:relative hover:z-[1] hover:border-accent hover:bg-accent-soft hover:text-accent",
+              : "hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-accent",
             "aria-disabled:cursor-default aria-disabled:opacity-45 aria-disabled:hover:border-line-strong aria-disabled:hover:bg-transparent aria-disabled:hover:text-dim",
           )}
           onClick={() => {
@@ -691,7 +691,7 @@ export function PreviewButton({
                 open || running
                   ? "relative z-[1] border-[rgba(63,185,80,0.5)] bg-[rgba(63,185,80,0.12)] text-green"
                   : "",
-                !running && "hover:relative hover:z-[1] hover:border-accent hover:bg-accent-soft hover:text-accent",
+                !running && "hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-accent",
                 running && !open &&
                   "hover:relative hover:z-[1] hover:border-[rgba(63,185,80,0.5)] hover:bg-[rgba(63,185,80,0.12)] hover:text-green",
               )}

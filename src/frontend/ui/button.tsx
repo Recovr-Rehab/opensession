@@ -86,8 +86,10 @@ const variants: Record<Variant, string> = {
 	// The raised control look of the newest chrome (viewer Share button).
 	default:
 		"bg-control border-line text-dim shadow-control hover:text-fg hover:border-line-strong",
-	// Kept as an alias of `ink` so existing call sites keep working; reach for
-	// `ink` in new code.
+	// One plate, two names. `primary` is the one to reach for — it carries 46
+	// call sites to `ink`'s 2, and now that the accent *is* ink the older name
+	// no longer describes anything the newer one doesn't. `ink` stays so its
+	// two callers keep working.
 	primary: INK,
 	ink: INK,
 	ghost: "border-transparent text-dim hover:bg-hover hover:text-fg",

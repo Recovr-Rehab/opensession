@@ -103,10 +103,12 @@
 	/* What sits ON an --accent fill: its inverse. Was a hardcoded #fff at every
 	   call site, which is white-on-white the moment the accent becomes ink. */
 	--on-accent: var(--bg);
-	/* Achromatic wash, pitched above --hover-strong (0.11) so a selected surface
-	   still separates from a hovered one — they are the same ink now, and
-	   opacity is all that tells them apart. Where that is too weak to carry the
-	   meaning alone, prefer --blue-soft (see .sidebar-item-waiting). */
+	/* Achromatic wash for a SELECTED or ACTIVE surface, pitched above
+	   --hover-strong (0.11). Once the accent went ink this and the hover wash
+	   became the same ink, so the two were told apart only by opacity. The split
+	   is by meaning instead: a hover paints --hover (0.07), selected paints this,
+	   and "needs you" leaves the greyscale entirely for --blue-soft. Don't spell
+	   a hover with this token — that is what the collision was. */
 	--accent-soft: rgba(255, 255, 255, 0.16);
 	/* Inline affordances: a link in an agent answer, a PR title that opens. The
 	   accent cannot do this job once it is ink, and red never should have. */
@@ -2311,7 +2313,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--bg-active);
 }
 .sidebar-swipe-row > .sidebar-item-waiting {
-	background: var(--accent-soft);
+	background: var(--blue-soft);
 }
 .sidebar-swipe-row.is-open > .sidebar-item {
 	transition-duration: var(--dur-micro);
@@ -3255,19 +3257,22 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	flex-shrink: 0;
 	animation: pulse 1.4s ease-in-out infinite;
 }
-/* Tab is blocked on an AskUserQuestion — match the sidebar's "needs you" accent. */
+/* Tab is blocked on an AskUserQuestion. "Needs you" is blue throughout — the
+   sidebar already resolved it that way (.sidebar-item-waiting), and this rule's
+   old comment claimed to match it while reaching for the accent instead. Now
+   that the accent is ink it could not draw an eye at all, so the two agree. */
 .session-tab-dot-waiting {
-	background: var(--accent);
-	box-shadow: 0 0 6px var(--accent);
+	background: var(--blue);
+	box-shadow: 0 0 6px var(--blue);
 	animation: pulse 1.2s ease-in-out infinite;
 }
 .session-tab-waiting {
 	color: var(--text);
-	border-color: var(--accent);
-	background: var(--accent-soft);
+	border-color: var(--blue);
+	background: var(--blue-soft);
 }
 .session-tab-waiting:hover {
-	background: var(--accent-soft);
+	background: var(--blue-soft);
 }
 
 /* A transient tab (the current session when it isn't pinned) reads as
@@ -4157,7 +4162,7 @@ html.wco .viewer-branch {
 .btn-panel-toggle:hover {
 	color: var(--accent);
 	border-color: var(--accent);
-	background: var(--accent-soft);
+	background: var(--hover);
 }
 .btn-panel-toggle.active:not(.btn-workspace) {
 	color: var(--accent);
@@ -4188,7 +4193,7 @@ html.wco .viewer-branch {
 }
 .viewer-code-icon:hover {
 	color: var(--accent);
-	background: var(--accent-soft);
+	background: var(--hover);
 }
 /* The staging globe rides in the header's icon cluster, 2px from the ⋯, so it
    takes the same 32px square box as the share / ⋯ / panel buttons rather than
@@ -6656,7 +6661,14 @@ a.workspace-info-check-row {
 	outline-offset: 1px;
 }
 .pr-bar-btn:hover:not(:disabled) {
+	filter: brightness(1.08);
+}
+/* The ink tone is the exception: brightness() does nothing to a near-white or
+   near-black fill, so it mixes toward the page instead. The saturated tones
+   above brighten correctly and keep the filter. */
+.pr-bar-btn-solid:hover:not(:disabled) {
 	background: color-mix(in srgb, var(--text) 86%, var(--bg));
+	filter: none;
 }
 .pr-bar-btn-secondary:hover:not(:disabled) {
 	background: var(--hover);
@@ -8846,10 +8858,13 @@ a.workspace-info-check-row {
 	font-size: 14px;
 	line-height: 1;
 }
-/* Content arrived out of view — draw the eye with the accent. */
-.jump-latest-new {
-	border-color: var(--accent);
-	color: var(--accent);
+/* Content arrived out of view — draw the eye. Blue, not the accent: the accent
+   is ink now, so an "unread" pill would have been the same colour as the idle
+   one it replaces, and only the pulsing arrow would have said anything. */
+.jump-latest-new,
+.jump-latest-new:hover {
+	border-color: var(--blue);
+	color: var(--blue);
 }
 .jump-latest-new .jump-latest-arrow {
 	animation: pulse 1s ease-in-out infinite;
@@ -10559,7 +10574,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .composer-queue-steer:not(:disabled):hover {
 	color: var(--accent);
 	border-color: transparent;
-	background: var(--accent-soft);
+	background: var(--hover);
 }
 .composer-queue-action.danger:not(:disabled):hover {
 	color: var(--red);
@@ -10969,7 +10984,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	cursor: default;
 }
 .composer-send:not(:disabled):hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
+	filter: brightness(1.12);
 	transform: scale(1.05);
 }
 .composer-send-queue {
@@ -10986,6 +11001,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	background: var(--red-soft);
 	color: var(--red);
 	border: 1px solid var(--red);
+}
+/* Only the accent-filled send disc takes the ink hover; .composer-stop and
+   .composer-send-interrupt carry .composer-send too, and they are saturated
+   red, which brightens fine. Without this exclusion, hovering Stop mid-run
+   painted it near-white. */
+.composer-send:not(.composer-stop):not(.composer-send-interrupt):not(:disabled):hover {
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
+	filter: none;
 }
 .composer-stop {
 	background: var(--red);
@@ -12397,7 +12420,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 .user-gate-btn:hover {
 	border-color: var(--accent);
-	background: var(--accent-soft);
+	background: var(--hover);
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
@@ -15450,10 +15473,6 @@ html[data-theme="light"] .md-mermaid {
 	transition:
 		filter var(--dur-micro) var(--ease),
 		opacity var(--dur-micro) var(--ease);
-}
-html[data-theme="light"] .palette-card .palette-create {
-	background: var(--text);
-	color: var(--bg);
 }
 .palette-create:not(:disabled):hover {
 	background: color-mix(in srgb, var(--text) 86%, var(--bg));

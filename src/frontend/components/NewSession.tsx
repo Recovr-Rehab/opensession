@@ -73,12 +73,6 @@ interface RepoOption {
   default?: boolean;
 }
 
-// Light mode paints the Create split-button ink-on-paper instead of accent.
-// global.css scopes that override under `.palette-card`, which the shared Modal
-// shell no longer carries, so the two buttons opt in explicitly.
-const LIGHT_CREATE =
-  "[html[data-theme=light]_&]:bg-fg [html[data-theme=light]_&]:text-bg";
-
 const LAST_REPO_KEY = "opensession-new-session-repo";
 const ADD_REPO_VALUE = "__add_repo__";
 const SCRATCH_REPO_VALUE = "__scratch__";
@@ -1116,10 +1110,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 
             <div className="palette-create-split" ref={createSplitRef}>
               <button
-                // In light mode the Create button is ink-on-paper rather than
-                // accent — carried here since the shell no longer supplies the
-                // `.palette-card` that scoped that override.
-                className={`palette-create palette-create-main ${LIGHT_CREATE}`}
+                className="palette-create palette-create-main"
                 onClick={handleCreate}
                 disabled={!canCreate}
               >
@@ -1145,7 +1136,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               </button>
               <button
                 type="button"
-                className={`palette-create palette-create-caret ${LIGHT_CREATE} ${createMenuOpen ? "is-open" : ""}`}
+                className={`palette-create palette-create-caret ${createMenuOpen ? "is-open" : ""}`}
                 onClick={() => setCreateMenuOpen((v) => !v)}
                 disabled={creating}
                 aria-haspopup="menu"
