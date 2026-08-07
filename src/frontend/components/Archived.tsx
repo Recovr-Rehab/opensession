@@ -1,4 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
+import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
 import { sessionSourceLabel } from "../lib/brand";
 import React, { useState, useMemo, useEffect } from "react";
 import type { UnifiedSession } from "../lib/types";
@@ -13,7 +14,6 @@ interface Props {
   onChanged: () => void;
 }
 
-const DEFAULT_PROJECT = "repository";
 // Same key the sidebar persists its group/repo/sort choices under, so the
 // archived page opens with the repo filter the sidebar is already showing.
 const SIDEBAR_FILTER_KEY = "opensession-sidebar-filter";
@@ -27,8 +27,10 @@ function isAutoReason(s: UnifiedSession): boolean {
   return !!s.archivedReason && s.archivedReason !== "manual";
 }
 
+// Repo-less sessions group under the literal FALLBACK_REPO bucket, not the
+// sidebar's default-repo lane (see lib/session-repo for the fork rationale).
 function sessionRepo(s: UnifiedSession): string {
-  return s.repo || DEFAULT_PROJECT;
+  return sessionRepoOr(s, FALLBACK_REPO);
 }
 
 // The repo the sidebar is currently filtered to ("all" when unset), read fresh
