@@ -375,7 +375,11 @@ struct SessionsListView: View {
                             // since the icon route began cropping icons to
                             // their artwork it reaches the tile's edges — so
                             // a circular mask cut its corners off.
-                            RepoTile(name: "opensession", size: 44)
+                            // Art nearly to the edges, unlike a list tile:
+                            // the 0.76 inset is there to keep icons level
+                            // with the letter tiles beside them, and this
+                            // one stands alone.
+                            RepoTile(name: "opensession", size: 44, artScale: 0.88)
                         }
                         .accessibilityLabel("Settings")
                         // Hiding the glass background leaves the padding the
