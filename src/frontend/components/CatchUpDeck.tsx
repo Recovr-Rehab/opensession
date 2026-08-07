@@ -125,6 +125,9 @@ export function CatchUpDeck({
 			(s) =>
 				!s.archived &&
 				!s.automation &&
+				// The Desk is a summonable overlay you already read as you talk to
+				// it (⌘J), not work to catch up on.
+				!s.desk &&
 				!!s.startedBy &&
 				s.startedBy.toLowerCase() === me &&
 				isUnread(s.id, s.lastActivity, reads),

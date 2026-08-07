@@ -221,6 +221,13 @@ function DeskBody({
 								? voiceRef.current.sendText(text)
 								: false
 						}
+						// The Desk's job is delegating, so its transcript is full of
+						// spawned workers. There's no side pane in a modal — open the
+						// worker as a full session, the way the expand button does.
+						onOpenSubagent={(id) => {
+							onClose();
+							onOpenSession(id);
+						}}
 						placeholder="Ask your Desk…"
 						emptyState={
 							<>

@@ -18,6 +18,9 @@ interface DeskConversationProps {
 	/** While a voice call is live, typed messages go into it instead of
 	 *  starting a text run. Return false to fall through to the normal send. */
 	voiceSend?: (text: string) => boolean;
+	/** Drill into a session a tool call spawned (the Desk delegates constantly).
+	 *  The overlay has no side pane, so this opens it in the full viewer. */
+	onOpenSubagent?: (sessionId: string) => void;
 }
 
 /**
@@ -31,6 +34,7 @@ export function DeskConversation({
 	effort,
 	hideBefore,
 	voiceSend,
+	onOpenSubagent,
 }: DeskConversationProps) {
 	const { connected, send, addHandler } = useWebSocket();
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
@@ -241,7 +245,19 @@ export function DeskConversation({
 					</div>
 				) : (
 					<>
-						<TranscriptBlocks entries={visibleEntries} live={isRunning} />
+						{/* sessionId is load-bearing, not decoration: the server
+						    wire-clamps big entries and replaces inline images with
+						    os-blob: markers, and both are resolved through routes
+						    keyed on the session. Without it a Desk tool call with a
+						    large result is truncated with a "Show full message"
+						    button that can't fetch, and any screenshot a tool
+						    returned renders as a broken image. */}
+						<TranscriptBlocks
+							entries={visibleEntries}
+							live={isRunning}
+							sessionId={sessionId}
+							onOpenSubagent={onOpenSubagent}
+						/>
 						{streamText && (
 							<div className="msg msg-assistant msg-streaming">
 								<div
