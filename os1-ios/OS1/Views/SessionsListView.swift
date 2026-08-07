@@ -375,20 +375,20 @@ struct SessionsListView: View {
                             // since the icon route began cropping icons to
                             // their artwork it reaches the tile's edges — so
                             // a circular mask cut its corners off.
-                            // 47, so the MARK measures 44pt — exactly the
-                            // height of the button capsule opposite it. The
-                            // web bar's mark runs a couple of points over its
-                            // neighbours (a bare mark beside bordered discs
-                            // reads light there); do NOT copy that here. This
-                            // mark is square against a wide pill, so it
-                            // already carries far more area at equal height —
-                            // 46pt made it tower over the actions. The tile
+                            // 38, so the MARK measures ~35pt. Sized against
+                            // the WEIGHT of the actions opposite it, not the
+                            // height of the capsule holding them: that pill
+                            // is 44pt tall but nearly transparent, and what
+                            // the eye weighs there is two ~22pt glyphs. A
+                            // 44pt mark is a solid square, so matching the
+                            // capsule made it tower over everything; 35 sits
+                            // between the two and reads as a peer. The tile
                             // runs 3pt bigger than the mark because every
                             // icon is served with a small margin baked in
                             // (~93% of its canvas is artwork), and it's the
-                            // artwork that has to line up, not the box around
-                            // it.
-                            RepoTile(name: "opensession", size: 47)
+                            // artwork that has to line up, not the box
+                            // around it.
+                            RepoTile(name: "opensession", size: 38)
                         }
                         .accessibilityLabel("Settings")
                         // Hiding the glass background leaves the padding the
