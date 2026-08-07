@@ -149,6 +149,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
 import type { RunAgentOpts } from "./agent-runner";
 import {
   journalSet,
+  buildRunJournalRecord,
   journalClear,
   registerActiveRunProbe,
   activeRunRecords,
@@ -2729,32 +2730,28 @@ async function* runOpencodeAttempt(
       undefined,
       opts.images
     );
-    journalSet({
-      runKey,
-      osSessionId: journal.osSessionId,
-      claudeSessionId: opts.sessionId || undefined,
-      prompt,
-      promptEntryId: String(turn.userLine.uuid),
-      cwd,
-      mode,
-      mcpServers,
-      user,
-      deniedTools: opts.deniedTools,
-      confirmTools,
-      aws: !!opts.aws,
-      model,
-      selectedModel: opts.selectedModel,
-      transientFallback: opts.transientFallback,
-      effort: opts.effort,
-      fastMode: opts.fastMode,
-      fallbackModel: opts.fallbackModel,
-      accountId: opts.accountId,
-      accountStrict: opts.accountStrict,
-      usageCredits: opts.usageCredits,
-      prReviewer: opts.prReviewer,
-      kind: journal.kind,
-      startedAt: new Date().toISOString(),
-    });
+    journalSet(
+      buildRunJournalRecord(opts, {
+        runKey,
+        osSessionId: journal.osSessionId,
+        claudeSessionId: opts.sessionId || undefined,
+        prompt,
+        promptEntryId: String(turn.userLine.uuid),
+        cwd,
+        mode,
+        mcpServers,
+        user,
+        confirmTools,
+        model,
+        effort: opts.effort,
+        fastMode: opts.fastMode,
+        accountId: opts.accountId,
+        accountStrict: opts.accountStrict,
+        usageCredits: opts.usageCredits,
+        prReviewer: opts.prReviewer,
+        kind: journal.kind,
+      })
+    );
     storeAppendUserLineEarly(
       journal.osSessionId,
       turn.userLine,
@@ -3697,31 +3694,27 @@ async function* runOpencodeAttempt(
     // and a generic headless resume could DUPLICATE side effects they never
     // had (e.g. re-creating a Linear issue). Only UI-owned runs journal.
     if (journal?.osSessionId) {
-      journalSet({
-        runKey,
-        osSessionId: journal.osSessionId,
-        claudeSessionId: ocSessionId,
-        // Reattach needs the hosting server: detached servers survive the
-        // restart, and resume looks the adopted entry up by this key.
-        serverKey,
-        prompt,
-        promptEntryId: turn.userLine ? String(turn.userLine.uuid) : undefined,
-        cwd,
-        mode,
-        mcpServers,
-        user,
-        deniedTools: opts.deniedTools,
-        confirmTools,
-        aws: !!opts.aws,
-        model,
-        selectedModel: opts.selectedModel,
-        transientFallback: opts.transientFallback,
-        effort,
-        fastMode: opts.fastMode,
-        fallbackModel: opts.fallbackModel,
-        kind: journal.kind,
-        startedAt: new Date().toISOString(),
-      });
+      journalSet(
+        buildRunJournalRecord(opts, {
+          runKey,
+          osSessionId: journal.osSessionId,
+          claudeSessionId: ocSessionId,
+          // Reattach needs the hosting server: detached servers survive the
+          // restart, and resume looks the adopted entry up by this key.
+          serverKey,
+          prompt,
+          promptEntryId: turn.userLine ? String(turn.userLine.uuid) : undefined,
+          cwd,
+          mode,
+          mcpServers,
+          user,
+          confirmTools,
+          model,
+          effort,
+          fastMode: opts.fastMode,
+          kind: journal.kind,
+        })
+      );
     }
 
     turnEvent({

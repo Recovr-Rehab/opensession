@@ -162,7 +162,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
-import { journalSet, journalClear, registerActiveRunProbe } from "./run-journal";
+import { journalSet, buildRunJournalRecord, journalClear, registerActiveRunProbe } from "./run-journal";
 import { isClaudeUsageLimitError, isCodexUsageLimitError } from "./runner-shared";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import { readOpencodeBridgeConfig } from "./opencode-config";
@@ -1077,30 +1077,26 @@ export async function* runPi(
     // and persist the user line under the unified id with a stable uuid.
     const userLine = transcriptLineUser(prompt, opts.promptEntryId, undefined, opts.images);
     if (journal?.osSessionId) {
-      journalSet({
-        runKey,
-        osSessionId: journal.osSessionId,
-        claudeSessionId: opts.sessionId || undefined,
-        prompt,
-        promptEntryId: String(userLine.uuid),
-        cwd,
-        mode,
-        mcpServers,
-        user,
-        deniedTools: opts.deniedTools,
-        confirmTools,
-        aws: !!opts.aws,
-        model,
-        selectedModel: opts.selectedModel,
-        transientFallback: opts.transientFallback,
-        effort: opts.effort,
-        fallbackModel: opts.fallbackModel,
-        accountId: opts.accountId,
-        accountStrict: opts.accountStrict,
-        usageCredits: opts.usageCredits,
-        kind: journal.kind,
-        startedAt: new Date().toISOString(),
-      });
+      journalSet(
+        buildRunJournalRecord(opts, {
+          runKey,
+          osSessionId: journal.osSessionId,
+          claudeSessionId: opts.sessionId || undefined,
+          prompt,
+          promptEntryId: String(userLine.uuid),
+          cwd,
+          mode,
+          mcpServers,
+          user,
+          confirmTools,
+          model,
+          effort: opts.effort,
+          accountId: opts.accountId,
+          accountStrict: opts.accountStrict,
+          usageCredits: opts.usageCredits,
+          kind: journal.kind,
+        })
+      );
       storeAppendUserLineEarly(journal.osSessionId, userLine, opts.sessionId);
     }
 
@@ -1604,30 +1600,26 @@ export async function* runPi(
     // Journal upgrade: the record now carries the engine id (still no
     // serverKey — boot must take the continuation re-prompt path).
     if (journal?.osSessionId) {
-      journalSet({
-        runKey,
-        osSessionId: journal.osSessionId,
-        claudeSessionId: piSessionId,
-        prompt,
-        promptEntryId: String(userLine.uuid),
-        cwd,
-        mode,
-        mcpServers,
-        user,
-        deniedTools: opts.deniedTools,
-        confirmTools,
-        aws: !!opts.aws,
-        model,
-        selectedModel: opts.selectedModel,
-        transientFallback: opts.transientFallback,
-        effort: opts.effort,
-        fallbackModel: opts.fallbackModel,
-        accountId: opts.accountId,
-        accountStrict: opts.accountStrict,
-        usageCredits: opts.usageCredits,
-        kind: journal.kind,
-        startedAt: new Date().toISOString(),
-      });
+      journalSet(
+        buildRunJournalRecord(opts, {
+          runKey,
+          osSessionId: journal.osSessionId,
+          claudeSessionId: piSessionId,
+          prompt,
+          promptEntryId: String(userLine.uuid),
+          cwd,
+          mode,
+          mcpServers,
+          user,
+          confirmTools,
+          model,
+          effort: opts.effort,
+          accountId: opts.accountId,
+          accountStrict: opts.accountStrict,
+          usageCredits: opts.usageCredits,
+          kind: journal.kind,
+        })
+      );
     }
 
     // Register the engine-id alias + the steer surface on the shared handle.
