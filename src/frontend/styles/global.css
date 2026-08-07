@@ -15931,7 +15931,11 @@ html.wco .settings-sidenav {
 	font-size: 14px;
 	font-weight: 500;
 	padding: 8px 10px;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
+	/* The same corner as .sidebar-item. Both are a full-width selectable row in
+	   a left rail, and they already agreed on type, dim colour, hover wash and
+	   --bg-active fill -- the 8px corner was the one thing that made settings
+	   read as a different app's rail. */
+	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
 }
 .settings-sidenav-icon {
 	display: inline-flex;
