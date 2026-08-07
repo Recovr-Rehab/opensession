@@ -148,8 +148,7 @@ enum OS1API {
     /// One file in a session's scratch assets folder — the artifacts an agent
     /// writes with `opensession-assets` (visualizations, reports, sample data).
     /// They live outside every worktree, so nothing here is a repo path.
-    /// `Hashable` so a row can be pushed as a navigation destination.
-    struct SessionAsset: Decodable, Sendable, Hashable, Identifiable {
+    struct SessionAsset: Decodable, Sendable, Equatable, Identifiable {
         let path: String
         let size: Int
         let mtime: String

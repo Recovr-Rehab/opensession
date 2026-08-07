@@ -4,21 +4,23 @@ import WebKit
 #endif
 
 #if os(iOS)
-/// The session's scratch assets: the file list, one level deeper than the
-/// conversation.
+/// The session's scratch assets, as a tab: the file list, and the file you
+/// picked rendered in place.
 ///
-/// Rows push the file itself, so the way back out is the chevron and the edge
-/// swipe — the same way back as everywhere else in the stack. It brings no
-/// `NavigationStack` of its own: it is always pushed into one that exists
-/// already (the session's, or the workspace sheet's).
-struct AssetsListView: View {
+/// No `NavigationStack` of its own — this sits inside the one that pushed the
+/// session, so a list-to-file drill-in would stack a second navigation bar
+/// under the first. The "Files" button in the toolbar is the way back up
+/// instead, and the title says which of the two you're looking at.
+struct AssetsView: View {
     let sessionId: String
+    /// The file the tab opened on, when it was opened from a chat row.
+    var initialPath: String?
 
     @State private var files: [OS1API.SessionAsset] = []
+    @State private var selectedPath: String?
+    @State private var showingList = false
     @State private var loading = true
     @State private var loadFailed = false
-    /// The file being read, pushed one level deeper.
-    @State private var openFile: OS1API.SessionAsset?
 
     var body: some View {
         Group {
@@ -28,27 +30,45 @@ struct AssetsListView: View {
                 failedPlaceholder
             } else if files.isEmpty {
                 emptyPlaceholder
+            } else if let asset = selectedAsset, !showingList {
+                AssetPreview(sessionId: sessionId, asset: asset)
             } else {
                 fileList
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OS1VisualStyle.background)
-        .navigationTitle("Assets")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await load() }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                if selectedAsset != nil && !showingList {
+                    Button {
+                        withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                            showingList = true
+                        }
+                    } label: {
+                        Label("Files", systemImage: "list.bullet")
+                    }
+                } else {
+                    Button {
+                        Task { await load() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
                 }
             }
         }
-        .navigationDestination(item: $openFile) { asset in
-            AssetDetailView(sessionId: sessionId, asset: asset)
-        }
         .task(id: sessionId) { await load() }
+    }
+
+    private var title: String {
+        guard let asset = selectedAsset, !showingList else { return "Assets" }
+        return asset.name
+    }
+
+    private var selectedAsset: OS1API.SessionAsset? {
+        files.first { $0.path == selectedPath }
     }
 
     // MARK: - The list
@@ -58,9 +78,12 @@ struct AssetsListView: View {
             Section {
                 ForEach(files) { asset in
                     Button {
-                        openFile = asset
+                        withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                            selectedPath = asset.path
+                            showingList = false
+                        }
                     } label: {
-                        AssetRow(asset: asset)
+                        AssetRow(asset: asset, selected: asset.path == selectedPath)
                     }
                     .buttonStyle(.plain)
                 }
@@ -116,44 +139,24 @@ struct AssetsListView: View {
         files = loaded.sorted { $0.mtime > $1.mtime }
         loadFailed = files.isEmpty && loaded.isEmpty
         loading = false
-    }
-}
 
-/// One asset on its own, one level below the list — or straight below the
-/// conversation, when a chat row's chip pointed at it.
-///
-/// It takes the path rather than the file's listing row: a chip in the
-/// transcript knows what was written, not how big it ended up, and waiting
-/// for a directory listing to render a file you already named would be a
-/// spinner for nothing.
-struct AssetDetailView: View {
-    let sessionId: String
-    let asset: OS1API.SessionAsset
-
-    init(sessionId: String, asset: OS1API.SessionAsset) {
-        self.sessionId = sessionId
-        self.asset = asset
-    }
-
-    init(sessionId: String, path: String) {
-        self.init(
-            sessionId: sessionId,
-            asset: OS1API.SessionAsset(path: path, size: 0, mtime: "")
-        )
-    }
-
-    var body: some View {
-        AssetPreview(sessionId: sessionId, asset: asset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(OS1VisualStyle.background)
-            .navigationTitle(asset.name)
-            .navigationBarTitleDisplayMode(.inline)
+        // Land on the file the tab was opened with, or the newest one. A
+        // selection already made by hand survives a refresh.
+        if let selectedPath, files.contains(where: { $0.path == selectedPath }) { return }
+        if let initialPath, files.contains(where: { $0.path == initialPath }) {
+            selectedPath = initialPath
+            showingList = false
+        } else {
+            selectedPath = files.first?.path
+            showingList = files.count > 1 && initialPath == nil
+        }
     }
 }
 
 /// One file in the list: what it's called, where it sits, how big and how old.
 private struct AssetRow: View {
     let asset: OS1API.SessionAsset
+    let selected: Bool
 
     /// The folders above the file, when it isn't at the top level.
     private var folder: String? {
@@ -180,11 +183,11 @@ private struct AssetRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            // The row pushes; the chevron is the promise that it does, and
-            // that the way back is the one you already know.
-            Image(systemName: "chevron.right")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(OS1VisualStyle.textFaint)
+            if selected {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.accent)
+            }
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
