@@ -20,7 +20,8 @@ import {
 	measureSessionPerf,
 	recordSessionPerf,
 } from "../lib/session-performance";
-import { AGENT_NAME, DEFAULT_DOC_TITLE, PLAIN_WORKSPACE_ID } from "../lib/brand";
+import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { plainThreadUrl } from "./PlainThreadPanel";
 import {
 	isGitHubAttribution,
 	parseHumanReply,
@@ -406,14 +407,6 @@ const RESUME_GROWTH_WINDOW_MS = 8_000;
 // trips, the pill stays put so the reader can keep going deliberately.
 const JUMP_PAGE_ENTRIES = 400;
 const JUMP_MAX_ENTRIES = 4_000;
-
-/** Deep link into the Plain app (the "jump into Plain" link), or "" when the
- *  instance has no configured Plain workspace id — the link hides. */
-function plainThreadUrl(threadId: string): string {
-	return PLAIN_WORKSPACE_ID
-		? `https://app.plain.com/workspace/${PLAIN_WORKSPACE_ID}/thread/${threadId}/`
-		: "";
-}
 
 function modelIsCodex(id: string, models: ModelOption[]): boolean {
 	const found = models.find((m) => m.id === id);

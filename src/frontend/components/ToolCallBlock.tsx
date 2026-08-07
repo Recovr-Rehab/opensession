@@ -5,6 +5,7 @@ import { currentPlanItem, parsePlanItems, planDoneCount } from "../lib/todo-plan
 import { PlanChecklist } from "./PlanChecklist";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { cn } from "../ui/cn";
+import { tidyPath, type PathRoot } from "../lib/tidy-path";
 import { openGalleryFrom } from "./MediaLightbox";
 import {
   IconTerminal,
@@ -62,8 +63,8 @@ interface Props {
  * a "<project>:" prefix, the same form @-mentions use. Context rather than a
  * prop so the preview rows inside TurnBlock get it for free.
  */
-export type PathRoot = { dir: string; label?: string };
 const PathRootsContext = createContext<readonly PathRoot[]>([]);
+export type { PathRoot };
 export const ToolPathRootsProvider = PathRootsContext.Provider;
 export function useToolPathRoots(): readonly PathRoot[] {
   return useContext(PathRootsContext);
@@ -370,24 +371,6 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
           return <IconWrench size={size} />;
       }
   }
-}
-
-/**
- * Shorten a path for display: inside one of the session's worktrees it renders
- * repo-relative (an attached repo keeps a "<project>:" prefix so it stays
- * unambiguous); anything outside them just collapses $HOME to "~".
- */
-function tidyPath(p: string, roots: readonly PathRoot[] = []): string {
-  if (!p) return "";
-  for (const root of roots) {
-    if (!root.dir) continue;
-    if (p === root.dir) return root.label ? `${root.label}:.` : ".";
-    if (p.startsWith(`${root.dir}/`)) {
-      const rel = p.slice(root.dir.length + 1);
-      return root.label ? `${root.label}:${rel}` : rel;
-    }
-  }
-  return p.replace(/^\/home\/[^/]+\//, "~/");
 }
 
 /** Path summary with the directory dimmed and the basename readable. */
