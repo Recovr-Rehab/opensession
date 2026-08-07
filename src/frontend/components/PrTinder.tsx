@@ -17,6 +17,7 @@ import {
 	labelTinderPr,
 	type TinderPr,
 } from "../lib/api";
+import { DEFAULT_REPO_ID } from "../lib/brand";
 import { renderMarkdown } from "../lib/markdown";
 import { providerFromUrl } from "../lib/provider";
 import { useCurrentUser } from "./UserPicker";
@@ -666,8 +667,10 @@ function SwipeCard({
 		}),
 	};
 
+	// The deck is the default repo's open PRs (server-side pr-tinder.ts), so
+	// that's what a `#5528` in a PR body refers to.
 	const bodyHtml = useMemo(
-		() => (pr.body.trim() ? renderMarkdown(pr.body) : ""),
+		() => (pr.body.trim() ? renderMarkdown(pr.body, { repo: DEFAULT_REPO_ID }) : ""),
 		[pr.body],
 	);
 

@@ -7,6 +7,7 @@ import { ConversationPane } from "./ConversationPane";
 import { FeedWebPane, refWebPanel } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
 import { plainThreadUrl } from "./PlainThreadPanel";
+import { MarkdownRepoProvider } from "./MarkdownBody";
 import { PrPanel } from "./PrPanel";
 import { repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
@@ -237,11 +238,16 @@ export function WorkspacePane({
 		</aside>
 	);
 
+	// Everything on this pane — the PR body, review comments, the info panel —
+	// is about this workspace's repo, so a `#5528` written in any of it means a
+	// PR there (markdown.ts).
 	const withPanel = (main: React.ReactNode) => (
-		<div className="flex h-full min-h-0">
-			<div className="flex-1 min-w-0 min-h-0">{main}</div>
-			{infoPanel}
-		</div>
+		<MarkdownRepoProvider repo={workspace.repo}>
+			<div className="flex h-full min-h-0">
+				<div className="flex-1 min-w-0 min-h-0">{main}</div>
+				{infoPanel}
+			</div>
+		</MarkdownRepoProvider>
 	);
 
 	if (tab === "review" && reviewTarget) {

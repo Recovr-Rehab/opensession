@@ -5,6 +5,7 @@ import type { AskQuestion } from "../lib/types";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { IconCheck } from "./icons";
+import { useMarkdownRepo } from "./MarkdownBody";
 
 interface Props {
   questions: AskQuestion[];
@@ -28,6 +29,7 @@ interface Props {
  * allowed.
  */
 export function AskCard({ questions, onAnswer }: Props) {
+  const repo = useMarkdownRepo();
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [other, setOther] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -94,7 +96,9 @@ export function AskCard({ questions, onAnswer }: Props) {
               "needs input" label already mark it as the thing being asked. */}
           <div
             className="markdown text-body leading-6 text-fg [overflow-wrap:anywhere]"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(q.question) }}
+            dangerouslySetInnerHTML={{
+              __html: renderMarkdown(q.question, { repo }),
+            }}
           />
           {q.options?.length ? (
             <div

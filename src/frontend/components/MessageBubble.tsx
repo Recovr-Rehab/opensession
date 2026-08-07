@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
-import { MarkdownBody } from "./MarkdownBody";
+import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import {
 	parseHumanReply,
 	parseAttribution,
@@ -72,9 +72,10 @@ export function ClampedBody({
 	const shown = showAll ? (fetched ?? content) : head;
 	// Giant expanded payloads skip markdown entirely — see FULL_MD_CHARS.
 	const asMarkdown = shown.length <= FULL_MD_CHARS;
+	const repo = useMarkdownRepo();
 	const html = useMemo(
-		() => (asMarkdown ? renderMarkdown(shown) : ""),
-		[asMarkdown, shown],
+		() => (asMarkdown ? renderMarkdown(shown, { repo }) : ""),
+		[asMarkdown, shown, repo],
 	);
 
 	const expand = async () => {
