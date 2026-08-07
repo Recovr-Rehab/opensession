@@ -178,7 +178,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         openOnHover
         delay={250}
         closeDelay={100}
-        className="ml-1 flex h-6 min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md bg-panel pr-1.5"
+        className="ml-1 flex h-6 min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-control bg-panel pr-1.5"
       >
         <ExtBadge name={name} flush />
         <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
