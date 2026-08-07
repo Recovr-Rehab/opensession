@@ -125,6 +125,19 @@ final class Dictation {
 
     // MARK: - Permissions
 
+    /// Both permissions already granted — so a caller that opens the mic on
+    /// its own (the Action Button's "New Idea", `CaptureIdeaIntent`) can hold
+    /// off rather than stacking two system prompts over a sheet the person
+    /// did not ask for them from. Tapping the mic still asks, as always.
+    static var isAuthorized: Bool {
+        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return false }
+        #if os(iOS)
+        return AVAudioApplication.shared.recordPermission == .granted
+        #else
+        return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        #endif
+    }
+
     private func requestSpeechAuthorization() async -> Bool {
         switch SFSpeechRecognizer.authorizationStatus() {
         case .authorized: return true

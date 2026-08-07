@@ -49,6 +49,8 @@ struct SessionsListView: View {
     @State private var searchText = ""
     /// Non-nil opens the new-session sheet; carries the per-repo "+" preset.
     @State private var newSessionRequest: NewSessionRequest?
+    /// Parked "New Idea" requests from the Action Button (`CaptureIdeaIntent`).
+    @State private var quickCapture = QuickCapture.shared
     /// Opening prompts (and images) of just-created sessions, keyed by id —
     /// seeds the conversation view so it renders instantly instead of waiting
     /// for the server to persist the session.
@@ -76,6 +78,9 @@ struct SessionsListView: View {
     struct NewSessionRequest: Identifiable {
         let id = UUID()
         var repo: String?
+        /// Opened from the Action Button's "New Idea": the composer's mic
+        /// starts listening with the sheet.
+        var dictate = false
         /// Set when the create joins an existing workspace as a new tab (the
         /// session's ⋯ menu); nil starts a standalone session.
         var workspaceId: String?
@@ -180,6 +185,11 @@ struct SessionsListView: View {
             .onChange(of: viewModel.hasLoaded) {
                 autoOpenFromEnvironment()
             }
+            // "New Idea" from the Action Button (CaptureIdeaIntent). It can run
+            // before this view exists (cold launch) or while it's already on
+            // screen, so both entrances read the parked request.
+            .onAppear { openQuickCapture() }
+            .onChange(of: quickCapture.request?.id) { openQuickCapture() }
             .alert(
                 "Couldn't start session",
                 isPresented: Binding(
@@ -258,7 +268,8 @@ struct SessionsListView: View {
         .sheet(item: $newSessionRequest) { request in
             NewSessionView(
                 initialRepo: request.repo,
-                initialWorkspaceId: request.workspaceId
+                initialWorkspaceId: request.workspaceId,
+                autoDictate: request.dictate
             ) { session, seed in
                 openOptimistic(session, seed: seed)
             } onResolved: { tempId, result in
@@ -415,7 +426,8 @@ struct SessionsListView: View {
                 .sheet(item: $newSessionRequest) { request in
                     NewSessionView(
                         initialRepo: request.repo,
-                        initialWorkspaceId: request.workspaceId
+                        initialWorkspaceId: request.workspaceId,
+                        autoDictate: request.dictate
                     ) { session, seed in
                         openOptimistic(session, seed: seed)
                     } onResolved: { tempId, result in
@@ -520,6 +532,13 @@ struct SessionsListView: View {
         return .systemAction(
             base.appendingPathComponent("session").appendingPathComponent(id)
         )
+    }
+
+    /// Open the composer for an Action Button "New Idea", mic hot. A request
+    /// is consumed once, so returning to the list later doesn't reopen it.
+    private func openQuickCapture() {
+        guard let request = quickCapture.take() else { return }
+        newSessionRequest = NewSessionRequest(dictate: request.dictate)
     }
 
     /// Dev convenience for simulator runs: OS1_OPEN_SESSION=<id> jumps straight

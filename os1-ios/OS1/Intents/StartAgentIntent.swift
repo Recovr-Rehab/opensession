@@ -209,8 +209,63 @@ enum StartAgentError: Error, CustomLocalizedStringResourceConvertible {
     }
 }
 
-/// Makes the intent show up without any setup: in Spotlight, in the Action
-/// Button's shortcut picker, and as a Siri phrase.
+/// The other half of the Action Button story: instead of the system's plain
+/// "enter text" dialog, open OUR composer with the mic already listening.
+///
+/// `StartAgentIntent` is the one-press, never-see-the-app path; this one is for
+/// when the idea needs shaping — you can watch the words land, fix the one the
+/// recogniser got wrong, swap the repo or the model, attach a screenshot, and
+/// only then send. Both are bindable to the Action Button; which you pick is
+/// taste, so both are offered.
+struct CaptureIdeaIntent: AppIntent {
+    static let title: LocalizedStringResource = "New Idea"
+
+    static let description = IntentDescription(
+        "Opens the composer with the mic already listening, so you can speak an idea and send it.",
+        categoryName: "Sessions",
+        searchKeywords: ["idea", "dictate", "voice", "session", "compose"]
+    )
+
+    /// The point of this one — the app comes forward and the sheet is the
+    /// first thing you see.
+    static let openAppWhenRun = true
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        QuickCapture.shared.ask(dictate: true)
+        return .result()
+    }
+}
+
+/// The hand-off between the intent and the sessions list. The intent can run
+/// before any view exists (cold launch), so the request is PARKED here rather
+/// than posted — the list picks it up whenever it appears.
+@MainActor
+@Observable
+final class QuickCapture {
+    static let shared = QuickCapture()
+
+    struct Request: Identifiable {
+        let id = UUID()
+        var dictate: Bool
+    }
+
+    private(set) var request: Request?
+
+    func ask(dictate: Bool) {
+        request = Request(dictate: dictate)
+    }
+
+    /// Read once and clear: reopening the sheet on every later appearance
+    /// would trap you in the composer.
+    func take() -> Request? {
+        defer { request = nil }
+        return request
+    }
+}
+
+/// Makes the intents show up without any setup: in Spotlight, in the Action
+/// Button's shortcut picker, and as Siri phrases.
 struct AgentShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -222,6 +277,15 @@ struct AgentShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Start an Agent",
             systemImageName: "sparkles"
+        )
+        AppShortcut(
+            intent: CaptureIdeaIntent(),
+            phrases: [
+                "New idea in \(.applicationName)",
+                "Capture an idea in \(.applicationName)",
+            ],
+            shortTitle: "New Idea",
+            systemImageName: "mic"
         )
     }
 }

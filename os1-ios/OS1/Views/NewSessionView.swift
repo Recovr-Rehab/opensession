@@ -23,6 +23,11 @@ struct NewSessionView: View {
     /// workspace.
     var initialWorkspaceId: String?
 
+    /// Open with the mic already listening — the Action Button's "New Idea"
+    /// (see `CaptureIdeaIntent`), where the whole point is to speak before you
+    /// have found the keyboard.
+    var autoDictate = false
+
     /// Called the moment Start is tapped, with an optimistic session row
     /// (temporary `pending-` id) plus the prompt/images to seed the
     /// conversation view instantly.
@@ -41,6 +46,9 @@ struct NewSessionView: View {
     @State private var effort = ""
     @State private var fastMode = false
     @State private var images: [AttachedImage] = []
+    /// Owned here, like the session composer's: the button reads it, this view
+    /// keeps it alive across the layout changes a long dictation causes.
+    @State private var dictation = Dictation()
     @FocusState private var promptFocused: Bool
 
     /// The universal "+" reopens on whatever repo was used last.
@@ -86,6 +94,9 @@ struct NewSessionView: View {
                 #endif
             }
             .task { await load() }
+            // Swiping the sheet away is as much a "never mind" as Cancel; the
+            // mic must not outlive either.
+            .onDisappear { dictation.stop() }
         }
     }
 
@@ -342,6 +353,7 @@ struct NewSessionView: View {
     private var controls: some View {
         HStack(spacing: 8) {
             AttachImagesButton(images: $images)
+            ComposerDictationButton(dictation: dictation, draft: $prompt)
             Spacer(minLength: 8)
             #if os(macOS)
             if !availableEfforts.isEmpty { effortChip }
@@ -531,6 +543,14 @@ struct NewSessionView: View {
 
     private func load() async {
         promptFocused = true
+        // Opened from the Action Button: the mic goes hot with the sheet, so
+        // speaking is the first thing that works. Everything else below still
+        // loads underneath it. Only once the permissions exist, though — the
+        // first press should show the composer, not two system prompts stacked
+        // over it; the mic in the footer asks for them on the first tap.
+        if autoDictate, !dictation.active, Dictation.isAuthorized {
+            Task { await dictation.start(base: prompt) { prompt = $0 } }
+        }
         repo = initialRepo ?? lastRepo
         async let reposFetch = OS1API.repos()
         async let modelsFetch = OS1API.models()
@@ -578,6 +598,7 @@ struct NewSessionView: View {
     /// create (worktree prep — seconds) runs in the background. The list
     /// swaps the temp id for the server's when it resolves.
     private func create() {
+        dictation.stop()
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageURLs = images.map(\.dataURL)
         lastRepo = repo
