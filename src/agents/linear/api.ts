@@ -18,25 +18,6 @@ async function gql(accessToken: string, query: string, variables: Record<string,
   return response.json();
 }
 
-/** Fetch plan comment from issue */
-export async function fetchPlanFromLinear(accessToken: string, issueId: string): Promise<string | null> {
-  const data = await gql(accessToken, `
-    query GetIssueComments($issueId: String!) {
-      issue(id: $issueId) {
-        comments { nodes { body } }
-      }
-    }
-  `, { issueId });
-
-  const comments = data?.data?.issue?.comments?.nodes || [];
-  for (const comment of comments) {
-    if (comment.body?.includes("# Implementation Plan")) {
-      return comment.body;
-    }
-  }
-  return null;
-}
-
 /** Fetch a Linear user's details */
 export async function fetchLinearUser(accessToken: string, userId: string): Promise<Participant | null> {
   try {
@@ -212,28 +193,6 @@ export async function getIssueDetails(accessToken: string, issueId: string): Pro
     identifier: issue?.identifier || "",
     creator: creator ? { id: creator.id, name: creator.name, email: creator.email || null } : null,
   };
-}
-
-/** End an agent session by sending a stop signal */
-export async function endAgentSession(accessToken: string, sessionId: string): Promise<boolean> {
-  const result = await gql(accessToken, `
-    mutation EndAgentSession($input: AgentActivityCreateInput!) {
-      agentActivityCreate(input: $input) { success }
-    }
-  `, {
-    input: {
-      agentSessionId: sessionId,
-      signal: "stop",
-      content: { type: "response", body: "Session ended." },
-    },
-  });
-
-  if (!result.data?.agentActivityCreate?.success) {
-    console.error("[linear] Failed to end agent session:", result);
-    return false;
-  }
-  console.log(`[linear] Ended agent session ${sessionId}`);
-  return true;
 }
 
 /** Move issue to a specific status */

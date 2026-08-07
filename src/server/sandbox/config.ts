@@ -88,7 +88,7 @@ export interface SandboxSnapshotsConfig {
   quickSyncOnRestore: boolean;
 }
 
-export const SNAPSHOT_DEFAULTS: SandboxSnapshotsConfig = {
+const SNAPSHOT_DEFAULTS: SandboxSnapshotsConfig = {
   enabled: false,
   onIdle: true,
   maxPerSession: 2,
@@ -113,7 +113,7 @@ export interface SandboxPublicIngressConfig {
   publicBaseUrl?: string;
 }
 
-export const PUBLIC_INGRESS_DEFAULT_PORT = 3860;
+const PUBLIC_INGRESS_DEFAULT_PORT = 3860;
 
 /** Warm-on-typing prewarm pool (src/server/sandbox/prewarm.ts): typing a
  *  new-session prompt starts provider-specific preparation; session create
@@ -126,7 +126,7 @@ export interface SandboxPrewarmConfig {
   maxLive: number;
 }
 
-export const PREWARM_DEFAULTS: Omit<SandboxPrewarmConfig, "enabled"> = {
+const PREWARM_DEFAULTS: Omit<SandboxPrewarmConfig, "enabled"> = {
   ttlMinutes: 10,
   maxLive: 2,
 };
@@ -563,7 +563,7 @@ export function isRemoteSandboxProvider(
 
 /** True when a sandbox config file exists and parses — the operator has set
  *  sandboxing up at all. Without it every provider is unconfigured. */
-export function sandboxConfigPresent(): boolean {
+function sandboxConfigPresent(): boolean {
   try {
     const path = configPath();
     if (!existsSync(path)) return false;

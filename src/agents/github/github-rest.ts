@@ -23,14 +23,14 @@ export const BOT_LOGIN = githubBotLogins()[0] || "";
  * these constants directly.
  */
 export const REVIEW_MARKER = "<!-- os-review -->";
-export const REVIEW_OUTDATED_MARKER = "<!-- os-review-outdated -->";
+const REVIEW_OUTDATED_MARKER = "<!-- os-review-outdated -->";
 export const REPLY_MARKER = "<!-- os-reply -->";
 export const AUTOFIX_MARKER = "<!-- os-autofix -->";
 export const SIMPLIFY_MARKER = "<!-- os-simplify -->";
 export const ADVERSARIAL_MARKER = "<!-- os-adversarial -->";
 
 /** The michael-* form of a marker, as stamped on pre-rename comments. */
-export function legacyMarker(marker: string): string {
+function legacyMarker(marker: string): string {
   return marker.replace("<!-- os-", "<!-- michael-");
 }
 /** Every marker, current AND legacy forms — used to skip our own comments
@@ -107,7 +107,7 @@ export async function githubRequest<T = any>(
  * GraphQL request (the REST API can't resolve review threads). Same PAT/auth as
  * the REST helper. Returns the `data` object, or null on any error.
  */
-export async function githubGraphQL<T = any>(
+async function githubGraphQL<T = any>(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<T | null> {
@@ -199,7 +199,7 @@ export interface ReviewCommentInfo {
 }
 
 /** List the inline review comments on a PR (for auto-fix to address + reply to). Newest first. */
-export async function listReviewComments(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<ReviewCommentInfo[]> {
+async function listReviewComments(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<ReviewCommentInfo[]> {
   const r = await githubRequest<any[]>(
     "GET",
     `/repos/${ghRepo}/pulls/${prNumber}/comments?per_page=100`,
@@ -225,7 +225,7 @@ export interface ReviewInfo {
 }
 
 /** List the formal reviews on a PR that carry a summary body (Greptile/human/agent). */
-export async function listReviews(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<ReviewInfo[]> {
+async function listReviews(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<ReviewInfo[]> {
   const r = await githubRequest<any[]>("GET", `/repos/${ghRepo}/pulls/${prNumber}/reviews?per_page=100`);
   if (!r.ok || !Array.isArray(r.data)) return [];
   return r.data

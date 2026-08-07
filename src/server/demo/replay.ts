@@ -23,7 +23,6 @@
 
 import {
   markSessionStarting,
-  unmarkSessionStarting,
 } from "../agent-runner";
 import { transitionRunState } from "../run-state";
 import {
@@ -103,15 +102,4 @@ export function startDemoReplayer(): void {
     state.timer = setTimeout(tick, STEP_MS);
   };
   tick();
-}
-
-/** Stop streaming and release the busy mark (tests / demo teardown). */
-export function stopDemoReplayer(): void {
-  const state = g.__osDemoReplay;
-  if (!state) return;
-  state.running = false;
-  if (state.timer) clearTimeout(state.timer);
-  state.timer = null;
-  unmarkSessionStarting(DEMO_LIVE_SESSION_ID);
-  transitionRunState(DEMO_LIVE_SESSION_ID, "turn_end", { demo: true });
 }

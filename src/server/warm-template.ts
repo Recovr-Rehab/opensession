@@ -71,7 +71,7 @@ export interface WarmTemplateRepoConfig {
   warmRoutes: string[];
 }
 
-export const WARM_DEFAULTS: Omit<WarmTemplateRepoConfig, "enabled"> = {
+const WARM_DEFAULTS: Omit<WarmTemplateRepoConfig, "enabled"> = {
   intervalHours: 6,
   warmRoutes: ["/", "/api/session"],
 };
@@ -174,7 +174,7 @@ function manifestFile(repoId: string): string {
   return join(warmDir(), `${repoId}.manifest`);
 }
 
-export function warmTemplateState(repoId: string): WarmTemplateState | null {
+function warmTemplateState(repoId: string): WarmTemplateState | null {
   try {
     const f = stateFile(repoId);
     if (!existsSync(f)) return null;
@@ -194,7 +194,7 @@ function writeState(state: WarmTemplateState): void {
 }
 
 /** The template worktree path for a repo (whether or not it exists yet). */
-export function warmTemplateDir(repo: Repo): string {
+function warmTemplateDir(repo: Repo): string {
   return `${configuredPaths().worktreesDir}/${repo.wtPrefix}-warm-template`;
 }
 
@@ -229,7 +229,7 @@ function refreshLockHeld(repoId: string): boolean {
   }
 }
 
-export function warmTemplateRefreshing(repoId: string): boolean {
+function warmTemplateRefreshing(repoId: string): boolean {
   return refreshing.has(repoId);
 }
 
@@ -710,7 +710,7 @@ async function sweepWarmTemplates(): Promise<void> {
 /** Arm the sweep once per process (globalThis-parked, unref'd — never keeps
  *  a test/CLI process alive). Cheap no-op every tick while nothing is
  *  enabled, so it's armed unconditionally at module load. */
-export function ensureWarmTemplateScheduler(): void {
+function ensureWarmTemplateScheduler(): void {
   if (isLocalProfile()) return;
   if (g.__warmTemplateSweepTimer) return;
   const t = setInterval(() => {

@@ -257,28 +257,6 @@ export function transitionRunState(
 	return to;
 }
 
-/**
- * Recovery escape hatch for paths that reconcile against external reality
- * (e.g. boot discovering a run the table didn't predict). Always audited with
- * the caller's reason; never use it where a normal event fits.
- */
-export function forceRunState(
-	sessionId: string,
-	state: RunState,
-	reason: string,
-	emit: AuditEmit = audit,
-): void {
-	const from = getRunState(sessionId);
-	runStates.set(sessionId, { state, since: new Date().toISOString() });
-	emit({
-		msg: "run_state_forced",
-		session_id: sessionId,
-		from,
-		to: state,
-		reason,
-	});
-}
-
 /** Drop tracking for a deleted session. */
 export function clearRunState(sessionId: string): void {
 	runStates.delete(sessionId);

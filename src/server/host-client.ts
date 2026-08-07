@@ -25,7 +25,7 @@
  */
 
 import type { McpScope } from "./runner-shared";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 import {
   runAgent,
   resumeContinuationPrompt,
@@ -68,7 +68,7 @@ const HOSTS_DIR = runHostsDir(OPENSESSION_SESSIONS_DIR);
 const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-run-hosts`;
 const ENV_FILE = statePath(".opensession.env");
 
-export function runHostsEnabled(): boolean {
+function runHostsEnabled(): boolean {
   return !existsSync(DISABLE_FILE);
 }
 
@@ -315,7 +315,7 @@ export interface HostConnector {
 /** The default transport: opensession dials the host's unix socket. Behavior is
  *  identical to the pre-seam inline code — the existsSync guard preserves the
  *  old "poll for the socket file" cadence, and open/close/error map 1:1. */
-export function unixSocketConnector(sockPath: string): HostConnector {
+function unixSocketConnector(sockPath: string): HostConnector {
   return {
     connect(handlers: HostConnectionHandlers): Promise<HostConnection> {
       if (!existsSync(sockPath)) {
@@ -759,18 +759,6 @@ export class HostHandle {
   }
 }
 
-// ── Boot-time discovery & reattach ───────────────────────────────────────────
-
-export interface DiscoveredHost {
-  dir: string;
-  spec: RunHostSpec;
-  meta: RunHostMeta | null;
-  /** The host's per-run journal record, if the run never finished. */
-  journal: ActiveRunRecord | null;
-  /** Host process still running (reattachable). */
-  alive: boolean;
-}
-
 function readJsonSafe<T>(path: string): T | null {
   try {
     if (!existsSync(path)) return null;
@@ -785,62 +773,4 @@ function readHostJournal(dir: string): ActiveRunRecord | null {
   if (!j) return null;
   const records = Object.values(j);
   return records[0] || null;
-}
-
-/** Scan the run-hosts dir. Call once at boot, before any new spawns. */
-export function discoverRunHosts(): DiscoveredHost[] {
-  if (!existsSync(HOSTS_DIR)) return [];
-  const out: DiscoveredHost[] = [];
-  for (const name of readdirSync(HOSTS_DIR)) {
-    const dir = `${HOSTS_DIR}/${name}`;
-    const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
-    if (!spec) {
-      // Torn dir from a crash mid-create — nothing to recover.
-      try {
-        rmSync(dir, { recursive: true, force: true });
-      } catch {}
-      continue;
-    }
-    const meta = readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
-    let alive = false;
-    if (meta?.pid) {
-      try {
-        process.kill(meta.pid, 0);
-        alive = existsSync(`${dir}/${HOST_SOCK_NAME}`);
-      } catch {}
-    }
-    out.push({ dir, spec, meta, journal: readHostJournal(dir), alive });
-  }
-  return out;
-}
-
-/**
- * Reattach to a live host after a opensession restart. Returns the same
- * generator shape as runAgentHosted; the caller runs the normal consumption
- * bookkeeping over it. Re-registers the run's RPC token so its opensession-*
- * proxies keep working.
- */
-export async function attachRunHost(
-  d: DiscoveredHost,
-  cb: HandleCallbacks
-): Promise<AsyncGenerator<StreamEvent>> {
-  if (d.spec.rpcToken) {
-    registerRunToken(d.spec.rpcToken, {
-      sessionId: d.spec.osSessionId,
-      user: d.spec.user,
-    });
-  }
-  const handle = new HostHandle(d.dir, d.spec, cb);
-  if (d.meta?.engineSessionId) {
-    (handle as any).noteEngineId?.call(handle, d.meta.engineSessionId);
-  }
-  await handle.connectWithWait(10_000);
-  return handle.events();
-}
-
-/** Remove a dead host's dir once its final state has been consumed. */
-export function cleanupHostDir(dir: string): void {
-  try {
-    rmSync(dir, { recursive: true, force: true });
-  } catch {}
 }

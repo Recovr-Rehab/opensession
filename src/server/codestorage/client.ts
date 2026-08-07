@@ -161,14 +161,6 @@ export interface CsBranchDiff {
   stats?: CsDiffStats;
 }
 
-export interface CsCommitDiff {
-  sha: string;
-  files: CsDiffFile[];
-  filtered_files?: CsFilteredFile[];
-  merge_base_sha?: string;
-  stats?: CsDiffStats;
-}
-
 export interface CsMergeResult {
   /** merge_commit, fast_forward, no_op, squash, or unknown. */
   result: string;
@@ -202,12 +194,6 @@ export interface CsConflictBlob {
   truncated: boolean;
   content?: string;
   oid?: string;
-}
-
-export interface CsCreatedRepo {
-  repo_id: string;
-  http_url: string;
-  message: string;
 }
 
 /** A git note read back for one object (GET /repos/{repo}/notes). */
@@ -273,20 +259,6 @@ export async function listRepos(q?: string): Promise<CsRepoSummary[]> {
   return repos;
 }
 
-/** POST /repos (repo:write) — the new repo's id comes from the JWT `repo` claim. */
-export async function createRepo(
-  repoId: string,
-  opts?: { defaultBranch?: string },
-): Promise<CsCreatedRepo> {
-  const res = await csFetch("/repos", {
-    scopes: ["repo:write"],
-    repo: repoId,
-    method: "POST",
-    body: opts?.defaultBranch ? { default_branch: opts.defaultBranch } : {},
-  });
-  return (await res.json()) as CsCreatedRepo;
-}
-
 /** GET /repos/{repo} (git:read). */
 export async function getRepo(repoId: string): Promise<CsRepoSummary> {
   const res = await csFetch(repoPath(repoId), { scopes: ["git:read"], repo: repoId });
@@ -312,26 +284,6 @@ export async function listBranches(repoId: string): Promise<CsBranch[]> {
     cursor = page.has_more ? page.next_cursor : undefined;
   } while (cursor);
   return branches;
-}
-
-/** POST /repos/{repo}/branches/create (git:write). */
-export async function createBranch(
-  repoId: string,
-  targetBranch: string,
-  opts?: { baseBranch?: string; baseRef?: string; force?: boolean },
-): Promise<{ target_branch: string; commit_sha?: string; message: string }> {
-  const res = await csFetch(`${repoPath(repoId)}/branches/create`, {
-    scopes: ["git:write"],
-    repo: repoId,
-    method: "POST",
-    body: {
-      target_branch: targetBranch,
-      ...(opts?.baseBranch ? { base_branch: opts.baseBranch } : {}),
-      ...(opts?.baseRef ? { base_ref: opts.baseRef } : {}),
-      ...(opts?.force ? { force: true } : {}),
-    },
-  });
-  return (await res.json()) as { target_branch: string; commit_sha?: string; message: string };
 }
 
 /** DELETE /repos/{repo}/branches (git:write). The default branch is protected. */
@@ -424,20 +376,6 @@ export async function getCommit(repoId: string, sha: string): Promise<CsCommit> 
     query: { sha },
   });
   return ((await res.json()) as { commit: CsCommit }).commit;
-}
-
-/** GET /repos/{repo}/diff (git:read) — a single commit's diff. */
-export async function getCommitDiff(
-  repoId: string,
-  sha: string,
-  opts?: { baseSha?: string; paths?: string[] },
-): Promise<CsCommitDiff> {
-  const res = await csFetch(`${repoPath(repoId)}/diff`, {
-    scopes: ["git:read"],
-    repo: repoId,
-    query: { sha, baseSha: opts?.baseSha, path: opts?.paths },
-  });
-  return (await res.json()) as CsCommitDiff;
 }
 
 /**
@@ -585,18 +523,4 @@ export async function listFiles(
     cursor = page.has_more && entries.length < max ? page.next_cursor : undefined;
   } while (cursor);
   return entries.slice(0, max);
-}
-
-/** GET /repos/{repo}/file (git:read). Returns the blob as UTF-8 text. */
-export async function getFile(
-  repoId: string,
-  path: string,
-  opts?: { ref?: string },
-): Promise<string> {
-  const res = await csFetch(`${repoPath(repoId)}/file`, {
-    scopes: ["git:read"],
-    repo: repoId,
-    query: { path, ref: opts?.ref },
-  });
-  return await res.text();
 }

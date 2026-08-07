@@ -66,7 +66,6 @@ import {
 import { transcriptStore } from "../transcript-store";
 import type { TranscriptEntry } from "../types";
 import type {
-  EngineAdapter,
   RunAgentOpts,
   StreamEvent,
   TurnUsage,
@@ -552,20 +551,6 @@ export async function* runClaudeDirect(
     }
   }
 }
-
-// ── Adapter surface ──────────────────────────────────────────────────────────
-
-export const claudeDirectAdapter: EngineAdapter = {
-  name: "claude-direct",
-  startTurn: (opts, model) => runClaudeDirect(opts, model),
-  // v0 gaps, documented in the module doc: no mid-turn steer (single-shot
-  // prompt), no detached processes to reattach.
-  steer: () => false,
-  cancel: (id) => cancelClaudeDirectRun(id),
-  isBusy: (id) => isClaudeDirectBusy(id),
-  reattach: async () => null,
-  activeDetachedRunCount: () => 0,
-};
 
 // ── Scripted smoke harness ───────────────────────────────────────────────────
 

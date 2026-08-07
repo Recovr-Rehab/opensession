@@ -158,7 +158,7 @@ export function setClientAway(ws: any, away: boolean) {
 	else broadcastGlobalPresence();
 }
 
-export function broadcastPresence(sessionId: string) {
+function broadcastPresence(sessionId: string) {
 	const set = sessionWatchers.get(sessionId);
 	const viewers = set
 		? Array.from(set)
@@ -198,7 +198,7 @@ export function computeGlobalPresence(
 	}));
 }
 
-export function broadcastGlobalPresence() {
+function broadcastGlobalPresence() {
 	broadcastToAll({
 		type: "global_presence",
 		viewing: computeGlobalPresence(sessionWatchers),
@@ -246,7 +246,7 @@ export function broadcastToNote(noteId: string, msg: object, except?: any) {
 	}
 }
 
-export function broadcastNotePresence(noteId: string) {
+function broadcastNotePresence(noteId: string) {
 	const set = noteWatchers.get(noteId);
 	const viewers = set
 		? Array.from(set, (ws: any) => ws.data?.user || "Anonymous")
