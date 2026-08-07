@@ -919,31 +919,54 @@ private struct SessionActionsMenu: View {
 
 /// The way back to the bottom of a transcript the reader scrolled away from.
 ///
-/// Just the arrow: the direction is the whole message, and a wordless disc
-/// sits over the conversation without reading as another message in it.
+/// On the phone it is just the arrow: the direction is the whole message, a
+/// thumb wants the target, and a wordless disc sits over the conversation
+/// without reading as another message in it. The Mac keeps the words and
+/// stays small — a pointer needs no 44pt target, and a desktop window has
+/// room for a label that says which way "down" goes.
+///
 /// It doubles as the "there is output you haven't seen" signal — new content
-/// below the fold fills the disc in the accent colour rather than resting on
-/// the neutral control surface, which is the difference between a control and
-/// a notification.
+/// below the fold wears the accent colour rather than the neutral control
+/// surface, which is the difference between a control and a notification.
+///
+/// Both shapes sit on a solid surface, deliberately neither glass nor
+/// material: those sample what is behind them, so a dark code block or image
+/// scrolling under the control dragged it toward its dark appearance while
+/// the glyph kept its light-mode colour. It travels over arbitrary content,
+/// so it keeps one appearance and earns its lift from a hairline and a soft
+/// shadow instead — the same opaque treatment the web control wears.
 private struct ScrollToLatestButton: View {
     let hasNewOutput: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
+            #if os(macOS)
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(hasNewOutput ? "New messages" : "Scroll to bottom")
+                    .font(.caption.weight(.medium))
+            }
+            .foregroundStyle(
+                hasNewOutput ? OS1VisualStyle.accent : OS1VisualStyle.textDim
+            )
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(OS1VisualStyle.panel, in: Capsule())
+            .overlay { Capsule().stroke(OS1VisualStyle.border, lineWidth: 0.5) }
+            .shadow(color: .black.opacity(0.12), radius: 6, y: 1)
+            .contentShape(Capsule())
+            #else
             Image(systemName: "arrow.down")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(
                     hasNewOutput ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
                 )
                 .frame(width: 40, height: 40)
-                // A solid surface, deliberately neither glass nor material:
-                // both sample what is behind them, so a dark code block or
-                // image scrolling under the button dragged it toward its dark
-                // appearance while the glyph kept its light-mode colour. It
-                // travels over arbitrary content, so it keeps one appearance
-                // and earns its lift from the hairline and shadow instead —
-                // the same opaque treatment the web control wears.
+                // The accent fill is the phone's version of the accent label
+                // the Mac gets: without words, colour is the only thing left
+                // to carry "there is something new down there".
                 .background(
                     hasNewOutput ? OS1VisualStyle.accent : OS1VisualStyle.panel,
                     in: Circle()
@@ -957,6 +980,7 @@ private struct ScrollToLatestButton: View {
                 // Padded out to a 44pt target: the disc reads better at 40.
                 .padding(2)
                 .contentShape(Circle())
+            #endif
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
