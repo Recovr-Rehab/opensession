@@ -2621,6 +2621,145 @@ function teardownOpencodeRunRegistries(ctx: {
 }
 
 /**
+ * Permission-ask bridge shared by both drain paths (see the block comment at
+ * the primary call site in runOpencodeAttempt for the full policy rationale).
+ * One bridge per run: dedupes ask ids across the SSE pump and the busy-poll
+ * sweep, and serializes surfaced asks so a session shows one card at a time.
+ * Returns the handlePermissionAsk entrypoint. noteAskPending is an accessor
+ * (not the stall guard itself) because the reattach path constructs its stall
+ * guard after this bridge — asks only ever arrive via events, never
+ * synchronously, so the late binding is safe there.
+ */
+function makeOpencodePermissionBridge(ctx: {
+  client: OpencodeClient;
+  entry: OpencodeServerEntry;
+  ocSessionId: string;
+  q: { query?: { directory: string } };
+  unattended: boolean;
+  /** Command-policy gate for bash asks (bashGated / recomputed from the journaled kind). */
+  gated: boolean;
+  sessionId: string | undefined;
+  runKind: string | undefined;
+  onAskUser: RunAgentOpts["onAskUser"];
+  turnEvent: (fields: Record<string, unknown>) => void;
+  noteAskPending: (delta: 1 | -1) => void;
+}): (ask: any, via: string) => void {
+  const { client, entry, ocSessionId, q } = ctx;
+  const repliedPermissionIds = new Set<string>();
+  let permissionAskChain: Promise<void> = Promise.resolve();
+  const replyPermissionAsk = async (permId: string, reply: "once" | "always" | "reject") => {
+    // Legacy reply endpoint first (exists on every server version we run,
+    // 1.17.15 included); fall back to the flat 1.17+ reply route in case a
+    // future server drops the legacy path.
+    const res = await client
+      .postSessionIdPermissionsPermissionId({
+        path: { id: ocSessionId, permissionID: permId },
+        body: { response: reply },
+        ...q,
+      })
+      .catch((e) => ({ error: e }));
+    if ((res as { error?: unknown })?.error) {
+      await fetch(`${entry.url}/permission/${encodeURIComponent(permId)}/reply`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Basic ${btoa(`opencode:${entry.password}`)}`,
+        },
+        body: JSON.stringify({ reply }),
+      }).catch((e) =>
+        console.warn(`[opencode-runner] failed to answer permission ask ${permId}:`, e)
+      );
+    }
+  };
+  const decidePermissionAsk = async (ask: any): Promise<"once" | "always" | "reject"> => {
+    const kind = String(ask?.permission ?? ask?.action ?? "unknown");
+    // Bash asks go to the command policy first (command-policy.ts): a deny
+    // match rejects in every mode; on gated runs an allowed command answers
+    // its own ask. Null ⇒ not bash / interactive ⇒ the flow below decides.
+    const policyReply = bashAskPolicyReply(ask, {
+      unattended: ctx.unattended,
+      gated: ctx.gated,
+      sessionId: ctx.sessionId,
+      runKind: ctx.runKind,
+    });
+    if (policyReply) return policyReply;
+    if (ctx.unattended) return "reject";
+    if (kind === "external_directory") return "once";
+    if (!ctx.onAskUser) return "reject";
+    // Surface on the session's question card and wait for the human.
+    const what = ((ask?.patterns ?? ask?.resources ?? []) as unknown[])
+      .map(String)
+      .join(", ");
+    const meta = ask?.metadata ? JSON.stringify(ask.metadata).slice(0, 300) : "";
+    const answer = await ctx.onAskUser({
+      questions: [
+        {
+          question:
+            `The agent needs permission: **${kind}**` +
+            (what ? ` on \`${what}\`` : "") +
+            (meta && meta !== "{}" ? ` (${meta})` : "") +
+            ". Allow it?",
+          header: "Permission",
+          options: [
+            { label: "Allow", description: "Allow this call once" },
+            { label: "Allow always", description: "Remember for matching future calls" },
+            { label: "Reject", description: "Deny — the agent sees a permission error" },
+          ],
+          multiSelect: false,
+        },
+      ],
+    });
+    if (answer.behavior === "deny") return "reject"; // nobody answered
+    const picked = String(
+      Object.values(
+        (answer.updatedInput as { answers?: Record<string, string> }).answers || {}
+      )[0] || ""
+    ).toLowerCase();
+    if (picked.startsWith("allow always")) return "always";
+    if (picked.startsWith("allow") || picked.startsWith("yes")) return "once";
+    return "reject";
+  };
+  return (ask: any, via: string) => {
+    const permId = String(ask?.id || "");
+    if (!permId || repliedPermissionIds.has(permId)) return;
+    repliedPermissionIds.add(permId);
+    const kind = String(ask?.permission ?? ask?.action ?? "unknown");
+    permissionAskChain = permissionAskChain.then(async () => {
+      // Pause the stall clock: a tool part sits open while its ask waits on
+      // a human, which can legitimately take longer than any stall window.
+      ctx.noteAskPending(1);
+      try {
+        let reply: "once" | "always" | "reject" = "reject";
+        try {
+          reply = await decidePermissionAsk(ask);
+        } catch (e) {
+          console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
+        }
+        console.warn(
+          `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
+        );
+        ctx.turnEvent({
+          direction: "out",
+          kind: "permission_decision",
+          tool_name: kind,
+          decision: reply === "reject" ? "deny" : "allow",
+          reason: ctx.unattended
+            ? "unattended_auto_reject"
+            : kind === "external_directory"
+              ? "interactive_auto_approve"
+              : ctx.onAskUser
+                ? "human_decision"
+                : "no_ask_handler",
+        });
+        await replyPermissionAsk(permId, reply);
+      } finally {
+        ctx.noteAskPending(-1);
+      }
+    });
+  };
+}
+
+/**
  * Read the turn's final assistant message out of the messages list and mirror
  * any text parts the SSE pump missed into the transcript + the pending event
  * queue. Shared tail of runOpencodeAttempt and tryReattachOpencodeRun (the
@@ -4159,119 +4298,20 @@ async function* runOpencodeAttempt(
     // pipeline); no answer ⇒ reject. Deduped because the SSE pump and the
     // poll sweep can both see the same ask; surfaced asks are serialized so a
     // session shows one card at a time (pendingAsks holds one per session).
-    const repliedPermissionIds = new Set<string>();
-    let permissionAskChain: Promise<void> = Promise.resolve();
-    const replyPermissionAsk = async (permId: string, reply: "once" | "always" | "reject") => {
-      // Legacy reply endpoint first (exists on every server version we run,
-      // 1.17.15 included); fall back to the flat 1.17+ reply route in case a
-      // future server drops the legacy path.
-      const res = await client
-        .postSessionIdPermissionsPermissionId({
-          path: { id: ocSessionId, permissionID: permId },
-          body: { response: reply },
-          ...q,
-        })
-        .catch((e) => ({ error: e }));
-      if ((res as { error?: unknown })?.error) {
-        await fetch(`${entry!.url}/permission/${encodeURIComponent(permId)}/reply`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            Authorization: `Basic ${btoa(`opencode:${entry!.password}`)}`,
-          },
-          body: JSON.stringify({ reply }),
-        }).catch((e) =>
-          console.warn(`[opencode-runner] failed to answer permission ask ${permId}:`, e)
-        );
-      }
-    };
-    const decidePermissionAsk = async (ask: any): Promise<"once" | "always" | "reject"> => {
-      const kind = String(ask?.permission ?? ask?.action ?? "unknown");
-      // Bash asks go to the command policy first (command-policy.ts): a deny
-      // match rejects in every mode; on gated runs an allowed command answers
-      // its own ask. Null ⇒ not bash / interactive ⇒ the flow below decides.
-      const policyReply = bashAskPolicyReply(ask, {
-        unattended: policy.unattended,
-        gated: bashGated,
-        sessionId: journal?.osSessionId,
-        runKind: journal?.kind,
-      });
-      if (policyReply) return policyReply;
-      if (policy.unattended) return "reject";
-      if (kind === "external_directory") return "once";
-      if (!opts.onAskUser) return "reject";
-      // Surface on the session's question card and wait for the human.
-      const what = ((ask?.patterns ?? ask?.resources ?? []) as unknown[])
-        .map(String)
-        .join(", ");
-      const meta = ask?.metadata ? JSON.stringify(ask.metadata).slice(0, 300) : "";
-      const answer = await opts.onAskUser({
-        questions: [
-          {
-            question:
-              `The agent needs permission: **${kind}**` +
-              (what ? ` on \`${what}\`` : "") +
-              (meta && meta !== "{}" ? ` (${meta})` : "") +
-              ". Allow it?",
-            header: "Permission",
-            options: [
-              { label: "Allow", description: "Allow this call once" },
-              { label: "Allow always", description: "Remember for matching future calls" },
-              { label: "Reject", description: "Deny — the agent sees a permission error" },
-            ],
-            multiSelect: false,
-          },
-        ],
-      });
-      if (answer.behavior === "deny") return "reject"; // nobody answered
-      const picked = String(
-        Object.values(
-          (answer.updatedInput as { answers?: Record<string, string> }).answers || {}
-        )[0] || ""
-      ).toLowerCase();
-      if (picked.startsWith("allow always")) return "always";
-      if (picked.startsWith("allow") || picked.startsWith("yes")) return "once";
-      return "reject";
-    };
-    const handlePermissionAsk = (ask: any, via: string) => {
-      const permId = String(ask?.id || "");
-      if (!permId || repliedPermissionIds.has(permId)) return;
-      repliedPermissionIds.add(permId);
-      const kind = String(ask?.permission ?? ask?.action ?? "unknown");
-      permissionAskChain = permissionAskChain.then(async () => {
-        // Pause the stall clock: a tool part sits open while its ask waits on
-        // a human, which can legitimately take longer than any stall window.
-        stallGuard.noteAskPending(1);
-        try {
-          let reply: "once" | "always" | "reject" = "reject";
-          try {
-            reply = await decidePermissionAsk(ask);
-          } catch (e) {
-            console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
-          }
-          console.warn(
-            `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
-          );
-          turnEvent({
-            direction: "out",
-            kind: "permission_decision",
-            tool_name: kind,
-            decision: reply === "reject" ? "deny" : "allow",
-            reason:
-              policy.unattended
-                ? "unattended_auto_reject"
-                : kind === "external_directory"
-                  ? "interactive_auto_approve"
-                  : opts.onAskUser
-                    ? "human_decision"
-                    : "no_ask_handler",
-          });
-          await replyPermissionAsk(permId, reply);
-        } finally {
-          stallGuard.noteAskPending(-1);
-        }
-      });
-    };
+    // Machinery lives in makeOpencodePermissionBridge (shared with reattach).
+    const handlePermissionAsk = makeOpencodePermissionBridge({
+      client,
+      entry: entry!,
+      ocSessionId,
+      q,
+      unattended: policy.unattended,
+      gated: bashGated,
+      sessionId: journal?.osSessionId,
+      runKind: journal?.kind,
+      onAskUser: opts.onAskUser,
+      turnEvent,
+      noteAskPending: (delta) => stallGuard.noteAskPending(delta),
+    });
 
     const handleEvent = async (ev: any) => {
       const p = ev?.properties;
@@ -5342,114 +5382,25 @@ export async function tryReattachOpencodeRun(
         confirmTools: run.confirmTools,
         journalKind: run.kind,
       });
-      const repliedPermissionIds = new Set<string>();
-      let permissionAskChain: Promise<void> = Promise.resolve();
-      const replyPermissionAsk = async (permId: string, reply: "once" | "always" | "reject") => {
-        const res = await client
-          .postSessionIdPermissionsPermissionId({
-            path: { id: ocSessionId!, permissionID: permId },
-            body: { response: reply },
-            ...q,
-          })
-          .catch((e) => ({ error: e }));
-        if ((res as { error?: unknown })?.error) {
-          await fetch(`${server.url}/permission/${encodeURIComponent(permId)}/reply`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              Authorization: `Basic ${btoa(`opencode:${server.password}`)}`,
-            },
-            body: JSON.stringify({ reply }),
-          }).catch((e) =>
-            console.warn(`[opencode-runner] failed to answer permission ask ${permId}:`, e)
-          );
-        }
-      };
-      const decidePermissionAsk = async (ask: any): Promise<"once" | "always" | "reject"> => {
-        const kind = String(ask?.permission ?? ask?.action ?? "unknown");
-        // Same command-policy-first order as the master bridge. The gated
-        // flag is recomputed from the journaled kind/mode because a reattach
-        // adopts a server whose config (bash "*" ask included) it did not
-        // write — the two must agree or an adopted run's asks all reject.
-        const policyReply = bashAskPolicyReply(ask, {
-          unattended: policy.unattended,
-          gated: isUnattendedKind(baseJournalKind(run.kind)) && run.mode !== "ask",
-          sessionId: run.osSessionId,
-          runKind: run.kind,
-        });
-        if (policyReply) return policyReply;
-        if (policy.unattended) return "reject";
-        if (kind === "external_directory") return "once";
-        if (!handlers.onAskUser) return "reject";
-        const what = ((ask?.patterns ?? ask?.resources ?? []) as unknown[]).map(String).join(", ");
-        const meta = ask?.metadata ? JSON.stringify(ask.metadata).slice(0, 300) : "";
-        const answer = await handlers.onAskUser({
-          questions: [
-            {
-              question:
-                `The agent needs permission: **${kind}**` +
-                (what ? ` on \`${what}\`` : "") +
-                (meta && meta !== "{}" ? ` (${meta})` : "") +
-                ". Allow it?",
-              header: "Permission",
-              options: [
-                { label: "Allow", description: "Allow this call once" },
-                { label: "Allow always", description: "Remember for matching future calls" },
-                { label: "Reject", description: "Deny — the agent sees a permission error" },
-              ],
-              multiSelect: false,
-            },
-          ],
-        });
-        if (answer.behavior === "deny") return "reject";
-        const picked = String(
-          Object.values(
-            (answer.updatedInput as { answers?: Record<string, string> }).answers || {}
-          )[0] || ""
-        ).toLowerCase();
-        if (picked.startsWith("allow always")) return "always";
-        if (picked.startsWith("allow") || picked.startsWith("yes")) return "once";
-        return "reject";
-      };
-      const handlePermissionAsk = (ask: any, via: string) => {
-        const permId = String(ask?.id || "");
-        if (!permId || repliedPermissionIds.has(permId)) return;
-        repliedPermissionIds.add(permId);
-        const kind = String(ask?.permission ?? ask?.action ?? "unknown");
-        permissionAskChain = permissionAskChain.then(async () => {
-          // Pause the stall clock while the ask waits on a human — same
-          // reasoning as the primary path. (Called only after stallGuard
-          // below is initialized: asks arrive via events, not synchronously.)
-          stallGuard.noteAskPending(1);
-          try {
-            let reply: "once" | "always" | "reject" = "reject";
-            try {
-              reply = await decidePermissionAsk(ask);
-            } catch (e) {
-              console.warn(`[opencode-runner] permission ask ${permId} decision failed:`, e);
-            }
-            console.warn(
-              `[opencode-runner] permission ask ${permId} (${kind}) on ${ocSessionId} via ${via} → ${reply}`
-            );
-            turnEvent({
-              direction: "out",
-              kind: "permission_decision",
-              tool_name: kind,
-              decision: reply === "reject" ? "deny" : "allow",
-              reason: policy.unattended
-                ? "unattended_auto_reject"
-                : kind === "external_directory"
-                  ? "interactive_auto_approve"
-                  : handlers.onAskUser
-                    ? "human_decision"
-                    : "no_ask_handler",
-            });
-            await replyPermissionAsk(permId, reply);
-          } finally {
-            stallGuard.noteAskPending(-1);
-          }
-        });
-      };
+      // Shared bridge machinery (makeOpencodePermissionBridge). The gated
+      // flag is recomputed from the journaled kind/mode because a reattach
+      // adopts a server whose config (bash "*" ask included) it did not
+      // write — the two must agree or an adopted run's asks all reject.
+      // noteAskPending resolves stallGuard lazily: it's declared below, and
+      // asks arrive via events only, never synchronously.
+      const handlePermissionAsk = makeOpencodePermissionBridge({
+        client,
+        entry: server,
+        ocSessionId: ocSessionId!,
+        q,
+        unattended: policy.unattended,
+        gated: isUnattendedKind(baseJournalKind(run.kind)) && run.mode !== "ask",
+        sessionId: run.osSessionId,
+        runKind: run.kind,
+        onAskUser: handlers.onAskUser,
+        turnEvent,
+        noteAskPending: (delta) => stallGuard.noteAskPending(delta),
+      });
 
       // Same mid-turn task-subagent stall guard as the primary path: a
       // reattached turn can hang on a wedged subagent request identically. No
