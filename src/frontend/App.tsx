@@ -3281,7 +3281,8 @@ export function App(
 					<div className="app-header-actions" ref={setHeaderActionsEl}>
 						{/* On the root page the actions slot is otherwise empty (session
 						    actions only portal in on pushed pages) — it carries Search,
-						    which lives in the top bar on phones instead of the sidebar. */}
+						    which lives in the top bar on phones instead of the sidebar.
+						    The Desk rides the bottom-right FAB cluster instead. */}
 						{!mobileDetail && (
 							<button
 								className="mobile-search-btn"
@@ -3418,8 +3419,6 @@ export function App(
 							onOpenReports={() => navigate({ view: "reports" })}
 							analyticsActive={route.view === "analytics"}
 							onOpenAnalytics={() => navigate({ view: "analytics" })}
-							deskActive={deskOpen}
-							onOpenDesk={() => setDeskOpen(true)}
 							onSelect={(s) => navigate({ view: "session", id: s.id })}
 							onOpenReview={openReviewForSession}
 							onOpenTicket={openTicketWorkspace}
@@ -3924,8 +3923,21 @@ export function App(
 					</button>
 				)}
 
-				{/* The Desk's triggers are ⌘J, the command palette, and the sidebar's
-				    Desk tool — which is off until someone turns it on in Settings. */}
+				{/* The Desk trigger — desktop: a quiet floating button in the
+				    bottom-right corner; phones: a second FAB beside the new-session +
+				    on the root page (see .desk-fab). ⌘J and the command palette still
+				    summon it too. */}
+				{(!isPhone || !mobileDetail) && (
+					<Tooltip label="Desk" side="left" shortcut={["⌘", "J"]}>
+						<button
+							className="desk-fab"
+							onClick={() => setDeskOpen(true)}
+							aria-label="Open the Desk"
+						>
+							<IconDesk size={24} />
+						</button>
+					</Tooltip>
+				)}
 
 				{/* ⌘J Desk overlay — standing concierge session. */}
 				<DeskOverlay
