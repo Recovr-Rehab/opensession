@@ -66,6 +66,7 @@ struct ComposerSettingsView: View {
 
     var body: some View {
         Form {
+            PersonalPromptSection()
             if loading {
                 Section { ProgressView("Loading composer preferences…") }
             } else {
@@ -357,64 +358,48 @@ struct AppearanceSettingsView: View {
     }
 }
 
-/// Settings → General (personal). Holds the per-user settings that don't fill
-/// a page of their own — today the standing prompt, which is one text box.
-struct PersonalGeneralSettingsView: View {
+/// The standing prompt, shown inside Composer. There is no Save button: it
+/// commits when the box loses focus and again when the screen goes away, so
+/// leaving keeps your edit — same contract as the web.
+struct PersonalPromptSection: View {
     @State private var prompt = ""
     @State private var savedPrompt = ""
     @State private var loading = true
-    @State private var saving = false
     @State private var error: String?
-    @State private var savedMessage: String?
+    @FocusState private var editing: Bool
 
     private let user = ServerConfig.shared.userName
 
     var body: some View {
-        Form {
+        Section {
             if loading {
-                Section { ProgressView("Loading personal prompt…") }
+                ProgressView()
+            } else if let error {
+                Text(error).foregroundStyle(.red)
+                Button("Try again") { Task { await load() } }
             } else {
-                Section {
-                    Text("Standing instructions are added to every interactive session you start. They follow your identity across devices and are not used for automations.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    TextEditor(text: $prompt)
-                        .frame(minHeight: 180)
-                } header: {
-                    Text("Instructions")
-                } footer: {
-                    Text("Leave this empty to turn off personal instructions.")
-                }
-
-                Section {
-                    Button(saving ? "Saving…" : "Save personal prompt") {
-                        Task { await save() }
-                    }
-                    .disabled(saving || prompt == savedPrompt)
-                    Button("Clear personal prompt", role: .destructive) {
-                        prompt = ""
-                        Task { await save() }
-                    }
-                    .disabled(saving || prompt.isEmpty)
-                    if prompt != savedPrompt, !saving {
-                        Text("Unsaved changes")
-                            .foregroundStyle(.secondary)
-                    }
-                    if let savedMessage {
-                        Text(savedMessage).foregroundStyle(.green)
-                    }
-                }
+                TextEditor(text: $prompt)
+                    .frame(minHeight: 140)
+                    .focused($editing)
             }
-
-            if let error {
-                Section {
-                    Text(error).foregroundStyle(.red)
-                    Button("Try again") { Task { await load() } }
-                }
-            }
+        } header: {
+            Text("Personal prompt")
+        } footer: {
+            Text("Standing instructions added to every session you start, on top of the built-in ones. Saved when you leave this screen; empty turns it off.")
         }
-        .navigationTitle("General")
         .task { await load() }
+        .onChange(of: editing) { _, focused in if !focused { commit() } }
+        .onDisappear { commit() }
+    }
+
+    /// Fire-and-forget — by the time this runs the view may already be gone,
+    /// so there is nothing to report a result to. `savedPrompt` moves first so
+    /// a blur followed by a disappear doesn't send the same body twice.
+    private func commit() {
+        guard !loading, prompt != savedPrompt else { return }
+        let pending = prompt
+        savedPrompt = pending
+        Task { _ = try? await SettingsAPI.setPersonalPrompt(user: user, prompt: pending) }
     }
 
     private func load() async {
@@ -428,20 +413,5 @@ struct PersonalGeneralSettingsView: View {
             self.error = error.localizedDescription
         }
         loading = false
-    }
-
-    private func save() async {
-        saving = true
-        error = nil
-        savedMessage = nil
-        do {
-            let result = try await SettingsAPI.setPersonalPrompt(user: user, prompt: prompt)
-            prompt = result
-            savedPrompt = result
-            savedMessage = result.isEmpty ? "Personal prompt cleared." : "Personal prompt saved."
-        } catch {
-            self.error = error.localizedDescription
-        }
-        saving = false
     }
 }

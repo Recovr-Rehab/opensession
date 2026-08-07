@@ -206,7 +206,6 @@ function isToolView(view: string): view is ToolView {
 
 // Non-tool settings sections, addressable as <base>/settings/<section>.
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
-	"general",
 	"myAccounts",
 	"keychain",
 	"composer",
@@ -229,8 +228,9 @@ const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
 	warmPreviews: "prewarming",
 	previewPool: "prewarming",
 	workspace: "setup",
-	personalPrompt: "general",
-	deskVoice: "general",
+	general: "composer",
+	personalPrompt: "composer",
+	deskVoice: "composer",
 };
 
 function parseRoute(pathname: string): Route {
@@ -444,7 +444,15 @@ function samePanel(a: Route, b: Route): boolean {
 	return id(a) !== undefined && id(a) === id(b);
 }
 
-export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) {
+export function App(
+	{
+		serviceWorker = true,
+		initialTeamViewing = [],
+	}: {
+		serviceWorker?: boolean;
+		initialTeamViewing?: Array<{ user: string; sessionId: string }>;
+	} = {},
+) {
 	const { sessions, loading, cloudUnreachable, refresh, inject, unstick, patch, remove } =
 		useSessions();
 	const auth = useAuthStatus();
@@ -595,7 +603,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// Who's viewing what, app-wide (from global_presence).
 	const [teamViewing, setTeamViewing] = useState<
 		Array<{ user: string; sessionId: string }>
-	>([]);
+	>(initialTeamViewing);
 	const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
 		undefined,
 	);
