@@ -75,6 +75,7 @@ Drop a JSON file in `automations/`:
     "mode": "ask",
     "schedule": "0 16 * * 1",
     "enabled": false,
+    "prReviewer": "your-org/your-team",
     "prompt": "..."
   }
 }
@@ -84,6 +85,13 @@ Drop a JSON file in `automations/`:
   and never reuse another recipe's.
 - `mode`: `ask` is read-only on the main checkout. `code` gets an isolated
   worktree with write access and can open PRs. Default to `ask`.
+- `prReviewer` names who to request review from on the PRs a `code` recipe
+  opens — a GitHub login, an `org/team` slug, or a comma-separated list. Set
+  it on every `code` recipe: PRs are the human gate, and a PR nobody is asked
+  to review is one nobody sees. Omit it for `ask` recipes, which can't open
+  PRs. See [GitHub setup](../docs/setup/github.md#getting-automation-prs-reviewed)
+  for how the request reaches a human, and the collaborator rule that trips up
+  team slugs.
 - `schedule` is a UTC cron expression; leave it empty for event-triggered ones.
 - `enabled` should be `false`. An operator should read a prompt before it runs.
 - `requires` lists integration ids, purely to warn at install time.

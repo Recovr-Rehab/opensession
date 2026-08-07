@@ -203,6 +203,9 @@ is why they are scoped tightly:
 - customer-facing and identity-mutating tools are denied outright;
 - `mode` applies here too — an `ask` automation cannot write; a `code`
   automation gets a worktree and can open a pull request, never merge one.
+  Give every `code` automation a `prReviewer` so the PRs it opens request a
+  human: an unreviewed PR is an invisible one, and the human gate is only as
+  real as the review request that reaches someone.
 
 Automations are data, not code: create one from the UI or by talking to the
 agent. Reusable ones can be packaged as **recipes** — a JSON file in

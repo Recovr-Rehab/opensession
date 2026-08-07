@@ -122,6 +122,52 @@ Prompts and `pr-info.ts` defaults are config-driven (they interpolate the
 default repo's `ghRepo`, or the PR's own repo when threaded) — no code edits
 needed to point the PR agent at your repos.
 
+## Getting automation PRs reviewed
+
+A `code` automation can open PRs but never merge them — PRs are the human
+gate. That gate only closes if a human is actually asked, and nothing asks by
+default: an automation PR opens with no reviewer, so it lands in the repo and
+waits. Left alone this compounds quietly; the backlog is invisible precisely
+because no one was requested on it.
+
+Set `prReviewer` on every `code` automation (and `code` recipe). It takes a
+GitHub login, an `org/team` slug, or a comma-separated list of either, and the
+run is instructed to pass it to `gh pr create --reviewer`:
+
+```jsonc
+{ "name": "Production Error Sweep", "mode": "code",
+  "prReviewer": "your-org/your-reviewers" }
+```
+
+How the request becomes a notification: `pr-review-notifications.ts` polls the
+PR cache every 60s and pushes to anyone newly appearing in a PR's
+`reviewRequested`. A team slug is expanded to its members
+(`github-review-requests.ts`), each mapped through the identity table to a
+person, so one team request notifies every member individually.
+
+Three things to know before you pick a value:
+
+- **A reviewer must be a collaborator on the repo.** For a team that means the
+  team itself needs access — being an org member with access by some other
+  route is not enough. GitHub rejects the rest with
+  `422 Reviews may only be requested from collaborators`. Grant it under
+  *Team → Repositories → Add repository*; the bot token can't (it has no
+  Administration scope).
+- **A team request fans out, it does not round-robin.** Every member gets their
+  own notification for every PR. If you want a shared queue rather than a group
+  ping, turn on the team's code review assignment in GitHub (round-robin or
+  load-balance, count 1) so the team request resolves to one person.
+- **The PR author is never requested**, so a reviewer who also authors PRs in
+  the same repo gets nothing from those.
+
+The notification is edge-triggered and sent once — there is no digest,
+reminder, or re-notify. A recipient with no push subscription, or one who
+misses the push, is left with only the review-queue row in the sidebar. Bear
+that in mind when backfilling reviewers onto many existing PRs: doing it
+against a running server fires one push per PR per reviewer, while doing it
+with the server stopped lets the next boot adopt them as the baseline
+silently.
+
 ## Per-user GitHub auth (PRs as the session owner)
 
 Opt-in: interactive sessions open PRs as the actual human who owns the

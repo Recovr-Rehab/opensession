@@ -40,6 +40,10 @@ export type Recipe = {
     mode?: "ask" | "code";
     enabled?: boolean;
     mcpServers?: string[];
+    /** Reviewer requested on PRs a `code` recipe opens — a GitHub login, an
+     *  `org/team` slug, or a comma-separated list. Set it on every code
+     *  recipe; a PR nobody is asked to review is one nobody sees. */
+    prReviewer?: string;
     [key: string]: unknown;
   };
 };

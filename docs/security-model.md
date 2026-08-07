@@ -48,6 +48,12 @@ configuration for the run.
   from ask.
 - When adding an automation, scope it: pick ask mode unless it must write, and
   name only the MCP servers it uses.
+- The PR gate is only a gate if a human is asked. A code automation's
+  `prReviewer` (a GitHub login, `org/team` slug, or list) is requested as
+  reviewer on the PRs it opens; without one the PR reaches nobody's review
+  queue and the human gate degrades into an unread backlog. Set it on every
+  code automation — see
+  [Getting automation PRs reviewed](setup/github.md#getting-automation-prs-reviewed).
 
 ## Stripe: a third enforcement tier
 

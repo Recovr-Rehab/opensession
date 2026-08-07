@@ -271,7 +271,10 @@ just in prompts. Every change must preserve these invariants:
 - The run gate (`opencodeGateReason`) is deny-by-default on journal kind.
 - `mode` is per-automation: "ask" runs read-only on the main checkout; "code"
   gets an isolated worktree with Write/Edit and can open PRs — never merge,
-  PRs are the human gate. Code mode keeps every other scoping.
+  PRs are the human gate. Code mode keeps every other scoping. Give every code
+  automation a `prReviewer` (GitHub login, `org/team` slug, or list) — it is
+  requested as reviewer on the PRs it opens, and without one the gate is an
+  unread backlog (docs/setup/github.md#getting-automation-prs-reviewed).
 - An MCP server can carry `allowedUsers`; enforcement is at the runner layer
   (`filterMcpServers` in runner-shared.ts), matched through the identity
   table. Automation runs pass no user, so restricted servers are invisible to
