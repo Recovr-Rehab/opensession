@@ -366,22 +366,16 @@ struct SessionsListView: View {
                         Button {
                             showSettings = true
                         } label: {
-                            // The app's own tile, drawn at the size the repo
-                            // tiles under it use rather than a brand-sized
-                            // one — at 44pt it was the largest thing on the
-                            // screen by some way. The 44pt frame stays: it's
-                            // the tap target, and keeping the outer box the
-                            // same size is what lets the leading inset below
-                            // still land the mark on the same column.
+                            // Brand-sized on purpose: this is the app's own
+                            // mark standing in for a title, not one of the
+                            // repo tiles in the list under it.
                             //
                             // Square, not `round`: this is a product mark
                             // with its own rounded-square silhouette, and
                             // since the icon route began cropping icons to
                             // their artwork it reaches the tile's edges — so
                             // a circular mask cut its corners off.
-                            RepoTile(name: "opensession", size: 24)
-                                .frame(width: 44, height: 44, alignment: .leading)
-                                .contentShape(Rectangle())
+                            RepoTile(name: "opensession", size: 44)
                         }
                         .accessibilityLabel("Settings")
                         // Hiding the glass background leaves the padding the
