@@ -247,7 +247,7 @@ struct SessionView: View {
                     .overlay(alignment: .bottom) {
                         if !pinnedToBottom, !holdingAtLatest,
                            !viewModel.displayBlocks.isEmpty {
-                            ScrollToLatestPill(hasNewOutput: newBelow) {
+                            ScrollToLatestButton(hasNewOutput: newBelow) {
                                 newBelow = false
                                 scrollToBottom(proxy, animated: true)
                             }
@@ -273,6 +273,11 @@ struct SessionView: View {
                     }
                     .onChange(of: viewModel.pendingQuestion) {
                         // A question needs eyes even if they've scrolled away.
+                        scrollToBottom(proxy, animated: true)
+                    }
+                    .onChange(of: viewModel.composeSeq) {
+                        // Typing a reply brings the end of the conversation
+                        // into view, so the message lands where you're looking.
                         scrollToBottom(proxy, animated: true)
                     }
                     .onChange(of: viewModel.sendSeq) {
@@ -914,40 +919,44 @@ private struct SessionActionsMenu: View {
 
 /// The way back to the bottom of a transcript the reader scrolled away from.
 ///
-/// It doubles as the "there is output you haven't seen" signal: when new
-/// content landed below the fold it says so in the accent colour instead of
-/// quietly offering navigation, which is the difference between a control and
+/// Just the arrow: the direction is the whole message, and a wordless disc
+/// sits over the conversation without reading as another message in it.
+/// It doubles as the "there is output you haven't seen" signal — new content
+/// below the fold fills the disc in the accent colour rather than resting on
+/// the neutral control surface, which is the difference between a control and
 /// a notification.
-private struct ScrollToLatestPill: View {
+private struct ScrollToLatestButton: View {
     let hasNewOutput: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 11, weight: .semibold))
-                Text(hasNewOutput ? "New messages" : "Scroll to bottom")
-                    .font(.footnote.weight(.medium))
-            }
-            .foregroundStyle(
-                hasNewOutput ? OS1VisualStyle.accent : OS1VisualStyle.textDim
-            )
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            // A solid control surface, deliberately neither glass nor material:
-            // both sample what is behind them, so a dark code block or image
-            // scrolling under the pill dragged it toward its dark appearance
-            // while the label kept its light-mode colour. The pill travels over
-            // arbitrary content, so it keeps one appearance and earns its lift
-            // from the hairline and shadow instead — the same opaque treatment
-            // the web pill wears.
-            .background(OS1VisualStyle.panel, in: Capsule())
-            .overlay {
-                Capsule().stroke(OS1VisualStyle.border, lineWidth: 0.5)
-            }
-            .shadow(color: .black.opacity(0.12), radius: 6, y: 1)
-            .contentShape(Capsule())
+            Image(systemName: "arrow.down")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(
+                    hasNewOutput ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
+                )
+                .frame(width: 40, height: 40)
+                // A solid surface, deliberately neither glass nor material:
+                // both sample what is behind them, so a dark code block or
+                // image scrolling under the button dragged it toward its dark
+                // appearance while the glyph kept its light-mode colour. It
+                // travels over arbitrary content, so it keeps one appearance
+                // and earns its lift from the hairline and shadow instead —
+                // the same opaque treatment the web control wears.
+                .background(
+                    hasNewOutput ? OS1VisualStyle.accent : OS1VisualStyle.panel,
+                    in: Circle()
+                )
+                .overlay {
+                    if !hasNewOutput {
+                        Circle().stroke(OS1VisualStyle.border, lineWidth: 0.5)
+                    }
+                }
+                .shadow(color: .black.opacity(0.12), radius: 6, y: 1)
+                // Padded out to a 44pt target: the disc reads better at 40.
+                .padding(2)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
@@ -1986,8 +1995,11 @@ private struct SessionInputBar: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                     if height > oneLineFieldHeight * 1.6 { draftWrapped = true }
                 }
-                .onChange(of: viewModel.draft) { _, draft in
+                .onChange(of: viewModel.draft) { previous, draft in
                     if draft.isEmpty { draftWrapped = false }
+                    // Starting to write is a statement about where you want to
+                    // be: at the end of the conversation you're replying to.
+                    if previous.isEmpty, !draft.isEmpty { viewModel.draftStarted() }
                 }
                 // A vertical-axis TextField is greedy: without an explicit
                 // fill it claims the row's whole width in the pill and pushes

@@ -62,6 +62,16 @@ final class SessionViewModel {
     /// reader has scrolled (or the keyboard resized the viewport), leaving
     /// a just-sent message below the fold.
     private(set) var sendSeq = 0
+    /// Bumped when a draft starts (empty -> typed), so the view can bring the
+    /// end of the conversation into sight: writing a reply from halfway up the
+    /// transcript otherwise types into a view of old output. It is a counter
+    /// rather than the draft itself because `draft` changes on every keystroke,
+    /// and SessionView's body must not depend on that (see the observation
+    /// note in os1-ios/AGENTS.md).
+    private(set) var composeSeq = 0
+
+    /// Called by the composer on the first character of a new draft.
+    func draftStarted() { composeSeq += 1 }
 
     // ── Pull request ──
     /// PR details for the session's branch (toolbar chip + PR panel).
