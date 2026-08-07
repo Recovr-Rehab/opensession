@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Card, CardList } from "./card";
 import { cn } from "./cn";
-import { fieldClass } from "./input";
+import { fieldClasses } from "./input";
 
 export function SettingsPanel({
 	className,
@@ -174,8 +174,14 @@ export function SettingsHint({
  * component (native selects with their own appearance resets, mostly); the
  * shape behind them is now shared with every other field and, through it, with
  * every button.
+ *
+ * They go through `fieldClasses("md")` rather than composing `fieldClass` with
+ * their own padding, which is what had settings rendering 35px fields beside
+ * the primitive's 32px ones — two field heights visible on one page, e.g.
+ * /settings/connections. Reaching for the size step instead of re-spelling it
+ * is the whole point of having one.
  */
-export const settingsSelectClass = cn(fieldClass, "cursor-pointer px-2.5 py-1.5 text-control-label");
+export const settingsSelectClass = fieldClasses("md", "cursor-pointer");
 
 export function SettingsForm({
 	className,
@@ -215,11 +221,11 @@ export function SettingsField({
 	);
 }
 
-export const settingsInputClass = cn(fieldClass, "px-2.5 py-2 text-body");
+export const settingsInputClass = fieldClasses("md");
 
 /** Multi-line text entry inside settings — memory entries, the personal
  *  prompt. One class so every editor in settings reads the same. */
-export const settingsTextareaClass = cn(settingsInputClass, "resize-y");
+export const settingsTextareaClass = fieldClasses("md", "resize-y py-2");
 
 export function SettingsFormActions({
 	className,

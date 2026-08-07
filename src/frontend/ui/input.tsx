@@ -46,7 +46,13 @@ export function fieldClasses(size: Size = "md", className?: string) {
 	return cn(fieldClass, sizes[size], className);
 }
 
-type InputProps = Omit<React.ComponentPropsWithoutRef<"input">, "size"> & {
+// `ComponentProps` rather than `ComponentPropsWithoutRef`: under React 19 a ref
+// is an ordinary prop, so this is all it takes for a caller to hold onto the
+// element (focus it, measure it, autosize a textarea). Written without it, the
+// four sites in the app that need a ref had to fall back to `fieldClasses()` on
+// a raw element — the exact copy-the-classes pattern this primitive exists to
+// end.
+type InputProps = Omit<React.ComponentProps<"input">, "size"> & {
 	size?: Size;
 };
 
@@ -54,7 +60,7 @@ export function Input({ className, size = "md", ...props }: InputProps) {
 	return <input className={fieldClasses(size, className)} {...props} />;
 }
 
-type TextareaProps = React.ComponentPropsWithoutRef<"textarea"> & {
+type TextareaProps = React.ComponentProps<"textarea"> & {
 	size?: Size;
 };
 
@@ -64,7 +70,7 @@ export function Textarea({ className, size = "md", ...props }: TextareaProps) {
 	return <textarea className={fieldClasses(size, cn("resize-y py-2", className))} {...props} />;
 }
 
-type SelectProps = Omit<React.ComponentPropsWithoutRef<"select">, "size"> & {
+type SelectProps = Omit<React.ComponentProps<"select">, "size"> & {
 	size?: Size;
 };
 
