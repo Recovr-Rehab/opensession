@@ -21,8 +21,12 @@
  *
  * Grouping fidelity: sessions sharing an ISOLATED worktree land in ONE workspace —
  * the same rule the sidebar used to group its `wt:` rows, so no row fragments
- * when this lands. A shared checkout (a repo's live main checkout or its pinned
- * ask checkout) is owned by nobody: every session there gets its own workspace.
+ * when this lands. Sessions on the same non-default BRANCH of a repo also land
+ * in one workspace even across different worktrees (workspaceForBranch below) —
+ * the Slack loop and PR automations run one branch in separate worktrees, and
+ * worktree grouping alone split them into parallel workspaces. A shared
+ * checkout (a repo's live main checkout or its pinned ask checkout) is owned
+ * by nobody: every session there gets its own workspace.
  *
  * Automation runs are the deliberate exception. They live in the Automations
  * band, not the Workspaces list, and minting a workspace for each of the ~1100
@@ -39,8 +43,14 @@
  * children each get their own (session-control-wiring.ts).
  */
 
-import { createWorkspace, findWorkspaceByWorktree, getWorkspace } from "./workspaces";
-import { isSharedCheckoutDir } from "./worktree";
+import {
+  createWorkspace,
+  findWorkspaceByBranch,
+  findWorkspaceByWorktree,
+  getWorkspace,
+  type Workspace,
+} from "./workspaces";
+import { getRepo, isSharedCheckoutDir } from "./worktree";
 import type { UnifiedSession } from "./types";
 
 /**
@@ -59,6 +69,29 @@ const pending: Map<string, string> = ((
  */
 export function ownedWorktree(dir: string | null | undefined): string | null {
   return dir && !isSharedCheckoutDir(dir) ? dir : null;
+}
+
+/**
+ * The workspace already working this session's repo + branch, or null. This is
+ * what unites sessions that share a BRANCH but not a worktree: the Slack loop,
+ * the github agent's review/autofix runs, and UI sessions each get their own
+ * worktree for the same branch, so worktree adoption alone minted a parallel
+ * "work-on-a" workspace next to the PR's — and the PR workspace's tab strip
+ * never showed the slack session (2026-08-07). Only sessions that OWN a
+ * worktree qualify: shared-checkout sessions all carry the checkout's branch
+ * and deliberately get one workspace each. Default branches never match —
+ * legacy sessions carry pre-rename branch/repo names getRepo can't resolve,
+ * so unresolvable repos are skipped rather than guessed at.
+ */
+function workspaceForBranch(session: UnifiedSession): Workspace | null {
+  if (!session.branch || !ownedWorktree(session.worktreeDir)) return null;
+  try {
+    const repo = getRepo(session.repo || undefined);
+    if (session.branch === repo.defaultBranch) return null;
+    return findWorkspaceByBranch(repo.id, session.branch);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -136,10 +169,12 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
     const dir = key.startsWith("wt:") ? key.slice(3) : null;
     group.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     try {
-      // Adopt the workspace that already owns this worktree before minting a
-      // second one over it (a sibling session may be filed there already).
+      // Adopt the workspace that already owns this worktree — then the one
+      // already working this branch — before minting a second one over it
+      // (a sibling session may be filed there already).
       const workspace =
         (dir ? findWorkspaceByWorktree(dir) : null) ??
+        workspaceForBranch(group[0]) ??
         createWorkspace({
           name: nameFor(group, !!dir),
           repo: group[0].repo,

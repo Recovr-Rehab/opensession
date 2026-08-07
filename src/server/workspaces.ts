@@ -23,6 +23,7 @@
  */
 
 import { homeDir } from "./paths";
+import { defaultRepo } from "./config";
 import {
   existsSync,
   mkdirSync,
@@ -177,6 +178,36 @@ export function findWorkspaceByWorktree(worktreeDir: string): Workspace | null {
 export function findWorkspaceByKey(key: string): Workspace | null {
   if (!key) return null;
   return listWorkspaces().find((p) => p.key === key) || null;
+}
+
+/**
+ * The workspace already carrying `repo` + `branch`, or null. Same
+ * adopt-don't-duplicate role as findWorkspaceByWorktree, one level up: the
+ * Slack/Linear loops and PR automations each run the SAME branch in their own
+ * worktree, so worktree ownership alone can't unite them (the split that left
+ * a slack session and its PR's review session in two sidebar workspaces).
+ * Callers must not pass a repo's default branch — every shared-checkout
+ * session carries it, and those deliberately keep one workspace each.
+ * Preference among duplicates: a key-stamped workspace (PR/ticket provenance,
+ * the one resolution converges on) over unkeyed, then oldest.
+ */
+export function findWorkspaceByBranch(
+  repo: string,
+  branch: string,
+): Workspace | null {
+  if (!repo || !branch) return null;
+  // Workspaces minted before repo stamping (and sweep-minted ones around
+  // repo-less slack sessions) carry no repo field; they mean the default repo.
+  const fallback = defaultRepo().id;
+  const owners = listWorkspaces().filter(
+    (w) => w.branch === branch && (w.repo || fallback) === repo,
+  );
+  if (owners.length < 2) return owners[0] || null;
+  return owners.sort(
+    (a, b) =>
+      Number(!!b.key) - Number(!!a.key) ||
+      (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0),
+  )[0];
 }
 
 /**
