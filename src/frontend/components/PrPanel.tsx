@@ -1190,7 +1190,7 @@ export function PrPanel({
           <header className="flex min-h-[96px] shrink-0 items-center gap-5 px-6 py-4 max-[720px]:min-h-[78px] max-[720px]:px-3">
             <div className="min-w-0 flex-1">
               <a
-                className="block truncate text-page-title font-semibold tracking-[-0.025em] text-fg no-underline hover:text-accent max-[720px]:text-section-title"
+                className="block truncate text-page-title font-semibold tracking-[-0.025em] text-fg no-underline hover:text-link max-[720px]:text-section-title"
                 href={pr.url}
                 target="_blank"
                 rel="noopener"
@@ -1376,7 +1376,7 @@ export function PrPanel({
                     <>
                       <span className="text-red">{diffError}</span>
                       <button
-                        className="ml-2 border-0 bg-transparent text-accent"
+                        className="ml-2 border-0 bg-transparent text-link"
                         onClick={() => {
                           setDiffLoading(true);
                           setDiffError(null);
@@ -1419,7 +1419,7 @@ export function PrPanel({
                   <div className="py-12 text-center text-sm text-faint">
                     Couldn't generate a guide for this PR.
                     <button
-                      className="ml-2 border-0 bg-transparent text-accent"
+                      className="ml-2 border-0 bg-transparent text-link"
                       onClick={() => void loadGuide()}
                     >
                       Retry
@@ -1685,7 +1685,7 @@ export function PrPanel({
           {/* Header — title + meta line, Linear-style */}
           <div className="flex flex-col gap-2 rounded-panel border border-line bg-panel px-4 py-4 sm:px-5">
             <a
-              className="text-section-title font-semibold leading-tight text-fg no-underline hover:text-accent"
+              className="text-section-title font-semibold leading-tight text-fg no-underline hover:text-link"
               href={pr.url}
               target="_blank"
               rel="noopener"
@@ -1865,7 +1865,7 @@ export function PrPanel({
               ))}
               {files.length > 8 && (
                 <button
-                  className="mt-1 self-start text-xs font-medium text-accent hover:text-fg"
+                  className="mt-1 self-start text-xs font-medium text-link hover:text-fg"
                   onClick={() => setAllFilesOpen((o) => !o)}
                 >
                   {allFilesOpen ? "Show fewer" : `Show all ${files.length} files`}
@@ -1973,7 +1973,7 @@ export function PrPanel({
                     <span className="ml-2 text-green">review submitted ✓</span>
                   ) : (
                     <a
-                      className="ml-2 text-accent no-underline hover:text-fg"
+                      className="ml-2 text-link no-underline hover:text-fg"
                       href={reviewDone}
                       target="_blank"
                       rel="noopener"
@@ -1989,7 +1989,7 @@ export function PrPanel({
               ) : guideFailed ? (
                 <div className="flex items-center gap-3 px-4 py-6 text-sm text-faint sm:px-5">
                   Couldn't generate a guide for this PR.
-                  <button className="text-xs font-medium text-accent hover:text-fg" onClick={() => void loadGuide()}>
+                  <button className="text-xs font-medium text-link hover:text-fg" onClick={() => void loadGuide()}>
                     Retry
                   </button>
                 </div>

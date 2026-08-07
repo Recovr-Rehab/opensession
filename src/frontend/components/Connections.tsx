@@ -615,7 +615,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
               {flow.userCode}
             </span>{" "}
             at{" "}
-            <a href={flow.verificationUri} target="_blank" rel="noreferrer" className="text-accent underline">
+            <a href={flow.verificationUri} target="_blank" rel="noreferrer" className="text-link underline">
               {flow.verificationUri}
             </a>
             <span className="ml-2 text-label text-dim">

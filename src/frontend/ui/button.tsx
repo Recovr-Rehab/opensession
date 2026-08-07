@@ -69,23 +69,27 @@ const iconOnlyPad: Record<Size, string> = {
 	lg: "w-9 px-0",
 };
 
+// Solid ink: the heaviest weight, for the one dominant action on a surface (a
+// page header's CTA, a panel's single call to action). This variant existed
+// because the brand accent was red and, at that size, it shouted — ink carried
+// the same emphasis without it. The accent is now ink itself, so `primary` and
+// `ink` describe the same plate and share one definition.
+//
+// The label is `text-on-accent` rather than a literal white: on an ink fill,
+// white-on-white is what you get in dark mode. And `brightness-110` (what
+// `primary` used to hover with) is invisible on a near-white or near-black
+// fill, so the hover mixes the fill toward the page instead.
+const INK =
+	"bg-accent border-transparent text-on-accent shadow-control hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))]";
+
 const variants: Record<Variant, string> = {
 	// The raised control look of the newest chrome (viewer Share button).
 	default:
 		"bg-control border-line text-dim shadow-control hover:text-fg hover:border-line-strong",
-	primary:
-		"bg-accent border-transparent text-white shadow-control hover:brightness-110",
-	// Solid ink: the heaviest weight, for the one dominant action on a surface
-	// (a page header's CTA, a panel's single call to action). Reaching for the
-	// brand accent at that size makes the red shout; ink carries the same
-	// emphasis and keeps the accent meaningful elsewhere.
-	//
-	// It is `bg-fg`/`text-bg` rather than a literal black so it flips with the
-	// theme — near-black plate with a light label in light mode, near-white
-	// with a dark label in dark. `brightness-110` (what `primary` uses) is
-	// invisible on #1a1a1a, so the hover mixes the fill toward the page
-	// instead, which reads in both themes.
-	ink: "bg-fg border-transparent text-bg shadow-control hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))]",
+	// Kept as an alias of `ink` so existing call sites keep working; reach for
+	// `ink` in new code.
+	primary: INK,
+	ink: INK,
 	ghost: "border-transparent text-dim hover:bg-hover hover:text-fg",
 	// Outline green, mirroring `danger` — the affirmative half of the pair
 	// (approve a review, merge, confirm). Green is the second-most reached-for

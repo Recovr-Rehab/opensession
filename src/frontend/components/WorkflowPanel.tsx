@@ -785,7 +785,7 @@ const AgentRow = React.memo(function AgentRow({
 							{detail === undefined &&
 								(a.status === "done" || a.status === "error") && (
 									<button
-										className="self-start text-[11px] font-medium text-accent hover:underline"
+										className="self-start text-[11px] font-medium text-link hover:underline"
 										onClick={() => onLoadDetail(a.seq)}
 									>
 										Show full prompt & result
@@ -798,7 +798,7 @@ const AgentRow = React.memo(function AgentRow({
 								// Transient failures happen (the snapshot flips done before
 								// the journal entry lands) — keep the miss retryable.
 								<button
-									className="self-start text-[11px] font-medium text-accent hover:underline"
+									className="self-start text-[11px] font-medium text-link hover:underline"
 									onClick={() => onLoadDetail(a.seq)}
 								>
 									Couldn't load the full record — retry

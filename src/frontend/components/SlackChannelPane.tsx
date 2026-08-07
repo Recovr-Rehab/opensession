@@ -63,7 +63,7 @@ function MessageText({ text }: { text: string }) {
 					href={href}
 					target="_blank"
 					rel="noreferrer"
-					className="text-accent underline decoration-line underline-offset-2 hover:decoration-current"
+					className="text-link underline decoration-line underline-offset-2 hover:decoration-current"
 				>
 					{label}
 				</a>,
@@ -165,7 +165,7 @@ function MessageRow({
 				<ReactionPills reactions={m.reactions} />
 				{depth === 0 && (m.replyCount || 0) > 0 && (
 					<button
-						className="mt-1 text-meta font-medium text-accent hover:underline"
+						className="mt-1 text-meta font-medium text-link hover:underline"
 						onClick={toggleThread}
 					>
 						{expanded

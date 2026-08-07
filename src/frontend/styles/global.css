@@ -87,8 +87,30 @@
 	--text: #e9e9e9;
 	--text-dim: #a2a2a2;
 	--text-faint: #767676;
-	--accent: #ff3b3b;
-	--accent-soft: rgba(255, 59, 59, 0.13);
+	/* The brand mark, matching the native app (OS1VisualStyle.accent): ink on the
+	   page — near-white on dark, near-black on light. It is a FILL colour (the
+	   send disc, an active tab underline, a checked switch) and a full-strength
+	   EMPHASIS colour (an active icon against a dim one). It is deliberately NOT
+	   a link colour: at body contrast, words wearing it are indistinguishable
+	   from the prose around them, so inline affordances take --link. Red goes
+	   back to meaning only "this failed".
+
+	   var(--text) rather than a literal, so it tracks the ink ramp. This is not
+	   a new idea in this file — the `ink` Button variant, the light-theme Create
+	   button and .pr-bar-btn-solid already paint ink-on-paper, each with its own
+	   comment explaining that the red accent shouted. */
+	--accent: var(--text);
+	/* What sits ON an --accent fill: its inverse. Was a hardcoded #fff at every
+	   call site, which is white-on-white the moment the accent becomes ink. */
+	--on-accent: var(--bg);
+	/* Achromatic wash, pitched above --hover-strong (0.11) so a selected surface
+	   still separates from a hovered one — they are the same ink now, and
+	   opacity is all that tells them apart. Where that is too weak to carry the
+	   meaning alone, prefer --blue-soft (see .sidebar-item-waiting). */
+	--accent-soft: rgba(255, 255, 255, 0.16);
+	/* Inline affordances: a link in an agent answer, a PR title that opens. The
+	   accent cannot do this job once it is ink, and red never should have. */
+	--link: var(--blue);
 	--tooltip-bg: #303030;
 	--tooltip-fg: #eeeeee;
 	--tooltip-ring: rgba(255, 255, 255, 0.1);
@@ -168,8 +190,10 @@ html[data-theme="light"] {
 	--text: #1a1a1a;
 	--text-dim: #646464;
 	--text-faint: #949494;
-	--accent: #e5322f;
-	--accent-soft: rgba(229, 50, 47, 0.1);
+	--accent: var(--text);
+	--on-accent: var(--bg);
+	--accent-soft: rgba(0, 0, 0, 0.12);
+	--link: var(--blue);
 	--tooltip-bg: #222222;
 	--tooltip-fg: #ffffff;
 	--tooltip-ring: rgba(255, 255, 255, 0.12);
@@ -372,7 +396,7 @@ html[data-theme="light"] .markdown pre code {
 	color: inherit;
 }
 html[data-theme="light"] .note-chip-session {
-	color: #c0322f;
+	color: var(--blue);
 }
 html[data-theme="light"] .note-chip-note {
 	color: #1a7f37;
@@ -646,7 +670,7 @@ select {
 }
 
 a {
-	color: var(--accent);
+	color: var(--link);
 }
 
 /* ── App chrome ──────────────────────────────────────────── */
@@ -2330,7 +2354,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 .sidebar-swipe-action--star.is-on {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 }
 .sidebar-swipe-action svg {
 	flex: 0 0 auto;
@@ -3498,7 +3522,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 .btn-new-session {
 	margin-top: 18px;
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border: none;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
 	padding: 9px 18px;
@@ -3506,7 +3530,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	font-weight: 500;
 }
 .btn-new-session:hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
 .loading,
@@ -3969,7 +3993,7 @@ html.wco .viewer-branch {
 	bottom: -3px;
 	right: -3px;
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	font-size: 9px;
 	border-radius: 99px;
 	padding: 0 3.5px;
@@ -6043,7 +6067,7 @@ a.workspace-info-check-row {
 }
 .pr-review-toggle {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border: none;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
 	padding: 7px 14px;
@@ -6052,7 +6076,7 @@ a.workspace-info-check-row {
 	cursor: pointer;
 }
 .pr-review-toggle:hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 .pr-review-form {
 	display: flex;
@@ -6103,7 +6127,7 @@ a.workspace-info-check-row {
 }
 .pr-review-submit {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border: none;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
 	padding: 9px 12px;
@@ -6116,7 +6140,7 @@ a.workspace-info-check-row {
 	cursor: default;
 }
 .pr-review-submit:not(:disabled):hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
 .pr-diff-section {
@@ -6127,7 +6151,7 @@ a.workspace-info-check-row {
 
 .pr-comment-link {
 	margin-left: 8px;
-	color: var(--accent);
+	color: var(--link);
 	text-decoration: none;
 	text-transform: none;
 	letter-spacing: 0;
@@ -6186,8 +6210,8 @@ a.workspace-info-check-row {
 	color: var(--red);
 }
 .diff-status-renamed {
-	background: var(--accent-soft);
-	color: var(--accent);
+	background: var(--blue-soft);
+	color: var(--blue);
 }
 
 .diff-file-path {
@@ -6632,7 +6656,7 @@ a.workspace-info-check-row {
 	outline-offset: 1px;
 }
 .pr-bar-btn:hover:not(:disabled) {
-	filter: brightness(1.08);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 .pr-bar-btn-secondary:hover:not(:disabled) {
 	background: var(--hover);
@@ -6805,7 +6829,7 @@ a.workspace-info-check-row {
 	font-size: 13px;
 }
 .pr-number:hover {
-	color: var(--accent);
+	color: var(--link);
 }
 
 .pr-title {
@@ -6816,7 +6840,7 @@ a.workspace-info-check-row {
 	line-height: 1.28;
 }
 .pr-title:hover {
-	color: var(--accent);
+	color: var(--link);
 }
 
 .pr-meta {
@@ -7328,7 +7352,7 @@ a.workspace-info-check-row {
 	display: block;
 	text-align: center;
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	text-decoration: none;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
 	padding: 9px;
@@ -7336,7 +7360,7 @@ a.workspace-info-check-row {
 	font-weight: 500;
 }
 .btn-open-pr:hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
 /* PR action row (Open on GitHub / Squash & merge / Open session) */
@@ -7416,7 +7440,7 @@ a.workspace-info-check-row {
 	text-decoration: none;
 }
 .prc-title:hover {
-	color: var(--accent);
+	color: var(--link);
 }
 .prc-meta {
 	display: flex;
@@ -7554,12 +7578,12 @@ a.workspace-info-check-row {
 .prc-btn-primary {
 	background: var(--accent);
 	border-color: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 }
 .prc-btn-primary:hover:not(:disabled) {
 	background: var(--accent);
-	color: #fff;
-	filter: brightness(1.08);
+	color: var(--on-accent);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 .prc-btn-primary:disabled {
 	opacity: 0.6;
@@ -7947,7 +7971,7 @@ a.workspace-info-check-row {
 .sidebar-nav-count {
 	margin-left: auto;
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	font-size: 10.5px;
 	font-weight: 600;
 	border-radius: 99px;
@@ -8180,7 +8204,7 @@ a.workspace-info-check-row {
 	opacity: 1;
 }
 .rv-open-gh:hover {
-	color: var(--accent);
+	color: var(--link);
 }
 .rv-sub-line {
 	display: flex;
@@ -9305,7 +9329,7 @@ a.workspace-info-check-row {
 }
 
 .markdown a {
-	color: var(--accent);
+	color: var(--link);
 	text-decoration: none;
 }
 .markdown a:hover {
@@ -9643,7 +9667,7 @@ a.pr-ref:hover {
 
 .btn-ask {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border: none;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
 	padding: 7px 22px;
@@ -9655,7 +9679,7 @@ a.pr-ref:hover {
 	cursor: default;
 }
 .btn-ask:not(:disabled):hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
 .ask-error {
@@ -9851,8 +9875,8 @@ button.home-whisper-link:hover {
 	color: var(--green);
 }
 .status-blue {
-	background: var(--accent-soft);
-	color: var(--accent);
+	background: var(--blue-soft);
+	color: var(--blue);
 }
 .status-purple {
 	background: rgba(163, 113, 247, 0.16);
@@ -10189,7 +10213,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 
 .btn-send {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border: none;
 	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
 	padding: 10px 18px;
@@ -10201,7 +10225,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	cursor: default;
 }
 .btn-send:not(:disabled):hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
 /* ── Composer (shared session input — Claude/Codex style) ─────────────── */
@@ -10927,7 +10951,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	height: 32px;
 	border-radius: 50%;
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border: none;
 	font-size: 15px;
 	font-weight: 600;
@@ -10945,7 +10969,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	cursor: default;
 }
 .composer-send:not(:disabled):hover {
-	filter: brightness(1.12);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 	transform: scale(1.05);
 }
 .composer-send-queue {
@@ -11014,7 +11038,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border: none;
 	border-radius: 0 calc(14px * var(--rf)) calc(14px * var(--rf)) 0; corner-shape: var(--cs);
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	cursor: pointer;
 	transition: filter var(--dur-micro) var(--ease);
 }
@@ -11031,7 +11055,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	background: rgba(255, 255, 255, 0.45);
 }
 .composer-send-caret:not(:disabled):hover {
-	filter: brightness(1.12);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 .composer-send-caret:disabled {
 	opacity: 0.35;
@@ -11230,14 +11254,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border: none;
 	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	font-size: 13px;
 	font-weight: 600;
 	cursor: pointer;
 	transition: filter var(--dur-micro) var(--ease);
 }
 .composer-schedule-submit:not(:disabled):hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 .composer-schedule-submit:disabled {
 	opacity: 0.45;
@@ -11404,7 +11428,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 
 .btn-create {
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	border: none;
 	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
 	padding: 11px;
@@ -11416,7 +11440,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	cursor: default;
 }
 .btn-create:not(:disabled):hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
 .form-error {
@@ -11640,7 +11664,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 
 .automation-session-link {
-	color: var(--accent);
+	color: var(--link);
 	text-decoration: none;
 	cursor: pointer;
 }
@@ -12302,7 +12326,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
 }
 .wiki-doc a {
-	color: var(--accent);
+	color: var(--link);
 }
 
 .wiki-welcome {
@@ -14727,9 +14751,9 @@ html[data-theme="light"] .md-mermaid {
 	border: 1px solid transparent;
 }
 .note-chip-session {
-	background: var(--accent-soft);
-	color: #ff8f8f;
-	border-color: rgba(255, 59, 59, 0.3);
+	background: var(--blue-soft);
+	color: var(--blue);
+	border-color: color-mix(in srgb, var(--blue) 30%, transparent);
 }
 .note-chip-note {
 	background: var(--green-soft);
@@ -14907,8 +14931,8 @@ html[data-theme="light"] .md-mermaid {
 	color: var(--text-faint);
 }
 .plain-status-todo {
-	background: color-mix(in srgb, var(--accent) 18%, transparent);
-	color: var(--accent);
+	background: color-mix(in srgb, var(--blue) 18%, transparent);
+	color: var(--blue);
 }
 .plain-status-done {
 	background: color-mix(in srgb, var(--green, #3fb950) 18%, transparent);
@@ -14921,7 +14945,7 @@ html[data-theme="light"] .md-mermaid {
 .plain-open {
 	font-size: 11.5px;
 	font-weight: 600;
-	color: var(--accent);
+	color: var(--link);
 	text-decoration: none;
 	white-space: nowrap;
 	flex-shrink: 0;
@@ -15419,7 +15443,7 @@ html[data-theme="light"] .md-mermaid {
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
 	padding: 7px 14px;
 	background: var(--accent);
-	color: #fff;
+	color: var(--on-accent);
 	font-size: 13px;
 	font-weight: 600;
 	cursor: pointer;
@@ -15432,7 +15456,7 @@ html[data-theme="light"] .palette-card .palette-create {
 	color: var(--bg);
 }
 .palette-create:not(:disabled):hover {
-	filter: brightness(1.1);
+	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 .palette-create:disabled {
 	opacity: 0.4;
@@ -16230,7 +16254,7 @@ html.wco .settings-sidenav {
 }
 .viewer-promote-btn:hover {
 	border-color: var(--accent);
-	color: var(--accent);
+	color: var(--link);
 }
 .viewer-promote-btn:disabled {
 	opacity: 0.6;
@@ -16626,7 +16650,7 @@ html.wco .settings-sidenav {
 		border-radius: 50%;
 		border: none;
 		background: var(--accent);
-		color: #fff;
+		color: var(--on-accent);
 		box-shadow:
 			0 6px 20px rgba(0, 0, 0, 0.3),
 			0 2px 6px rgba(0, 0, 0, 0.18);

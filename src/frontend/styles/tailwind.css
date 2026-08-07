@@ -49,6 +49,12 @@
 	/* Accent + status */
 	--color-accent: var(--accent);
 	--color-accent-soft: var(--accent-soft);
+	/* What sits ON an --accent fill: its inverse. Pair it with bg-accent —
+	   text-white only worked while the accent was a saturated red. */
+	--color-on-accent: var(--on-accent);
+	/* Inline affordances (a link, a PR title that opens). The accent is ink
+	   now, so it cannot mark a link inside running text; this can. */
+	--color-link: var(--link);
 	--color-focus-ring: var(--accent);
 	--color-green: var(--green);
 	--color-green-soft: var(--green-soft);

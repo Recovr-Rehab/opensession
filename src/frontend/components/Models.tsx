@@ -1571,7 +1571,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 									href={login.url}
 									target="_blank"
 									rel="noreferrer"
-									className="text-accent underline"
+									className="text-link underline"
 								>
 									{login.url}
 								</a>{" "}
@@ -1609,7 +1609,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 							href={oauth.url}
 							target="_blank"
 							rel="noreferrer"
-							className="text-accent underline"
+							className="text-link underline"
 						>
 							the ChatGPT sign-in
 						</a>{" "}

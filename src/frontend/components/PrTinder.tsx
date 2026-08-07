@@ -610,7 +610,7 @@ export function PrTinder({ onExit }: Props) {
 						{toast.text}
 						{toast.undo && (
 							<button
-								className="font-semibold text-accent hover:underline"
+								className="font-semibold text-link hover:underline"
 								onClick={toast.undo}
 							>
 								Undo
@@ -812,7 +812,7 @@ function CommentPanel({
 					Cancel
 				</button>
 				<button
-					className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+					className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent disabled:opacity-40"
 					disabled={busy || !text.trim()}
 					onClick={() => onSubmit(text.trim())}
 				>

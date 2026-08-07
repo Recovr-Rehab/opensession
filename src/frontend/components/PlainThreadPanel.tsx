@@ -621,7 +621,7 @@ export function PlainReplyBox({
 				)}
 				<button
 					type="button"
-					className="ml-auto shrink-0 rounded-md bg-accent text-white text-supporting font-semibold px-2.5 py-1 cursor-pointer border-0 hover:opacity-90 disabled:opacity-50 disabled:cursor-default"
+					className="ml-auto shrink-0 rounded-md bg-accent text-on-accent text-supporting font-semibold px-2.5 py-1 cursor-pointer border-0 hover:opacity-90 disabled:opacity-50 disabled:cursor-default"
 					onClick={handleSend}
 					disabled={sending || !text.trim()}
 					title="Send (⌘↵)"

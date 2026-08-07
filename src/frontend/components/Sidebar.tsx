@@ -8047,7 +8047,7 @@ function WsCardBody({
 				    review the not-ready PR (neutral), or archive merged work (purple). */}
 				{row.status === "needsinput" && row.sessions.length > 0 ? (
 					<button
-						className={`${WS_ACTION} bg-accent text-white hover:opacity-90`}
+						className={`${WS_ACTION} bg-accent text-on-accent hover:opacity-90`}
 						onClick={() =>
 							onOpen(
 								row.sessions.find((c) => c.waitingForInput) ||

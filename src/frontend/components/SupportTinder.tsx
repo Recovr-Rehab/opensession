@@ -475,7 +475,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						{toast.text}
 						{toast.undo && (
 							<button
-								className="font-semibold text-accent hover:underline"
+								className="font-semibold text-link hover:underline"
 								onClick={toast.undo}
 							>
 								Undo
