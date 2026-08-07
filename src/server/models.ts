@@ -688,8 +688,6 @@ const defaultModelStore = () =>
     ? `${localProfileRoot()}/default-model.json`
     : stateDir("default-model.json");
 const FALLBACK_AUTO_STORE = stateDir("model-fallback.json");
-const CODEX_MODEL_EXHAUST_MS = 60 * 60 * 1000;
-const codexModelExhaustedUntil = new Map<string, number>();
 
 // undefined = not yet loaded from disk; null = no override set.
 let overrideCache: string | null | undefined;
@@ -838,27 +836,6 @@ export function setModelFallbackAuto(auto: boolean): boolean {
   return auto;
 }
 
-function isCodexModelExhausted(model: string): boolean {
-  const until = codexModelExhaustedUntil.get(model);
-  if (until === undefined) return false;
-  if (Date.now() >= until) {
-    codexModelExhaustedUntil.delete(model);
-    return false;
-  }
-  return true;
-}
-
-export function markCodexModelExhausted(model: string): void {
-  const resolved = resolveModel(model);
-  if (!resolved || resolved.provider !== "codex") return;
-  if (resolved.id === BEST_AVAILABLE_CODEX_MODEL) return;
-  const until = Date.now() + CODEX_MODEL_EXHAUST_MS;
-  codexModelExhaustedUntil.set(resolved.id, until);
-  console.warn(
-    `[models] ${resolved.id} marked unavailable until ${new Date(until).toISOString()}`
-  );
-}
-
 export function resolveConcreteModel(
   model?: string | null,
   exclude?: Set<string>
@@ -868,10 +845,6 @@ export function resolveConcreteModel(
     return resolved?.id || getDefaultModel();
   }
 
-  for (const id of CODEX_MODEL_ORDER) {
-    if (exclude?.has(id)) continue;
-    if (!isCodexModelExhausted(id)) return id;
-  }
   for (const id of CODEX_MODEL_ORDER) {
     if (!exclude?.has(id)) return id;
   }

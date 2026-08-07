@@ -17,7 +17,6 @@ import {
   fallbackPlan,
   fallbackTier,
   nextFallbackModel,
-  markCodexModelExhausted,
   modelEfforts,
   interactiveDefaultModel,
   interactiveFallbackModel,
@@ -581,12 +580,5 @@ describe("alias table (pinned)", () => {
 describe("resolveConcreteModel", () => {
   it("resolves best available codex to the strongest usable codex model", () => {
     expect(resolveConcreteModel(BEST_AVAILABLE_CODEX_MODEL)).toBe("gpt-5.6-sol");
-  });
-
-  it("skips codex models marked exhausted", () => {
-    markCodexModelExhausted("gpt-5.6-sol");
-
-    // 5.5/5.4/spark are retired — the step-downs are the 5.6 siblings.
-    expect(resolveConcreteModel(BEST_AVAILABLE_CODEX_MODEL)).toBe("gpt-5.6-terra");
   });
 });

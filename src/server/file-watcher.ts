@@ -271,17 +271,6 @@ export function startWatching(
   watches.set(path, state);
 }
 
-export function stopWatching(path: string, ws: any): void {
-  const state = watches.get(path);
-  if (!state) return;
-
-  state.viewers.delete(ws);
-  if (state.viewers.size === 0) {
-    if (state.interval) clearInterval(state.interval);
-    watches.delete(path);
-  }
-}
-
 export function stopAllWatchesForClient(ws: any): void {
   for (const [path, state] of watches) {
     state.viewers.delete(ws);
@@ -290,8 +279,4 @@ export function stopAllWatchesForClient(ws: any): void {
       watches.delete(path);
     }
   }
-}
-
-export function getViewerCount(path: string): number {
-  return watches.get(path)?.viewers.size || 0;
 }

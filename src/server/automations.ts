@@ -1382,13 +1382,6 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
   console.log("[automations] Scheduler started (20s tick, UTC cron)");
 }
 
-export function stopScheduler(): void {
-  if (schedulerInterval) {
-    clearInterval(schedulerInterval);
-    schedulerInterval = null;
-  }
-}
-
 // ── Webhook trigger ──────────────────────────────────────────
 // POST /automations/<id>/<secret> on the public webhook server (3848,
 // proxied by Caddy). The secret in the path is the only auth, so it's

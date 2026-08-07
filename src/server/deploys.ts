@@ -330,11 +330,6 @@ export async function deleteDeploy(id: string): Promise<boolean> {
   return true;
 }
 
-export function deployPort(name: string): number | undefined {
-  const d = getDeploy(name);
-  return d && d.state === "running" ? d.port : undefined;
-}
-
 /** Relaunch everything that should be running. Called once at boot. */
 export async function relaunchDeploys(): Promise<void> {
   load();
