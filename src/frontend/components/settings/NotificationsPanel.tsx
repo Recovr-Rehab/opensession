@@ -17,8 +17,9 @@ import {
 	SettingsHeader,
 	SettingsPanel,
 } from "../../ui/settings";
+import { Switch } from "../../ui/switch";
 import { getCurrentUser } from "../UserPicker";
-import { Select, SettingRow, Toggle } from "./shared";
+import { Select, SettingRow } from "./shared";
 
 // ── Notifications ──────────────────────────────────────────────────────────
 
@@ -59,10 +60,10 @@ function PushRow() {
 						: "Buzz this device when a session needs your input, even with the app closed. It's per device, so enable it on your phone too.")
 			}
 			control={
-				<Toggle
-					label="Push to this device"
+				<Switch
+					aria-label="Push to this device"
 					checked={state === "on"}
-					onChange={toggle}
+					onCheckedChange={toggle}
 				/>
 			}
 		/>
@@ -91,10 +92,10 @@ export function NotificationsPanel() {
 					title="Desktop notifications"
 					desc="Get a banner when one of your sessions needs input or finishes."
 					control={
-						<Toggle
-							label="Desktop notifications"
+						<Switch
+							aria-label="Desktop notifications"
 							checked={s.desktop}
-							onChange={(v) => {
+							onCheckedChange={(v) => {
 								if (v) ensureNotificationPermission();
 								patch({ desktop: v });
 							}}
@@ -158,10 +159,10 @@ export function NotificationsPanel() {
 					title="Needs input"
 					desc="Alert when a session is blocked waiting for your answer."
 					control={
-						<Toggle
-							label="Needs input alerts"
+						<Switch
+							aria-label="Needs input alerts"
 							checked={s.needsInput}
-							onChange={(v) => patch({ needsInput: v })}
+							onCheckedChange={(v) => patch({ needsInput: v })}
 						/>
 					}
 				/>
@@ -169,10 +170,10 @@ export function NotificationsPanel() {
 					title="Run complete"
 					desc="Alert when one of your sessions finishes working."
 					control={
-						<Toggle
-							label="Run complete alerts"
+						<Switch
+							aria-label="Run complete alerts"
 							checked={s.done}
-							onChange={(v) => patch({ done: v })}
+							onCheckedChange={(v) => patch({ done: v })}
 						/>
 					}
 				/>

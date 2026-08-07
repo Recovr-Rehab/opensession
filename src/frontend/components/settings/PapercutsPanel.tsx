@@ -13,7 +13,8 @@ import {
 	SettingsPanel,
 } from "../../ui/settings";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
-import { Select, SettingRow, Toggle } from "./shared";
+import { Switch } from "../../ui/switch";
+import { Select, SettingRow } from "./shared";
 
 // ── Papercuts: the cross-session friction log agents append via the
 // opensession-papercuts tools — per-repo toggles + the recent entries. ──
@@ -74,10 +75,10 @@ export function PapercutsPanel() {
 								: "Off — runs in this repo don't log papercuts."
 						}
 						control={
-							<Toggle
-								label={`Papercuts for ${r.repoId}`}
+							<Switch
+								aria-label={`Papercuts for ${r.repoId}`}
 								checked={r.enabled}
-								onChange={(v) =>
+								onCheckedChange={(v) =>
 									setPapercutsRepoEnabled(r.repoId, v)
 										.then((res) => setRepos(res.repos))
 										.catch((e) => setError(e.message))

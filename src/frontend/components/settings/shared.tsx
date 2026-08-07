@@ -7,10 +7,16 @@ import {
 	SettingRowTitle,
 	settingsSelectClass,
 } from "../../ui/settings";
-import { Switch } from "../../ui/switch";
 import { IconChevronDown } from "../icons";
 
 // ── Reusable controls ──────────────────────────────────────────────────────
+//
+// Deliberately thin, and deliberately still here: SettingRow is a convenience
+// prop-API over ui/settings' composable row parts (it renders exactly those
+// primitives, so there is no style duplication to drift), and Select has no
+// ui/ primitive to defer to — it is the settings-flavored native <select>
+// with the chevron overlay. Panels use toggles via ui/switch's Switch
+// directly; there is no wrapper for it.
 
 export function SettingRow({
 	title,
@@ -29,20 +35,6 @@ export function SettingRow({
 			</SettingRowText>
 			<SettingRowControl>{control}</SettingRowControl>
 		</SettingsRow>
-	);
-}
-
-export function Toggle({
-	checked,
-	onChange,
-	label,
-}: {
-	checked: boolean;
-	onChange: (v: boolean) => void;
-	label: string;
-}) {
-	return (
-		<Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
 	);
 }
 

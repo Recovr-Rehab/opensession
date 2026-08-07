@@ -63,9 +63,10 @@ import {
 	settingsTextareaClass,
 } from "../../ui/settings";
 import { InlineAlert, LoadingState } from "../../ui/state";
+import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { getCurrentUser } from "../UserPicker";
-import { Select, SettingRow, Toggle } from "./shared";
+import { Select, SettingRow } from "./shared";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
 
@@ -167,7 +168,7 @@ function DeskVoicePanel() {
 					title="Voice mode"
 					desc="Show the voice toggle in your Desk. Off hides it for you only."
 					control={
-						<Toggle label="Voice mode" checked={on} onChange={setDeskVoicePref} />
+						<Switch aria-label="Voice mode" checked={on} onCheckedChange={setDeskVoicePref} />
 					}
 				/>
 				<DeskVoiceApiKeyRow />
@@ -428,17 +429,17 @@ export function PreferencesPanel() {
 					title="Vim mode"
 					desc="Modal editing in the message composer: Esc for normal mode, the usual motions and operators, i to type. Enter still sends."
 					control={
-						<Toggle label="Vim mode" checked={vimMode} onChange={setVimModePref} />
+						<Switch aria-label="Vim mode" checked={vimMode} onCheckedChange={setVimModePref} />
 					}
 				/>
 				<SettingRow
 					title="Pin new sessions"
 					desc="Automatically pin a session to your tab strip when you start it."
 					control={
-						<Toggle
-							label="Pin new sessions"
+						<Switch
+							aria-label="Pin new sessions"
 							checked={pinNew}
-							onChange={setPinNewSessions}
+							onCheckedChange={setPinNewSessions}
 						/>
 					}
 				/>
@@ -446,10 +447,10 @@ export function PreferencesPanel() {
 					title="Pin new workspaces"
 					desc="Also pin a workspace to your tab strip when you create one."
 					control={
-						<Toggle
-							label="Pin new workspaces"
+						<Switch
+							aria-label="Pin new workspaces"
 							checked={pinNewWs}
-							onChange={setPinNewWorkspaces}
+							onCheckedChange={setPinNewWorkspaces}
 						/>
 					}
 				/>

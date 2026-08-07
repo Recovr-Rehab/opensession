@@ -44,7 +44,8 @@ import {
 	SettingsPanel,
 	SettingsSection,
 } from "../../ui/settings";
-import { Select, SettingRow, Toggle } from "./shared";
+import { Switch } from "../../ui/switch";
+import { Select, SettingRow } from "./shared";
 
 // ── Appearance ─────────────────────────────────────────────────────────────
 
@@ -245,10 +246,10 @@ export function AppearancePanel() {
 						title={SIDEBAR_TOOL_LABELS[toolId]}
 						desc="Show this tool in the sidebar."
 						control={
-							<Toggle
-								label={`Show ${SIDEBAR_TOOL_LABELS[toolId]} in sidebar`}
+							<Switch
+								aria-label={`Show ${SIDEBAR_TOOL_LABELS[toolId]} in sidebar`}
 								checked={!hiddenSidebarTools.has(toolId)}
-								onChange={(visible) =>
+								onCheckedChange={(visible) =>
 									setSidebarToolVisible(toolId, visible)
 								}
 							/>
@@ -261,10 +262,10 @@ export function AppearancePanel() {
 						title={feed.title}
 						desc="Show this source in the sidebar. Hidden sources stop refreshing until shown again."
 						control={
-							<Toggle
-								label={`Show ${feed.title} in sidebar`}
+							<Switch
+								aria-label={`Show ${feed.title} in sidebar`}
 								checked={!hiddenSidebarFeeds.has(feed.id)}
-								onChange={(visible) =>
+								onCheckedChange={(visible) =>
 									setSidebarFeedVisible(feed.id, visible)
 								}
 							/>

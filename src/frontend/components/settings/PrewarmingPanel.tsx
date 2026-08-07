@@ -19,7 +19,8 @@ import {
 	SettingsPanel,
 } from "../../ui/settings";
 import { InlineAlert, LoadingState } from "../../ui/state";
-import { Select, SettingRow, Toggle } from "./shared";
+import { Switch } from "../../ui/switch";
+import { Select, SettingRow } from "./shared";
 
 // ── Warm previews (per-repo prebuilt template worktrees) ────────────────────
 
@@ -133,10 +134,10 @@ function WarmPreviewsPanel() {
 											/>
 										</>
 									)}
-									<Toggle
-										label={`Warm deps for ${entry.repoId}`}
+									<Switch
+										aria-label={`Warm deps for ${entry.repoId}`}
 										checked={entry.enabled}
-										onChange={(v) =>
+										onCheckedChange={(v) =>
 											apply(updateWarmTemplate(entry.repoId, { enabled: v }))
 										}
 									/>
@@ -322,10 +323,10 @@ function PreviewPoolPanel() {
 											/>
 										</>
 									)}
-									<Toggle
-										label={`Preview pool for ${entry.repoId}`}
+									<Switch
+										aria-label={`Preview pool for ${entry.repoId}`}
 										checked={entry.config.enabled}
-										onChange={(v) =>
+										onCheckedChange={(v) =>
 											apply(updatePreviewPool(entry.repoId, { enabled: v }))
 										}
 									/>
