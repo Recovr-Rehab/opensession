@@ -3203,6 +3203,7 @@ async function* runOpencodeAttempt(
       accountId: opts.accountId,
       accountStrict: opts.accountStrict,
       usageCredits: opts.usageCredits,
+      prReviewer: opts.prReviewer,
       kind: journal.kind,
       startedAt: new Date().toISOString(),
     });
@@ -3686,6 +3687,7 @@ async function* runOpencodeAttempt(
       isAsk,
       isScratch,
       reposNote: opts.reposNote,
+      prReviewer: opts.prReviewer,
       // Host-aware PR-flow instructions: code.storage repos have no PRs, so
       // the agent is told to push its branch instead of `gh pr create`.
       // Unregistered cwds (repoForPath throws) keep the GitHub default.

@@ -56,6 +56,10 @@ export interface ActiveRunRecord {
   accountStrict?: boolean; // hard pin: never rotate into the pool (automation cost cap)
   usageCredits?: boolean; // may run on accounts spending usage-credits past their limits
   fallbackModel?: string; // usage-limit fallback policy, preserved across resume
+  /** PR reviewer to request (automation config), preserved across resume —
+   *  unlike reposNote there is no rebuild callback for automation sessions, so
+   *  an unjournaled value would be silently dropped by a restart. */
+  prReviewer?: string;
   /** Pool key of the opencode server hosting this run — lets resume-after-
    *  restart REATTACH to a detached server that survived (adoption via the
    *  opencode-detach registry) instead of re-prompting a fresh one. */

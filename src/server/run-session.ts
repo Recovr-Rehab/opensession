@@ -30,6 +30,7 @@ import { getRunState, transitionRunState } from "./run-state";
 import {
 	automationDeniedTools,
 	automationMcpServersByName,
+	getAutomation,
 	selfImproveMcpForSession,
 } from "./automations";
 import { defaultRepo } from "./config";
@@ -2005,6 +2006,12 @@ async function runSessionPromptInner(
 		reposNote: isAutomationSession
 			? undefined
 			: await buildSessionNote(session, user),
+		// A human steering an automation-owned session still opens PRs under
+		// that automation's policy — keep its reviewer so a resumed turn's PR
+		// surfaces the same way the unattended run's would have.
+		prReviewer: isAutomationSession && session.automationId
+			? getAutomation(session.automationId)?.prReviewer
+			: undefined,
 		deniedTools,
 		confirmTools: STRIPE_CONFIRM_TOOLS,
 		aws: true, // sessions keep AWS read access (via injected creds)

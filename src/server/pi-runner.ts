@@ -1484,6 +1484,7 @@ export async function* runPi(
       isAsk,
       isScratch,
       reposNote: opts.reposNote,
+      prReviewer: opts.prReviewer,
       // Same host-awareness as the opencode runner: code.storage repos get
       // push-the-branch instructions instead of `gh pr create`. Dynamic import
       // to avoid a static module-init cycle through "./worktree".

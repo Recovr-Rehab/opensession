@@ -28,6 +28,9 @@ export function buildRunInstructions(input: {
   /** Repo-less scratch session (feed-item workspaces — the feeds design). */
   isScratch?: boolean;
   reposNote?: string;
+  /** Reviewer to request on PRs this run opens (GitHub login, `org/team`
+   *  slug, or comma-separated list) — see RunAgentOpts.prReviewer. */
+  prReviewer?: string;
   /** The session's real working directory — set ONLY for shared-pool runs,
    *  where opencode's own environment block reports the pool server's neutral
    *  cwd (SHARED_CWD, "Is a git repository: false") rather than the session's
@@ -328,6 +331,17 @@ export function buildRunInstructions(input: {
                 : " via the body line above.")
             : "")
     );
+    if (input.prReviewer) {
+      parts.push(
+        "## PR reviewer\nEvery pull request you open in this run must request " +
+          `\`${input.prReviewer}\` as reviewer: add \`--reviewer ${input.prReviewer}\` to ` +
+          `\`gh pr create\` (or \`gh pr edit --add-reviewer ${input.prReviewer}\` if the PR ` +
+          "already exists). This is how the PR reaches a human's review queue — an " +
+          "unreviewed PR is an invisible one, so do not skip it. If the request fails " +
+          "(a reviewer who isn't a collaborator on the repo is rejected with a 422), say " +
+          "so in your final summary and continue — never drop the PR over it."
+      );
+    }
   }
   const inproc = (input.inProcessMcp || {}) as Record<string, unknown>;
   // Gated on the sessions server specifically (not any in-process server):

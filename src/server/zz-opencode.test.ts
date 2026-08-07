@@ -645,6 +645,41 @@ describe("buildRunInstructions", () => {
       expect(s).toContain("short-lived, read-only installation token");
     }
   });
+  test("a configured PR reviewer becomes a --reviewer instruction", () => {
+    const s = buildRunInstructions({
+      isAsk: false,
+      osSessionId: "os-1",
+      prReviewer: "tellahq/super-developers",
+    });
+    expect(s).toContain("## PR reviewer");
+    expect(s).toContain("--reviewer tellahq/super-developers");
+    expect(s).toContain("--add-reviewer tellahq/super-developers");
+    // A rejected reviewer must not cost the PR itself.
+    expect(s).toContain("never drop the PR over it");
+  });
+  test("no reviewer configured leaves the PR section alone", () => {
+    const s = buildRunInstructions({ isAsk: false, osSessionId: "os-1" });
+    expect(s).toContain("## PR attribution");
+    expect(s).not.toContain("## PR reviewer");
+  });
+  test("the reviewer instruction is GitHub-only — code.storage has no PRs", () => {
+    const s = buildRunInstructions({
+      isAsk: false,
+      osSessionId: "os-1",
+      repoHost: "codestorage",
+      prReviewer: "tellahq/super-developers",
+    });
+    expect(s).toContain("a pushed branch IS the change request");
+    expect(s).not.toContain("## PR reviewer");
+  });
+  test("ask and scratch runs never get a reviewer instruction", () => {
+    for (const input of [
+      { isAsk: true, osSessionId: "os-1", prReviewer: "kentdebruin" },
+      { isAsk: false, isScratch: true, osSessionId: "os-1", prReviewer: "kentdebruin" },
+    ]) {
+      expect(buildRunInstructions(input)).not.toContain("## PR reviewer");
+    }
+  });
   test("shared-pool runs are told their real cwd; per-session runs aren't", () => {
     const shared = buildRunInstructions({
       isAsk: false,

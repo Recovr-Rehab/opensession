@@ -194,6 +194,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Allow runs to spend usage-credits past subscription limits (needs extra usage enabled on the account). Default false."
             ),
+          prReviewer: z
+            .string()
+            .optional()
+            .describe(
+              "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list. Without one the PR reaches nobody's review queue. The target must be a collaborator on the repo."
+            ),
         },
         async (args: {
           name: string;
@@ -205,6 +211,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           accountId?: string;
           accountStrict?: boolean;
           usageCredits?: boolean;
+          prReviewer?: string;
         }) => {
           const res = createAutomation({
             name: args.name,
@@ -217,6 +224,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             accountId: args.accountId,
             accountStrict: args.accountStrict,
             usageCredits: args.usageCredits,
+            prReviewer: args.prReviewer,
           });
           if ("error" in res) return text(`Couldn't create it: ${res.error}`);
           return text(
@@ -255,6 +263,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .boolean()
             .optional()
             .describe("Allow spending usage-credits past subscription limits."),
+          prReviewer: z
+            .string()
+            .optional()
+            .describe(
+              "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list; '' clears it."
+            ),
         },
         async (args: {
           id: string;
@@ -268,6 +282,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           accountId?: string;
           accountStrict?: boolean;
           usageCredits?: boolean;
+          prReviewer?: string;
         }) => {
           const { id, ...patch } = args;
           const res = updateAutomation(id, patch);

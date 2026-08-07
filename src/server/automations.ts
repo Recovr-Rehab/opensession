@@ -106,6 +106,17 @@ export interface Automation {
    * repos (opensession) explicitly isolated, never the live checkout.
    */
   repo?: string;
+  /**
+   * Reviewer to request on PRs this automation opens — a GitHub login
+   * (`kentdebruin`), an `org/team` slug (`tellahq/super-developers`), or a
+   * comma-separated list of either. Unattended PRs are otherwise opened with
+   * no reviewer, so nothing surfaces them: the review-requested push
+   * (pr-review-notifications.ts) is edge-triggered off GitHub's own
+   * `reviewRequested`, and a team slug is expanded to its members there.
+   * The target must be a collaborator on the repo or GitHub rejects the
+   * request (422), so a team needs repo access before it works here.
+   */
+  prReviewer?: string;
   enabled: boolean;
   createdBy: string;
   createdAt: string;
@@ -322,6 +333,30 @@ function sanitizeRepo(repo?: unknown): string | { error: string } | undefined {
   return id;
 }
 
+/**
+ * Normalize a PR reviewer spec into the comma-separated form `gh pr create
+ * --reviewer` takes: individual logins and/or `org/team` slugs. Rejects
+ * anything that isn't shaped like one, so a typo fails at config time rather
+ * than as a silent 422 on every run.
+ */
+function sanitizePrReviewer(
+  reviewer?: unknown,
+): string | { error: string } | undefined {
+  if (typeof reviewer !== "string" || !reviewer.trim()) return undefined;
+  const entries: string[] = [];
+  for (const raw of reviewer.split(",")) {
+    const entry = raw.trim();
+    if (!entry) continue;
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$/.test(entry)) {
+      return {
+        error: `Invalid PR reviewer "${entry}" — use a GitHub login or an org/team slug`,
+      };
+    }
+    if (!entries.some((e) => e.toLowerCase() === entry.toLowerCase())) entries.push(entry);
+  }
+  return entries.length ? entries.join(",") : undefined;
+}
+
 export function createAutomation(input: {
   name: string;
   prompt: string;
@@ -336,6 +371,7 @@ export function createAutomation(input: {
   eventKey?: string;
   mcpServers?: string[];
   repo?: string;
+  prReviewer?: string;
   selfImprove?: boolean;
   workflows?: boolean;
   model?: string;
@@ -361,6 +397,8 @@ export function createAutomation(input: {
   }
   const repo = sanitizeRepo(input.repo);
   if (repo && typeof repo === "object") return repo;
+  const prReviewer = sanitizePrReviewer(input.prReviewer);
+  if (prReviewer && typeof prReviewer === "object") return prReviewer;
   const model = sanitizeModel(input.model);
   if (model && typeof model === "object") return model;
   const fallbackModel = sanitizeModel(input.fallbackModel, true);
@@ -388,6 +426,7 @@ export function createAutomation(input: {
     eventKey: (input.eventKey || "").trim() || undefined,
     mcpServers: sanitizeMcpList(input.mcpServers),
     repo,
+    prReviewer,
     selfImprove: input.selfImprove === true || undefined,
     workflows: input.workflows === true || undefined,
     model,
@@ -445,7 +484,7 @@ export function ensureConfiguredAutomations(): void {
 
 export function updateAutomation(
   id: string,
-  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "selfImprove" | "workflows" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch">>
+  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch">>
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
@@ -467,6 +506,11 @@ export function updateAutomation(
     const repo = sanitizeRepo(patch.repo);
     if (repo && typeof repo === "object") return repo;
     next.repo = repo;
+  }
+  if ("prReviewer" in patch) {
+    const prReviewer = sanitizePrReviewer(patch.prReviewer);
+    if (prReviewer && typeof prReviewer === "object") return prReviewer;
+    next.prReviewer = prReviewer;
   }
   if ("selfImprove" in patch) next.selfImprove = patch.selfImprove === true || undefined;
   if ("workflows" in patch) next.workflows = patch.workflows === true || undefined;
@@ -1134,6 +1178,7 @@ export async function runAutomation(
         const fb = automation.fallbackModel || DEFAULT_FALLBACK_MODEL;
         return fb ? opencodeAutomationModel(fb) : undefined;
       })(),
+      prReviewer: automation.prReviewer,
       journal: { osSessionId: bksId, kind: "automation" },
     })) {
       if (event.type === "init") {

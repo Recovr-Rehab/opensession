@@ -119,6 +119,13 @@ export interface RunAgentOpts {
    * developer_instructions config channel.
    */
   reposNote?: string;
+  /**
+   * Reviewer to request on PRs this run opens (GitHub login, `org/team` slug,
+   * or a comma-separated list). Set from the owning automation's `prReviewer`
+   * — unattended PRs otherwise land with no reviewer and never surface in
+   * anyone's review queue. Preserved across model fallback and restart resume.
+   */
+  prReviewer?: string;
   /** Images attached to the opening message. */
   images?: ImageInput[];
   /**
@@ -814,6 +821,7 @@ export function resumeInterruptedRuns(
             accountId: run.accountId,
             accountStrict: run.accountStrict,
             usageCredits: run.usageCredits,
+            prReviewer: run.prReviewer,
             journal: { osSessionId: run.osSessionId, kind: `${run.kind || "run"}-rerun` },
             onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           })) {
@@ -915,6 +923,7 @@ export function resumeInterruptedRuns(
           accountId: run.accountId,
           accountStrict: run.accountStrict,
           usageCredits: run.usageCredits,
+          prReviewer: run.prReviewer,
           journal: { osSessionId: run.osSessionId, kind: `${run.kind || "run"}-resume` },
           onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
         })) {
