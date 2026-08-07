@@ -128,6 +128,16 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   URL so a shortcut can chain into "Open URLs". For a keyboard-free capture,
   build a shortcut of [Dictate Text] → [Start an Agent] and bind THAT. It also
   registers Siri phrases ("Start an agent in OS1") via `AgentShortcuts`.
+- **Action Button — "New Idea"** — the same press into OUR composer instead of
+  the system's text dialog, for ideas that need shaping: `CaptureIdeaIntent`
+  (`openAppWhenRun = true`) brings the app forward and the new-session sheet
+  opens with the mic already listening, so you speak, watch the words land,
+  fix what the recogniser got wrong, and still have repo/mode/model chips and
+  attachments before you send. The intent parks its request on `QuickCapture`
+  (it can run before any view exists on a cold launch) and the sessions list
+  consumes it once. The mic itself is a `ComposerDictationButton` in the
+  sheet's footer — it only auto-starts when speech + mic permission already
+  exist, so a first press isn't two system prompts stacked over the composer.
 - **Connection care** — client-initiated pings every 20s (the server never
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.
