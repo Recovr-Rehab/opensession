@@ -199,7 +199,7 @@ struct RepoTile: View {
 
     /// How much of the tile an icon fills. Keep in step with the web tile's
     /// `.repo-tile--img img` scale.
-    private static let artScale: CGFloat = 0.88
+    private static let artScale: CGFloat = 0.8
 
     private var letter: String {
         if name == "backstage" { return "O" }
@@ -266,7 +266,7 @@ struct RepoTile: View {
                 image
                     .resizable()
                     .scaledToFill()
-                    // Art sits a little inside the tile — the same 0.88 the
+                    // Art sits a little inside the tile — the same 0.8 the
                     // web tile uses (.repo-tile--img img). Every icon is
                     // cropped to its artwork server-side, so this is the one
                     // place its size is decided, and at the full box art read
