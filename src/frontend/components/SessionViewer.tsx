@@ -276,6 +276,13 @@ interface Props {
 	/** Open/foreground this session's Review view-tab (PR/review triggers). */
 	onOpenReview?: () => void;
 	/**
+	 * Which PR the Review pane should land on, pulsed by the app when a sidebar
+	 * row opened it: a workspace can carry several PRs, and the row you clicked
+	 * says which one you meant. `seq` re-applies the same PR after you've
+	 * switched targets by hand.
+	 */
+	reviewFocusPr?: { repo: string; branch: string; seq: number } | null;
+	/**
 	 * Whether the Preview environment pane (the PR's Vercel preview, full-width) is
 	 * foregrounded — driven by the top tab strip's Preview environment view-tab (App state).
 	 */
@@ -623,6 +630,7 @@ export function SessionViewer({
 	onReviewChange,
 	showReview = false,
 	onOpenReview,
+	reviewFocusPr,
 	showStaging = false,
 	onOpenStaging,
 	onCloseStaging,
@@ -708,6 +716,17 @@ export function SessionViewer({
 		},
 		[onOpenReview],
 	);
+	// The app opened Review on a specific PR (a sidebar PR row, or a workspace
+	// row whose PR isn't this session's primary). Re-sequenced locally so it
+	// shares one monotonic counter with the chips above.
+	useEffect(() => {
+		if (!reviewFocusPr) return;
+		setReviewFocus((prev) => ({
+			repo: reviewFocusPr.repo,
+			branch: reviewFocusPr.branch,
+			seq: (prev?.seq ?? 0) + 1,
+		}));
+	}, [reviewFocusPr?.seq]);
 	// Worktree roots for the transcript's tool rows: paths inside them render
 	// repo-relative instead of as a long absolute path (see tidyPath).
 	const toolPathRoots = useMemo(

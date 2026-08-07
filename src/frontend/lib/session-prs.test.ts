@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { UnifiedSession } from "./types";
 import {
+	sessionHasPr,
 	sessionPrApproved,
 	sessionPrMerged,
 	sessionPrPresentation,
@@ -172,5 +173,43 @@ describe("session PR presentation", () => {
 			primary,
 			additional: [linked],
 		});
+	});
+});
+
+describe("sessionHasPr", () => {
+	test("counts a PR opened on a branch the session doesn't own", () => {
+		expect(
+			sessionHasPr(
+				session({
+					branch: undefined,
+					worktreeDir: undefined,
+					prs: [
+						{
+							repo: "tella-fusion",
+							branch: "someone-elses-branch",
+							source: "discovered",
+							number: 5548,
+							state: "OPEN",
+						},
+					],
+				}),
+			),
+		).toBe(true);
+	});
+
+	test("a bare attached branch is not a PR", () => {
+		expect(
+			sessionHasPr(
+				session({
+					prs: [
+						{ repo: "shared-infra", branch: "infra-feature", source: "attached" },
+					],
+				}),
+			),
+		).toBe(false);
+	});
+
+	test("a session with no PR at all", () => {
+		expect(sessionHasPr(session({}))).toBe(false);
 	});
 });

@@ -33,6 +33,19 @@ export function sessionPrPresentation(prs?: SessionPrRef[]): {
 	return { additional: actual };
 }
 
+/**
+ * Does this session have a PR at all? Counts the singular branch-derived fields
+ * as well as the `prs` list, so a session whose PR sits on a branch it doesn't
+ * own (a discovered one) counts too — those still have a diff to review.
+ */
+export function sessionHasPr(session: UnifiedSession): boolean {
+	return (
+		session.prNumber !== undefined ||
+		!!session.prUrl ||
+		pullRequests(session).length > 0
+	);
+}
+
 /** A multi-PR session has landed once every actual PR is terminal and one merged. */
 export function sessionPrMerged(session: UnifiedSession): boolean {
 	const refs = pullRequests(session);

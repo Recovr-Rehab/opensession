@@ -103,6 +103,7 @@ import {
 	getWorkspaceLastSession,
 	saveWorkspaceLastSession,
 } from "./lib/workspace-last-session";
+import { sessionHasPr } from "./lib/session-prs";
 import { sessionHasWorkspace } from "./lib/session-workspace";
 import type {
 	Workspace,
@@ -1012,6 +1013,18 @@ export function App(
 	// only opens from within the already-current session, so it needs no such
 	// pending pulse.)
 	const [pendingReviewOpen, setPendingReviewOpen] = useState<string | null>(null);
+	// Which PR the Review pane should land on. A workspace can carry several
+	// (a feature shipped as two PRs, a discovered one), and they each get their
+	// own sidebar row — so the row you clicked, not the primary, decides.
+	// `seq` re-applies the same PR after you've switched targets by hand.
+	const [reviewFocusPr, setReviewFocusPr] = useState<{
+		repo: string;
+		branch: string;
+		seq: number;
+	} | null>(null);
+	const focusReviewPr = React.useCallback((repo: string, branch: string) => {
+		setReviewFocusPr((prev) => ({ repo, branch, seq: (prev?.seq ?? 0) + 1 }));
+	}, []);
 	// One-shot guard consumed by the workspace default-pane seeding effect (set
 	// when closing a view tab replaces the workspace URL — see onCloseView).
 	const suppressWsSeedRef = useRef(false);
@@ -1521,8 +1534,14 @@ export function App(
 		!!currentSession && sessionHasWorkspace(currentSession);
 	// Review renders without a session too: a session-less PR-backed workspace
 	// (branch/prNumber on the record) reviews through the preview APIs.
+	// A PR is reviewable whether or not the session owns the branch it sits on —
+	// a discovered PR (opened on someone else's branch) still has a diff — so it
+	// earns the tab on its own.
 	const reviewCapable = currentSession
-		? currentHasWorkspace
+		? currentHasWorkspace ||
+			sessionHasPr(currentSession) ||
+			(!!wsRecord &&
+				(wsRecord.prNumber !== undefined || !!wsRecord.branch))
 		: !!routeWorkspace &&
 			Boolean(routeWorkspace.branch || routeWorkspace.prNumber !== undefined);
 	// A PR-backed workspace's whole point is its PR, so its Review tab is
@@ -1875,10 +1894,11 @@ export function App(
 		if (subagentSelected && subagentStack.length === 0) setActiveViewTabState(null);
 	}, [subagentSelected, subagentStack.length]);
 	// Sidebar PR row → the PR's ONE workspace (resolve-or-create server-side,
-	// adopt-don't-duplicate), landing in its main/last-open session (Review only
-	// leads when the workspace has no sessions — the workspace-landing effect
-	// decides). Falls back to the legacy preview routes if the resolve fails,
-	// so a click is never dead.
+	// adopt-don't-duplicate), landing on THAT PR's Review tab: the row is a pull
+	// request, so its diff is what you clicked for. The focus pulse matters when
+	// the workspace carries several PRs — each has its own row, and without it
+	// they'd all land on the primary. Falls back to the legacy preview routes if
+	// the resolve fails, so a click is never dead.
 	const openPrWorkspace = React.useCallback(
 		async (item: ReviewQueueItem) => {
 			try {
@@ -1891,14 +1911,15 @@ export function App(
 					},
 				});
 				refreshWorkspaces();
-				navigate({ view: "workspace", id: workspaceId });
+				focusReviewPr(item.pr.repo, item.pr.branch);
+				navigate({ view: "workspace", id: workspaceId, tab: "review" });
 			} catch {
 				if (item.sessionId) navigate({ view: "reviews", id: item.sessionId });
 				else
 					navigate({ view: "pr", repo: item.pr.repo, branch: item.pr.branch });
 			}
 		},
-		[refreshWorkspaces],
+		[refreshWorkspaces, focusReviewPr],
 	);
 	const openPrReview = React.useCallback(
 		async (pr: OpenPr) => {
@@ -1912,12 +1933,13 @@ export function App(
 					},
 				});
 				refreshWorkspaces();
+				focusReviewPr(pr.repo, pr.branch);
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
 			} catch {
 				navigate({ view: "pr", repo: pr.repo, branch: pr.branch });
 			}
 		},
-		[refreshWorkspaces],
+		[refreshWorkspaces, focusReviewPr],
 	);
 	// Sidebar feed row (Tella video, …) → the item's ONE workspace, its web
 	// panel foregrounded (the feeds design).
@@ -3085,6 +3107,7 @@ export function App(
 				onOpenSubagent={openSubagent}
 				onSubagentBack={popSubagent}
 				onOpenReview={openReview}
+				reviewFocusPr={reviewFocusPr}
 				onOpenStaging={openStaging}
 				onCloseStaging={closeStagingTab}
 				onOpenPreviewTab={openPreviewTab}

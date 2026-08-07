@@ -127,6 +127,8 @@ import {
 	wsPrMerged,
 	wsPrReviewGivenBy,
 } from "../lib/sidebar-lanes";
+import { sessionHasPr } from "../lib/session-prs";
+import { sessionHasWorkspace } from "../lib/session-workspace";
 import {
 	ARCHIVE_SHORTCUT_KEYS,
 	ARCHIVE_WS_SHORTCUT_KEYS,
@@ -1965,7 +1967,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			clearWsPress();
 		}
 	}
-	function wsRowTouchEnd(row: WsRow, e: React.TouchEvent) {
+	// What a row click opens. `review` rows — the ones under the "Needs review"
+	// band — land on the workspace's Review tab, because the whole reason that
+	// band exists is that someone asked you to look at the diff. Every other
+	// place the same workspace appears (status lanes, Pinned, search) still
+	// opens the session.
+	function openWsRow(row: WsRow, review: boolean) {
+		// …as long as there's something to review: a PR (even one opened on a
+		// branch the session doesn't own), or its own branch/worktree to diff.
+		// Anything else falls through to the session rather than landing on an
+		// empty pane.
+		const reviewable =
+			row.workspace?.prNumber !== undefined ||
+			row.sessions.some((s) => sessionHasPr(s) || sessionHasWorkspace(s));
+		if (review && reviewable && row.sessions[0]) onOpenReview(row.sessions[0]);
+		else if (row.workspace) onOpenWorkspace(row.workspace.id);
+		else if (row.sessions[0]) onSelect(row.sessions[0]);
+	}
+	function wsRowTouchEnd(row: WsRow, e: React.TouchEvent, review = false) {
 		const hadOrigin = wsPressOrigin.current !== null;
 		const wasSwiping = wsSwiping.current;
 		const rowWidth = wsSwipeOrigin.current?.width ?? e.currentTarget.clientWidth;
@@ -2033,8 +2052,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				wsSwipeOffset.current = 0;
 				return;
 			}
-			if (row.workspace) onOpenWorkspace(row.workspace.id);
-			else if (row.sessions[0]) onSelect(row.sessions[0]);
+			openWsRow(row, review);
 		} else if (wsLongPressed.current) {
 			// Release after a long-press: the workspace sheet is already up —
 			// swallow any ghost click so it can't land on the sheet (or its
@@ -2450,6 +2468,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return renderWsRowImpl(row, false);
 	}
 
+	// The "Needs review" band's rows: identical in every way except that a click
+	// opens the workspace's Review tab (see openWsRow).
+	function renderReviewWsRow(row: WsRow) {
+		return renderWsRowImpl(row, false, false, true);
+	}
+
 	// `inbox` renders the Inbox-mode variant of the same row — a repo tile in
 	// front of the title, idle timestamp on every row — with identical behavior
 	// (click, swipe, context menu, pin, archive).
@@ -2460,7 +2484,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// you" — the Needs input lane, the Inbox's Needs action band. There the
 	// attention dot is the third copy of the same fact (header, count, and the
 	// row's own accent wash), so it's dropped.
-	function renderWsRowImpl(row: WsRow, inbox: boolean, banded = false) {
+	//
+	// `review` marks a row under the "Needs review" band, whose click opens the
+	// Review tab instead of the session.
+	function renderWsRowImpl(
+		row: WsRow,
+		inbox: boolean,
+		banded = false,
+		review = false,
+	) {
 		const active = row.sessions.some((s) => s.id === selectedId);
 		const editing = rowRenameEditing(row);
 		const waiting = row.status === "needsinput";
@@ -2572,15 +2604,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						return;
 					}
 					if (editing) return;
-					if (row.workspace) onOpenWorkspace(row.workspace.id);
-					else if (row.sessions[0]) onSelect(row.sessions[0]);
+					openWsRow(row, review);
 				}}
 					onMouseEnter={(e) => wsRowHoverEnter(row, e.currentTarget)}
 					onMouseLeave={scheduleWsHoverClose}
 					onMouseDown={closeWsHover}
 					onTouchStart={(e) => wsRowTouchStart(row, e)}
 					onTouchMove={(e) => wsRowTouchMove(row, e)}
-					onTouchEnd={(e) => wsRowTouchEnd(row, e)}
+					onTouchEnd={(e) => wsRowTouchEnd(row, e, review)}
 					onTouchCancel={(e) => {
 						clearWsPress();
 						wsSwipeOrigin.current = null;
@@ -4160,7 +4191,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									.filter(
 										(r) => open || r.sessions.some((c) => c.id === selectedId),
 									)
-									.map(renderWsRow)}
+									.map(renderReviewWsRow)}
 								{requestedPrItems
 									.filter((item) => open || prRowSelected(item))
 									.map(renderPrRow)}
