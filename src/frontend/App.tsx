@@ -157,6 +157,7 @@ import {
 } from "./lib/tab-colors";
 import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
+import { isApple } from "./lib/platform";
 import type { UnifiedSession } from "./lib/types";
 import "./styles/global.css";
 
@@ -2741,7 +2742,7 @@ export function App(
 	// weight as the fuller play/globe glyphs there (a framed rectangle reads a
 	// hair lighter than a filled triangle / globe at the same nominal size).
 	const panelIcon = <IconSidebarLeft size={24} />;
-	const appleShortcuts = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+	const appleShortcuts = isApple;
 	const mod = appleShortcuts ? "⌘" : "Ctrl";
 	const currentTheme = effectiveTheme();
 	const commandActions: CommandPaletteAction[] = [

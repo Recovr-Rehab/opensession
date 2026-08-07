@@ -91,3 +91,10 @@ export function imageFilesFromPaste(e: React.ClipboardEvent): File[] {
     .map((it) => it.getAsFile())
     .filter((f): f is File => !!f);
 }
+
+/** Short uppercase extension badge for a filename (e.g. "PDF", "TS"), or "FILE". */
+export function extBadge(name: string): string {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0 || dot === name.length - 1) return "FILE";
+  return name.slice(dot + 1, dot + 5).toUpperCase();
+}

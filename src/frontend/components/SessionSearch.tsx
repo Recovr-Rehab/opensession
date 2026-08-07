@@ -1,4 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
+import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import {
@@ -30,10 +31,10 @@ interface Props {
 	onClose: () => void;
 }
 
-const DEFAULT_PROJECT = "repository";
-
+// Repo-less sessions group under the literal FALLBACK_REPO bucket, not the
+// sidebar's default-repo lane (see lib/session-repo for the fork rationale).
 function sessionRepo(s: UnifiedSession): string {
-	return s.repo || DEFAULT_PROJECT;
+	return sessionRepoOr(s, FALLBACK_REPO);
 }
 
 // The status buckets a session can fall into, mirroring the sidebar's triage

@@ -1,11 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-	AnimatePresence,
-	motion,
-	useMotionValue,
-	useTransform,
-	type PanInfo,
-} from "motion/react";
+import { AnimatePresence } from "motion/react";
 import {
 	fetchTinderDeck,
 	keepTinderPr,
@@ -22,6 +16,8 @@ import { renderMarkdown } from "../lib/markdown";
 import { providerFromUrl } from "../lib/provider";
 import { useCurrentUser } from "./UserPicker";
 import { Textarea } from "../ui/input";
+import { DeckDone, SwipeCard } from "../ui/swipe-deck";
+import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
 
 /**
  * PR Tinder — a swipe deck over tella-fusion's open PRs, one card at a time:
@@ -38,10 +34,6 @@ import { Textarea } from "../ui/input";
  * The deck is shuffled once per session (fresh eyes on the stale middle of the
  * list) and frozen, so acting on cards never reshuffles the rest.
  */
-
-const SWIPE_DISTANCE = 110; // px of drag past which a release commits
-const SWIPE_VELOCITY = 520; // px/s flick that commits regardless of distance
-const UNDO_MS = 7000;
 
 // The label shortlist pinned to the top of the label picker — the ones triage
 // actually reaches for (mirrors the CLI's LABEL_SHORTLIST).
@@ -67,33 +59,6 @@ type UndoEntry =
 interface Props {
 	/** Leave the deck (back / done). */
 	onExit: () => void;
-}
-
-function shuffle<T>(arr: T[]): T[] {
-	const out = arr.slice();
-	for (let i = out.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[out[i], out[j]] = [out[j], out[i]];
-	}
-	return out;
-}
-
-function ageDays(ts: string): number {
-	return Math.floor((Date.now() - new Date(ts).getTime()) / 86_400_000);
-}
-
-function ageLabel(ts: string): string {
-	const d = ageDays(ts);
-	if (d <= 0) return "today";
-	return `${d}d`;
-}
-
-/** Fresh activity green, drifting yellow, stale red — the CLI's age tint. */
-function ageTone(ts: string): string {
-	const d = ageDays(ts);
-	if (d < 3) return "text-green";
-	if (d < 14) return "text-yellow";
-	return "text-red";
 }
 
 /** GitHub label chip: label's own hex as bg, black/white text by luminance. */
@@ -500,9 +465,21 @@ export function PrTinder({ onExit }: Props) {
 				</div>
 			) : done ? (
 				<DeckDone
-					reviewed={index}
-					keptCount={deck.keptCount}
-					onShowKept={showKept}
+					emoji="🔥"
+					title="Deck done"
+					message={
+						index > 0
+							? `You went through ${index} PR${index === 1 ? "" : "s"}.`
+							: "Nothing new to triage."
+					}
+					secondary={
+						deck.keptCount > 0
+							? {
+									label: `Deal ${deck.keptCount} kept PR${deck.keptCount === 1 ? "" : "s"}`,
+									onClick: showKept,
+								}
+							: undefined
+					}
 					onExit={onExit}
 				/>
 			) : (
@@ -522,7 +499,7 @@ export function PrTinder({ onExit }: Props) {
 							/>
 						)}
 						<AnimatePresence initial={false} custom={dir}>
-							<SwipeCard
+							<PrCard
 								key={card!.number}
 								pr={card!}
 								labels={cardLabels(card!)}
@@ -624,7 +601,7 @@ export function PrTinder({ onExit }: Props) {
 	);
 }
 
-function SwipeCard({
+function PrCard({
 	pr,
 	labels,
 	custom,
@@ -639,35 +616,6 @@ function SwipeCard({
 	onClose: () => void;
 	onRemoveLabel: (name: string) => void;
 }) {
-	const x = useMotionValue(0);
-	const rotate = useTransform(x, [-260, 260], [-9, 9]);
-	const closeTint = useTransform(x, [-SWIPE_DISTANCE, -20], [1, 0]);
-	const keepTint = useTransform(x, [20, SWIPE_DISTANCE], [0, 1]);
-
-	function onDragEnd(_: unknown, info: PanInfo) {
-		if (info.offset.x < -SWIPE_DISTANCE || info.velocity.x < -SWIPE_VELOCITY)
-			onClose();
-		else if (info.offset.x > SWIPE_DISTANCE || info.velocity.x > SWIPE_VELOCITY)
-			onKeep();
-	}
-
-	// Exit flings left for close, right for keep/comment (both are "dealt
-	// with"). The card lives in normal flow (auto height), so the exiting one
-	// is popped to absolute for its fling — otherwise it would hold layout and
-	// shove the incoming card down while both are mounted.
-	const variants = {
-		exit: (a: Action | null) => ({
-			position: "absolute" as const,
-			top: 0,
-			left: 0,
-			right: 0,
-			x: a === "close" ? -640 : 640,
-			rotate: a === "close" ? -12 : 12,
-			opacity: 0,
-			transition: { duration: 0.26 },
-		}),
-	};
-
 	// The deck is the default repo's open PRs (server-side pr-tinder.ts), so
 	// that's what a `#5528` in a PR body refers to.
 	const bodyHtml = useMemo(
@@ -676,34 +624,19 @@ function SwipeCard({
 	);
 
 	return (
-		<motion.div
-			className="relative z-10 flex w-full touch-pan-y flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
-			style={{ x, rotate }}
-			drag="x"
-			dragConstraints={{ left: 0, right: 0 }}
-			dragElastic={0.7}
-			onDragEnd={onDragEnd}
-			variants={variants}
-			initial={{ scale: 0.97, opacity: 0, y: 12 }}
-			animate={{ scale: 1, opacity: 1, y: 0 }}
-			exit="exit"
+		// Exit flings left for close, right for keep/comment (both are "dealt
+		// with"); the card lives in normal flow, hence popOnExit.
+		<SwipeCard
+			className="relative z-10 w-full"
 			custom={custom}
-			transition={{ type: "spring", stiffness: 400, damping: 34 }}
+			exitFor={(a) => (a === "close" ? "left" : "right")}
+			exitDistance={640}
+			popOnExit
+			stampLeft="Close"
+			stampRight="Keep"
+			onSwipeLeft={onClose}
+			onSwipeRight={onKeep}
 		>
-			{/* Swipe intent stamps. */}
-			<motion.div
-				className="pointer-events-none absolute left-4 top-16 z-10 rounded-md border-2 border-red px-2.5 py-1 text-sm font-bold tracking-wide text-red"
-				style={{ opacity: closeTint, rotate: -12 }}
-			>
-				Close
-			</motion.div>
-			<motion.div
-				className="pointer-events-none absolute right-4 top-16 z-10 rounded-md border-2 border-green px-2.5 py-1 text-sm font-bold tracking-wide text-green"
-				style={{ opacity: keepTint, rotate: 12 }}
-			>
-				Keep
-			</motion.div>
-
 			{/* Card head: number/author/ages, title, labels, diffstat. */}
 			<div className="shrink-0 border-b border-line px-5 py-3.5">
 				<div className="flex items-center gap-2 text-xs text-faint">
@@ -724,7 +657,7 @@ function SwipeCard({
 					/>
 					<span className="text-dim">{pr.author}</span>
 					<span>·</span>
-					<span className={ageTone(pr.updatedAt)}>
+					<span className={ageTone(pr.updatedAt, 3, 14)}>
 						updated {ageLabel(pr.updatedAt)}
 					</span>
 					<span>·</span>
@@ -772,7 +705,7 @@ function SwipeCard({
 					<div className="text-sm italic text-faint">(no description)</div>
 				)}
 			</div>
-		</motion.div>
+		</SwipeCard>
 	);
 }
 
@@ -883,46 +816,6 @@ function LabelPanel({
 						);
 					})
 				)}
-			</div>
-		</div>
-	);
-}
-
-function DeckDone({
-	reviewed,
-	keptCount,
-	onShowKept,
-	onExit,
-}: {
-	reviewed: number;
-	keptCount: number;
-	onShowKept: () => void;
-	onExit: () => void;
-}) {
-	return (
-		<div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-			<div className="text-4xl">🔥</div>
-			<div className="text-item-title font-semibold text-fg">Deck done</div>
-			<div className="max-w-xs text-sm text-dim">
-				{reviewed > 0
-					? `You went through ${reviewed} PR${reviewed === 1 ? "" : "s"}.`
-					: "Nothing new to triage."}
-			</div>
-			<div className="mt-2 flex gap-2">
-				{keptCount > 0 && (
-					<button
-						className="rounded-control border border-line bg-panel px-4 py-2.5 text-sm font-semibold text-dim hover:bg-surface hover:text-fg"
-						onClick={onShowKept}
-					>
-						Deal {keptCount} kept PR{keptCount === 1 ? "" : "s"}
-					</button>
-				)}
-				<button
-					className="rounded-control bg-panel px-4 py-2.5 text-sm font-semibold text-fg hover:bg-surface"
-					onClick={onExit}
-				>
-					Done
-				</button>
 			</div>
 		</div>
 	);

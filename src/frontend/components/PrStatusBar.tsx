@@ -26,6 +26,7 @@ import { sessionPrPresentation } from "../lib/session-prs";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
+import { isApple } from "../lib/platform";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
 import {
@@ -250,9 +251,7 @@ function PrBarButton({
 }
 
 // Keyboard hint for the open-PR chord (SessionViewer owns the handler).
-const PR_CHORD = /Mac|iPhone|iPad|iPod/.test(navigator.platform)
-	? "⌘G"
-	: "Ctrl+G";
+const PR_CHORD = isApple ? "⌘G" : "Ctrl+G";
 
 /**
  * The PR chip links to Open Session's review by default. GitHub remains a

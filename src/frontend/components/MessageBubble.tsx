@@ -17,6 +17,7 @@ import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { BASE_PATH } from "../lib/base";
 import { resolveEntryImageSrc } from "../lib/osBlob";
+import { extBadge } from "../lib/images";
 import { fullTime, shortTime } from "../lib/time";
 import { IconChevronDown } from "./icons";
 import { noticeTone, stripNoticeGlyph } from "../lib/notice-tone";
@@ -335,13 +336,6 @@ function EntryVideos({ videos }: { videos?: string[] }) {
 			))}
 		</div>
 	);
-}
-
-/** Short uppercase extension badge for a filename (e.g. "PDF"), or "FILE". */
-function extBadge(name: string): string {
-	const dot = name.lastIndexOf(".");
-	if (dot <= 0 || dot === name.length - 1) return "FILE";
-	return name.slice(dot + 1, dot + 5).toUpperCase();
 }
 
 /** Non-media attachments on a user turn — download chips (served via <base>/media). */

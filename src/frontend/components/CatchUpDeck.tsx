@@ -1,11 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-	AnimatePresence,
-	motion,
-	useMotionValue,
-	useTransform,
-	type PanInfo,
-} from "motion/react";
+import { AnimatePresence } from "motion/react";
 import type {
 	UnifiedSession,
 	Workspace,
@@ -29,6 +23,7 @@ import { TranscriptBlocks } from "./TranscriptBlocks";
 import { Composer } from "./Composer";
 import { useCurrentUser } from "./UserPicker";
 import { shortTime, elapsedClock } from "../lib/time";
+import { SwipeCard } from "../ui/swipe-deck";
 
 /**
  * Catch-up deck — a Slack-style "swipe through your unread" card stack. Each
@@ -43,8 +38,6 @@ import { shortTime, elapsedClock } from "../lib/time";
  */
 
 const DEFAULT_REPO = "repository";
-const SWIPE_DISTANCE = 110; // px of drag past which a release commits
-const SWIPE_VELOCITY = 520; // px/s flick that commits regardless of distance
 
 type Action = "archive" | "read" | "keep";
 
@@ -280,21 +273,39 @@ export function CatchUpDeck({
 						/>
 					)}
 					<AnimatePresence initial={false} custom={dir}>
+						{/* Exit flings left for archive, right for read, up for skip;
+						    the card is already absolutely positioned, so no popOnExit. */}
 						<SwipeCard
 							key={card.key}
-							card={card}
+							className="absolute inset-x-4 top-1 bottom-5"
 							custom={dir}
-							connected={connected}
-							models={models}
-							defaultModel={defaultModel}
-							accounts={accounts}
-							send={send}
-							currentUser={currentUser}
-							onArchive={() => act("archive")}
-							onMarkRead={() => act("read")}
-							onOpen={() => onOpenSession(replyTarget(card).id)}
-							onReplied={onReplied}
-						/>
+							exitFor={(a) =>
+								a === "archive"
+									? "left"
+									: a === "read"
+										? "right"
+										: a === "keep"
+											? "up"
+											: null
+							}
+							exitDistance={560}
+							stampLeft="Archive"
+							stampRight="Read"
+							onSwipeLeft={() => act("archive")}
+							onSwipeRight={() => act("read")}
+						>
+							<CardBody
+								card={card}
+								connected={connected}
+								models={models}
+								defaultModel={defaultModel}
+								accounts={accounts}
+								send={send}
+								currentUser={currentUser}
+								onOpen={() => onOpenSession(replyTarget(card).id)}
+								onReplied={onReplied}
+							/>
+						</SwipeCard>
 					</AnimatePresence>
 				</div>
 			)}
@@ -343,101 +354,6 @@ export function CatchUpDeck({
 				</div>
 			)}
 		</div>
-	);
-}
-
-function SwipeCard({
-	card,
-	custom,
-	connected,
-	models,
-	defaultModel,
-	accounts,
-	send,
-	currentUser,
-	onArchive,
-	onMarkRead,
-	onOpen,
-	onReplied,
-}: {
-	card: CatchupCard;
-	custom: Action | null;
-	connected: boolean;
-	models: ModelOption[];
-	defaultModel: string;
-	accounts: ProviderAccountOption[];
-	send: (msg: WSClientMessage) => void;
-	currentUser: string;
-	onArchive: () => void;
-	onMarkRead: () => void;
-	onOpen: () => void;
-	onReplied: () => void;
-}) {
-	const x = useMotionValue(0);
-	const rotate = useTransform(x, [-260, 260], [-9, 9]);
-	const archiveTint = useTransform(x, [-SWIPE_DISTANCE, -20], [1, 0]);
-	const readTint = useTransform(x, [20, SWIPE_DISTANCE], [0, 1]);
-
-	function onDragEnd(_: unknown, info: PanInfo) {
-		if (info.offset.x < -SWIPE_DISTANCE || info.velocity.x < -SWIPE_VELOCITY)
-			onArchive();
-		else if (info.offset.x > SWIPE_DISTANCE || info.velocity.x > SWIPE_VELOCITY)
-			onMarkRead();
-	}
-
-	// Exit is a function variant so AnimatePresence's `custom` (the action taken)
-	// picks the fling direction — left for archive, right for read, up for skip.
-	const variants = {
-		exit: (a: Action | null) => ({
-			x: a === "archive" ? -560 : a === "read" ? 560 : 0,
-			y: a === "keep" ? -560 : 0,
-			rotate: a === "archive" ? -12 : a === "read" ? 12 : 0,
-			opacity: 0,
-			transition: { duration: 0.26 },
-		}),
-	};
-
-	return (
-		<motion.div
-			className="absolute inset-x-4 top-1 bottom-5 flex touch-pan-y flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
-			style={{ x, rotate }}
-			drag="x"
-			dragConstraints={{ left: 0, right: 0 }}
-			dragElastic={0.7}
-			onDragEnd={onDragEnd}
-			variants={variants}
-			initial={{ scale: 0.97, opacity: 0, y: 12 }}
-			animate={{ scale: 1, opacity: 1, y: 0 }}
-			exit="exit"
-			custom={custom}
-			transition={{ type: "spring", stiffness: 400, damping: 34 }}
-		>
-			{/* Swipe intent stamps. */}
-			<motion.div
-				className="pointer-events-none absolute left-4 top-16 z-10 rounded-md border-2 border-red px-2.5 py-1 text-sm font-bold tracking-wide text-red"
-				style={{ opacity: archiveTint, rotate: -12 }}
-			>
-				Archive
-			</motion.div>
-			<motion.div
-				className="pointer-events-none absolute right-4 top-16 z-10 rounded-md border-2 border-green px-2.5 py-1 text-sm font-bold tracking-wide text-green"
-				style={{ opacity: readTint, rotate: 12 }}
-			>
-				Read
-			</motion.div>
-
-			<CardBody
-				card={card}
-				connected={connected}
-				models={models}
-				defaultModel={defaultModel}
-				accounts={accounts}
-				send={send}
-				currentUser={currentUser}
-				onOpen={onOpen}
-				onReplied={onReplied}
-			/>
-		</motion.div>
 	);
 }
 

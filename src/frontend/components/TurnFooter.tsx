@@ -15,6 +15,7 @@ import {
 import { fullTime } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { canonicalToolName } from "./ToolCallBlock";
+import { tidyPath } from "../lib/tidy-path";
 import { LANG_MARKS } from "./lang-marks";
 
 /** One change a tool made to a file: old text removed, new text added.
@@ -239,10 +240,6 @@ function editDiffText(e: FileEdit): string {
 
 function truncateDiff(s: string): string {
   return s.length <= 3000 ? s : s.slice(0, 3000) + "\n…";
-}
-
-function tidyPath(p: string): string {
-  return p.replace(/^\/home\/[^/]+\//, "~/");
 }
 
 function DiffHighlight({ code }: { code: string }) {

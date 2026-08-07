@@ -3,6 +3,7 @@ import type { OsReview, SupportThread, UnifiedSession } from "../lib/types";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { relativeTime, type OpenPr } from "../lib/api";
 import { providerFromUrl } from "../lib/provider";
+import { prettyReview } from "../lib/sidebar-hover";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { IconGitMerge } from "./icons";
 import { Popover } from "../ui/popover";
@@ -159,13 +160,6 @@ export function CardFooter({
 }
 
 // ── Pull request ────────────────────────────────────────────────────────────
-
-function prettyReview(d: string): string {
-	if (d === "APPROVED") return "approved";
-	if (d === "CHANGES_REQUESTED") return "changes requested";
-	if (d === "REVIEW_REQUIRED") return "review required";
-	return d.toLowerCase().replace(/_/g, " ");
-}
 
 /**
  * The automated review's verdict, worded exactly as its PR comment words it

@@ -1,6 +1,7 @@
 import { DEFAULT_REPO_ID } from "./brand";
 import type { Group } from "./sidebar-types";
 import type { UnifiedSession } from "./types";
+import { sessionRepoOr } from "./session-repo";
 import { RepoTile } from "../components/RepoTile";
 
 // Per-person group dots share the repo-tile swatch palette (RepoTile.tsx) —
@@ -156,8 +157,9 @@ export function readFilter(): FilterState {
 
 export function sessionRepo(s: UnifiedSession): string {
 	// Repo-less feed/scratch sessions file under their feed's kind so they
-	// don't mislabel as the default repo (the feeds design).
-	return s.repo || s.externalRefs?.[0]?.kind || DEFAULT_PROJECT;
+	// don't mislabel as the default repo (the feeds design). Other surfaces
+	// use different fallbacks on purpose — see lib/session-repo.
+	return sessionRepoOr(s, s.externalRefs?.[0]?.kind || DEFAULT_PROJECT);
 }
 
 // Every `repo\nbranch` key a session's work can be reached by: its own checkout

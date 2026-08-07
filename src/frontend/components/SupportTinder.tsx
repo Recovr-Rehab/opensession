@@ -1,11 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-	AnimatePresence,
-	motion,
-	useMotionValue,
-	useTransform,
-	type PanInfo,
-} from "motion/react";
+import { AnimatePresence } from "motion/react";
 import type { PlainThread, SupportThread } from "../lib/types";
 import {
 	fetchPlainThreadById,
@@ -16,6 +10,8 @@ import {
 } from "../lib/api";
 import { PlainEntryRow, plainThreadUrl } from "./PlainThreadPanel";
 import { useCurrentUser } from "./UserPicker";
+import { DeckDone, SwipeCard } from "../ui/swipe-deck";
+import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
 
 /**
  * Support Tinder — PR Tinder's sibling for the Plain Todo queue, one ticket at
@@ -32,10 +28,6 @@ import { useCurrentUser } from "./UserPicker";
  * age order here, so old tickets don't wall off the fresh ones.
  */
 
-const SWIPE_DISTANCE = 110; // px of drag past which a release commits
-const SWIPE_VELOCITY = 520; // px/s flick that commits regardless of distance
-const UNDO_MS = 7000;
-
 type Action = "skip" | "spam" | "done";
 
 /** One reversible deck action; `at` is the card's index, for jumping back. */
@@ -48,36 +40,6 @@ interface Props {
 	onExit: () => void;
 	/** Navigate into a session (the Session button resolves one over HTTP). */
 	onOpenSession: (id: string) => void;
-}
-
-/** Fisher–Yates, returns a new array — the deck order is rolled once per visit. */
-function shuffle<T>(arr: T[]): T[] {
-	const out = arr.slice();
-	for (let i = out.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[out[i], out[j]] = [out[j], out[i]];
-	}
-	return out;
-}
-
-function ageDays(ts: string): number {
-	return Math.floor((Date.now() - new Date(ts).getTime()) / 86_400_000);
-}
-
-function ageLabel(ts: string | null): string {
-	if (!ts) return "";
-	const d = ageDays(ts);
-	if (d <= 0) return "today";
-	return `${d}d`;
-}
-
-/** Fresh green, drifting yellow, stale red — same age tint as PR Tinder. */
-function ageTone(ts: string | null): string {
-	if (!ts) return "text-faint";
-	const d = ageDays(ts);
-	if (d < 1) return "text-green";
-	if (d < 4) return "text-yellow";
-	return "text-red";
 }
 
 /** Plain thread priorities, as Plain's own UI names them. */
@@ -391,7 +353,16 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 					Dealing support tickets…
 				</div>
 			) : done ? (
-				<DeckDone reviewed={index} onExit={onExit} />
+				<DeckDone
+					emoji="🎉"
+					title="Queue clear"
+					message={
+						index > 0
+							? `You went through ${index} ticket${index === 1 ? "" : "s"}.`
+							: "No Todo tickets right now."
+					}
+					onExit={onExit}
+				/>
 			) : (
 				/* The deck area scrolls like a normal page: the card is auto-height
 				   (the full conversation, no inner scroll pane) and long threads
@@ -409,7 +380,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 							/>
 						)}
 						<AnimatePresence initial={false} custom={dir}>
-							<SwipeCard
+							<TicketCard
 								key={card!.id}
 								thread={card!}
 								timeline={timelines[card!.id]}
@@ -488,7 +459,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 	);
 }
 
-function SwipeCard({
+function TicketCard({
 	thread,
 	timeline,
 	custom,
@@ -501,66 +472,22 @@ function SwipeCard({
 	onSkip: () => void;
 	onSpam: () => void;
 }) {
-	const x = useMotionValue(0);
-	const rotate = useTransform(x, [-260, 260], [-9, 9]);
-	const spamTint = useTransform(x, [-SWIPE_DISTANCE, -20], [1, 0]);
-	const skipTint = useTransform(x, [20, SWIPE_DISTANCE], [0, 1]);
-
-	function onDragEnd(_: unknown, info: PanInfo) {
-		if (info.offset.x < -SWIPE_DISTANCE || info.velocity.x < -SWIPE_VELOCITY)
-			onSpam();
-		else if (info.offset.x > SWIPE_DISTANCE || info.velocity.x > SWIPE_VELOCITY)
-			onSkip();
-	}
-
-	// Exit flings left for spam/done (dealt with and gone), right for skip.
-	// The card lives in normal flow (auto height), so the exiting one is popped
-	// to absolute for its fling — otherwise it would hold layout and shove the
-	// incoming card down while both are mounted.
-	const variants = {
-		exit: (a: Action | null) => ({
-			position: "absolute" as const,
-			top: 0,
-			left: 0,
-			right: 0,
-			x: a === "spam" || a === "done" ? -640 : 640,
-			rotate: a === "spam" || a === "done" ? -12 : 12,
-			opacity: 0,
-			transition: { duration: 0.26 },
-		}),
-	};
-
 	const prio = thread.priority != null ? PRIORITY[thread.priority] : null;
 
 	return (
-		<motion.div
-			className="relative z-10 flex w-full touch-pan-y flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
-			style={{ x, rotate }}
-			drag="x"
-			dragConstraints={{ left: 0, right: 0 }}
-			dragElastic={0.7}
-			onDragEnd={onDragEnd}
-			variants={variants}
-			initial={{ scale: 0.97, opacity: 0, y: 12 }}
-			animate={{ scale: 1, opacity: 1, y: 0 }}
-			exit="exit"
+		// Exit flings left for spam/done (dealt with and gone), right for skip;
+		// the card lives in normal flow, hence popOnExit.
+		<SwipeCard
+			className="relative z-10 w-full"
 			custom={custom}
-			transition={{ type: "spring", stiffness: 400, damping: 34 }}
+			exitFor={(a) => (a === "spam" || a === "done" ? "left" : "right")}
+			exitDistance={640}
+			popOnExit
+			stampLeft="Spam"
+			stampRight="Skip"
+			onSwipeLeft={onSpam}
+			onSwipeRight={onSkip}
 		>
-			{/* Swipe intent stamps. */}
-			<motion.div
-				className="pointer-events-none absolute left-4 top-16 z-10 rounded-md border-2 border-red px-2.5 py-1 text-sm font-bold tracking-wide text-red"
-				style={{ opacity: spamTint, rotate: -12 }}
-			>
-				Spam
-			</motion.div>
-			<motion.div
-				className="pointer-events-none absolute right-4 top-16 z-10 rounded-md border-2 border-green px-2.5 py-1 text-sm font-bold tracking-wide text-green"
-				style={{ opacity: skipTint, rotate: 12 }}
-			>
-				Skip
-			</motion.div>
-
 			{/* Card head: customer, ages, priority, title. */}
 			<div className="shrink-0 border-b border-line px-5 py-3.5">
 				<div className="flex flex-wrap items-center gap-2 text-xs text-faint">
@@ -573,7 +500,7 @@ function SwipeCard({
 					{thread.createdAt && (
 						<>
 							<span>·</span>
-							<span className={ageTone(thread.createdAt)}>
+							<span className={ageTone(thread.createdAt, 1, 4)}>
 								{ageLabel(thread.createdAt)} old
 							</span>
 						</>
@@ -614,32 +541,6 @@ function SwipeCard({
 					timeline.entries.map((e) => <PlainEntryRow key={e.id} entry={e} />)
 				)}
 			</div>
-		</motion.div>
-	);
-}
-
-function DeckDone({
-	reviewed,
-	onExit,
-}: {
-	reviewed: number;
-	onExit: () => void;
-}) {
-	return (
-		<div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-			<div className="text-4xl">🎉</div>
-			<div className="text-item-title font-semibold text-fg">Queue clear</div>
-			<div className="max-w-xs text-sm text-dim">
-				{reviewed > 0
-					? `You went through ${reviewed} ticket${reviewed === 1 ? "" : "s"}.`
-					: "No Todo tickets right now."}
-			</div>
-			<button
-				className="mt-2 rounded-control bg-panel px-4 py-2.5 text-sm font-semibold text-fg hover:bg-surface"
-				onClick={onExit}
-			>
-				Done
-			</button>
-		</div>
+		</SwipeCard>
 	);
 }

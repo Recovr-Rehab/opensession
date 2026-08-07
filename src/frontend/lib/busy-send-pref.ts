@@ -6,7 +6,10 @@
 // the live turn at its next step boundary.
 // Stored server-side per user (ui-prefs) so it follows you across devices,
 // with a localStorage copy as the synchronous cache — the same hydrate
-// pattern as lib/vim-pref.
+// pattern as lib/user-pref. Deliberately NOT a makeUserPref instance: this
+// module manages two stored keys (one per gesture) behind a single change
+// event, with one hydrate fetch that applies/pushes both keys in one batch —
+// the factory models exactly one key per preference.
 
 import { fetchUiPrefs, saveUiPrefsApi } from "./api";
 import { getCurrentUser } from "../components/UserPicker";

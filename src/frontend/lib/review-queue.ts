@@ -1,6 +1,7 @@
 import type { UnifiedSession } from "./types";
 import type { OpenPr } from "./api";
 import { GITHUB_BOT_LOGINS } from "./brand";
+import { FALLBACK_REPO, sessionRepoOr } from "./session-repo";
 
 export type ReviewBucket = "ready" | "attention" | "waiting";
 export type ReviewSource = "mine" | "requested" | "automation" | "other";
@@ -54,8 +55,10 @@ export function prReviewCompletion(
 	return { by: request.to, at: session.prUpdatedAt };
 }
 
+// FALLBACK_REPO never equals a real PR repo id, so a repo-less session
+// deliberately matches no PR (see lib/session-repo for the fork rationale).
 function sessionRepo(session: UnifiedSession): string {
-	return session.repo || "repository";
+	return sessionRepoOr(session, FALLBACK_REPO);
 }
 
 function sessionMatchesPr(

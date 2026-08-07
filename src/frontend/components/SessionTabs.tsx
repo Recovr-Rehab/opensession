@@ -9,6 +9,7 @@ import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { IconHistory, IconPencil, IconPlus, IconRestore } from "./icons";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { isApple } from "../lib/platform";
 
 /**
  * The tab strip is scoped to ONE Workspace: it shows the sibling sessions of the
@@ -122,8 +123,6 @@ type NewMenu = { x: number; y: number };
 type TabMember =
 	| { kind: "session"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
-
-const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
 /** Right-aligned keyboard-shortcut hint on a menu row. */
 function MenuHint({ label }: { label: string }) {

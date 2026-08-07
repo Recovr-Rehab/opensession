@@ -1,10 +1,9 @@
 import React, { useRef, useState } from "react";
+import { isApple, isChromium } from "./platform";
 
 // Archive the active workspace. The viewer's ⌘E/⌘⇧A archives just the open
 // session and bails on Alt, so the Alt-carrying escalation here never
 // double-fires it.
-export const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-export const isChromium = /Chrome|Chromium|CriOS|Edg|OPR/.test(navigator.userAgent);
 export const ARCHIVE_WS_SHORTCUT_KEYS = isApple
 	? ["⌘", "⌥", "⇧", "A"]
 	: ["Ctrl", "Alt", "Shift", "A"];

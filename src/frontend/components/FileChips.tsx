@@ -1,17 +1,10 @@
 import React from "react";
-import type { FileAttachment } from "../lib/images";
+import { extBadge, type FileAttachment } from "../lib/images";
 
 interface Props {
   files: FileAttachment[];
   onRemove: (index: number) => void;
   disabled?: boolean;
-}
-
-/** Short uppercase extension badge for a filename (e.g. "PDF", "TS"), or "FILE". */
-function extBadge(name: string): string {
-  const dot = name.lastIndexOf(".");
-  if (dot <= 0 || dot === name.length - 1) return "FILE";
-  return name.slice(dot + 1, dot + 5).toUpperCase();
 }
 
 /** Removable preview cards for non-image file attachments (staged to disk server-side). */
