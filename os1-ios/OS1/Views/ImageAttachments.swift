@@ -164,13 +164,19 @@ struct DataImage: View {
 }
 
 /// A sent conversation image that opens into the familiar full-screen iOS
-/// viewer. Composer thumbnails deliberately stay non-expandable because their
-/// primary interaction is removing the attachment before sending.
+/// viewer — by a tap, or by pinching the thumbnail itself. Composer thumbnails
+/// deliberately stay non-expandable because their primary interaction is
+/// removing the attachment before sending.
 struct ExpandableDataImage: View {
     let data: Data
 
     #if os(iOS)
     @State private var previewPresented = false
+
+    /// Low enough that the viewer arrives while the pinch still feels like one
+    /// motion, high enough that the scroll jitter of two fingers landing on a
+    /// moving transcript can't reach it.
+    private static let pinchToOpenRatio: CGFloat = 1.15
     #endif
 
     init(data: Data) {
@@ -192,6 +198,31 @@ struct ExpandableDataImage: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Open image")
         .accessibilityHint("Shows the image full screen")
+        // Pinching the thumbnail opens the same viewer, without a tap first —
+        // the gesture people reach for on a photo they want a closer look at.
+        //
+        // It has to be `simultaneousGesture`: a plain `.gesture` inside the
+        // transcript's ScrollView never fires, because the scroll view's pan
+        // claims the touches (`highPriorityGesture` doesn't help either — the
+        // priority never reaches the UIKit recognizer it is losing to). The
+        // pinch only TRIGGERS the presentation and cannot carry on into the
+        // viewer's own zoom: a full-screen cover takes the presenting
+        // hierarchy out of the window, cancelling the touch sequence with it.
+        // So the viewer opens at the fit scale, and the next pinch — the one
+        // that lands on the scroll view — zooms.
+        .simultaneousGesture(
+            MagnifyGesture()
+                .onChanged { value in
+                    // Pinching in has nowhere to go from a thumbnail; only
+                    // spreading opens. Testing the live ratio rather than the
+                    // direction means a pinch that wobbles inward first still
+                    // opens once it spreads.
+                    guard !previewPresented,
+                          value.magnification > Self.pinchToOpenRatio
+                    else { return }
+                    previewPresented = true
+                }
+        )
         .fullScreenCover(isPresented: $previewPresented) {
             FullScreenImagePreview(data: data)
         }
