@@ -312,7 +312,7 @@ export function DeskConversation({
 					}}
 				/>
 				<button
-					className="flex shrink-0 items-center justify-center rounded-md bg-fg p-1.5 text-panel disabled:opacity-40"
+					className="flex shrink-0 items-center justify-center rounded-control bg-fg p-1.5 text-panel disabled:opacity-40"
 					onClick={handleSend}
 					disabled={!connected || !draft.trim()}
 					aria-label="Send"

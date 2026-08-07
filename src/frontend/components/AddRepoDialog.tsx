@@ -80,7 +80,7 @@ export function AddRepoDialog({
 							type="button"
 							role="tab"
 							aria-selected={mode === nextMode}
-							className={`rounded-sm border-0 px-3 py-2 text-sm font-medium transition-colors ${
+							className={`rounded-control border-0 px-3 py-2 text-sm font-medium transition-colors ${
 								mode === nextMode
 									? "bg-raised text-fg shadow-control"
 									: "bg-transparent text-dim hover:text-fg"

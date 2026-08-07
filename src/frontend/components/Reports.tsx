@@ -159,7 +159,7 @@ export function Reports({
 							<button
 								key={group.automationId}
 								type="button"
-								className={`mb-1 flex w-full items-start gap-3 rounded-md border-0 px-3 py-3 text-left cursor-pointer ${!isPhone && selectedAutomationId === group.automationId ? "bg-active" : "bg-transparent hover:bg-hover"}`}
+								className={`mb-1 flex w-full items-start gap-3 rounded-control border-0 px-3 py-3 text-left cursor-pointer ${!isPhone && selectedAutomationId === group.automationId ? "bg-active" : "bg-transparent hover:bg-hover"}`}
 								onClick={() => onSelect(group.automationId)}
 							>
 								<span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-surface text-accent"><IconFile size={17} /></span>
@@ -181,7 +181,7 @@ export function Reports({
 						<header className="shrink-0 border-b border-line px-3 pb-3 pt-2">
 							<button
 								type="button"
-								className="-ml-1 flex items-center gap-0.5 rounded-md border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-sm font-medium text-accent cursor-pointer"
+								className="-ml-1 flex items-center gap-0.5 rounded-control border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-sm font-medium text-accent cursor-pointer"
 								onClick={onBack}
 							>
 								<IconChevronLeft size={18} />

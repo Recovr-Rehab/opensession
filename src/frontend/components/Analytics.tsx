@@ -431,7 +431,7 @@ export function Analytics() {
 								<button
 									key={p.label}
 									type="button"
-									className={`cursor-pointer rounded-sm border-0 px-2.5 py-1 text-control-label font-medium ${
+									className={`cursor-pointer rounded-control border-0 px-2.5 py-1 text-control-label font-medium ${
 										activePresetDays === p.days ? "bg-active text-fg" : "bg-transparent text-dim hover:text-fg"
 									}`}
 									onClick={() => {
