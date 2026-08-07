@@ -12,8 +12,9 @@ export { repoColor } from "../lib/repo-colors";
 // Bumped when the icons behind /repo-icon/<id>.png are redrawn: the response
 // is cacheable, so without a new URL an installed PWA keeps painting the old
 // art until its copy expires. 3 dropped the owner/org-avatar fallback, so the
-// repos that were wearing their org's mark have to stop asking for it.
-const ICON_VERSION = 3;
+// repos that were wearing their org's mark had to stop asking for it; 4 trims
+// the empty margin around every icon, so the copies drawn small have to go.
+const ICON_VERSION = 4;
 
 // A repo's icon tile (sidebar Repo dropdown, session-header breadcrumb, repo
 // menus): the server's /repo-icon/<id>.png when the repo was given an icon of

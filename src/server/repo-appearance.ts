@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "fs";
 import { configuredRepos } from "./config";
 import { persistRawConfig, rawConfig, withConfigMutationLock } from "./config-mutation";
 import { stateDir } from "./paths";
+import { trimIconMargin } from "./png-trim";
 import { REPO_TILE_COLORS } from "./repo-tile-colors";
 
 /** Where fetched icons live: ~/.opensession-repo-icons/<id>.png. */
@@ -58,7 +59,10 @@ async function fetchOwnerAvatar(owner: string): Promise<Uint8Array> {
 	if (!bytes.length) {
 		throw new RepoAppearanceError(`${owner}'s avatar came back empty`);
 	}
-	return bytes;
+	// Avatars are uploaded art with whatever padding their author chose —
+	// tellahq's mark sits on 62% of its canvas. Crop it now so the stored file
+	// is already tile-shaped.
+	return trimIconMargin(bytes) ?? bytes;
 }
 
 export interface RepoAppearancePatch {

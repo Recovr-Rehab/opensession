@@ -212,8 +212,9 @@ struct RepoTile: View {
     /// URLCache survives an app update, so without a new URL a freshly
     /// installed build would keep painting the art the old one cached. 3
     /// dropped the owner/org-avatar fallback, so a repo that was wearing its
-    /// org's mark has to stop asking for the copy on disk.
-    private static let iconVersion = 3
+    /// org's mark had to stop asking for the copy on disk; 4 trims the empty
+    /// margin around every icon, so the copies drawn small have to go.
+    private static let iconVersion = 4
 
     @MainActor
     private static func iconURL(for name: String) -> URL? {

@@ -6,17 +6,39 @@
  * next handler (see routes/index.ts for the dispatch order).
  */
 
-import { existsSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import type { RouteContext } from "./context";
 import { configuredIntegration, configuredRepos, productName } from "../config";
 import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend } from "../frontend-build";
 import { isLocalProfile } from "../profile";
+import { trimIconMargin } from "../png-trim";
 import { resolveRepoIcon } from "../repo-appearance";
 
-/** A tile icon that lives on disk, or undefined when the file isn't there. */
+// Icons normalized for the tile, keyed by path and invalidated by mtime.
+// Trimming decodes and re-encodes a PNG, which is silly to repeat for a file
+// that hasn't changed since the last request.
+const trimmedIcons = new Map<string, { mtimeMs: number; bytes: Uint8Array }>();
+
+/**
+ * A tile icon that lives on disk, or undefined when the file isn't there.
+ *
+ * Served with its empty margin cropped off (see png-trim.ts): icons come drawn
+ * to whatever proportions their author chose — a GitHub avatar puts its mark
+ * on ~60% of its canvas, an app icon on 80% — while a letter tile fills its
+ * square, so untouched art reads visibly smaller than the tiles beside it.
+ */
 function localIcon(iconPath: string): Response | undefined {
 	if (!existsSync(iconPath)) return undefined;
-	return new Response(Bun.file(iconPath), {
+	const mtimeMs = statSync(iconPath).mtimeMs;
+	let entry = trimmedIcons.get(iconPath);
+	if (!entry || entry.mtimeMs !== mtimeMs) {
+		const raw = new Uint8Array(readFileSync(iconPath));
+		entry = { mtimeMs, bytes: trimIconMargin(raw) ?? raw };
+		trimmedIcons.set(iconPath, entry);
+	}
+	// A fresh view each time: a Response takes ownership of the buffer it is
+	// handed, and this one is cached for the next request.
+	return new Response(entry.bytes.slice().buffer as ArrayBuffer, {
 		headers: {
 			"Content-Type": "image/png",
 			// These are editable assets: a day-long hard cache pins a redrawn
