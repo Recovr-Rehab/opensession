@@ -361,15 +361,6 @@ struct SessionsListView: View {
                     // circle around it read as a stray border.
                     .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topTrailingCompat) {
-                        Button {
-                            showDesk = true
-                        } label: {
-                            Image(systemName: "lamp.desk")
-                                .foregroundStyle(OS1VisualStyle.text)
-                        }
-                        .accessibilityLabel("Open the Desk")
-                    }
-                    ToolbarItem(placement: .topTrailingCompat) {
                         filterMenu
                     }
                     // New session lives in the top bar; search moved into the
@@ -384,6 +375,21 @@ struct SessionsListView: View {
                                 .foregroundStyle(OS1VisualStyle.text)
                         }
                         .accessibilityLabel("New session")
+                    }
+                    // The Desk is a place you go, not nav chrome for this
+                    // list, so it rides the bottom edge within thumb reach —
+                    // placing search explicitly keeps it leading and parks
+                    // the Desk in the bottom-right corner beside it.
+                    DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                    ToolbarSpacer(.fixed, placement: .bottomBar)
+                    ToolbarItem(placement: .bottomBar) {
+                        Button {
+                            showDesk = true
+                        } label: {
+                            Image(systemName: "lamp.desk")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel("Open the Desk")
                     }
                 }
                 .sheet(isPresented: $showSettings) {
