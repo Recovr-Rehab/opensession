@@ -1,5 +1,17 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { effectiveTheme, onThemeChanged, type EffectiveTheme } from "../lib/theme";
+import type React from "react";
+import {
+	createContext,
+	useContext,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import {
+	type EffectiveTheme,
+	effectiveTheme,
+	onThemeChanged,
+} from "../lib/theme";
 
 /**
  * The repo the markdown on this surface is about — what a bare `#5528` in it
@@ -47,6 +59,18 @@ export function MarkdownBody({
 	const ref = useRef<HTMLDivElement>(null);
 	const [theme, setTheme] = useState<EffectiveTheme>(effectiveTheme);
 	const [visible, setVisible] = useState(false);
+	// React 19 re-writes innerHTML whenever the dangerouslySetInnerHTML OBJECT
+	// identity changes (it no longer compares the __html strings like 18 did),
+	// and a rewrite silently destroys the mermaid/shiki upgrades below. A
+	// stable object keeps unrelated re-renders (visibility flips, parent
+	// updates) from resetting the DOM back to the plain fences.
+	const innerHtml = useMemo(() => ({ __html: html }), [html]);
+	// The (element, html, theme) combination whose upgrade last completed —
+	// lets the effect skip redoing (and visibly flashing) work whose output is
+	// already in the DOM, e.g. when scrolling a diagram out of and back into
+	// the lazy-upgrade window. Keyed on the element too: a React remount gives
+	// a fresh node with pristine fences that must upgrade again.
+	const upgradedRef = useRef<{ el: HTMLDivElement; key: string } | null>(null);
 	useEffect(() => onThemeChanged(() => setTheme(effectiveTheme())), []);
 	useEffect(() => {
 		const node = ref.current;
@@ -68,6 +92,12 @@ export function MarkdownBody({
 		if (!visible || !html.includes('<code class="language-')) return;
 		const el = ref.current;
 		if (!el) return;
+		const upgradeKey = `${theme}\u0000${html}`;
+		if (
+			upgradedRef.current?.el === el &&
+			upgradedRef.current.key === upgradeKey
+		)
+			return;
 		let alive = true;
 		(async () => {
 			// Restore the pristine marked output first: a theme flip re-runs this
@@ -119,17 +149,20 @@ export function MarkdownBody({
 					pre.replaceWith(shikiPre);
 				}
 			}
-		})().catch(() => {}); // both upgrades are progressive enhancement — plain pre stays
+		})().then(
+			() => {
+				// A cancelled pass may have skipped replacements (the alive-gated
+				// continues), so only an un-cancelled run counts as upgraded.
+				if (alive) upgradedRef.current = { el, key: upgradeKey };
+			},
+			() => {}, // both upgrades are progressive enhancement — plain pre stays
+		);
 		return () => {
 			alive = false;
 		};
 	}, [html, theme, visible]);
 
 	return (
-		<div
-			ref={ref}
-			className={className}
-			dangerouslySetInnerHTML={{ __html: html }}
-		/>
+		<div ref={ref} className={className} dangerouslySetInnerHTML={innerHtml} />
 	);
 }
