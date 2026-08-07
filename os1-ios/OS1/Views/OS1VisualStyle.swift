@@ -110,22 +110,22 @@ final class RepoTilePalette {
     static let shared = RepoTilePalette()
 
     static let colors: [UInt32] = [
-        0xe883_6b,  // coral
-        0x6ba5_e8,  // blue
-        0x8ed9_9c,  // green
-        0xe8c4_6b,  // amber
-        0xc06b_e8,  // purple
-        0x6be8_d2,  // teal
-        0xe86b_9c,  // pink
-        0xa3b8_6b,  // olive
-        0xe8a5_6b,  // orange
-        0x6b7f_e8,  // indigo
-        0x8ed9_6b,  // lime
-        0x6bd2_e8,  // cyan
-        0x9c6b_e8,  // violet
-        0x6bd9_a5,  // spring
-        0xe86b_d2,  // magenta
-        0xc9d9_6b,  // citron
+        0xad6b_6d,  // brick
+        0x2479_67,  // sage
+        0x9f6d_96,  // rose
+        0x5873_3d,  // moss
+        0x7d78_b0,  // plum
+        0x7f65_28,  // ochre
+        0x5186_af,  // denim
+        0x9257_42,  // rust
+        0x3490_92,  // teal
+        0x8f53_6b,  // clay
+        0x568f_68,  // fern
+        0x785b_8d,  // mauve
+        0x8584_45,  // olive
+        0x5167_9a,  // indigo
+        0xa475_48,  // umber
+        0x1f74_8b,  // slate
     ]
 
     private var assigned: [String: Color] = [:]
