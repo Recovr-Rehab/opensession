@@ -4,9 +4,13 @@
  * Remotes are plain HTTPS (`https://<org>.code.storage/<repoId>.git`) with
  * username "t" and a JWT password. Rather than embedding a token that expires
  * into the remote URL, checkouts get a URL-scoped git credential helper that
- * mints a fresh JWT per fetch/push (scripts/cs-credential.ts). URL-scoped
- * repo-local config wins over the global `credential.helper store` install.sh
- * sets, and never touches github.com flows.
+ * mints a fresh JWT per fetch/push (scripts/cs-credential.ts). Helper config
+ * is CUMULATIVE across scopes (system/global/local), so the URL-scoped entry
+ * is preceded by an empty value — git's documented way to reset the helper
+ * list for that context — or an inherited persisting helper (osxkeychain,
+ * `credential.helper store`) would both answer first with a stale JWT after
+ * expiry and get our short-lived JWTs `approve`d into it at rest. The scope
+ * only matches https://<org>.code.storage, never github.com flows.
  */
 
 import { $ } from "bun";
@@ -39,9 +43,18 @@ export async function configureCsCredentialHelper(
   checkoutPath: string,
   org: string,
 ): Promise<void> {
-  const section = `credential.https://${org}.code.storage`;
-  await $`git -C ${checkoutPath} config ${section + ".helper"} ${`!bun ${CREDENTIAL_SCRIPT}`}`.quiet();
-  await $`git -C ${checkoutPath} config ${section + ".useHttpPath"} true`.quiet();
+  const helperKey = `credential.https://${org}.code.storage.helper`;
+  // Two entries, in order: an empty value (resets the helper list inherited
+  // from system/global config for this URL scope — see the module doc), then
+  // the minting helper. --replace-all keeps re-runs from stacking duplicates.
+  await $`git -C ${checkoutPath} config --replace-all ${helperKey} ${""}`.quiet();
+  await $`git -C ${checkoutPath} config --add ${helperKey} ${`!bun ${CREDENTIAL_SCRIPT}`}`.quiet();
+  await $`git -C ${checkoutPath} config ${`credential.https://${org}.code.storage.useHttpPath`} true`.quiet();
+}
+
+/** The exact helper-entry list configureCsCredentialHelper writes. */
+function expectedHelperValues(): string[] {
+  return ["", `!bun ${CREDENTIAL_SCRIPT}`];
 }
 
 /** Idempotent configureCsCredentialHelper: cheap read-before-write so boot
@@ -50,13 +63,13 @@ export async function ensureCsCredentialHelper(
   checkoutPath: string,
   org: string,
 ): Promise<void> {
-  const current = (
-    await $`git -C ${checkoutPath} config --get ${`credential.https://${org}.code.storage.helper`}`
-      .quiet()
-      .nothrow()
-      .text()
-  ).trim();
-  if (current === `!bun ${CREDENTIAL_SCRIPT}`) return;
+  const raw = await $`git -C ${checkoutPath} config --get-all ${`credential.https://${org}.code.storage.helper`}`
+    .quiet()
+    .nothrow()
+    .text();
+  const current = raw.replace(/\n$/, "").split("\n");
+  const expected = expectedHelperValues();
+  if (current.length === expected.length && current.every((v, i) => v === expected[i])) return;
   await configureCsCredentialHelper(checkoutPath, org);
 }
 

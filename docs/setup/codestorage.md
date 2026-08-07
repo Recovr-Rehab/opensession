@@ -114,7 +114,9 @@ where PRs themselves are the feature:
   the default branch (the branch-diff API — every change is reviewable before
   merge), commits, and conflict preview.
 - **Merge** from the review UI via the merge API (humans merge; agents never
-  do).
+  do). The source branch is always deleted after a successful merge — on this
+  host the branch IS the change request, so a surviving branch would re-list
+  as an open change.
 - Agent prompts adapt: sessions are told to push their branch — "a pushed
   branch IS the change request" — instead of `gh pr create`.
 

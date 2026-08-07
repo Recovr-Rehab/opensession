@@ -171,6 +171,10 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 	// code.storage list, probed alongside GitHub. Stays null until the probe
 	// answers; an unconfigured integration answers `source: null` (no section).
 	const [csBrowse, setCsBrowse] = useState<CsBrowseResult | null>(null);
+	// Configured-but-failing (bad key path, API outage): the route answers 502
+	// with the server's error — distinct from "not configured", which hides the
+	// section entirely.
+	const [csError, setCsError] = useState<string | null>(null);
 	const [filter, setFilter] = useState("");
 	const [addingRepo, setAddingRepo] = useState<string | null>(null);
 	const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
@@ -193,8 +197,12 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 					"/api/setup/codestorage/repos",
 				);
 				if (!cancelled) setCsBrowse(body);
-			} catch {
-				// Treated like "not configured" — the GitHub flow is unaffected.
+			} catch (e: any) {
+				// A throw means configured-but-failing (the route answers 200 with
+				// source: null when unconfigured) — surface the server's error
+				// instead of silently hiding the section. GitHub is unaffected.
+				if (!cancelled)
+					setCsError(e?.message || "Couldn’t reach code.storage right now.");
 			}
 		})();
 		return () => {
@@ -325,33 +333,39 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 					</div>
 				</>
 			)}
-			{csConfigured && (
+			{(csConfigured || csError) && (
 				<>
 					<div className="mt-3 border-t border-line pt-3 text-meta font-medium text-dim">
 						code.storage
 					</div>
-					<div className="mt-1 max-h-[240px] overflow-y-auto">
-						{csFiltered.length === 0 ? (
-							<EmptyState placement="row" className="px-1">
-								{filter.trim()
-									? "No code.storage repositories match."
-									: "No repositories visible to the org's signing key."}
-							</EmptyState>
-						) : (
-							csFiltered.map((r) => (
-								<RepoPickRow
-									key={r.fullName}
-									repo={r}
-									registered={
-										r.registered || added.has(`codestorage:${r.fullName}`)
-									}
-									working={addingRepo === `codestorage:${r.fullName}`}
-									disabled={addingRepo !== null}
-									onAdd={() => addRepo(r.fullName, "codestorage")}
-								/>
-							))
-						)}
-					</div>
+					{csError ? (
+						<InlineAlert className="mt-1.5">
+							code.storage is configured but its repo list failed: {csError}
+						</InlineAlert>
+					) : (
+						<div className="mt-1 max-h-[240px] overflow-y-auto">
+							{csFiltered.length === 0 ? (
+								<EmptyState placement="row" className="px-1">
+									{filter.trim()
+										? "No code.storage repositories match."
+										: "No repositories visible to the org's signing key."}
+								</EmptyState>
+							) : (
+								csFiltered.map((r) => (
+									<RepoPickRow
+										key={r.fullName}
+										repo={r}
+										registered={
+											r.registered || added.has(`codestorage:${r.fullName}`)
+										}
+										working={addingRepo === `codestorage:${r.fullName}`}
+										disabled={addingRepo !== null}
+										onAdd={() => addRepo(r.fullName, "codestorage")}
+									/>
+								))
+							)}
+						</div>
+					)}
 				</>
 			)}
 			{error && <InlineAlert className="mt-2.5">{error}</InlineAlert>}

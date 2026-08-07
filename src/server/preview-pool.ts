@@ -55,6 +55,7 @@ import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
 import { sandboxConfig } from "./sandbox/config";
+import { redactUrl } from "./shared/redact";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -764,12 +765,19 @@ async function refreshContainerCreds(target: string | PoolContainer): Promise<bo
   return r.ok;
 }
 
-async function cloneUrlFor(repo: Repo): Promise<string | null> {
+async function cloneUrlFor(
+  repo: Repo,
+  opts?: { longLived?: boolean },
+): Promise<string | null> {
   if (repo.host === "codestorage") {
-    // Short-lived by design: pool fetches use the URL immediately, and the
-    // default 1h TTL covers even a slow golden build's clone.
+    // Default: short-lived — pool fetches use the URL immediately, and the 1h
+    // TTL covers even a slow golden build's clone. `longLived` (30 days) is
+    // for URLs baked into a warm container's boot command line, which re-runs
+    // on the `docker restart` clean-reboot path hours or days later — the
+    // tradeoff is a write-scoped repo token visible in docker inspect for the
+    // container's life (same call as sandbox remotes, bootstrap.ts).
     if (!repo.csRepo || !codeStorageConfig()) return null;
-    return authedRemoteUrl(repo.csRepo);
+    return authedRemoteUrl(repo.csRepo, opts?.longLived ? { ttlSeconds: 30 * 24 * 3600 } : {});
   }
   if (!repo.ghRepo) return null;
   const cred = sandboxConfig().cloneCredential;
@@ -962,7 +970,8 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
   };
   patchContainer(repo.id, sbx.id, c);
   const fail = async (msg: string) => {
-    console.warn(`[preview-pool] ${repo.id}: daytona warm ${sbx.id} failed: ${msg.slice(0, 600)}`);
+    // git failure output can echo the full authed clone URL (live JWT).
+    console.warn(`[preview-pool] ${repo.id}: daytona warm ${sbx.id} failed: ${redactUrl(msg).slice(0, 600)}`);
     await destroyContainer(repo.id, sbx.id);
   };
   try {
@@ -1099,7 +1108,7 @@ export async function refreshGoldenImage(repoId: string, force = false): Promise
             ],
             30 * 60_000,
           );
-          if (!r.ok) console.warn(`[preview-pool] ${repoId}: microvm golden refresh failed: ${r.out.slice(-600)}`);
+          if (!r.ok) console.warn(`[preview-pool] ${repoId}: microvm golden refresh failed: ${redactUrl(r.out.slice(-600))}`);
           else console.log(`[preview-pool] ${repoId}: microvm golden refreshed`);
         })()
       : doRefreshGolden(repoId, force);
@@ -1125,7 +1134,9 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<void> {
   const name = `os-preview-goldenbuild-${repoId}`;
   const cloneUrl = await cloneUrlFor(repo);
   console.log(`[preview-pool] ${repoId}: building golden image at ${sha.slice(0, 10)}`);
-  const fail = async (msg: string) => {
+  const fail = async (rawMsg: string) => {
+    // git failure output can echo the full authed clone URL (live JWT).
+    const msg = redactUrl(rawMsg);
     console.warn(`[preview-pool] ${repoId}: golden build failed: ${msg.slice(0, 800)}`);
     writeState(repoId, {
       ...readState(repoId),
@@ -1267,7 +1278,10 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
   const { previewHost, httpsPortFor } = await import("./preview");
   const host = await previewHost();
   const previewUrl = `https://${host}:${httpsPortFor(hostPort)}`;
-  const cloneUrl = await cloneUrlFor(repo);
+  // longLived: this URL is baked into the container's boot command, which the
+  // `docker restart` clean-reboot path re-runs long after spawn — a 1h token
+  // would make that advance fetch fail silently (`|| true`) onto a stale tree.
+  const cloneUrl = await cloneUrlFor(repo, { longLived: true });
 
   patchContainer(repo.id, name, {
     name, repoId: repo.id, state: "warming", hostPort, bootSha: "", createdAt: new Date().toISOString(),
@@ -1298,7 +1312,8 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
   ]);
   if (!run.ok) {
     patchContainer(repo.id, name, null);
-    return console.warn(`[preview-pool] ${repo.id}: warm spawn failed: ${run.out.slice(-300)}`);
+    // docker failure output can echo the command line, authed cloneUrl included.
+    return console.warn(`[preview-pool] ${repo.id}: warm spawn failed: ${redactUrl(run.out.slice(-300))}`);
   }
   await refreshContainerCreds(name);
   const up = await waitForUp(name, hostPort, 4 * 60_000);

@@ -1014,6 +1014,10 @@ function prRepos() {
 			openLimit: repo.prCacheOpenLimit ?? 100,
 			recentLimit: repo.prCacheRecentLimit ?? 500,
 			host: prHostFor(repo),
+			// GitHub-API-backed repos share gh's rate-limit backoff; code.storage
+			// tokens are self-signed (no shared quota), so the sweep's
+			// ghRateLimited() gates must not freeze those rows.
+			ghBacked: repo.host !== "codestorage",
 		}));
 }
 
@@ -1517,8 +1521,10 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
   const reviewRefreshGeneration = prReviewState.generation;
   const freshRepos = new Set<string>();
   const reviewAuthoritativeRepos = new Set<string>();
-  if (ghRateLimited()) {
-    // Rate-limited — keep serving the stale snapshot, don't burn calls.
+  if (ghRateLimited() && prRepos().every((repo) => repo.ghBacked)) {
+    // Rate-limited — keep serving the stale snapshot, don't burn calls. Only
+    // a full stop when every polled repo is GitHub-backed: code.storage repos
+    // have no shared GitHub quota and proceed through the per-repo gate below.
     prCache.ts = Date.now();
     return freshRepos;
   }
@@ -1545,6 +1551,12 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
       // interval): an unchanged snapshot is by definition current, so the repo
       // still counts as fresh for notification consumers.
       const stale = prCache.data.get(repo.id);
+      // The GitHub backoff is a GitHub-API concern: it must not stall
+      // code.storage repos, whose calls never touch that quota.
+      if (repo.ghBacked && ghRateLimited()) {
+        if (stale) next.set(repo.id, stale);
+        continue;
+      }
       const refreshAge = Date.now() - (lastFullRefresh.get(repo.id) || 0);
       if (stale && refreshAge < PROBE_MAX_SKIP_MS) {
         const probe = await repo.host.changedSince(
@@ -1562,7 +1574,8 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
           continue;
         }
       }
-      if (ghRateLimited()) {
+      // Re-checked after the probe: the probe itself can flag a fresh backoff.
+      if (repo.ghBacked && ghRateLimited()) {
         if (stale) next.set(repo.id, stale);
         continue;
       }

@@ -424,7 +424,7 @@ export async function handlePrRoutes(
 		if (!target) return Response.json(null);
 		const { getReviewGuide } = await import("../../server/review-guide");
 		return prApiResponse(
-			() => getReviewGuide(target.branch, target.ghRepo),
+			() => getReviewGuide(target.branch, getRepo(target.repoId)),
 		);
 	}
 
@@ -488,14 +488,14 @@ export async function handlePrRoutes(
 		});
 	}
 	// Session-less review guide for the preview's Guide tab — getReviewGuide
-	// only needs branch+ghRepo (same generation/cache as the session route).
+	// only needs branch+repo (same generation/cache as the session route).
 	if (path === "/api/pr-preview-guide" && req.method === "GET") {
 		const branch = url.searchParams.get("branch") || "";
 		if (!branch)
 			return Response.json({ error: "branch required" }, { status: 400 });
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
 		const { getReviewGuide } = await import("../../server/review-guide");
-		return prApiResponse(() => getReviewGuide(branch, hostRepoId(repo)));
+		return prApiResponse(() => getReviewGuide(branch, repo));
 	}
 	if (path === "/api/pr-preview-review" && req.method === "POST") {
 		const credential = githubMutationCredential(ctx);

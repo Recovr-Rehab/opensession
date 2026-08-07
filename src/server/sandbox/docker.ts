@@ -127,7 +127,11 @@ import { listCodexAccounts } from "../codex-accounts";
 import { OPENCODE_TRANSCRIPTS_DIR } from "../opencode-transcript";
 import { dropSandboxPreviewRoutes, externalPreviewCommandDirs } from "../preview";
 import { configuredPaths } from "../config";
-import { REPOS, getRepo, worktreePathFor, type Repo } from "../worktree";
+import { codeStorageConfig } from "../config";
+import { authedRemoteUrl } from "../codestorage/auth";
+import { parseCsRemote } from "../codestorage/remote";
+import { redactUrl } from "../shared/redact";
+import { REPOS, getRepo, repoForPath, worktreePathFor, type Repo } from "../worktree";
 import { LocalProvider } from "./local";
 import {
   sandboxConfig,
@@ -715,15 +719,15 @@ async function setupVolumeWorkspace(
   if (cloned.exitCode !== 0) {
     const originUrl = await repoOriginUrl(repo.repo);
     // Redact credentials before logging — https origins can carry a token in
-    // the userinfo part (https://x-access-token:ghp_…@github.com/…).
-    const loggedUrl = originUrl.replace(/^(https?:\/\/)[^@/]+@/, "$1");
-    console.log(`[sandbox] ${name}: cloning ${loggedUrl} into workspace volume at ${cwd}`);
+    // the userinfo part (https://x-access-token:ghp_…@github.com/…), and git
+    // echoes remote URLs (post-insteadOf, so authed for cs repos) into stderr.
+    console.log(`[sandbox] ${name}: cloning ${redactUrl(originUrl)} into workspace volume at ${cwd}`);
     const clone = await docker(
       ["exec", name, "git", "clone", "--", originUrl, cwd],
       { timeoutMs: 600_000 },
     );
     if (clone.exitCode !== 0) {
-      throw new Error(`sandbox ${name}: in-container clone failed: ${clone.stderr.trim().slice(0, 500)}`);
+      throw new Error(`sandbox ${name}: in-container clone failed: ${redactUrl(clone.stderr.trim()).slice(0, 500)}`);
     }
   }
   const cur = await docker(["exec", "-w", assertSafePath(cwd), name, "git", "branch", "--show-current"]);
@@ -736,6 +740,65 @@ async function setupVolumeWorkspace(
   const co = await docker(["exec", "-w", cwd, name, "git", "checkout", "-B", branch, startPoint]);
   if (co.exitCode !== 0) {
     throw new Error(`sandbox ${name}: checkout -B ${branch} ${startPoint} failed: ${co.stderr.trim().slice(0, 300)}`);
+  }
+}
+
+/** Container-side git config carrying code.storage auth (see setupCsGitAuth).
+ *  Its own file, included from /etc/gitconfig, so re-minting on every ensure()
+ *  is a wholesale overwrite — no stale url sections accumulate. */
+const CS_GITCONFIG_PATH = "/etc/gitconfig-opensession-cs";
+
+/**
+ * In-container git auth for code.storage repos. The host-side URL-scoped
+ * credential helper is a bun script plus a private key, both deliberately NOT
+ * mounted into containers — so in-container git (volume-mode clones, bind-mode
+ * pushes: the branch IS the change request on this host) would have no
+ * credentials at all. Instead the container gets a system-level
+ * `url.<authed>.insteadOf <credential-free>` rewrite per repo, container-local
+ * (/etc is container layer, never a shared mount — the host and the shared
+ * bind-mounted .git/config are untouched). 30-day TTL to match the sandbox's
+ * life, same tradeoff as remoteCloneUrl (bootstrap.ts); re-minted fresh on
+ * every ensure(). Best-effort: a failure logs (redacted) and leaves git in the
+ * credential-free state it had before.
+ */
+async function setupCsGitAuth(name: string, repos: Repo[]): Promise<void> {
+  if (!codeStorageConfig()) return;
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const repo of repos) {
+    if (repo.host !== "codestorage" || seen.has(repo.id)) continue;
+    seen.add(repo.id);
+    try {
+      const csRepoId =
+        repo.csRepo || parseCsRemote(await repoOriginUrl(repo.repo))?.repoId;
+      if (!csRepoId) continue;
+      // Prefix mapping without the .git suffix so both `…/<repo>.git` and
+      // `…/<repo>` remote spellings rewrite.
+      const authed = (
+        await authedRemoteUrl(csRepoId, { ttlSeconds: 30 * 24 * 3600 })
+      ).replace(/\.git$/, "");
+      const clean = authed.replace(/^https:\/\/[^@]*@/, "https://");
+      lines.push(`[url "${authed}"]`, `\tinsteadOf = ${clean}`);
+    } catch (e) {
+      console.warn(
+        `[sandbox] ${name}: code.storage auth setup failed for ${repo.id}: ${redactUrl(String((e as Error)?.message || e)).slice(0, 300)}`,
+      );
+    }
+  }
+  if (!lines.length) return;
+  // JWTs are base64url (plus the URL scaffolding) — safe inside a quoted
+  // heredoc. Root: /etc/gitconfig* is root-owned in the image.
+  const script =
+    `cat > ${CS_GITCONFIG_PATH} <<'OSCSEOF'\n${lines.join("\n")}\nOSCSEOF\n` +
+    // World-readable like /etc/gitconfig: the sandbox user's git must read it,
+    // and the token is the sandbox's own credential (container-local file).
+    `chmod 644 ${CS_GITCONFIG_PATH}\n` +
+    `git config --system --get-all include.path 2>/dev/null | grep -qxF ${CS_GITCONFIG_PATH} || git config --system --add include.path ${CS_GITCONFIG_PATH}`;
+  const r = await docker(["exec", "-u", "0", name, "sh", "-c", script]);
+  if (r.exitCode !== 0) {
+    console.warn(
+      `[sandbox] ${name}: writing code.storage git auth failed: ${redactUrl(r.stderr.trim()).slice(0, 300)}`,
+    );
   }
 }
 
@@ -1349,6 +1412,18 @@ export class DockerProvider implements SandboxProvider {
       });
     }
     await ensureStarted(name);
+    // Before any in-container git: code.storage repos need container-side auth
+    // (the host credential helper isn't mounted). Attached repos too — their
+    // worktrees are bind-mounted rw and the agent pushes from them.
+    const attachedRepos: Repo[] = [];
+    for (const dir of attachedDirs) {
+      try {
+        attachedRepos.push(repoForPath(dir));
+      } catch {
+        // Unregistered path — nothing to auth.
+      }
+    }
+    await setupCsGitAuth(name, [repo, ...attachedRepos]);
     if (workspace === "volume") {
       await setupVolumeWorkspace(name, cwd, repo, branch!);
       if (restoredFromSnapshot && sandboxSnapshots().quickSyncOnRestore) {
@@ -1359,7 +1434,7 @@ export class DockerProvider implements SandboxProvider {
           { timeoutMs: 120_000 },
         );
         if (f.exitCode !== 0) {
-          console.warn(`[sandbox] ${name}: quick-sync git fetch failed (continuing): ${f.stderr.trim().slice(0, 200)}`);
+          console.warn(`[sandbox] ${name}: quick-sync git fetch failed (continuing): ${redactUrl(f.stderr.trim()).slice(0, 200)}`);
         } else {
           await docker(["exec", "-w", cwd, name, "git", "status", "--porcelain"]);
         }

@@ -61,6 +61,7 @@ import { accountsForRemoteUpload } from "../../claude-accounts";
 import { audit } from "../../audit";
 import { authedRemoteUrl } from "../../codestorage/auth";
 import { parseCsRemote } from "../../codestorage/remote";
+import { redactUrl } from "../../shared/redact";
 import { listCodexAccounts } from "../../codex-accounts";
 import { readOpencodeBridgeConfig } from "../../opencode-config";
 import {
@@ -166,10 +167,9 @@ function envPrefix(env: Record<string, string>): string {
   return parts.length ? `env ${parts.join(" ")} ` : "";
 }
 
-/** Strip credentials from https URLs before they reach logs/errors. */
-export function redactUrl(s: string): string {
-  return s.replace(/(https?:\/\/)[^@/\s]+@/g, "$1");
-}
+// Re-exported for the existing importers of this module's URL redaction; the
+// implementation moved to the shared util so non-sandbox code can use it too.
+export { redactUrl };
 
 // ── Provider state files (mirror docker's, namespaced per provider) ──────────
 
@@ -345,10 +345,14 @@ export async function remoteCloneUrl(repo: {
         `repo ${repo.id} is code.storage-hosted but has neither csRepo nor a code.storage origin`,
       );
     }
-    // 24h TTL: the URL is persisted as the sandbox's remote, and later
-    // fetches/pushes during the sandbox's life reuse it (mirrors the
-    // long-lived-token preference for GitHub below).
-    return authedRemoteUrl(csRepoId, { ttlSeconds: 24 * 3600 });
+    // 30-day TTL: the URL is persisted as the sandbox's origin and nothing
+    // re-materializes the remote inside a long-lived sandbox, so the token
+    // must outlive the sandbox (mirrors the long-lived-token preference for
+    // GitHub below). Tradeoff, accepted deliberately: a write-scoped,
+    // repo-scoped JWT sits at rest in the sandbox-side .git/config for its
+    // life — code.storage's auth model expects long-lived dev tokens for
+    // exactly this. One-shot operations keep short default TTLs.
+    return authedRemoteUrl(csRepoId, { ttlSeconds: 30 * 24 * 3600 });
   }
   const https = (origin && toHttpsUrl(origin)) || (repo.ghRepo ? `https://github.com/${repo.ghRepo}.git` : null);
   if (!https) {

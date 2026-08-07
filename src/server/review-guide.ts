@@ -9,7 +9,8 @@
  * Fail-soft like every one-shot consumer: any hiccup returns null and the UI
  * falls back to the plain diff.
  */
-import { getPrDiff, getPrDetails } from "./pr-info";
+import type { Repo } from "./config";
+import { hostRepoId, prHostFor } from "./pr-host";
 import { opencodeOneShot } from "./opencode-oneshot";
 
 const GUIDE_MODEL = process.env.REVIEW_GUIDE_MODEL || "claude-sonnet-5";
@@ -87,12 +88,16 @@ function parseGuide(raw: string): ReviewGuideSection[] | null {
 
 async function generate(
 	branch: string,
-	repo: string,
+	repo: Repo,
 ): Promise<ReviewGuideData | null> {
-	const diff = await getPrDiff(branch, repo);
+	// Through the PrHost seam: gh for GitHub repos, the code.storage
+	// branch-diff API for cs repos — never gh with a code.storage repo id.
+	const host = prHostFor(repo);
+	const hostRepo = hostRepoId(repo);
+	const diff = await host.getPrDiff(branch, hostRepo);
 	if (!diff?.patch) return null;
 
-	const key = cacheKey(repo, branch);
+	const key = cacheKey(hostRepo, branch);
 	const hit = cache.get(key);
 	if (hit && hit.oid === diff.headRefOid) {
 		// Successful guides are pinned to the head commit; failures retry after
@@ -100,7 +105,7 @@ async function generate(
 		if (hit.data || Date.now() - hit.ts < FAILURE_TTL) return hit.data;
 	}
 
-	const details = await getPrDetails(branch, repo).catch(() => null);
+	const details = await host.getPrDetails(branch, hostRepo).catch(() => null);
 	const patch =
 		diff.patch.length > MAX_PATCH_CHARS
 			? `${diff.patch.slice(0, MAX_PATCH_CHARS)}\n\n[diff truncated — describe the sections from what is shown]`
@@ -140,9 +145,9 @@ async function generate(
  */
 export async function getReviewGuide(
 	branch: string,
-	repo: string,
+	repo: Repo,
 ): Promise<ReviewGuideData | null> {
-	const key = cacheKey(repo, branch);
+	const key = cacheKey(hostRepoId(repo), branch);
 	const running = inflight.get(key);
 	if (running) return running;
 	const p = generate(branch, repo).finally(() => inflight.delete(key));

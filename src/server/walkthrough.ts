@@ -28,7 +28,8 @@ import type {
 import { UPLOADS_DIR } from "./uploads";
 import { findSession, touchNativeSession } from "./session-cache";
 import { resolvePrTarget } from "./session-repos";
-import { getPrDetails, updatePrBody } from "./pr-info";
+import { prHostFor } from "./pr-host";
+import { getRepo } from "./worktree";
 import { configuredServer } from "./config";
 
 const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov"]);
@@ -197,11 +198,23 @@ export async function mirrorWalkthroughToPr(
     return { mirrored: false, reason: "no walkthrough on session" };
   const target = resolvePrTarget(session, null, null);
   if (!target) return { mirrored: false, reason: "session has no branch" };
-  const details = await getPrDetails(target.branch, target.ghRepo);
+  const repo = getRepo(target.repoId);
+  // code.storage has no PR description to splice a walkthrough into
+  // (updatePrBody is unsupported there) — no-op cleanly instead of handing
+  // gh a code.storage repo id, which would read (and could write to) an
+  // unrelated github.com/<csRepoId>.
+  if (repo.host === "codestorage") {
+    console.debug(
+      `[walkthrough] ${sessionId}: skipping PR mirror — code.storage branches have no PR description`,
+    );
+    return { mirrored: false, reason: "code.storage changes have no PR description to mirror into" };
+  }
+  const host = prHostFor(repo);
+  const details = await host.getPrDetails(target.branch, target.ghRepo);
   if (!details || details.state !== "OPEN")
     return { mirrored: false, reason: "no open PR for the session's branch" };
   const section = walkthroughPrSection(walkthrough);
-  const result = await updatePrBody(
+  const result = await host.updatePrBody(
     target.branch,
     (body) => spliceWalkthroughSection(body, section),
     target.ghRepo,
