@@ -38,20 +38,29 @@ function withScratchEnv<T>(fn: () => T): T {
   }
 }
 
-const { engineStatus } = await withScratchEnv(async () => {
-  const mod = await import("./engine-status");
-  const { __setCodexAccountsPathForTest } = await import("./codex-accounts");
-  // Module-level path in codex-accounts, so env alone wouldn't isolate it.
-  __setCodexAccountsPathForTest(join(SCRATCH, "codex-accounts.json"));
-  return mod;
-});
+const { engineStatus, __resetModelCachesForTest } = await withScratchEnv(
+  async () => {
+    const mod = await import("./engine-status");
+    const { __setCodexAccountsPathForTest } = await import("./codex-accounts");
+    // Module-level path in codex-accounts, so env alone wouldn't isolate it.
+    __setCodexAccountsPathForTest(join(SCRATCH, "codex-accounts.json"));
+    const models = await import("./models");
+    return { ...mod, __resetModelCachesForTest: models.__resetModelCachesForTest };
+  },
+);
 
 /** Re-point the engine config at `cfg` (null = the file doesn't exist, which
  *  is the fresh-install state) and read the status. Both are read per call. */
 function statusWith(cfg: object | null) {
   if (cfg) writeFileSync(ENGINE_CONFIG, JSON.stringify(cfg));
   else rmSync(ENGINE_CONFIG, { force: true });
-  return withScratchEnv(() => engineStatus());
+  return withScratchEnv(() => {
+    // models.ts memoizes the default-model store at first read; an earlier
+    // test file may have baked in this host's real ~/.opensession state, so
+    // drop the caches for the scratch-env read.
+    __resetModelCachesForTest();
+    return engineStatus();
+  });
 }
 
 // The status check and the runner must agree on where the engine is. They

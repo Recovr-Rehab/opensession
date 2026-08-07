@@ -174,7 +174,12 @@ export function onRepoOrderChanged(handler: () => void): () => void {
 	return () => window.removeEventListener(CHANGE_EVENT, handler);
 }
 
-if (typeof window !== "undefined") {
+// Capability check, not just `typeof window`: test runners can leave a bare
+// `window` global without DOM methods, which must not break module import.
+if (
+	typeof window !== "undefined" &&
+	typeof window.addEventListener === "function"
+) {
 	void hydrate(getCurrentUser());
 	window.addEventListener(USER_CHANGE_EVENT, () => {
 		writeStamp++;

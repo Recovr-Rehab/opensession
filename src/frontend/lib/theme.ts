@@ -73,21 +73,29 @@ export function onThemeChanged(handler: () => void): () => void {
 
 // Re-apply when the OS flips while we're following it, and mirror changes made
 // in another tab (localStorage `storage` events fire cross-tab, not same-tab).
-window
-	.matchMedia("(prefers-color-scheme: light)")
-	.addEventListener?.("change", () => {
-		if (getThemePref() === "system") {
+// Capability check, not just `typeof window`: test runners can leave a bare
+// `window` global without DOM methods, which must not break module import.
+if (
+	typeof window !== "undefined" &&
+	typeof window.matchMedia === "function" &&
+	typeof window.addEventListener === "function"
+) {
+	window
+		.matchMedia("(prefers-color-scheme: light)")
+		.addEventListener?.("change", () => {
+			if (getThemePref() === "system") {
+				applyTheme();
+				window.dispatchEvent(new Event(CHANGE_EVENT));
+			}
+		});
+	window.addEventListener("storage", (e) => {
+		if (e.key === KEY) {
 			applyTheme();
 			window.dispatchEvent(new Event(CHANGE_EVENT));
 		}
 	});
-window.addEventListener("storage", (e) => {
-	if (e.key === KEY) {
-		applyTheme();
-		window.dispatchEvent(new Event(CHANGE_EVENT));
-	}
-});
 
-// Belt-and-suspenders with index.html's pre-paint script: apply on import so the
-// theme is correct even if that inline script is ever dropped.
-applyTheme();
+	// Belt-and-suspenders with index.html's pre-paint script: apply on import so
+	// the theme is correct even if that inline script is ever dropped.
+	applyTheme();
+}

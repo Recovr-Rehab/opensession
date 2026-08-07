@@ -73,8 +73,13 @@ function schedulePersist(key: string) {
 }
 
 // Flush pending mirrors when the page is going away, so the debounce window
-// can't eat the last keystrokes before a reload.
-if (typeof window !== "undefined") {
+// can't eat the last keystrokes before a reload. Capability check, not just
+// `typeof window`: test runners can leave a bare `window` global without DOM
+// methods.
+if (
+  typeof window !== "undefined" &&
+  typeof window.addEventListener === "function"
+) {
   window.addEventListener("pagehide", () => {
     for (const key of [...timers.keys()]) {
       clearTimeout(timers.get(key));

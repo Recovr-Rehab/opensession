@@ -31,6 +31,13 @@ const cancelFrame = (id: number) => {
 	else clearTimeout(id);
 };
 
+// Placeholder frame id held while scheduleFrame is being called: if the
+// callback fires synchronously (a test-installed requestAnimationFrame may),
+// flush() nulls `frame` before scheduleFrame returns — and storing the
+// returned id over that null would leave a stale id blocking every future
+// schedule, silencing the store for good.
+const SCHEDULING = -1;
+
 export class LiveTurnStore {
 	private snapshot: LiveTurnSnapshot = EMPTY;
 	private listeners = new Set<() => void>();
@@ -84,7 +91,10 @@ export class LiveTurnStore {
 		if (this.firstDeltaAt === null) this.firstDeltaAt = performance.now();
 		this.pending += text;
 		if (this.frame === null) {
-			this.frame = scheduleFrame(() => this.flush());
+			this.frame = SCHEDULING;
+			const id = scheduleFrame(() => this.flush());
+			// A synchronous callback already flushed and cleared the slot.
+			if (this.frame === SCHEDULING) this.frame = id;
 		}
 		if (this.settleTimer !== null) clearTimeout(this.settleTimer);
 		this.settleTimer = setTimeout(() => {
@@ -144,7 +154,9 @@ export class LiveTurnStore {
 	}
 
 	private flush() {
-		if (this.frame !== null) cancelFrame(this.frame);
+		if (this.frame !== null && this.frame !== SCHEDULING) {
+			cancelFrame(this.frame);
+		}
 		this.frame = null;
 		if (!this.pending) return;
 		const receivedAt = this.firstDeltaAt;
@@ -168,7 +180,9 @@ export class LiveTurnStore {
 	}
 
 	private cancelTimers() {
-		if (this.frame !== null) cancelFrame(this.frame);
+		if (this.frame !== null && this.frame !== SCHEDULING) {
+			cancelFrame(this.frame);
+		}
 		if (this.settleTimer !== null) clearTimeout(this.settleTimer);
 		if (this.clearTimer !== null) clearTimeout(this.clearTimer);
 		this.frame = null;

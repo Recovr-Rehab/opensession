@@ -30,7 +30,11 @@ const USER_CHANGE_EVENT = "opensession-user-changed";
 let cache: Record<string, string> = {};
 
 function emit() {
-	if (typeof window === "undefined") return;
+	if (
+		typeof window === "undefined" ||
+		typeof window.dispatchEvent !== "function"
+	)
+		return;
 	window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
@@ -52,8 +56,13 @@ async function load(user: string) {
 
 // Guarded so the module stays importable outside a browser — `partitionHidden`
 // below carries the rule that keeps a hide from swallowing a blocked session, and
-// it's worth unit-testing without standing up a DOM.
-if (typeof window !== "undefined") {
+// it's worth unit-testing without standing up a DOM. Capability check, not just
+// `typeof window`: test runners can leave a bare `window` global without DOM
+// methods.
+if (
+	typeof window !== "undefined" &&
+	typeof window.addEventListener === "function"
+) {
 	void load(getCurrentUser());
 	window.addEventListener(USER_CHANGE_EVENT, () => void load(getCurrentUser()));
 }

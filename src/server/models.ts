@@ -695,6 +695,16 @@ const codexModelExhaustedUntil = new Map<string, number>();
 let overrideCache: string | null | undefined;
 let interactiveOverrideCache: string | null | undefined;
 
+/** Test seam (bun tests only) — mirrors codex-accounts's __setXForTest naming.
+ *  Drops the memoized default-model override reads so a test's scratch
+ *  OPENSESSION_STATE_DIR takes effect: `bun test` shares one process across
+ *  files, so an earlier file's read would otherwise bake this host's real
+ *  default-model store into the caches. */
+export function __resetModelCachesForTest(): void {
+  overrideCache = undefined;
+  interactiveOverrideCache = undefined;
+}
+
 function loadStoredDefault(field: "model" | "interactiveModel"): string | null {
   try {
     if (existsSync(defaultModelStore())) {

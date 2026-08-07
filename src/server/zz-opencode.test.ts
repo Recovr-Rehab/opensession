@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -20,6 +20,7 @@ import {
   meridianRequiredModels,
 } from "./opencode-runner";
 import { buildRunInstructions } from "./run-instructions";
+import { __setIdentitiesForTest } from "./shared/user-mappings";
 import { STRIPE_CONFIRM_TOOLS, filterMcpServers } from "./runner-shared";
 import { DESK_NOTE } from "./desk";
 import { buildSystemPromptParts } from "./system-prompt";
@@ -41,6 +42,18 @@ import {
   DEFAULT_TURN_TIMEOUT_MINUTES,
   DEFAULT_BRIDGE_MAX_REQUESTS_PER_HOUR,
 } from "./opencode-config";
+
+// Roster-dependent assertions below (alias "Alex"/"alex" resolving to the
+// GitHub login "happylinks") must not read the operator's real
+// ~/.opensession/config.json — pin a fixture roster for this file so the
+// tests pass on any machine.
+let restoreIdentities: (() => void) | undefined;
+beforeAll(() => {
+  restoreIdentities = __setIdentitiesForTest([
+    { name: "Alex Rivera", email: "alex@example.com", github: "happylinks" },
+  ]);
+});
+afterAll(() => restoreIdentities?.());
 
 describe("parseOpencodeModel", () => {
   test("splits provider/model", () => {

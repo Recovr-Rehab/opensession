@@ -1,5 +1,22 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { LiveTurnStore } from "./live-turn-store";
+
+// os1-tui's tests run earlier in the same bun-test process and leak
+// @opentui/core's renderer-bound requestAnimationFrame: it invokes a callback
+// at most once (synchronously, when it flips the renderer's idle loop live)
+// and never again once that renderer is gone — so no real frames ever fire
+// here. Drop the leaked globals for this file; the store then uses its
+// setTimeout(16ms) fallback, which the sleeps below already cover.
+const savedRaf = globalThis.requestAnimationFrame;
+const savedCancel = globalThis.cancelAnimationFrame;
+beforeAll(() => {
+	delete (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame;
+	delete (globalThis as { cancelAnimationFrame?: unknown }).cancelAnimationFrame;
+});
+afterAll(() => {
+	if (savedRaf) globalThis.requestAnimationFrame = savedRaf;
+	if (savedCancel) globalThis.cancelAnimationFrame = savedCancel;
+});
 
 describe("LiveTurnStore", () => {
 	test("coalesces a burst of deltas into one published text snapshot", async () => {

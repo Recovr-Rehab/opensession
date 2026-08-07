@@ -70,7 +70,7 @@ export function deriveIdentityTables(
   return { githubToSlack, linearEmailToGithub, slackIdToName, teamGitIdentity };
 }
 
-const identity = configuredIdentity();
+let identity = configuredIdentity();
 const tables = deriveIdentityTables(identity.team, identity.slackNames);
 
 /** GitHub username → Slack user ID */
@@ -263,6 +263,38 @@ export function userMatchesAny(
     const allowedId = gitIdentityFor(a);
     return !!(allowedId && userId && allowedId.email === userId.email);
   });
+}
+
+/** Test seam (bun tests only) — mirrors codex-accounts's __setXForTest
+ *  naming. The tables above are baked from this host's
+ *  ~/.opensession/config.json at module load, which makes roster-dependent
+ *  assertions host-dependent; this swaps in a fixture roster instead. The
+ *  exported tables are mutated in place so existing importers see the
+ *  fixture. Returns a restore function that re-derives from the real config. */
+export function __setIdentitiesForTest(
+  team: TeamMember[],
+  slackNames: Record<string, string> = {},
+): () => void {
+  const prev = identity;
+  identity = { ...prev, team, slackNames };
+  applyDerivedTables(deriveIdentityTables(team, slackNames));
+  return () => {
+    identity = prev;
+    applyDerivedTables(deriveIdentityTables(prev.team, prev.slackNames));
+  };
+}
+
+function applyDerivedTables(next: DerivedIdentityTables): void {
+  for (const [target, source] of [
+    [GITHUB_TO_SLACK, next.githubToSlack],
+    [LINEAR_EMAIL_TO_GITHUB, next.linearEmailToGithub],
+    [SLACK_ID_TO_NAME, next.slackIdToName],
+  ] as const) {
+    for (const key of Object.keys(target)) delete target[key];
+    Object.assign(target, source);
+  }
+  TEAM_GIT_IDENTITY.length = 0;
+  TEAM_GIT_IDENTITY.push(...next.teamGitIdentity);
 }
 
 /**
