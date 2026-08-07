@@ -5,7 +5,7 @@
  * (globalThis-parked, mutated in place) and the debounced rebuild.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { activeRunRecords } from "./run-journal";
@@ -228,7 +228,30 @@ export async function buildFrontend(): Promise<string> {
 	console.log(
 		`Frontend built: ${result.outputs.length} files → ${FRONTEND_DIST} (v=${version})`,
 	);
+	pruneFrontendDist([entryName, cssName, twName ?? ""]);
 	return version;
+}
+
+// Hashed bundles accumulate forever without this (the dist hit 8.6 GB /
+// 47k files before 2026-08-07). Old chunks stay servable for a grace window
+// so long-open tabs can still lazy-load their build's chunks; anything older
+// only fails into a page refresh, which those tabs need anyway.
+const DIST_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+
+function pruneFrontendDist(keep: string[]): void {
+	try {
+		const cutoff = Date.now() - DIST_RETENTION_MS;
+		for (const name of readdirSync(FRONTEND_DIST)) {
+			if (keep.includes(name)) continue;
+			if (!/\.(js|css|map)$/.test(name)) continue;
+			try {
+				const p = join(FRONTEND_DIST, name);
+				if (statSync(p).mtimeMs < cutoff) unlinkSync(p);
+			} catch {}
+		}
+	} catch (e) {
+		console.error("[frontend] dist prune failed (non-fatal):", e);
+	}
 }
 
 // ── Boot-time build skip ─────────────────────────────────────────────────────
