@@ -1932,6 +1932,11 @@ private struct SessionInputBar: View {
                 .pastesImages(into: $viewModel.attachedImages)
 
                 if isSingleRow {
+                    // Dictation leads the trailing controls: it belongs to
+                    // writing the message, not to the run, so it keeps the
+                    // same seat whether or not a turn is in flight — stop
+                    // appears between it and send instead of displacing it.
+                    ComposerDictationButton(dictation: dictation, draft: $viewModel.draft)
                     // Stop is the only meaningful action while a turn runs
                     // with nothing typed; once there IS a draft, send joins
                     // it rather than replacing it — queueing the next message
@@ -1940,7 +1945,6 @@ private struct SessionInputBar: View {
                     if viewModel.isRunning {
                         stopButton
                     }
-                    ComposerDictationButton(dictation: dictation, draft: $viewModel.draft)
                     if !viewModel.isRunning || viewModel.canSend {
                         sendButton
                     }
@@ -1953,11 +1957,12 @@ private struct SessionInputBar: View {
                     addMenu
                     Spacer(minLength: 8)
 
+                    ComposerDictationButton(dictation: dictation, draft: $viewModel.draft)
+
                     if viewModel.isRunning {
                         stopButton
                     }
 
-                    ComposerDictationButton(dictation: dictation, draft: $viewModel.draft)
                     sendButton
                 }
                 .padding(.horizontal, controlRowInset.horizontal)
