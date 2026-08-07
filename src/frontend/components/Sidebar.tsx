@@ -141,7 +141,6 @@ import {
 	buildReviewQueue,
 	reviewRowMatchesPersonFilter,
 } from "../lib/review-queue";
-import { PixelSpinner } from "./PixelSpinner";
 import {
 	readHiddenSidebarTools,
 	setSidebarToolVisible,
@@ -4018,7 +4017,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					{flatRepoGrouping ? (
 						<WsStatusMark row={row} size={18} />
 					) : row.running ? (
-						<PixelSpinner className="text-yellow sidebar-spinner" />
+						<span className="sidebar-item-status sidebar-status-running" />
 					) : (
 						<WsPrStatusMark sessions={row.sessions} size={18} workspace={row.workspace} />
 					)}
@@ -7046,7 +7045,7 @@ function SidebarItem({
 				<span className="sidebar-rail">
 					{waiting && <span className="sr-only">Needs your attention</span>}
 					{session.isRunning ? (
-						<PixelSpinner className="text-yellow sidebar-spinner" />
+						<span className="sidebar-item-status sidebar-status-running" />
 					) : (
 						<WsPrStatusMark sessions={[session]} size={18} />
 					)}
@@ -7779,8 +7778,7 @@ function WsStatusMark({
 	);
 	const dot = (cls: string) => slot(<span className={`sidebar-item-status ${cls}`} />);
 	if (row.status === "needsinput") return dot("sidebar-status-waiting");
-	if (row.running)
-		return slot(<PixelSpinner className="text-yellow sidebar-spinner" />);
+	if (row.running) return dot("sidebar-status-running");
 	if (row.status === "review") {
 		const open = row.sessions.filter((c) => c.prState === "OPEN");
 		const allDraft = open.length > 0 && open.every((c) => c.prIsDraft);
