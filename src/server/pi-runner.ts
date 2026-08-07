@@ -179,7 +179,7 @@ import {
   baseJournalKind,
   opencodeRunPolicy,
   readLocalInstructions,
-} from "./opencode-runner";
+} from "./opencode-policy";
 import { buildRunInstructions } from "./run-instructions";
 import { bashAskPolicyReply } from "./command-policy";
 import {
