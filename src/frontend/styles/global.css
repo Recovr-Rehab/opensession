@@ -986,8 +986,15 @@ html.wco .app-body.sidebar-collapsed
 }
 .app-logo-image {
 	display: block;
-	width: 32px;
-	height: 32px;
+	/* Sized so the MARK measures 40px — the same as the bar buttons opposite
+	   it (.mobile-search-btn, a 40px circle), because this is the same kind
+	   of control and belongs on their size. The box has to run bigger than
+	   that: unlike a repo icon this asset isn't trimmed (it's also the
+	   favicon and the og:image, which want their padding), and it carries
+	   its artwork on 80% of its canvas — so 50 × 0.8 = 40px of ink. The 10px
+	   of overflow past the button is transparent margin and touches nothing. */
+	width: 50px;
+	height: 50px;
 }
 @keyframes kitt-scan {
 	from {
@@ -1703,13 +1710,12 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	height: 100%;
 	object-fit: cover;
 	border-radius: inherit;
-	/* Art sits a little inside the tile. The route crops every icon to its
-	   artwork (png-trim.ts), so this is now the one place the size is decided
-	   rather than something each icon's own padding settles — a letter tile's
-	   ink is its glyph, well inside its square, and art at the full box read
-	   heavier than the letters beside it. Scale rather than a smaller box:
-	   the radius scales with it, so the corners stay right. */
-	transform: scale(0.76);
+	/* No inset here on purpose. The route already crops every icon to its
+	   artwork and re-pads it to a fixed margin (png-trim.ts), which lands
+	   them all at the same ~93% fill — the breathing room is baked into the
+	   image. A second shrink on top of that only stacks: it took icons to
+	   ~71% of the tile while a lettered tile fills 100% of its, so a repo
+	   with art read smaller than the repo beside it wearing a letter. */
 }
 .sidebar-list {
 	flex: none;

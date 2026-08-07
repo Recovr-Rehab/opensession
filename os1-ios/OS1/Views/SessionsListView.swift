@@ -375,11 +375,13 @@ struct SessionsListView: View {
                             // since the icon route began cropping icons to
                             // their artwork it reaches the tile's edges — so
                             // a circular mask cut its corners off.
-                            // Art nearly to the edges, unlike a list tile:
-                            // the 0.76 inset is there to keep icons level
-                            // with the letter tiles beside them, and this
-                            // one stands alone.
-                            RepoTile(name: "opensession", size: 44, artScale: 0.88)
+                            // 47, so the MARK measures 44pt — the height of
+                            // the button capsule opposite it. The tile runs
+                            // 3pt bigger than the mark because every icon is
+                            // served with a small margin baked in (~93% of
+                            // its canvas is artwork), and it's the artwork
+                            // that has to line up, not the box around it.
+                            RepoTile(name: "opensession", size: 47)
                         }
                         .accessibilityLabel("Settings")
                         // Hiding the glass background leaves the padding the

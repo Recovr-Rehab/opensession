@@ -197,17 +197,6 @@ struct RepoTile: View {
         name == "backstage" ? "opensession" : name  // legacy repo id on older instances
     }
 
-    /// How much of the tile an icon fills, for a tile standing in a list
-    /// beside lettered ones. Keep in step with the web tile's
-    /// `.repo-tile--img img` scale.
-    static let listArtScale: CGFloat = 0.76
-
-    /// Overridable because the inset above is a LIST measure: art at the full
-    /// box out-weighs the letter tiles beside it. A tile standing alone —
-    /// the app's own mark in the sessions-list toolbar — has no letters to
-    /// balance against, and at 0.76 it just reads small for its slot.
-    var artScale: CGFloat = RepoTile.listArtScale
-
     private var letter: String {
         if name == "backstage" { return "O" }
         return String(name.prefix(1)).uppercased()
@@ -273,12 +262,12 @@ struct RepoTile: View {
                 image
                     .resizable()
                     .scaledToFill()
-                    // Art sits a little inside the tile — the same 0.76 the
-                    // web tile uses (.repo-tile--img img). Every icon is
-                    // cropped to its artwork server-side, so this is the one
-                    // place its size is decided, and at the full box art read
-                    // heavier than the lettered tiles beside it.
-                    .scaleEffect(artScale)
+                    // Filling the tile is right: the server crops every icon
+                    // to its artwork and re-pads it to a fixed margin, so the
+                    // breathing room is already in the image. Shrinking again
+                    // here would stack, and leave art reading smaller than
+                    // the lettered tiles beside it (.repo-tile--img img on
+                    // the web carries no inset either).
             } else {
                 Text(letter)
                     .font(.system(size: size * 0.6, weight: .bold, design: .rounded))
