@@ -34,6 +34,30 @@ describe("assignRepoTileColors", () => {
 		expect(colors["opensession"]).not.toBe(colors["os1-chrome"]);
 	});
 
+	test("keeps same-letter repos on plainly different hues", () => {
+		// Two `T` tiles are told apart by color alone, so "not identical"
+		// isn't the bar — they have to not read as the same color either.
+		const colors = assignRepoTileColors(REPOS);
+		const wheel = (hex: string) => {
+			const slot = REPO_TILE_COLORS.indexOf(hex);
+			return (slot * 7) % REPO_TILE_COLORS.length;
+		};
+		const apart = (a: string, b: string) => {
+			const gap = Math.abs(wheel(colors[a]) - wheel(colors[b]));
+			return Math.min(gap, REPO_TILE_COLORS.length - gap);
+		};
+		for (const [a, b] of [
+			["tella-fusion", "tella-mac"],
+			["tella-fusion", "tella-windows"],
+			["tella-mac", "tella-windows"],
+			["gitops", "gstreamer"],
+			["gitops", "gst-plugins-rs"],
+			["gstreamer", "gst-plugins-rs"],
+		]) {
+			expect(apart(a, b)).toBeGreaterThanOrEqual(3);
+		}
+	});
+
 	test("depends on the set, not the order it is given in", () => {
 		expect(assignRepoTileColors(REPOS)).toEqual(
 			assignRepoTileColors([...REPOS].reverse()),

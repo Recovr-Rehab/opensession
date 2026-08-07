@@ -89,20 +89,54 @@ export function repoTileColor(id: string): string {
 export function assignRepoTileColors(ids: string[]): Record<string, string> {
 	const assigned: Record<string, string> = {};
 	const taken = new Set<number>();
+	// Slots already spoken for by repos starting with the same letter. Those
+	// are the tiles a person has to tell apart on color alone.
+	const byLetter = new Map<string, number[]>();
 	for (const id of [...ids].sort()) {
 		const start = repoTileColorIndex(id);
+		const letter = tileLetter(id);
+		const siblings = byLetter.get(letter) ?? [];
 		let index = start;
+		let fallback: number | null = null;
 		for (let step = 0; step < REPO_TILE_COLORS.length; step++) {
 			const candidate = (start + step) % REPO_TILE_COLORS.length;
-			if (!taken.has(candidate)) {
+			if (taken.has(candidate)) continue;
+			if (fallback === null) fallback = candidate;
+			// Distinct isn't enough between two `T`s: a color three hue steps
+			// from a sibling's still reads as "the other blue-green one". Keep
+			// probing for one that doesn't.
+			if (siblings.every((s) => hueSteps(candidate, s) >= 3)) {
 				index = candidate;
+				fallback = null;
 				break;
 			}
 		}
-		// Past sixteen repos the palette repeats: every entry is taken, so the
-		// probe finds nothing and the hashed slot stands.
+		// Nothing far enough — or, past sixteen repos, nothing free at all.
+		// Take whatever's left rather than handing two repos one color.
+		if (fallback !== null) index = fallback;
 		taken.add(index);
+		byLetter.set(letter, [...siblings, index]);
 		assigned[id] = REPO_TILE_COLORS[index];
 	}
 	return assigned;
+}
+
+/** The glyph the tile shows — the same rule the clients apply. */
+function tileLetter(id: string): string {
+	if (id === "opensession" || id === "backstage") return "O";
+	return (id[0] || "?").toUpperCase();
+}
+
+/**
+ * How far apart two slots sit on the hue wheel, in 22.5° steps.
+ *
+ * The palette is laid out in strides of seven around the wheel, and seven is
+ * its own inverse modulo sixteen — so the same stride maps a slot back to its
+ * wheel position.
+ */
+function hueSteps(a: number, b: number): number {
+	const size = REPO_TILE_COLORS.length;
+	const wheel = (index: number) => (index * 7) % size;
+	const gap = Math.abs(wheel(a) - wheel(b));
+	return Math.min(gap, size - gap);
 }
