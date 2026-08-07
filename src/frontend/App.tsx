@@ -39,7 +39,7 @@ import { Analytics } from "./components/Analytics";
 import { Tasks } from "./components/Tasks";
 import { UserGate, getCurrentUser, useAuthStatus } from "./components/UserPicker";
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
-import { SettingsMenu } from "./components/SettingsMenu";
+import { SettingsButton } from "./components/SettingsButton";
 import { TitleBar } from "./components/TitleBar";
 import { Settings, type SettingsSectionKey } from "./components/Settings";
 import { SessionTabs, type ViewTab } from "./components/SessionTabs";
@@ -2695,12 +2695,12 @@ export function App(
 						? routeWorkspace?.name || "Workspace"
 						: "";
 
-	// Mobile top-bar brand: logo only, as the account/settings sheet trigger.
-	// On desktop that menu lives in the footer user row instead, so the top stays
-	// just the title + the collapse toggle.
+	// Mobile top-bar brand: logo only, as the settings trigger. On desktop the
+	// avatar in the chrome row plays that part instead, so the top stays just
+	// the title + the collapse toggle.
 	const brand = (
 		<div className="app-brand">
-			<SettingsMenu
+			<SettingsButton
 				variant="brand"
 				onOpenSettings={() => navigate({ view: "settings" })}
 				connected={connected}
@@ -3360,7 +3360,7 @@ export function App(
 					>
 						{/* Desktop chrome row — identical on web and in the desktop shell
 						    (the shell additionally insets it past the traffic lights and
-						    makes it a drag region): collapse toggle + the avatar account
+						    makes it a drag region): collapse toggle + the avatar settings
 						    trigger on the left, back/forward + search at the right edge.
 						    No app brand inside the app. Hidden on mobile, where the top
 						    bar carries the brand instead. */}
@@ -3380,7 +3380,7 @@ export function App(
 									</button>
 								</Tooltip>
 							</div>
-							<SettingsMenu
+							<SettingsButton
 								variant="user"
 								onOpenSettings={() => navigate({ view: "settings" })}
 								connected={connected}

@@ -58,7 +58,7 @@ export interface AuthStatus {
 }
 
 // Shared auth state: UserGate fetches /api/auth/status once on load; other
-// components (SettingsMenu's account section) read it reactively from here
+// components (Settings' account footer) read it reactively from here
 // instead of re-fetching.
 const AUTH_STATUS_EVENT = "opensession-auth-status-changed";
 let authStatusCache: AuthStatus | null = null;

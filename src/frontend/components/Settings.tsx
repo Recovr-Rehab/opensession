@@ -112,6 +112,7 @@ import {
 import type { FeedDescriptor } from "../lib/types";
 import { getPushState, enablePush, disablePush, type PushState } from "../lib/push";
 import { getCurrentUser } from "./UserPicker";
+import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { BottomSheet } from "../ui/sheet";
 import { cn } from "../ui/cn";
@@ -675,6 +676,7 @@ export function Settings({
 						))}
 					</div>
 				))}
+				<SettingsAccountFooter />
 			</aside>
 
 			{/* Tool sections fill the whole content area edge-to-edge (they carry
@@ -793,6 +795,7 @@ function MobileSettings({
 									</div>
 								</div>
 							))}
+							<SettingsAccountCard />
 						</div>
 
 						{/* Detail page: the picked section's panel, slid in from the right. */}

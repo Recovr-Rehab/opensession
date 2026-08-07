@@ -2,7 +2,7 @@
 // Stored per-browser in localStorage — it's an appearance/device preference, not
 // per-user cloud state like pins — and applied to <html data-theme>, which drives
 // the CSS-variable palette in styles/global.css. Kept in its own module so the
-// pre-paint inline script in index.html and the React SettingsMenu share one
+// pre-paint inline script in index.html and the React Settings page share one
 // source of truth for the key and the resolution logic.
 
 export type ThemePref = "system" | "light" | "dark";
