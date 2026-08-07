@@ -482,6 +482,71 @@ enum OS1API {
         return response.repos
     }
 
+    /// What's wired up on this instance, for Settings → Setup. Read-only
+    /// snapshot; presence booleans only, never a credential value. Mirrors
+    /// the web's `SetupStatus` (src/frontend/components/setup-shared.tsx) as
+    /// a tolerant subset — every field optional, so a server that grows or
+    /// drops one can't break an older build.
+    struct SetupStatus: Decodable, Sendable {
+        struct Engine: Decodable, Sendable {
+            let ready: Bool?
+            /// What stops this instance running a turn, in one sentence.
+            let blocker: String?
+            let fix: String?
+            let defaultModel: String?
+            let bridgeEnabled: Bool?
+            let claudeAccounts: Int?
+            let codexAccounts: Int?
+        }
+
+        /// Whether a repo commits the scripts that let a session provision and
+        /// boot it unattended (docs/repo-lifecycle.md).
+        struct Lifecycle: Decodable, Sendable {
+            let dir: String?
+            let setup: Bool?
+            let start: Bool?
+            let previewCommand: Bool?
+        }
+
+        struct Repo: Decodable, Sendable {
+            let id: String
+            let label: String?
+            let path: String?
+            let lifecycle: Lifecycle?
+        }
+
+        struct Team: Decodable, Sendable {
+            let count: Int?
+            let names: [String]?
+        }
+
+        struct Github: Decodable, Sendable {
+            let userPrAuth: Bool?
+            let clientIdConfigured: Bool?
+            let redirectFlowAvailable: Bool?
+            let botTokenPresent: Bool?
+            let callbackUrl: String?
+        }
+
+        struct Integration: Decodable, Sendable {
+            let id: String
+            let label: String?
+            let enabled: Bool?
+            let missingRequired: [String]?
+        }
+
+        let publicBaseUrl: String?
+        let repos: [Repo]?
+        let team: Team?
+        let engine: Engine?
+        let github: Github?
+        let integrations: [Integration]?
+    }
+
+    static func setupStatus() async throws -> SetupStatus {
+        try await get("/api/setup/status")
+    }
+
     /// Models (and presets) a session can run on, plus the interactive default.
     static func models() async throws -> ModelCatalog {
         try await get("/api/models")
