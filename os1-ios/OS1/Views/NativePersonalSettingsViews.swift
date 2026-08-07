@@ -66,7 +66,6 @@ struct ComposerSettingsView: View {
 
     var body: some View {
         Form {
-            PersonalPromptSection()
             if loading {
                 Section { ProgressView("Loading composer preferences…") }
             } else {
@@ -136,6 +135,7 @@ struct ComposerSettingsView: View {
                     }
                 }
             }
+            PersonalPromptSection()
         }
         .navigationTitle("Composer")
         .task { await load() }

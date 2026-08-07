@@ -1526,7 +1526,7 @@ function PersonalPromptPanel() {
 	}, [commit]);
 
 	const label = (
-		<SettingsGroupLabel className="mt-0">Personal prompt</SettingsGroupLabel>
+		<SettingsGroupLabel>Personal prompt</SettingsGroupLabel>
 	);
 
 	if (prompt === null)
@@ -2637,10 +2637,9 @@ function ComposerPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Composer"
-				description="How you talk to a session — your standing instructions, how the message box behaves, and voice. All of it follows your account, so it's the same on every device you sign in from."
+				description="How you talk to a session — how the message box behaves, voice, and the standing instructions every session you start begins with. All of it follows your account, so it's the same on every device you sign in from."
 			/>
-			<PersonalPromptPanel />
-			<SettingsGroupLabel>Messages</SettingsGroupLabel>
+			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Default model"
@@ -2759,6 +2758,7 @@ function ComposerPanel() {
 				/>
 			</SettingCard>
 			<DeskVoicePanel />
+			<PersonalPromptPanel />
 		</SettingsPanel>
 	);
 }
