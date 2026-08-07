@@ -533,7 +533,7 @@ function CheckStatusIcon({ kind }: { kind: CheckVisual }) {
 	if (kind === "pending")
 		return (
 			<span
-				className="m-[1.5px] block size-[13px] animate-spin rounded-full border-[1.6px] border-current/30 border-t-current"
+				className="m-[1.5px] block size-[13px] animate-spin rounded-full border border-current/30 border-t-current"
 				aria-hidden
 			/>
 		);

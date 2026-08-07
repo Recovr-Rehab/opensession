@@ -39,7 +39,7 @@ const splitSegmentBase =
   "inline-flex items-center justify-center border border-line-strong bg-transparent text-dim";
 
 const spinnerClass =
-  "size-[10px] shrink-0 rounded-full border-[1.5px] border-line-strong border-t-accent animate-[preview-spin_0.7s_linear_infinite]";
+  "size-[10px] shrink-0 rounded-full border border-line-strong border-t-accent animate-[preview-spin_0.7s_linear_infinite]";
 
 const popoverActionClass =
   "w-full rounded-sm border border-[rgba(248,81,73,0.4)] bg-transparent px-2.5 py-[5px] text-xs font-semibold text-red disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent hover:bg-[rgba(248,81,73,0.12)]";
@@ -535,7 +535,7 @@ export function PreviewButton({
               >
                 <span className="relative inline-flex items-center justify-center">
                   <span
-                    className="pointer-events-none absolute left-1/2 top-1/2 size-[25px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] border-transparent border-t-current opacity-90 animate-[preview-spin_0.7s_linear_infinite]"
+                    className="pointer-events-none absolute left-1/2 top-1/2 size-[25px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-transparent border-t-current opacity-90 animate-[preview-spin_0.7s_linear_infinite]"
                     aria-hidden="true"
                   />
                   <IconPlayOutline size={22} />

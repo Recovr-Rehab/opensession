@@ -144,7 +144,7 @@ function StatusDot({ state }: { state: PresenceState }) {
 					"block size-full rounded-full bg-panel",
 					state === "working"
 						? "bg-green motion-safe:animate-pulse"
-						: "border-[1.5px] border-green",
+						: "border border-green",
 				)}
 			/>
 		</span>

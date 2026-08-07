@@ -3355,7 +3355,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	content: "";
 	position: absolute;
 	inset: 3px;
-	border-top: 1.5px solid var(--text-faint);
+	border-top: 1px solid var(--text-faint);
 	transform: rotate(45deg);
 	transform-origin: center;
 }
@@ -4071,7 +4071,11 @@ html.wco .viewer-branch {
 	height: 22px;
 	margin: -11px 0 0 -11px;
 	border-radius: 50%;
-	border: 1.5px solid transparent;
+	/* Integer stroke on purpose. Chrome floors border-width to a whole CSS
+	   pixel (min 1px) at every DPR, so the 1.5px this used to ask for painted
+	   1px anyway — while WebKit, which the iOS PWA runs on, honoured it. The
+	   fraction bought nothing here and only split the two engines. */
+	border: 1px solid transparent;
 	border-top-color: currentColor;
 	opacity: 0.9;
 	pointer-events: none;
@@ -4082,7 +4086,6 @@ html.wco .viewer-branch {
 	width: 16px;
 	height: 16px;
 	margin: -8px 0 0 -8px;
-	border-width: 1.25px;
 }
 
 /* Deploy is on its way but butler hasn't posted the preview URL yet — there's
@@ -5110,7 +5113,7 @@ a.workspace-info-check-row {
 	height: 13px;
 	margin: 1.5px;
 	border-radius: 999px;
-	border: 1.6px solid color-mix(in srgb, currentColor 28%, transparent);
+	border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
 	border-top-color: currentColor;
 	animation: wi-check-spin 0.7s linear infinite;
 }
@@ -7070,7 +7073,7 @@ a.workspace-info-check-row {
 .pr-comment-select {
 	width: 11px;
 	height: 11px;
-	border: 1.5px solid var(--text-faint);
+	border: 1px solid var(--text-faint);
 	border-radius: 50%;
 	justify-self: center;
 }
@@ -9269,7 +9272,7 @@ a.workspace-info-check-row {
 	width: 30px;
 	height: 30px;
 	border-radius: 50%;
-	border: 2.5px solid var(--border-strong);
+	border: 2px solid var(--border-strong);
 	border-top-color: var(--accent);
 	animation: spin 0.8s linear infinite;
 }
