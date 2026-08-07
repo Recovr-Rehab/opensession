@@ -83,7 +83,9 @@ language instead of introducing a new local style for each feature.
 ## React and verification
 
 - Follow the existing React 19 patterns. Do not add `useMemo` or `useCallback`
-  by default; let the React Compiler handle routine optimization.
+  by default; no React Compiler is configured in the build (Bun.build in
+  frontend-build.ts has no compiler plugin), so memoize manually — and only
+  where a measured re-render cost justifies it.
 - Keep component files component-only: put non-component helpers/constants in
   `lib/` or `ui/` modules, because mixed component+helper exports disqualify a
   module from React Fast Refresh and downgrade every edit to a full page
