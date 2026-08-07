@@ -139,7 +139,13 @@ export function UsageMeter({
 				</span>
 				{window > 0 && <ContextRing frac={frac} tone={tone.stroke} />}
 				{showCacheRate && (
-					<span className="tabular-nums text-dim">{cacheHit}% cached</span>
+					// Named so the phone header can drop it: there the meter rides in
+					// the title pill's subtitle next to the model name, and the cache
+					// rate is the one thing on that line nobody navigates by — it was
+					// pushing "Opus 5 + Fable oracle" down to "Opus 5 + …".
+					<span className="usage-cache-rate tabular-nums text-dim">
+						{cacheHit}% cached
+					</span>
 				)}
 			</Popover.Trigger>
 			<Popover.Popup side="top" align="end" className="w-64 p-3 text-xs">

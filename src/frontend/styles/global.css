@@ -34,6 +34,11 @@
 	   whisper of shadow. Codex-style. */
 	--control-surface: #292929;
 	--control-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+	/* The composer's own fill + edge. In dark it IS --control-surface: lighter
+	   than the page, so the box already reads as lifted. Light needs its own
+	   pair — see the light block. */
+	--composer-surface: var(--control-surface);
+	--composer-border: var(--border);
 	--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.16), 0 14px 36px rgba(0, 0, 0, 0.2);
 	/* The composer box's corner. It lives here, not on .composer, because the
 	   expand/collapse morph is driven from Composer.tsx — Motion writes the
@@ -187,6 +192,21 @@ html[data-theme="light"] {
 	   is where dark's #292929 sits between #262626 and #2e2e2e. */
 	--control-surface: #ebebeb;
 	--control-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	/* The composer is the exception to the ramp above, and it has to be. The
+	   ramp steps AWAY from the page — darker in light — which is right for a
+	   small chip read against its neighbours, but the composer is a big empty
+	   box, and a big empty box that is darker than the page reads as a well
+	   you cannot type in: greyed out, the same signal a disabled field gives.
+	   So it goes white and does its lifting with an edge and a shadow instead
+	   of a fill, which is how a raised surface behaves in light anyway.
+	   #dcdcdc rather than --border (#e2e2e2): white-on-white needs a firmer
+	   line to hold its shape, while --border-strong (#d0d0d0) draws a box
+	   around the composer instead of an edge under it.
+	   This also fixes the stack behind it — the queue/agents flaps tuck under
+	   the composer at ~#eeeeee, which was LIGHTER than the #ebebeb box in
+	   front of them, so the thing on top looked like the thing behind. */
+	--composer-surface: #ffffff;
+	--composer-border: #dcdcdc;
 	--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 14px 36px rgba(0, 0, 0, 0.08);
 	--bg-panel: #f0f0f0;
 	--bg-hover: #e9e9e9;
@@ -10278,8 +10298,8 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .composer {
 	/* Anchors the dictation overlay (VoiceInput). */
 	position: relative;
-	background: var(--control-surface);
-	border: 1px solid var(--border);
+	background: var(--composer-surface);
+	border: 1px solid var(--composer-border);
 	border-radius: var(--composer-radius); corner-shape: var(--cs);
 	box-shadow: var(--composer-shadow);
 	/* Symmetric horizontal padding: the old extra 2px on the left stacked with
@@ -10312,7 +10332,8 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	gap: 8px;
 	margin: 0 18px -14px;
 	padding: 10px 16px 26px;
-	border: 1px solid var(--border);
+	/* Same edge as the composer it tucks under — the two hairlines meet. */
+	border: 1px solid var(--composer-border);
 	border-bottom: none;
 	border-radius: calc(18px * var(--rf)) calc(18px * var(--rf)) 0 0; corner-shape: var(--cs);
 	background: color-mix(in srgb, var(--bg-panel) 70%, var(--control-surface));
@@ -10334,7 +10355,8 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	width: calc(100% - 36px);
 	margin: 0 18px -14px;
 	padding: 10px 14px 22px;
-	border: 1px solid var(--border);
+	/* Same edge as the composer it tucks under — the two hairlines meet. */
+	border: 1px solid var(--composer-border);
 	border-bottom: none;
 	border-radius: calc(18px * var(--rf)) calc(18px * var(--rf)) 0 0; corner-shape: var(--cs);
 	background: var(--bg-panel);
@@ -12739,6 +12761,37 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		   scrolling underneath; the pills themselves re-enable pointer events. */
 		pointer-events: none;
 	}
+	/* Scroll edge. "Floating pills over the content" only works if the content
+	   DISSOLVES as it goes under them — otherwise a transcript line, or a dark
+	   screenshot, slides up into the gaps between Back / title / ⋯ and the bar
+	   reads as three stickers dropped on a page. iOS never shows bare content
+	   there for the same reason. So: a blur that fades out downward, over a
+	   fade of the page colour, both masked so the band has no bottom line of
+	   its own — the effect ends by disappearing, not by drawing an edge.
+	   Sits under the pills (they are later siblings) and takes no taps. */
+	.app-header-overlay::before {
+		content: "";
+		position: absolute;
+		inset: 0 0 auto;
+		height: calc(100% + 30px);
+		pointer-events: none;
+		/* Behind the pills. Without this the absolutely-positioned pseudo paints
+		   ABOVE the in-flow title pill (positioned beats static in the same
+		   stacking context) and washes it out; the negative index stays inside
+		   the bar's own z-index: 40 context, so it is still above the page. */
+		z-index: -1;
+		background: linear-gradient(
+			to bottom,
+			var(--bg) 0%,
+			var(--bg) 50%,
+			color-mix(in srgb, var(--bg) 70%, transparent) 75%,
+			transparent 100%
+		);
+		-webkit-backdrop-filter: blur(16px);
+		backdrop-filter: blur(16px);
+		-webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%);
+		mask-image: linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%);
+	}
 	.app-header-overlay > * {
 		pointer-events: auto;
 	}
@@ -13126,6 +13179,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.header-sessionbar .sessionbar-usage svg {
 		width: 10px;
 		height: 10px;
+	}
+	/* …but not the cache rate. The subtitle line holds model · cost inside a
+	   pill capped by the screen, and "92% cached" was winning that fight
+	   against the model name — the thing you actually read to know what you
+	   are talking to. The full breakdown is one tap away in the meter's own
+	   popup, and the composer's meter still shows it on wider screens. */
+	.header-sessionbar .sessionbar-usage .usage-cache-rate {
+		display: none;
 	}
 	/* Model line as a tap target: a compact label + chevron with a full-bleed
 	   transparent native <select> over it (opens the OS picker). Kept tiny to
