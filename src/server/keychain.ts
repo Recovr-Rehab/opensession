@@ -75,8 +75,8 @@ function storePath(): string {
   return process.env.OPENSESSION_KEYCHAIN_STORE || `${HOME}/.opensession-keychain.json`;
 }
 
-export const ONCE_GRANT_TTL_MS = 60 * 60 * 1000;
-export const STANDING_GRANT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const ONCE_GRANT_TTL_MS = 60 * 60 * 1000;
+const STANDING_GRANT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Terminal asks/grants older than this are pruned on load. */
 const TERMINAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -479,7 +479,7 @@ const APPROVE_ONCE = "Approve once";
 const APPROVE_STANDING = "Approve standing";
 const DECLINE = "Decline";
 
-export const KEYCHAIN_ASK_DOMAIN = "keychain-ask";
+const KEYCHAIN_ASK_DOMAIN = "keychain-ask";
 
 function brokerBaseUrl(): string {
   const port = parseInt(process.env.PORT || "3850");
@@ -622,7 +622,7 @@ export function parseOwnerAnswer(
  * DM reply, UI card). Mints or declines, and returns the steer text the
  * requesting session receives in place of the generic "X answered" line.
  */
-export function resolveKeychainAsk(ask: HumanAsk, answer: string): string | null {
+function resolveKeychainAsk(ask: HumanAsk, answer: string): string | null {
   load();
   const ref = ask.domain?.ref;
   const record = ref ? keychainAsks.get(ref) : undefined;

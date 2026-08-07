@@ -558,7 +558,7 @@ export function updateAutomation(
  * undone. Length floor guards against self-lobotomy (a degenerate rewrite
  * that drops the prompt's structure and guardrails).
  */
-export function updateAutomationPromptSelf(
+function updateAutomationPromptSelf(
   id: string,
   newPrompt: string,
   reason: string
@@ -680,7 +680,7 @@ export function automationRunMcpForSession(
  * is held to the automation bar: append-only, nothing sensitive readable, no
  * control surface — the admin/sessions siblings must never join this set.
  */
-export function automationRunInProcessMcp(
+function automationRunInProcessMcp(
   a: Automation,
   sessionId: string,
   ctx: {

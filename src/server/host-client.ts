@@ -68,7 +68,7 @@ const HOSTS_DIR = runHostsDir(OPENSESSION_SESSIONS_DIR);
 const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-run-hosts`;
 const ENV_FILE = statePath(".opensession.env");
 
-export function runHostsEnabled(): boolean {
+function runHostsEnabled(): boolean {
   return !existsSync(DISABLE_FILE);
 }
 
@@ -315,7 +315,7 @@ export interface HostConnector {
 /** The default transport: opensession dials the host's unix socket. Behavior is
  *  identical to the pre-seam inline code — the existsSync guard preserves the
  *  old "poll for the socket file" cadence, and open/close/error map 1:1. */
-export function unixSocketConnector(sockPath: string): HostConnector {
+function unixSocketConnector(sockPath: string): HostConnector {
   return {
     connect(handlers: HostConnectionHandlers): Promise<HostConnection> {
       if (!existsSync(sockPath)) {

@@ -40,7 +40,7 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import { audit } from "./audit";
 import { stateDir } from "./paths";
 
-export const DEPLOYS_DIR = stateDir("deploys");
+const DEPLOYS_DIR = stateDir("deploys");
 const REGISTRY = join(DEPLOYS_DIR, "registry.json");
 
 /** Host ports for deploys. Kept clear of the webapp dev range (3100-3999) and
@@ -113,7 +113,7 @@ function rootDir(): string {
   return process.env.OPENSESSION_DEPLOYS_DIR || DEPLOYS_DIR;
 }
 
-export function deployDir(id: string): string {
+function deployDir(id: string): string {
   return join(rootDir(), id);
 }
 export function versionDir(id: string, version: number): string {

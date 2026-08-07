@@ -140,7 +140,7 @@ function mediaUrl(path: string): string {
 }
 
 /** The marker-delimited markdown section spliced into the PR body. */
-export function walkthroughPrSection(w: SessionWalkthrough): string {
+function walkthroughPrSection(w: SessionWalkthrough): string {
   const lines: string[] = ["## Walkthrough", ""];
   if (w.video) {
     const title = w.videoTitle || "Demo video";
@@ -164,7 +164,7 @@ export function walkthroughPrSection(w: SessionWalkthrough): string {
 
 /** Replace an existing managed section, else insert above the "Started by …"
  *  attribution footer, else append. */
-export function spliceWalkthroughSection(body: string, section: string): string {
+function spliceWalkthroughSection(body: string, section: string): string {
   const block = `${START_MARKER}\n${section}\n${END_MARKER}`;
   const start = body.indexOf(START_MARKER);
   const end = body.indexOf(END_MARKER);
@@ -185,7 +185,7 @@ export function spliceWalkthroughSection(body: string, section: string): string 
  * PR yet is a normal outcome (the agent usually publishes before `gh pr
  * create`) — the caller tells the agent to re-publish after opening it.
  */
-export async function mirrorWalkthroughToPr(
+async function mirrorWalkthroughToPr(
   sessionId: string,
   /** Freshly-built walkthrough from publishWalkthrough — wins over the
    *  unified-session re-read so a persistence/scan gap can't lose it. */

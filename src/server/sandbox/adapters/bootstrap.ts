@@ -107,14 +107,14 @@ import type {
 /** Absolute paths INSIDE the sandbox — kept byte-identical to the host/docker
  *  layout so the runner's hardcoded paths resolve (do not "tidy" these). */
 export const REMOTE_HOME = "/home/ubuntu";
-export const REMOTE_BUN = `${REMOTE_HOME}/.bun/bin/bun`;
-export const REMOTE_CLAUDE = `${REMOTE_HOME}/.local/bin/claude`;
-export const REMOTE_OPENCODE = `${REMOTE_HOME}/.bun/bin/opencode`;
+const REMOTE_BUN = `${REMOTE_HOME}/.bun/bin/bun`;
+const REMOTE_CLAUDE = `${REMOTE_HOME}/.local/bin/claude`;
+const REMOTE_OPENCODE = `${REMOTE_HOME}/.bun/bin/opencode`;
 /** Same pin as deploy/sandbox/Dockerfile's OPENCODE_VERSION (host runs this
  *  too) — bump BOTH together. Part of bootstrapSignature, so a bump
  *  invalidates existing sandboxes/prewarms and re-bootstraps them. */
-export const REMOTE_OPENCODE_VERSION = "1.17.15";
-export const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
+const REMOTE_OPENCODE_VERSION = "1.17.15";
+const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 const WORKSPACE_BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-workspace-runtime`;
 const WORKSPACE_BOOTSTRAP_SIGNATURE = "workspace-runtime-v1+bun";
@@ -644,7 +644,7 @@ export async function bootstrapRemoteSandbox(
 
 /** Where prewarmed workspace clones live in-sandbox until a session adopts
  *  them (warmRemoteWorkspace → setupRemoteWorkspace's mv). */
-export const REMOTE_WARM_BASE = `${REMOTE_HOME}/.bks-warm`;
+const REMOTE_WARM_BASE = `${REMOTE_HOME}/.bks-warm`;
 
 /**
  * Pre-clone a repo at its default branch (+ deps install) inside a PREWARM
@@ -786,7 +786,7 @@ function readJsonSafe<T>(path: string): T | null {
  * in-sandbox: spec.json exists in BOTH (host mirror feeds restart-resume;
  * the in-sandbox copy feeds HOST_ENTRY), meta/journal/log are sandbox-only.
  */
-export function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): HostLauncher {
+function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): HostLauncher {
   return {
     async alive(dir) {
       const meta = await driver.exec(`cat ${shellQuoteWord(`${dir}/meta.json`)} 2>/dev/null`);
