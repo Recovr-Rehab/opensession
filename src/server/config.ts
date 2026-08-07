@@ -87,8 +87,12 @@ export interface RepoSection {
   /** Marks this repo as the instance default (see defaultRepo()). */
   default?: boolean;
   /** PNG served as the repo's tile icon (absolute path, or relative to the
-   *  checkout); unset = the GitHub org avatar. */
+   *  checkout); unset = the colored letter tile. Settings → Setup can fetch
+   *  the owner's GitHub avatar into one of these. */
   icon?: string;
+  /** Overrides the tile color the server would otherwise assign, as
+   *  "#rrggbb". Set from Settings → Setup; see repo-tile-colors.ts. */
+  color?: string;
   previewCommand?: string;
   /** One-time setup command run in a fresh worktree before depsInstall. */
   worktreeSetup?: string;
@@ -227,6 +231,8 @@ export interface Repo {
   default?: boolean;
   /** Tile-icon PNG path (see RepoSection.icon). */
   icon?: string;
+  /** Chosen tile color, "#rrggbb" (see RepoSection.color). */
+  color?: string;
   /** Dev-server bring-up command for previews. */
   previewCommand?: string;
   worktreeSetup?: string;
@@ -332,6 +338,7 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
     sharedCheckout: bool(o.sharedCheckout),
     default: bool(o.default),
     icon: str(o.icon),
+    color: str(o.color),
     previewCommand: str(o.previewCommand),
     worktreeSetup: str(o.worktreeSetup),
     depsInstall: str(o.depsInstall),
@@ -600,6 +607,7 @@ export function configuredRepos(): Record<string, Repo> {
           sharedCheckout: entry.sharedCheckout,
           default: entry.default,
           icon: entry.icon,
+          color: entry.color,
           previewCommand: entry.previewCommand,
           worktreeSetup: entry.worktreeSetup,
           depsInstall: entry.depsInstall,

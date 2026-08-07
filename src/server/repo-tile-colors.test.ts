@@ -73,6 +73,22 @@ describe("assignRepoTileColors", () => {
 		expect(new Set(Object.values(colors)).size).toBe(REPO_TILE_COLORS.length);
 	});
 
+	test("keeps a chosen color, and keeps it to itself", () => {
+		const chosen = REPO_TILE_COLORS[3];
+		const colors = assignRepoTileColors(REPOS, { infra: chosen });
+		expect(colors["infra"]).toBe(chosen);
+		// The rest route around it rather than doubling up on it.
+		const others = REPOS.filter((id) => id !== "infra").map((id) => colors[id]);
+		expect(others).not.toContain(chosen);
+		expect(new Set(Object.values(colors)).size).toBe(REPOS.length);
+	});
+
+	test("ignores a chosen color for a repo that isn't registered", () => {
+		const colors = assignRepoTileColors(REPOS, { "not-here": "#ad6b6d" });
+		expect(colors["not-here"]).toBeUndefined();
+		expect(Object.keys(colors).sort()).toEqual([...REPOS].sort());
+	});
+
 	test("hashes an unregistered repo to a palette color", () => {
 		expect(REPO_TILE_COLORS).toContain(repoTileColor("some-local-checkout"));
 		expect(repoTileColor("some-local-checkout")).toBe(

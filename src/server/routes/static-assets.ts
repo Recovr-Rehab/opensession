@@ -11,6 +11,7 @@ import type { RouteContext } from "./context";
 import { configuredIntegration, configuredRepos, productName } from "../config";
 import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend } from "../frontend-build";
 import { isLocalProfile } from "../profile";
+import { resolveRepoIcon } from "../repo-appearance";
 
 /** A tile icon that lives on disk, or undefined when the file isn't there. */
 function localIcon(iconPath: string): Response | undefined {
@@ -103,14 +104,14 @@ export async function handleStaticAssetsRoutes(
 			const generic = localIcon(`${FRONTEND_SRC}/${id}-icon.png`);
 			if (generic) return generic;
 		}
-		// A repo's optional `icon` (absolute path, or relative to its
-		// checkout). No icon, no tile art — the letter tile is the default.
+		// A repo's optional `icon` — art someone chose for it, either a path in
+		// its config or an avatar fetched into the state dir from Settings →
+		// Setup. No icon, no tile art: the letter tile is the default.
 		const repo = configuredRepos()[id];
-		if (repo?.icon) {
-			const configured = localIcon(
-				repo.icon.startsWith("/") ? repo.icon : `${repo.repo}/${repo.icon}`,
-			);
-			if (configured) return configured;
+		const configured = resolveRepoIcon(repo?.icon, repo?.repo);
+		if (configured) {
+			const served = localIcon(configured);
+			if (served) return served;
 		}
 		return new Response("Not found", { status: 404 });
 	}

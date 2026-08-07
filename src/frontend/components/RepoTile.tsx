@@ -1,6 +1,6 @@
 import React from "react";
 import { repoLetter } from "../lib/repo-label";
-import { repoColor } from "../lib/repo-colors";
+import { repoColor, repoIconRevision } from "../lib/repo-colors";
 
 // The display-name map lives in lib/repo-label and the tile colors in
 // lib/repo-colors, so lib-level formatters can reach both without a component
@@ -46,10 +46,13 @@ export function RepoTile({
 		style.borderRadius = "50%";
 	}
 	if (failedFor !== name) {
+		const rev = repoIconRevision(name);
 		return (
 			<span className="repo-tile repo-tile--img" style={style}>
 				<img
-					src={`/repo-icon/${encodeURIComponent(name)}.png?v=${ICON_VERSION}`}
+					src={`/repo-icon/${encodeURIComponent(name)}.png?v=${ICON_VERSION}${
+						rev ? `&r=${rev}` : ""
+					}`}
 					alt=""
 					loading="lazy"
 					onError={() => setFailedFor(name)}

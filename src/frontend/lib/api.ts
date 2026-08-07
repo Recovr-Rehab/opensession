@@ -584,6 +584,24 @@ export interface RepoInfo {
 	default?: boolean;
 	/** This repo's letter-tile color, assigned across the registered set. */
 	color?: string;
+	/** Whether that color was chosen for the repo rather than assigned. */
+	colorChosen?: boolean;
+	/** Whether the tile paints art rather than the letter. */
+	hasIcon?: boolean;
+	/** Changes when that art does, so a replaced icon isn't served stale. */
+	iconRev?: number | null;
+}
+
+/** Set a repo's tile color, or fetch/clear its icon (Settings → Setup). */
+export async function setRepoAppearanceApi(
+	id: string,
+	patch: { color?: string | null; icon?: "github" | null },
+): Promise<{ color: string | null; hasIcon: boolean; iconRev: number | null }> {
+	return request(`/repos/${encodeURIComponent(id)}/appearance`, {
+		method: "POST",
+		body: patch,
+		label: "Failed to update the repository tile",
+	});
 }
 
 const REPO_FETCH_RETRY_DELAYS_MS = [250, 750, 1_500];

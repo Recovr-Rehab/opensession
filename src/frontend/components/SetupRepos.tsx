@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/button";
+import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import {
@@ -14,7 +15,10 @@ import {
 	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { IconPlus, IconRepo } from "./icons";
+import { IconPlus } from "./icons";
+import { RepoTile } from "./RepoTile";
+import { REPO_TILE_COLORS } from "../lib/repo-colors";
+import { fetchRepos, setRepoAppearanceApi, type RepoInfo } from "../lib/api";
 import {
 	StateChip,
 	repoLifecycleState,
@@ -40,6 +44,17 @@ export function ReposSection({
 	onChanged: () => void | Promise<void>;
 }) {
 	const [pickerOpen, setPickerOpen] = useState(false);
+	// Tile appearance rides on the repo list rather than the setup status: the
+	// same payload every tile in the app reads, so what this page shows and
+	// what the sidebar paints can't drift apart.
+	const [appearance, setAppearance] = useState<Map<string, RepoInfo>>(new Map());
+	const loadAppearance = useCallback(async () => {
+		const list = await fetchRepos().catch(() => []);
+		setAppearance(new Map(list.map((r) => [r.id, r])));
+	}, []);
+	useEffect(() => {
+		loadAppearance();
+	}, [loadAppearance, repos]);
 	return (
 		<>
 			<SettingsGroupLabel
@@ -67,9 +82,11 @@ export function ReposSection({
 						const lifecycle = repoLifecycleState(r);
 						return (
 							<SettingRow key={r.id}>
-								<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
-									<IconRepo size={16} />
-								</span>
+								<RepoTileButton
+									repo={appearance.get(r.id)}
+									id={r.id}
+									onChanged={loadAppearance}
+								/>
 								<SettingRowText>
 									<SettingRowTitle>{r.label}</SettingRowTitle>
 									<SettingRowDescription className="truncate font-mono text-meta">
@@ -94,6 +111,119 @@ export function ReposSection({
 				changes in a real browser — see docs/repo-lifecycle.md.
 			</SettingsHint>
 		</>
+	);
+}
+
+/**
+ * The repo's tile, and the controls behind it. The tile is the trigger because
+ * it's the thing being edited — a separate "edit tile" button would say less
+ * than the picture it changes.
+ *
+ * A repo shows a colored letter by default. That's deliberate: the art GitHub
+ * has is the OWNER's avatar, so taking it automatically put the same tile on
+ * every repo in an org. Here it's a choice, per repo.
+ */
+function RepoTileButton({
+	id,
+	repo,
+	onChanged,
+}: {
+	id: string;
+	repo: RepoInfo | undefined;
+	onChanged: () => Promise<void>;
+}) {
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	async function apply(patch: {
+		color?: string | null;
+		icon?: "github" | null;
+	}) {
+		if (busy) return;
+		setBusy(true);
+		setError(null);
+		try {
+			await setRepoAppearanceApi(id, patch);
+			await onChanged();
+		} catch (e: any) {
+			setError(e.message);
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	return (
+		<Popover.Root>
+			<Popover.Trigger
+				className="shrink-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]"
+				aria-label={`Change ${id}'s tile`}
+			>
+				<RepoTile name={id} size={28} />
+			</Popover.Trigger>
+			<Popover.Popup className="w-[248px] p-3" initialFocus>
+				<div className="mb-2 text-meta font-medium text-dim">Tile color</div>
+				<div className="grid grid-cols-8 gap-1.5">
+					{REPO_TILE_COLORS.map((color) => {
+						const active = repo?.color === color;
+						return (
+							<button
+								key={color}
+								type="button"
+								disabled={busy}
+								onClick={() => apply({ color })}
+								aria-label={color}
+								aria-pressed={active}
+								className={cn(
+									"h-6 w-6 rounded-md outline-none transition-transform",
+									"hover:scale-110 focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
+									active && "ring-2 ring-fg ring-offset-2 ring-offset-panel",
+								)}
+								style={{ background: color }}
+							/>
+						);
+					})}
+				</div>
+				{repo?.colorChosen && (
+					<Button
+						size="sm"
+						variant="ghost"
+						className="mt-2"
+						disabled={busy}
+						onClick={() => apply({ color: null })}
+					>
+						Use the assigned color
+					</Button>
+				)}
+				<div className="mt-3 mb-2 border-t border-line pt-3 text-meta font-medium text-dim">
+					Icon
+				</div>
+				<div className="flex flex-wrap gap-1.5">
+					<Button
+						size="sm"
+						disabled={busy || !repo?.ghRepo}
+						onClick={() => apply({ icon: "github" })}
+					>
+						{busy ? "Working…" : "Fetch from GitHub"}
+					</Button>
+					{repo?.hasIcon && (
+						<Button
+							size="sm"
+							variant="ghost"
+							disabled={busy}
+							onClick={() => apply({ icon: null })}
+						>
+							Remove
+						</Button>
+					)}
+				</div>
+				<div className="mt-2 text-meta leading-relaxed text-faint">
+					{repo?.ghRepo
+						? `Takes ${repo.ghRepo.split("/")[0]}’s avatar — the same picture for every repo that owner has, so it suits the one that IS the product.`
+						: "No GitHub repository configured, so there’s no avatar to take."}
+				</div>
+				{error && <InlineAlert className="mt-2">{error}</InlineAlert>}
+			</Popover.Popup>
+		</Popover.Root>
 	);
 }
 

@@ -86,16 +86,35 @@ export function repoTileColor(id: string): string {
  * later one that wanted the same slot — the tiles are cosmetic, and the fix
  * for a repo whose color matters is to give it a real icon.
  */
-export function assignRepoTileColors(ids: string[]): Record<string, string> {
+export function assignRepoTileColors(
+	ids: string[],
+	chosen: Record<string, string> = {},
+): Record<string, string> {
 	const assigned: Record<string, string> = {};
 	const taken = new Set<number>();
+	// A repo whose color someone picked keeps it, and holds that slot against
+	// the automatic ones — otherwise choosing a color could hand the same one
+	// to a repo that hadn't asked for anything.
+	for (const [id, color] of Object.entries(chosen)) {
+		if (!ids.includes(id)) continue;
+		assigned[id] = color;
+		const slot = REPO_TILE_COLORS.indexOf(color);
+		if (slot >= 0) taken.add(slot);
+	}
 	// Slots already spoken for by repos starting with the same letter. Those
 	// are the tiles a person has to tell apart on color alone.
 	const byLetter = new Map<string, number[]>();
 	for (const id of [...ids].sort()) {
-		const start = repoTileColorIndex(id);
 		const letter = tileLetter(id);
 		const siblings = byLetter.get(letter) ?? [];
+		// A chosen color is final. It still counts as a sibling, so the repos
+		// sharing its letter are steered away from it.
+		if (assigned[id]) {
+			const slot = REPO_TILE_COLORS.indexOf(assigned[id]);
+			if (slot >= 0) byLetter.set(letter, [...siblings, slot]);
+			continue;
+		}
+		const start = repoTileColorIndex(id);
 		let index = start;
 		let fallback: number | null = null;
 		for (let step = 0; step < REPO_TILE_COLORS.length; step++) {

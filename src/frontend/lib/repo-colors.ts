@@ -35,14 +35,27 @@ export const REPO_TILE_COLORS = [
 
 /** Colors the server assigned, by repo id. */
 const assigned = new Map<string, string>();
+/** When each repo's icon last changed, so a new one isn't served from cache. */
+const revisions = new Map<string, number>();
 
 /** Record the assignment that came down with the repo list. */
 export function rememberRepoColors(
-	repos: Array<{ id: string; color?: string }>,
+	repos: Array<{ id: string; color?: string; iconRev?: number | null }>,
 ): void {
 	for (const repo of repos) {
 		if (repo.color) assigned.set(repo.id, repo.color);
+		if (repo.iconRev) revisions.set(repo.id, repo.iconRev);
+		else revisions.delete(repo.id);
 	}
+}
+
+/**
+ * The revision to hang off a tile's icon URL. Icons are cacheable, and one
+ * fetched from Settings replaces art the browser may already hold — without
+ * this the tile keeps painting the old picture until the cache lets go.
+ */
+export function repoIconRevision(id: string): number | null {
+	return revisions.get(id) ?? null;
 }
 
 /** FNV-1a over the lowercased id — mirrored from the server module. */

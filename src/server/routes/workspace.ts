@@ -8,6 +8,13 @@
 
 import { requestUser, type RouteContext } from "./context";
 import { searchRepoEntries } from "../file-index";
+import {
+	RepoAppearanceError,
+	repoIconRevision,
+	resolveRepoIcon,
+	updateRepoAppearance,
+	type RepoAppearancePatch,
+} from "../repo-appearance";
 import { assignRepoTileColors } from "../repo-tile-colors";
 import { runSessionPrompt } from "../run-session";
 import { type Sandbox, hasRemoteWorkspace, workspaceExecFor } from "../sandbox";
@@ -233,23 +240,59 @@ export async function handleWorkspaceRoutes(
 
 	// Repos available to attach / start a session against.
 	if (path === "/api/repos" && req.method === "GET") {
-		// `color` is the repo's fallback tile: assigned across the whole set so
-		// no two registered repos wear the same one, which is what lets a tile
-		// stand in for a repo where there's no room to name it. Clients hash
-		// their own for anything not listed here.
-		const colors = assignRepoTileColors(Object.keys(REPOS));
+		// `color` is the repo's fallback tile: a color chosen for it, else one
+		// assigned across the whole set so no two registered repos wear the
+		// same one — which is what lets a tile stand in for a repo where
+		// there's no room to name it. Clients hash their own for anything not
+		// listed here.
+		const chosen = Object.fromEntries(
+			Object.values(REPOS)
+				.filter((p) => p.color)
+				.map((p) => [p.id, p.color as string]),
+		);
+		const colors = assignRepoTileColors(Object.keys(REPOS), chosen);
 		return Response.json({
-			repos: Object.values(REPOS).map((p) => ({
-				id: p.id,
-				label: p.label,
-				description: p.description,
-				ghRepo: p.ghRepo,
-				defaultBranch: p.defaultBranch,
-				sharedCheckout: !!p.sharedCheckout,
-				default: !!p.default,
-				color: colors[p.id],
-			})),
+			repos: Object.values(REPOS).map((p) => {
+				const icon = resolveRepoIcon(p.icon, p.repo);
+				return {
+					id: p.id,
+					label: p.label,
+					description: p.description,
+					ghRepo: p.ghRepo,
+					defaultBranch: p.defaultBranch,
+					sharedCheckout: !!p.sharedCheckout,
+					default: !!p.default,
+					color: colors[p.id],
+					/** Whether that color was chosen rather than assigned. */
+					colorChosen: !!p.color,
+					/** Whether the tile paints art instead of the letter. */
+					hasIcon: !!icon,
+					/** Bumped when that art changes, so tiles don't stay cached. */
+					iconRev: repoIconRevision(icon),
+				};
+			}),
 		});
+	}
+
+	// Tile appearance: pick one of the palette colors, or give the repo real
+	// art (its owner's GitHub avatar). Both are instance config, so this is a
+	// config write, not a per-person preference.
+	const appearance = path.match(/^\/api\/repos\/([\w.-]+)\/appearance$/);
+	if (appearance && req.method === "POST") {
+		const body = (await req.json().catch(() => ({}))) as RepoAppearancePatch;
+		try {
+			return Response.json(await updateRepoAppearance(appearance[1], body));
+		} catch (e) {
+			if (e instanceof RepoAppearanceError) {
+				return Response.json({ error: e.message }, { status: 400 });
+			}
+			// A GitHub fetch that times out or dies mid-download isn't the
+			// caller's fault — say so with a status they can retry on.
+			return Response.json(
+				{ error: e instanceof Error ? e.message : "Couldn’t update the tile" },
+				{ status: 502 },
+			);
+		}
 	}
 
 	// ── Workspaces (containers that group sessions) ──
