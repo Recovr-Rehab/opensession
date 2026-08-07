@@ -1709,7 +1709,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	   ink is its glyph, well inside its square, and art at the full box read
 	   heavier than the letters beside it. Scale rather than a smaller box:
 	   the radius scales with it, so the corners stay right. */
-	transform: scale(0.8);
+	transform: scale(0.76);
 }
 .sidebar-list {
 	flex: none;
