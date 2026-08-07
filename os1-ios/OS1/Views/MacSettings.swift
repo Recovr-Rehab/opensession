@@ -12,6 +12,7 @@ struct MacSettingsView: View {
         case connection
         case composer
         case notifications
+        case shortcuts
         case appearance
         case models
         case connections
@@ -31,6 +32,7 @@ struct MacSettingsView: View {
             case .connection: "Connection"
             case .composer: "Composer"
             case .notifications: "Notifications"
+            case .shortcuts: "Shortcuts"
             case .appearance: "Appearance"
             case .models: "Models"
             case .connections: "Connections"
@@ -50,6 +52,7 @@ struct MacSettingsView: View {
             case .connection: "server.rack"
             case .composer: "keyboard"
             case .notifications: "bell.badge"
+            case .shortcuts: "sparkles"
             case .appearance: "circle.lefthalf.filled"
             case .models: "square.grid.2x2"
             case .connections: "point.3.connected.trianglepath.dotted"
@@ -83,6 +86,7 @@ struct MacSettingsView: View {
                 Section("Personal") {
                     paneRow(.composer)
                     paneRow(.notifications)
+                    paneRow(.shortcuts)
                     paneRow(.appearance)
                 }
                 Section("Workspace") {
@@ -140,6 +144,7 @@ struct MacSettingsView: View {
         case .connection: MacConnectionSettingsView(authenticationMessage: authenticationMessage)
         case .composer: ComposerSettingsView()
         case .notifications: NotificationsSettingsView()
+        case .shortcuts: ShortcutsSettingsView()
         case .appearance: AppearanceSettingsView()
         case .models: ModelsSettingsView()
         case .connections: ConnectionsSettingsView()

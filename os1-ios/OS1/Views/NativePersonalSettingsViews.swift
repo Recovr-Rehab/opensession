@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 // Native personal settings use the same server preference keys as the web app
@@ -411,5 +412,94 @@ struct PersonalPromptSection: View {
             self.error = error.localizedDescription
         }
         loading = false
+    }
+}
+
+/// Where the two App Intents are explained and handed over to the system.
+///
+/// The shortcuts themselves need no setup — an `AppShortcutsProvider` registers
+/// them the moment the app is installed (see `AgentShortcuts`) — but nothing in
+/// the app ever SAYS that, and the one step that is a person's to take (binding
+/// one to the Action Button, which only iOS Settings can do) happens outside
+/// OS1 entirely. So this page is mostly signposting: what each one does, a
+/// `ShortcutsLink` into the Shortcuts app where they live, and the path to the
+/// setting that Apple gives no deep link for.
+struct ShortcutsSettingsView: View {
+    var body: some View {
+        Form {
+            Section {
+                shortcut(
+                    icon: "sparkles",
+                    title: "Start an Agent",
+                    detail: """
+                    Asks for the idea and starts a session on it without opening \
+                    OS1. Repo and model come from what the composer used last.
+                    """
+                )
+                shortcut(
+                    icon: "mic",
+                    title: "New Idea",
+                    detail: """
+                    Opens the composer with the mic listening, so you can speak \
+                    the idea and still change repo, mode or model before sending.
+                    """
+                )
+            } footer: {
+                // No section header: the navigation title above already says
+                // "Shortcuts", and repeating it just pushed the first row down.
+                Text("Both are installed with the app — no setup needed. Ask Siri for either by name, or find them under OS1 in the Shortcuts app.")
+            }
+
+            Section {
+                #if os(iOS)
+                // The system's own button into the Shortcuts app, opened on
+                // this app's shortcuts. macOS has no such view, so it gets an
+                // ordinary button on the Shortcuts app's URL scheme.
+                ShortcutsLink()
+                    .shortcutsLinkStyle(.automaticOutline)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .listRowBackground(Color.clear)
+                #else
+                Button("Open Shortcuts") {
+                    if let url = URL(string: "shortcuts://") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                #endif
+            } footer: {
+                #if os(iOS)
+                Text("To put one on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → OS1. For dictation straight into a background session, make a shortcut of Dictate Text → Start an Agent and choose that instead.")
+                #else
+                Text("Run either from Spotlight, or say it to Siri.")
+                #endif
+            }
+        }
+        .navigationTitle("Shortcuts")
+        #if os(iOS)
+        .scrollContentBackground(.hidden)
+        .background(OS1VisualStyle.background)
+        #else
+        .formStyle(.grouped)
+        #endif
+    }
+
+    private func shortcut(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(OS1VisualStyle.accent)
+                .frame(width: 26, height: 26)
+                .background(OS1VisualStyle.hover, in: Circle())
+                // Optically centred on the title's cap height rather than the
+                // text block, which the multi-line detail below would drag down.
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }

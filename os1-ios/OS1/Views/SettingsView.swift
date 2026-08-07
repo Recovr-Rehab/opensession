@@ -64,6 +64,9 @@ struct SettingsView: View {
                 settingsLink("Notifications", icon: "bell") {
                     NotificationsSettingsView()
                 }
+                settingsLink("Shortcuts", icon: "sparkles") {
+                    ShortcutsSettingsView()
+                }
                 settingsLink("Appearance", icon: "circle.lefthalf.filled") {
                     AppearanceSettingsView()
                 }
