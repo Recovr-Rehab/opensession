@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Card, CardList } from "./card";
 import { cn } from "./cn";
+import { fieldClass } from "./input";
 
 export function SettingsPanel({
 	className,
@@ -168,18 +169,13 @@ export function SettingsHint({
 }
 
 /**
- * One recipe behind every field in settings — select, input, textarea. They
- * had drifted into three (two radii, two fills, two focus colors), so a form
- * looked assembled from parts. The fill is the page's own surface so a field
- * reads as a well cut into the group it sits in.
+ * Settings fields are the app's fields — `ui/input`'s recipe, not a local one.
+ * These aliases stay because ~20 call sites pass a class rather than render a
+ * component (native selects with their own appearance resets, mostly); the
+ * shape behind them is now shared with every other field and, through it, with
+ * every button.
  */
-const settingsFieldClass =
-	"rounded-md border border-line bg-surface text-fg outline-none placeholder:text-faint focus:border-accent disabled:cursor-default disabled:opacity-40";
-
-export const settingsSelectClass = cn(
-	settingsFieldClass,
-	"cursor-pointer px-2.5 py-1.5 text-control-label",
-);
+export const settingsSelectClass = cn(fieldClass, "cursor-pointer px-2.5 py-1.5 text-control-label");
 
 export function SettingsForm({
 	className,
@@ -219,7 +215,7 @@ export function SettingsField({
 	);
 }
 
-export const settingsInputClass = cn(settingsFieldClass, "w-full px-2.5 py-2 text-body");
+export const settingsInputClass = cn(fieldClass, "px-2.5 py-2 text-body");
 
 /** Multi-line text entry inside settings — memory entries, the personal
  *  prompt. One class so every editor in settings reads the same. */
