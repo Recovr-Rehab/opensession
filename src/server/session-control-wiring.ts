@@ -8,33 +8,30 @@
  */
 
 import { personaName } from "./config";
-import { type StreamEvent, cancelAgentRun, isAgentSessionBusy, runAgent, steerAgentRun } from "./agent-runner";
-import { makeAskHandler, pendingAsks } from "./asks";
-import { ensureGeneratedTitle } from "./generated-titles";
-import { onSessionIdle as onHumanAsksSessionIdle, relinkAskThreads } from "./human-asks";
-import { interactiveMcpServers } from "./interactive-mcp";
-import { SESSION_EFFORTS, type SessionEffort, interactiveDefaultModel, interactiveFallbackModel, modelLabel, providerFor, resolveModel } from "./models";
+import { cancelAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
+import { pendingAsks } from "./asks";
+import { relinkAskThreads } from "./human-asks";
+import { SESSION_EFFORTS, type SessionEffort, interactiveDefaultModel, providerFor, resolveModel } from "./models";
 import { promptQueues, recordSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
-import { attachSessionWatchersToEngineTranscript, attachSessionWatchersToTranscript, enqueuePrompt, foldSessionUsage, maybeLaunchSandboxedRun, maybeQueueAutoContinue, runSessionPrompt, runSessionPromptAndDrain, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
-import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
+import { enqueuePrompt, runSessionPrompt, runSessionPromptAndDrain, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
 import { parseImageDataUrls } from "./uploads";
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
-import { findSession, getCachedSessions, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
+import { findSession, getCachedSessions, invalidateSessionsCache, touchNativeSession } from "./session-cache";
 import { type SessionState, type SessionSummary, registerSessionControl } from "./session-control";
-import { buildBranchNote, memoryNoteFor, resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
-import { engineSessionPatch, engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sessions";
+import { type ResolvedCreate, forkHandoffContext, openCreatedSession, resolveForkContext, resolvePinnedAccountId } from "./session-create";
+import { resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
+import { engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sessions";
 import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
-import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
+import { type UnifiedSession } from "./types";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
 import { ownedWorktree } from "./session-workspace";
-import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch, worktreeHeadBranch } from "./worktree";
-import { broadcastToAll, broadcastToSession } from "./ws-hub";
+import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch } from "./worktree";
+import { broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import { existsSync, watch } from "fs";
-import { shouldPersistModelSwitch } from "./run-events";
 import { newSessionId } from "./paths";
 import { branchNameFromPrompt } from "./suggest-branch";
 
@@ -235,23 +232,43 @@ registerSessionControl({
 		reportBack,
 		user,
 		sandbox,
+		forkFrom,
+		accountId: accountIdInput,
+		planFirst,
 	}) => {
+		// Fork: branch a new session off an existing one — same rules as the
+		// web create (shares the source's cwd/branch/model; Claude sources are
+		// cloned via SDK forkSession, others get a transcript handoff). An
+		// unknown source id fails the create loudly.
+		const fork = resolveForkContext(forkFrom);
 		// Scratch: repo-less sessions (feed-item workspaces — the feeds design).
-		const isScratch = mode === "scratch";
-		const isAsk = !isScratch && mode !== "code";
-		const model =
-			(modelInput ? resolveModel(String(modelInput))?.id : undefined) ||
-			interactiveDefaultModel();
+		const isScratch = fork ? fork.source.mode === "scratch" : mode === "scratch";
+		const isAsk = fork
+			? !isScratch && fork.source.mode !== "code"
+			: !isScratch && mode !== "code";
+		const model = fork
+			? fork.source.model
+			: (modelInput ? resolveModel(String(modelInput))?.id : undefined) ||
+				interactiveDefaultModel();
 		// Same validation as the web palette's create_session: unknown efforts
-		// are dropped rather than persisted; images arrive as data URLs.
-		const createEffort =
-			typeof effortInput === "string" &&
-			(SESSION_EFFORTS as readonly string[]).includes(
-				effortInput.trim().toLowerCase(),
-			)
+		// are dropped rather than persisted; images arrive as data URLs. Forks
+		// inherit the source's effort/fast-mode/account pin, like the web path.
+		const createEffort = fork
+			? fork.source.effort
+			: typeof effortInput === "string" &&
+					(SESSION_EFFORTS as readonly string[]).includes(
+						effortInput.trim().toLowerCase(),
+					)
 				? (effortInput.trim().toLowerCase() as SessionEffort)
 				: undefined;
-		const createFastMode = fastModeInput === true;
+		const createFastMode = fork
+			? fork.source.fastMode === true
+			: fastModeInput === true;
+		// Pinned provider account: validated exactly like the web palette
+		// (mismatched/unknown/foreign ids drop to the pool).
+		const createAccountId = fork
+			? fork.source.accountId
+			: resolvePinnedAccountId(model, accountIdInput, user);
 		const images = parseImageDataUrls(imageUrls);
 		const parentSession = parentSessionId ? findSession(parentSessionId) : null;
 		// Explicit workspace join (the native apps' "new session in this workspace" —
@@ -280,8 +297,14 @@ registerSessionControl({
 		);
 		// Sandbox opt-in: true = config default provider, or an explicit
 		// provider id validated against the config — an unconfigured pick fails
-		// the create loudly instead of silently running on the host.
-		const sandboxResolved = resolveRequestedSandbox(sandbox, repo.id, model);
+		// the create loudly instead of silently running on the host. Forks
+		// never sandbox — they share/fork the source session's engine state
+		// and cwd (same rule as the web create).
+		const sandboxResolved = resolveRequestedSandbox(
+			fork ? undefined : sandbox,
+			repo.id,
+			model,
+		);
 		if (!sandboxResolved.ok) throw new Error(sandboxResolved.error);
 		const sandboxProvider = sandboxResolved.provider;
 		const remoteSandbox = isRemoteSandboxProvider(sandboxProvider);
@@ -314,7 +337,11 @@ registerSessionControl({
 			existsSync(parentRepoContext.dir)
 				? parentRepoContext
 				: null;
-		if (isScratch) {
+		if (fork) {
+			// Share the source's cwd so the fork sees the same code state.
+			wtPath = fork.source.worktreeDir || repo.repo;
+			sessionBranch = fork.source.branch || "";
+		} else if (isScratch) {
 			// Scratch children share the parent workspace's scratch dir (so a
 			// child sees the parent's downloads); standalone scratch creates get
 			// a fresh one. Never a repo checkout (the feeds design).
@@ -401,9 +428,13 @@ registerSessionControl({
 		const deskParent = !!parentSession?.desk;
 		// A joined workspace is the session's workspace, which also skips the mint /
 		// adopt block below — and with it the auto-naming: a session that merely
-		// joins an existing workspace must never rename it.
+		// joins an existing workspace must never rename it. A fork lands next to
+		// its source in the same workspace (same rule as the web create).
 		let resolvedWorkspaceId =
-			joinedWorkspace?.id || (deskParent ? null : parentSession?.workspaceId) || null;
+			joinedWorkspace?.id ||
+			fork?.source.workspaceId ||
+			(deskParent ? null : parentSession?.workspaceId) ||
+			null;
 		// A workspace minted below from THIS session's provisional first line is
 		// renamed once the generated summary lands, exactly like the web create
 		// path — the sidebar rows (web and native) are titled by the workspace,
@@ -457,115 +488,6 @@ registerSessionControl({
 			if (resolvedWorkspaceId && !deskParent && parentSession?.source === "opensession")
 				touchNativeSession(parentSession.id, { workspaceId: resolvedWorkspaceId });
 		}
-		// Replace the raw first-line title with a short summary in the background;
-		// the next sessions poll (≤5s) picks it up. A workspace minted for this
-		// session is named ONCE from that same summary and keeps the name for life —
-		// later sessions never rename it.
-		void ensureGeneratedTitle(bksId, prompt, user, model).then((t) => {
-			if (!t) return;
-			invalidateSessionsCache();
-			if (!autoNamedWorkspace) return;
-			const cur = getWorkspace(autoNamedWorkspace.id);
-			// Only while it still wears the provisional name — a manual rename in
-			// the meantime wins.
-			if (cur && cur.name === autoNamedWorkspace.name)
-				updateWorkspace(autoNamedWorkspace.id, { name: t });
-		});
-
-		let engineSessionId = "";
-		let effectiveModel = model;
-		let selectedModel = model;
-		let effectiveProvider = providerFor(effectiveModel);
-		const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
-		let persisted = false;
-		let latestUsage: SessionUsage | undefined;
-		// Terminal failure the opening run died on — recorded after the loop so
-		// the fresh session surfaces as "Needs input".
-		let runFailure: string | null = null;
-		// The runner already wrote its own, friendlier transcript line.
-		let failureNoticePersisted = false;
-		// The opening turn's reply and tool count, for the shared
-		// announce-then-stop guard (maybeQueueAutoContinue) below.
-		let assistantText = "";
-		let toolUseCount = 0;
-		// Actual worktree HEAD when it drifted from the recorded branch (the
-		// agent switched/renamed branches during the opening turn).
-		const headBranchPatch = () => {
-			const head =
-				!isAsk && !isScratch && sessionBranch
-					? worktreeHeadBranch(wtPath)
-					: null;
-			return head && head !== sessionBranch ? { branch: head } : {};
-		};
-		// Field-scoped write: creation fields are create-if-absent defaults (an
-		// existing file — e.g. one a sandbox launch already stamped a sandboxId
-		// onto — wins); this run only owns the engine-id/model/HEAD-sync fields
-		// it actually changes. Serialized via updateSessionFile.
-		const persist = () =>
-			updateSessionFile(bksId, (data) => {
-				// Widen to Partial: the file may not exist yet (create-if-absent).
-				const existing: Partial<NativeSessionFile> = data;
-				return {
-					id: bksId,
-					claudeSessionId: "",
-					branch: isAsk || isScratch ? "" : sessionBranch,
-					worktreeDir: wtPath,
-					// Scratch sessions are repo-less (wtPath is a plain dir).
-					...(isScratch ? {} : { repo: repo.id }),
-					...(resolvedWorkspaceId ? { workspaceId: resolvedWorkspaceId } : {}),
-					...(parentSessionId ? { parentSessionId } : {}),
-					// Persisted so the failure beacon (handoff-evidence.ts) can tell
-					// a worker that owes its parent a report from a child session
-					// that was explicitly told not to report (e.g. the PR session).
-					...(parentSessionId && reportBack ? { reportBack: true } : {}),
-					// Feed-item linkage follows the session's workspace (Video tab +
-					// sidebar feed-row join — the feeds design).
-					...(contextWorkspace?.externalRefs?.length
-						? { externalRefs: contextWorkspace.externalRefs }
-						: {}),
-					// A session in a support-ticket workspace is on that ticket too —
-					// same rule as the web tab strip's "+".
-					...(joinedWorkspace?.plainThreadId
-						? { plainThreadId: joinedWorkspace.plainThreadId }
-						: {}),
-					// Persist the MCP scoping so follow-up prompts keep it.
-					...(effectiveMcpServers?.length
-						? { mcpServers: effectiveMcpServers }
-						: {}),
-					createdBy: sessionCreatedBy,
-					createdAt: sessionCreatedAt,
-					title,
-					mode: (isScratch ? "scratch" : isAsk ? "ask" : "code") as
-						| "ask"
-						| "code"
-						| "scratch",
-					...(createEffort ? { effort: createEffort } : {}),
-					...(createFastMode ? { fastMode: true } : {}),
-					// Sandbox opt-in: the opening run below and every later prompt
-					// route through maybeLaunchSandboxedRun for this provider.
-					...(sandboxProvider
-						? {
-								sandbox: {
-									provider: sandboxProvider,
-									// Remote providers are always volume-style (no host mounts).
-									...(remoteSandbox ? { workspace: "volume" as const } : {}),
-								},
-							}
-						: {}),
-					...existing,
-					...(engineSessionId
-						? engineSessionPatch(effectiveProvider, engineSessionId)
-						: {}),
-					...(engineSessionId ? { lastEngineProvider: effectiveProvider } : {}),
-					...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-					...(selectedModel ? { model: selectedModel } : {}),
-					...(modelHistory.length ? { modelHistory } : {}),
-					...headBranchPatch(),
-					lastActivity: new Date().toISOString(),
-				};
-			}).then(() => {
-				persisted = true;
-			});
 
 		// @session:<id> mentions in a create_session prompt (e.g. a monitor
 		// session spun up to watch others) get the same resolving footer as
@@ -610,285 +532,92 @@ registerSessionControl({
 				}
 			}
 		}
+		// A non-clonable fork hands the source transcript over in the opening
+		// prompt instead (same as the web create).
+		if (fork?.needsHandoff) {
+			openingPrompt += `\n\n${await forkHandoffContext(fork)}`;
+		}
 
-		// Make the id resolvable before returning it. Callers can navigate to the
-		// fresh session immediately, while engine startup continues in the background.
-		await persist();
+		const spec: ResolvedCreate = {
+			id: bksId,
+			title,
+			titlePrompt: prompt,
+			openingPrompt,
+			user,
+			createdBy: sessionCreatedBy,
+			createdAt: sessionCreatedAt,
+			mode: isScratch
+				? ("scratch" as const)
+				: isAsk
+					? ("ask" as const)
+					: ("code" as const),
+			wtPath,
+			// Ask/scratch sessions record no branch (a shared parent worktree's
+			// branch still drives the branch note + HEAD-drift compare below).
+			persistBranch: isAsk || isScratch ? "" : sessionBranch,
+			branch: sessionBranch,
+			// Scratch sessions are repo-less (wtPath is a plain dir). A fork's
+			// worktree names its repo (the source may live elsewhere).
+			repoId: isScratch ? undefined : fork ? repoForPath(wtPath).id : repo.id,
+			memoryRepoIds: [repo.id],
+			workspaceId: resolvedWorkspaceId || undefined,
+			announceWorkspaceId: resolvedWorkspaceId || undefined,
+			autoNameWorkspace: autoNamedWorkspace,
+			parentSessionId,
+			reportBack,
+			planFirst: planFirst === true,
+			model,
+			effort: createEffort,
+			fastMode: createFastMode || undefined,
+			accountId: createAccountId,
+			images,
+			// Feed-item linkage follows the session's workspace (Video tab +
+			// sidebar feed-row join — the feeds design).
+			externalRefs: contextWorkspace?.externalRefs,
+			// A session in a support-ticket workspace is on that ticket too —
+			// same rule as the web tab strip's "+".
+			plainThreadId: joinedWorkspace?.plainThreadId,
+			// Persist the MCP scoping so follow-up prompts keep it.
+			persistMcpServers: effectiveMcpServers?.length
+				? effectiveMcpServers
+				: undefined,
+			// Unscoped creates leave this undefined (read as "all" downstream,
+			// like the web path) — the sandbox launcher fail-closes to [].
+			runMcpServers: effectiveMcpServers,
+			sandboxProvider,
+			volumeWorkspace: false,
+			remoteSandbox,
+			// The worktree was created synchronously above — the tool caller
+			// gets an id whose workspace already exists.
+			needsWorktree: false,
+			fork: fork?.canFork
+				? {
+						engineSessionId: fork.source.claudeSessionId!,
+						resumeAt: fork.messageId,
+					}
+				: undefined,
+			finish: "auto-continue-guard",
+		};
 
-		// Run in the background; watchers (web UI) see the live stream, the same as
-		// a UI-created session. The tool returns once the session file exists.
-		void (async () => {
-			try {
-				// Sandbox session: the OPENING turn routes through the same launcher
-				// the prompt path uses (persist first so the session file resolves;
-				// the worktree already exists — created above — so bind mounts are
-				// ready). Bind mode falls back to a host run on launch failure;
-				// remote providers (always volume) have no host fallback — fail the
-				// opening turn with a clear error instead.
-				let sandboxOpeningRun: AsyncGenerator<StreamEvent> | null = null;
-				if (sandboxProvider) {
-					if (!persisted) await persist();
-					const created = findSession(bksId);
-					sandboxOpeningRun = created
-						? await maybeLaunchSandboxedRun(created, {
-								prompt: openingPrompt,
-								cwd: wtPath,
-								user,
-								images,
-								mcpServers: effectiveMcpServers ?? "all",
-								isAutomationSession: false,
-							})
-						: null;
-					if (!sandboxOpeningRun && remoteSandbox) {
-						runFailure =
-							"Sandbox unavailable for this remote-sandbox session — the opening prompt was not run. Check sandbox config/kill-switch and retry.";
-						broadcastToSession(bksId, {
-							type: "error",
-							sessionId: bksId,
-							message: runFailure,
-						});
-						recordRunOutcome(bksId, runFailure);
-						broadcastToSession(bksId, { type: "stream_done", sessionId: bksId });
-						broadcastToSession(bksId, {
-							type: "session_status",
-							sessionId: bksId,
-							isRunning: false,
-						});
-						return;
-					}
-				}
-				for await (const event of sandboxOpeningRun ?? runAgent({
-					prompt: openingPrompt,
-					cwd: wtPath,
-					mode: isScratch ? ("scratch" as const) : isAsk ? ("ask" as const) : ("code" as const),
-					model,
-					effort: createEffort,
-					fastMode: createFastMode || undefined,
-					images,
-					fallbackModel: interactiveFallbackModel(model),
-					mcpServers: effectiveMcpServers ?? "all",
-					reposNote:
-						[
-							buildBranchNote({
-								mode: isScratch ? ("scratch" as const) : isAsk ? ("ask" as const) : ("code" as const),
-								branch: sessionBranch,
-								worktreeDir: wtPath,
-							}),
-							await memoryNoteFor(user, [repo.id]),
-						]
-							.filter(Boolean)
-							.join("\n\n") || undefined,
-					inProcessMcp: interactiveMcpServers(user, bksId),
-					confirmTools: STRIPE_CONFIRM_TOOLS,
-					aws: true,
-					user, // gate per-user MCP servers (allowedUsers) to the creator
-					journal: { osSessionId: bksId, kind: "create" },
-					onAskUser: makeAskHandler(bksId),
-				})) {
-					if (event.type === "init") {
-						engineSessionId = event.sessionId || "";
-						if (event.provider) effectiveProvider = event.provider;
-						if (event.model) effectiveModel = event.model;
-						// A sandbox session was persisted before launch and its file has
-						// since been touched with the materialized sandboxId — persist()
-						// is field-scoped now, but the narrower touch stays the clearer
-						// statement of what init actually changes.
-						if (persisted)
-							touchNativeSession(bksId, {
-								...engineSessionPatch(effectiveProvider, engineSessionId),
-								...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-							});
-						else await persist();
-						// Attach anyone already viewing this fresh session to its brand-new
-						// transcript file so the first turn streams live (see
-						// attachSessionWatchersToTranscript).
-						if (engineSessionId) {
-							attachSessionWatchersToEngineTranscript(
-								bksId,
-								effectiveProvider,
-								wtPath,
-								engineSessionId,
-							);
-						}
-					}
-					if (event.type === "model_switch") {
-						const to = event.toModel || "";
-						const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
-						if (to) {
-							effectiveModel = to;
-							effectiveProvider = providerFor(to);
-							if (shouldPersistModelSwitch(event)) {
-								selectedModel = to;
-								modelHistory.push({
-									model: to,
-									from: event.fromModel,
-									at: new Date().toISOString(),
-									by: reason,
-								});
-								touchNativeSession(bksId, {
-									model: selectedModel,
-									modelHistory,
-								});
-								broadcastToSession(bksId, {
-									type: "model_changed",
-									sessionId: bksId,
-									model: to,
-									from: event.fromModel,
-									by: reason,
-								});
-							} else {
-								broadcastToSession(bksId, {
-									type: "notice",
-									message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
-								});
-							}
-						}
-					}
-					if (event.type === "text_chunk") {
-						assistantText += event.text;
-						broadcastToSession(bksId, {
-							type: "stream_text",
-							sessionId: bksId,
-							text: event.text,
-						});
-					}
-					if (event.type === "tool_use") {
-						toolUseCount++;
-						broadcastToSession(bksId, {
-							type: "stream_tool_use",
-							sessionId: bksId,
-							entry: {
-								id: event.toolUseId || crypto.randomUUID(),
-								type: "tool_use",
-								content: `Using ${event.toolName}`,
-								timestamp: new Date().toISOString(),
-								toolName: event.toolName,
-								toolInput: event.toolInput,
-								toolUseId: event.toolUseId,
-							},
-						});
-					}
-					if (event.type === "tool_result") {
-						broadcastToSession(bksId, {
-							type: "stream_tool_result",
-							sessionId: bksId,
-							entry: {
-								id: event.toolUseId
-									? `tr-${event.toolUseId}`
-									: crypto.randomUUID(),
-								type: "tool_result",
-								content: event.content || "",
-								timestamp: new Date().toISOString(),
-								toolUseId: event.toolUseId,
-								...(event.images && event.images.length > 0
-									? { images: event.images }
-									: {}),
-								...(event.videos && event.videos.length > 0
-									? { videos: event.videos }
-									: {}),
-							},
-						});
-					}
-					if (event.type === "usage_snapshot" && event.usage) {
-						// Live mid-run cost/context. Snapshots are run-cumulative and this
-						// is the session's only run, so the fold base is empty — each
-						// snapshot recomputes the total from scratch (folding onto
-						// latestUsage would double-count).
-						latestUsage = foldSessionUsage(
-							undefined,
-							event.usage,
-							effectiveModel,
-						);
-						broadcastToSession(bksId, {
-							type: "usage_update",
-							sessionId: bksId,
-							usage: latestUsage,
-						});
-					}
-					if (event.type === "done") {
-						engineSessionId = event.sessionId || engineSessionId;
-						if (event.provider) effectiveProvider = event.provider;
-						if (event.model) effectiveModel = event.model;
-						if (event.usageLimitExhausted)
-							runFailure =
-								event.result || "Usage limit reached on every account";
-						if (event.usage) {
-							latestUsage = foldSessionUsage(
-								undefined,
-								event.usage,
-								event.model || effectiveModel,
-							);
-							broadcastToSession(bksId, {
-								type: "usage_update",
-								sessionId: bksId,
-								usage: latestUsage,
-							});
-						}
-						if (event.cacheMissWarning) {
-							broadcastToSession(bksId, {
-								type: "cache_warning",
-								sessionId: bksId,
-							});
-						}
-					}
-					if (event.type === "error") {
-						runFailure = event.content || "Run failed";
-						if (event.noticePersisted) failureNoticePersisted = true;
-						broadcastToSession(bksId, {
-							type: "error",
-							message: event.content,
-						});
-					}
-				}
-				if (!persisted) await persist();
-				else
-					touchNativeSession(
-						bksId,
-						{
-							...engineSessionPatch(effectiveProvider, engineSessionId),
-							...(engineSessionId ? { lastEngineProvider: effectiveProvider } : {}),
-							...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-							...(modelHistory.length ? { modelHistory } : {}),
-							// Same run-end branch sync as runSessionPromptInner.
-							...headBranchPatch(),
-						},
-					);
-				if (latestUsage)
-					touchNativeSession(bksId, { usage: latestUsage });
-				recordRunOutcome(bksId, runFailure, {
-					engineSessionId,
-					noticePersisted: failureNoticePersisted,
+		// Run in the background; watchers (web UI) see the live stream, the same
+		// as a UI-created session. The tool returns once the session file exists
+		// (the announce), while engine startup continues behind it.
+		return await new Promise<{ id: string; createdBy: string; createdAt: string }>(
+			(resolve, reject) => {
+				openCreatedSession(spec, {
+					announce: (info) =>
+						resolve({
+							id: info.id,
+							createdBy: info.createdBy,
+							createdAt: info.createdAt,
+						}),
+					emit: (m) => broadcastToSession(bksId, { ...m, sessionId: bksId }),
+					fail: (message) => reject(new Error(message)),
+				}).catch((e) => {
+					console.error(`[sessions-mcp] create session ${bksId} failed:`, e);
+					reject(e);
 				});
-				broadcastToSession(bksId, { type: "stream_done", sessionId: bksId });
-				broadcastToSession(bksId, {
-					type: "session_status",
-					sessionId: bksId,
-					isRunning: false,
-				});
-				// An opening turn announce-then-stops exactly like a later one, and
-				// this path bypasses runSessionPromptInner (see createMentionsNote
-				// above) — so run the shared guard here too. Nothing wraps this run
-				// in runSessionPromptAndDrain, so a queued nudge needs the drain
-				// watcher to deliver it.
-				if (
-					maybeQueueAutoContinue({
-						sessionId: bksId,
-						assistantText,
-						toolUseCount,
-						endedWithError: !!runFailure,
-						runFailure,
-					})
-				) {
-					watchExternalRunAndDrain(bksId);
-				}
-				if (!promptQueues.get(bksId)?.length) {
-					onHumanAsksSessionIdle(bksId);
-				}
-			} catch (e) {
-				console.error(`[sessions-mcp] create session ${bksId} failed:`, e);
-			}
-		})();
-
-		return { id: bksId, createdBy: sessionCreatedBy, createdAt: sessionCreatedAt };
+			},
+		);
 	},
 });

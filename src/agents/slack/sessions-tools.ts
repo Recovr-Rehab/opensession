@@ -687,6 +687,21 @@ export function createSessionsMcpServer(
             .union([z.boolean(), z.enum(["docker", "daytona", "e2b", "box", "modal", "microvm", "lambda-microvm"])])
             .optional()
             .describe("Run the session in an isolated sandbox: true = the server's default provider, or an explicit provider id (must be configured server-side, else the create fails with a clear error). Omit for a host run."),
+          planFirst: z
+            .boolean()
+            .optional()
+            .describe("Plan-first gate: the session must post a short design doc before creating/editing any file. Code mode only."),
+          accountId: z
+            .string()
+            .optional()
+            .describe("Pin a Claude/Codex provider account id for the session's runs (soft pin; invalid/foreign ids fall back to the pool)."),
+          forkFrom: z
+            .object({
+              sourceId: z.string().describe("Session id to fork."),
+              messageId: z.string().optional().describe("Fork from this past message instead of the tip."),
+            })
+            .optional()
+            .describe("Fork an existing session: the new session shares its worktree/branch/model, cloning the conversation when the engine supports it (Claude) and handing off the transcript otherwise. mode/branch/model/sandbox inputs are ignored."),
         },
         async (args: {
           prompt: string;
@@ -699,6 +714,9 @@ export function createSessionsMcpServer(
           reportBack?: boolean;
           standalone?: boolean;
           sandbox?: boolean | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm";
+          planFirst?: boolean;
+          accountId?: string;
+          forkFrom?: { sourceId: string; messageId?: string };
         }) => {
           if (!args.prompt?.trim()) return text("Need a prompt to start a session.");
           const parentSessionId = args.standalone
@@ -727,6 +745,9 @@ export function createSessionsMcpServer(
             reportBack: shouldReportBack,
             user: ctx.createdBy,
             sandbox: args.sandbox,
+            planFirst: args.planFirst,
+            accountId: args.accountId,
+            forkFrom: args.forkFrom,
           });
           return text(
             [
