@@ -192,6 +192,14 @@ struct RepoTile: View {
     let name: String
     var size: CGFloat = 18
     var round = false
+    /// How much of the tile the artwork fills. 1 is right for a repo tile —
+    /// the server crops every icon to its artwork and re-pads it to a fixed
+    /// margin, so the breathing room is already in the image, and shrinking
+    /// again here would leave art reading smaller than the lettered tiles
+    /// beside it. The one caller that overrides it is the sessions-list
+    /// Settings button, which reproduces the margin the app mark used to
+    /// carry before the icons were trimmed.
+    var artScale: CGFloat = 1
 
     static func label(for name: String) -> String {
         name == "backstage" ? "opensession" : name  // legacy repo id on older instances
@@ -262,12 +270,11 @@ struct RepoTile: View {
                 image
                     .resizable()
                     .scaledToFill()
-                    // Filling the tile is right: the server crops every icon
-                    // to its artwork and re-pads it to a fixed margin, so the
-                    // breathing room is already in the image. Shrinking again
-                    // here would stack, and leave art reading smaller than
-                    // the lettered tiles beside it (.repo-tile--img img on
+                    // Fills the tile unless a caller says otherwise: the
+                    // server already crops every icon to its artwork and
+                    // re-pads it to a fixed margin (.repo-tile--img img on
                     // the web carries no inset either).
+                    .scaleEffect(artScale)
             } else {
                 Text(letter)
                     .font(.system(size: size * 0.6, weight: .bold, design: .rounded))
