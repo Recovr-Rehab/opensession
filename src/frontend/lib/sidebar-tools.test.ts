@@ -37,6 +37,6 @@ describe("readHiddenSidebarTools", () => {
 
 	test("unreadable storage falls back to the new-account default", () => {
 		store.set("opensession-sidebar-hidden-tools", "{not json");
-		expect(readHiddenSidebarTools().has("desk")).toBe(true);
+		expect(readHiddenSidebarTools().has("notes")).toBe(true);
 	});
 });
