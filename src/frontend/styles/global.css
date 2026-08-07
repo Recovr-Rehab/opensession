@@ -7,15 +7,31 @@
 	/* Conductor-style dark: lifted neutral charcoal rather than near-black — the
 	   deepest surface sits ~#1b, so code blocks/terminals (which stay near-black)
 	   read as inset wells instead of blending in. */
+	/* Elevation ramp. Four tiers, each one step further from the page than the
+	   last, and — this is the part that has to hold — stepping the SAME
+	   direction in both themes: lighter than --bg in dark, darker than --bg in
+	   light. A surface's tier is what makes it read as lifted, so a token may
+	   not swap tiers between themes or the same stack reads raised in one and
+	   inset in the other.
+
+	     L0  --bg                                   the page
+	     L1  --bg-raised / --topbar-bg / sidebar    chrome behind the content
+	     L2  --bg-panel                             cards, bubbles, tool rows
+	     L3  --control-surface                      controls/popups on top
+
+	   --bg-hover/--bg-active continue past L3 (see below), so the whole chain
+	   is monotonic: bg < raised < panel < control < hover < active in dark, and
+	   the same order descending in light. */
 	--bg: #1c1c1c;
 	--bg-raised: #222222;
 	/* Desktop sidebar material: a translucent charcoal wash over the native
-	   window/backdrop. */
+	   window/backdrop — L1, so it is --bg-raised at partial opacity. */
 	--sidebar-material: rgba(34, 34, 34, 0.66);
 	--sidebar-material-sheen: rgba(255, 255, 255, 0.035);
 	--topbar-bg: #222222;
-	/* Clean control chips (header Share, PR chip): sit one gentle step above the
-	   topbar so they read as lifted, with a whisper of shadow. Codex-style. */
+	/* Clean control chips (header Share, PR chip), the composer, popups: the top
+	   of the ramp, so they read as lifted off whatever they sit on, with a
+	   whisper of shadow. Codex-style. */
 	--control-surface: #292929;
 	--control-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 	--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.16), 0 14px 36px rgba(0, 0, 0, 0.2);
@@ -87,14 +103,25 @@
    variable-driven, so redefining these ~15 core tokens re-themes it; the handful
    of hardcoded light-on-translucent spots get explicit overrides just below. */
 html[data-theme="light"] {
+	/* Same four tiers as :root, stepping down from white instead of up from
+	   charcoal (L0 #ffffff → L1 -9 → L2 -15 → L3 -20). The steps are wider than
+	   dark's 6/10/13 because ink on white reads lighter than the same step of
+	   white on charcoal. */
 	--bg: #ffffff;
 	--bg-raised: #f6f6f6;
 	--sidebar-material: rgba(246, 246, 246, 0.72);
 	--sidebar-material-sheen: rgba(255, 255, 255, 0.42);
-	--topbar-bg: #fbfbfb;
-	/* Pure white, a hair brighter than the neutral topbar, + a barely-there shadow —
-	   the clean lifted chip from the Codex reference. */
-	--control-surface: #ffffff;
+	/* L1, same tier as --bg-raised (as in dark). It used to be #fbfbfb, a half
+	   step, which put the topbar between the page and the sidebar instead of
+	   level with it. */
+	--topbar-bg: #f6f6f6;
+	/* L3 + a barely-there shadow — the clean lifted chip from the Codex
+	   reference. It used to be #ffffff, byte-identical to --bg, so a chip, the
+	   composer and the mention popup had no surface of their own in light; and
+	   it sat at the BOTTOM of the ramp here while it sits at the top in dark.
+	   #ebebeb lands between --bg-panel (#f0f0f0) and --bg-hover (#e9e9e9), which
+	   is where dark's #292929 sits between #262626 and #2e2e2e. */
+	--control-surface: #ebebeb;
 	--control-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 	--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 14px 36px rgba(0, 0, 0, 0.08);
 	--bg-panel: #f0f0f0;
