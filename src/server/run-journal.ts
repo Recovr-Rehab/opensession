@@ -96,6 +96,45 @@ function writeRunJournal(journal: Record<string, ActiveRunRecord>): void {
   }
 }
 
+/**
+ * The journal payload the engine runners write at their two journal points —
+ * the pre-engine early write and the engine-id upgrade write. The fields every
+ * site copies identically out of the runner's opts (RunAgentOpts) come from
+ * `opts`; everything else — including the fields the sites deliberately
+ * DIFFER on (fastMode, account pinning, prReviewer, serverKey) — stays a
+ * per-site decision in `site`, so each caller states exactly what it
+ * journals. Stamps startedAt.
+ */
+export function buildRunJournalRecord(
+  opts: {
+    deniedTools?: Record<string, string>;
+    aws?: boolean;
+    selectedModel?: string;
+    transientFallback?: boolean;
+    fallbackModel?: string;
+  },
+  site: Omit<
+    ActiveRunRecord,
+    | "startedAt"
+    | "claimedAt"
+    | "deniedTools"
+    | "aws"
+    | "selectedModel"
+    | "transientFallback"
+    | "fallbackModel"
+  >,
+): ActiveRunRecord {
+  return {
+    ...site,
+    deniedTools: opts.deniedTools,
+    aws: !!opts.aws,
+    selectedModel: opts.selectedModel,
+    transientFallback: opts.transientFallback,
+    fallbackModel: opts.fallbackModel,
+    startedAt: new Date().toISOString(),
+  };
+}
+
 export function journalSet(record: ActiveRunRecord): void {
   const journal = readRunJournal();
   const rejournal = record.runKey in journal;
