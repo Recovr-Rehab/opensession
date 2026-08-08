@@ -62,6 +62,14 @@ import {
   PR_BODY_CLAMPED,
   PR_BODY_MD,
   PR_BODY_TOGGLE,
+  PR_COMMENT_ADD,
+  PR_COMMENT_AUTHOR,
+  PR_COMMENT_BODY,
+  PR_COMMENT_LINK,
+  PR_COMMENT_META,
+  PR_COMMENT_ROW,
+  PR_COMMENT_SELECT,
+  PR_COMMENTS_ADD_ALL,
   PR_REPO_TAB_X,
   PR_REPO_TABS,
   prRepoTabClass,
@@ -1835,7 +1843,7 @@ export function PrPanel({
               headExtra={
                 onAddToInput ? (
                   <button
-                    className="pr-comments-add-all"
+                    className={PR_COMMENTS_ADD_ALL}
                     onClick={() => onAddToInput(formatPrCommentsPrompt(comments, pr))}
                   >
                     Add all to session
@@ -1844,20 +1852,20 @@ export function PrPanel({
               }
             >
               {comments.map((comment, i) => (
-                <div className="pr-comment-row" key={`${comment.url || comment.createdAt || i}`}>
-                  <span className="pr-comment-select" aria-hidden />
-                  <div className="pr-comment-meta">
-                    <span className="pr-comment-author">{comment.author || "comment"}</span>
+                <div className={PR_COMMENT_ROW} key={`${comment.url || comment.createdAt || i}`}>
+                  <span className={PR_COMMENT_SELECT} aria-hidden />
+                  <div className={PR_COMMENT_META}>
+                    <span className={PR_COMMENT_AUTHOR}>{comment.author || "comment"}</span>
                   </div>
-                  <div className="pr-comment-body">{stripHtmlComments(comment.body)}</div>
+                  <div className={PR_COMMENT_BODY}>{stripHtmlComments(comment.body)}</div>
                   {comment.url && (
-                    <a className="pr-comment-link" href={comment.url} target="_blank" rel="noopener">
+                    <a className={PR_COMMENT_LINK} href={comment.url} target="_blank" rel="noopener">
                       ↗
                     </a>
                   )}
                   {onAddToInput && (
                     <button
-                      className="pr-comment-add"
+                      className={PR_COMMENT_ADD}
                       onClick={() => onAddToInput(formatPrCommentPrompt(comment, pr))}
                     >
                       Add to session

@@ -263,6 +263,31 @@ export const prRepoTabClass = (selected: boolean) =>
 /** Unlink (×) inside the selected linked-PR tab. */
 export const PR_REPO_TAB_X = "-mr-1 inline-flex items-center text-dim hover:text-fg";
 
+/* ── Review comments ─────────────────────────────────────────────────────
+ *
+ * One row per comment: a marker, the author, the comment clamped to a line,
+ * the outbound link, and "Add to session" — which only appears once the row is
+ * hovered or the button takes focus, hence the group.
+ */
+export const PR_COMMENT_ROW =
+	"group grid grid-cols-[16px_minmax(78px,auto)_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-control border border-transparent px-1.5 py-[7px] hover:border-line-strong";
+export const PR_COMMENT_SELECT =
+	"size-[11px] justify-self-center rounded-full border border-faint";
+export const PR_COMMENT_META =
+	"flex min-w-0 items-center gap-[5px] text-label text-fg";
+export const PR_COMMENT_AUTHOR = "truncate font-semibold";
+export const PR_COMMENT_BODY =
+	"block truncate text-label leading-[1.25] text-faint";
+/** The outbound arrow is a glyph, not running text — 16px is its size, not a
+ *  step on the type scale. */
+export const PR_COMMENT_LINK = "text-[16px] text-faint no-underline hover:text-fg";
+/** "Add to session", per row and once for the card. The quiet card-level one
+ *  drops the outline and fill; both light up the same way. */
+export const PR_COMMENT_ADD =
+	"cursor-pointer whitespace-nowrap rounded-md border border-line bg-surface px-[7px] py-[3px] text-meta text-faint opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 hover:bg-hover hover:text-fg";
+export const PR_COMMENTS_ADD_ALL =
+	"cursor-pointer whitespace-nowrap rounded-md border border-transparent bg-transparent px-[7px] py-[3px] text-label text-faint hover:bg-hover hover:text-fg";
+
 /* ── PR description ──────────────────────────────────────────────────────
  *
  * The description is renderer output (dangerouslySetInnerHTML), so its
