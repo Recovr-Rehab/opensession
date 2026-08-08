@@ -406,6 +406,29 @@ struct StreamingBubble: View {
     }
 }
 
+/// The live run, at the end of the transcript: an amber pulse and the
+/// ticking clock, sitting directly under the last message so it reads as
+/// something that message is still doing. It used to ride the composer, which
+/// put the state on the field you type in rather than on the work.
+struct RunStatusFooter: View {
+    let since: Date?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // Amber is the in-progress colour everywhere else in the app —
+            // the sessions list's in-progress lane, the tab strip's running
+            // pill — so the transcript says "running" in the same voice.
+            PulsingDot(color: OS1VisualStyle.yellow, size: 6)
+            RunElapsedLabel(since: since)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(OS1VisualStyle.yellow)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Working")
+    }
+}
+
 /// Ticking elapsed-run clock ("8.3s", "2m 14s", "1h 5m") — the web viewer's
 /// BusyElapsed format. Falls back to "Running" with no anchor.
 struct RunElapsedLabel: View {

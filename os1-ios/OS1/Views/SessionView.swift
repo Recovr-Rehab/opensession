@@ -180,6 +180,14 @@ struct SessionView: View {
                                 StreamingBubble(text: viewModel.liveText)
                                     .id("live-stream")
                             }
+                            // The run clock closes the transcript while work
+                            // is in flight, under whatever the last message
+                            // is — a durable answer, a live stream, or a
+                            // working fold.
+                            if viewModel.isRunning {
+                                RunStatusFooter(since: viewModel.runStartedAt)
+                                    .id("run-status")
+                            }
                             if let ask = viewModel.pendingQuestion {
                                 AskQuestionCard(ask: ask) { answers in
                                     viewModel.answer(question: ask, answers: answers)
@@ -306,6 +314,14 @@ struct SessionView: View {
                             scrollToBottom(proxy, animated: true)
                         } else {
                             newBelow = true
+                        }
+                    }
+                    // The clock arriving lengthens the transcript by a row;
+                    // follow it so it lands above the composer rather than
+                    // behind it.
+                    .onChange(of: viewModel.isRunning) { _, running in
+                        if running, pinnedToBottom || holdingAtLatest {
+                            scrollToBottom(proxy, animated: true)
                         }
                     }
                     .onChange(of: viewModel.liveText) {
@@ -635,15 +651,13 @@ struct SessionView: View {
                 // fallback that stands in until the repo icon loads.
                 RepoTile(name: viewModel.session.effectiveRepo, size: 24)
                 VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
-                        Text(viewModel.session.displayTitle)
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(OS1VisualStyle.text)
-                            .lineLimit(1)
-                        if viewModel.isRunning {
-                            PulsingDot(color: .green, size: 6)
-                        }
-                    }
+                    // No run dot up here: the bar is identity and navigation,
+                    // and the running state now reads where the work is — the
+                    // clock at the end of the transcript.
+                    Text(viewModel.session.displayTitle)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .lineLimit(1)
                     if !dynamicTypeSize.isAccessibilitySize {
                         Text(headerSubtitle)
                             .font(.footnote)
@@ -758,6 +772,11 @@ struct SessionView: View {
         let target: String
         if viewModel.pendingQuestion != nil {
             target = "ask-\(viewModel.pendingQuestion!.id)"
+        } else if viewModel.isRunning {
+            // While work is in flight the run clock IS the last row. Stopping
+            // at the block above it parks the clock in the strip the composer
+            // floats over, where the glass eats everything but the dot.
+            target = "run-status"
         } else if !viewModel.liveText.isEmpty {
             target = "live-stream"
         } else if let last = viewModel.displayBlocks.last {
@@ -1531,18 +1550,14 @@ private struct SessionInputBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if viewModel.isRunning
-                || (viewModel.queuedCount > 0 && viewModel.queuedItems.isEmpty)
+            // The run clock used to live here. It belongs to the work, not to
+            // the field you type in, so it now ticks at the end of the
+            // transcript under the last message (`RunStatusFooter`) — this
+            // chip is left for what's waiting on the composer itself.
+            if (viewModel.queuedCount > 0 && viewModel.queuedItems.isEmpty)
                 || visibleNotice != nil {
                 // Compact glass chip floating above the composer.
                 HStack(spacing: 6) {
-                    if viewModel.isRunning {
-                        // Pulsing dot + live elapsed clock, like the web
-                        // viewer's busy row — not a static "Running" label.
-                        PulsingDot(color: .green, size: 7)
-                        RunElapsedLabel(since: viewModel.runStartedAt)
-                            .foregroundStyle(.secondary)
-                    }
                     if viewModel.queuedCount > 0, viewModel.queuedItems.isEmpty {
                         // Pre-handshake count from the sessions list, before
                         // the watch delivers the actual items.
