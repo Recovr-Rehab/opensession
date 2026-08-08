@@ -1,5 +1,5 @@
 import { statSync } from "fs";
-import { clampEntriesForWire, parseTranscriptFrom } from "./jsonl-parser";
+import { entriesForWire, parseTranscriptFrom } from "./jsonl-parser";
 import { markTranscriptStoreDegraded } from "./opencode-transcript";
 import { transcriptStore } from "./transcript-store";
 import type { TranscriptEntry } from "./types";
@@ -181,7 +181,7 @@ export function pollTranscriptFile(
   const msg = JSON.stringify({
     type: reset ? "transcript_init" : "transcript_append",
     ...(state.sessionId ? { sessionId: state.sessionId } : {}),
-    entries: clampEntriesForWire(entries),
+    entries: entriesForWire(entries),
     endOffset: state.lastByteOffset,
     rev: transcriptRev(state.path),
   });
@@ -207,7 +207,7 @@ function sendTranscriptAppend(
       JSON.stringify({
         type: "transcript_append",
         ...(sessionId ? { sessionId } : {}),
-        entries: clampEntriesForWire(entries),
+        entries: entriesForWire(entries),
         endOffset,
         rev,
       })

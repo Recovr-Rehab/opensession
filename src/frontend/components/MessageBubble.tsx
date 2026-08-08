@@ -2,16 +2,7 @@ import React, { useMemo, useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
-import {
-	parseHumanReply,
-	parseAttribution,
-	isGitHubAttribution,
-	parseRecoveryNotice,
-	parseReviewHandoff,
-	parseSessionNotice,
-	parseWorkerReport,
-	parseWorkflowNotice,
-} from "../lib/humanReply";
+import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import { useCurrentUser } from "./UserPicker";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -19,8 +10,7 @@ import { BASE_PATH } from "../lib/base";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { extBadge } from "../lib/images";
 import { fullTime, shortTime } from "../lib/time";
-import { IconChevronDown } from "./icons";
-import { noticeTone, stripNoticeGlyph } from "../lib/notice-tone";
+
 import {
 	fileChipCard,
 	fileChipCardPadding,
@@ -158,42 +148,92 @@ export function ClampedBody({
 	);
 }
 
-/** Centered system pill whose full markdown body stays out of the transcript
- * until requested. Used for informational machine-authored messages. */
-function CollapsibleSystemNotice({
+/**
+ * The one way a transcript renders something that isn't a message.
+ *
+ * Every operational line goes through here — a runner notice, a recap, a
+ * context compaction, a worker's report, review findings, a heads-up from
+ * another session, a restart resume. The server decides which of those an
+ * entry is (classifyEntry in the protocol's notices.ts) and hands back a
+ * title, a tone, and at most one body and one action; this component is the
+ * only place that decides what any of them LOOK like. Adding a tenth kind of
+ * notice must not add a tenth rendering.
+ */
+function NoticeRow({
 	entry,
 	sessionId,
-	label,
-	toggleNoun,
-	content,
 }: {
 	entry: TranscriptEntry;
 	sessionId?: string;
-	label: string;
-	toggleNoun: string;
-	content: string;
 }) {
+	const notice = entry.notice!;
 	const [open, setOpen] = useState(false);
+	const collapsible = notice.body === "collapsed";
+	const toned = notice.tone !== "info";
+
+	// An inline body is a catch-up line, not a card: title, colon, prose, all
+	// on one left-aligned run so a returning reader takes it in without a tap.
+	if (notice.body === "inline") {
+		return (
+			<div className={msgSystemRow} data-eid={entry.id}>
+				<span className={cn(msgSystemText, "text-left italic")}>
+					<span className="font-semibold not-italic">{notice.title}: </span>
+					{entry.content}
+				</span>
+			</div>
+		);
+	}
+
 	return (
 		<div className={msgSystemRow} data-eid={entry.id}>
-			<button
-				type="button"
-				onClick={() => setOpen((v) => !v)}
-				className={cn(msgSystemText, "cursor-pointer [font-family:inherit]")}
+			<span
+				className={cn(
+					msgSystemText,
+					toned && msgSystemToned,
+					notice.tone === "error" && "bg-red-soft text-red",
+					notice.tone === "warn" &&
+						"bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] text-yellow",
+				)}
+				data-tone={toned ? notice.tone : undefined}
+				role={notice.tone === "error" ? "alert" : undefined}
 			>
-				{label} ·{" "}
-				<span className="font-medium text-dim">
-					{open ? `hide ${toggleNoun}` : `show ${toggleNoun}`}
-				</span>
-			</button>
-			{open && (
+				{toned && <NoticeGlyph />}
+				{collapsible ? (
+					<button
+						type="button"
+						aria-expanded={open}
+						onClick={() => setOpen((v) => !v)}
+						className="cursor-pointer [font-family:inherit] text-inherit"
+					>
+						{notice.title} ·{" "}
+						<span className="font-medium text-dim">
+							{open ? "hide" : "show"}
+						</span>
+					</button>
+				) : (
+					<span>{notice.title}</span>
+				)}
+			</span>
+			{collapsible && open && (
 				<div className="mx-auto mt-2 w-full max-w-[560px] rounded-lg bg-panel px-4 py-3 text-left">
 					<ClampedBody
 						className={cn(msgBody, "markdown")}
-						content={content}
+						content={entry.content}
 						entry={entry}
 						sessionId={sessionId}
 					/>
+					{notice.link && (
+						// The delegated click handler on the transcript navigates on
+						// data-session-id, so this opens in place; the href is there
+						// for cmd-click and copy-link.
+						<a
+							className="mt-2.5 block text-xs text-dim no-underline hover:text-fg"
+							data-session-id={notice.link.sessionId}
+							href={`${BASE_PATH}/session/${notice.link.sessionId}`}
+						>
+							{notice.link.label}
+						</a>
+					)}
 				</div>
 			)}
 		</div>
@@ -221,67 +261,6 @@ function NoticeGlyph() {
 			<path d="M12 9v4" />
 			<path d="M12 17h.01" />
 		</svg>
-	);
-}
-
-/** An operational line from the server/runner. A failed run reads as a
- *  failure — the transcript used to give a dead session and an account
- *  rotation the same faint grey pill. */
-function SystemNotice({ entry }: { entry: TranscriptEntry }) {
-	const tone = noticeTone(entry.content);
-	return (
-		<div className={msgSystemRow} data-eid={entry.id}>
-			<span
-				className={cn(
-					msgSystemText,
-					tone !== "info" && msgSystemToned,
-					tone === "error" && "bg-red-soft text-red",
-					tone === "warn" &&
-						"bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] text-yellow",
-				)}
-				data-tone={tone === "info" ? undefined : tone}
-				role={tone === "error" ? "alert" : undefined}
-			>
-				{tone !== "info" && <NoticeGlyph />}
-				<span>{stripNoticeGlyph(entry.content)}</span>
-			</span>
-		</div>
-	);
-}
-
-/** Away-summary written while nobody watched (see server recap.ts) — a
- *  Claude Code-style "recap: …" line so a returning viewer catches up without
- *  rereading the tail. */
-function RecapNotice({ entry }: { entry: TranscriptEntry }) {
-	return (
-		<div className={msgSystemRow} data-eid={entry.id}>
-			{/* Left-aligned and italic like the toned notices: 1-3 sentences read
-			    as the harness whispering a catch-up, not the model speaking. */}
-			<span className={cn(msgSystemText, "text-left italic")}>
-				<span className="font-semibold not-italic">recap: </span>
-				{entry.content}
-			</span>
-		</div>
-	);
-}
-
-function CompactionNotice({
-	entry,
-	sessionId,
-}: {
-	entry: TranscriptEntry;
-	sessionId?: string;
-}) {
-	// Without this fold, context compaction looks like the model randomly
-	// dumping a status report in the middle of the conversation.
-	return (
-		<CollapsibleSystemNotice
-			entry={entry}
-			sessionId={sessionId}
-			label="Context compacted — earlier conversation summarized to keep going"
-			toggleNoun="summary"
-			content={entry.content}
-		/>
 	);
 }
 
@@ -436,255 +415,46 @@ export const MessageBubble = React.memo(function MessageBubble({
 	sessionId,
 }: Props) {
 	const me = useCurrentUser();
-	// A routed-back teammate reply (human-in-the-loop): credit the teammate and
-	// render just their words (the header is stripped — the label carries "who").
-	const humanReply = useMemo(() => {
-		if (entry.type !== "user") return null;
-		const parsed = parseHumanReply(entry.content);
-		return parsed ? { name: parsed.name, body: parsed.body } : null;
-	}, [entry.type, entry.content]);
-	// A "[Name] …" attributed turn: a named teammate steered/sent into this
-	// session. It's the driver, so it keeps a normal user bubble — but credited
-	// to the sender (and the prefix stripped). When the sender is the viewer it
-	// stays "You"; only the body changes (prefix removed).
-	const attribution = useMemo(() => {
-		if (entry.type !== "user" || humanReply) return null;
-		return parseAttribution(entry.content);
-	}, [entry.type, entry.content, humanReply]);
-	const displayContent = attribution ? attribution.body : entry.content;
+	// How this entry reads — an operational notice, someone else's words, or an
+	// ordinary message — was decided server-side and shipped on the entry
+	// (classifyEntry, protocol/notices.ts). Re-running it here is free on an
+	// already-classified entry and keeps the UI correct against a server that
+	// predates the field, which is what a rolling deploy looks like.
+	const e = useMemo(() => classifyEntry(entry), [entry]);
+	const displayContent = e.content;
 
-	// A review handoff (unsatisfied PR review's findings delivered into this
-	// session) is a long instruction block, not an FYI — render it as a distinct
-	// card with real markdown instead of the tiny centered msg-system pill
-	// (which is right for short "🔀 merged" notices and stays for those).
-	const reviewHandoff = useMemo(
-		() =>
-			entry.type === "user" && attribution && isGitHubAttribution(attribution.name)
-				? parseReviewHandoff(attribution.body)
-				: null,
-		[entry.type, attribution],
-	);
-	// Agent-to-agent deliveries that arrive as "user" turns but are nobody's
-	// instruction: a worker reporting to its parent, and the nudge a finished
-	// workflow sends its launching session. Parsed off the raw content — the
-	// worker attribution is too long for parseAttribution, and the workflow
-	// nudge is attributed to the human who launched it, so both would otherwise
-	// render as words the human appears to have typed.
-	const workerReport = useMemo(
-		() => (entry.type === "user" ? parseWorkerReport(entry.content) : null),
-		[entry.type, entry.content],
-	);
-	const workflowNotice = useMemo(
-		() =>
-			entry.type === "user" && !workerReport
-				? parseWorkflowNotice(entry.content)
-				: null,
-		[entry.type, entry.content, workerReport],
-	);
-	const sessionNotice = useMemo(
-		() =>
-			entry.type === "user" && !workerReport && !workflowNotice
-				? parseSessionNotice(entry.content)
-				: null,
-		[entry.type, entry.content, workerReport, workflowNotice],
-	);
-	const recoveryNotice = useMemo(
-		() => (entry.type === "user" ? parseRecoveryNotice(entry.content) : null),
-		[entry.type, entry.content],
-	);
-	const [workerReportOpen, setWorkerReportOpen] = useState(false);
-	const [reviewHandoffOpen, setReviewHandoffOpen] = useState(false);
+	// Anything that isn't a message is a notice, whatever produced it.
+	if (e.notice) return <NoticeRow entry={e} sessionId={sessionId} />;
 
-	if (entry.type === "user" && recoveryNotice) {
+	// A teammate's answer routed back into the session (human-in-the-loop):
+	// their words, so their own bubble — the "who" lives in the label.
+	if (e.type === "user" && e.sender && e.senderVia) {
 		return (
-			<CollapsibleSystemNotice
-				entry={entry}
-				sessionId={sessionId}
-				label="Session resumed after a service restart"
-				toggleNoun="details"
-				content={recoveryNotice.body}
-			/>
-		);
-	}
-
-	if (entry.type === "user" && workerReport) {
-		return (
-			<div className={msgRow} data-eid={entry.id}>
-				{/* Folded, this is one quiet line in the transcript — no surface of its
-				    own, like the other collapsible notices. The panel appears only when
-				    there is a report body for it to hold. */}
-				<div
-					className={cn(
-						"overflow-hidden rounded-lg transition-colors",
-						workerReportOpen ? "bg-panel" : "hover:bg-hover",
-					)}
-				>
-					<div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-dim">
-						<Button
-							variant="ghost"
-							size="xs"
-							aria-expanded={workerReportOpen}
-							onClick={() => setWorkerReportOpen((open) => !open)}
-							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-xs font-medium hover:bg-transparent"
-						>
-							<span
-								className={cn(
-									"shrink-0 text-faint transition-transform duration-150",
-									!workerReportOpen && "-rotate-90",
-								)}
-							>
-								<IconChevronDown size={16} />
-							</span>
-							<span>Worker report</span>
-						</Button>
-						<MsgTime ts={entry.timestamp} />
-					</div>
-					{workerReportOpen && (
-						<>
-							<ClampedBody
-								className={cn(msgBody, "markdown px-3.5 py-2.5")}
-								content={workerReport.body}
-								entry={entry}
-								sessionId={sessionId}
-							/>
-							{/* Part of the report, not the collapsed row: the header stays
-							    title + time like every other folded notice, and the jump to
-							    the worker reads as the end of what it reported. The
-							    data-session-id is what the transcript's delegated click
-							    handler navigates on, so it opens in place — the href is
-							    there for cmd-click and copy-link. */}
-							{workerReport.sessionId && (
-								<div className="px-3.5 pb-2.5">
-									<a
-										className="text-xs text-dim no-underline hover:text-fg"
-										data-session-id={workerReport.sessionId}
-										href={`${BASE_PATH}/session/${workerReport.sessionId}`}
-									>
-										Open worker
-									</a>
-								</div>
-							)}
-						</>
-					)}
-				</div>
-			</div>
-		);
-	}
-
-	// Short and purely informational — the centered system pill, like "🔀 merged".
-	if (entry.type === "user" && workflowNotice) {
-		return (
-			<div className={msgSystemRow} data-eid={entry.id}>
-				<span className={msgSystemText}>{workflowNotice.body}</span>
-			</div>
-		);
-	}
-
-	if (entry.type === "user" && sessionNotice) {
-		return (
-			<CollapsibleSystemNotice
-				entry={entry}
-				sessionId={sessionId}
-				label="Heads-up from another session"
-				toggleNoun="message"
-				content={sessionNotice.body}
-			/>
-		);
-	}
-
-	if (entry.type === "user" && reviewHandoff) {
-		return (
-			<div className={msgRow} data-eid={entry.id}>
-				{/* Same folded-notice treatment as the worker report above. */}
-				<div
-					className={cn(
-						"overflow-hidden rounded-lg transition-colors",
-						reviewHandoffOpen ? "bg-panel" : "hover:bg-hover",
-					)}
-				>
-					<div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-dim">
-						<Button
-							variant="ghost"
-							size="xs"
-							aria-expanded={reviewHandoffOpen}
-							onClick={() => setReviewHandoffOpen((open) => !open)}
-							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-xs font-medium hover:bg-transparent"
-						>
-							<span
-								className={cn(
-									"shrink-0 text-faint transition-transform duration-150",
-									!reviewHandoffOpen && "-rotate-90",
-								)}
-							>
-								<IconChevronDown size={16} />
-							</span>
-							<span>
-								🔍 Review findings
-								{reviewHandoff.prNumber ? ` · PR #${reviewHandoff.prNumber}` : ""}
-							</span>
-						</Button>
-						<MsgTime ts={entry.timestamp} />
-					</div>
-					{reviewHandoffOpen && (
-						<ClampedBody
-							className={cn(msgBody, "markdown px-3.5 py-2.5")}
-							content={reviewHandoff.body}
-							entry={entry}
-							sessionId={sessionId}
-						/>
-					)}
-				</div>
-			</div>
-		);
-	}
-
-	if (entry.type === "user" && attribution && isGitHubAttribution(attribution.name)) {
-		return (
-			<div className={msgSystemRow} data-eid={entry.id}>
-				<span className={msgSystemText}>{displayContent}</span>
-			</div>
-		);
-	}
-
-	if (entry.type === "system" && entry.compaction) {
-		return <CompactionNotice entry={entry} sessionId={sessionId} />;
-	}
-
-	if (entry.type === "system" && entry.recap) {
-		return <RecapNotice entry={entry} />;
-	}
-
-	if (entry.type === "system") {
-		return <SystemNotice entry={entry} />;
-	}
-
-	if (entry.type === "user" && humanReply) {
-		return (
-			<div className={cn(msgRow, msgOwnTurn)} data-eid={entry.id}>
+			<div className={cn(msgRow, msgOwnTurn)} data-eid={e.id}>
 				<div className={cn(msgLabel, msgLabelHuman)}>
 					<span className={msgDotHuman} aria-hidden />
-					💬 {humanReply.name} · via Slack
-					<MsgTime ts={entry.timestamp} />
+					💬 {e.sender} · via Slack
+					<MsgTime ts={e.timestamp} />
 				</div>
 				<ClampedBody
 					className={cn(msgBubbleHuman, "markdown")}
-					content={humanReply.body}
-					entry={entry}
+					content={displayContent}
+					entry={e}
 					sessionId={sessionId}
 				/>
-				<EntryImages images={entry.images} sessionId={sessionId} right />
-				<EntryVideos videos={entry.videos} right />
-				<EntryFiles files={entry.files} right />
+				<EntryImages images={e.images} sessionId={sessionId} right />
+				<EntryVideos videos={e.videos} right />
+				<EntryFiles files={e.files} right />
 			</div>
 		);
 	}
 
-	if (entry.type === "user") {
-		// Who sent this turn: an explicit "[Name] " attribution (a teammate who
-		// steered/sent into the session) wins; otherwise it's the session owner's
-		// own words. Either way, credit the sender — "You" only when the sender is
-		// the current viewer. Falls back to "You" when the owner is unknown.
-		const sender = attribution ? attribution.name : owner;
+	if (e.type === "user") {
+		// Who sent this turn: a teammate who steered or sent into the session
+		// (e.sender) wins; otherwise it's the session owner's own words. Either
+		// way, credit the sender — "You" only when the sender is the current
+		// viewer. Falls back to "You" when the owner is unknown.
+		const sender = e.sender ?? owner;
 		const fromOther = sender && sender !== me ? sender : null;
 		// Nothing to show: an entry that strips down to just its "[Name] "
 		// delivery attribution is plumbing whose body was fenced context (the
@@ -694,9 +464,9 @@ export const MessageBubble = React.memo(function MessageBubble({
 		// already persisted.
 		if (
 			!displayContent &&
-			!entry.images?.length &&
-			!entry.videos?.length &&
-			!entry.files?.length
+			!e.images?.length &&
+			!e.videos?.length &&
+			!e.files?.length
 		) {
 			return null;
 		}
@@ -714,29 +484,29 @@ export const MessageBubble = React.memo(function MessageBubble({
 					// next transcript block.
 					!fromOther && "[@media(hover:hover)]:mb-8.75",
 				)}
-				data-eid={entry.id}
+				data-eid={e.id}
 			>
 				{fromOther && (
 					<div className={msgLabel}>
 						<span className={msgDotUser} aria-hidden />
 						{fromOther}
-						<MsgTime ts={entry.timestamp} />
+						<MsgTime ts={e.timestamp} />
 					</div>
 				)}
 				{/* One stack anchors the hover time below both the bubble and attachments. */}
 				<div className="group/bubble relative flex min-w-0 flex-col">
-					{!fromOther && <BubbleHoverTime ts={entry.timestamp} />}
+					{!fromOther && <BubbleHoverTime ts={e.timestamp} />}
 					{displayContent && (
 						<ClampedBody
 							className={cn(msgBubbleUser, "markdown")}
 							content={displayContent}
-							entry={entry}
+							entry={e}
 							sessionId={sessionId}
 						/>
 					)}
-					<EntryImages images={entry.images} sessionId={sessionId} right />
-					<EntryVideos videos={entry.videos} right />
-					<EntryFiles files={entry.files} right />
+					<EntryImages images={e.images} sessionId={sessionId} right />
+					<EntryVideos videos={e.videos} right />
+					<EntryFiles files={e.files} right />
 				</div>
 			</div>
 		);
@@ -745,15 +515,15 @@ export const MessageBubble = React.memo(function MessageBubble({
 	// assistant — no speaker label: every left-aligned bubble is the agent, so
 	// the name row was pure noise above each answer.
 	return (
-		<div className={msgRow} data-eid={entry.id}>
+		<div className={msgRow} data-eid={e.id}>
 			<ClampedBody
 				className={cn(msgBody, "markdown text-fg")}
 				content={displayContent}
-				entry={entry}
+				entry={e}
 				sessionId={sessionId}
 			/>
-			<EntryImages images={entry.images} sessionId={sessionId} />
-			<EntryVideos videos={entry.videos} />
+			<EntryImages images={e.images} sessionId={sessionId} />
+			<EntryVideos videos={e.videos} />
 		</div>
 	);
 });

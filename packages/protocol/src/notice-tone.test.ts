@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { noticeTone, stripNoticeGlyph } from "./notice-tone";
+import { noticeTone, stripNoticeGlyph } from "./notices";
 
 // The strings below are copied from the call sites that write them, so this
 // test fails if a message is reworded without re-checking its tone.

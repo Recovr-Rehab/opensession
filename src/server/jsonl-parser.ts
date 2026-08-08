@@ -2,6 +2,7 @@ import { readFileSync, statSync } from "fs";
 import { openSync, readSync, closeSync, fstatSync } from "fs";
 import { existsSync } from "fs";
 import type { TranscriptEntry } from "./types";
+import { classifyEntries } from "@tellahq/opensession-protocol/notices";
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
 import { configuredIntegration } from "./config";
@@ -1156,6 +1157,26 @@ export function clampEntriesForWire(
   if (!entries.some((e) => (e.content?.length ?? 0) > maxBytes))
     return entries;
   return entries.map((e) => clampEntryForWire(e, maxBytes));
+}
+
+/**
+ * Everything a batch of entries needs before it leaves the server: classify
+ * how each one reads (notices.ts), then clamp what's left.
+ *
+ * That order is load-bearing. The classifier strips delivery plumbing —
+ * sentinels, "[Name] " prefixes, the "💬 X answered" header — out of
+ * `content`, so clamping afterwards measures the text a reader will actually
+ * see. Classifying is also why history needs no migration: it runs on the way
+ * out, over entries persisted long before any of these markers existed.
+ *
+ * Use this at every send site; `clampEntriesForWire` alone would ship raw
+ * plumbing to a client that no longer knows how to parse it.
+ */
+export function entriesForWire(
+  entries: TranscriptEntry[],
+  maxBytes: number = WIRE_CLAMP_BYTES
+): TranscriptEntry[] {
+  return clampEntriesForWire(classifyEntries(entries), maxBytes);
 }
 
 function safeStringify(v: unknown): string {

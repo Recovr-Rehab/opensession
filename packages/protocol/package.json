@@ -10,6 +10,7 @@
     "./events": "./src/events.ts",
     "./runner": "./src/runner.ts",
     "./session": "./src/session.ts",
+    "./notices": "./src/notices.ts",
     "./identity": "./src/identity.ts"
   },
   "repository": {

@@ -7,7 +7,10 @@ import {
 	parseSessionNotice,
 	parseWorkerReport,
 	parseWorkflowNotice,
-} from "./humanReply";
+	classifyEntries,
+	classifyEntry,
+} from "./notices";
+import type { TranscriptEntry } from "./session";
 
 describe("human reply attribution", () => {
 	it("parses bracketed attributions", () => {
@@ -169,5 +172,130 @@ describe("cross-session notice detection", () => {
 				`<!--os:session-notice-->\n${headsUp}\n\n[Kent] Please also run the tests.`,
 			),
 		).toBeNull();
+	});
+});
+
+describe("classifyEntry", () => {
+	const entry = (over: Partial<TranscriptEntry>): TranscriptEntry => ({
+		id: "e1",
+		type: "user",
+		content: "",
+		timestamp: "2026-08-08T10:00:00.000Z",
+		...over,
+	});
+
+	it("leaves an ordinary message alone, by reference", () => {
+		const e = entry({ content: "Can we simplify all these different ways?" });
+		expect(classifyEntry(e)).toBe(e);
+	});
+
+	it("tones a system line by what it says", () => {
+		expect(
+			classifyEntry(entry({ type: "system", content: "run failed: boom" }))
+				.notice,
+		).toMatchObject({ kind: "system", tone: "error" });
+		expect(
+			classifyEntry(entry({ type: "system", content: "switched account" }))
+				.notice,
+		).toMatchObject({ kind: "system", tone: "info" });
+	});
+
+	it("strips a glyph a notice already carries into the title", () => {
+		const c = classifyEntry(entry({ type: "system", content: "⚠️ couldn't push" }));
+		expect(c.notice?.title).toBe("couldn't push");
+		expect(c.content).toBe("couldn't push");
+	});
+
+	it("reads a recap inline and a compaction folded", () => {
+		expect(
+			classifyEntry(entry({ type: "system", content: "Fixed the build.", recap: true }))
+				.notice,
+		).toMatchObject({ kind: "recap", body: "inline" });
+		expect(
+			classifyEntry(
+				entry({ type: "system", content: "Earlier…", compaction: true }),
+			).notice,
+		).toMatchObject({ kind: "compaction", body: "collapsed" });
+	});
+
+	it("turns a worker report into a notice that links back to the worker", () => {
+		const c = classifyEntry(
+			entry({ content: "[worker os-123] <!--os:worker-report-->\nFound it." }),
+		);
+		expect(c.notice).toMatchObject({
+			kind: "worker-report",
+			title: "Worker report",
+			body: "collapsed",
+			link: { label: "Open worker", sessionId: "os-123" },
+		});
+		// The plumbing is gone: content is what a reader should see.
+		expect(c.content).toBe("Found it.");
+	});
+
+	it("titles a review handoff with its PR", () => {
+		const c = classifyEntry(
+			entry({
+				content: "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 has findings",
+			}),
+		);
+		expect(c.notice).toMatchObject({
+			kind: "review-handoff",
+			title: "Review findings · PR #42",
+			body: "collapsed",
+		});
+	});
+
+	it("keeps a short GitHub status as a title-only notice", () => {
+		const c = classifyEntry(entry({ content: "[GitHub] 🔀 merged" }));
+		expect(c.notice).toMatchObject({ kind: "system", title: "🔀 merged" });
+		expect(c.notice?.body).toBeUndefined();
+	});
+
+	it("classifies workflow, session-notice and restart deliveries", () => {
+		expect(
+			classifyEntry(
+				entry({ content: '<!--os:workflow-notice-->✅ Workflow "nightly" finished' }),
+			).notice,
+		).toMatchObject({ kind: "workflow" });
+		expect(
+			classifyEntry(entry({ content: "<!--os:session-notice-->\nFYI: staging is down." }))
+				.notice,
+		).toMatchObject({ kind: "session-notice", body: "collapsed" });
+		expect(
+			classifyEntry(
+				entry({
+					content:
+						"This session was interrupted by a Michael service restart mid-run. Continue.",
+				}),
+			).notice,
+		).toMatchObject({ kind: "recovery", body: "collapsed" });
+	});
+
+	it("credits a steered turn and a routed-back answer instead of noticing them", () => {
+		const steer = classifyEntry(entry({ content: "[Kent] check the logs" }));
+		expect(steer.notice).toBeUndefined();
+		expect(steer).toMatchObject({ sender: "Kent", content: "check the logs" });
+
+		const answer = classifyEntry(
+			entry({ content: "💬 **Michiel** answered:\n\nShip it." }),
+		);
+		expect(answer.notice).toBeUndefined();
+		expect(answer).toMatchObject({
+			sender: "Michiel",
+			senderVia: "slack",
+			content: "Ship it.",
+		});
+	});
+
+	it("is idempotent — a second pass can't strip twice", () => {
+		const once = classifyEntry(
+			entry({ content: "[worker os-9] <!--os:worker-report-->\nDone." }),
+		);
+		expect(classifyEntry(once)).toBe(once);
+	});
+
+	it("returns the same array when a batch holds only messages", () => {
+		const batch = [entry({ content: "hi" }), entry({ id: "e2", type: "assistant", content: "hello" })];
+		expect(classifyEntries(batch)).toBe(batch);
 	});
 });

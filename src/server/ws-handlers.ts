@@ -14,7 +14,7 @@ import { pendingAsks } from "./asks";
 import { mentionedUsers } from "./people";
 import { sendPushToUser } from "./push";
 import { startWatching, stopAllWatchesForClient, transcriptRev } from "./file-watcher";
-import { INIT_WIRE_CLAMP_BYTES, clampEntriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow } from "./jsonl-parser";
+import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow } from "./jsonl-parser";
 import { providerFor } from "./models";
 import { applyNoteUpdate, getNoteState, isValidNoteId } from "./notes";
 import { appendOpencodeTranscript, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./opencode-transcript";
@@ -182,7 +182,7 @@ const v2BgImports: Set<string> = ((globalThis as any).__osTranscriptV2BgImports 
  * transcript-open payload clamps entries to INIT_WIRE_CLAMP_BYTES (8KB — the
  * e4e2340a slow-transcript fix; the UI eagerly renders ~6KB per bubble and
  * fetches the full entry on "Show more" anyway), so v2 init/history/backlog
- * pages go through the same budget. Same markers as clampEntriesForWire,
+ * pages go through the same budget. Same markers as entriesForWire,
  * except an already-store-stripped entry keeps its original contentLength
  * (the true pre-strip length) instead of the 32KB form's. Live
  * transcript_append frames keep the fatter store forms, same as legacy
@@ -586,7 +586,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					JSON.stringify({
 						type: "transcript_init",
 						sessionId,
-						entries: clampEntriesForWire(entries, INIT_WIRE_CLAMP_BYTES),
+						entries: entriesForWire(entries, INIT_WIRE_CLAMP_BYTES),
 						truncated,
 						startOffset,
 						// Resume cursor (see the sinceOffset branch above): where this
@@ -668,7 +668,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							type: "transcript_init",
 							sessionId: msg.sessionId,
 							entries: session
-								? clampEntriesForWire(
+								? entriesForWire(
 										await mergedSessionTranscriptAsync(session),
 									)
 								: [],
@@ -701,7 +701,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 								JSON.stringify({
 									type: "transcript_init",
 									sessionId: msg.sessionId,
-									entries: clampEntriesForWire(
+									entries: entriesForWire(
 										await mergedSessionTranscriptAsync(session),
 									),
 									truncated: false,
@@ -714,7 +714,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							JSON.stringify({
 								type: "transcript_init",
 								sessionId: msg.sessionId,
-								entries: clampEntriesForWire(tail.entries, INIT_WIRE_CLAMP_BYTES),
+								entries: entriesForWire(tail.entries, INIT_WIRE_CLAMP_BYTES),
 								truncated: tail.truncated,
 								startOffset: tail.startOffset,
 								endOffset: tail.endOffset,
@@ -739,7 +739,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						JSON.stringify({
 							type: "transcript_history",
 							sessionId: msg.sessionId,
-							entries: clampEntriesForWire(page.entries, INIT_WIRE_CLAMP_BYTES),
+							entries: entriesForWire(page.entries, INIT_WIRE_CLAMP_BYTES),
 							truncated: page.truncated,
 							startOffset: page.startOffset,
 						}),
@@ -751,7 +751,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					JSON.stringify({
 						type: "transcript_init",
 						sessionId: msg.sessionId,
-						entries: clampEntriesForWire(entries),
+						entries: entriesForWire(entries),
 						truncated: false,
 					}),
 				);

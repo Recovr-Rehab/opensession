@@ -179,7 +179,7 @@ const EVIDENCE_MAX_CHARS = 4000;
 /**
  * Marks the delivered report as agent-authored so the UI renders it as a
  * worker card rather than a message the human appears to have typed. Kept in
- * sync with WORKER_SENTINEL_RE in src/frontend/lib/humanReply.ts, which also
+ * sync with WORKER_SENTINEL_RE in packages/protocol/src/notices.ts, which also
  * falls back to the "worker <id>" attribution so reports sent before this
  * sentinel shipped still render as cards.
  */

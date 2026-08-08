@@ -12,6 +12,7 @@ import { archiveOlderThan, setArchived, unpinArchivedSessions } from "../archive
 import { audit } from "../audit";
 import { pendingAsks } from "../asks";
 import { transcriptMatchSnippet } from "../jsonl-parser";
+import { classifyEntries, classifyEntry } from "@tellahq/opensession-protocol/notices";
 import { transcriptDbPath, transcriptStore } from "../transcript-store";
 import { clearSessionFileArchive } from "../plain-archive";
 import { editPrReviewers, isNoPrError, prMetaForBranch } from "../pr-info";
@@ -375,8 +376,11 @@ export async function handleSessionsRoutes(
 		// Engine-spanning read: the transcript file plus, for sessions with
 		// opencode history, the opencode store (covers legacy opencode
 		// sessions from before transcript persistence, and migrated
-		// sessions whose history spans engines).
-		return Response.json(await mergedSessionTranscriptAsync(session));
+		// sessions whose history spans engines). Classified on the way out,
+		// like every other send site — this is what the native clients read.
+		return Response.json(
+			classifyEntries(await mergedSessionTranscriptAsync(session)),
+		);
 	}
 
 	// One transcript entry, unclamped. The WS wire clamps giant entry contents
@@ -402,18 +406,30 @@ export async function handleSessionsRoutes(
 				// unstripped fields the bounded store row summarized away.
 				if (full)
 					return Response.json({
-						content: full.content,
+						// Same stripping the wire path applies, so expanding a
+						// clamped notice doesn't suddenly reveal the sentinel and
+						// "[Name] " prefix its folded form hid. The store row
+						// carries no type; a user turn is the only kind that
+						// arrives with delivery plumbing, and the detectors are
+						// conservative enough to leave anything else alone.
+						content: classifyEntry({
+							id: entryId,
+							type: "user",
+							content: full.content,
+							timestamp: "",
+						}).content,
 						toolInput: full.toolInput,
 						images: full.images,
 					});
 			} catch {
 				// store read failed — the legacy scan below still serves the entry
 			}
-			const entry = (await mergedSessionTranscriptAsync(session)).find(
+			const found = (await mergedSessionTranscriptAsync(session)).find(
 				(e) => e.id === entryId,
 			);
-			if (!entry)
+			if (!found)
 				return Response.json({ error: "Entry not found" }, { status: 404 });
+			const entry = classifyEntry(found);
 			return Response.json({
 				content: entry.content,
 				toolInput: entry.toolInput,

@@ -14,7 +14,7 @@ import { suppressLayoutAnimations } from "../ui/motion";
 import { renderMarkdown } from "../lib/markdown";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
-import { noticeTone } from "../lib/notice-tone";
+import { noticeTone } from "@tellahq/opensession-protocol/notices";
 import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
 	measureSessionPerf,
@@ -28,7 +28,7 @@ import {
 	parseSessionNotice,
 	parseWorkerReport,
 	parseWorkflowNotice,
-} from "../lib/humanReply";
+} from "@tellahq/opensession-protocol/notices";
 import type {
 	UnifiedSession,
 	TranscriptEntry,

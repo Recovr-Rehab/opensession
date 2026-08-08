@@ -21,6 +21,8 @@
  * breaks one. Unknown frame types must be ignored by clients.
  */
 
+import type { EntryNotice } from "./notices";
+
 /** One rendered line of a session's durable transcript (the jsonl record). */
 export interface TranscriptEntry {
   id: string;
@@ -60,10 +62,23 @@ export interface TranscriptEntry {
   changeSeq?: number;
   // Set on a system entry holding an engine context-compaction summary — the
   // UI renders a collapsed "context compacted" chip, not an assistant bubble.
+  // Classification input: clients read `notice`, not this.
   compaction?: boolean;
   // Set on a system entry holding a session recap (the away-summary written
-  // when a turn finished with nobody watching) — rendered as a "recap:" line.
+  // when a turn finished with nobody watching). Classification input; see above.
   recap?: boolean;
+  /** How this entry reads: an operational notice rather than a message. Set by
+   *  classifyEntry (notices.ts) on the way to a client, which also strips the
+   *  delivery plumbing out of `content` — so a client renders `notice.title`,
+   *  and `content` as the body when `notice.body` says to. Absent on ordinary
+   *  messages, which is the whole point: one branch, not nine. */
+  notice?: EntryNotice;
+  /** Who sent this turn, when it wasn't the session's driver: a teammate who
+   *  steered in, or one whose answer was routed back. The client credits them
+   *  instead of the owner ("You" only when the sender is the viewer). */
+  sender?: string;
+  /** Where `sender` said it, when they weren't in the app. */
+  senderVia?: "slack";
 }
 
 /** Cumulative token/cost accounting for a session, as viewers render it. */

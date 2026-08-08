@@ -2,7 +2,7 @@ import { test, expect, describe } from "bun:test";
 import { turnTimeoutError, turnTimeoutNotice } from "./opencode-config";
 
 // The frontend colours these lines red by matching their opening words
-// (src/frontend/lib/notice-tone.ts) — a reword that breaks the match turns a
+// (packages/protocol/src/notices.ts) — a reword that breaks the match turns a
 // dead run back into a grey pill, so the phrasing is pinned here.
 describe("turn timeout copy", () => {
 	test("says the limit the way a person would", () => {
