@@ -114,14 +114,6 @@
 	width: 52px;
 	height: 52px;
 }
-@keyframes kitt-scan {
-	from {
-		transform: translateX(-130%);
-	}
-	to {
-		transform: translateX(270%);
-	}
-}
 
 /* The "Tools" band header sits above the top-level nav as a collapse toggle.
    Its 6px inset plus the shared toggle's 14px padding matches the band headings
@@ -2721,15 +2713,6 @@ body.resizing-panel .panel-resize::after {
 .diff-file-header:hover {
 	background: var(--hover);
 }
-@keyframes pr-bar-checking-pulse {
-	0%,
-	100% {
-		opacity: 0.45;
-	}
-	50% {
-		opacity: 0.85;
-	}
-}
 
 .pr-number {
 	color: var(--text-dim);
@@ -2918,17 +2901,6 @@ body.resizing-panel .panel-resize::after {
 	height: 0;
 	pointer-events: none;
 	overflow-anchor: none;
-}
-
-@keyframes jump-rise {
-	from {
-		opacity: 0;
-		transform: translate(-50%, 4px);
-	}
-	to {
-		opacity: 1;
-		transform: translate(-50%, 0);
-	}
 }
 
 .msg {
@@ -7589,78 +7561,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   }
 }
 
-@keyframes pixel-wave-trail-2 {
-  0%,
-  15% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.15;
-  }
-  25%,
-  30% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  40% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.8;
-  }
-  50% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.5;
-  }
-  60% {
-    background: color-mix(in srgb, var(--glow-color) 30%, transparent);
-    box-shadow: none;
-    opacity: 0.3;
-  }
-  70%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.15;
-  }
-}
-
-@keyframes pixel-wave-trail-3 {
-  0%,
-  40% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.15;
-  }
-  50%,
-  55% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  65% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.8;
-  }
-  75% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.5;
-  }
-  85% {
-    background: color-mix(in srgb, var(--glow-color) 30%, transparent);
-    box-shadow: none;
-    opacity: 0.3;
-  }
-  95%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.15;
-  }
-}
-
 /* Snake Trail Animation */
 @keyframes pixel-snake-trail {
   0% {
@@ -7724,77 +7624,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
     background: var(--glow-color);
     box-shadow: none;
     opacity: 1;
-  }
-}
-
-@keyframes pixel-ripple-out-mid {
-  0%,
-  20% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-  30%,
-  35% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  45% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.7;
-  }
-  55% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.4;
-  }
-  65% {
-    background: color-mix(in srgb, var(--glow-color) 20%, transparent);
-    box-shadow: none;
-    opacity: 0.2;
-  }
-  75%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-}
-
-@keyframes pixel-ripple-out-outer {
-  0%,
-  50% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-  60%,
-  65% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  75% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.7;
-  }
-  85% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.4;
-  }
-  92% {
-    background: color-mix(in srgb, var(--glow-color) 20%, transparent);
-    box-shadow: none;
-    opacity: 0.2;
-  }
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
   }
 }
 
@@ -7893,46 +7722,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
     background: var(--glow-color);
     box-shadow: none;
     opacity: 1;
-  }
-}
-
-@keyframes pixel-checker-b-trail {
-  0%,
-  10% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-  25% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.3;
-  }
-  40% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.6;
-  }
-  50%,
-  60% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  75% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.6;
-  }
-  90% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.3;
-  }
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
   }
 }
 
@@ -8042,32 +7831,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   }
 }
 
-@keyframes pixel-heartbeat-cross {
-  0%,
-  10% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.8;
-  }
-  20% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.4;
-  }
-  30%,
-  35% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.7;
-  }
-  50%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-}
-
 /* Dot Bounce Animation */
 @keyframes pixel-dot-bounce {
   0%,
@@ -8110,15 +7873,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   }
 }
 
-/* Cross */
-.pixel-spinner.cross .pixel:nth-child(2),
-.pixel-spinner.cross .pixel:nth-child(4),
-.pixel-spinner.cross .pixel:nth-child(5),
-.pixel-spinner.cross .pixel:nth-child(6),
-.pixel-spinner.cross .pixel:nth-child(8) {
-  animation-name: pixel-pulse-trail;
-}
-
 /* Diagonal */
 .pixel-spinner.diagonal-br .pixel:nth-child(1) {
   animation-name: pixel-snake-trail;
@@ -8143,107 +7897,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .pixel-spinner.diagonal-br .pixel:nth-child(9) {
   animation-name: pixel-snake-trail;
   animation-delay: 840ms;
-}
-
-/* Frame */
-.pixel-spinner.frame .pixel:nth-child(1) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 0ms;
-}
-.pixel-spinner.frame .pixel:nth-child(2) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 100ms;
-}
-.pixel-spinner.frame .pixel:nth-child(3) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 200ms;
-}
-.pixel-spinner.frame .pixel:nth-child(6) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 300ms;
-}
-.pixel-spinner.frame .pixel:nth-child(9) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 400ms;
-}
-.pixel-spinner.frame .pixel:nth-child(8) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 500ms;
-}
-.pixel-spinner.frame .pixel:nth-child(7) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 600ms;
-}
-.pixel-spinner.frame .pixel:nth-child(4) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 700ms;
-}
-
-/* Heartbeat */
-.pixel-spinner.heartbeat .pixel:nth-child(5) {
-  animation-name: pixel-heartbeat-center;
-}
-.pixel-spinner.heartbeat .pixel:nth-child(2),
-.pixel-spinner.heartbeat .pixel:nth-child(4),
-.pixel-spinner.heartbeat .pixel:nth-child(6),
-.pixel-spinner.heartbeat .pixel:nth-child(8) {
-  animation-name: pixel-heartbeat-cross;
-}
-
-/* Bounce */
-.pixel-spinner.bounce .pixel:nth-child(1) {
-  animation-name: pixel-bounce-pixel;
-  animation-delay: 0ms;
-}
-.pixel-spinner.bounce .pixel:nth-child(3) {
-  animation-name: pixel-bounce-pixel;
-  animation-delay: 300ms;
-}
-.pixel-spinner.bounce .pixel:nth-child(9) {
-  animation-name: pixel-bounce-pixel;
-  animation-delay: 600ms;
-}
-.pixel-spinner.bounce .pixel:nth-child(7) {
-  animation-name: pixel-bounce-pixel;
-  animation-delay: 900ms;
-}
-
-/* Shuffle */
-.pixel-spinner.shuffle .pixel:nth-child(1) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 0ms;
-}
-.pixel-spinner.shuffle .pixel:nth-child(5) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 133ms;
-}
-.pixel-spinner.shuffle .pixel:nth-child(9) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 266ms;
-}
-.pixel-spinner.shuffle .pixel:nth-child(3) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 400ms;
-}
-.pixel-spinner.shuffle .pixel:nth-child(7) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 533ms;
-}
-.pixel-spinner.shuffle .pixel:nth-child(2) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 666ms;
-}
-.pixel-spinner.shuffle .pixel:nth-child(8) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 800ms;
-}
-.pixel-spinner.shuffle .pixel:nth-child(4) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 933ms;
-}
-.pixel-spinner.shuffle .pixel:nth-child(6) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 1066ms;
 }
 
 
