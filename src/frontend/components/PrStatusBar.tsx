@@ -605,9 +605,9 @@ export function PrStatusBar({
 	// session reads "Up to date" rather than vanishing.
 	if (!loaded && variant !== "header") {
 		return (
-			<div className={`${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}>
+			<div className={`pr-bar ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}>
 				{leading}
-				<span className={PR_BAR_CHECKING}>Checking status…</span>
+				<span className={`pr-bar-checking ${PR_BAR_CHECKING}`}>Checking status…</span>
 			</div>
 		);
 	}
@@ -793,7 +793,7 @@ export function PrStatusBar({
 	// The primary row is the session's own branch — the one this worktree can
 	// push, pull and merge. Its other PRs stack underneath, one row each.
 	const primaryRow = (
-		<div className={`${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}>
+		<div className={`pr-bar ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}>
 			{leading}
 			{pr && (
 				<PrNumberChip

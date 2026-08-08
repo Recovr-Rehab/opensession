@@ -2,6 +2,9 @@ import { checkClass, formatCheckDuration } from "../../lib/pr-status-derive";
 import { CHECK_TEXT } from "../../lib/pr-tone-classes";
 import type { PrCheck } from "../../lib/types";
 
+/** `pr-check-mark-pending` styles nothing — it is base.css's hook for keeping
+ *  this pulse alive under prefers-reduced-motion, which it does with
+ *  !important and a utility therefore cannot. */
 export function CheckRow({ check }: { check: PrCheck }) {
   const cls = checkClass(check.status, check.conclusion);
   const mark = cls === "check-success" ? "✓" : cls === "check-failure" ? "✕" : "●";
@@ -16,7 +19,7 @@ export function CheckRow({ check }: { check: PrCheck }) {
       >
         <span
           className={`w-3.5 shrink-0 text-center text-label ${CHECK_TEXT[cls]} ${
-            cls === "check-pending" ? "animate-[pulse_1.4s_infinite]" : ""
+            cls === "check-pending" ? "pr-check-mark-pending animate-[pulse_1.4s_infinite]" : ""
           }`}
         >
           {mark}

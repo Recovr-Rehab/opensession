@@ -78,7 +78,18 @@ export const CHECKS_GROUP =
  */
 
 /** The strip: one row of status atop the workspace panel, with a border that
- *  lines up with the session header's. */
+ *  lines up with the session header's.
+ *
+ *  The markup also keeps the bare `pr-bar` class, and the checking line keeps
+ *  `pr-bar-checking`. Neither styles anything any more — they are hooks for two
+ *  rules in base.css that only base.css can express: the Electron/WCO titlebar
+ *  drag region (`html.wco .pr-bar`, plus its no-drag carve-outs for anything
+ *  interactive) and the reduced-motion block, which kills every animation with
+ *  !important and then hands a few liveness signals back. A utility cannot win
+ *  against !important, so dropping the hook would silently freeze the
+ *  "Checking status…" pulse for anyone on reduced motion and make the strip
+ *  undraggable in the desktop shell. Same reason `.markdown` stays on the
+ *  description. */
 export const PR_BAR =
 	"flex min-h-[var(--desktop-header-h)] items-center gap-2.5 border-b border-[var(--top-divider)] px-3 py-2 " +
 	// The globe (staging) icon rides inside the strip, flush to its padding.

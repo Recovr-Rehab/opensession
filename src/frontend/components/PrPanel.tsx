@@ -1761,7 +1761,7 @@ export function PrPanel({
                     checkSummary.failed > 0
                       ? "text-red"
                       : checkSummary.pending > 0
-                        ? "text-yellow animate-[pulse_1.4s_infinite]"
+                        ? "prc-mark-pending text-yellow animate-[pulse_1.4s_infinite]"
                         : "text-green"
                   }`}
                 >
