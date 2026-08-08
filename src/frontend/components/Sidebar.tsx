@@ -168,7 +168,11 @@ import {
 	WsStatusMark,
 } from "./sidebar/HoverCards";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
-import { SidebarItem } from "./sidebar/SidebarItem";
+import {
+	SIDEBAR_ROW,
+	SIDEBAR_ROW_TITLE,
+	SidebarItem,
+} from "./sidebar/SidebarItem";
 
 // Re-exported for App.tsx, which holds the sidebar ref.
 export type { SidebarHandle } from "../lib/sidebar-types";
@@ -1785,12 +1789,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				return;
 			const candidates = Array.from(
 				document.querySelectorAll<HTMLButtonElement>(
-					".sidebar-list button.sidebar-item",
+					".sidebar-list button[data-sidebar-row]",
 				),
 			);
 			if (candidates.length === 0) return;
 			const idx = candidates.findIndex((item) =>
-				item.classList.contains("sidebar-item-selected"),
+				item.hasAttribute("data-selected"),
 			);
 			const dir = e.key === "ArrowDown" ? 1 : -1;
 			// No selected sidebar item (e.g. Home): enter from the edge.
@@ -2359,15 +2363,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								archivedRows.slice(0, ARCHIVED_INLINE_MAX).map((r) => (
 									<button
 										key={r.key}
-										className="sidebar-item sidebar-ws-row sidebar-archived-row"
+										className={cn(
+											SIDEBAR_ROW,
+											"sidebar-ws-row sidebar-archived-row hover:bg-hover",
+										)}
+										data-sidebar-row=""
 										onClick={() => onSelect(r.sessions[0])}
 										aria-label={r.name}
 									>
 										<span className="sidebar-rail">
-											<span className="sidebar-item-status sidebar-status-idle" />
+											<span className="size-2 shrink-0 rounded-full sidebar-status-idle" />
 										</span>
 										<span
-											className="sidebar-item-title"
+											// On touch the unarchive/pin pair is always visible (it's
+											// the only way back from the band), so the title stops
+											// short of it instead of running underneath.
+											className={cn(
+												SIDEBAR_ROW_TITLE,
+												"[@media(hover:none)]:pr-18",
+											)}
 											style={{ color: "var(--text-dim)" }}
 										>
 											{stripPrTitlePrefix(r.name)}
@@ -2437,16 +2451,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							{open && (
 								<button
 									className={cn(
-										"sidebar-item",
+										SIDEBAR_ROW,
 										"sidebar-ws-row",
-										archivedActive && "sidebar-item-selected",
+										archivedActive ? "bg-pressed" : "hover:bg-hover",
 									)}
+									data-sidebar-row=""
+									data-selected={archivedActive || undefined}
 									onClick={onOpenArchived}
 									title="View all archived sessions"
 								>
 									<span className="sidebar-rail" />
 									<span
-										className="sidebar-item-title"
+										className={SIDEBAR_ROW_TITLE}
 										style={{ color: "var(--text-faint)" }}
 									>
 										{archivedCount > ARCHIVED_INLINE_MAX
@@ -2589,7 +2605,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</button>
 				)}
 				<button
-					className={`sidebar-item sidebar-ws-row ${active ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${row.unread ? "sidebar-item-unread" : ""}`}
+					className={cn(
+						SIDEBAR_ROW,
+						// Inside a swipe row: the wrapper carries the 2px gap and the
+						// row carries the slide. The drag writes --swipe-x straight onto
+						// the node, so the transform reads it rather than a React style.
+						"sidebar-ws-row z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))] hover:bg-hover",
+						waiting ? "bg-blue-soft" : active && "bg-active",
+						draggingRow
+							? "transition-none"
+							: swipeSide
+								? "transition-transform duration-(--dur-micro)"
+								: "transition-transform duration-(--dur)",
+						(draggingRow || swipeSide) && "will-change-transform",
+					)}
+					data-sidebar-row=""
+					data-selected={active || undefined}
+					data-waiting={waiting || undefined}
+					data-unread={row.unread || undefined}
 					style={
 						swipeOffset
 							? ({ "--swipe-x": `${swipeOffset}px` } as React.CSSProperties)
@@ -2651,7 +2684,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					{flatRepoGrouping ? (
 						<WsStatusMark row={row} size={18} />
 					) : row.running ? (
-						<span className="sidebar-item-status sidebar-status-running" />
+						<span className="size-2 shrink-0 rounded-full sidebar-status-running" />
 					) : (
 						<WsPrStatusMark sessions={row.sessions} size={18} workspace={row.workspace} />
 					)}
@@ -2695,8 +2728,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<span
 						// Same class as a session row's title, so workspace rows pick up
 						// the shared type scale (incl. the phone bump) and the
-						// selected/waiting/unread emphasis from the row's own classes.
-						className="sidebar-item-title"
+						// selected/waiting/unread emphasis from the row's data attributes.
+						className={SIDEBAR_ROW_TITLE}
 						onDoubleClick={(e) => {
 							e.stopPropagation();
 							if (row.workspace) {
@@ -2786,7 +2819,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</span>
 				)}
 				{/* Hover actions: pin + archive, side by side. */}
-				<span className="sidebar-ws-actions">
+				<span
+					className={cn(
+						"sidebar-ws-actions",
+						// The selected row's fill under the cluster, which the
+						// selected-row rule in legacy.css used to carry.
+						"group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]",
+					)}
+				>
 					<span
 						role="button"
 						tabIndex={0}
@@ -4378,15 +4418,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							sessions: [],
 							node: (
 								<button
-									className={`sidebar-item ${n.id === activeNoteId ? "sidebar-item-selected" : ""}`}
+									className={cn(
+										SIDEBAR_ROW,
+										"block",
+										n.id === activeNoteId ? "bg-pressed" : "hover:bg-hover",
+									)}
+									data-sidebar-row=""
+									data-selected={n.id === activeNoteId || undefined}
 									onClick={() => onOpenNote(n.id)}
 									title={n.title}
 								>
-									<span className="sidebar-item-top">
+									<span className="flex min-w-0 items-center gap-[9px]">
 										<span className="sidebar-rail" style={{ opacity: 0.9 }}>
 											📝
 										</span>
-										<span className="sidebar-item-title">{n.title}</span>
+										<span className={SIDEBAR_ROW_TITLE}>{n.title}</span>
 									</span>
 								</button>
 							),
@@ -4868,9 +4914,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												</span>
 											</Tooltip>
 											<span
-												className={`sidebar-item-title flex-1${
-													selected ? " !text-fg font-semibold" : ""
-												}`}
+												className={cn(
+													SIDEBAR_ROW_TITLE,
+													"flex-1",
+													selected && "font-semibold text-fg",
+												)}
 											>
 												{liveId ? titleFor(liveId) : act?.title || p.name}
 											</span>

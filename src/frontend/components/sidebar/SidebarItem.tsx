@@ -6,6 +6,7 @@ import { ARCHIVE_SHORTCUT_KEYS, LONG_PRESS_MS, LONG_PRESS_SLOP, PIN_SHORTCUT_KEY
 import { MINE_STATUS_META, type LaneChoice } from "../../lib/sidebar-types";
 import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
+import { cn } from "../../ui/cn";
 import { Popover } from "../../ui/popover";
 import { Tooltip } from "../../ui/tooltip";
 import { RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
@@ -14,6 +15,33 @@ import { SessionCardBody, WsPrStatusMark } from "../sidebar/HoverCards";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+/** The sidebar's selectable row — the shape every list family wears: session,
+ *  workspace, PR, support, feed, archived and note rows. Migrated off the
+ *  legacy row family, so the state that used to live in `-selected` /
+ *  `-waiting` / `-unread` modifier classes now rides `data-*` attributes on
+ *  the row itself and descendants read it through `group-data-[…]` variants.
+ *  `data-sidebar-row` is the hook the ⌘↑/⌘↓ row walker queries by.
+ *
+ *  Rows wrapped in a `.sidebar-swipe-row` add `mt-0` — the wrapper carries the
+ *  2px gap for them — plus the swipe transform; bare rows keep the margin. */
+export const SIDEBAR_ROW =
+	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg max-[720px]:px-1 max-[720px]:py-[13px]";
+
+/** A row's title: one ellipsized line that brightens and emboldens for the
+ *  states the row advertises. Read conversations stay quiet; unread ones
+ *  brighten like Slack, a blocked one bolds under its blue wash. */
+/* Pin + archive, hover-revealed on desktop: on hover they take the metadata's
+   place at the far right so they don't crowd the title. Long titles run under
+   that spot, so each wears an opaque row-hover plate with a soft left feather
+   — swapped for the selected fill when the row is the selected one. The reveal
+   is `group-hover`, which Tailwind gates to real hover devices for us; on touch
+   these actions live behind the swipe gesture and the long-press sheet. */
+const ROW_ACTION =
+	"absolute top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md bg-[var(--bg-hover)] text-[15px] leading-none text-faint shadow-[-6px_0_5px_-2px_var(--bg-hover)] group-hover:flex hover:bg-active hover:text-fg group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]";
+
+export const SIDEBAR_ROW_TITLE =
+	"min-w-0 truncate text-body font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg max-[720px]:text-[16px]";
 
 export function SidebarItem({
 	session,
@@ -71,7 +99,7 @@ export function SidebarItem({
 	const closeHover = card.close;
 
 	// Mobile long-press → action sheet, and — importantly — the *tap* to open a
-	// session is driven from `touchend`, not the synthesized `click`. `.sidebar-item`
+	// session is driven from `touchend`, not the synthesized `click`. The row
 	// has `:hover` styles (the reveal-on-hover X, the hover background), and iOS
 	// treats the first tap on a hover-styled element as a hover-in, swallowing the
 	// click — so a click-driven open needs a second tap ("first tap doesn't work").
@@ -231,6 +259,9 @@ export function SidebarItem({
 	}
 
 	const visibleSwipeOffset = isPhone ? swipeOffset : 0;
+	// The swipe row is "open" — a revealed action sits behind it, so the slide
+	// back and forth runs at the shorter duration.
+	const swipeOpen = swipeAction !== null || visibleSwipeOffset !== 0;
 
 	return (
 		<Popover.Root {...card.rootProps}>
@@ -286,10 +317,32 @@ export function SidebarItem({
 			render={
 				<button
 					ref={btnRef}
-					className={`sidebar-item ${!mine ? "sidebar-item--twoline" : ""} ${selected ? "sidebar-item-selected" : ""} ${waiting ? "sidebar-item-waiting" : ""} ${unread ? "sidebar-item-unread" : ""}`}
+					className={cn(
+						SIDEBAR_ROW,
+						// Inside a swipe row: the wrapper owns the gap, the row owns the
+						// slide. Hover paints over selected/waiting here, as it always
+						// has — the swipe row's rules outranked both.
+						"z-1 mt-0 block touch-pan-y hover:bg-hover",
+						// Other people's sessions stack a meta line under the title, so
+						// the row is already two lines tall — trim its padding.
+						!mine && "py-[7px]",
+						waiting ? "bg-blue-soft" : selected && "bg-active",
+						dragging
+							? "transition-none"
+							: swipeOpen
+								? "transition-transform duration-(--dur-micro)"
+								: "transition-transform duration-(--dur)",
+						// One compositor layer for the row under the finger, none for
+						// the idle list (dozens of retina-sized layers is a real tax).
+						(dragging || swipeOpen) && "will-change-transform",
+					)}
+					data-sidebar-row=""
+					data-selected={selected || undefined}
+					data-waiting={waiting || undefined}
+					data-unread={unread || undefined}
 					style={
 						visibleSwipeOffset
-							? ({ "--swipe-x": `${visibleSwipeOffset}px` } as React.CSSProperties)
+							? { transform: `translateX(${visibleSwipeOffset}px)` }
 							: undefined
 					}
 					onClick={(e) => {
@@ -327,7 +380,10 @@ export function SidebarItem({
 				/>
 			}
 		>
-			<div className="sidebar-item-top">
+			{/* Same gap as .sidebar-group-header and .sidebar-ws-row: with the
+			    shared .sidebar-rail slot in front, that's what puts every title on
+			    one rail. */}
+			<div className="flex min-w-0 items-center gap-[9px]">
 				{/* Match workspace rows: the rail holds the PR glyph alone — a blocked
 				    session reads from its accent wash and bold title, not from a second
 				    dot wedged in beside it — and merged PRs keep the glyph itself
@@ -335,14 +391,14 @@ export function SidebarItem({
 				<span className="sidebar-rail">
 					{waiting && <span className="sr-only">Needs your attention</span>}
 					{session.isRunning ? (
-						<span className="sidebar-item-status sidebar-status-running" />
+						<span className="size-2 shrink-0 rounded-full sidebar-status-running" />
 					) : (
 						<WsPrStatusMark sessions={[session]} size={18} />
 					)}
 				</span>
 				{editing ? (
 					<input
-						className="sidebar-item-rename"
+						className="min-w-0 flex-1 rounded-md border border-accent bg-bg px-[3px] py-0 text-body font-medium text-inherit outline-none max-[720px]:text-[16px]"
 						value={draft}
 						autoFocus
 						onChange={(e) => setDraft(e.target.value)}
@@ -358,7 +414,7 @@ export function SidebarItem({
 					/>
 				) : (
 					<span
-						className="sidebar-item-title"
+						className={SIDEBAR_ROW_TITLE}
 						onDoubleClick={(e) => {
 							e.stopPropagation();
 							setDraft(session.title);
@@ -373,8 +429,17 @@ export function SidebarItem({
 						local
 					</span>
 				)}
+				{/* Own sessions collapse to one line: the timestamp (+ any PR/Linear
+				    badge) rides to the right of the title, flush with the row edge. On
+				    hover it fades and the archive button takes its place — but not on a
+				    phone, where there is no archive button. */}
 				{mine && !editing && metaParts.length > 0 && (
-					<span className="sidebar-item-inline-meta">
+					<span
+						className={cn(
+							"ml-auto flex min-w-10 shrink-0 items-center justify-end gap-1 pl-2.5 whitespace-nowrap text-meta text-faint max-[720px]:text-label group-data-[unread]:text-dim",
+							!isPhone && "group-hover:opacity-0",
+						)}
+					>
 						{metaParts.map((part, i) => (
 							<React.Fragment key={i}>
 								{i > 0 && <span className="sidebar-meta-sep">·</span>}
@@ -392,8 +457,16 @@ export function SidebarItem({
 					</span>
 				)}
 			</div>
+			{/* The block meta lives on its own line below the title, so it stays
+			    readable under the hover-revealed buttons — it just reserves room on
+			    the right so it clears them. */}
 			{!mine && (
-				<div className="sidebar-item-meta pl-[28px]">
+				<div
+					className={cn(
+						"mt-[3px] flex items-center gap-1 overflow-hidden pl-7 whitespace-nowrap text-meta text-faint max-[720px]:text-label group-data-[unread]:text-dim",
+						!isPhone && "group-hover:pr-[58px]",
+					)}
+				>
 					{metaParts.map((part, i) => (
 						<React.Fragment key={i}>
 							{i > 0 && <span className="sidebar-meta-sep">·</span>}
@@ -402,12 +475,17 @@ export function SidebarItem({
 					))}
 				</div>
 			)}
+			{!isPhone && (
 			<Tooltip
 				label={pinned ? "Unpin session" : "Pin session"}
 				shortcut={selected ? PIN_SHORTCUT_KEYS : undefined}
 			>
 				<span
-					className={`sidebar-item-pin${pinned ? " is-on" : ""}`}
+					className={cn(
+						ROW_ACTION,
+						"right-[35px] data-[on]:bg-active data-[on]:text-fg",
+					)}
+					data-on={pinned || undefined}
 					role="button"
 					aria-label={pinned ? "Unpin session" : "Pin session"}
 					onMouseEnter={closeHover}
@@ -419,12 +497,14 @@ export function SidebarItem({
 					<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
 				</span>
 			</Tooltip>
+			)}
+			{!isPhone && (
 			<Tooltip
 				label="Archive session"
 				shortcut={selected ? ARCHIVE_SHORTCUT_KEYS : undefined}
 			>
 				<span
-					className="sidebar-item-x"
+					className={cn(ROW_ACTION, "right-[7px]")}
 					role="button"
 					aria-label="Archive session"
 					onMouseEnter={closeHover}
@@ -447,6 +527,7 @@ export function SidebarItem({
 					</svg>
 				</span>
 			</Tooltip>
+			)}
 		</Popover.Trigger>
 		</div>
 		<RowCardPopup>

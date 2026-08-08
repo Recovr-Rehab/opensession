@@ -9,9 +9,11 @@ import {
 	IconPullRequest,
 	IconX,
 } from "./icons";
+import { cn } from "../ui/cn";
 import { ContextMenu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
+import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./sidebar/SidebarItem";
 import {
 	PrRowCard,
 	RowCardPopup,
@@ -80,7 +82,13 @@ export function PrRow({
 						render={
 							<button
 								type="button"
-								className={`sidebar-item sidebar-ws-row${selected ? " sidebar-item-selected" : ""}`}
+								className={cn(
+									SIDEBAR_ROW,
+									"sidebar-ws-row",
+									selected ? "bg-pressed" : "hover:bg-hover",
+								)}
+								data-sidebar-row=""
+								data-selected={selected || undefined}
 								onClick={onOpen}
 								onContextMenu={card.close}
 								aria-label={item.pr.title}
@@ -92,7 +100,7 @@ export function PrRow({
 			<span className="sidebar-rail">
 				<PrStateMark item={item} size={18} />
 			</span>
-			<span className="sidebar-item-title">{item.pr.title}</span>
+			<span className={SIDEBAR_ROW_TITLE}>{item.pr.title}</span>
 			{!isPhone && (
 				<span
 					className="sidebar-ws-time"
@@ -106,7 +114,14 @@ export function PrRow({
 			    (confirmed). It deliberately does NOT wear the archive icon —
 			    this row sits beside workspace rows whose trailing icon archives
 			    locally, and a mis-click here closes someone's PR on GitHub. */}
-			<span className="sidebar-ws-actions">
+			<span
+				className={cn(
+					"sidebar-ws-actions",
+					// The selected row's fill under the cluster, which the
+					// selected-row rule in legacy.css used to carry.
+					"group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]",
+				)}
+			>
 				<Tooltip label={pinned ? "Unpin pull request" : "Pin pull request"}>
 					<span
 						role="button"

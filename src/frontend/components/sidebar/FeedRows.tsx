@@ -6,13 +6,20 @@ import { mineStatus } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type Group, type LaneChoice } from "../../lib/sidebar-types";
 import { shortTime } from "../../lib/time";
 import type { FeedDescriptor, FeedFilterSpec, FeedItem, SupportThread, UnifiedSession } from "../../lib/types";
+import { cn } from "../../ui/cn";
 import { Menu } from "../../ui/menu";
 import { Popover } from "../../ui/popover";
 import { Tooltip } from "../../ui/tooltip";
 import { CardFooter, RowCardPopup, SupportRowCard, useRowHoverCard } from "../SidebarRowCards";
 import { IconCheck, IconFilter, IconPin } from "../icons";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
+import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "../sidebar/SidebarItem";
 import React, { useEffect, useState } from "react";
+
+/* Restore the selected row's fill under the hover-action cluster, which the
+   selected-row rule in legacy.css used to carry. */
+const WS_ACTIONS_SELECTED =
+	"group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]";
 
 // A Support row: one TODO Plain ticket, single-line in the workspace rows'
 // exact shape. The rail dot wears the linked session's status (the ticket's
@@ -58,9 +65,13 @@ export function SupportRow({
 				render={
 					<button
 						type="button"
-						className={`sidebar-item sidebar-ws-row${
-							active ? " sidebar-item-selected" : ""
-						}`}
+						className={cn(
+							SIDEBAR_ROW,
+							"sidebar-ws-row",
+							active ? "bg-pressed" : "hover:bg-hover",
+						)}
+						data-sidebar-row=""
+						data-selected={active || undefined}
 						onClick={onOpen}
 						onContextMenu={menu.onContextMenu}
 						aria-label={label}
@@ -73,7 +84,7 @@ export function SupportRow({
 						style={{ backgroundColor: dot }}
 					/>
 				</span>
-				<span className="sidebar-item-title">{label}</span>
+				<span className={SIDEBAR_ROW_TITLE}>{label}</span>
 				{!isPhone && t.statusChangedAt && (
 					<span
 						className="sidebar-ws-time"
@@ -85,7 +96,7 @@ export function SupportRow({
 				{/* Hover actions: the same pin + finish pair the workspace rows
 				    wear — pin keeps the ticket in the Pinned band, the check
 				    marks it done in Plain. */}
-				<span className="sidebar-ws-actions">
+				<span className={cn("sidebar-ws-actions", WS_ACTIONS_SELECTED)}>
 					<span
 						role="button"
 						tabIndex={0}
@@ -204,9 +215,13 @@ export function FeedRow({
 				render={
 					<button
 						type="button"
-						className={`sidebar-item sidebar-ws-row${
-							active ? " sidebar-item-selected" : ""
-						}`}
+						className={cn(
+							SIDEBAR_ROW,
+							"sidebar-ws-row",
+							active ? "bg-pressed" : "hover:bg-hover",
+						)}
+						data-sidebar-row=""
+						data-selected={active || undefined}
 						onClick={onOpen}
 						onContextMenu={menu.onContextMenu}
 						aria-label={item.title}
@@ -220,7 +235,7 @@ export function FeedRow({
 					/>
 				</span>
 				<span
-					className={`sidebar-item-title${unread ? " font-semibold text-fg" : ""}`}
+					className={cn(SIDEBAR_ROW_TITLE, unread && "font-semibold text-fg")}
 				>
 					{item.title}
 				</span>
@@ -232,7 +247,7 @@ export function FeedRow({
 						{shortTime(ts)}
 					</span>
 				)}
-				<span className="sidebar-ws-actions">
+				<span className={cn("sidebar-ws-actions", WS_ACTIONS_SELECTED)}>
 					<span
 						role="button"
 						tabIndex={0}

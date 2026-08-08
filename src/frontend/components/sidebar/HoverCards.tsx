@@ -63,9 +63,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 	return (
 		<>
 			<div className="flex min-w-0 items-center gap-[7px]">
-				<span
-					className={`sidebar-item-status shrink-0 ${state.dotClass}`}
-				/>
+				<span className={`size-2 shrink-0 rounded-full ${state.dotClass}`} />
 				<span className="min-w-0 flex-1 truncate text-meta text-dim">
 					{s.branch || s.title}
 				</span>
@@ -264,7 +262,8 @@ export function WsStatusMark({
 			{child}
 		</span>
 	);
-	const dot = (cls: string) => slot(<span className={`sidebar-item-status ${cls}`} />);
+	const dot = (cls: string) =>
+		slot(<span className={`size-2 shrink-0 rounded-full ${cls}`} />);
 	if (row.status === "needsinput") return dot("sidebar-status-waiting");
 	if (row.running) return dot("sidebar-status-running");
 	if (row.status === "review") {
