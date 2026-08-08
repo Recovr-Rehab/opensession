@@ -1,6 +1,6 @@
 import React from "react";
 import { repoLetter } from "../lib/repo-label";
-import { repoColor, repoIconRevision } from "../lib/repo-colors";
+import { REPO_TILE_INK, repoColor, repoIconRevision } from "../lib/repo-colors";
 
 // The display-name map lives in lib/repo-label and the tile colors in
 // lib/repo-colors, so lib-level formatters can reach both without a component
@@ -66,6 +66,9 @@ export function RepoTile({
 		);
 	}
 	style.background = repoColor(name);
+	// Inline, over legacy.css's white: the palette is bright enough that the
+	// letter is dark ink, and the two are set together (lib/repo-colors).
+	style.color = REPO_TILE_INK;
 	const letter = repoLetter(name);
 	return (
 		<span className="repo-tile" style={style}>

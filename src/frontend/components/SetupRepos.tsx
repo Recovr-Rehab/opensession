@@ -17,7 +17,7 @@ import {
 import { toast } from "../ui/toast";
 import { IconArrowUpToLine, IconPlus } from "./icons";
 import { RepoTile } from "./RepoTile";
-import { REPO_TILE_COLORS, repoColor } from "../lib/repo-colors";
+import { REPO_TILE_COLORS, REPO_TILE_INK, repoColor } from "../lib/repo-colors";
 import { repoLetter } from "../lib/repo-label";
 import { pngFromImageFile } from "../lib/icon-image";
 import {
@@ -320,8 +320,8 @@ function TileChoice({
 function LetterTile({ id, color }: { id: string; color?: string }) {
 	return (
 		<span
-			className="flex h-full w-full items-center justify-center rounded-control text-[15px] font-bold text-white"
-			style={{ background: color ?? repoColor(id) }}
+			className="flex h-full w-full items-center justify-center rounded-control text-[15px] font-bold"
+			style={{ background: color ?? repoColor(id), color: REPO_TILE_INK }}
 		>
 			{repoLetter(id)}
 		</span>

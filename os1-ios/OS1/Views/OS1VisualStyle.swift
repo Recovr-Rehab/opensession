@@ -110,17 +110,23 @@ final class RepoTilePalette {
     static let shared = RepoTilePalette()
 
     static let colors: [UInt32] = [
-        0xd860_69,  // red
-        0x6285_00,  // leaf
-        0x0098_d0,  // azure
-        0xb04e_90,  // plum
-        0xab87_00,  // gold
-        0x0088_8c,  // teal
-        0xa371_d3,  // violet
-        0xb65b_00,  // amber
-        0x00a6_71,  // emerald
-        0x566f_cf,  // indigo
+        0xff6f_7a,  // red
+        0x79a3_00,  // leaf
+        0x00b2_f4,  // azure
+        0xdf55_b4,  // plum
+        0xc89f_00,  // gold
+        0x00a7_ab,  // teal
+        0xc281_ff,  // violet
+        0xdd70_00,  // amber
+        0x00c2_85,  // emerald
+        0x6887_ff,  // indigo
     ]
+
+    /// The letter every tile carries. The palette is bright enough that a
+    /// white letter would be the thing holding it back (these run 4.9–7.3:1
+    /// against this ink), so colors and ink move together — see
+    /// REPO_TILE_INK in src/server/repo-tile-colors.ts.
+    static let ink = Color(rgb: 0x1c1c_1e)
 
     private var assigned: [String: Color] = [:]
     /// When each repo's icon last changed. Icons are cacheable and URLCache
@@ -272,7 +278,7 @@ struct RepoTile: View {
             } else {
                 Text(letter)
                     .font(.system(size: size * 0.6, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(RepoTilePalette.ink)
                     .frame(width: size, height: size)
                     .background(color)
             }

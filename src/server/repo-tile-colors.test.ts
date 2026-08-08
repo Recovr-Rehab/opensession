@@ -88,6 +88,8 @@ describe("assignRepoTileColors", () => {
 		const azure = REPO_TILE_COLORS[2];
 		expect(currentTileColor("#5186af")).toBe(azure);
 		expect(currentTileColor("#1394df")).toBe(azure);
+		// And the ten-color palette that came between them.
+		expect(currentTileColor("#0098d0")).toBe(azure);
 		expect(currentTileColor(azure)).toBe(azure);
 		// A hex from no palette (hand-edited config) is left alone.
 		expect(currentTileColor("#123456")).toBe("#123456");
