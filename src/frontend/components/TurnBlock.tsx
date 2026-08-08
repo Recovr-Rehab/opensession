@@ -10,6 +10,7 @@ import { ClampedBody } from "./MessageBubble";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { IconChevronDown } from "./icons";
 import { cn } from "../ui/cn";
+import { msgBody, msgMedia } from "../lib/msg-classes";
 import {
   getTurnActivityPref,
   onTurnActivityChanged,
@@ -238,13 +239,13 @@ function TurnMessage({
       data-eid={entry.id}
     >
       <ClampedBody
-        className="msg-body msg-body-assistant markdown text-dim"
+        className={cn(msgBody, "markdown text-dim")}
         content={entry.content}
         entry={entry}
         sessionId={sessionId}
       />
       {entry.images && entry.images.length > 0 && (
-        <div className="msg-images">
+        <div className={msgMedia}>
           {entry.images.map((raw, i) => {
             const src = resolveEntryImageSrc(raw, sessionId);
             return (

@@ -146,6 +146,15 @@ import { SessionRelations, type RelatedSession } from "./SessionRelations";
 import { PixelSpinner } from "./PixelSpinner";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import {
+	msgBodyStreaming,
+	msgBubbleUser,
+	msgDotUser,
+	msgLabel,
+	msgMedia,
+	msgOwnTurn,
+	msgRow,
+} from "../lib/msg-classes";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { CopyCheck, useCopy } from "../ui/copy";
@@ -5066,18 +5075,30 @@ export function SessionViewer({
 							)}
 
 								{pendingBubbles.map((p) => (
-									<div key={p.id} className="msg msg-user msg-sending">
+									<div
+										key={p.id}
+										/* .msg-sending + .msg-label-user stay as hooks: base.css's
+										   reduced-motion exception names the pair to keep the
+										   optimistic pulse breathing. */
+										className={cn(
+											msgRow,
+											msgOwnTurn,
+											"msg-user msg-sending opacity-60",
+										)}
+									>
 										{/* No name: the bubble is right-aligned, so authorship is
 										    already clear — just the transient status. Busy sends
 										    render in the queue flap, never as a bubble. */}
-										<div className="msg-label msg-label-user">
-											<span className="msg-label-status">Sending…</span>
+										<div className={cn(msgLabel, "msg-label-user")}>
+											<span className={msgDotUser} aria-hidden />
+											{/* A quiet aside, not a shouted label. */}
+											<span className="tracking-normal">Sending…</span>
 										</div>
 									{p.content && (
-										<div className="msg-body msg-body-user">{p.content}</div>
+										<div className={msgBubbleUser}>{p.content}</div>
 									)}
 									{p.images && p.images.length > 0 && (
-										<div className="msg-images">
+										<div className={cn(msgMedia, "justify-end")}>
 											{p.images.map((src, i) => (
 												<img
 													key={i}
@@ -5574,7 +5595,12 @@ function BusyInline({
 	since: number | null;
 }) {
 	return (
-		<div className="msg msg-busy-inline">
+		<div
+			className={cn(
+				msgRow,
+				"mt-0.5 flex-row items-center gap-2.25 py-1.25 text-dim",
+			)}
+		>
 			<PulseDot size={7} />
 			{since != null && <BusyElapsed since={since} />}
 		</div>
@@ -5596,14 +5622,17 @@ function StreamingMessage({ store }: { store: LiveTurnStore }) {
 	if (!snapshot.text) return null;
 
 	return (
-		<div className="msg msg-assistant msg-streaming">
+		/* .msg-streaming + .msg-body-assistant stay as hooks: the streaming caret
+		   is a ::after on that pair, and base.css's reduced-motion exception
+		   keeps it blinking by naming the same selector. */
+		<div className={cn(msgRow, "msg-streaming")}>
 			{snapshot.rapid ? (
-				<div className="msg-body msg-body-assistant whitespace-pre-wrap">
+				<div className={cn(msgBodyStreaming, "whitespace-pre-wrap")}>
 					{snapshot.text}
 				</div>
 			) : (
 				<MarkdownBody
-					className="msg-body msg-body-assistant markdown"
+					className={cn(msgBodyStreaming, "markdown")}
 					html={html}
 				/>
 			)}

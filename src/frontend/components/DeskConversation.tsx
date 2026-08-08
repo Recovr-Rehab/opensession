@@ -9,6 +9,13 @@ import { useFileMentions } from "./useFileMentions";
 import { IconArrowUp } from "./icons";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
 import { fieldClasses } from "../ui/input";
+import { cn } from "../ui/cn";
+import {
+	msgBodyStreaming,
+	msgBubbleUser,
+	msgOwnTurn,
+	msgRow,
+} from "../lib/msg-classes";
 
 interface DeskConversationProps {
 	sessionId: string;
@@ -260,9 +267,9 @@ export function DeskConversation({
 							onOpenSubagent={onOpenSubagent}
 						/>
 						{streamText && (
-							<div className="msg msg-assistant msg-streaming">
+							<div className={cn(msgRow, "msg-streaming")}>
 								<div
-									className="msg-body msg-body-assistant markdown"
+									className={cn(msgBodyStreaming, "markdown")}
 									dangerouslySetInnerHTML={{ __html: renderMarkdown(streamText) }}
 								/>
 							</div>
@@ -272,8 +279,8 @@ export function DeskConversation({
 						    delivered the instant Enter lands; reconciles away when the
 						    real user entry arrives. */}
 						{pending && (
-							<div className="msg msg-user">
-								<div className="msg-body msg-body-user">{pending}</div>
+							<div className={cn(msgRow, msgOwnTurn, "msg-user")}>
+								<div className={msgBubbleUser}>{pending}</div>
 							</div>
 						)}
 					</>

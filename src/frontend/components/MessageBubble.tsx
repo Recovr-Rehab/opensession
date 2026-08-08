@@ -21,6 +21,22 @@ import { extBadge } from "../lib/images";
 import { fullTime, shortTime } from "../lib/time";
 import { IconChevronDown } from "./icons";
 import { noticeTone, stripNoticeGlyph } from "../lib/notice-tone";
+import {
+	msgBody,
+	msgBubbleHuman,
+	msgBubbleUser,
+	msgDotHuman,
+	msgDotUser,
+	msgLabel,
+	msgLabelHuman,
+	msgMedia,
+	msgOwnTurn,
+	msgRow,
+	msgSystemRow,
+	msgSystemText,
+	msgSystemToned,
+	msgTime,
+} from "../lib/msg-classes";
 import { cn } from "../ui/cn";
 
 // Only this much of a message is markdown-parsed eagerly. marked is
@@ -151,11 +167,11 @@ function CollapsibleSystemNotice({
 }) {
 	const [open, setOpen] = useState(false);
 	return (
-		<div className="msg msg-system" data-eid={entry.id}>
+		<div className={msgSystemRow} data-eid={entry.id}>
 			<button
 				type="button"
 				onClick={() => setOpen((v) => !v)}
-				className="msg-system-text cursor-pointer [font-family:inherit]"
+				className={cn(msgSystemText, "cursor-pointer [font-family:inherit]")}
 			>
 				{label} ·{" "}
 				<span className="font-medium text-dim">
@@ -165,7 +181,7 @@ function CollapsibleSystemNotice({
 			{open && (
 				<div className="mx-auto mt-2 w-full max-w-[560px] rounded-lg bg-panel px-4 py-3 text-left">
 					<ClampedBody
-						className="msg-body markdown"
+						className={cn(msgBody, "markdown")}
 						content={content}
 						entry={entry}
 						sessionId={sessionId}
@@ -179,8 +195,10 @@ function CollapsibleSystemNotice({
 /** Triangle-alert glyph for a toned notice; inherits the pill's colour. */
 function NoticeGlyph() {
 	return (
+		// Optical: line-height 1.45 on 11px text leaves the cap ~2px below the
+		// box top, so mt-0.5 sets the glyph down on the first line.
 		<svg
-			className="msg-system-glyph"
+			className="mt-0.5 flex-none"
 			width="12"
 			height="12"
 			viewBox="0 0 24 24"
@@ -204,9 +222,15 @@ function NoticeGlyph() {
 function SystemNotice({ entry }: { entry: TranscriptEntry }) {
 	const tone = noticeTone(entry.content);
 	return (
-		<div className="msg msg-system" data-eid={entry.id}>
+		<div className={msgSystemRow} data-eid={entry.id}>
 			<span
-				className="msg-system-text"
+				className={cn(
+					msgSystemText,
+					tone !== "info" && msgSystemToned,
+					tone === "error" && "bg-red-soft text-red",
+					tone === "warn" &&
+						"bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] text-yellow",
+				)}
 				data-tone={tone === "info" ? undefined : tone}
 				role={tone === "error" ? "alert" : undefined}
 			>
@@ -222,9 +246,11 @@ function SystemNotice({ entry }: { entry: TranscriptEntry }) {
  *  rereading the tail. */
 function RecapNotice({ entry }: { entry: TranscriptEntry }) {
 	return (
-		<div className="msg msg-system" data-eid={entry.id}>
-			<span className="msg-system-text" data-recap="">
-				<span className="msg-recap-prefix">recap: </span>
+		<div className={msgSystemRow} data-eid={entry.id}>
+			{/* Left-aligned and italic like the toned notices: 1-3 sentences read
+			    as the harness whispering a catch-up, not the model speaking. */}
+			<span className={cn(msgSystemText, "text-left italic")}>
+				<span className="font-semibold not-italic">recap: </span>
 				{entry.content}
 			</span>
 		</div>
@@ -258,20 +284,31 @@ function MsgTime({ ts }: { ts?: string }) {
 	if (!label) return null;
 	return (
 		<Tooltip label={fullTime(ts)}>
-			<span className="msg-time">{label}</span>
+			<span className={msgTime}>{label}</span>
 		</Tooltip>
 	);
 }
 
 /** The real time below your own bubble, faded in while the row is hovered —
  * those turns carry no label row to hang a MsgTime off, and a timestamp on
- * every one of them would just be noise while reading. Hover-capable pointers
- * only (see .msg-hover-time); on touch the row renders exactly as before. */
+ * every one of them would just be noise while reading.
+ *
+ * Hover-capable pointers only: a touch pointer never gets a dead element, and
+ * the assistant's time lives in the ⋯ menu there instead. The reveal is
+ * opacity-only over an absolutely positioned element — nothing here may change
+ * a block's height, or VirtualTranscriptBlock's measured placeholders would
+ * mis-size and jump the scroll. The ::selection mask is the same WebKit fix as
+ * the label's: a drag-select sweeping past unselectable text paints a phantom
+ * highlight without it, and a fully transparent background is ignored. */
 function BubbleHoverTime({ ts }: { ts?: string }) {
 	if (!ts) return null;
 	const label = fullTime(ts);
 	if (!label) return null;
-	return <span className="msg-hover-time">{label}</span>;
+	return (
+		<span className="absolute top-[calc(100%+8px)] right-0 hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100">
+			{label}
+		</span>
+	);
 }
 
 interface Props {
@@ -293,13 +330,16 @@ interface Props {
 function EntryImages({
 	images,
 	sessionId,
+	right,
 }: {
 	images?: string[];
 	sessionId?: string;
+	/** Attachments under a right-aligned bubble hug its edge. */
+	right?: boolean;
 }) {
 	if (!images || images.length === 0) return null;
 	return (
-		<div className="msg-images">
+		<div className={cn(msgMedia, right && "justify-end")}>
 			{images.map((raw, i) => {
 				const src = resolveEntryImageSrc(raw, sessionId);
 				return (
@@ -319,10 +359,16 @@ function EntryImages({
 }
 
 /** Inline video players for attached/staged videos (streamed via <base>/media). */
-function EntryVideos({ videos }: { videos?: string[] }) {
+function EntryVideos({
+	videos,
+	right,
+}: {
+	videos?: string[];
+	right?: boolean;
+}) {
 	if (!videos || videos.length === 0) return null;
 	return (
-		<div className="msg-videos">
+		<div className={cn(msgMedia, right && "justify-end")}>
 			{videos.map((src, i) => (
 				<div key={i} className="md-video-wrap">
 					<video
@@ -339,10 +385,16 @@ function EntryVideos({ videos }: { videos?: string[] }) {
 }
 
 /** Non-media attachments on a user turn — download chips (served via <base>/media). */
-function EntryFiles({ files }: { files?: TranscriptEntry["files"] }) {
+function EntryFiles({
+	files,
+	right,
+}: {
+	files?: TranscriptEntry["files"];
+	right?: boolean;
+}) {
 	if (!files || files.length === 0) return null;
 	return (
-		<div className="msg-files">
+		<div className={cn(msgMedia, right && "justify-end")}>
 			{files.map((f, i) => (
 				<a
 					key={i}
@@ -445,7 +497,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 
 	if (entry.type === "user" && workerReport) {
 		return (
-			<div className="msg" data-eid={entry.id}>
+			<div className={msgRow} data-eid={entry.id}>
 				{/* Folded, this is one quiet line in the transcript — no surface of its
 				    own, like the other collapsible notices. The panel appears only when
 				    there is a report body for it to hold. */}
@@ -478,7 +530,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 					{workerReportOpen && (
 						<>
 							<ClampedBody
-								className="msg-body markdown px-3.5 py-2.5"
+								className={cn(msgBody, "markdown px-3.5 py-2.5")}
 								content={workerReport.body}
 								entry={entry}
 								sessionId={sessionId}
@@ -510,8 +562,8 @@ export const MessageBubble = React.memo(function MessageBubble({
 	// Short and purely informational — the centered system pill, like "🔀 merged".
 	if (entry.type === "user" && workflowNotice) {
 		return (
-			<div className="msg msg-system" data-eid={entry.id}>
-				<span className="msg-system-text">{workflowNotice.body}</span>
+			<div className={msgSystemRow} data-eid={entry.id}>
+				<span className={msgSystemText}>{workflowNotice.body}</span>
 			</div>
 		);
 	}
@@ -530,7 +582,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 
 	if (entry.type === "user" && reviewHandoff) {
 		return (
-			<div className="msg" data-eid={entry.id}>
+			<div className={msgRow} data-eid={entry.id}>
 				{/* Same folded-notice treatment as the worker report above. */}
 				<div
 					className={cn(
@@ -563,7 +615,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 					</div>
 					{reviewHandoffOpen && (
 						<ClampedBody
-							className="msg-body markdown px-3.5 py-2.5"
+							className={cn(msgBody, "markdown px-3.5 py-2.5")}
 							content={reviewHandoff.body}
 							entry={entry}
 							sessionId={sessionId}
@@ -576,8 +628,8 @@ export const MessageBubble = React.memo(function MessageBubble({
 
 	if (entry.type === "user" && attribution && isGitHubAttribution(attribution.name)) {
 		return (
-			<div className="msg msg-system" data-eid={entry.id}>
-				<span className="msg-system-text">{displayContent}</span>
+			<div className={msgSystemRow} data-eid={entry.id}>
+				<span className={msgSystemText}>{displayContent}</span>
 			</div>
 		);
 	}
@@ -596,23 +648,21 @@ export const MessageBubble = React.memo(function MessageBubble({
 
 	if (entry.type === "user" && humanReply) {
 		return (
-			<div
-				className="msg msg-human"
-				data-eid={entry.id}
-			>
-				<div className="msg-label msg-label-human">
+			<div className={cn(msgRow, msgOwnTurn)} data-eid={entry.id}>
+				<div className={cn(msgLabel, msgLabelHuman)}>
+					<span className={msgDotHuman} aria-hidden />
 					💬 {humanReply.name} · via Slack
 					<MsgTime ts={entry.timestamp} />
 				</div>
 				<ClampedBody
-					className="msg-body msg-body-human markdown"
+					className={cn(msgBubbleHuman, "markdown")}
 					content={humanReply.body}
 					entry={entry}
 					sessionId={sessionId}
 				/>
-				<EntryImages images={entry.images} sessionId={sessionId} />
-				<EntryVideos videos={entry.videos} />
-				<EntryFiles files={entry.files} />
+				<EntryImages images={entry.images} sessionId={sessionId} right />
+				<EntryVideos videos={entry.videos} right />
+				<EntryFiles files={entry.files} right />
 			</div>
 		);
 	}
@@ -643,29 +693,38 @@ export const MessageBubble = React.memo(function MessageBubble({
 		// attribution label.
 		return (
 			<div
-				className={cn("msg msg-user", !fromOther && "msg-user-own")}
+				className={cn(
+					msgRow,
+					"msg-user",
+					msgOwnTurn,
+					// Your own turns hang their time below the bubble, so on
+					// hover-capable pointers the row keeps that much clear of the
+					// next transcript block.
+					!fromOther && "[@media(hover:hover)]:mb-8.75",
+				)}
 				data-eid={entry.id}
 			>
 				{fromOther && (
-					<div className="msg-label msg-label-user">
+					<div className={msgLabel}>
+						<span className={msgDotUser} aria-hidden />
 						{fromOther}
 						<MsgTime ts={entry.timestamp} />
 					</div>
 				)}
 				{/* One stack anchors the hover time below both the bubble and attachments. */}
-				<div className="msg-user-row">
+				<div className="group/bubble relative flex min-w-0 flex-col">
 					{!fromOther && <BubbleHoverTime ts={entry.timestamp} />}
 					{displayContent && (
 						<ClampedBody
-							className="msg-body msg-body-user markdown"
+							className={cn(msgBubbleUser, "markdown")}
 							content={displayContent}
 							entry={entry}
 							sessionId={sessionId}
 						/>
 					)}
-					<EntryImages images={entry.images} sessionId={sessionId} />
-					<EntryVideos videos={entry.videos} />
-					<EntryFiles files={entry.files} />
+					<EntryImages images={entry.images} sessionId={sessionId} right />
+					<EntryVideos videos={entry.videos} right />
+					<EntryFiles files={entry.files} right />
 				</div>
 			</div>
 		);
@@ -674,12 +733,9 @@ export const MessageBubble = React.memo(function MessageBubble({
 	// assistant — no speaker label: every left-aligned bubble is the agent, so
 	// the name row was pure noise above each answer.
 	return (
-		<div
-			className="msg msg-assistant"
-			data-eid={entry.id}
-		>
+		<div className={msgRow} data-eid={entry.id}>
 			<ClampedBody
-				className="msg-body msg-body-assistant markdown"
+				className={cn(msgBody, "markdown text-fg")}
 				content={displayContent}
 				entry={entry}
 				sessionId={sessionId}
