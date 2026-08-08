@@ -10,7 +10,7 @@ import { requestUser, type RouteContext } from "./context";
 import { defaultRepo, personaName } from "../config";
 import { hostRepoId, prHostFor } from "../pr-host";
 import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
-import { linkPrStack } from "../pr-stack";
+import { getPrStack, linkPrStack, mergePrStack } from "../pr-stack";
 import { closeTinderPr, commentTinderPr, deleteTinderComment, getSeenPrs, labelTinderPr, listTinderLabels, listTinderPrs, markPrSeen, markPrUnseen, reopenTinderPr } from "../pr-tinder";
 import { findSession, invalidateSessionsCache } from "../session-cache";
 import { getSessionControl } from "../session-control";
@@ -814,6 +814,95 @@ export async function handlePrRoutes(
 			host.invalidatePrInfo(ghRepo, session.branch);
 			host.invalidatePrInfo(ghRepo, stackedOn.branch);
 			return Response.json({ ok: true });
+		} catch (e: any) {
+			return Response.json({ error: e.message || String(e) }, { status: 502 });
+		}
+	}
+
+	// Merge every layer of the stack up to and including this session's PR, in
+	// one atomic GitHub operation. Distinct from /pr-merge, which takes a single
+	// PR and refuses a layer with open layers under it: this is the action that
+	// lands such a layer, by taking the ones below it along.
+	if (
+		path.match(/^\/api\/sessions\/(.+)\/pr-stack-merge$/) &&
+		req.method === "POST"
+	) {
+		const credential = githubMutationCredential(ctx);
+		if (!credential) return githubCredentialRequiredResponse();
+		const sessionId = decodeURIComponent(
+			path.match(/^\/api\/sessions\/(.+)\/pr-stack-merge$/)![1],
+		);
+		const session = findSession(sessionId);
+		if (!session)
+			return Response.json({ error: "Session not found" }, { status: 404 });
+
+		const body = await req.json().catch(() => ({}));
+		const target = resolvePrTarget(session, body.repo, body.branch);
+		if (!target)
+			return Response.json(
+				{ error: "No branch/PR for that repo" },
+				{ status: 400 },
+			);
+		const repoCfg = getRepo(target.repoId);
+		const host = prHostFor(repoCfg);
+		if (!host.capabilities.stacks)
+			return Response.json(
+				{ error: "This repo's host has no stacks" },
+				{ status: 400 },
+			);
+		// `gh stack merge` reads its remote from the working directory and has no
+		// --repo flag, so it must run inside a checkout of the repo.
+		if (!session.worktreeDir || !existsSync(session.worktreeDir))
+			return Response.json(
+				{ error: "This session's worktree is gone — nothing to merge from" },
+				{ status: 400 },
+			);
+		const method =
+			body.method === "merge" || body.method === "rebase"
+				? body.method
+				: "squash";
+		try {
+			const meta = await host.prMetaForBranch(
+				target.branch,
+				target.ghRepo,
+				credential,
+			);
+			if (!meta)
+				return Response.json(
+					{ error: `No PR on \`${target.branch}\`` },
+					{ status: 400 },
+				);
+			// Read the stack before merging: afterwards it's the set of layers we
+			// have to un-cache, and it's the only place the branch names live.
+			const stack = await getPrStack(target.ghRepo, meta.number, credential);
+			if (!stack)
+				return Response.json(
+					{ error: `PR #${meta.number} isn't part of a stack` },
+					{ status: 400 },
+				);
+			const merging = stack.layers.filter(
+				(l) => l.position <= stack.position && l.state === "OPEN",
+			);
+			const result = await mergePrStack(
+				meta.number,
+				session.worktreeDir,
+				{ method },
+				credential,
+			);
+			if ("error" in result) return Response.json(result, { status: 502 });
+			// Patch the bulk PR cache for every layer that just landed, before
+			// dropping the sessions cache: the rebuild reads that cache
+			// stale-while-revalidate, so without this each layer's session row
+			// stays green/open until the throttled sweep or a webhook lands.
+			for (const layer of merging) {
+				markCachedPrMerged(target.ghRepo, layer.headRefName);
+				host.invalidatePrInfo(target.ghRepo, layer.headRefName);
+			}
+			invalidateSessionsCache();
+			return Response.json({
+				ok: true,
+				merged: merging.map((l) => l.number),
+			});
 		} catch (e: any) {
 			return Response.json({ error: e.message || String(e) }, { status: 502 });
 		}

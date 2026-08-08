@@ -231,6 +231,18 @@ export function prChipExternalClass(tone: PrTone, size: "bar" | "head"): string 
 	return `${geometry} ${size === "head" ? "size-[32px]" : "size-[30px]"} ${colour}`;
 }
 
+/** The stack chip — `position/size` with the layers glyph, sitting left of the
+ *  PR chip. A pill rather than half of a split button: it opens one popup, so
+ *  both of its ends are its own. Sized to whichever strip it rides in, and it
+ *  runs tighter than a PR chip because the glyph already fills its left. */
+export function prStackChipClass(tone: PrTone, size: "bar" | "head"): string {
+	const box =
+		size === "head"
+			? "min-h-[32px] pr-[9px] pl-[5px]"
+			: "min-h-[30px] pr-2 pl-1";
+	return `${CHIP_BASE} ${box} cursor-pointer rounded-control text-label ${CHIP_TONE[tone]}`;
+}
+
 /** The split button's two halves lift over each other on hover/focus so the
  *  shared seam doesn't clip the active one's edge. */
 export const PR_CHIP_SEAM =

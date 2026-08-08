@@ -417,6 +417,30 @@ export async function linkPrStackApi(sessionId: string) {
 	);
 }
 
+/**
+ * Merge every layer of this PR's stack up to and including it, atomically.
+ * `merged` comes back with the numbers that landed. Separate from mergePrApi
+ * because it is a different GitHub operation, not a flag on the same one.
+ */
+export async function mergePrStackApi(
+	sessionId: string,
+	method: "squash" | "merge" | "rebase" = "squash",
+	repo?: string,
+	branch?: string,
+) {
+	return request<{ ok: true; merged: number[] }>(
+		`/sessions/${encodeURIComponent(sessionId)}/pr-stack-merge`,
+		{
+			method: "POST",
+			body: {
+				method,
+				...(repo ? { repo } : {}),
+				...(branch ? { branch } : {}),
+			},
+		},
+	);
+}
+
 export async function mergePrPreviewApi(
 	repo: string,
 	branch: string,

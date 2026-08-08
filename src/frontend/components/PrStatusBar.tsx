@@ -15,7 +15,9 @@ import {
 	gitPullApi,
 	gitPushApi,
 	mergePrApi,
+	mergePrStackApi,
 } from "../lib/api";
+import { stackMergePlan } from "../lib/pr-stack";
 import {
 	pollWhileVisible,
 	PR_WEBHOOK_FALLBACK_POLL_MS,
@@ -49,6 +51,7 @@ import { cn } from "../ui/cn";
 import { isApple } from "../lib/platform";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
+import { PrStackChip } from "./pr/StackPopover";
 import {
 	IconArrowDown,
 	IconArrowUp,
@@ -129,17 +132,15 @@ function deriveHeadline(
 		if (pr.isDraft) return { key: "draft", label: "Draft", tone: "muted" };
 		if (pr.reviewDecision === "CHANGES_REQUESTED")
 			return { key: "changes-requested", label: "Changes requested", tone: "red" };
-		// A stack layer can't land before the layers under it (mergePr refuses
-		// it) — "Ready to merge" would be a promise the merge button breaks.
-		const openBelow = pr.stack
-			? pr.stack.layers.filter(
-					(l) => l.position < pr.stack!.position && l.state === "OPEN",
-				)
-			: [];
-		if (openBelow.length)
+		// A stack layer never lands alone while the layers under it are open — it
+		// lands as a stack merge, which takes them along, so it is genuinely
+		// ready. The one refusal we can see from here is a draft in that set:
+		// GitHub's stack merge won't take one, and the whole merge is atomic.
+		const draftBelow = stackMergePlan(pr)?.blockedBy;
+		if (draftBelow)
 			return {
 				key: "stack-blocked",
-				label: `Waiting on #${openBelow[openBelow.length - 1].number} below it`,
+				label: `Draft #${draftBelow.number} below it`,
 				tone: "yellow",
 			};
 		return { key: "ready", label: "Ready to merge", tone: "green" };
@@ -576,6 +577,17 @@ export function PrStatusBar({
 		}
 	}
 
+	// Merging a stack layer means merging everything under it — GitHub takes the
+	// whole set atomically, and a single-PR merge of a layer with open layers
+	// below it is refused outright. So the action follows the stack whenever
+	// there is more than one layer to take, and stays a plain merge otherwise
+	// (a bottom layer, or one whose lower layers have already landed).
+	const stackPlan = stackMergePlan(pr);
+	const stackMerge =
+		stackPlan && stackPlan.layers.length > 1 && !stackPlan.blockedBy
+			? stackPlan
+			: null;
+
 	function handleMerge() {
 		if (!confirmMerge) {
 			setConfirmMerge(true);
@@ -584,7 +596,9 @@ export function PrStatusBar({
 		}
 		setConfirmMerge(false);
 		run("merge", () =>
-			mergePrApi(sessionId, "squash", targetRepo, targetBranch),
+			stackMerge
+				? mergePrStackApi(sessionId, "squash", targetRepo, targetBranch)
+				: mergePrApi(sessionId, "squash", targetRepo, targetBranch),
 		);
 	}
 
@@ -733,13 +747,28 @@ export function PrStatusBar({
 						icon={!busy && !confirmMerge ? <IconGitMerge size={18} /> : undefined}
 						disabled={!!busy}
 						onClick={handleMerge}
-						title="Squash and merge this PR into its base branch"
+						title={
+							stackMerge
+								? `Squash and merge ${stackMerge.layers
+										.map((l) => `#${l.number}`)
+										.join(", ")} into ${pr?.stack?.baseRefName || "the base branch"} — all or nothing`
+								: "Squash and merge this PR into its base branch"
+						}
 					>
 						{busy === "merge"
-							? "Merging…"
+							? stackMerge
+								? "Merging stack…"
+								: "Merging…"
 							: confirmMerge
 								? "Confirm merge"
-								: "Merge"}
+								: stackMerge
+									? "Merge stack"
+									: "Merge"}
+						{stackMerge && busy !== "merge" && (
+							<span className="ml-1.5 rounded-full bg-white/20 px-1.5 tabular-nums">
+								{stackMerge.layers.length}
+							</span>
+						)}
 					</PrBarButton>
 				);
 			default:
@@ -750,6 +779,18 @@ export function PrStatusBar({
 	if (variant === "header") {
 		return (
 			<div className={PR_HEAD}>
+				{/* Left of the PR chip: a stack layer's first fact is that it is one
+				    of several, and the merge action takes the whole set. */}
+				{pr && (
+					<PrStackChip
+						pr={pr}
+						tone={headline.tone}
+						size="head"
+						headline={headlineLabel}
+						repo={primaryRepoId}
+						onOpenPr={(r, branch) => onOpenPrTab?.({ repo: r, branch })}
+					/>
+				)}
 				{pr && (
 					<PrNumberChip
 						pr={pr}
@@ -795,6 +836,16 @@ export function PrStatusBar({
 	const primaryRow = (
 		<div className={`pr-bar ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}>
 			{leading}
+			{pr && (
+				<PrStackChip
+					pr={pr}
+					tone={headlineTone}
+					size="bar"
+					headline={headlineLabel}
+					repo={primaryRepoId}
+					onOpenPr={(r, branch) => onOpenPrTab?.({ repo: r, branch })}
+				/>
+			)}
 			{pr && (
 				<PrNumberChip
 					pr={pr}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { linkPrStackApi } from "../../lib/api";
+import { stackLayersTopFirst } from "../../lib/pr-stack";
 import { prPath } from "../../lib/share-link";
 import type { PrDetails } from "../../lib/types";
 import { Button } from "../../ui/button";
@@ -83,7 +84,7 @@ function StackBody({
     );
 
   // Top of the stack first — the trunk is the base line below the last row.
-  const layers = [...stack.layers].sort((a, b) => b.position - a.position);
+  const layers = stackLayersTopFirst(stack);
   return (
     <>
       {layers.map((layer) => {

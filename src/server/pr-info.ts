@@ -741,8 +741,8 @@ export async function mergePr(
   // for the message, not the protection: it names the blocking PR instead of
   // surfacing a raw GraphQL error. `force` skips our check only; GitHub still
   // refuses, so there is no way to merge a stack out of order from here.
-  // Taking several layers at once needs GitHub's stack merge (`gh stack
-  // merge`), which we don't wire up yet.
+  // Taking several layers at once is a different operation — mergePrStack()
+  // (GitHub's atomic stack merge), which the "Merge stack" action calls.
   if (!opts.force) {
     const stack = await getPrStack(repo, pr.number, credential);
     const below = stack ? unmergedLayersBelow(stack) : [];
@@ -751,8 +751,8 @@ export async function mergePr(
         error:
           `PR #${pr.number} is layer ${stack!.position} of stack #${stack!.number} and ` +
           `${below.length === 1 ? "the layer" : "the layers"} below ${below.length === 1 ? "is" : "are"} still open (` +
-          `${below.map((l) => `#${l.number}`).join(", ")}). Merge from the bottom up, ` +
-          "or merge the stack on GitHub.",
+          `${below.map((l) => `#${l.number}`).join(", ")}). Merge the stack instead, ` +
+          "which lands every layer up to this one at once.",
       };
   }
 

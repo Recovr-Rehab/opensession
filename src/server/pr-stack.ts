@@ -421,3 +421,53 @@ export async function linkPrStack(
     },
   );
 }
+
+/**
+ * Merge a stack up to and including `prNumber` through GitHub's atomic stack
+ * merge — every layer from the trunk up to that PR lands in one all-or-nothing
+ * operation, so the trunk never sees a half-merged stack.
+ *
+ * This is the answer to the gate in mergePr(): a single layer can't merge while
+ * the layers below it are open, and merging them one `gh pr merge` at a time
+ * would rewrite each remaining layer's base between calls. `--yes` is what
+ * makes the command non-interactive (it otherwise opens a wizard); the merge
+ * method is always passed explicitly rather than inheriting gh's "last used"
+ * default, which is per-machine state we don't control.
+ *
+ * Like `gh stack link` the command has no `--repo` flag and reads its remote
+ * from `cwd`, so it must run inside a checkout of the repo. GitHub evaluates
+ * branch protection and repo rules when the merge runs, and reports a refusal
+ * back through the exit code — nothing here bypasses them.
+ */
+export async function mergePrStack(
+  prNumber: number,
+  cwd: string,
+  opts: { method?: "merge" | "squash" | "rebase" } = {},
+  credential: GithubCredential = serviceGithubCredential,
+): Promise<{ ok: true } | { error: string }> {
+  const method = opts.method || "squash";
+  return audited(
+    {
+      context: "reviews",
+      action: "pr_stack_merge",
+      args: { number: prNumber, method, cwd, credential: credential.principal },
+    },
+    async () => {
+      const { code, err } = await runGh(
+        ["stack", "merge", String(prNumber), "--yes", `--${method}`],
+        credential,
+        cwd,
+      );
+      if (code !== 0) {
+        const msg = String(err || "gh stack merge failed").slice(0, 300);
+        if (/unknown command|extension|not installed/i.test(msg))
+          return {
+            error:
+              "The gh-stack extension isn't installed on this server (`gh extension install github/gh-stack`).",
+          } as const;
+        return { error: msg } as const;
+      }
+      return { ok: true } as const;
+    },
+  );
+}
