@@ -20,6 +20,15 @@
  *   · `viewer-messages` — base.css's selection policy opts the whole transcript
  *     in, and MarkdownBody, VirtualTranscriptBlock and CodeHighlight all find
  *     their scroll container with `closest(".viewer-messages")`.
+ *
+ * Two more join them from the row's contents:
+ *
+ *   · `presence` and `session-link` — legacy.css still spaces both off the
+ *     ⋯ cluster from the row (`.viewer-header-actions .presence`), and sizes the
+ *     links for touch on phones, which is the same kind of ancestor-state rule;
+ *   · `session-link` is also written by lib/markdown.ts into rendered agent
+ *     output, where base.css styles the chip form (`.session-link[data-session-id]`).
+ *     There is no JSX there to hang utilities on.
  */
 
 /* ── Top bar ────────────────────────────────────────────────────────────── */
@@ -84,6 +93,38 @@ export const VIEWER_BRANCH_RENAME =
  */
 export const VIEWER_HEADER_ACTIONS =
 	"viewer-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end";
+
+/** The presence facepile (Figma/Notion-style), just before Share. */
+export const VIEWER_PRESENCE = "presence flex items-center";
+
+/**
+ * One face in it. They overlap by 8px so the pile reads as a stack, and the
+ * first one keeps the row's own left edge.
+ *
+ * No ring here: `.presence-avatar` carried a `box-shadow` meant to separate the
+ * faces with the header's colour, but UserAvatar's own `shadow-[var(--avatar-edge)]`
+ * is a utility and so already won that tie — the ring has not been drawn for as
+ * long as the avatar has been Tailwind-styled. Left as it renders today rather
+ * than reintroduced here, which would be a visual change dressed up as a
+ * migration.
+ */
+export const VIEWER_PRESENCE_AVATAR = "-ml-2 first:ml-0";
+
+/**
+ * The Linear / Plain / feed links in the header: quiet outlined pills that
+ * carry their source's hue. Each variant only re-tints the ink and the edge, so
+ * it must come after the base string through `cn()` — two `text-*` utilities on
+ * one element resolve by Tailwind's output order, not by the order written.
+ *
+ * The hues stay literal. They are the sources' brand colours (Linear's indigo,
+ * Plain's teal), not steps of the app's palette, so there is no token to reach
+ * for and swapping in one would be a redesign.
+ */
+export const SESSION_LINK =
+	"session-link rounded-control border border-line-strong px-[11px] py-[5px] " +
+	"text-label font-semibold text-dim no-underline";
+export const SESSION_LINK_LINEAR = "border-[rgba(94,106,210,0.5)] text-[#7b86e8]";
+export const SESSION_LINK_PLAIN = "border-[rgba(13,148,136,0.5)] text-[#5eead4]";
 
 /** ⋯ overflow: the secondary actions collapse into the shared Menu popup when
  *  they would otherwise crowd the title. */

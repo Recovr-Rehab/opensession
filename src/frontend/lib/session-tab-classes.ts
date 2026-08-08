@@ -266,6 +266,23 @@ export const tabDotClass = (waiting: boolean) =>
  *  which render the same mark. The caller adds the tone's fill. */
 export const PANEL_TAB_DOT = "size-[7px] rounded-full";
 
+/**
+ * What that dot means on a Review view-tab: the PR's state, plus the conflict
+ * case, which is a mergeability flag rather than a state of its own.
+ *
+ * A lookup of literal strings because the old spelling was
+ * `` `pr-dot-${prState.toLowerCase()}` `` — a class assembled at runtime, which
+ * no utility can ever be (Tailwind only compiles names it can find in source).
+ * Same tones the rule set, and the same ones lib/sidebar-hover gives these
+ * states in the row hover cards.
+ */
+export const PR_DOT_TONE: Record<string, string> = {
+	OPEN: "bg-green",
+	MERGED: "bg-purple",
+	CLOSED: "bg-red",
+	CONFLICT: "bg-yellow",
+};
+
 /* ── Per-tab close, and the trailing controls ───────────────────────────── */
 
 const CLOSE_BASE =

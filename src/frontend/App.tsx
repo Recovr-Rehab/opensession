@@ -157,6 +157,7 @@ import {
 	setTabColor,
 	onTabColorsChanged,
 } from "./lib/tab-colors";
+import { PR_DOT_TONE } from "./lib/session-tab-classes";
 import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
 import { isApple } from "./lib/platform";
@@ -1571,8 +1572,8 @@ export function App(
 						dotClass: currentSession?.prState
 							? currentSession.prState === "OPEN" &&
 								currentSession.prMergeable === "CONFLICTING"
-								? "pr-dot-conflict"
-								: `pr-dot-${currentSession.prState.toLowerCase()}`
+								? PR_DOT_TONE.CONFLICT
+								: (PR_DOT_TONE[currentSession.prState] ?? null)
 							: null,
 					},
 				]

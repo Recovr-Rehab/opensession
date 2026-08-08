@@ -213,6 +213,9 @@ import {
 	SESSION_BANNER,
 	SESSION_BANNERS,
 	SESSION_DELETE_LABEL,
+	SESSION_LINK,
+	SESSION_LINK_LINEAR,
+	SESSION_LINK_PLAIN,
 	VIEWER_BRANCH,
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
@@ -223,6 +226,8 @@ import {
 	VIEWER_MESSAGES,
 	VIEWER_MESSAGES_REGION,
 	VIEWER_OVERFLOW,
+	VIEWER_PRESENCE,
+	VIEWER_PRESENCE_AVATAR,
 	VIEWER_REVIEW_MAIN,
 	VIEWER_TITLE,
 	INFO_CONTENT,
@@ -4148,7 +4153,7 @@ export function SessionViewer({
 								href={session.linearIssue.url}
 								target="_blank"
 								rel="noopener"
-								className="session-link session-link-linear"
+								className={cn(SESSION_LINK, SESSION_LINK_LINEAR)}
 							>
 								{session.linearIssue.identifier}
 							</a>
@@ -4162,7 +4167,7 @@ export function SessionViewer({
 								href={plainUrl}
 								target="_blank"
 								rel="noopener"
-								className="session-link session-link-plain"
+								className={cn(SESSION_LINK, SESSION_LINK_PLAIN)}
 							>
 								Plain ↗
 							</a>
@@ -4176,7 +4181,7 @@ export function SessionViewer({
 								href={feedRef.url}
 								target="_blank"
 								rel="noopener"
-								className="session-link session-link-plain"
+								className={cn(SESSION_LINK, SESSION_LINK_PLAIN)}
 							>
 								{feedRefLabel} ↗
 							</a>
@@ -4346,13 +4351,13 @@ export function SessionViewer({
 					    before Share. You're always in it (rightmost); others stack
 					    in front with their GitHub picture. */}
 					{!isPhone && viewers.length > 0 && (
-						<div className="presence" title={`Viewing: ${viewers.join(", ")}`}>
+						<div className={VIEWER_PRESENCE} title={`Viewing: ${viewers.join(", ")}`}>
 							{dedupeViewers(viewers, me).map((v) => (
 								<UserAvatar
 									key={v.name}
 									name={v.name}
 									size={24}
-									className="presence-avatar"
+									className={VIEWER_PRESENCE_AVATAR}
 								/>
 							))}
 						</div>

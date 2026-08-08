@@ -437,41 +437,6 @@ body.resizing-tab-split {
 	margin-right: 6px;
 }
 
-/* presence facepile (the Figma/Notion-style user row before Share) */
-.presence {
-	display: flex;
-	align-items: center;
-}
-
-.presence-avatar {
-	margin-left: -8px;
-	/* Ring the color of the header behind it (.viewer-header is bg-raised),
-	   so stacked faces read as separate avatars. Keeps the shared edge — an
-	   outer ring alone would leave the picture itself unbounded. */
-	box-shadow: var(--avatar-edge), 0 0 0 2px var(--bg-raised);
-}
-.presence-avatar:first-child {
-	margin-left: 0;
-}
-
-.session-link {
-	font-size: 13px;
-	font-weight: 600;
-	text-decoration: none;
-	padding: 5px 11px;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid var(--border-strong);
-	color: var(--text-dim);
-}
-.session-link-linear {
-	color: #7b86e8;
-	border-color: rgba(94, 106, 210, 0.5);
-}
-.session-link-plain {
-	color: #5eead4;
-	border-color: rgba(13, 148, 136, 0.5);
-}
-
 /* The panel portals into this app-level slot. `display: contents` dissolves the
    slot so the panel (and its overlay) become direct flex children of `.app-body`
    — making the panel a full-height right column at the same level as the left
@@ -495,19 +460,6 @@ body.resizing-tab-split {
 	flex-direction: column;
 	min-height: 0;
 }
-.pr-dot-open {
-	background: var(--green);
-}
-.pr-dot-merged {
-	background: var(--purple);
-}
-.pr-dot-closed {
-	background: var(--red);
-}
-.pr-dot-conflict {
-	background: var(--yellow);
-}
-
 /* ── Reviews view ────────────────────────────────────────── */
 
 .reviews {
