@@ -34,6 +34,13 @@ const ICON_VERSION = 4;
 // sets: those land as INLINE style below, which beats any utility. Geometry a
 // caller wants scaled proportionally (radius and letter together) belongs in
 // `size`; a caller that needs only some of it passes utilities here.
+//
+// `repo-tile` itself is now a bare hook, not styling: two ancestors still reach
+// the tile through it — INFO_HERO's `[&_.repo-tile]:shadow-[…]` (the phone
+// session-info hero) and legacy.css's `.header-sessionbar .repo-tile`.
+const TILE =
+	"repo-tile inline-flex size-[18px] shrink-0 items-center justify-center rounded-sm text-meta font-bold";
+
 export function RepoTile({
 	name,
 	size,
@@ -59,29 +66,44 @@ export function RepoTile({
 	} else if (round) {
 		style.borderRadius = "50%";
 	}
+	// The tile's ink, on BOTH variants. legacy.css put `color: #fff` on
+	// `.repo-tile` itself, which the image variant inherited too — so it stays
+	// on both, from the same module as the fill (the two are chosen together,
+	// see REPO_TILE_INK) rather than as a raw colour in a utility.
+	style.color = REPO_TILE_INK;
 	const rev = repoIconRevision(name);
 	const attempt = `${name}:${rev ?? 0}`;
 	if (failedFor !== attempt) {
 		return (
-			<span className={cn("repo-tile repo-tile--img", className)} style={style}>
+			<span className={cn(TILE, className)} style={style}>
+				{/* The img fills the tile and inherits its rounding; the tile keeps
+				    no colored backing, so icons with transparency sit on the
+				    surface itself. No inset on purpose: the route already crops
+				    every icon to its artwork and re-pads it to a fixed margin
+				    (png-trim.ts), landing them all at ~93% fill — the breathing
+				    room is baked into the image, and shrinking again on top of it
+				    took icons to ~71% of the tile while a lettered tile fills
+				    100% of its.
+				    `border-radius: inherit` is spelled as the property rather
+				    than `rounded-[inherit]`: any `rounded-*` class also picks up
+				    base.css's squircle grant, and this img has always worn a
+				    plain round corner inside its squircled tile. */}
 				<img
 					src={`/repo-icon/${encodeURIComponent(name)}.png?v=${ICON_VERSION}${
 						rev ? `&r=${rev}` : ""
 					}`}
 					alt=""
 					loading="lazy"
+					className="size-full object-cover [border-radius:inherit]"
 					onError={() => setFailedFor(attempt)}
 				/>
 			</span>
 		);
 	}
 	style.background = repoIconFill(repoColor(name));
-	// From the same module as the color, because the two are chosen together
-	// (see REPO_TILE_INK) — not left to legacy.css, which would drift.
-	style.color = REPO_TILE_INK;
 	const letter = repoLetter(name);
 	return (
-		<span className={cn("repo-tile", className)} style={style}>
+		<span className={cn(TILE, className)} style={style}>
 			{letter}
 		</span>
 	);
