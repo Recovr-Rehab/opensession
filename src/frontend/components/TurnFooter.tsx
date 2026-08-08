@@ -121,10 +121,10 @@ export const TurnFooter = React.memo(function TurnFooter({
       {/* When the turn actually happened, last in the row: it trails the file
           chips on the right when there's room and wraps to the line below when
           there isn't, rather than painting over a chip. It's opacity-toggled
-          rather than mounted on hover (see .turn-footer-time), so its space is
+          rather than mounted on hover (see FOOTER_TIME), so its space is
           always reserved and revealing it never shifts the buttons out from
           under the cursor. */}
-      <span className={cn("turn-footer-time ml-auto pl-3 text-faint", FOOTER_TEXT)}>
+      <span className={cn(FOOTER_TIME, "ml-auto pl-3 text-faint", FOOTER_TEXT)}>
         {fullTime(entry.timestamp)}
       </span>
     </div>
@@ -171,6 +171,40 @@ const MAX_CHIPS = 4;
  * itself centred in that row. Same 13px/16px pair the fold line above uses.
  */
 const FOOTER_TEXT = "text-label font-medium leading-4";
+
+/**
+ * The hover-revealed real timestamp. A message's time is a detail you go
+ * looking for, not something to read past on every turn, so it fades in while
+ * the message is hovered and costs nothing the rest of the time.
+ *
+ * Three things this may not do. It may not change a block's height — the
+ * reveal is opacity-only over a box whose space is always reserved, or
+ * VirtualTranscriptBlock's measured placeholders would mis-size and jump the
+ * scroll. It may not leave a dead element on touch, where there is no hover
+ * and the time lives in the ⋯ menu instead: hence `hidden` as the base and
+ * `block` only inside `@media (hover: hover)`, which is also why those three
+ * utilities carry the media query themselves rather than riding Tailwind's
+ * `hover:` (that one adds `:hover` on this element, and the hover that matters
+ * is the message's). And it may not paint a phantom highlight when a
+ * drag-select sweeps past an unselectable label — the same 1% mask
+ * `msg-label` uses, because a fully transparent selection background is
+ * ignored.
+ *
+ * `.transcript-window` is named here as a hook rather than styled: the answer
+ * and its footer are adjacent windows (see TranscriptBlocks), so hovering
+ * either one reveals the time. It carries no rules of its own.
+ *
+ * Deliberately NO font-size. The old `.turn-footer-time` rule asked for 11px
+ * and had not been getting it since FOOTER_TEXT arrived: `text-label` is 13px,
+ * a utility, and utilities win source-order ties against legacy.css. Spelling
+ * the 11px back in would have been a change, not a migration.
+ */
+const FOOTER_TIME =
+  "hidden select-none whitespace-nowrap selection:bg-[rgba(0,0,0,0.01)] " +
+  "[@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 " +
+  "[@media(hover:hover)]:transition-opacity " +
+  "[@media(hover:hover)]:[.transcript-window:hover_&]:opacity-100 " +
+  "[@media(hover:hover)]:[.transcript-window:hover+.transcript-window_&]:opacity-100";
 
 function FileChip({ file }: { file: TouchedFile }) {
   const name = file.path.split("/").pop() || file.path;

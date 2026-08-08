@@ -44,7 +44,7 @@ export const VirtualTranscriptBlock = React.memo(function VirtualTranscriptBlock
 		return (
 			<div
 				ref={ref}
-				className="transcript-window transcript-window-placeholder"
+				className="transcript-window pointer-events-none"
 				data-eid={anchorId}
 				aria-hidden
 				style={{ height: heightRef.current }}
@@ -55,7 +55,15 @@ export const VirtualTranscriptBlock = React.memo(function VirtualTranscriptBlock
 	return (
 		<div
 			ref={ref}
-			className={enabled ? "transcript-window transcript-settled" : "transcript-window"}
+			className={
+				enabled
+					? // Settled turns get skipped during layout/paint while off-screen,
+					  // at their measured height. `transcript-window` stays as a bare
+					  // hook: it carries no rules, but TurnFooter's timestamp reveal
+					  // keys off hovering this element or the one before it.
+					  "transcript-window [content-visibility:auto] [contain-intrinsic-size:auto_96px]"
+					: "transcript-window"
+			}
 		>
 			{children}
 		</div>

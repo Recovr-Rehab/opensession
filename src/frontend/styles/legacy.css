@@ -727,45 +727,6 @@
 	}
 }
 
-/* Hover-revealed real timestamps. A message's time is a detail you go looking
-   for, not something to read past on every turn — so it fades in while the
-   message is hovered and costs nothing the rest of the time. Reveals are
-   opacity-only over absolutely positioned elements: nothing here may
-   change a block's height, or VirtualTranscriptBlock's measured placeholders
-   would mis-size and jump the scroll.
-
-   Touch pointers never get a dead element: display:none outside
-   hover-capable devices, where the assistant's time lives in the ⋯ menu
-   instead. */
-.turn-footer-time {
-	display: none;
-	font-size: 11px;
-	font-weight: 500;
-	color: var(--text-faint);
-	white-space: nowrap;
-	user-select: none;
-}
-@media (hover: hover) {
-	.turn-footer-time {
-		display: block;
-		opacity: 0;
-		transition: opacity var(--dur-micro) var(--ease);
-	}
-	/* The answer and its footer are adjacent .transcript-window siblings
-	   (see TranscriptBlocks), so hovering either one reveals the time. */
-.transcript-window:hover .turn-footer-time,
-	.transcript-window:hover + .transcript-window .turn-footer-time {
-		opacity: 1;
-	}
-}
-
-/* Same WebKit selection mask as .msg-label: a drag-select sweeping past an
-   unselectable label paints a phantom highlight without it, and a fully
-   transparent background is ignored (1% alpha sticks). */
-.turn-footer-time::selection {
-	background: rgba(0, 0, 0, 0.01);
-}
-
 /* ── Mobile new-session FAB ──────────────────────────────────
    Floating "+" in the bottom-right of the root session list (phones only) —
    opens the same new-session palette as the sidebar's + button. Rendered only
@@ -852,11 +813,3 @@
 	}
 }
 
-.transcript-settled {
-	content-visibility: auto;
-	contain-intrinsic-size: auto 96px;
-}
-
-.transcript-window-placeholder {
-	pointer-events: none;
-}
