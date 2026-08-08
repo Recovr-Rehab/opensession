@@ -542,7 +542,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const actions = actionsRef.current;
 			const probe = probeRef.current;
 			if (!head || !title || !actions || !probe) return;
-			const GAP = 6; // .sidebar-workspace-head gap
+			const GAP = 6; // the header row's own gap-1.5, in px
 			const MARGIN = 8; // breathing room so it never crowds the buttons
 			const avail =
 				head.clientWidth -
