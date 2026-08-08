@@ -438,6 +438,12 @@ enum OS1API {
         let color: String?
         /// Whether that color was chosen for the repo rather than assigned.
         let colorChosen: Bool?
+        /// What automatic would give it — the same as `color` unless one was
+        /// chosen. The tile editor previews it on its Automatic row.
+        let autoColor: String?
+        /// Which of the editor's icon choices the art came from, when the
+        /// server stored it ("github" / "upload").
+        let iconSource: String?
         /// Whether the tile paints art rather than the letter.
         let hasIcon: Bool?
         /// Changes when that art does — hung off the icon URL so a replaced
@@ -446,7 +452,7 @@ enum OS1API {
 
         private enum CodingKeys: String, CodingKey {
             case id, ghRepo, label, defaultBranch, sharedCheckout, color
-            case colorChosen, hasIcon, iconRev
+            case colorChosen, autoColor, iconSource, hasIcon, iconRev
             case isDefault = "default"
         }
     }
@@ -469,6 +475,42 @@ enum OS1API {
         let color: String?
         let hasIcon: Bool
         let iconRev: Double?
+        let iconSource: String?
+    }
+
+    /// The owner's GitHub avatar, proxied by our server so the editor can
+    /// OFFER the picture rather than a button promising one. 404s when the
+    /// repo has no GitHub remote — the choice then isn't shown.
+    @MainActor
+    static func repoGitHubAvatarURL(id: String) -> URL? {
+        ServerConfig.shared.baseURL?
+            .appendingPathComponent("api/repos/\(id)/github-avatar")
+    }
+
+    /// Give a repo art of its own. Raw PNG bytes, like the web editor: the
+    /// client re-encodes whatever was picked, so the server's icon path only
+    /// ever decodes PNG.
+    static func uploadRepoIcon(id: String, png: Data) async throws -> RepoAppearance {
+        let config = ServerConfig.shared
+        guard let base = config.baseURL, config.isConfigured else {
+            throw APIError.notConfigured
+        }
+        guard let url = URL(string: base.absoluteString + "/api/repos/\(id)/icon") else {
+            throw APIError.badURL
+        }
+        var request = config.authorizedRequest(url)
+        request.httpMethod = "POST"
+        request.setValue("image/png", forHTTPHeaderField: "Content-Type")
+        request.httpBody = png
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
+               let message = serverError.error {
+                throw APIError.server(message)
+            }
+            throw APIError.http(http.statusCode)
+        }
+        return try await decodeDetached(RepoAppearance.self, from: data)
     }
 
     /// Repos a new session can target.
