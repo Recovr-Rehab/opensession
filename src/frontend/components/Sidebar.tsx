@@ -3672,7 +3672,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	return (
 		<div
-			className="sidebar"
+			className={cn(
+				"flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+				// The whole sidebar scrolls as one on phones, so the tool cards (and
+				// the Workspaces header) scroll away with the list instead of staying
+				// pinned above a separately-scrolling list. The top bar floats over
+				// it (.app-header-overlay), so pad the scroll's top by the bar height
+				// — the cards clear the pills at rest and the list scrolls under
+				// them — fade the list into the bar with a mask, and keep the last
+				// section clear of the home indicator.
+				isPhone &&
+					"pt-[var(--header-h)] pb-[max(24px,env(safe-area-inset-bottom,0px))] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0,#000_var(--header-h))] [mask-image:linear-gradient(to_bottom,transparent_0,#000_var(--header-h))]",
+			)}
 			ref={sidebarScrollRef}
 			onDragOver={handleRepoAutoScroll}
 			onDragLeave={(event) => {

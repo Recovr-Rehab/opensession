@@ -9,6 +9,8 @@ import { MotionConfig } from "motion/react";
 import { MarkdownRepoProvider } from "./components/MarkdownBody";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
+import { cn } from "./ui/cn";
+import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { ToastHost, toast } from "./ui/toast";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
@@ -3386,8 +3388,30 @@ export function App(
 						sidebarCollapsed ? " sidebar-collapsed" : ""
 					}`}
 				>
+					{/* `sidebar-container` stays on the markup as a hook: base.css's
+					    platform chrome (html.material-backdrop, the reduced-transparency
+					    fallback) paints this surface by name. */}
 					<div
-						className="sidebar-container"
+						className={cn(
+							"sidebar-container flex min-h-0 shrink-0 flex-col bg-raised [--sidebar-icon-left:16px]",
+							// Desktop and the exposed workspace gutter share one chrome
+							// material, so opaque sticky headers scroll over the exact same
+							// surface instead of revealing a gradient seam. No
+							// backdrop-filter: since the shell went opaque the blur sampled
+							// nothing but our own flat background while forcing the
+							// compositor to re-rasterize the whole sidebar on any repaint
+							// behind it (a scroll-flash amplifier).
+							"min-[721px]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]",
+							// On phones the sidebar is the root PAGE of the iOS-style
+							// stack — full bleed under the pushed detail pane — rather than
+							// a fixed-width column.
+							isPhone
+								? "absolute inset-0 z-[1] w-full"
+								: "relative w-[var(--sidebar-w,252px)]",
+							// Collapsed hides the whole left column; on phones the page
+							// stack owns the sidebar and the class is inert.
+							sidebarCollapsed && "min-[721px]:hidden",
+						)}
 						style={
 							{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties
 						}
@@ -3398,15 +3422,37 @@ export function App(
 						    trigger on the left, back/forward + search at the right edge.
 						    No app brand inside the app. Hidden on mobile, where the top
 						    bar carries the brand instead. */}
-						<div className="sidebar-brand">
-							<div className="sidebar-brand-actions">
+						{/* `sidebar-brand` / `sidebar-brand-actions` stay as hooks: base.css
+						    drives the WCO/desktop-shell chrome off them (traffic-light
+						    inset, drag regions, the optical 5px nudge).
+						    The brand trigger carries its own 8px of left padding, so the
+						    row pulls its own in to keep the logo on the list icons'
+						    --sidebar-icon-left column. */}
+						<div
+							className={cn(
+								"sidebar-brand h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
+								// The brand row (and its account menu) is a desktop
+								// affordance; on phones the top bar carries the brand
+								// instead. Gated in JS rather than at `max-[720px]:` because
+								// Tailwind's max-* is `width < 720`, one pixel short of the
+								// `max-width: 720px` the rest of the app means by "phone".
+								isPhone ? "hidden" : "flex",
+							)}
+						>
+							<div className="sidebar-brand-actions flex shrink-0 items-center gap-2">
 								<Tooltip
 									label="Hide sidebar"
 									side="bottom"
 									shortcut={["⌘", "B"]}
 								>
+									{/* Padding box, matching .viewer-code-icon exactly, so the
+									    sidebar's chrome row and the session header's icon
+									    cluster read as one system. */}
 									<button
-										className="sidebar-toggle-btn"
+										className={cn(
+											SIDEBAR_CHROME_BTN,
+											"inline-flex px-[5px] py-[3px]",
+										)}
 										onClick={toggleSidebarCollapsed}
 										aria-label="Hide sidebar"
 									>
@@ -3627,9 +3673,16 @@ export function App(
 						{/* Desktop: docked toast at the sidebar bottom. On phones the
 						    update nudge moves to the top bar (next to the brand). */}
 						{!isPhone && <UpdatePill addHandler={addHandler} />}
-						{/* Drag the right edge to resize (desktop only; hidden on mobile). */}
+						{/* Drag the right edge to resize: a hover/active hairline over a
+						    wider invisible grab strip. Hidden on mobile, where the drawer
+						    is a fixed width. It sits above both primary (20) and nested
+						    (15) sticky headers so the hairline stays one uninterrupted
+						    edge while the list scrolls. */}
 						<div
-							className="sidebar-resize"
+							className={cn(
+								"absolute top-0 right-[-3px] z-30 h-full w-[7px] cursor-col-resize after:absolute after:top-0 after:right-[3px] after:h-full after:w-[2px] after:bg-transparent after:transition-[background] after:content-[''] hover:after:bg-line-strong [body.resizing-sidebar_&]:after:bg-faint",
+								isPhone && "hidden",
+							)}
 							onMouseDown={startSidebarResize}
 							aria-hidden="true"
 						/>
@@ -3645,8 +3698,17 @@ export function App(
 						    is collapsed (CSS-gated). Mirrors the brand-row toggle so the
 						    sidebar can always be brought back. */}
 						<Tooltip label="Show sidebar" side="right" shortcut={["⌘", "B"]}>
+							{/* `sidebar-reopen` stays as a hook: base.css exempts it from the
+							    desktop shell's drag region and re-anchors it past the
+							    traffic lights. `top` matches the open row's center,
+							    accounting for its 1px bottom divider; `left` is the same 8px
+							    anchor the open sidebar's brand row uses. */}
 							<button
-								className="sidebar-reopen"
+								className={cn(
+									SIDEBAR_CHROME_BTN,
+									"sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0",
+									sidebarCollapsed && "min-[721px]:inline-flex",
+								)}
 								onClick={toggleSidebarCollapsed}
 								aria-label="Show sidebar"
 							>

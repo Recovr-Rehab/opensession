@@ -37,6 +37,21 @@ export const SIDEBAR_RAIL =
  * one, keyframes don't cascade by specificity, and Tailwind's sheet is linked
  * second — which is already what these dots animate with today.
  */
+/**
+ * The sidebar's collapse toggle, and the floating re-open control that stands
+ * in for it once the sidebar is hidden. They share a look on purpose: the
+ * affordance has to read the same whether the sidebar is open or gone.
+ *
+ * Size and `display` are deliberately NOT here. The in-row toggle is a padding
+ * box matching `.viewer-code-icon`, so the two top bars read as one system,
+ * while the floating re-open control keeps a fixed 34x34 square (what centers
+ * it on the collapsed header row) and starts out `hidden`. Two utilities from
+ * the same group in one string would leave the winner to Tailwind's internal
+ * ordering rather than to the call site.
+ */
+export const SIDEBAR_CHROME_BTN =
+	"shrink-0 items-center justify-center rounded-control text-faint transition-[color,background] hover:bg-hover hover:text-fg";
+
 export const SIDEBAR_STATUS_DOT = {
 	/** Yellow to match the "In progress" lane — green means "In review". */
 	running:

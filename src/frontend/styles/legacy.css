@@ -262,66 +262,20 @@ html[data-platform="windows"] .workspace-shell {
 
 /* ── Sidebar ─────────────────────────────────────────────── */
 
-.sidebar-container {
-	position: relative;
-	--sidebar-icon-left: 16px;
-	width: var(--sidebar-w, 252px);
-	flex-shrink: 0;
-	background: var(--bg-raised);
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
-}
-
-/* Shared desktop chrome material for the sidebar and exposed workspace gutter.
-   Keep it uniform so opaque sticky headers use the exact same surface while
-   scrolling instead of revealing a gradient seam. No backdrop-filter —
-   the vibrancy-era blur sampled nothing but our own flat background since the
-   shell went opaque, while forcing the compositor to re-rasterize the whole
-   sidebar whenever anything behind it repainted (scroll-flash amplifier).
-   Keep the phone root page opaque below. */
+/* Shared desktop chrome material for the app body and the exposed workspace
+   gutter — .sidebar-container wears the identical value as a utility. Keep the
+   two in step so opaque sticky headers scroll over the exact same surface
+   instead of revealing a gradient seam. No backdrop-filter — the vibrancy-era
+   blur sampled nothing but our own flat background since the shell went opaque,
+   while forcing the compositor to re-rasterize the whole sidebar whenever
+   anything behind it repainted (scroll-flash amplifier). Keep the phone root
+   page opaque below. */
 @media (min-width: 721px) {
-	.app-body,
-	.sidebar-container {
+	.app-body {
 		background:
 			linear-gradient(var(--sidebar-material), var(--sidebar-material)),
 			var(--bg-raised);
 	}
-}
-
-/* Brand row at the top of the desktop sidebar: product menu left, collapse
-   toggle right. */
-.sidebar-brand {
-	display: flex;
-	align-items: center;
-	justify-content: flex-start;
-	gap: 8px;
-	height: var(--desktop-header-h);
-	/* The brand trigger carries its own 8px left padding, so pull the row's in
-	   to keep the logo aligned with the list icons at --sidebar-icon-left. */
-	padding: 0 12px 0 calc(var(--sidebar-icon-left) - 8px);
-	flex-shrink: 0;
-	min-width: 0;
-}
-
-/* Right-side icon buttons on the brand row (search + collapse toggle). The
-   cluster mirrors the session header's code affordances (play/globe/panel
-   toggle) so the two top bars read as one system: same 8px rhythm and the
-   same padding-based hit box below. */
-.sidebar-brand-actions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex-shrink: 0;
-}
-/* Match .viewer-code-icon exactly — padding-based box (not the base
-   .sidebar-toggle-btn's fixed 34x34, which stays for the floating
-   .sidebar-reopen control that centers on the collapsed header). */
-.sidebar-brand-actions .sidebar-toggle-btn {
-	width: auto;
-	height: auto;
-	padding: 3px 5px;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
 }
 
 /* Live connection dot on the logo corner — sits on a relative wrapper because
@@ -336,91 +290,9 @@ html[data-platform="windows"] .workspace-shell {
 	border: 2px solid var(--bg-raised);
 }
 
-/* Collapse toggle sitting where the user chip used to be. The floating re-open
-   control (.sidebar-reopen) shares its look so the affordance reads the same
-   whether the sidebar is open or hidden. */
-.sidebar-toggle-btn,
-.sidebar-reopen {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 34px;
-	height: 34px;
-	flex-shrink: 0;
-	padding: 0;
-	background: none;
-	border: none;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-faint);
-	cursor: pointer;
-	transition:
-		color var(--dur-micro) var(--ease),
-		background var(--dur-micro) var(--ease);
-}
-.sidebar-toggle-btn:hover,
-.sidebar-reopen:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-
-/* The re-open control is mounted in the detail pane but only shows while the
-   desktop sidebar is collapsed (see the sidebar-collapsed rules below). */
-.sidebar-reopen {
-	position: absolute;
-	/* Match the open row's center, accounting for its 1px bottom divider. */
-	top: calc((var(--desktop-header-h) - 35px) / 2);
-	/* Same 8px anchor as the open sidebar's .sidebar-brand row. */
-	left: 8px;
-	z-index: 20;
-	display: none;
-}
-
-/* Drag handle on the sidebar's right edge — a hover/active hairline over a
-   wider invisible grab strip. Hidden on mobile (the drawer is a fixed width). */
-.sidebar-resize {
-	position: absolute;
-	top: 0;
-	right: -3px;
-	width: 7px;
-	height: 100%;
-	cursor: col-resize;
-	/* Stay above both primary (20) and nested (15) sticky headers so the
-	   hover/drag hairline remains one uninterrupted edge while scrolling. */
-	z-index: 30;
-}
-.sidebar-resize::after {
-	content: "";
-	position: absolute;
-	top: 0;
-	right: 3px;
-	width: 2px;
-	height: 100%;
-	background: transparent;
-	transition: background var(--dur-micro) var(--ease);
-}
-.sidebar-resize:hover::after {
-	background: var(--border-strong);
-}
-body.resizing-sidebar .sidebar-resize::after {
-	background: var(--text-faint);
-}
 body:is(.resizing-sidebar, .resizing-panel) {
 	cursor: col-resize;
 	user-select: none;
-}
-
-.sidebar {
-	display: flex;
-	flex-direction: column;
-	width: 100%;
-	flex: 1;
-	min-height: 0;
-	overflow-x: hidden;
-	overflow-y: auto;
-	scrollbar-width: none;
-}
-.sidebar::-webkit-scrollbar {
-	display: none;
 }
 
 /* Workspace header: "My sessions" title row (+ optional repo chip + action
@@ -1126,12 +998,9 @@ body:is(.resizing-sidebar, .resizing-panel) {
    Scoped to desktop; on mobile the page-stack (mobile-root/mobile-detail) owns
    the sidebar and this class is inert. */
 @media (min-width: 721px) {
-	.app-body.sidebar-collapsed .sidebar-container {
-		display: none;
-	}
-	.app-body.sidebar-collapsed .sidebar-reopen {
-		display: inline-flex;
-	}
+	/* Hiding the column itself and revealing the floating re-open control both
+	   ride on the collapsed flag in App.tsx, as utilities on those two
+	   elements. */
 	/* Clear the floating re-open control AND the fallback nav/search cluster
 	   beside it, so neither sits on top of the topbar title or the session
 	   header's first row. */
@@ -2415,15 +2284,6 @@ body.resizing-tab-split {
 		display: contents;
 	}
 
-	.sidebar-container {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		z-index: 1;
-		border-right: none;
-		transform: none;
-	}
-
 	.detail-pane {
 		position: absolute;
 		inset: 0;
@@ -2811,15 +2671,6 @@ body.resizing-tab-split {
 	.detail-topbar-title {
 		display: none;
 	}
-	/* The brand row (with its account menu) is a desktop affordance; on mobile
-	   the top bar carries the brand + account menu instead. */
-	.sidebar-brand {
-		display: none;
-	}
-	.sidebar-resize {
-		display: none;
-	}
-
 	/* On phones the session header portals INTO the top bar's right slot (see
 	   headerActionsEl in App/SessionViewer): the title row is hidden — the
 	   centered bar title replaces it — and the actions sit flat beside it.
@@ -3223,25 +3074,6 @@ body.resizing-tab-split {
    is the last max-width:720px block so it wins source-order ties over the
    base mobile bumps above. */
 @media (max-width: 720px) {
-	/* The whole sidebar scrolls as one on phones, so the top cards (and the
-	   Workspaces header) scroll away with the list instead of staying pinned
-	   above a separately-scrolling list. */
-	.sidebar {
-		overflow-y: auto;
-		/* The top bar floats over the list (see .app-header-overlay), so pad the
-		   scroll's top by the bar height — the tool cards clear the pills at rest
-		   and the list scrolls under them. */
-		padding-top: var(--header-h);
-		/* Keep the final section clear of the home indicator and rounded corners. */
-		padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
-		/* Fade the list into the bar as it scrolls under the floating pills. */
-		-webkit-mask-image: linear-gradient(
-			to bottom,
-			transparent 0,
-			#000 var(--header-h)
-		);
-		mask-image: linear-gradient(to bottom, transparent 0, #000 var(--header-h));
-	}
 	.sidebar-list {
 		flex: none;
 		overflow-y: visible;
