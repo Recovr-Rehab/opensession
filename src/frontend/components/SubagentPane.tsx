@@ -3,6 +3,7 @@ import { fetchSubagent, type SubagentTranscript } from "../lib/api";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+import { PANEL_BODY } from "../lib/session-panel-classes";
 
 export interface SubagentRef {
   agentId: string;
@@ -116,7 +117,7 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
         {meta?.description && <div className="subagent-desc">{meta.description}</div>}
       </div>
 
-      <div className="panel-body subagent-body" ref={bodyRef} onScroll={onScroll}>
+      <div className={`${PANEL_BODY} subagent-body`} ref={bodyRef} onScroll={onScroll}>
         {loading ? (
           <LoadingState>Loading sub-agent…</LoadingState>
         ) : error ? (

@@ -38,11 +38,10 @@
  *   · `session-tab-view` / `session-tab-reorder` — `.app:has(.session-tab-view)
  *     .app-header-overlay` and `.detail-pane:has(.session-tab-reorder ~
  *     .session-tab-reorder)` set the phone header's fill and
- *     `--strip-clearance` on elements that belong to other components;
- *   · `session-tab-dot` / `session-tab-dot-waiting` — base.css's reduced-motion
- *     block kills every animation with `!important` and then hands these two
- *     liveness pulses back. A utility cannot outrank `!important`, so dropping
- *     the hook would silently freeze the running/waiting dots.
+ *     `--strip-clearance` on elements that belong to other components.
+ *
+ * The dots used to be a third pair of hooks, for base.css's reduced-motion
+ * exception list; they now carry that exception themselves — see `tabDotClass`.
  */
 
 /** 8px, the tab pill's corner. Authored the way base.css authors every corner
@@ -237,8 +236,16 @@ export const TAB_RENAME =
 
 /**
  * The running / needs-you dot. "Needs you" is blue throughout — the sidebar
- * already resolved it that way — and the class names stay because base.css's
- * reduced-motion block hands these two pulses back with `!important`.
+ * already resolved it that way.
+ *
+ * base.css's reduced-motion block kills every animation with `!important` and
+ * then hands a handful of liveness signals back BY CLASS NAME — these two dots
+ * among them. That list is the one thing a migration can break silently: the
+ * rule stays valid, it just stops matching, and the "still running" pulse
+ * freezes for anyone with the preference set with nothing to detect it. So the
+ * exception rides the element instead of the list, where it travels with the
+ * component; it wins on equal specificity because the utility sheet is linked
+ * last, and `!` matches the block it is arguing with.
  *
  * `pulse` is defined by BOTH legacy.css and the utility sheet, and keyframes
  * don't cascade by specificity: the later definition wins document-wide, so
@@ -246,11 +253,14 @@ export const TAB_RENAME =
  * 1 → 0.5 fade rather than the authored 1 → 0.35. Naming the same keyframes
  * here keeps exactly what ships; this is not the place to change it.
  */
+const DOT_BASE = "size-1.5 shrink-0 rounded-full";
+
 export const tabDotClass = (waiting: boolean) =>
 	waiting
-		? "session-tab-dot session-tab-dot-waiting size-1.5 shrink-0 rounded-full bg-blue " +
-			"shadow-[0_0_6px_var(--blue)] animate-[pulse_1.2s_ease-in-out_infinite]"
-		: "session-tab-dot size-1.5 shrink-0 rounded-full bg-green animate-[pulse_1.4s_ease-in-out_infinite]";
+		? `${DOT_BASE} bg-blue shadow-[0_0_6px_var(--blue)] animate-[pulse_1.2s_ease-in-out_infinite] ` +
+			"motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!"
+		: `${DOT_BASE} bg-green animate-[pulse_1.4s_ease-in-out_infinite] ` +
+			"motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";
 
 /** A view tab's status dot (PR state). Shared with the right panel's tabs,
  *  which render the same mark. The caller adds the tone's fill. */

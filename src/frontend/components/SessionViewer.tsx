@@ -171,6 +171,35 @@ import {
 	getSessionPanelTab,
 	saveSessionPanelTab,
 } from "../lib/session-panel-tab";
+import {
+	PANEL_BACK,
+	PANEL_BODY,
+	PANEL_OVERLAY,
+	PANEL_RESIZE,
+	PANEL_SHEET_ACTIONS,
+	PANEL_SHEET_HEAD,
+	PANEL_TABS,
+	PANEL_TAB_DOT,
+	panelTabClass,
+	panelTabCountClass,
+} from "../lib/session-panel-classes";
+import {
+	SESSION_BANNER,
+	SESSION_BANNERS,
+	SESSION_DELETE_LABEL,
+	VIEWER_BRANCH,
+	VIEWER_BRANCH_EDITABLE,
+	VIEWER_BRANCH_RENAME,
+	VIEWER_DELETE_CONFIRM,
+	VIEWER_HEADER,
+	VIEWER_HEADER_ACTIONS,
+	VIEWER_INPUT,
+	VIEWER_MESSAGES,
+	VIEWER_MESSAGES_REGION,
+	VIEWER_OVERFLOW,
+	VIEWER_REVIEW_MAIN,
+	VIEWER_TITLE,
+} from "../lib/session-viewer-classes";
 
 type QueueReceipt = {
 	id?: string;
@@ -1159,7 +1188,7 @@ export function SessionViewer({
 	const sessionReports = useSessionReports(session.id, addHandler);
 	const panelResizeHandle = (
 		<div
-			className="panel-resize"
+			className={PANEL_RESIZE}
 			onMouseDown={startPanelResize}
 			aria-hidden="true"
 		/>
@@ -3763,7 +3792,7 @@ export function SessionViewer({
 
 
 	return (
-		<div className="session-viewer relative flex h-full min-h-0 flex-col">
+		<div className="relative flex h-full min-h-0 flex-col">
 			{localMode && session.local && (
 				<MoveToCloudDialog
 					open={moveToCloudOpen}
@@ -3779,7 +3808,7 @@ export function SessionViewer({
 				>
 					<div className="flex flex-col items-center gap-[14px] rounded-xl border border-line bg-panel px-8 py-[26px] shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
 						<div className="restart-spinner" />
-						<span className="session-delete-label">{deleteLabel}</span>
+						<span className={SESSION_DELETE_LABEL}>{deleteLabel}</span>
 					</div>
 				</div>
 			)}
@@ -3960,7 +3989,7 @@ export function SessionViewer({
 						<span className="grow">Delete session</span>
 					</Menu.Item>
 				) : (
-					<div className="viewer-delete-confirm">
+					<div className={VIEWER_DELETE_CONFIRM}>
 						{session.worktreeDir && !isAsk && (
 							<Button
 								variant="danger"
@@ -4070,10 +4099,10 @@ export function SessionViewer({
 				);
 				const header = (
 					<div
-						className={`viewer-header ${compactHeader ? "viewer-header-compact" : ""}`}
+						className={VIEWER_HEADER}
 						ref={headerRef}
 					>
-						<div className="viewer-title">
+						<div className={VIEWER_TITLE}>
 					{/* This slot says where a session came FROM. Ask mode isn't an
 					    origin — it's a mode you can change — so it rides the composer
 					    toolbar next to the model pill instead, where the switch is one
@@ -4118,7 +4147,7 @@ export function SessionViewer({
 						))}
 					{renameDraft !== null ? (
 						<input
-							className="viewer-branch-rename"
+							className={VIEWER_BRANCH_RENAME}
 							value={renameDraft}
 							autoFocus
 							onChange={(e) => setRenameDraft(e.target.value)}
@@ -4132,7 +4161,7 @@ export function SessionViewer({
 						/>
 					) : (
 						<span
-							className={`viewer-branch ${onRename ? "viewer-branch-editable" : ""}`}
+							className={`${VIEWER_BRANCH} ${onRename ? VIEWER_BRANCH_EDITABLE : ""}`}
 							title={
 								workspaceName
 									? `${session.title} — double-click to rename the workspace`
@@ -4221,7 +4250,7 @@ export function SessionViewer({
 						</button>
 					)}
 				</div>
-				<div className="viewer-header-actions">
+				<div className={VIEWER_HEADER_ACTIONS}>
 					{!isPhone && secondaryActions(false)}
 					{/* Everyone with the session open, Figma/Notion-style, right
 					    before Share. You're always in it (rightmost); others stack
@@ -4245,7 +4274,7 @@ export function SessionViewer({
 					    and Delete live only in there. */}
 					{!compactHeader && !isPhone && shareAction(false)}
 					<Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
-						<div className="viewer-overflow">
+						<div className={VIEWER_OVERFLOW}>
 							<Menu.Trigger
 								// Rendered AS the Button primitive rather than restyled to
 								// look like one, so the box, radius, hover wash, transition
@@ -4380,7 +4409,7 @@ export function SessionViewer({
 									}`}
 								>
 									<button
-										className="panel-back"
+										className={`${PANEL_BACK} relative z-[1]`}
 										onClick={() => setInfoPageOpen(false)}
 										aria-label="Back to session"
 										autoFocus
@@ -4645,7 +4674,7 @@ export function SessionViewer({
 				)}
 
 			{(session.goal || session.loop || runErrorBanner) && (
-				<div className="session-banners">
+				<div className={SESSION_BANNERS}>
 					{/* The last run died on a terminal failure (usage limits/credits
 					    exhausted, API errors) — say why the session stopped; the error
 					    itself was only ever a transient toast. Hidden while a retry
@@ -4654,7 +4683,7 @@ export function SessionViewer({
 					    clean run. */}
 					{runErrorBanner && (
 						<span
-							className="session-banner text-red"
+							className={`${SESSION_BANNER} text-red`}
 							title={runErrorBanner.message}
 						>
 							⚠ Last run failed: {runErrorBanner.message.slice(0, 160)}
@@ -4682,10 +4711,10 @@ export function SessionViewer({
 				</div>
 			)}
 
-			<div className="viewer-split flex min-h-0 flex-1">
-				<div className="viewer-session flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]">
+			<div className="flex min-h-0 flex-1">
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px] max-[720px]:[--wash-depth:40px]">
 					{showPreviewTab ? (
-						<div className="viewer-review-main">
+						<div className={VIEWER_REVIEW_MAIN}>
 							<PreviewPane
 								session={session}
 								status={previewStatus}
@@ -4703,7 +4732,7 @@ export function SessionViewer({
 							// logged-OUT one gets a blank frame (staging redirects to
 							// WorkOS AuthKit, which refuses framing), so the header keeps a
 							// first-party "Open" break-out to log in, then come back.
-							<div className="viewer-review-main">
+							<div className={VIEWER_REVIEW_MAIN}>
 								<div className="flex h-full flex-col">
 									<div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5 text-xs text-dim">
 										<IconGlobe size={14} />
@@ -4749,7 +4778,7 @@ export function SessionViewer({
 							// Deploy hasn't opted into being framed (older preview, or the
 							// fusion CSP change hasn't reached it yet) — open it
 							// first-party in a new tab rather than show a blocked frame.
-							<div className="viewer-review-main">
+							<div className={VIEWER_REVIEW_MAIN}>
 								<div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
 									<IconGlobe size={40} className="text-dim" />
 									<div className="flex flex-col items-center gap-1">
@@ -4794,7 +4823,7 @@ export function SessionViewer({
 						// the Info panel's Assets button opens). AssetsPanel is
 						// `h-full`, so the flex-column viewer-review-main gives it
 						// height exactly like the Review PrPanel.
-						<div className="viewer-review-main">
+						<div className={VIEWER_REVIEW_MAIN}>
 							<AssetsPanel
 								sessionId={session.id}
 								files={assetFiles}
@@ -4809,7 +4838,7 @@ export function SessionViewer({
 						// as a conversation, so it gets the session column instead of being
 						// squeezed into the right sidebar. Nested Task calls push onto
 						// the same tab's breadcrumb.
-						<div className="viewer-review-main">
+						<div className={VIEWER_REVIEW_MAIN}>
 							<SubagentPane
 								sessionId={session.id}
 								stack={subagentStack}
@@ -4821,7 +4850,7 @@ export function SessionViewer({
 						// The workspace's Plain ticket thread, full-width — same
 						// ConversationPane the session-less workspace route renders, so
 						// the session stays mounted underneath exactly like Review.
-						<div className="viewer-review-main">
+						<div className={VIEWER_REVIEW_MAIN}>
 							<ConversationPane
 								threadId={conversationThreadId}
 								onOpenSession={() => {}}
@@ -4832,7 +4861,7 @@ export function SessionViewer({
 						// The workspace's feed panel — web embed (Tella) or a custom
 						// component (Slack channel Conversation) via the panel
 						// registry (the feeds design).
-						<div className="viewer-review-main">
+						<div className={VIEWER_REVIEW_MAIN}>
 							{videoPanel.component === "slack-channel" ? (
 								<SlackChannelPane channelId={videoPanel.refId} />
 							) : (
@@ -4843,7 +4872,7 @@ export function SessionViewer({
 							)}
 						</div>
 					) : showReview && hasWorkspace ? (
-						<div className="viewer-review-main">
+						<div className={VIEWER_REVIEW_MAIN}>
 							{localRepoCapabilityLoading ? (
 								<div className="flex h-full items-center justify-center text-sm text-faint">
 									Loading repository…
@@ -4884,9 +4913,9 @@ export function SessionViewer({
 						</div>
 					) : (
 					<>
-					<div className="viewer-messages-region">
+					<div className={VIEWER_MESSAGES_REGION}>
 						<div
-							className="viewer-messages"
+							className={VIEWER_MESSAGES}
 							ref={messagesRef}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
@@ -5142,7 +5171,7 @@ export function SessionViewer({
 								)}
 							</div>
 
-							<div className="viewer-input">
+							<div className={VIEWER_INPUT}>
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--session-col)] text-[13px] text-faint">
 										No engine session to resume
@@ -5297,7 +5326,7 @@ export function SessionViewer({
 				const rightRegion = (
 					<>
 				{!isPhone && panelAvailable && panelOpen && (
-					<div className="panel-overlay" onClick={() => setPanelOpen(false)} />
+					<div className={PANEL_OVERLAY} onClick={() => setPanelOpen(false)} />
 				)}
 				{!isPhone && panelAvailable && panelOpen ? (
 					<div className="viewer-panel" style={panelStyle}>
@@ -5308,9 +5337,9 @@ export function SessionViewer({
 						    labelled Preview/Preview environment controls on the right — on desktop
 						    those live in the session header as state-colored icons. */}
 						{isPhone && (
-							<div className="panel-sheet-head">
+							<div className={PANEL_SHEET_HEAD}>
 								<button
-									className="panel-back"
+									className={PANEL_BACK}
 									onClick={() => setPanelOpen(false)}
 									aria-label="Back to session"
 								>
@@ -5324,7 +5353,7 @@ export function SessionViewer({
 										/>
 									</svg>
 								</button>
-								<div className="panel-sheet-actions">
+								<div className={PANEL_SHEET_ACTIONS}>
 									<PreviewButton
 										session={session}
 										onAttachImage={(img) =>
@@ -5364,9 +5393,9 @@ export function SessionViewer({
 								}
 							/>
 						)}
-						<div className="panel-tabs">
+						<div className={PANEL_TABS}>
 							<button
-								className={`panel-tab ${panelTab === "info" ? "active" : ""}`}
+								className={panelTabClass(panelTab === "info")}
 								onClick={() => selectPanelTab("info")}
 							>
 								Info
@@ -5374,18 +5403,18 @@ export function SessionViewer({
 							{hasWorkspace && (
 								<>
 									<button
-										className={`panel-tab ${panelTab === "changes" ? "active" : ""}`}
+										className={panelTabClass(panelTab === "changes")}
 										onClick={() => selectPanelTab("changes")}
 									>
 										Changes
 										{changesFileCount ? (
-											<span className="panel-tab-count">
+											<span className={panelTabCountClass(panelTab === "changes")}>
 												{changesFileCount}
 											</span>
 										) : null}
 									</button>
 									<button
-										className={`panel-tab ${panelTab === "shell" ? "active" : ""}`}
+										className={panelTabClass(panelTab === "shell")}
 										onClick={() => selectPanelTab("shell")}
 										title="Interactive terminal tabs in this session's workspace (inside its sandbox when sandboxed)"
 									>
@@ -5401,15 +5430,15 @@ export function SessionViewer({
 								workflowRuns.length > 0 ||
 								subagents.length > 0) && (
 								<button
-									className={`panel-tab ${panelTab === "workflows" ? "active" : ""}`}
+									className={panelTabClass(panelTab === "workflows")}
 									onClick={() => selectPanelTab("workflows")}
 								>
 									Agents
 									{workflowRuns.some((r) => r.status === "running") ||
 									subagents.some((s) => s.status === "running") ? (
-										<span className="panel-tab-dot animate-pulse bg-green" />
+										<span className={`${PANEL_TAB_DOT} animate-pulse bg-green`} />
 									) : workflowRuns.length + subagents.length > 0 ? (
-										<span className="panel-tab-count">
+										<span className={panelTabCountClass(panelTab === "workflows")}>
 											{workflowRuns.length + subagents.length}
 										</span>
 									) : null}
@@ -5420,15 +5449,15 @@ export function SessionViewer({
 							    sidebar assets tab — see the Assets view-tab in App.tsx. */}
 							{sessionReports.length > 0 && (
 								<button
-									className={`panel-tab ${panelTab === "reports" ? "active" : ""}`}
+									className={panelTabClass(panelTab === "reports")}
 									onClick={() => selectPanelTab("reports")}
 								>
 									Reports
-									<span className="panel-tab-count">{sessionReports.length}</span>
+									<span className={panelTabCountClass(panelTab === "reports")}>{sessionReports.length}</span>
 								</button>
 							)}
 						</div>
-						<div className="panel-body">
+						<div className={PANEL_BODY}>
 							{/* Plain-only sessions (no code workspace) show just the timeline. */}
 							{panelTab === "info" ? (
 								<div className="px-1">
