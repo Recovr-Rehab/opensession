@@ -247,6 +247,22 @@ export const PR_ROW_MAIN =
 export const PR_ROW_TITLE = "min-w-0 truncate text-dim";
 export const PR_ROW_STATE =
 	"ml-auto shrink-0 whitespace-nowrap text-label font-semibold";
+/* ── Per-repo tabs (a multi-repo session's PR panel) ─────────────────────
+ *
+ * Selected and unselected each carry their whole colour set. Layering the
+ * selected one over a default would leave two border-color utilities on one
+ * element, and which wins is Tailwind's output order rather than the order
+ * they are written. Phone keeps the bigger tap target it already had.
+ */
+export const PR_REPO_TABS =
+	"flex gap-1 overflow-x-auto border-b border-line px-3 py-2";
+const PR_REPO_TAB =
+	"inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-[3px] text-label max-[720px]:px-3 max-[720px]:py-2";
+export const prRepoTabClass = (selected: boolean) =>
+	`${PR_REPO_TAB} ${selected ? "border-line bg-panel text-fg" : "border-transparent bg-transparent text-dim hover:text-fg"}`;
+/** Unlink (×) inside the selected linked-PR tab. */
+export const PR_REPO_TAB_X = "-mr-1 inline-flex items-center text-dim hover:text-fg";
+
 /* ── PR description ──────────────────────────────────────────────────────
  *
  * The description is renderer output (dangerouslySetInnerHTML), so its

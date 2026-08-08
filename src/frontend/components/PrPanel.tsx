@@ -62,6 +62,9 @@ import {
   PR_BODY_CLAMPED,
   PR_BODY_MD,
   PR_BODY_TOGGLE,
+  PR_REPO_TAB_X,
+  PR_REPO_TABS,
+  prRepoTabClass,
 } from "../lib/pr-tone-classes";
 import {
   formatPendingCommentsPrompt,
@@ -1010,11 +1013,11 @@ export function PrPanel({
 
   const showBar = targets.length > 1;
   const switcher = showBar ? (
-    <div className="pr-repo-tabs">
+    <div className={PR_REPO_TABS}>
       {targets.map((t) => (
         <button
           key={t.key}
-          className={`pr-repo-tab ${t.key === active?.key ? "pr-repo-tab-active" : ""}`}
+          className={prRepoTabClass(t.key === active?.key)}
           onClick={() => setActiveKey(t.key)}
           title={
             t.linked
@@ -1029,7 +1032,7 @@ export function PrPanel({
           {t.label}
           {t.linked && t.key === active?.key && (
             <span
-              className="pr-repo-tab-x"
+              className={PR_REPO_TAB_X}
               role="button"
               title="Unlink this PR from the session"
               onClick={(e) => {
