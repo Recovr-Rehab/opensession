@@ -426,7 +426,12 @@ export function SessionSearch({
 					/>
 					{(searching || loadingPrs) && (
 						<span
-							className="size-[13px] shrink-0 animate-[spin_0.7s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent"
+							className={
+								"size-[13px] shrink-0 animate-[spin_0.7s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent " +
+								// Keeps turning under reduced motion — it is the only "still
+								// searching" signal, and the blanket rule would freeze it.
+								"motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!"
+							}
 							aria-label="Searching"
 						/>
 					)}

@@ -28,26 +28,6 @@
    rules keep their current position in the cascade.
    ───────────────────────────────────────────────────────────── */
 
-.wco-nav-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 30px;
-	height: 30px;
-	padding: 0;
-	border: none;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	background: transparent;
-	color: var(--text-dim);
-	cursor: pointer;
-	-webkit-app-region: no-drag;
-	app-region: no-drag;
-}
-.wco-nav-btn:hover {
-	background: var(--hover);
-	color: var(--text);
-}
-
 /* The top bar is mobile-only: on desktop the brand + user controls live in the
    sidebar's brand row instead (cleaner, single column of chrome). Shown again in
    the ≤720px media query where the drawer needs the hamburger. */
@@ -1498,19 +1478,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	flex-shrink: 0;
 	min-width: 0;
 }
-.session-tabs-scroll {
-	display: flex;
-	align-items: center;
-	gap: 3px;
-	min-width: 0;
-	flex: 1 1 auto;
-	overflow-x: auto;
-	overscroll-behavior-x: contain;
-	scrollbar-width: none;
-}
-.session-tabs-scroll::-webkit-scrollbar {
-	display: none;
-}
 /* Edge fades so a tab clipped by the scroll boundary reads as "there's more this
    way" rather than as a broken, half-drawn tab — the strip hides its scrollbar,
    so without this an overflowing strip gives no hint that it scrolls at all.
@@ -1551,52 +1518,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		--tabs-fade-end: 0px;
 	}
 }
-@supports (animation-timeline: scroll()) {
-	.session-tabs-scroll[data-overflow] {
-		mask-image: linear-gradient(
-			to right,
-			transparent 0,
-			#000 var(--tabs-fade-start),
-			#000 calc(100% - var(--tabs-fade-end)),
-			transparent 100%
-		);
-	}
-	.session-tabs-scroll {
-		animation:
-			session-tabs-fade-start 1ms both,
-			session-tabs-fade-end 1ms both; /* inert — the scroll timeline drives progress */
-		animation-timeline: scroll(self inline), scroll(self inline);
-		animation-range:
-			0 24px,
-			calc(100% - 24px) 100%;
-	}
-}
-.session-tabs-actions {
-	display: flex;
-	align-items: center;
-	gap: 3px;
-	flex: 0 0 auto;
-	margin-left: auto;
-}
-
-/* The drag-to-reorder group wraps EVERY tab in the strip — sessions and view panes
-   alike, so a pane can be dragged in among the sessions. It's a transparent flex
-   row that keeps the same 3px inter-tab gap as the scroll, so nesting it
-   changes nothing visually. flex:0 0 auto is load-bearing: the tabs inside
-   never shrink, so if the group itself were allowed to (the flex default, plus
-   min-width:0), its box would collapse below its content and the last tab would
-   spill out of it, painting over whatever the scroll laid out after the
-   SHRUNKEN box. Sizing to content instead pushes the overflow out to
-   .session-tabs-scroll, which is what scrolls. */
-.session-tabs-sessiongroup {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	flex: 0 0 auto;
-	/* Containing block for the drag ghost (.session-tab-drop-slot), which is
-	   positioned in the group's own coordinates so it scrolls with the tabs. */
-	position: relative;
-}
 /* Each session tab's Reorder.Item wrapper — the draggable flex child. It hugs the
    pill inside it and never shrinks, so a full strip scrolls rather than squishes.
    position:relative lets whileDrag's z-index lift the dragged tab over siblings. */
@@ -1605,60 +1526,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	align-items: center;
 	flex-shrink: 0;
 	position: relative;
-}
-/* Icon-only view tab (Staging → globe): center the glyph, drop the label's text
-   metrics so the pill sizes to the icon. */
-.session-tab-vicon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	line-height: 0;
-}
-
-.session-tab {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	flex-shrink: 0;
-	max-width: 200px;
-	padding: 6px 10px;
-	/* Floating pill: a real little chip with a soft shadow so it reads cleanly
-	   as the topmost layer while the transcript scrolls up underneath it. Fully
-	   rounded, no chrome-tab top corners or bottom seam into the body. The
-	   transparent ring stays so colored/waiting tabs can tint it. --tab-stroke is
-	   transparent by default; the desktop solid-band layout sets it to a visible
-	   hairline so uncolored tabs read as outlined "stroke" chips. */
-	border: 1px solid var(--tab-stroke, transparent);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	/* Solid fill so the transcript scrolling underneath never shows through. */
-	background: var(--bg-panel);
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-	color: var(--text-dim);
-	font-size: 12px;
-	cursor: pointer;
-	white-space: nowrap;
-	transition:
-		background var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease);
-}
-.session-tab:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-.session-tab-active {
-	color: var(--text);
-	/* Keep the same floating-pill shadow as inactive tabs so the active one
-	   doesn't read as smaller/pressed-in — the darker fill alone marks it as
-	   selected. Nudged a touch past --bg-active for a clear selected read. */
-	background: color-mix(in srgb, var(--bg-active) 94%, var(--text));
-	border-color: transparent;
-}
-/* The trailing + / history controls stay quiet chrome — no pill fill or shadow;
-   they light up on hover like before. */
-.session-tab-new,
-.session-tab-history {
-	background: transparent;
-	box-shadow: none;
 }
 
 /* Desktop: a flat tab bar in normal flow — plain text tabs sitting on the
@@ -1693,73 +1560,13 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		   hairline instead of floating centered above it. */
 		align-items: stretch;
 	}
-	/* Hug the tab content (don't grow) so the pinned "+" sits right after the last
-	   tab instead of being pushed to the far right; it still shrinks and scrolls
-	   internally when the tabs overflow. Full-height so its tabs can stretch to the
-	   bottom hairline. */
-	.session-tabs-scroll {
-		flex: 0 1 auto;
-		align-items: stretch;
-	}
+	
 	/* The reorder group + its item wrappers are extra flex layers between the
 	   scroll and each tab; stretch them full-height too so the flat tabs' active
 	   underline still lands flush on the baseline hairline. */
-	.session-tabs-sessiongroup,
-	.session-tab-reorder {
+.session-tab-reorder {
 		align-self: stretch;
 		align-items: stretch;
-	}
-	/* Plain text tabs — no fill, outline, shadow, or rounding. Just the label, with
-	   a transparent underline reserved so the active/inactive swap never shifts the
-	   row. Real tabs only — the trailing +/history controls keep their own
-	   centered-button footprint. */
-	.session-tabs .session-tab:not(.session-tab-new):not(.session-tab-history) {
-		background: transparent;
-		border: none;
-		border-radius: 0;
-		box-shadow: inset 0 -2px 0 transparent;
-	}
-	/* Hover only lifts the label to full-strength text (and reveals the × via its
-	   own rule) — no background, so a tab never reads as a pill. */
-	.session-tabs .session-tab:not(.session-tab-new):not(.session-tab-history):hover {
-		background: transparent;
-		color: var(--text);
-	}
-	/* Active tab: a straight 3px accent underline sitting flush on (and covering) the
-	   bottom hairline, label at full strength. Held through hover so the line reads
-	   cleanly. */
-	.session-tabs .session-tab-active:not(.session-tab-new):not(.session-tab-history),
-	.session-tabs .session-tab-active:not(.session-tab-new):not(.session-tab-history):hover {
-		color: var(--text);
-		background: transparent;
-		box-shadow: inset 0 -3px 0 var(--accent);
-	}
-	/* Colored / waiting states have no pill to tint in the flat layout, so their
-	   cue moves to the underline: the swatch color, or the accent for a waiting
-	   tab. The active accent line still wins for the selected tab. */
-	.session-tabs .session-tab-colored:not(.session-tab-active) {
-		box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--tab-color) 70%, transparent);
-	}
-	.session-tabs .session-tab-waiting:not(.session-tab-active) {
-		color: var(--text);
-		box-shadow: inset 0 -2px 0 var(--accent);
-	}
-	/* New-tab "+" as a real control on the same footprint/weight as the header
-	   ⋯ menu (btn-viewer-overflow): quiet borderless square, centered in the
-	   band, that lights up on hover. It keeps the strip's hover-reveal (below)
-	   rather than sitting there permanently — the strip should read as tabs. */
-	.session-tabs .session-tab-new {
-		align-self: center;
-		width: auto;
-		height: auto;
-		padding: 3px 5px;
-		border: 1px solid transparent;
-		border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-		font-size: 22px;
-	}
-	.session-tabs .session-tab-new:hover {
-		background: var(--hover);
-		color: var(--text);
 	}
 	/* Strip is in flow now, so the transcript just starts below it — no overlay
 	   padding, no mask. (Higher specificity than the later unconditional
@@ -1790,25 +1597,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		0 8px 20px rgba(0, 0, 0, 0.22);
 	cursor: grabbing;
 }
-.session-tab-drop-slot {
-	position: absolute;
-	top: 8px;
-	bottom: 8px;
-	z-index: 5;
-	pointer-events: none;
-	animation: tab-drop-slot-in var(--dur-micro) var(--ease);
-	transition: left var(--dur) var(--ease);
-}
-.session-tab-drop-slot::after {
-	content: "";
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: 0;
-	width: 2px;
-	border-radius: 1px;
-	background: var(--accent);
-}
 @keyframes tab-drop-slot-in {
 	from {
 		opacity: 0;
@@ -1816,31 +1604,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	to {
 		opacity: 1;
 	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.session-tab-drop-slot {
-		animation: none;
-		transition: none;
-	}
-}
-
-.session-tab-title {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: 150px;
-}
-
-/* Inline rename input in a tab — sized to sit in place of the title. */
-.session-tab-rename {
-	max-width: 150px;
-	font: inherit;
-	color: inherit;
-	background: var(--bg);
-	border: 1px solid var(--accent, #6b8afd);
-	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
-	padding: 0 3px;
-	margin: -1px 0;
-	outline: none;
 }
 
 .session-tab-dot {
@@ -1859,33 +1622,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--blue);
 	box-shadow: 0 0 6px var(--blue);
 	animation: pulse 1.2s ease-in-out infinite;
-}
-.session-tab-waiting {
-	color: var(--text);
-	border-color: var(--blue);
-	background: var(--blue-soft);
-}
-.session-tab-waiting:hover {
-	background: var(--blue-soft);
-}
-
-/* A user-colored tab: a colored top edge plus a faint tint of the chosen
-   swatch (`--tab-color`, set inline). Lets a row of lookalike tabs be told
-   apart at a glance. The active colored tab leans into the tint a touch more.
-   The waiting accent (border-color) still wins over the colored border. */
-.session-tab-colored {
-	/* Colored pill: a tinted solid fill plus a colored ring, in place of the old
-	   colored top edge. Tinted over the panel fill (not transparent) so the
-	   transcript underneath never shows through. */
-	border-color: color-mix(in srgb, var(--tab-color) 50%, transparent);
-	background: color-mix(in srgb, var(--tab-color) 14%, var(--bg-panel));
-}
-.session-tab-colored:hover {
-	background: color-mix(in srgb, var(--tab-color) 22%, var(--bg-panel));
-}
-.session-tab-colored.session-tab-active {
-	background: color-mix(in srgb, var(--tab-color) 26%, var(--bg-active));
-	border-color: color-mix(in srgb, var(--tab-color) 60%, transparent);
 }
 
 /* Right-click swatch menu — a floating row of color chips anchored at the
@@ -1939,97 +1675,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	transform-origin: center;
 }
 
-/* Per-tab close (×) — reset the <button> chrome, sit at the tab's trailing
-   edge, and reveal on hover like the pin. Clicking archives the session. */
-.session-tab-close {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 16px;
-	height: 16px;
-	margin: -2px -3px -2px 0;
-	padding: 0;
-	border: none;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	background: transparent;
-	color: var(--text-dim);
-	font-size: 15px;
-	line-height: 1;
-	font-family: inherit;
-	cursor: pointer;
-	flex-shrink: 0;
-}
-.session-tab-close:hover {
-	background: var(--hover-strong);
-	color: var(--text);
-}
-
-@media (hover: hover) and (pointer: fine) {
-	.session-tab-close {
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity var(--dur-micro) var(--ease);
-	}
-	.session-tab:hover .session-tab-close,
-	.session-tab-active .session-tab-close {
-		opacity: 1;
-		pointer-events: auto;
-	}
-}
-
-/* Trailing "+" tab — quick jump to the New Session view. Reset the <button>
-   chrome to match the tab look, then reveal on hover of the strip (desktop);
-   always shown on touch where there's nothing to hover. */
-.session-tab-new {
-	/* A quiet "+" that matches the tab's close × in weight — same 15px glyph,
-	   flex-centered so it sits dead-center (no text-baseline drift), in a box
-	   that stays smaller than a tab pill rather than towering over the strip. */
-	justify-content: center;
-	padding: 6px 9px;
-	font-size: 15px;
-	line-height: 1;
-	font-family: inherit;
-	color: var(--text-dim);
-}
-.session-tab-new:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-
-/* Trailing history button — opens the workspace's archived-sessions menu. Same
-   quiet reveal as the + it sits next to, but it stays visible (and lit) while
-   its menu is open. */
-.session-tab-history {
-	padding: 7px 10px;
-	font-family: inherit;
-	align-items: center;
-}
-.session-tab-history:hover,
-.session-tab-history[data-popup-open] {
-	color: var(--text);
-	background: var(--hover);
-}
-
-@media (hover: hover) and (pointer: fine) {
-	.session-tab-new,
-	.session-tab-history {
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity var(--dur-micro) var(--ease);
-	}
-	/* Keyboard users get the same reveal on focus — hover can't be the only way
-	   to reach the control — and both stay put while their menu is open. */
-	.session-tabs:hover .session-tab-new,
-	.session-tabs:hover .session-tab-history,
-	.session-tab-new:focus-visible,
-	.session-tab-history:focus-visible,
-	.session-tab-new[data-menu-open],
-	.session-tab-history[data-popup-open] {
-		opacity: 1;
-		pointer-events: auto;
-	}
-}
-
 
 /* ── Session viewer layout ───────────────────────────────── */
 
@@ -2039,57 +1684,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	height: 100%;
 	min-height: 0;
 	position: relative;
-}
-
-.session-split {
-	display: grid;
-	min-width: 0;
-	min-height: 0;
-	flex: 1;
-	overflow: hidden;
-}
-.session-split-pane {
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
-	min-height: 0;
-	position: relative;
-	overflow: hidden;
-}
-/* Bar sits at the column's top at its natural height; the pane takes the rest. */
-.session-split-pane > .session-tabs {
-	flex-shrink: 0;
-}
-.session-split-pane > :not(.session-tabs) {
-	flex: 1;
-	min-height: 0;
-}
-/* The divider between the columns IS the seam — one hairline on the same token
-   as every other divider, with the panes butted straight onto it. It used to be
-   a 2px bar floating in an 8px gutter, which read as two borders with a channel
-   of background between them, and left each tab bar's baseline hairline dying
-   3px short of the seam instead of running into it. */
-.session-split-resize {
-	position: relative;
-	z-index: 5;
-	background: var(--border);
-	cursor: col-resize;
-	touch-action: none;
-	transition: background var(--dur-micro) var(--ease);
-}
-/* Grab area only: wider than the hairline, spilling over both panes without
-   taking any layout width of its own. */
-.session-split-resize::after {
-	content: "";
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: -4px;
-	right: -4px;
-}
-.session-split-resize:hover,
-body.resizing-tab-split .session-split-resize {
-	background: var(--accent);
 }
 body.resizing-tab-split {
 	cursor: col-resize;
@@ -2307,41 +1901,6 @@ html.wco .viewer-branch {
 .viewer-overflow {
 	position: relative;
 	display: inline-flex;
-}
-/* Squircle user picture (GitHub avatar, initial fallback) — see UserAvatar.tsx.
-   Size + font-size come inline from the component; the count badge the
-   presence facepile nests inside sits outside the avatar, so no overflow
-   clipping here (the img rounds itself instead).
-
-   The edge is a translucent hairline drawn *over* the picture rather than a
-   solid border around it. An avatar lands on many surfaces (sidebar rows,
-   hover, selection, Home, menus, overlapping piles), and a fixed gray ring
-   outside the photo reads as a frame on all of them; ink at 14% just defines
-   the photo's own edge and picks up whatever it sits on. The picture and the
-   initial fallback share it via --avatar-edge, since the image covers the
-   container's own shadow. */
-.user-avatar {
-	--avatar-edge: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
-	position: relative;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
-	border-radius: 32%;
-	background: var(--bg-active);
-	box-shadow: var(--avatar-edge);
-	color: var(--text-dim);
-	font-weight: 700;
-	user-select: none;
-}
-.user-avatar img {
-	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	border-radius: inherit;
-	object-fit: cover;
-	box-shadow: var(--avatar-edge);
 }
 
 /* presence facepile (the Figma/Notion-style user row before Share) */
@@ -3923,69 +3482,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	font-weight: 600;
 	letter-spacing: -0.01em;
 }
-.seg-control {
-	display: inline-flex;
-	background: var(--bg-hover);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 2px;
-	gap: 2px;
-}
-.seg-control-btn {
-	background: none;
-	border: none;
-	cursor: pointer;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 4px 10px;
-	font-size: 12px;
-	font-weight: 500;
-	color: var(--text-faint);
-	white-space: nowrap;
-}
-.seg-control-btn:hover {
-	color: var(--text-dim);
-}
-.seg-control-btn.active {
-	background: var(--bg-active);
-	color: var(--text);
-}
-
-.auto-toggle {
-	width: 34px;
-	height: 19px;
-	border-radius: 999px;
-	border: 1px solid var(--border-strong);
-	background: var(--bg-active);
-	position: relative;
-	flex-shrink: 0;
-	padding: 0;
-	transition: background var(--dur-micro) var(--ease);
-}
-.auto-toggle-knob {
-	position: absolute;
-	top: 2px;
-	left: 2px;
-	width: 13px;
-	height: 13px;
-	border-radius: 50%;
-	background: var(--text-faint);
-	transition:
-		transform var(--dur-micro) var(--ease),
-		background var(--dur-micro) var(--ease);
-}
-.auto-toggle-on {
-	background: var(--green-soft);
-	border-color: var(--green);
-}
-.auto-toggle-on .auto-toggle-knob {
-	transform: translateX(15px);
-	background: var(--green);
-}
-
-@media (max-width: 560px) {
-	.auto-toggle {
-		flex-shrink: 0;
-	}
-}
 
 /* ── Connections ─────────────────────────────────────────── */
 
@@ -4960,13 +4456,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		font-size: 14px;
 		line-height: 24px;
 	}
-	/* Pinned session tabs. */
-	.session-tab {
-		padding: 6px 10px;
-	}
-	.session-tab-title {
-		font-size: 13px;
-	}
 	/* A one-session workspace's tab strip is pure chrome on a phone: a single tab
 	   repeating the title in the top bar, plus a "+" that's hover-revealed and
 	   so mostly invisible on touch anyway. Hide the strip until the workspace
@@ -5187,34 +4676,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		min-height: 38px;
 	}
 
-	/* Segmented pickers (Ask/Code mode, sort, …). */
-	.seg-control-btn {
-		padding: 9px 13px;
-		font-size: 14px;
-	}
-
-	/* The "+" new-session and history tabs keep a comfortable square hit area. */
-	.session-tab-new,
-	.session-tab-history {
-		min-height: 36px;
-		padding: 6px 14px;
-	}
-
-	/* Toggle switches read larger and are easier to flick on a phone.
-	   Width/knob/offset move together so the on-state math stays right:
-	   44 − 20(knob) − 2(left) − 2(right) = 20 → knob travels 18px. */
-	.auto-toggle {
-		width: 44px;
-		height: 26px;
-	}
-	.auto-toggle-knob {
-		width: 20px;
-		height: 20px;
-	}
-	.auto-toggle-on .auto-toggle-knob {
-		transform: translateX(18px);
-	}
-
 }
 
 /* ── Phone: Slack-style top cards + relocated filter ─────────────
@@ -5406,17 +4867,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.mobile-filter-btn:active {
 		opacity: 0.35;
 		transition-duration: 0s;
-	}
-}
-
-/* Touch screens can't hover, so the tab's close (×) is always visible
-   there rather than hover-revealed — give it a finger-sized hit area
-   (the glyph stays small, the tappable box grows). */
-@media (hover: none) {
-	.session-tab-close {
-		width: 26px;
-		height: 26px;
-		margin: -2px -4px -2px 0;
 	}
 }
 
@@ -5809,35 +5259,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	padding-bottom: 48px;
 }
 
-/* "Settings" entry in the product-menu dropdown */
-
-
-/* ── Workspaces sidebar (Workspaces & Sessions overhaul) ── */
-/* The + tab's right-click mode menu (share / stacked / ask). */
-.session-tab-new-menu {
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
-	padding: 4px;
-	min-width: 250px;
-}
-.session-tab-new-menu-item {
-	display: block;
-	width: 100%;
-	text-align: left;
-	background: none;
-	border: none;
-	color: var(--text);
-	font-size: 13px;
-	padding: 6px 8px;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	cursor: pointer;
-	white-space: nowrap;
-}
-.session-tab-new-menu-item:hover {
-	background: var(--hover);
-}
-
 
 /* Hover-revealed real timestamps. A message's time is a detail you go looking
    for, not something to read past on every turn — so it fades in while the
@@ -6088,12 +5509,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		display: none;
 	}
 }
-.session-tab-draft {
-	display: inline-flex;
-	align-items: center;
-	flex: 0 0 auto;
-	color: var(--text-dim);
-}
 
 /* ── Mobile new-session FAB ──────────────────────────────────
    Floating "+" in the bottom-right of the root session list (phones only) —
@@ -6178,20 +5593,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 	.desk-fab:active {
 		transform: scale(0.92);
-	}
-}
-.voice-spinner {
-	width: 16px;
-	height: 16px;
-	border-radius: 50%;
-	border: 2px solid var(--border-strong);
-	border-top-color: var(--text-dim);
-	animation: voice-spin 0.8s linear infinite;
-	flex-shrink: 0;
-}
-@keyframes voice-spin {
-	to {
-		transform: rotate(360deg);
 	}
 }
 

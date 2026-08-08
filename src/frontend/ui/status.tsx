@@ -28,7 +28,13 @@ import { cn } from "./cn";
  * explicitly here keeps exactly what ships today.
  */
 
-const PULSE = "animate-[pulse_1.4s_ease-in-out_infinite]";
+// The exception rides on the element, not on a class name in base.css's
+// reduced-motion list: that blanket kills every animation with !important
+// and hands specific liveness signals back by class, so a rename silently
+// freezes the indicator. This one cannot be orphaned by a rename.
+const PULSE =
+	"animate-[pulse_1.4s_ease-in-out_infinite] " +
+	"motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";
 
 export function PulseDot({
 	size = 8,

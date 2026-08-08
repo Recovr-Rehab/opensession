@@ -341,6 +341,13 @@ html[data-theme="light"] {
                         the clearest thing this preference is asking us to
                         drop; the pixel grid still reads as a graphic at rest.
 
+   PREFER PUTTING A NEW EXCEPTION ON THE ELEMENT, not in this list:
+   `motion-reduce:[animation-duration:0.8s]! motion-reduce:[animation-iteration-count:infinite]!`
+   wins here (equal specificity, and the utility sheet is linked last) and
+   travels with the component. Five indicators silently froze during the
+   Tailwind migration because their class name was removed from the markup
+   while its exception stayed behind here, which nothing can detect.
+
    The exceptions restate their durations literally rather than trying to undo
    the blanket with `revert` — `revert` rolls back to the *origin* below the
    author one, i.e. the UA's `0s`, which would freeze exactly the indicators we
@@ -358,12 +365,6 @@ html[data-theme="light"] {
 	}
 
 	/* Progress spinners — constant rotation, the sole "working" signal. */
-	.staging-spinner,
-	.wi-check-spin,
-	.ss-searching {
-		animation-duration: 0.7s !important;
-		animation-iteration-count: infinite !important;
-	}
 	.restart-spinner,
 	.voice-spinner {
 		animation-duration: 0.8s !important;
@@ -379,12 +380,9 @@ html[data-theme="light"] {
 	   not zero: keep opacity, drop movement", and these are pure opacity. */
 	.sidebar-status-running,
 	.session-tab-dot,
-	.working-dot,
 	.pr-check-mark-pending,
 	.prc-mark-pending,
-	.rv-check-dot-pending,
-	.terminal-running,
-	.pulse-dot {
+	.rv-check-dot-pending {
 		animation-duration: 1.4s !important;
 		animation-iteration-count: infinite !important;
 	}
