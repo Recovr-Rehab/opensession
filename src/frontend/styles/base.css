@@ -364,7 +364,20 @@ html[data-theme="light"] {
 		scroll-behavior: auto !important;
 	}
 
-	/* Progress spinners — constant rotation, the sole "working" signal. */
+	/* Progress spinners — constant rotation, the sole "working" signal, so
+	   they keep turning. Matched on the animation utility itself rather than
+	   on a hook class per spinner: the old name list silently stopped
+	   matching whenever a migration renamed an element, and a frozen spinner
+	   next to live output reads as a hung app. Anything spelt `animate-spin`
+	   or `animate-[spin_…]` is a progress indicator by construction. */
+	[class*="animate-spin"],
+	[class*="animate-[spin"] {
+		animation-duration: 0.8s !important;
+		animation-iteration-count: infinite !important;
+	}
+
+	/* The few spinners still styled by a legacy class keep their own rate;
+	   they sit after the rule above so their duration wins the tie. */
 	.restart-spinner,
 	.voice-spinner {
 		animation-duration: 0.8s !important;
@@ -378,16 +391,12 @@ html[data-theme="light"] {
 	/* Status pulses — opacity breathing that encodes live session state
 	   (running vs waiting vs idle). The rule for this preference is "gentler,
 	   not zero: keep opacity, drop movement", and these are pure opacity. */
-	.sidebar-status-running,
-	.session-tab-dot,
 	.pr-check-mark-pending,
 	.prc-mark-pending,
 	.rv-check-dot-pending {
 		animation-duration: 1.4s !important;
 		animation-iteration-count: infinite !important;
 	}
-	.sidebar-status-waiting,
-	.session-tab-dot-waiting,
 	.msg-sending .msg-label-user {
 		animation-duration: 1.2s !important;
 		animation-iteration-count: infinite !important;
@@ -675,9 +684,6 @@ button {
 	.user-avatar,
 	.user-avatar img,
 	.rv-avatar,
-	.viewer-branch-editable,
-	.viewer-branch-rename,
-	.session-info-list,
 	.session-link,
 	.btn-panel-toggle,
 	.btn-viewer-newsession,

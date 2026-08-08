@@ -478,78 +478,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	margin: -2px 0 8px;
 	min-width: 0;
 }
-.sidebar-repo-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 1px;
-	min-width: 0;
-	max-width: 100%;
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	padding: 3px 4px;
-	font-size: 13px;
-	line-height: 1.15;
-}
-/* Chip body — clicking it re-opens the repo filter. Its own padding/hover give
-   the tile+name a real button hit area inside the pill. */
-.sidebar-repo-chip-open {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	min-width: 0;
-	border: none;
-	background: none;
-	color: inherit;
-	font: inherit;
-	line-height: 1.15;
-	padding: 2px 3px;
-	border-radius: 999px;
-	cursor: pointer;
-}
-.sidebar-repo-chip-open:hover {
-	background: var(--hover);
-}
-/* Inline in the header: never let the spacer squeeze it (it's only shown when
-   measured to fit). */
-.sidebar-repo-chip--inline {
-	flex-shrink: 0;
-	max-width: none;
-}
-/* Off-layout probe: measured, never seen. */
-.sidebar-repo-chip--probe {
-	position: absolute;
-	left: -9999px;
-	top: 0;
-	visibility: hidden;
-	pointer-events: none;
-	max-width: none;
-}
-.sidebar-repo-chip .repo-tile {
-	width: 17px;
-	height: 17px;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	font-size: 10px;
-}
-.sidebar-repo-chip-x {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 19px;
-	height: 19px;
-	border: none;
-	background: none;
-	border-radius: 50%;
-	color: var(--text-faint);
-	font-size: 14px;
-	line-height: 1;
-	flex-shrink: 0;
-	cursor: pointer;
-}
-.sidebar-repo-chip-x:hover {
-	color: var(--text);
-	background: var(--hover);
-}
 
 .sidebar-new-btn {
 	width: 34px;
@@ -633,86 +561,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 .filter-row-label {
 	font-size: 14px;
-	color: var(--text-dim);
-	flex-shrink: 0;
-}
-
-.mini-select-wrap {
-	position: relative;
-}
-.mini-select {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 148px;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	padding: 8px 10px 8px 12px;
-	color: var(--text);
-	font-size: 14px;
-	cursor: pointer;
-}
-.mini-select:hover {
-	background: var(--hover);
-}
-.mini-select-value {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	flex: 1;
-	min-width: 0;
-}
-.mini-select-text {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.mini-select-caret {
-	color: var(--text-faint);
-	flex-shrink: 0;
-}
-
-.mini-select-menu {
-	position: fixed;
-	z-index: 321;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
-	padding: 5px;
-	max-height: 60vh;
-	overflow-y: auto;
-	animation: hovercard-in var(--dur-micro) var(--ease);
-}
-.mini-select-item {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	width: 100%;
-	background: none;
-	border: none;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 8px 9px;
-	color: var(--text);
-	font-size: 14px;
-	text-align: left;
-	cursor: pointer;
-}
-.mini-select-item:hover {
-	background: var(--hover);
-}
-.mini-select-item.selected {
-	background: var(--hover-strong);
-}
-.mini-select-item-text {
-	flex: 1;
-	min-width: 0;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.mini-select-check {
 	color: var(--text-dim);
 	flex-shrink: 0;
 }
@@ -853,7 +701,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	margin-top: 2px;
 }
 
-
 /* Rows nested under a repo band, a status lane or an inbox band take no inset
    of their own: every row in the list keeps the base 10px edge, so all their
    marks and titles share one rail top to bottom. The nesting is carried by the
@@ -871,7 +718,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 .sidebar-group--automations {
 	padding-bottom: 28px;
 }
-
 
 /* Top-level band labels (Support / People / Automations) — small quiet labels
    that read like section kickers but behave like Notion's: the whole heading is
@@ -1032,24 +878,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	opacity: 0.9;
 }
 
-/* The sidebar's leading column. Every row and group header opens with one of
-   these, whatever it holds — a 22px glyph, a 20px one, a 7px status dot, a
-   repo tile — so the marks share a centre line AND the text after them shares
-   a left rail. Before this the slot was whatever its content measured (7 /
-   17 / 20 / 22), which fanned the titles out across seven different left
-   edges in the same list. Wrap shared marks at the call site rather than
-   resizing them: .sidebar-group-dot and RepoTile are also dropdown option
-   icons, where a 22px box would be wrong. */
-.sidebar-rail {
-	position: relative;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	flex: 0 0 22px;
-	width: 22px;
-	height: 22px;
-}
-
 .sidebar-group-name {
 	text-align: left;
 	white-space: nowrap;
@@ -1108,7 +936,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		display: inline-flex;
 	}
 }
-
 
 /* 2px of breathing room between list rows — covers both the swipe-wrapped
    rows (workspace + session) and the bare rows (PR / support). The inner
@@ -1269,26 +1096,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	to {
 		transform: translateY(0);
 	}
-}
-.sidebar-status-running {
-	/* Yellow to match the "In progress" lane — green means "In review". */
-	background: var(--yellow);
-	animation: pulse 1.4s ease-in-out infinite;
-}
-.sidebar-status-idle {
-	background: var(--text-faint);
-}
-.sidebar-status-waiting {
-	background: var(--blue);
-	box-shadow: 0 0 6px var(--blue);
-	animation: pulse 1.2s ease-in-out infinite;
-}
-
-.sidebar-meta-sep {
-	opacity: 0.5;
-}
-.sidebar-meta-linear {
-	color: #7b86e8;
 }
 
 /* ── Sidebar row hover card ──────────────────────────────────
@@ -1525,24 +1332,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	}
 }
 
-.session-tab-dot {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: var(--green);
-	flex-shrink: 0;
-	animation: pulse 1.4s ease-in-out infinite;
-}
-/* Tab is blocked on an AskUserQuestion. "Needs you" is blue throughout — the
-   sidebar already resolved it that way (.sidebar-item-waiting), and this rule's
-   old comment claimed to match it while reaching for the accent instead. Now
-   that the accent is ink it could not draw an eye at all, so the two agree. */
-.session-tab-dot-waiting {
-	background: var(--blue);
-	box-shadow: 0 0 6px var(--blue);
-	animation: pulse 1.2s ease-in-out infinite;
-}
-
 /* Right-click swatch menu — a floating row of color chips anchored at the
    cursor. Fixed-position so it escapes the tab strip's overflow clipping. */
 .tab-color-menu {
@@ -1592,17 +1381,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	border-top: 1px solid var(--text-faint);
 	transform: rotate(45deg);
 	transform-origin: center;
-}
-
-
-/* ── Session viewer layout ───────────────────────────────── */
-
-.session-viewer {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-	min-height: 0;
-	position: relative;
 }
 body.resizing-tab-split {
 	cursor: col-resize;
@@ -1657,14 +1435,6 @@ body.resizing-tab-split {
 	.viewer-header {
 		border-bottom: 1px solid var(--top-divider);
 	}
-}
-
-.viewer-title {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-width: 0;
-	font-weight: 500;
 }
 
 .source-chip {
@@ -1740,54 +1510,6 @@ body.resizing-tab-split {
 	opacity: 0.6;
 }
 
-.viewer-branch {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-	/* Cap the title so a long workspace name truncates instead of eating the
-	   whole top bar; it still shrinks below this when the row runs out of room. */
-	max-width: 420px;
-	font-size: 14px;
-	-webkit-user-select: text;
-	-moz-user-select: text;
-	user-select: text;
-	-webkit-touch-callout: default;
-}
-
-/* The shell makes the surrounding header a native window drag region. Opt the
-   workspace title out so its text remains selectable and copyable. */
-html.wco .viewer-branch {
-	-webkit-app-region: no-drag;
-	app-region: no-drag;
-}
-
-/* Double-clickable to rename — hint it on hover without shifting layout. */
-.viewer-branch-editable {
-	cursor: text;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	padding: 5px 8px;
-	margin: -5px -8px;
-}
-.viewer-branch-editable:hover {
-	background: var(--hover);
-}
-
-/* Inline rename input in the header — sized to sit in place of the title. */
-.viewer-branch-rename {
-	min-width: 0;
-	max-width: 280px;
-	font: inherit;
-	font-size: 14px;
-	color: inherit;
-	background: var(--bg);
-	border: 1px solid var(--accent, #6b8afd);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	padding: 1px 4px;
-	margin: -2px 0;
-	outline: none;
-}
-
 @keyframes pulse {
 	0%,
 	100% {
@@ -1813,13 +1535,6 @@ html.wco .viewer-branch {
 .viewer-header-actions .session-link,
 .viewer-header-actions .presence {
 	margin-right: 6px;
-}
-
-/* ⋯ overflow: the secondary actions collapse in the shared Menu popup when
-   they'd otherwise crowd the title. */
-.viewer-overflow {
-	position: relative;
-	display: inline-flex;
 }
 
 /* presence facepile (the Figma/Notion-style user row before Share) */
@@ -1888,31 +1603,6 @@ html.wco .viewer-branch {
 		transform: rotate(360deg);
 	}
 }
-.viewer-delete-confirm {
-	display: flex;
-	gap: 6px;
-}
-
-/* split layout: session + workspace panel */
-.viewer-split {
-	display: flex;
-	flex: 1;
-	min-height: 0;
-}
-
-.viewer-session {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
-	min-height: 0;
-	/* Depth the transcript scrolls up behind the composer. Shared by the
-	   composer's negative margin + backdrop and the transcript's bottom inset so
-	   they always line up. The mobile media query inherits this; both viewports
-	   get the "session scrolls under the input" fade. Kept snug so the newest row
-	   sits just above the composer rather than floating well clear of it. */
-	--session-under: 16px;
-}
 
 /* The panel portals into this app-level slot. `display: contents` dissolves the
    slot so the panel (and its overlay) become direct flex children of `.app-body`
@@ -1937,94 +1627,6 @@ html.wco .viewer-branch {
 	flex-direction: column;
 	min-height: 0;
 }
-
-/* Left-edge drag handle of the right panel — mirror of .sidebar-resize. */
-.panel-resize {
-	position: absolute;
-	top: 0;
-	left: -3px;
-	width: 7px;
-	height: 100%;
-	cursor: col-resize;
-	z-index: 6;
-}
-.panel-resize::after {
-	content: "";
-	position: absolute;
-	top: 0;
-	left: 3px;
-	width: 2px;
-	height: 100%;
-	background: transparent;
-	transition: background var(--dur-micro) var(--ease);
-}
-.panel-resize:hover::after {
-	background: var(--border-strong);
-}
-body.resizing-panel .panel-resize::after {
-	background: var(--text-faint);
-}
-
-.panel-tabs {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	/* Floating pill nav (no bottom divider): the active tab is a filled pill
-	   rather than an underline, so the strip reads as a free-standing control
-	   group over the panel body. Left inset lands the first pill's label at the
-	   panel body's 22px content edge (10px strip + 12px pill padding). */
-	padding: 13px 10px 8px;
-	/* When the tabs don't fit (narrow panel, many tabs), scroll horizontally
-	   rather than wrap or clip. Scrollbar hidden — the strip stays compact. */
-	overflow-x: auto;
-	scrollbar-width: none;
-}
-.panel-tabs::-webkit-scrollbar {
-	display: none;
-}
-
-.panel-tab {
-	background: none;
-	border: none;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	font-size: 13px;
-	font-weight: 500;
-	padding: 5px 12px;
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	/* Don't let tabs squish when the strip overflows — scroll instead. */
-	flex-shrink: 0;
-	white-space: nowrap;
-	transition:
-		background var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease);
-}
-.panel-tab:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-.panel-tab.active {
-	color: var(--text);
-	background: color-mix(in srgb, var(--bg-active) 28%, var(--bg-raised));
-}
-/* Count suffix on a tab (e.g. "Changes 10") — dimmer than the label, tabular
-   so the strip doesn't jitter as the number changes. */
-.panel-tab-count {
-	color: var(--text-faint);
-	font-variant-numeric: tabular-nums;
-}
-.panel-tab:hover .panel-tab-count,
-.panel-tab.active .panel-tab-count {
-	color: var(--text-dim);
-}
-
-.panel-tab-dot {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-}
 .pr-dot-open {
 	background: var(--green);
 }
@@ -2036,16 +1638,6 @@ body.resizing-panel .panel-resize::after {
 }
 .pr-dot-conflict {
 	background: var(--yellow);
-}
-
-.panel-overlay {
-	display: none;
-}
-
-.panel-body {
-	flex: 1;
-	overflow-y: auto;
-	min-height: 0;
 }
 
 .workspace-info-panel {
@@ -2253,17 +1845,6 @@ body.resizing-panel .panel-resize::after {
 	}
 }
 
-/* ── Messages ────────────────────────────────────────────── */
-
-/* Holds the scroll area plus the floating "Jump to latest" pill. */
-.viewer-messages-region {
-	position: relative;
-	flex: 1;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-}
-
 .viewer-messages {
 	flex: 1;
 	overflow-y: auto;
@@ -2325,35 +1906,8 @@ body.resizing-panel .panel-resize::after {
    nothing moves that wouldn't move anyway. */
 @media (min-width: 721px) {
 	@supports (animation-timeline: scroll()) {
-		.viewer-messages-region {
-			timeline-scope: --viewer-session-scroll;
-		}
 		.viewer-messages {
 			scroll-timeline: --viewer-session-scroll y;
-		}
-		.viewer-messages-region::before {
-			content: "";
-			position: absolute;
-			left: 0;
-			right: 0;
-			top: 0;
-			height: var(--wash-depth);
-			pointer-events: none;
-			/* Above the transcript's flow content, but below the composer
-			   (.viewer-input, z-index 1, later sibling wins the tie) and the
-			   jump-latest pill (z-index 5). */
-			z-index: 1;
-			opacity: 0;
-			/* Full page colour at the bar, gone by the bottom of the ramp — and
-			   non-linear on the way, so a row has faded well before it reaches
-			   the header rather than only on its last line. */
-			background: var(--wash-up);
-			animation-name: session-edge-fade-in;
-			animation-duration: 1ms; /* inert — the scroll timeline drives progress */
-			animation-fill-mode: both;
-			animation-timeline: --viewer-session-scroll;
-			/* Fully in after a couple of lines of scroll-back. */
-			animation-range: 0 56px;
 		}
 	}
 }
@@ -2549,10 +2103,6 @@ body.resizing-panel .panel-resize::after {
 	background: color-mix(in srgb, var(--bg) 72%, transparent);
 	backdrop-filter: blur(2px);
 }
-.session-delete-label {
-	font-size: 13px;
-	color: var(--text-dim);
-}
 
 /* A session reference rendered by markdown.ts as a clickable link into that
    session (e.g. an orchestrator jumping into the worker it spawned). Labelled
@@ -2642,7 +2192,6 @@ a.pr-ref:hover {
 	display: flex;
 	flex-direction: column;
 }
-
 
 .home-rows {
 	display: flex;
@@ -2787,48 +2336,6 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .shiki-gutter {
 	color: var(--text-faint);
 	user-select: none;
-}
-
-/* ── Input area ──────────────────────────────────────────── */
-
-.viewer-input {
-	/* Float the composer up over the transcript so the session scrolls UNDER it
-	   (not cut off above it), in normal flow — a negative top margin only shifts
-	   it visually. z-index lifts it over the position:relative messages region it
-	   now overlaps. */
-	position: relative;
-	z-index: 1;
-	margin-top: calc(-1 * var(--session-under));
-	flex-shrink: 0;
-	/* Opaque from the composer's top edge down; the dissolve above it lives on
-	   ::before. The overlap band (--session-under) is behind this fill, so the
-	   sliver of transcript that the scroll container still renders there is
-	   covered rather than half-showing through the composer's padding. */
-	background: var(--bg);
-	/* Top padding is deliberately SMALLER than the negative margin (--session-under),
-	   so the composer box rises a few px above where the transcript ends — the last
-	   row tucks slightly UNDER the input instead of leaving a gap. */
-	padding: 4px 20px 14px;
-}
-/* The transcript's bottom scroll edge. It hangs off the COMPOSER rather than
-   the scroll container for the same reason the native app hangs its wash off
-   the bar: an overlay inside the scroll box is laid out inside the inset the
-   composer has already taken, so it paints in the wrong place — and the
-   composer is the thing content actually disappears behind. bottom: 100% puts
-   the ramp's end exactly on the composer's top edge, so the veil reaches full
-   page colour right where the box begins and the fill below carries on
-   seamlessly. --wash-down is non-linear (see :root): a row is already quiet
-   about two thirds of the way down instead of only on its last line. */
-.viewer-input::before {
-	content: "";
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 100%;
-	height: var(--wash-depth);
-	/* It lies over the transcript — selecting and scrolling must go through it. */
-	pointer-events: none;
-	background: var(--wash-down);
 }
 
 .btn-send {
@@ -3469,39 +2976,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		z-index: 30;
 		box-shadow: -12px 0 32px rgba(0, 0, 0, 0.5);
 	}
-
-	.panel-overlay {
-		display: block;
-		position: fixed;
-		inset: var(--header-h) 0 0 0;
-		background: rgba(0, 0, 0, 0.45);
-		z-index: 25;
-	}
-
-	/* Chevron-back at the top of the workspace panel on phones — the panel is a
-	   deeper page reached from the ⋯ menu, so it carries its own way back to the
-	   session (matching the top-bar back chevron, no "Back" word). */
-	.panel-back {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 40px;
-		height: 40px;
-		margin: 6px 0 0 6px;
-		padding: 0;
-		background: none;
-		border: none;
-		color: var(--accent);
-		cursor: pointer;
-		-webkit-tap-highlight-color: transparent;
-		touch-action: manipulation;
-	}
-	.panel-back svg {
-		margin-left: -1px;
-	}
-	.panel-back:active {
-		opacity: 0.4;
-	}
 }
 
 /* Phones: the workspace panel becomes a full-width bottom sheet in the same
@@ -3523,56 +2997,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		z-index: 50;
 		box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
 		animation: sheet-up var(--dur-lg) var(--ease);
-	}
-	.panel-overlay {
-		inset: 0;
-		z-index: 45;
-		background: rgba(0, 0, 0, 0.5);
-	}
-
-	/* One clean header row at the top of the sheet: back chevron on the left,
-	   the test-this-change actions (Preview / staging globe) on the right. */
-	.panel-sheet-head {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 8px 14px 2px 8px;
-	}
-	.panel-sheet-head .panel-back {
-		margin: 0;
-	}
-	.panel-sheet-actions {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin-left: auto;
-		min-width: 0;
-	}
-
-	/* Tabs: full-round pills with real touch targets and breathing room, and a
-	   soft fade at the strip's edges instead of a hard clip when it scrolls. */
-	.panel-tabs {
-		gap: 6px;
-		padding: 6px 14px 10px;
-		-webkit-mask-image: linear-gradient(
-			to right,
-			transparent 0,
-			#000 10px,
-			#000 calc(100% - 28px),
-			transparent
-		);
-		mask-image: linear-gradient(
-			to right,
-			transparent 0,
-			#000 10px,
-			#000 calc(100% - 28px),
-			transparent
-		);
-	}
-	.panel-tab {
-		font-size: 14px;
-		padding: 8px 15px;
-		border-radius: 999px;
 	}
 }
 
@@ -3886,24 +3310,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.header-sessionbar .repo-tile {
 		flex-shrink: 0;
 	}
-
-	/* ── Session info page (phone) ──────────────────────────────
-	   Tapping the top-bar title opens this as a deeper page, WhatsApp-style:
-	   a full-screen sheet with the session identity up top and every action
-	   below. Its own chevron-back returns to the session. */
-	.session-info-page {
-		position: fixed;
-		inset: 0;
-		z-index: 60;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		background: var(--bg);
-		padding: 0 0 max(16px, env(safe-area-inset-bottom, 0px));
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		animation: session-info-in var(--dur) var(--ease);
-	}
 	@keyframes session-info-in {
 		from {
 			opacity: 0;
@@ -3928,69 +3334,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 			background-color var(--dur) var(--ease),
 			border-color var(--dur) var(--ease);
 	}
-	.session-info-topbar-scrolled {
-		border-bottom-color: var(--border);
-		background: color-mix(in srgb, var(--bg) 92%, transparent);
-		-webkit-backdrop-filter: blur(18px) saturate(1.35);
-		backdrop-filter: blur(18px) saturate(1.35);
-	}
-	.session-info-topbar .panel-back {
-		position: relative;
-		z-index: 1;
-		margin: 0;
-	}
-	.session-info-topbar-title {
-		position: absolute;
-		left: 56px;
-		right: 56px;
-		bottom: 0;
-		height: 52px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-size: 15px;
-		font-weight: 600;
-		letter-spacing: -0.01em;
-		color: var(--text);
-		opacity: 0;
-		transform: translateY(5px);
-		pointer-events: none;
-		transition:
-			opacity var(--dur) var(--ease),
-			transform var(--dur) var(--ease);
-	}
-	.session-info-topbar-scrolled .session-info-topbar-title {
-		opacity: 1;
-		transform: translateY(0);
-	}
-	.session-info-hero {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 9px;
-		padding: 2px 20px 20px;
-		text-align: center;
-	}
-	.session-info-hero .repo-tile {
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-	}
-	.session-info-name {
-		font-size: 20px;
-		font-weight: 600;
-		letter-spacing: -0.02em;
-		line-height: 1.2;
-		color: var(--text);
-		max-width: 100%;
-		word-break: break-word;
-	}
-	.session-info-sub {
-		font-size: 13px;
-		font-weight: 500;
-		color: var(--text-dim);
-	}
 	.session-info-status {
 		margin: 0 12px 12px;
 		padding: 8px;
@@ -3998,14 +3341,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		border-radius: calc(18px * var(--rf));
 		corner-shape: var(--cs);
 		background: var(--bg-panel);
-	}
-	.session-info-content {
-		min-height: 320px;
-	}
-	.session-info-section {
-		margin-top: 8px;
-		padding: 12px;
-		border-top: 1px solid var(--border);
 	}
 
 	/* Static, full-width settings list on the session info page. */
@@ -4045,19 +3380,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		color: var(--text);
 		border-color: transparent;
 		background: var(--hover);
-	}
-	/* The workspace overview (Info-tab content) embedded below the actions:
-	   opening prompt, summary, files changed, sessions — the whole-workspace view. */
-	.session-info-overview {
-		padding: 8px 0 0;
-	}
-	/* Its title/meta duplicate the page hero — drop the title; the meta
-	   (sessions · author) and PR status chips still add detail. */
-	.session-info-overview .workspace-info-title {
-		display: none;
-	}
-	.session-info-overview .workspace-info-panel {
-		padding-top: 0;
 	}
 	.header-sessionbar-sep {
 		flex-shrink: 0;
@@ -4112,11 +3434,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		display: none;
 	}
 
-	/* The right panel is a fixed overlay on phones — no drag-resize. */
-	.panel-resize {
-		display: none;
-	}
-
 	/* On phones the session header portals INTO the top bar's right slot (see
 	   headerActionsEl in App/SessionViewer): the title row is hidden — the
 	   centered bar title replaces it — and the actions sit flat beside it.
@@ -4138,9 +3455,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.app-header-detail .app-header-actions {
 		margin-left: 10px;
 		flex: none;
-	}
-	.viewer-title {
-		display: none;
 	}
 	.app-header-actions .viewer-header {
 		height: auto;
@@ -4223,19 +3537,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		display: none;
 	}
 
-	/* Depth the transcript scrolls up behind the composer, shared by the
-	   composer's negative margin/backdrop and the transcript's bottom inset so
-	   they always line up. */
-	.viewer-session {
-		--session-under: 16px;
-		/* Shorter wash than the desktop's 56px: the resting pill is only ~50px
-		   tall and sits near the screen edge, so a full-depth veil would reach
-		   further up the transcript than the chrome it belongs to. Set on the
-		   session (not the composer) so the transcript's matching bottom inset
-		   reads the same number. */
-		--wash-depth: 40px;
-	}
-
 	.viewer-messages {
 		/* Clear the floating pills at rest, then scroll under them: the top inset
 		   is the bar height (+ a little air) so the newest/first row sits just
@@ -4272,42 +3573,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 			rgba(0, 0, 0, 0.45) calc(var(--pane-header-h) * 0.6),
 			#000 var(--pane-header-h)
 		);
-	}
-
-	.viewer-input {
-		/* Float the composer up over the transcript so the session scrolls UNDER it
-		   (not cut off above it). It stays in normal flow — a negative top margin
-		   only shifts it visually, so the iOS keyboard handling that keeps the
-		   in-flow composer above the keyboard is untouched. z-index lifts it over
-		   the position:relative messages region it now overlaps. */
-		position: relative;
-		z-index: 1;
-		margin-top: calc(-1 * var(--session-under));
-		/* Opaque from the composer's top edge down; the dissolve above it is the
-		   shared ::before wash (see the desktop rule). */
-		background: var(--bg);
-		/* Top padding is deliberately SMALLER than the negative margin (--session-under),
-		   so the composer rises a few px above where the transcript ends — the last
-		   row tucks slightly UNDER the input instead of leaving a gap. */
-		padding: 4px 12px 8px;
-		/* Clear the home indicator / bottom rounded corners: respect the full
-       safe-area inset (≈34px on home-indicator iPhones) rather than jamming
-       the composer against the very bottom edge. The hint is hidden on phones,
-       so the composer itself is the bottom-most element and needs the gap. */
-		/* The floor also has to clear the composer's shadow (see the phone
-		   --composer-shadow override): with no safe-area inset — mobile Safari,
-		   where the browser toolbar sits below — this gap is all the room the
-		   falloff gets, and anything shorter clips it into a hard line. */
-		padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
-	}
-	/* Keyboard up: it now covers the home-indicator area, but iOS keeps reporting
-     the safe-area inset — which would leave a big gap under the input. Drop back
-     to a snug gap so the composer sits just above the keyboard. Scope this to
-     the EXPANDED composer: the minimized resting pill only shows when the field
-     is unfocused (keyboard closed), so it must always keep the full safe-area
-     gap — otherwise a lingering kb-open would drop it too low. */
-	body.kb-open .viewer-input:has(.composer:not(.composer-min)) {
-		padding-bottom: 0;
 	}
 	/* Immersive reading (Safari-style): SessionViewer toggles body.chrome-collapsed
 	   from the transcript's scroll direction — scrolling down slides the top bar
@@ -4436,6 +3701,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		background: var(--bg);
 		min-height: var(--header-h);
 	}
+	
 	/* View-tab panes (Review/Conversation/Staging/Assets — .viewer-review-main
 	   in a session, .workspace-view-main on the session-less workspace route) fill
 	   the pane from the very top. Unlike the transcript, they don't self-pad
@@ -4444,8 +3710,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	   bar instead; their inner scrollers then clip cleanly at the opaque bar's
 	   bottom edge. --strip-clearance is only set when the docked bar is shown;
 	   the header-h term covers the floating pills when it isn't. */
-	.viewer-review-main,
-	.workspace-view-main {
+.workspace-view-main {
 		padding-top: calc(var(--pane-header-h) + var(--strip-clearance, 0px));
 	}
 	.app-brand > button[aria-label="Account menu"],
@@ -4789,31 +4054,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 }
 
-.session-banners {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	padding: 7px 16px;
-	border-bottom: 1px solid var(--border);
-	background: var(--bg-raised);
-}
-
-.session-banner {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 12px;
-	color: var(--text-dim);
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	padding: 3px 12px;
-	max-width: 100%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
 /* Optimistic just-sent bubble: present but visibly not-yet-confirmed */
 .msg-sending {
 	opacity: 0.6;
@@ -4830,7 +4070,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		opacity: 1;
 	}
 }
-
 
 /* Inline images: markdown images, pasted images, and Read-of-image results */
 .tool-result-images {
@@ -5177,7 +4416,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .settings-sheet .settings-panel-frame {
 	padding-bottom: 48px;
 }
-
 
 /* Hover-revealed real timestamps. A message's time is a detail you go looking
    for, not something to read past on every turn — so it fades in while the
@@ -5619,40 +4857,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 /* ===== PIXEL SPINNER ANIMATIONS ===== */
 
 /* Wave Trail Animations */
-@keyframes pixel-wave-trail-1 {
-  0%,
-  5% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  15% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.8;
-  }
-  25% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.5;
-  }
-  35% {
-    background: color-mix(in srgb, var(--glow-color) 30%, transparent);
-    box-shadow: none;
-    opacity: 0.3;
-  }
-  45%,
-  90% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.15;
-  }
-  100% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-}
 
 /* Snake Trail Animation */
 @keyframes pixel-snake-trail {
@@ -5685,286 +4889,24 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 
 /* Ripple Animations */
-@keyframes pixel-ripple-out-center {
-  0%,
-  5% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  15% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.7;
-  }
-  25% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.4;
-  }
-  35% {
-    background: color-mix(in srgb, var(--glow-color) 20%, transparent);
-    box-shadow: none;
-    opacity: 0.2;
-  }
-  45%,
-  85% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-  100% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-}
 
 /* Pulse Trail Animation */
-@keyframes pixel-pulse-trail {
-  0%,
-  10% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  25% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.7;
-  }
-  40% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.4;
-  }
-  55%,
-  85% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.15;
-  }
-  100% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-}
 
 /* Corner Trail Animation */
-@keyframes pixel-corner-trail {
-  0%,
-  5% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  15% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.7;
-  }
-  25% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.4;
-  }
-  35%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.15;
-  }
-}
 
 /* Checkerboard Animations */
-@keyframes pixel-checker-a-trail {
-  0%,
-  10% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  25% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.6;
-  }
-  40% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.3;
-  }
-  50%,
-  55% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-  65% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.3;
-  }
-  80% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.6;
-  }
-  100% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-}
 
 /* Breathe Animation */
-@keyframes pixel-breathe-trail {
-  0%,
-  15% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  35% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.7;
-  }
-  50% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.4;
-  }
-  65% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.7;
-  }
-  85%,
-  100% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-}
 
 /* Scan Line Animation */
-@keyframes pixel-scan-line {
-  0%,
-  5% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  20% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.5;
-  }
-  35%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-}
 
 /* Loading Bar Animation */
-@keyframes pixel-bar-fill {
-  0%,
-  10% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  40% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 0.8;
-  }
-  70%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-}
 
 /* Heartbeat Animations */
-@keyframes pixel-heartbeat-center {
-  0%,
-  5% {
-    background: var(--glow-color);
-    box-shadow:
-      0 0 1px var(--glow-color),
-      0 0 32px var(--glow-color);
-    opacity: 1;
-    transform: scale(1.1);
-  }
-  15% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.6;
-    transform: scale(1);
-  }
-  25%,
-  30% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-    transform: scale(1.05);
-  }
-  45%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-    transform: scale(1);
-  }
-}
 
 /* Dot Bounce Animation */
-@keyframes pixel-dot-bounce {
-  0%,
-  20% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  40% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.5;
-  }
-  60%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-}
 
 /* Bounce Pixel Animation */
-@keyframes pixel-bounce-pixel {
-  0%,
-  10% {
-    background: var(--glow-color);
-    box-shadow: none;
-    opacity: 1;
-  }
-  30% {
-    background: var(--glow-dim);
-    box-shadow: none;
-    opacity: 0.4;
-  }
-  50%,
-  100% {
-    background: transparent;
-    box-shadow: none;
-    opacity: 0.12;
-  }
-}
 
 /* Diagonal */
 .pixel-spinner.diagonal-br .pixel:nth-child(1) {
@@ -5990,23 +4932,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .pixel-spinner.diagonal-br .pixel:nth-child(9) {
   animation-name: pixel-snake-trail;
   animation-delay: 840ms;
-}
-
-
-/* ------------------------------------------------------------------ *
- * Full-width review host for the session column.
- * The PR review moves out of the cramped right panel: selecting the top tab
- * strip's Review view-tab swaps the transcript+composer for a full-width
- * PrPanel (its .pr-panel-split rail + diff get the whole main area). Only
- * offered on code sessions.
- * ------------------------------------------------------------------ */
-/* Full-width review host: a flex child of .viewer-session that stretches, so
-   the PrPanel (its .pr-panel-split is height:100%) fills the whole column. */
-.viewer-review-main {
-	flex: 1;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
 }
 .transcript-settled {
 	content-visibility: auto;
