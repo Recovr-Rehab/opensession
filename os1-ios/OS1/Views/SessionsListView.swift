@@ -1,6 +1,18 @@
 import Combine
 import SwiftUI
 
+/// The horizontal margin every row, band and lane heading in the list shares —
+/// one constant so they can't drift apart. iPhone runs wider than the 16pt the
+/// web sidebar uses: at 16 the list read tight against the screen edge, and
+/// 20 is also what the system's own plain lists give content at this width.
+/// The Mac sidebar keeps 16, where rows are compact and the window supplies
+/// its own breathing room.
+#if os(iOS)
+private let sidebarMargin: CGFloat = 20
+#else
+private let sidebarMargin: CGFloat = 16
+#endif
+
 /// Sessions list, mirroring the web sidebar's organization: group by Status
 /// (In progress / Needs input / In review / Done / Backlog), by Repo, by Repo
 /// and Status, by Repo and Inbox (each repo's rows banded by activity, the
@@ -404,8 +416,9 @@ struct SessionsListView: View {
                         // row tiles both begin at ~16pt — which is further
                         // than the tile's frame suggests: the art is inset
                         // inside it by `artScale`, so the frame has to sit
-                        // ~5pt left of where the ink should land.
-                        .padding(.leading, -17.5)
+                        // ~5pt left of where the ink should land, i.e. 33.5pt
+                        // left of the column itself.
+                        .padding(.leading, sidebarMargin - 33.5)
                     }
                     // The bare app tile is the control; the toolbar's glass
                     // circle around it read as a stray border.
@@ -1092,7 +1105,9 @@ struct SessionsListView: View {
             )
         }
         .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
+        .listRowInsets(EdgeInsets(
+            top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
+        ))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing) { archiveButton(workspace, viaSwipe: true) }
@@ -1404,10 +1419,12 @@ struct SessionsListView: View {
                     }
                     .buttonStyle(.plain)
                     #if os(iOS)
-                    // 16 leading, like every other row in this list — the
-                    // archive glyph lands on the same column as the repo
+                    // The shared margin, like every other row in this list —
+                    // the archive glyph lands on the same column as the repo
                     // tiles and band headings above it.
-                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
+                    .listRowInsets(EdgeInsets(
+                        top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
+                    ))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                     #endif
@@ -1511,11 +1528,11 @@ struct SessionsListView: View {
                 .buttonStyle(.borderless)
                 #if os(iOS)
                 // The 30pt tap target is ~7.5pt wider than the glyph on each
-                // side, so leaving it inside the row's 16pt margin parked the
-                // "+"'s ink at ~24pt while the repo tile opposite it sits
-                // flush at 16 — the whole line read as lopsided. Pull the
-                // frame out by that overhang so the INK lands on 16, the same
-                // column the row titles below truncate at.
+                // side, so leaving it inside the shared margin parked the
+                // "+"'s ink well short of it while the repo tile opposite it
+                // sits flush — the whole line read as lopsided. Pull the frame
+                // out by that overhang so the INK lands on the margin, the
+                // same column the row titles below truncate at.
                 .padding(.trailing, -7.5)
                 #endif
                 .accessibilityLabel("New session in \(RepoTile.label(for: repo))")
@@ -1525,6 +1542,10 @@ struct SessionsListView: View {
         .textCase(nil)
         .padding(.top, 4)
         #if os(iOS)
+        // A section header takes the list's own 16pt inset rather than a row's
+        // insets, so it needs the difference added by hand to sit on the same
+        // column as the rows under it.
+        .padding(.horizontal, sidebarMargin - 16)
         // Lopsided on purpose, like the lane headings below it: a band leads
         // the rows under it, so it sits nearer to them than to whatever came
         // before. The list's own header inset is what's being trimmed, hence
@@ -1562,7 +1583,9 @@ struct SessionsListView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(collapseLabel(group.title, group.id))
-        .listRowInsets(EdgeInsets(top: 17, leading: 16, bottom: 7, trailing: 16))
+        .listRowInsets(EdgeInsets(
+            top: 17, leading: sidebarMargin, bottom: 7, trailing: sidebarMargin
+        ))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
