@@ -124,6 +124,16 @@ function dirtySourcesAtHead(): { path: string; text: string }[] {
 	return out;
 }
 
+/**
+ * A hyphenated template that interpolates an *identity* builds a React key or
+ * a DOM id, not a class: `note-${h.id}`, `tool-${index}`. Harvesting those as
+ * class prefixes pins every rule that happens to share the stem — one `key=`
+ * in Notes.tsx held 18 `.note-*` rules alive after the page had fully
+ * migrated. A class template interpolates a *value* instead (a tone, a state,
+ * a source), which is why this excludes ids rather than allow-listing values.
+ */
+const IDENTITY_INTERP = /^(\w+\.)?(id|_?id|uuid|key|index|i|n|idx)$/i;
+
 const markup = new Set(MARKUP_DIRS.flatMap((d) => sourceFiles(join(ROOT, d))));
 
 const idents = new Set<string>();
@@ -141,9 +151,9 @@ for (const dir of SCAN_DIRS) {
 		for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
 		if (!markup.has(f)) continue;
 		// `foo-bar-${x}` / `a b c-${x}` -> the "c-" prefix such a literal can build
-		for (const m of text.matchAll(/`([a-zA-Z0-9 _-]*)\$\{/g)) {
+		for (const m of text.matchAll(/`([a-zA-Z0-9 _-]*)\$\{([^}]*)\}/g)) {
 			const tail = m[1].split(/\s+/).pop() ?? "";
-			if (/[a-z]-$/.test(tail)) prefixes.add(tail);
+			if (/[a-z]-$/.test(tail) && !IDENTITY_INTERP.test(m[2].trim())) prefixes.add(tail);
 		}
 	}
 }
