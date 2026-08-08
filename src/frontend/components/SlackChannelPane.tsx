@@ -1,6 +1,15 @@
 import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
+import {
+	composerBox,
+	composerBoxExpanded,
+	composerSend,
+	composerSendDefault,
+	composerTextarea,
+	composerTextareaPadding,
+} from "../lib/composer-classes";
 import { IconArrowUp } from "./icons";
 
 interface MessageReaction {
@@ -375,13 +384,29 @@ export function SlackChannelPane({
 					{error}
 				</div>
 			)}
-			{/* Same visual family as the sessions Composer (.composer classes from
-			    legacy.css) — rounded card, borderless textarea, circular accent
-			    send — sized down for a chat channel. */}
-			<div className="composer-wrap shrink-0 px-5 pb-4 pt-1">
-				<div className={`composer ${!asUser ? "composer-disabled" : ""}`}>
+			{/* Same visual family as the sessions Composer (lib/composer-classes) —
+			    rounded card, borderless textarea, circular accent send — sized down
+			    for a chat channel. */}
+			<div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)] shrink-0 px-5 pt-1 pb-4">
+				{/* `composer` stays as a hook: base.css and legacy.css key phone
+				    keyboard/shadow behaviour off the class name. */}
+				<div
+					className={cn(
+						"composer",
+						composerBox,
+						composerBoxExpanded,
+						!asUser && "opacity-60",
+					)}
+				>
 					<textarea
-						className="composer-textarea"
+						// `composer-textarea` stays as a class NAME hook (the sidebar
+						// swipe guard and SessionViewer's global keys look for it).
+						className={cn(
+							"composer-textarea",
+							composerTextarea,
+							composerTextareaPadding,
+							"text-fg placeholder:text-faint",
+						)}
 						style={{ minHeight: 48 }}
 						placeholder={
 							asUser
@@ -400,9 +425,9 @@ export function SlackChannelPane({
 						rows={1}
 					/>
 					<div className="composer-toolbar">
-						<div className="composer-spacer" />
+						<div className="grow basis-0" />
 						<button
-							className="composer-send"
+							className={cn(composerSend, composerSendDefault)}
 							onClick={send}
 							disabled={!asUser || !draft.trim() || sending}
 							aria-label="Send message"

@@ -113,8 +113,11 @@ export const fileChipCard =
 	"relative inline-flex max-w-[240px] items-center gap-[9px] rounded-lg border border-line-strong bg-[var(--bg-hover)] py-1.5 pl-1.5";
 /** Composer: leaves room for the absolutely-placed remove button. */
 export const fileChipCardPaddingRemovable = "pr-[26px]";
-/** Transcript: nothing to remove, so it closes up. */
-export const fileChipCardPadding = "pr-2.5";
+/** Transcript: nothing to remove there, and `.msg-file-card` asked for 10px —
+ *  but that rule sat ABOVE `.composer-file-card`'s padding shorthand in the
+ *  stylesheet at equal specificity, so it never applied. This keeps what the
+ *  chip has always rendered; closing it up is a design change, not a migration. */
+export const fileChipCardPadding = "pr-[26px]";
 export const fileChipThumb =
 	"inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-[10px] font-bold tracking-[0.02em] text-accent";
 export const fileChipMeta = "flex min-w-0 flex-col gap-px";

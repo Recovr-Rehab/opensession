@@ -19,6 +19,23 @@ import {
   IconEye,
   IconStopSquare,
 } from "./icons";
+import {
+  composerBox,
+  composerBoxExpanded,
+  composerBoxMinimized,
+  composerMenuAnchorLeft,
+  composerMenuPopup,
+  composerMenuWidth,
+  composerSend,
+  composerSendDefault,
+  composerSendMinimizedFill,
+  composerSendQueue,
+  composerSendSteer,
+  composerSendStop,
+  composerTextarea,
+  composerTextareaPadding,
+  composerTextareaPaddingMinimized,
+} from "../lib/composer-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -676,7 +693,7 @@ export function Composer({
   const effectiveModel = model || defaultModel;
 
   return (
-    <div className="composer-wrap">
+    <div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]">
       {/* Queued/steered messages fold out from behind the composer box —
           a sibling flap tucked under its top edge, not a box-in-box. */}
       {attached}
@@ -694,7 +711,19 @@ export function Composer({
         initial={false}
         animate={{ borderRadius: minimized ? 999 : composerRadius() }}
         transition={composerMorph}
-        className={`composer ${disabled ? "composer-disabled" : ""} ${minimized ? "composer-min" : ""}`}
+        // `composer` and `composer-min` stay on the markup as hooks, not as
+        // styling: legacy.css still reaches through them into controls this file
+        // doesn't own — the "+" and mic circles in the resting pill
+        // (`.composer.composer-min .palette-icon-btn`, whose hover wash is a
+        // pseudo-element) — and `body.kb-open .viewer-input:has(.composer:not(
+        // .composer-min))` keys the phone keyboard gap off the pair.
+        className={cn(
+          "composer",
+          minimized && "composer-min",
+          composerBox,
+          minimized ? composerBoxMinimized : composerBoxExpanded,
+          disabled && "opacity-60",
+        )}
         style={askMode ? tintedSurface("var(--green)", 7, 4, 30) : undefined}
         onDrop={handleDrop}
         onDragOver={(e) => canAttach && e.preventDefault()}
@@ -716,21 +745,49 @@ export function Composer({
         <motion.div
           layout="position"
           transition={composerMorph}
-          className="composer-input-wrap"
+          // Positioned for the code mirror below (and the scroll-fade mask the
+          // auto-grow effect writes onto it).
+          className={cn(
+            "relative",
+            minimized && "order-2 min-w-0 flex-auto",
+          )}
           ref={mentions.inputWrapRef}
         >
           {mentions.popup}
           {hlActive && (
+            // `composer-hl` stays as a hook: the tint spans inside this mirror
+            // are written as innerHTML by lib/composer-highlight.ts, so their
+            // `.cmp-code` / `.cmp-fence` rules can only be reached through it.
             <div
               ref={hlRef}
-              className="composer-textarea composer-hl"
+              className={cn(
+                "composer-hl",
+                composerTextarea,
+                composerTextareaPadding,
+                "pointer-events-none absolute inset-0 z-0 overflow-hidden text-fg break-words whitespace-pre-wrap select-none",
+              )}
               aria-hidden="true"
               dangerouslySetInnerHTML={{ __html: hlHtml }}
             />
           )}
           <textarea
             ref={textareaRef}
-            className={`composer-textarea ${hlActive ? "has-hl" : ""}`}
+            // `composer-textarea` stays as a class NAME hook: the sidebar swipe
+            // guard (lib/sidebar-swipe.ts) and SessionViewer's global keys both
+            // ask whether the caret is in a composer by looking for it.
+            className={cn(
+              "composer-textarea",
+              composerTextarea,
+              minimized
+                ? composerTextareaPaddingMinimized
+                : composerTextareaPadding,
+              "placeholder:text-faint",
+              // With the mirror painting the styled draft, the field's own
+              // glyphs go transparent and only the caret stays visible.
+              hlActive
+                ? "relative z-[1] break-words text-transparent caret-[var(--text)]"
+                : "text-fg",
+            )}
             // In the resting pill the full prompt would clip, so show a short
             // "Ask <model>" (ChatGPT-style) that fits the single row; the
             // descriptive placeholder returns once it expands.
@@ -791,12 +848,28 @@ export function Composer({
             <motion.div
               layout="position"
               transition={composerMorph}
-              className="composer-pop-wrap"
+              // `composer-pop-wrap` stays as a hook: the outside-click handler
+              // above dismisses the menu for any mousedown that isn't inside one.
+              className={cn(
+                "composer-pop-wrap relative inline-flex shrink-0",
+                // Phones pull the model pill to the front of the toolbar, so the
+                // "+" has to lead it; in the resting pill it opens the row.
+                minimized ? "order-1" : "max-[720px]:order-[-2]",
+              )}
             >
               <Tooltip label="Attach files and session options">
                 <button
                   type="button"
-                  className="palette-icon-btn composer-add-btn"
+                  // The "+" is a 40px target around a 20px glyph, so aligning
+                  // its BOX with the composer's padding parks the visible ink
+                  // 10px further in than the text above it. Pull the button (not
+                  // its wrapper, which the menu anchors to) back out so the glyph
+                  // sits about where the send circle does. The resting pill
+                  // insets everything by 4px already, so it stays put there.
+                  className={cn(
+                    "palette-icon-btn",
+                    minimized ? "ml-0" : "-ml-1.5",
+                  )}
                   {...tapProps(() => setMenu(menu === "add" ? null : "add"))}
                   disabled={disabled}
                   aria-label="Attach files and session options"
@@ -806,7 +879,13 @@ export function Composer({
                 </button>
               </Tooltip>
               {menu === "add" && (
-                <div className="composer-menu">
+                <div
+                  className={cn(
+                    composerMenuPopup,
+                    composerMenuWidth,
+                    composerMenuAnchorLeft,
+                  )}
+                >
                   {canAttach && (
                     <button
                       type="button"
@@ -905,7 +984,7 @@ export function Composer({
                 // between the "+" and this marker. Same order as the "+" wrap
                 // keeps the pair together — equal order falls back to DOM
                 // order, and the "+" is rendered first.
-                className="composer-pop-wrap max-[720px]:order-[-2]"
+                className="composer-pop-wrap relative inline-flex shrink-0 max-[720px]:order-[-2]"
               >
                 <Tooltip label="Ask mode — this session can read the code but not change it">
                   <button
@@ -935,7 +1014,9 @@ export function Composer({
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="composer-spacer" />
+          {/* `grow basis-0` rather than `flex-1`: the toolbar pins every direct
+              child at flex-shrink 0, and a shorthand would take that back. */}
+          {!minimized && <div className="grow basis-0" />}
 
           {/* Model + effort live together on the right edge (ChatGPT-style):
               one pill, effort levels up top, the model behind a submenu.
@@ -980,14 +1061,23 @@ export function Composer({
                 key="usage"
                 layout="position"
                 {...composerChipMotion}
-                className="composer-pop-wrap"
+                className="composer-pop-wrap relative inline-flex shrink-0"
               >
                 <UsageMeter usage={usage} />
               </motion.div>
             )}
           </AnimatePresence>
 
-          <motion.div layout="position" transition={composerMorph} className="composer-voice-wrap">
+          {/* Wrapper around the dictation mic — gives Motion a layout box so it
+              glides between rows during the morph without disturbing either. */}
+          <motion.div
+            layout="position"
+            transition={composerMorph}
+            className={cn(
+              "inline-flex shrink-0 items-center",
+              minimized && "order-3",
+            )}
+          >
             <VoiceInput onText={insertDictation} disabled={disabled} />
           </motion.div>
 
@@ -995,7 +1085,14 @@ export function Composer({
             <Tooltip label="Stop — interrupts the current turn; the session stays ready">
               <button
                 type="button"
-                className="composer-send composer-stop"
+                className={cn(
+                  composerSend,
+                  composerSendStop,
+                  // Without an order the stop button defaults to 0 and jumps to
+                  // the far left of the resting row; seat it just before send.
+                  minimized && "order-4",
+                  minimized && composerSendMinimizedFill,
+                )}
                 {...tapProps(() => onStop())}
                 disabled={disabled}
                 aria-label="Stop current turn"
@@ -1012,7 +1109,10 @@ export function Composer({
             <motion.div
               layout="position"
               transition={composerMorph}
-              className="composer-send-split"
+              className={cn(
+                "relative inline-flex shrink-0 items-stretch",
+                minimized && "order-5",
+              )}
             >
               <Tooltip
                 label={
@@ -1033,13 +1133,15 @@ export function Composer({
                 }
               >
                 <button
-                  className={`composer-send ${
+                  className={cn(
+                    composerSend,
                     steerSend
-                      ? "composer-send-interrupt"
+                      ? composerSendSteer
                       : busy
-                        ? "composer-send-queue-main"
-                        : ""
-                  }`}
+                        ? composerSendQueue
+                        : composerSendDefault,
+                    minimized && composerSendMinimizedFill,
+                  )}
                   {...tapProps(() =>
                     fireSend(onSend, steerSend ? { steer: true } : undefined),
                   )}
@@ -1052,12 +1154,12 @@ export function Composer({
                         : "Send message"
                   }
                 >
-                  {steerSend ? (
-                    <IconArrowUp size={24} />
-                  ) : busy ? (
-                    <IconReturn size={24} />
+                  {/* The arrow comes down with the disc in the resting pill — a
+                      24px glyph all but touches the smaller plate's edge. */}
+                  {busy && !steerSend ? (
+                    <IconReturn size={minimized ? 20 : 24} />
                   ) : (
-                    <IconArrowUp size={24} />
+                    <IconArrowUp size={minimized ? 20 : 24} />
                   )}
                 </button>
               </Tooltip>
@@ -1114,7 +1216,13 @@ export function Composer({
           </div>
         )}
       </motion.div>
-      {hint && <div className="composer-hint">{hint}</div>}
+      {/* The keyboard-shortcut hint is irrelevant on touch and eats vertical
+          space right where the keyboard appears. */}
+      {hint && (
+        <div className="mt-[7px] text-center text-meta text-faint max-[720px]:hidden">
+          {hint}
+        </div>
+      )}
     </div>
   );
 }

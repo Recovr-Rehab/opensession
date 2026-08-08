@@ -10,6 +10,7 @@ import { IconChevronDown, IconClock } from "./icons";
 import {
   composerMenuAnchorRight,
   composerMenuPopup,
+  composerMenuWidth,
 } from "../lib/composer-classes";
 import { cn } from "../ui/cn";
 
@@ -28,11 +29,13 @@ function inTime(iso: string): string {
 const caretButton =
 	"relative inline-flex w-[30px] items-center justify-center rounded-r-lg bg-accent text-on-accent transition-[filter] before:absolute before:top-1/2 before:left-0 before:h-4 before:w-px before:-translate-y-1/2 before:bg-white/45 before:content-[''] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-35";
 
-/** Date / time field in the custom-time dialog. No fill: the stylesheet asked
- *  for `var(--bg-surface)`, a token that has never existed, so these have always
- *  rendered on the dialog's own surface (see the report). */
+/** Date / time field in the custom-time dialog. `bg-transparent` is deliberate:
+ *  the stylesheet asked for `var(--bg-surface)`, a token that has never been
+ *  defined, so the declaration was invalid at computed-value time and the fill
+ *  fell back to `transparent` — these fields have always shown the dialog's own
+ *  surface. Without it they would pick up the UA's opaque field colour. */
 const scheduleField =
-	"rounded-control border border-line px-3 py-[9px] text-body font-medium text-fg outline-none focus:border-line-strong";
+	"min-w-0 rounded-control border border-line bg-transparent px-3 py-[9px] text-body font-medium text-fg outline-none focus:border-line-strong";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const fmtTime = (d: Date) =>
@@ -236,12 +239,11 @@ export function SchedulePromptButton({
       </button>
 
       {open && (
+        // 172px, not the 236px `.composer-schedule-menu` asked for: that rule
+        // has been dead since `.composer-menu` moved below it in the stylesheet
+        // (equal specificity, later wins), so the menu has always been 172px.
         <div
-          className={cn(
-            composerMenuPopup,
-            composerMenuAnchorRight,
-            "min-w-[236px]",
-          )}
+          className={cn(composerMenuPopup, composerMenuAnchorRight, composerMenuWidth)}
           role="menu"
         >
           {/* Pending scheduled messages, listed above the picks with a cancel. */}
@@ -344,7 +346,7 @@ export function SchedulePromptButton({
                 value={date}
                 min={toDateInput(new Date())}
                 onChange={(e) => setDate(e.target.value)}
-                className={cn(scheduleField, "min-w-0 flex-1")}
+                className={cn(scheduleField, "flex-1")}
               />
               <input
                 type="time"

@@ -270,7 +270,10 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 				onClick={toggle}
 			>
 				<span className={cn(liveDot, "size-2")} />
-				<span className="min-w-0 flex-1 truncate">
+				{/* flex-auto, not flex-1: with a zero basis the label would only ever
+				    take the free space left over, so a long phase name stopped pushing
+				    the caret and started truncating a step early. */}
+				<span className="min-w-0 flex-auto truncate">
 					{total > 0 ? (
 						<>
 							<strong className="font-semibold">{runningCount} running</strong>
