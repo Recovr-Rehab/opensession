@@ -36,18 +36,18 @@ const STATE_RANK: Record<string, number> = { OPEN: 0, CLOSED: 1, MERGED: 2 };
 const ROW =
 	"grid w-full grid-cols-[92px_minmax(0,1fr)_156px_132px_116px_132px_78px] items-center gap-3.5 border-b border-line px-[22px] text-left max-[1180px]:grid-cols-[88px_minmax(0,1fr)_150px_118px_78px]";
 
-const C_STATE = "flex items-center gap-[7px] text-meta font-medium max-[720px]:order-1";
+const C_STATE = "flex items-center gap-[7px] text-meta font-medium phone:order-1";
 const C_TITLE =
-	"flex min-w-0 flex-col gap-[3px] max-[720px]:order-2 max-[720px]:flex-[1_1_calc(100%-90px)]";
-const C_CHECKS = "max-[720px]:order-3 max-[720px]:inline-flex";
+	"flex min-w-0 flex-col gap-[3px] phone:order-2 phone:flex-[1_1_calc(100%-90px)]";
+const C_CHECKS = "phone:order-3 phone:inline-flex";
 const C_CHANGES =
-	"max-[720px]:order-4 max-[720px]:inline-flex max-[720px]:flex-row max-[720px]:items-center max-[720px]:gap-2";
+	"phone:order-4 phone:inline-flex phone:flex-row phone:items-center phone:gap-2";
 const C_REVIEW =
-	"min-[721px]:max-[1180px]:hidden max-[720px]:order-5 max-[720px]:inline-flex";
+	"min-[721px]:max-[1180px]:hidden phone:order-5 phone:inline-flex";
 const C_AUTHOR =
-	"flex min-w-0 items-center gap-2 min-[721px]:max-[1180px]:hidden max-[720px]:order-6 max-[720px]:inline-flex";
+	"flex min-w-0 items-center gap-2 min-[721px]:max-[1180px]:hidden phone:order-6 phone:inline-flex";
 const C_UPDATED =
-	"text-meta whitespace-nowrap text-faint tabular-nums max-[720px]:order-7 max-[720px]:ml-auto";
+	"text-meta whitespace-nowrap text-faint tabular-nums phone:order-7 phone:ml-auto";
 
 /** "—" and other absent values, wherever a cell has nothing to say. */
 const DIM = "text-meta text-faint";
@@ -154,7 +154,7 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
       <span className={`size-2 shrink-0 rounded-full ${CHECKS_TONE[tone].dot}`} />
       <span className={`whitespace-nowrap ${CHECKS_TONE[tone].label}`}>{label}</span>
       <span
-        className="inline-flex h-1 w-[46px] shrink-0 overflow-hidden rounded-full bg-active max-[720px]:hidden"
+        className="inline-flex h-1 w-[46px] shrink-0 overflow-hidden rounded-full bg-active phone:hidden"
         aria-hidden
       >
         <span className="h-full bg-green" style={{ width: pct(c.passed) }} />
@@ -318,7 +318,7 @@ export function Reviews({
   if (selected) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-surface">
-        <div className="hidden shrink-0 items-center border-b border-line px-3 py-2 max-[720px]:flex">
+        <div className="hidden shrink-0 items-center border-b border-line px-3 py-2 phone:flex">
           <button
             className="inline-flex items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1.5 text-sm font-medium text-fg hover:bg-hover"
             onClick={() => onSelect("")}
@@ -351,7 +351,7 @@ export function Reviews({
 
   return (
     <div className="relative flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto max-[720px]:overflow-x-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto phone:overflow-x-hidden">
         <div className="sticky top-0 z-[3] bg-surface px-[22px] pt-4">
           <div className="mb-3 flex items-center justify-between gap-4">
             <h1 className="m-0 text-section-title font-semibold tracking-[-0.01em]">Reviews</h1>
@@ -372,13 +372,13 @@ export function Reviews({
               underline sits on top of it. The negative margin cancels the
               header's 22px padding. Five tabs + counts don't fit a phone, so
               below 720px the strip scrolls edge to edge instead. */}
-          <div className="-mx-[22px] flex gap-0.5 border-b border-line px-[22px] max-[720px]:overflow-x-auto max-[720px]:[scrollbar-width:none] max-[720px]:[&::-webkit-scrollbar]:hidden">
+          <div className="-mx-[22px] flex gap-0.5 border-b border-line px-[22px] phone:overflow-x-auto phone:[scrollbar-width:none] phone:[&::-webkit-scrollbar]:hidden">
             {TABS.map((t) => {
               const on = filter === t.key;
               return (
                 <button
                   key={t.key}
-                  className={`-mb-px flex items-center gap-[7px] border-b-2 px-[13px] pt-2 pb-[11px] text-label font-medium transition-colors max-[720px]:shrink-0 max-[720px]:px-3.5 max-[720px]:pt-[11px] max-[720px]:pb-[13px] max-[720px]:text-body max-[720px]:whitespace-nowrap ${
+                  className={`-mb-px flex items-center gap-[7px] border-b-2 px-[13px] pt-2 pb-[11px] text-label font-medium transition-colors phone:shrink-0 phone:px-3.5 phone:pt-[11px] phone:pb-[13px] phone:text-body phone:whitespace-nowrap ${
                     on ? "border-b-accent text-fg" : "border-b-transparent text-dim hover:text-fg"
                   }`}
                   onClick={() => setFilter(t.key)}
@@ -400,7 +400,7 @@ export function Reviews({
               divider spans the full width. */}
           {filtered.length > 0 && (
             <div
-              className={`${ROW} -mx-[22px] bg-surface py-[9px] text-meta font-semibold tracking-[-0.01em] text-faint max-[720px]:hidden`}
+              className={`${ROW} -mx-[22px] bg-surface py-[9px] text-meta font-semibold tracking-[-0.01em] text-faint phone:hidden`}
               role="row"
             >
               <span className={C_STATE}>Status</span>
@@ -433,7 +433,7 @@ export function Reviews({
               return (
                 <button
                   key={s.prUrl}
-                  className={`${ROW} group cursor-pointer py-[11px] text-body text-fg hover:bg-hover max-[720px]:flex max-[720px]:flex-wrap max-[720px]:items-center max-[720px]:gap-x-3 max-[720px]:gap-y-[9px] max-[720px]:px-4 max-[720px]:py-3.5`}
+                  className={`${ROW} group cursor-pointer py-[11px] text-body text-fg hover:bg-hover phone:flex phone:flex-wrap phone:items-center phone:gap-x-3 phone:gap-y-[9px] phone:px-4 phone:py-3.5`}
                   onClick={() => onSelect(s.id)}
                   role="row"
                 >

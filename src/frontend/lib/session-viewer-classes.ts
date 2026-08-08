@@ -48,14 +48,14 @@ export const VIEWER_HEADER =
 	"min-[721px]:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
 	// On phones the bar is a set of floating pills inside the app header, not a
 	// row of its own.
-	"max-[720px]:[.app-header-actions_&]:h-auto max-[720px]:[.app-header-actions_&]:gap-1.5 " +
-	"max-[720px]:[.app-header-actions_&]:border-0 max-[720px]:[.app-header-actions_&]:bg-transparent " +
-	"max-[720px]:[.app-header-actions_&]:p-0";
+	"phone:[.app-header-actions_&]:h-auto phone:[.app-header-actions_&]:gap-1.5 " +
+	"phone:[.app-header-actions_&]:border-0 phone:[.app-header-actions_&]:bg-transparent " +
+	"phone:[.app-header-actions_&]:p-0";
 
 /** Workspace name + origin chip + status. Hidden on phones, where the ⋯ menu
  *  carries what it holds. */
 export const VIEWER_TITLE =
-	"flex min-w-0 items-center gap-2.5 font-medium max-[720px]:hidden";
+	"flex min-w-0 items-center gap-2.5 font-medium phone:hidden";
 
 /**
  * The workspace name. Capped so a long one truncates instead of eating the
@@ -83,7 +83,7 @@ export const VIEWER_BRANCH_RENAME =
  * presence facepile, the PR chip) space themselves.
  */
 export const VIEWER_HEADER_ACTIONS =
-	"viewer-header-actions flex shrink-0 items-center gap-0.5 max-[720px]:justify-end";
+	"viewer-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end";
 
 /** ⋯ overflow: the secondary actions collapse into the shared Menu popup when
  *  they would otherwise crowd the title. */
@@ -101,7 +101,7 @@ export const VIEWER_DELETE_CONFIRM = "flex gap-1.5";
  */
 export const VIEWER_REVIEW_MAIN =
 	"flex min-h-0 flex-1 flex-col " +
-	"max-[720px]:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px))]";
+	"phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px))]";
 
 /* ── Transcript ─────────────────────────────────────────────────────────── */
 
@@ -162,17 +162,17 @@ export const VIEWER_MESSAGES =
 	// Phone: clear the floating pills at rest, then scroll under them.
 	// --strip-clearance is 0 by default and the docked tab bar's height on a
 	// multi-session workspace.
-	"max-[720px]:px-3 " +
-	"max-[720px]:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] " +
+	"phone:px-3 " +
+	"phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] " +
 	// Dissolve the transcript into the header as it scrolls up under the pills.
 	// Same non-linear distribution as --wash-down mirrored into mask alpha:
 	// hidden for the first fifth, 45% by three fifths, full at the bar height.
-	"max-[720px]:[-webkit-mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
-	"max-[720px]:[mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
+	"phone:[-webkit-mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
+	"phone:[mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
 	// With the header slid away, the revealed rows read at full strength rather
 	// than dissolving into an absent bar.
-	"max-[720px]:[body.chrome-collapsed_&]:[-webkit-mask-image:none] " +
-	"max-[720px]:[body.chrome-collapsed_&]:[mask-image:none]";
+	"phone:[body.chrome-collapsed_&]:[-webkit-mask-image:none] " +
+	"phone:[body.chrome-collapsed_&]:[mask-image:none]";
 
 /**
  * The composer floats up over the transcript so the session scrolls UNDER it,
@@ -194,11 +194,11 @@ export const VIEWER_INPUT =
 	// Phone: clear the home indicator rather than jamming the composer against
 	// the very bottom edge — that gap is also all the room the composer's
 	// shadow gets in mobile Safari, where there is no safe-area inset.
-	"max-[720px]:px-3 max-[720px]:pb-[max(16px,env(safe-area-inset-bottom,0px))] " +
+	"phone:px-3 phone:pb-[max(16px,env(safe-area-inset-bottom,0px))] " +
 	// Keyboard up: iOS keeps reporting the inset even though the keyboard now
 	// covers that area. Scoped to the EXPANDED composer — the resting pill only
 	// shows while the field is unfocused, so it must keep the full gap.
-	"max-[720px]:[body.kb-open_&:has(.composer:not(.composer-min))]:pb-0";
+	"phone:[body.kb-open_&:has(.composer:not(.composer-min))]:pb-0";
 
 /* ── Banners and the delete overlay ─────────────────────────────────────── */
 
@@ -225,7 +225,7 @@ export const SESSION_DELETE_LABEL = "text-label text-dim";
  * with its own chevron-back to the session.
  *
  * The whole page renders only when `useIsPhone()` is true, so none of it is
- * written as a `max-[720px]:` override — which also keeps it clear of the
+ * written as a `phone:` override — which also keeps it clear of the
  * one-pixel disagreement between Tailwind's `max-[720px]` (`width < 720px`)
  * and the `max-width: 720px` that `useIsPhone` and the old sheet mean.
  *

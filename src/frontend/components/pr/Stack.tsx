@@ -205,7 +205,7 @@ export function StackSection({
 }) {
   if (!hasStackToShow(pr, sessionId)) return null;
   return (
-    <section className="shrink-0 px-6 pb-4 max-[720px]:px-3">
+    <section className="shrink-0 px-6 pb-4 phone:px-3">
       <h2 className="m-0 mb-1 flex items-center gap-2 text-xs font-semibold text-dim">
         Stack
         {pr.stack && (

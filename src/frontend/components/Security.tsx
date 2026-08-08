@@ -28,7 +28,7 @@ import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
    phones, so iOS doesn't zoom a focused field, and paragraph leading in a
    textarea. */
 const FORM_FIELDS =
-  "[&_textarea]:leading-normal max-[720px]:[&_input]:text-[16px] max-[720px]:[&_select]:text-[16px] max-[720px]:[&_textarea]:text-[16px]";
+  "[&_textarea]:leading-normal phone:[&_input]:text-[16px] phone:[&_select]:text-[16px] phone:[&_textarea]:text-[16px]";
 /** .automation-form */
 const FORM_CARD = `flex flex-col gap-3.5 rounded-panel border border-line-strong bg-panel p-4.5 ${FORM_FIELDS}`;
 /** .automation-form label */
@@ -41,18 +41,18 @@ const FORM_ACTIONS = "flex justify-end gap-2.5";
 const CARD = "rounded-panel border border-line bg-panel px-4 py-3.5";
 /** .automation-top — one row on desktop; on phones the title takes the first
  *  line, chips flow after it and the actions drop to a row of their own. */
-const CARD_TOP = "flex min-w-0 items-center gap-2.5 max-[720px]:flex-wrap max-[720px]:gap-y-2";
+const CARD_TOP = "flex min-w-0 items-center gap-2.5 phone:flex-wrap phone:gap-y-2";
 /** .automation-name */
 const CARD_NAME =
-  "truncate text-body font-semibold max-[720px]:min-w-0 max-[720px]:flex-[1_1_60%] max-[720px]:whitespace-normal max-[720px]:[overflow-wrap:anywhere]";
+  "truncate text-body font-semibold phone:min-w-0 phone:flex-[1_1_60%] phone:whitespace-normal phone:[overflow-wrap:anywhere]";
 /** .automation-actions */
-const CARD_ACTIONS = "ml-auto flex shrink-0 gap-1.5 max-[720px]:ml-0 max-[720px]:w-full";
+const CARD_ACTIONS = "ml-auto flex shrink-0 gap-1.5 phone:ml-0 phone:w-full";
 /** .automation-prompt */
 const CARD_PROMPT = "my-2.25 line-clamp-2 text-supporting leading-normal text-dim";
 /** .automation-meta */
 const CARD_META = "flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-meta text-faint";
 /** .automation-by — the trailing "by <person>", dropped on phones. */
-const CARD_BY = "ml-auto max-[720px]:hidden";
+const CARD_BY = "ml-auto phone:hidden";
 /** .automation-session-link */
 const LINK = "cursor-pointer text-link no-underline hover:underline";
 
@@ -122,7 +122,7 @@ export function Security({ onOpenSession }: Props) {
   }
 
   return (
-    <div className="mx-auto min-h-0 w-full max-w-[860px] flex-1 overflow-y-auto px-6 pt-7 pb-15 max-[720px]:px-3.5 max-[720px]:pt-4.5 max-[720px]:pb-12">
+    <div className="mx-auto min-h-0 w-full max-w-[860px] flex-1 overflow-y-auto px-6 pt-7 pb-15 phone:px-3.5 phone:pt-4.5 phone:pb-12">
       <PageHeader>
         <div>
           <PageTitle>Security</PageTitle>

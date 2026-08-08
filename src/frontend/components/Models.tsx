@@ -549,7 +549,7 @@ function StatusPill({
 	return (
 		<span
 			className={cn(
-				"inline-flex min-w-[70px] shrink-0 items-center justify-center gap-1.5 rounded-full px-2.5 py-[3px] text-[11px] font-bold max-[720px]:min-w-0 max-[720px]:px-2",
+				"inline-flex min-w-[70px] shrink-0 items-center justify-center gap-1.5 rounded-full px-2.5 py-[3px] text-[11px] font-bold phone:min-w-0 phone:px-2",
 				statusToneClasses[tone],
 			)}
 			{...props}

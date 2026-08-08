@@ -67,7 +67,7 @@ export function GitDivergenceStrip({
     return null;
 
   return (
-    <section className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-4 max-[720px]:px-3">
+    <section className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-4 phone:px-3">
       {verdict && (
         <span className="inline-flex items-center gap-2 text-xs text-dim">
           <span className={`${GIT_DOT} ${GIT_DOT_BG[verdict.tone]}`} aria-hidden />

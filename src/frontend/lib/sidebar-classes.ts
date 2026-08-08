@@ -26,7 +26,7 @@ export const SIDEBAR_RAIL =
  * ── Containers ──────────────────────────────────────────────────────────────
  * The boxes the row families sit in. Written phone-first with a `min-[721px]:`
  * desktop override, which is the exact complement of the `max-width: 720px`
- * these rules came from — `max-[720px]:` compiles to `< 720` and would leave a
+ * these rules came from — `phone:` compiles to `< 720` and would leave a
  * viewport exactly 720px wide wearing neither value.
  */
 
@@ -169,7 +169,7 @@ export const SIDEBAR_GROUP_CHEVRON =
 /**
  * The count on a group or band heading. Written phone-first for the same
  * reason the containers above are: the rule this replaces bumped to 13px under
- * `max-width: 720px`, and `max-[720px]:` compiles to `< 720`.
+ * `max-width: 720px`, and `phone:` compiles to `< 720`.
  *
  * Horizontal spacing is deliberately NOT here. The old rule pinned every count
  * to the right with `margin-left: auto` and a 4px inset, and then all but one
@@ -265,7 +265,7 @@ export const SIDEBAR_STICKY_LANE_NESTED =
  *
  * Written phone-first with a `min-[721px]:` desktop override, which is the
  * exact complement of the `max-width: 720px` these rules came from —
- * `max-[720px]:` would be `< 720` and leave a one-pixel viewport wearing
+ * `phone:` would be `< 720` and leave a one-pixel viewport wearing
  * neither value.
  */
 export const SIDEBAR_BAND_LABEL =

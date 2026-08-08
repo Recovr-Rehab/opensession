@@ -1153,10 +1153,10 @@ export function PrPanel({
             the diff. Only the tab row sticks, so the reviewer keeps a way back
             to Conversation/Commits/Checks once they're deep in a file. */}
         <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24">
-          <header className="flex min-h-[96px] shrink-0 items-center gap-5 px-6 py-4 max-[720px]:min-h-[78px] max-[720px]:px-3">
+          <header className="flex min-h-[96px] shrink-0 items-center gap-5 px-6 py-4 phone:min-h-[78px] phone:px-3">
             <div className="min-w-0 flex-1">
               <a
-                className="block truncate text-page-title font-semibold tracking-[-0.025em] text-fg no-underline hover:text-link max-[720px]:text-section-title"
+                className="block truncate text-page-title font-semibold tracking-[-0.025em] text-fg no-underline hover:text-link phone:text-section-title"
                 href={pr.url}
                 target="_blank"
                 rel="noopener"
@@ -1229,7 +1229,7 @@ export function PrPanel({
               here parks a scrollbar, since legacy.css opts Chrome out of overlay
               scrollbars). Horizontal scrollbars are hidden for the same reason. */}
           <div
-            className="sticky top-0 z-[8] flex h-[52px] shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] max-[720px]:px-2 [&::-webkit-scrollbar]:hidden"
+            className="sticky top-0 z-[8] flex h-[52px] shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden"
             role="tablist"
           >
             {([
@@ -1255,14 +1255,14 @@ export function PrPanel({
                 </button>
               );
             })}
-            <span className="ml-auto mb-3 shrink-0 text-meta max-[720px]:hidden">
+            <span className="ml-auto mb-3 shrink-0 text-meta phone:hidden">
               <span className="text-green">+{pr.additions}</span>{" "}
               <span className="text-red">−{pr.deletions}</span>
             </span>
           </div>
 
           {(diffView === "diff" || diffView === "guide") && (
-            <div className="sticky top-[52px] z-[7] flex h-[54px] items-center border-b border-line bg-surface/95 px-6 backdrop-blur max-[720px]:px-2">
+            <div className="sticky top-[52px] z-[7] flex h-[54px] items-center border-b border-line bg-surface/95 px-6 backdrop-blur phone:px-2">
               <div className="inline-flex rounded-md border border-line bg-panel p-0.5">
                 <Button
                   variant="ghost"
@@ -1321,7 +1321,7 @@ export function PrPanel({
             </div>
           )}
 
-          <div className={`${diffView === "diff" || diffView === "guide" ? "mx-auto max-w-[1500px] px-5 py-5 max-[720px]:px-2" : "mx-auto max-w-[900px] px-5 py-7 max-[720px]:px-3"}`}>
+          <div className={`${diffView === "diff" || diffView === "guide" ? "mx-auto max-w-[1500px] px-5 py-5 phone:px-2" : "mx-auto max-w-[900px] px-5 py-7 phone:px-3"}`}>
               {diffView === "checks" ? (
                 <ChecksView
                   checks={checkSummary.checks}

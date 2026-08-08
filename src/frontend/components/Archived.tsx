@@ -28,7 +28,7 @@ const SIDEBAR_FILTER_KEY = "opensession-sidebar-filter";
 const ROW =
   "flex w-full min-w-0 items-center gap-3 rounded-control border border-line bg-panel px-3.5 py-[11px] " +
   "text-left text-fg hover:border-line-strong hover:bg-hover " +
-  "max-[720px]:gap-2 max-[720px]:px-[11px] max-[720px]:py-3";
+  "phone:gap-2 phone:px-[11px] phone:py-3";
 
 type OwnerFilter = "mine" | "everyone";
 type ReasonFilter = "all" | "manual" | "auto";
@@ -157,13 +157,13 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
         <>
           <div className="inline-flex gap-0.5 rounded-md bg-[var(--bg-hover)] p-0.5" role="group" aria-label="Owner">
             <button
-              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", owner === "mine" ? "bg-active text-fg" : "text-faint")}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim phone:px-[13px] phone:py-[9px] phone:text-body", owner === "mine" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setOwner("mine")}
             >
               My archived
             </button>
             <button
-              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", owner === "everyone" ? "bg-active text-fg" : "text-faint")}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim phone:px-[13px] phone:py-[9px] phone:text-body", owner === "everyone" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setOwner("everyone")}
             >
               Everyone
@@ -172,7 +172,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
           {repos.length > 1 && (
             <div className="inline-flex gap-0.5 rounded-md bg-[var(--bg-hover)] p-0.5" role="group" aria-label="Repo">
               <button
-                className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", repo === "all" ? "bg-active text-fg" : "text-faint")}
+                className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim phone:px-[13px] phone:py-[9px] phone:text-body", repo === "all" ? "bg-active text-fg" : "text-faint")}
                 onClick={() => setRepo("all")}
               >
                 All repos
@@ -180,7 +180,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
               {repos.map((name) => (
                 <button
                   key={name}
-                  className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", repo === name ? "bg-active text-fg" : "text-faint")}
+                  className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim phone:px-[13px] phone:py-[9px] phone:text-body", repo === name ? "bg-active text-fg" : "text-faint")}
                   onClick={() => setRepo(name)}
                 >
                   {repoLabel(name)}
@@ -190,19 +190,19 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
           )}
           <div className="inline-flex gap-0.5 rounded-md bg-[var(--bg-hover)] p-0.5" role="group" aria-label="Reason">
             <button
-              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", reason === "all" ? "bg-active text-fg" : "text-faint")}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim phone:px-[13px] phone:py-[9px] phone:text-body", reason === "all" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setReason("all")}
             >
               All
             </button>
             <button
-              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", reason === "auto" ? "bg-active text-fg" : "text-faint")}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim phone:px-[13px] phone:py-[9px] phone:text-body", reason === "auto" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setReason("auto")}
             >
               Auto-archived
             </button>
             <button
-              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", reason === "manual" ? "bg-active text-fg" : "text-faint")}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim phone:px-[13px] phone:py-[9px] phone:text-body", reason === "manual" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setReason("manual")}
             >
               Manual
@@ -220,10 +220,10 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
           {archived.slice(0, 200).map((s) => (
             <button key={s.id} className={ROW} onClick={() => onSelect(s)}>
               <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="truncate text-label font-medium max-[720px]:text-[15px]">
+                <span className="truncate text-label font-medium phone:text-[15px]">
                   {s.title}
                 </span>
-                <span className="flex min-w-0 items-center gap-2.5 text-meta text-faint max-[720px]:text-[12px]">
+                <span className="flex min-w-0 items-center gap-2.5 text-meta text-faint phone:text-[12px]">
                   <span
                     className={cn(
                       SOURCE_CHIP,

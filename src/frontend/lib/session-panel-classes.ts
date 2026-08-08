@@ -34,7 +34,7 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  * (0,3,0 over 0,2,0); this makes the two states mutually exclusive instead.
  */
 export const PANEL_RESIZE =
-	"absolute top-0 left-[-3px] z-[6] h-full w-[7px] cursor-col-resize max-[720px]:hidden " +
+	"absolute top-0 left-[-3px] z-[6] h-full w-[7px] cursor-col-resize phone:hidden " +
 	"after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:bg-transparent " +
 	"after:transition-[background-color] after:content-[''] " +
 	"[body:not(.resizing-panel)_&]:hover:after:bg-line-strong " +
@@ -50,9 +50,9 @@ export const PANEL_RESIZE =
 export const PANEL_TABS =
 	"flex items-center gap-0.5 overflow-x-auto px-2.5 pt-[13px] pb-2 " +
 	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
-	"max-[720px]:gap-1.5 max-[720px]:px-3.5 max-[720px]:pt-1.5 max-[720px]:pb-2.5 " +
-	"max-[720px]:[-webkit-mask-image:linear-gradient(to_right,transparent_0,#000_10px,#000_calc(100%_-_28px),transparent)] " +
-	"max-[720px]:[mask-image:linear-gradient(to_right,transparent_0,#000_10px,#000_calc(100%_-_28px),transparent)]";
+	"phone:gap-1.5 phone:px-3.5 phone:pt-1.5 phone:pb-2.5 " +
+	"phone:[-webkit-mask-image:linear-gradient(to_right,transparent_0,#000_10px,#000_calc(100%_-_28px),transparent)] " +
+	"phone:[mask-image:linear-gradient(to_right,transparent_0,#000_10px,#000_calc(100%_-_28px),transparent)]";
 
 /** `group/ptab` is what dims the count with its tab. `shrink-0`: tabs never
  *  squish when the strip overflows — it scrolls instead. */
@@ -65,7 +65,7 @@ const PANEL_TAB_BASE =
 	// `[class*="rounded-"]:not([class*="rounded-full"])`, so the literal string
 	// "rounded-full" anywhere in this list would square off the DESKTOP corner
 	// too — measured, it did.
-	"max-[720px]:rounded-[999px] max-[720px]:px-[15px] max-[720px]:py-2 max-[720px]:text-body";
+	"phone:rounded-[999px] phone:px-[15px] phone:py-2 phone:text-body";
 
 /** Selected and unselected each carry their whole colour set: two background
  *  utilities in one variant bucket are resolved by Tailwind's output order, and
@@ -96,7 +96,7 @@ export const PANEL_OVERLAY =
 	"hidden " +
 	"max-[920px]:fixed max-[920px]:inset-[var(--header-h)_0_0_0] max-[920px]:z-[25] " +
 	"max-[920px]:block max-[920px]:bg-[rgba(0,0,0,0.45)] " +
-	"max-[720px]:inset-0 max-[720px]:z-[45] max-[720px]:bg-[rgba(0,0,0,0.5)]";
+	"phone:inset-0 phone:z-[45] phone:bg-[rgba(0,0,0,0.5)]";
 
 /**
  * Chevron-back at the top of the panel on phones — the panel is a deeper page

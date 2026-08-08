@@ -48,7 +48,7 @@
 export const paletteIconBtn =
 	"relative inline-flex size-10 items-center justify-center rounded-control border border-transparent text-body text-dim transition-[color] hover:text-fg disabled:cursor-default disabled:opacity-50 " +
 	"before:absolute before:inset-1 before:z-0 before:rounded-control before:[corner-shape:var(--cs)] before:transition-[background,box-shadow] before:content-[''] hover:before:bg-hover " +
-	"[&>*]:relative [&>*]:z-[1] max-[720px]:[&_svg]:size-5";
+	"[&>*]:relative [&>*]:z-[1] phone:[&_svg]:size-5";
 
 /** The phone composer's resting pill, and the ONE place `rounded-full` is the
  *  right spelling in this family. base.css grants `corner-shape: squircle` to

@@ -223,7 +223,7 @@ export function CatchUpDeck({
 			    collapsed-sidebar controls. Esc still leaves the deck. */}
 			<div className="deck-header flex w-full items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
 				<button
-					className="hidden h-10 w-10 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg max-[720px]:flex"
+					className="hidden h-10 w-10 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"
 					onClick={onExit}
 					title="Back"
 					aria-label="Back"

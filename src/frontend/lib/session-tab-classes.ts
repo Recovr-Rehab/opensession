@@ -15,7 +15,7 @@
  *    emits every breakpoint variant after every unprefixed and pseudo-class
  *    utility (verified in the compiled sheet: `hover:bg-hover` at ~93k,
  *    the first `min-[721px]:` rule at ~119k), which is what makes a responsive
- *    override reliable at all. Note that Tailwind's `max-[720px]:` is
+ *    override reliable at all. Note that Tailwind's `phone:` is
  *    `width < 720px`, NOT the `max-width: 720px` the old sheet and
  *    `useIsPhone` mean — so phone-only rules are written as overrides on a
  *    base that already reads correctly, never as one half of a split.
@@ -68,23 +68,23 @@ export const TAB_STRIP =
 	"min-[721px]:shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--border)] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
-	"max-[720px]:absolute max-[720px]:inset-x-0 max-[720px]:top-[var(--pane-header-h)] max-[720px]:z-[6] " +
-	"max-[720px]:m-0 max-[720px]:border-b max-[720px]:border-line max-[720px]:py-[5px] " +
-	"max-[720px]:shadow-[0_6px_12px_-8px_rgba(0,0,0,0.22)] " +
+	"phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
+	"phone:m-0 phone:border-b phone:border-line phone:py-[5px] " +
+	"phone:shadow-[0_6px_12px_-8px_rgba(0,0,0,0.22)] " +
 	// Mobile Safari can rasterize two composited layers that merely touch with a
 	// hairline seam: overlap the header by 2px and add those 2px back as padding.
-	"max-[720px]:[.app:has(.app-header-overlay)_&]:top-[calc(var(--pane-header-h)_-_2px)] " +
-	"max-[720px]:[.app:has(.app-header-overlay)_&]:pt-[7px] " +
+	"phone:[.app:has(.app-header-overlay)_&]:top-[calc(var(--pane-header-h)_-_2px)] " +
+	"phone:[.app:has(.app-header-overlay)_&]:pt-[7px] " +
 	// Immersive reading: SessionViewer sets body.chrome-collapsed from the
 	// transcript's scroll direction and the bar slides off with the top bar.
 	// `transform`, not the `translate` property, because that is what the
 	// transition names — and what .app-header-overlay animates beside it.
-	"max-[720px]:[transition:transform_var(--dur-lg)_var(--ease)] " +
-	"max-[720px]:[body.chrome-collapsed_&]:[transform:translateY(calc(-100%_-_var(--pane-header-h)_-_8px))] " +
+	"phone:[transition:transform_var(--dur-lg)_var(--ease)] " +
+	"phone:[body.chrome-collapsed_&]:[transform:translateY(calc(-100%_-_var(--pane-header-h)_-_8px))] " +
 	// A lone session with no view tabs has nothing to switch between, so the
 	// strip is pure chrome on a phone — every tab is a .session-tab-reorder
 	// wrapper, so "2+ sessions" reads as two adjacent wrappers.
-	"max-[720px]:[&:not(:has(.session-tab-view)):not(:has(.session-tab-reorder~.session-tab-reorder))]:hidden";
+	"phone:[&:not(:has(.session-tab-view)):not(:has(.session-tab-reorder~.session-tab-reorder))]:hidden";
 
 /**
  * The scrolling half of the strip. Its edge fades are driven by a CSS scroll

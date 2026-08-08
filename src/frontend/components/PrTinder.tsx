@@ -410,7 +410,7 @@ export function PrTinder({ onExit }: Props) {
 			    CatchUpDeck; Esc leaves the deck on both. */}
 			<div className="deck-header flex w-full items-center justify-between px-4 py-3">
 				<button
-					className="hidden h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg max-[720px]:flex"
+					className="hidden h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"
 					onClick={onExit}
 					title="Back (Esc)"
 					aria-label="Back"

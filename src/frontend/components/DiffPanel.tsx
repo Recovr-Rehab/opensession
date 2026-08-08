@@ -222,7 +222,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
                 // The active pill supplies its own surface and border colour —
                 // the base has the geometry only, so nothing carries two
                 // competing colour utilities.
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-[9px] py-[3px] text-label whitespace-nowrap max-[720px]:px-3 max-[720px]:py-2 ${
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-[9px] py-[3px] text-label whitespace-nowrap phone:px-3 phone:py-2 ${
                   i === active
                     ? "border-line bg-panel text-fg"
                     : "border-transparent bg-transparent text-dim hover:text-fg"

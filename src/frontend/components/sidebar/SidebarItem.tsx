@@ -38,7 +38,7 @@ import React, { useEffect, useRef, useState } from "react";
  *  Rows wrapped in a swipe shell add `mt-0` — the wrapper carries the 2px gap
  *  for them — plus the swipe transform; bare rows keep the margin. */
 export const SIDEBAR_ROW =
-	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg max-[720px]:px-1 max-[720px]:py-[13px]";
+	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg phone:px-1 phone:py-[13px]";
 
 /** A row's title: one ellipsized line that brightens and emboldens for the
  *  states the row advertises. Read conversations stay quiet; unread ones
@@ -53,7 +53,7 @@ const ROW_ACTION =
 	"absolute top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md bg-[var(--bg-hover)] text-[15px] leading-none text-faint shadow-[-6px_0_5px_-2px_var(--bg-hover)] group-hover:flex hover:bg-active hover:text-fg group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]";
 
 export const SIDEBAR_ROW_TITLE =
-	"min-w-0 truncate text-body font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg max-[720px]:text-[16px]";
+	"min-w-0 truncate text-body font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg phone:text-[16px]";
 
 export function SidebarItem({
 	session,
@@ -429,7 +429,7 @@ export function SidebarItem({
 				</span>
 				{editing ? (
 					<input
-						className="min-w-0 flex-1 rounded-md border border-accent bg-bg px-[3px] py-0 text-body font-medium text-inherit outline-none max-[720px]:text-[16px]"
+						className="min-w-0 flex-1 rounded-md border border-accent bg-bg px-[3px] py-0 text-body font-medium text-inherit outline-none phone:text-[16px]"
 						value={draft}
 						autoFocus
 						onChange={(e) => setDraft(e.target.value)}
@@ -467,7 +467,7 @@ export function SidebarItem({
 				{mine && !editing && metaParts.length > 0 && (
 					<span
 						className={cn(
-							"ml-auto flex min-w-10 shrink-0 items-center justify-end gap-1 pl-2.5 whitespace-nowrap text-meta text-faint max-[720px]:text-label group-data-[unread]:text-dim",
+							"ml-auto flex min-w-10 shrink-0 items-center justify-end gap-1 pl-2.5 whitespace-nowrap text-meta text-faint phone:text-label group-data-[unread]:text-dim",
 							!isPhone && "group-hover:opacity-0",
 						)}
 					>
@@ -495,7 +495,7 @@ export function SidebarItem({
 			{!mine && (
 				<div
 					className={cn(
-						"mt-[3px] flex items-center gap-1 overflow-hidden pl-7 whitespace-nowrap text-meta text-faint max-[720px]:text-label group-data-[unread]:text-dim",
+						"mt-[3px] flex items-center gap-1 overflow-hidden pl-7 whitespace-nowrap text-meta text-faint phone:text-label group-data-[unread]:text-dim",
 						!isPhone && "group-hover:pr-[58px]",
 					)}
 				>

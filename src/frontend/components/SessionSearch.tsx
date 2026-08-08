@@ -45,7 +45,7 @@ type Status = "needsinput" | "running" | "review" | "merged" | "pending";
 /** A keycap. Hidden below 720px, where the palette is driven by touch and the
  *  keyboard hints are noise. */
 const KBD =
-	"mx-px inline-flex min-w-4 items-center justify-center rounded-sm border border-line-strong bg-raised px-1 py-px font-sans text-meta text-dim max-[720px]:hidden";
+	"mx-px inline-flex min-w-4 items-center justify-center rounded-sm border border-line-strong bg-raised px-1 py-px font-sans text-meta text-dim phone:hidden";
 
 /** A result row. The selected wash rides on `aria-selected`, which the button
  *  already carries for the listbox — so the icon and keycap tones that used to
@@ -604,11 +604,11 @@ export function SessionSearch({
 				</div>
 
 				<div className="flex items-center gap-4 border-t border-line px-3.5 py-2 text-meta text-faint">
-					<span className="max-[720px]:hidden">
+					<span className="phone:hidden">
 						<kbd className={KBD}>↑</kbd>
 						<kbd className={KBD}>↓</kbd> navigate
 					</span>
-					<span className="max-[720px]:hidden">
+					<span className="phone:hidden">
 						<kbd className={KBD}>↵</kbd> open
 					</span>
 					<span className="ml-auto">

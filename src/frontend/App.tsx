@@ -3433,7 +3433,7 @@ export function App(
 								"sidebar-brand h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
 								// The brand row (and its account menu) is a desktop
 								// affordance; on phones the top bar carries the brand
-								// instead. Gated in JS rather than at `max-[720px]:` because
+								// instead. Gated in JS rather than at `phone:` because
 								// Tailwind's max-* is `width < 720`, one pixel short of the
 								// `max-width: 720px` the rest of the app means by "phone".
 								isPhone ? "hidden" : "flex",

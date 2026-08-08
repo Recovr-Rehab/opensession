@@ -8,7 +8,7 @@ export function PageHeader({
 	return (
 		<div
 			className={cn(
-				"mb-[22px] flex items-start justify-between gap-4 max-[720px]:flex-col max-[720px]:gap-2.5",
+				"mb-[22px] flex items-start justify-between gap-4 phone:flex-col phone:gap-2.5",
 				className,
 			)}
 			{...props}

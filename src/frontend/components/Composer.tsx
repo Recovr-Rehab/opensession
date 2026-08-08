@@ -874,7 +874,7 @@ export function Composer({
                 "composer-pop-wrap relative inline-flex shrink-0",
                 // Phones pull the model pill to the front of the toolbar, so the
                 // "+" has to lead it; in the resting pill it opens the row.
-                minimized ? "order-1" : "max-[720px]:order-[-2]",
+                minimized ? "order-1" : "phone:order-[-2]",
               )}
             >
               <Tooltip label="Attach files and session options">
@@ -1005,7 +1005,7 @@ export function Composer({
                 // between the "+" and this marker. Same order as the "+" wrap
                 // keeps the pair together — equal order falls back to DOM
                 // order, and the "+" is rendered first.
-                className="composer-pop-wrap relative inline-flex shrink-0 max-[720px]:order-[-2]"
+                className="composer-pop-wrap relative inline-flex shrink-0 phone:order-[-2]"
               >
                 <Tooltip label="Ask mode — this session can read the code but not change it">
                   <button
@@ -1248,7 +1248,7 @@ export function Composer({
       {/* The keyboard-shortcut hint is irrelevant on touch and eats vertical
           space right where the keyboard appears. */}
       {hint && (
-        <div className="mt-[7px] text-center text-meta text-faint max-[720px]:hidden">
+        <div className="mt-[7px] text-center text-meta text-faint phone:hidden">
           {hint}
         </div>
       )}

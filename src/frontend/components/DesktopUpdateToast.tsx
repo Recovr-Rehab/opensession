@@ -49,7 +49,7 @@ export function DesktopUpdateToast() {
 	const downloaded = update?.state === "downloaded";
 
 	return (
-		<div className="pointer-events-none fixed bottom-6 right-6 z-[100] max-[720px]:bottom-[calc(84px+env(safe-area-inset-bottom))]">
+		<div className="pointer-events-none fixed bottom-6 right-6 z-[100] phone:bottom-[calc(84px+env(safe-area-inset-bottom))]">
 			<AnimatePresence>
 				{show && (
 					<motion.div

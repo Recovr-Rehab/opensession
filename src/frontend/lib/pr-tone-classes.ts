@@ -95,14 +95,14 @@ export const PR_BAR =
 	// The globe (staging) icon rides inside the strip, flush to its padding.
 	"[&>.staging-icon]:-ml-0.5 [&>.staging-icon]:shrink-0 " +
 	// Phone: a row of the bottom sheet, and a row of the info card.
-	"max-[720px]:[.viewer-panel_&]:min-h-[50px] max-[720px]:[.viewer-panel_&]:px-3.5 " +
-	"max-[720px]:[.session-info-status_&]:min-h-[46px] max-[720px]:[.session-info-status_&]:px-2.5 " +
-	"max-[720px]:[.session-info-status_&]:last:border-b-0";
+	"phone:[.viewer-panel_&]:min-h-[50px] phone:[.viewer-panel_&]:px-3.5 " +
+	"phone:[.session-info-status_&]:min-h-[46px] phone:[.session-info-status_&]:px-2.5 " +
+	"phone:[.session-info-status_&]:last:border-b-0";
 
 /** Inside the info card the strip (or the stack of strips) is the card's
  *  content, so it takes the card's corner and clips to it. */
 export const PR_BAR_IN_CARD =
-	"max-[720px]:[.session-info-status>&]:overflow-hidden max-[720px]:[.session-info-status>&]:rounded-control";
+	"phone:[.session-info-status>&]:overflow-hidden phone:[.session-info-status>&]:rounded-control";
 
 /** The strip's tone band. Purple and yellow had no soft token and were frozen
  *  as dark-theme rgba() literals, so both themes got the dark hue; mixing from
@@ -115,7 +115,7 @@ export const PR_BAR_BG: Record<PrTone, string> = {
 	// The session's own top bar surface, so header + strip read as one band —
 	// except in the info card, which supplies its own surface.
 	muted:
-		"bg-[var(--topbar-bg)] max-[720px]:[.session-info-status_&]:bg-transparent",
+		"bg-[var(--topbar-bg)] phone:[.session-info-status_&]:bg-transparent",
 };
 
 /** A session that shipped one feature as several PRs: the primary strip plus a
@@ -250,7 +250,7 @@ export const PR_SIB_DOT_BG: Record<PrTone, string> = {
  *  carries the strip's divider so primary + series read as one block. */
 export const PR_ROW =
 	"flex min-h-[32px] items-center gap-0.5 border-b border-[var(--top-divider)] pr-2 hover:bg-hover " +
-	"max-[720px]:[.session-info-status_&]:last:border-b-0";
+	"phone:[.session-info-status_&]:last:border-b-0";
 export const PR_ROW_MAIN =
 	"flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-1 text-left text-label";
 /** The title takes what's left and gives it up first — the state on the right
@@ -268,7 +268,7 @@ export const PR_ROW_STATE =
 export const PR_REPO_TABS =
 	"flex gap-1 overflow-x-auto border-b border-line px-3 py-2";
 const PR_REPO_TAB =
-	"inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-[3px] text-label max-[720px]:px-3 max-[720px]:py-2";
+	"inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-[3px] text-label phone:px-3 phone:py-2";
 export const prRepoTabClass = (selected: boolean) =>
 	`${PR_REPO_TAB} ${selected ? "border-line bg-panel text-fg" : "border-transparent bg-transparent text-dim hover:text-fg"}`;
 /** Unlink (×) inside the selected linked-PR tab. */

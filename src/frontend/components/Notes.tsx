@@ -357,7 +357,7 @@ export function Notes({
 					</div>
 					<div className="border-b border-line p-3">
 						<input
-							className="w-full rounded-md border border-line bg-panel px-2.5 py-[7px] text-label text-fg outline-none placeholder:text-faint focus:border-accent max-[720px]:text-[16px]"
+							className="w-full rounded-md border border-line bg-panel px-2.5 py-[7px] text-label text-fg outline-none placeholder:text-faint focus:border-accent phone:text-[16px]"
 							placeholder="Search notes + docs…"
 							value={query}
 							onChange={(e) => setQuery(e.target.value)}

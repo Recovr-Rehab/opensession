@@ -30,7 +30,7 @@ export const composerBox =
  *  line its left edge up with the composer's outer edge rather than the
  *  button's, so it travels with the padding it describes. */
 export const composerBoxExpanded =
-	"rounded-[var(--composer-radius)] px-3.5 pt-3.5 pb-2.5 [--composer-inset-left:15px] max-[720px]:px-3 max-[720px]:pt-2.5 max-[720px]:pb-[9px] max-[720px]:[--composer-inset-left:13px]";
+	"rounded-[var(--composer-radius)] px-3.5 pt-3.5 pb-2.5 [--composer-inset-left:15px] phone:px-3 phone:pt-2.5 phone:pb-[9px] phone:[--composer-inset-left:13px]";
 
 /** Phone resting pill: one row, even 4px inset, clear of the screen edges.
  *  Motion animates the radius between this and the expanded box; the class is
@@ -56,7 +56,7 @@ export const composerBoxMinimized =
    shares these metrics exactly — any difference in font, padding or wrap
    desyncs the caret from the painted glyphs — so both read the same strings. */
 export const composerTextarea =
-	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none max-[720px]:max-h-[240px] max-[720px]:text-[16px]";
+	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-[16px]";
 export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
 /** In the resting pill the field is one row inside a 4px-inset box, so it
  *  carries the horizontal breathing room and no vertical padding at all. */
@@ -74,7 +74,7 @@ export const composerTextareaPaddingMinimized = "px-1 py-0";
    utility and a child's own `shrink` are the same specificity, so the pill's
    opt-back-in would have depended on the compiled sheet's order. */
 export const composerToolbar =
-	"mt-2.5 flex items-center gap-2 max-[720px]:mt-1.5 max-[720px]:gap-1.5";
+	"mt-2.5 flex items-center gap-2 phone:mt-1.5 phone:gap-1.5";
 /** Resting phone pill: `display: contents` lifts the toolbar's buttons into
  *  the composer's own flex row, so the textarea can sit between the "+" and
  *  the mic/send and `order` can sequence them. Combine through `cn()` —
@@ -86,12 +86,12 @@ export const composerToolbarMinimized = "contents";
  *  composer and pushed the send button off its right edge on phones. Phones
  *  also pull it to the front of the row, next to the "+". */
 export const composerToolbarSelect =
-	"inline-flex min-w-0 shrink max-[720px]:order-[-1]";
+	"inline-flex min-w-0 shrink phone:order-[-1]";
 /** The pill's toolbar-only metrics: it may shrink to a 34px stub here (the
  *  new-session footer lets it go to 0 instead), and phones tighten its
  *  padding and cap it so the whole row fits without clipping the send. */
 export const composerToolbarPill =
-	"shrink min-w-[34px] max-[720px]:max-w-[136px] max-[720px]:px-[9px]";
+	"shrink min-w-[34px] phone:max-w-[136px] phone:px-[9px]";
 
 /* ── Toolbar popover menus ─────────────────────────────────────────
    The popup surface for the "+" add menu and the send-later menu, and the
@@ -134,7 +134,7 @@ export const composerMenuAnchorLeft =
    40px phone size is what the last of the three (!) competing phone blocks in
    legacy.css resolved to. */
 export const composerSend =
-	"inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[filter,border-radius,transform] enabled:hover:scale-105 disabled:cursor-default disabled:opacity-35 max-[720px]:size-10";
+	"inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[filter,border-radius,transform] enabled:hover:scale-105 disabled:cursor-default disabled:opacity-35 phone:size-10";
 /** Ordinary send: the accent plate. Hover goes to ink rather than brightening —
  *  the accent is a wash now, and brightening it read as a disabled state. */
 export const composerSendDefault =
@@ -153,7 +153,7 @@ export const composerSendStop =
 /** Inside the 50px resting pill a 40px disc is a blob against the hairline
  *  glyphs beside it. Keep the target, shrink the fill: padding plus
  *  background-clip paints a 32px disc without moving the hit area. */
-export const composerSendMinimizedFill = "max-[720px]:bg-clip-content max-[720px]:p-1";
+export const composerSendMinimizedFill = "phone:bg-clip-content phone:p-1";
 
 /* ── File attachment chips ────────────────────────────────────────
    Shared by the composer's staged attachments (removable) and a user turn's

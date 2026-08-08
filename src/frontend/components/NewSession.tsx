@@ -114,9 +114,9 @@ const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting 
    (its label ellipsizes) while the icon buttons and Create keep their size.
    Phones let the row wrap instead of crushing every pill to one letter. */
 const FOOTER =
-	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-line px-[11px] py-[9px] max-[720px]:flex-wrap max-[560px]:gap-x-1.5 max-[560px]:px-2";
+	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-line px-[11px] py-[9px] phone:flex-wrap max-[560px]:gap-x-1.5 max-[560px]:px-2";
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1";
-const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 max-[720px]:ml-auto";
+const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 phone:ml-auto";
 const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
 /** The one flexible footer item. `[&_[data-effort]]` reaches the effort suffix
  *  inside ModelEffortSelect: on ultra-narrow screens it cedes its space to the
@@ -147,9 +147,9 @@ const MCP_BADGE =
    button out to a full pill. */
 const CREATE_SPLIT = "relative inline-flex shrink-0 items-stretch";
 const CREATE_MAIN =
-	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-40 min-[721px]:rounded-l-md max-[720px]:rounded-[999px] max-[560px]:px-3";
+	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-40 min-[721px]:rounded-l-md phone:rounded-[999px] max-[560px]:px-3";
 const CREATE_CARET =
-	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-md border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] max-[720px]:hidden";
+	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-md border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] phone:hidden";
 const CREATE_KBD = "opacity-70";
 const CREATE_MENU =
 	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control border border-line bg-raised p-[5px] shadow-[0_10px_30px_rgba(0,0,0,0.28)]";
@@ -1208,7 +1208,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
                 {sendKey === "mod-enter" ? (
-                  <span className={`${CREATE_KBD} mx-0 max-[720px]:hidden text-xs`}>
+                  <span className={`${CREATE_KBD} mx-0 phone:hidden text-xs`}>
                     {MOD_ENTER_GLYPH}
                   </span>
                 ) : (
@@ -1216,7 +1216,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                      button edge. "Create more" is a desktop workflow, so the
                      hint goes away with the caret on phones. */
                   <IconReturn
-                    className={`${CREATE_KBD} -mx-[3px] max-[720px]:hidden`}
+                    className={`${CREATE_KBD} -mx-[3px] phone:hidden`}
                     size={20}
                   />
                 )}

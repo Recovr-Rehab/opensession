@@ -101,8 +101,8 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
           "cursor-pointer border-none bg-red text-label font-semibold leading-none text-white transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-[color-mix(in_srgb,var(--red)_85%,black)] disabled:cursor-wait disabled:opacity-75 " +
           "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none " +
           // Phone: the pill sits last in the brand row and grows to a tap target.
-          "max-[720px]:[.app-brand_&]:order-3 max-[720px]:[.app-brand_&]:h-[34px] " +
-          "max-[720px]:[.app-brand_&]:px-[18px] max-[720px]:[.app-brand_&]:text-[15px]"
+          "phone:[.app-brand_&]:order-3 phone:[.app-brand_&]:h-[34px] " +
+          "phone:[.app-brand_&]:px-[18px] phone:[.app-brand_&]:text-[15px]"
         }
         onClick={refresh}
         disabled={refreshing}
@@ -125,7 +125,7 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
         "absolute right-2 bottom-2 left-2 z-[9500] flex items-center justify-between gap-3 " +
         "rounded-row border border-line bg-panel py-2.5 pr-2.5 pl-4 " +
         "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none " +
-        "max-[720px]:bottom-[max(8px,env(safe-area-inset-bottom))]"
+        "phone:bottom-[max(8px,env(safe-area-inset-bottom))]"
       }
       role="status"
       aria-live="polite"

@@ -33,7 +33,7 @@ import { WorkingPill } from "../ui/status";
    and a multi-line brief keeps paragraph leading, which the type scale
    doesn't set. */
 const FORM_FIELDS =
-  "[&_textarea]:leading-normal max-[720px]:[&_input]:text-[16px] max-[720px]:[&_select]:text-[16px] max-[720px]:[&_textarea]:text-[16px]";
+  "[&_textarea]:leading-normal phone:[&_input]:text-[16px] phone:[&_select]:text-[16px] phone:[&_textarea]:text-[16px]";
 /** .automation-form.automation-form-inline — no card chrome; the drawer body
  *  already provides the surface and the padding. */
 const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
@@ -46,7 +46,7 @@ const FORM_TITLE = "text-body font-semibold";
 /** .automation-form-actions */
 const FORM_ACTIONS = "flex justify-end gap-2.5";
 /** .automation-form-row */
-const FORM_ROW = "flex gap-3.5 max-[720px]:flex-col";
+const FORM_ROW = "flex gap-3.5 phone:flex-col";
 /** .automations-drawer-section-label */
 const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
 /** .automation-session-link */
@@ -291,7 +291,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 <span
                   role="button"
                   className={cn(
-                    "relative h-[19px] w-[34px] shrink-0 rounded-full border p-0 transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] max-[720px]:h-[26px] max-[720px]:w-11",
+                    "relative h-[19px] w-[34px] shrink-0 rounded-full border p-0 transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] phone:h-[26px] phone:w-11",
                     a.enabled ? "border-green bg-green-soft" : "border-line-strong bg-active",
                   )}
                   onClick={(e) => {
@@ -302,9 +302,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 >
                   <span
                     className={cn(
-                      "absolute top-0.5 left-0.5 size-[13px] rounded-full max-[720px]:size-5 transition-[translate,background] duration-[var(--dur-micro)] ease-[var(--ease)]",
+                      "absolute top-0.5 left-0.5 size-[13px] rounded-full phone:size-5 transition-[translate,background] duration-[var(--dur-micro)] ease-[var(--ease)]",
                       a.enabled
-                        ? "translate-x-[15px] bg-green max-[720px]:translate-x-[18px]"
+                        ? "translate-x-[15px] bg-green phone:translate-x-[18px]"
                         : "bg-faint",
                     )}
                   />
@@ -426,7 +426,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 <div className="flex items-center gap-2.5">
                   <button
                     className={cn(
-                    "relative h-[19px] w-[34px] shrink-0 rounded-full border p-0 transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] max-[720px]:h-[26px] max-[720px]:w-11",
+                    "relative h-[19px] w-[34px] shrink-0 rounded-full border p-0 transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] phone:h-[26px] phone:w-11",
                     sel.enabled ? "border-green bg-green-soft" : "border-line-strong bg-active",
                   )}
                     onClick={() => handleToggle(sel)}
@@ -434,9 +434,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                   >
                     <span
                       className={cn(
-                        "absolute top-0.5 left-0.5 size-[13px] rounded-full max-[720px]:size-5 transition-[translate,background] duration-[var(--dur-micro)] ease-[var(--ease)]",
+                        "absolute top-0.5 left-0.5 size-[13px] rounded-full phone:size-5 transition-[translate,background] duration-[var(--dur-micro)] ease-[var(--ease)]",
                         sel.enabled
-                          ? "translate-x-[15px] bg-green max-[720px]:translate-x-[18px]"
+                          ? "translate-x-[15px] bg-green phone:translate-x-[18px]"
                           : "bg-faint",
                       )}
                     />
