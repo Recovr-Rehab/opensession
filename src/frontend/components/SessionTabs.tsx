@@ -10,6 +10,27 @@ import { copySessionTranscript } from "../lib/transcript-copy";
 import { IconHistory, IconPencil, IconPlus, IconRestore } from "./icons";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { isApple } from "../lib/platform";
+import {
+	NEW_MENU,
+	NEW_MENU_ITEM,
+	PANEL_TAB_DOT,
+	TAB_ACTIONS,
+	TAB_DRAFT,
+	TAB_DROP_SLOT,
+	TAB_GROUP,
+	TAB_HISTORY,
+	TAB_ITEM,
+	TAB_ITEM_DRAGGING,
+	TAB_NEW,
+	TAB_RENAME,
+	TAB_SCROLL,
+	TAB_STRIP,
+	TAB_TITLE,
+	TAB_VICON,
+	tabClass,
+	tabCloseClass,
+	tabDotClass,
+} from "../lib/session-tab-classes";
 
 /**
  * The tab strip is scoped to ONE Workspace: it shows the sibling sessions of the
@@ -397,7 +418,7 @@ export function SessionTabs({
 					e.preventDefault();
 				}
 			},
-			className: `session-tab-reorder ${dropSlot?.key === key ? "is-dragging" : ""}`,
+			className: dropSlot?.key === key ? `${TAB_ITEM} ${TAB_ITEM_DRAGGING}` : TAB_ITEM,
 		};
 	}
 
@@ -431,7 +452,7 @@ export function SessionTabs({
 	const newTabButton = (
 		<button
 			type="button"
-			className="session-tab session-tab-new"
+			className={TAB_NEW}
 			data-menu-open={newMenu ? "" : undefined}
 			aria-label="New session in this workspace"
 			title="New session. Shares this workspace's worktree (right-click for options)"
@@ -450,7 +471,7 @@ export function SessionTabs({
 	// the ⟲ restores it into the strip for good.
 	const historyMenu = showHistory && archived.length > 0 && (
 		<Menu.Root>
-			<Menu.Trigger className="session-tab session-tab-history" aria-label="Archived sessions" title="Archived sessions">
+			<Menu.Trigger className={TAB_HISTORY} aria-label="Archived sessions" title="Archived sessions">
 				<IconHistory size={ctrlIconSize} />
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={4} className="min-w-[240px] max-w-[320px]">
@@ -477,20 +498,20 @@ export function SessionTabs({
 	);
 
 	return (
-		<div className="session-tabs" role="tablist">
-			<div className="session-tabs-scroll" ref={scrollRef}>
+		<div className={TAB_STRIP} role="tablist">
+			<div className={TAB_SCROLL} ref={scrollRef}>
 				<Reorder.Group
 					as="div"
 					axis="x"
 					ref={groupRef}
-					className="session-tabs-sessiongroup"
+					className={TAB_GROUP}
 					values={orderedKeys}
 					onReorder={reorderTabs}
 				>
 					{/* First child so the tabs sliding over it paint on top. */}
 					{dropSlot && (
 						<div
-							className="session-tab-drop-slot"
+							className={TAB_DROP_SLOT}
 							style={{ left: dropSlot.left, width: dropSlot.width }}
 							aria-hidden="true"
 						/>
@@ -507,21 +528,21 @@ export function SessionTabs({
 										role="tab"
 										aria-selected={v.active}
 										aria-label={v.icon ? v.label : undefined}
-										className={`session-tab session-tab-view ${v.icon ? "session-tab-view-icon" : ""} ${v.active ? "session-tab-active" : ""}`}
+										className={`session-tab-view group/tab ${tabClass({ active: v.active, waiting: false, colored: false })}`}
 										onClick={() => onSelectView(v.id)}
 										title={v.label}
 									>
-										{v.dotClass && <span className={`panel-tab-dot ${v.dotClass}`} />}
+										{v.dotClass && <span className={`${PANEL_TAB_DOT} ${v.dotClass}`} />}
 										{v.icon ? (
-											<span className="session-tab-vicon" aria-hidden="true">
+											<span className={TAB_VICON} aria-hidden="true">
 												{v.icon}
 											</span>
 										) : (
-											<span className="session-tab-title">{v.label}</span>
+											<span className={TAB_TITLE}>{v.label}</span>
 										)}
 										<button
 											type="button"
-											className="session-tab-close"
+											className={tabCloseClass(v.active)}
 											aria-label={`Close ${v.label}`}
 											title={`Close ${v.label}`}
 											onClick={(e) => {
@@ -546,9 +567,11 @@ export function SessionTabs({
 											<div
 												role="tab"
 												aria-selected={key === activeId}
-												className={`session-tab ${key === activeId ? "session-tab-active" : ""} ${
-													waiting ? "session-tab-waiting" : ""
-												} ${hex ? "session-tab-colored" : ""}`}
+												className={`group/tab ${tabClass({
+													active: key === activeId,
+													waiting,
+													colored: !!hex,
+												})}`}
 												style={hex ? ({ "--tab-color": hex } as React.CSSProperties) : undefined}
 												onClick={() => onSelect(session)}
 												title={session.title}
@@ -556,13 +579,13 @@ export function SessionTabs({
 										}
 									>
 										{waiting ? (
-											<span className="session-tab-dot session-tab-dot-waiting" />
+											<span className={tabDotClass(true)} />
 										) : (
-											session.isRunning && <span className="session-tab-dot" />
+											session.isRunning && <span className={tabDotClass(false)} />
 										)}
 										{editKey === key ? (
 											<input
-												className="session-tab-rename"
+												className={TAB_RENAME}
 												value={draft}
 												autoFocus
 												onChange={(e) => setDraft(e.target.value)}
@@ -577,7 +600,7 @@ export function SessionTabs({
 											/>
 										) : (
 											<span
-												className="session-tab-title"
+												className={TAB_TITLE}
 												onDoubleClick={(e) => {
 													e.stopPropagation();
 													setDraft(session.title);
@@ -590,13 +613,13 @@ export function SessionTabs({
 										{/* Unsent draft in a sibling session (the active tab's draft is
 							    already on screen in the composer — no pencil needed). */}
 										{key !== activeId && hasDraft(`session:${key}`) && (
-											<span className="session-tab-draft" title="Unsent draft">
+											<span className={TAB_DRAFT} title="Unsent draft">
 												<IconPencil size={20} />
 											</span>
 										)}
 										<button
 											type="button"
-											className="session-tab-close"
+											className={tabCloseClass(key === activeId)}
 											aria-label="Close session"
 											title="Close session"
 											onClick={(e) => {
@@ -682,17 +705,17 @@ export function SessionTabs({
 			{/* Desktop: the "+" sits OUTSIDE the scroll so it's pinned and always
 				    visible — never scrolled off when the tabs overflow a narrow pane. */}
 			{!isPhone && newTabButton}
-			{!isPhone && <div className="session-tabs-actions">{historyMenu}</div>}
+			{!isPhone && <div className={TAB_ACTIONS}>{historyMenu}</div>}
 
 			{newMenu && (
 				<div
-					className="tab-color-menu session-tab-new-menu"
+					className={`tab-color-menu ${NEW_MENU}`}
 					style={{ left: newMenu.x, top: newMenu.y }}
 					onClick={(e) => e.stopPropagation()}
 				>
 					<button
 						type="button"
-						className="session-tab-new-menu-item"
+						className={NEW_MENU_ITEM}
 						onClick={() => {
 							setNewMenu(null);
 							onNewSession("share");
@@ -702,7 +725,7 @@ export function SessionTabs({
 					</button>
 					<button
 						type="button"
-						className="session-tab-new-menu-item"
+						className={NEW_MENU_ITEM}
 						onClick={() => {
 							setNewMenu(null);
 							onNewSession("stack");
@@ -712,7 +735,7 @@ export function SessionTabs({
 					</button>
 					<button
 						type="button"
-						className="session-tab-new-menu-item"
+						className={NEW_MENU_ITEM}
 						onClick={() => {
 							setNewMenu(null);
 							onNewSession("ask");
