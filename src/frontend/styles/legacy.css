@@ -860,66 +860,6 @@
 	}
 }
 
-/* ── Settings page (full-window: sub-nav + scrolling body) ──────────────── */
-.settings-page {
-	display: flex;
-	flex: 1;
-	min-height: 0;
-	background: var(--bg);
-}
-.settings-back {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	text-align: left;
-	background: none;
-	border: none;
-	cursor: pointer;
-	color: var(--text-dim);
-	font-size: 13px;
-	font-weight: 500;
-	padding: 6px 10px;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	margin-bottom: 12px;
-}
-.settings-back:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-
-.settings-content {
-	flex: 1;
-	min-width: 0;
-	overflow-y: auto;
-	display: flex;
-	justify-content: center;
-	padding: 44px 32px 0;
-}
-/* Tool sections (Automations, Notes, …) hosted in Settings bring their own
-   layout, padding and scrolling — the content area goes edge-to-edge. */
-.settings-content-tool {
-	padding: 0;
-	min-height: 0;
-}
-.settings-panel-frame {
-	width: 100%;
-	max-width: 720px;
-	padding-bottom: 88px;
-	align-self: flex-start;
-}
-
-/* On phones Settings renders as a bottom sheet (Settings.tsx MobileSettings)
-   with its own paged header — the legacy panel classes adapt inside it: the
-   sheet header already carries the section title, and desktop's roomy content
-   padding doesn't fit a phone. */
-.settings-sheet .settings-content {
-	padding: 16px 16px 0;
-}
-.settings-sheet .settings-panel-frame {
-	padding-bottom: 48px;
-}
-
 /* Hover-revealed real timestamps. A message's time is a detail you go looking
    for, not something to read past on every turn — so it fades in while the
    message is hovered and costs nothing the rest of the time. Reveals are

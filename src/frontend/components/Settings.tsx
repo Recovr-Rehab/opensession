@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { cn } from "../ui/cn";
+import {
+	SETTINGS_BACK,
+	SETTINGS_CONTENT,
+	SETTINGS_CONTENT_SHEET,
+	SETTINGS_CONTENT_TOOL,
+	SETTINGS_PAGE,
+	SETTINGS_PANEL_FRAME,
+	SETTINGS_PANEL_FRAME_SHEET,
+} from "../lib/settings-classes";
 import { BottomSheet } from "../ui/sheet";
 import { Connections } from "./Connections";
 import { IconChevronLeft, IconChevronRight, IconX } from "./icons";
@@ -588,9 +597,9 @@ export function Settings({
 	const active = section ?? "myAccounts";
 
 	return (
-		<div className="settings-page">
+		<div className={SETTINGS_PAGE}>
 			<aside className="flex w-58 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-raised px-3 py-4 [html.wco_&]:pt-(--desktop-header-h)">
-				<button className="settings-back" onClick={onBack}>
+				<button className={SETTINGS_BACK} onClick={onBack}>
 					<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
 						<path
 							d="M10 3.5L5.5 8l4.5 4.5"
@@ -625,14 +634,16 @@ export function Settings({
 			    their own layout/scrolling); settings panels keep the centered,
 			    padded reading column. */}
 			<div
-				className={`settings-content${
-					TOOL_SECTIONS.has(active) ? " settings-content-tool" : ""
-				}`}
+				data-settings-scroll
+				className={cn(
+					SETTINGS_CONTENT,
+					TOOL_SECTIONS.has(active) && SETTINGS_CONTENT_TOOL,
+				)}
 			>
 				{TOOL_SECTIONS.has(active) ? (
 					<SectionPanel section={active}>{children}</SectionPanel>
 				) : (
-					<div className="settings-panel-frame">
+					<div className={SETTINGS_PANEL_FRAME}>
 						<SectionPanel section={active} onBack={onBack}>
 							{children}
 						</SectionPanel>
@@ -752,17 +763,11 @@ function MobileSettings({
 							aria-hidden={!detail}
 						>
 							{shownSection && (
-								<div
-									className={`settings-content min-h-0 flex-1${
-										TOOL_SECTIONS.has(shownSection)
-											? " settings-content-tool"
-											: ""
-									}`}
-								>
+								<div data-settings-scroll className={SETTINGS_CONTENT_SHEET}>
 									{TOOL_SECTIONS.has(shownSection) ? (
 										<SectionPanel section={shownSection}>{children}</SectionPanel>
 									) : (
-										<div className="settings-panel-frame">
+										<div className={SETTINGS_PANEL_FRAME_SHEET}>
 											<SectionPanel section={shownSection} onBack={onBack}>
 												{children}
 											</SectionPanel>

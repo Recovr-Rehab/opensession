@@ -185,7 +185,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 		// A step change is a page change: start it at the top, the way the
 		// settings pages these steps mirror open.
 		document
-			.querySelector(".settings-content")
+			.querySelector("[data-settings-scroll]")
 			?.scrollTo({ top: 0, behavior: "smooth" });
 	}
 
