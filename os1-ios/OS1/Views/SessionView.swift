@@ -1788,7 +1788,10 @@ private struct SessionInputBar: View {
             }
         }
         .padding(.top, 10)
-        .padding(.bottom, 26)
+        // 14 of this is tucked under the composer by the negative padding
+        // below, so the last row clears the seam by 6 — the old 26 left a
+        // visible band of empty flap under the message.
+        .padding(.bottom, 20)
         // Opaque, NOT a material: a material takes its tone from whatever is
         // behind it, so a code block scrolling under the bar turned the flap
         // (and the messages in it) dark in a light-mode app. Chrome you type
@@ -2348,7 +2351,11 @@ private struct SessionInputBar: View {
             // the other way round — a bold orange banner per row over a dimmed
             // message — which made a queue of two ordinary messages look like
             // a stack of warnings.
-            HStack(alignment: .top, spacing: 10) {
+            // Centred, not top-aligned: the trailing glyphs are taller than a
+            // one-line message, so top alignment left the text floating a good
+            // 10pt above the buttons it sits beside — and stacked that
+            // difference as dead space under the message.
+            HStack(alignment: .center, spacing: 10) {
                 if hasMark {
                     mark
                         .frame(width: 12, height: 16)
@@ -2456,10 +2463,13 @@ private struct SessionInputBar: View {
             .contextMenu { rowActions }
         }
 
-        /// One control in the row's trailing cluster. 40pt of hit area around
+        /// One control in the row's trailing cluster. 40x32 of hit area around
         /// a 16pt glyph: these are peers of the composer's own buttons a few
         /// points below them, and at 32/13 they read as a smaller, more
-        /// tentative class of control on the one surface you act from.
+        /// tentative class of control on the one surface you act from. The
+        /// hit area stays wide but no longer stands taller than the two-line
+        /// message it flanks — a 40pt-tall button set the whole row's height
+        /// and padded the flap out with space nothing was in.
         private func rowAction(
             _ symbol: String,
             _ label: String,
@@ -2469,8 +2479,8 @@ private struct SessionInputBar: View {
                 Image(systemName: symbol)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(OS1VisualStyle.textDim)
-                    .frame(width: 40, height: 40)
-                    .contentShape(Circle())
+                    .frame(width: 40, height: 32)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(label)
