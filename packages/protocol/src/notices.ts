@@ -335,7 +335,7 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
     if (entry.recap)
       return {
         ...entry,
-        notice: { kind: "recap", title: "recap", tone: "info", body: "inline" },
+        notice: { kind: "recap", title: "Recap", tone: "info", body: "inline" },
       };
     const content = stripNoticeGlyph(entry.content);
     return {

@@ -330,39 +330,8 @@ struct NoticeRow: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                if let symbol = tone.symbol {
-                    Image(systemName: symbol)
-                        .font(.caption2)
-                }
-                // The title is one line and stays one line — the body below
-                // is where the detail lives, which is what kept a folded
-                // notice from printing its whole text twice.
-                Text(notice.title)
-                    .lineLimit(notice.isCollapsible && !state.expanded ? 2 : nil)
-                if notice.isCollapsible {
-                    Text(state.expanded ? "hide" : "show")
-                        .foregroundStyle(OS1VisualStyle.link)
-                }
-            }
-            .font(.footnote)
-            .foregroundStyle(tone.color)
-            .multilineTextAlignment(notice.isCollapsible ? .leading : .center)
-
-            if showsBody, !entry.text.isEmpty {
-                // `notice.link` (e.g. "Open worker") is deliberately not
-                // rendered yet: this app routes to a session by pushing a
-                // whole `Session`, and a transcript row has only an id. The
-                // field is on the wire, so it costs one route to add.
-                Text(entry.text)
-                    .font(.footnote)
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(.horizontal, 12)
+        content
+            .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .frame(maxWidth: 520)
         .background(
@@ -376,6 +345,58 @@ struct NoticeRow: View {
             withAnimation(.snappy(duration: 0.2, extraBounce: 0)) { state.toggle() }
         }
         .accessibilityAddTraits(tone == .error ? .isStaticText : [])
+    }
+
+    /// A title-only notice is a short centered pill — the shape every
+    /// operational line in the transcript shares. A notice with an inline body
+    /// (a recap) is prose instead, so its label runs into the text on one
+    /// left-aligned block, the way the web reads it: centering the label over
+    /// a left-aligned paragraph left it floating loose above someone else's
+    /// sentence.
+    @ViewBuilder private var content: some View {
+        if notice.showsBodyInline, !entry.text.isEmpty {
+            (Text("\(notice.title): ")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(tone.color)
+                + Text(entry.text)
+                .font(.footnote)
+                .foregroundStyle(OS1VisualStyle.textDim))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    if let symbol = tone.symbol {
+                        Image(systemName: symbol)
+                            .font(.caption2)
+                    }
+                    // The title is one line and stays one line — the body
+                    // below is where the detail lives, which is what kept a
+                    // folded notice from printing its whole text twice.
+                    Text(notice.title)
+                        .lineLimit(notice.isCollapsible && !state.expanded ? 2 : nil)
+                    if notice.isCollapsible {
+                        Text(state.expanded ? "hide" : "show")
+                            .foregroundStyle(OS1VisualStyle.link)
+                    }
+                }
+                .font(.footnote)
+                .foregroundStyle(tone.color)
+                .multilineTextAlignment(notice.isCollapsible ? .leading : .center)
+
+                if showsBody, !entry.text.isEmpty {
+                    // `notice.link` (e.g. "Open worker") is deliberately not
+                    // rendered yet: this app routes to a session by pushing a
+                    // whole `Session`, and a transcript row has only an id.
+                    // The field is on the wire, so it costs one route to add.
+                    Text(entry.text)
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
     }
 }
 
