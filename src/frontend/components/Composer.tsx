@@ -24,6 +24,8 @@ import {
   composerBoxExpanded,
   composerBoxMinimized,
   composerMenuAnchorLeft,
+  composerMenuIcon,
+  composerMenuItem,
   composerMenuPopup,
   composerMenuWidth,
   composerSend,
@@ -128,7 +130,7 @@ interface Props {
    */
   usage?: SessionUsage;
   /** Extra row for the "+" menu, below the built-in ones. Same shape as
-   *  `sendMenu`: render a `.composer-menu-item` button and call `close()`
+   *  `sendMenu`: render a `composerMenuItem` button and call `close()`
    *  when it's picked. */
   menuExtra?: (ctx: { close: () => void }) => React.ReactNode;
   /** Content visually attached to the composer above the draft field. */
@@ -908,13 +910,13 @@ export function Composer({
                   {canAttach && (
                     <button
                       type="button"
-                      className="composer-menu-item"
+                      className={composerMenuItem}
                       {...tapProps(() => {
                         setMenu(null);
                         fileInputRef.current?.click();
                       })}
                     >
-                      <span className="composer-menu-icon">
+                      <span className={composerMenuIcon}>
                         <IconPaperclip size={22} />
                       </span>
                       {onFilesChange ? "Attach files" : "Attach an image"}
@@ -923,13 +925,13 @@ export function Composer({
                   {canAttach && mentionFetch && (
                     <button
                       type="button"
-                      className="composer-menu-item"
+                      className={composerMenuItem}
                       {...tapProps(() => {
                         setMenu(null);
                         startMention();
                       })}
                     >
-                      <span className="composer-menu-icon">
+                      <span className={composerMenuIcon}>
                         <IconAtSign size={22} />
                       </span>
                       Reference a file
@@ -938,13 +940,13 @@ export function Composer({
                   {onSetGoal && (
                     <button
                       type="button"
-                      className="composer-menu-item"
+                      className={composerMenuItem}
                       // Opens the goal editor: `menu` is single-valued, so this
                       // closes the add menu and opens the modal in one step.
                       {...tapProps(() => setMenu("goal"))}
                       title={goal ? `Goal: ${goal}` : undefined}
                     >
-                      <span className="composer-menu-icon">
+                      <span className={composerMenuIcon}>
                         <IconCrosshair size={22} />
                       </span>
                       {goal ? "Edit goal" : "Set a goal"}

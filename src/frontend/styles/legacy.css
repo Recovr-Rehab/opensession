@@ -2009,32 +2009,6 @@ body.resizing-tab-split {
 	}
 }
 
-/* Toolbar popovers (+ add menu, goal editor) */
-.composer-menu-item {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	width: 100%;
-	text-align: left;
-	font-size: 12px;
-	color: var(--text);
-	background: none;
-	border: none;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	padding: 7px 9px;
-	cursor: pointer;
-}
-.composer-menu-item:hover {
-	background: var(--hover);
-}
-.composer-menu-icon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 20px;
-	color: var(--text-dim);
-	font-size: 13px;
-}
 
 /* ─────────────────────────────────────────────────────────────
    Notes — shared collaborative editor (merged with the Docs wiki)

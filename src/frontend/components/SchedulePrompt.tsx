@@ -9,6 +9,8 @@ import { getCurrentUser } from "./UserPicker";
 import { IconChevronDown, IconClock } from "./icons";
 import {
   composerMenuAnchorRight,
+  composerMenuIcon,
+  composerMenuItem,
   composerMenuPopup,
   composerMenuWidth,
 } from "../lib/composer-classes";
@@ -205,10 +207,13 @@ export function SchedulePromptButton({
         type="button"
         className={
           variant === "menu-item"
-            ? // Keeps .composer-menu-item (SessionViewer renders rows into the
-              // same menu, so that class can't move yet) and adds only what the
-              // schedule row changes about it.
-              "composer-menu-item relative justify-start disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent"
+            ? // The shared menu row plus only what the schedule row changes
+              // about it. `disabled:hover:bg-transparent` is load-bearing: it
+              // is what suppresses the row's own hover wash while disabled.
+              cn(
+                composerMenuItem,
+                "relative justify-start disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent",
+              )
             : caretButton
         }
         onClick={() => setOpen(!open)}
@@ -220,7 +225,7 @@ export function SchedulePromptButton({
       >
         {variant === "menu-item" ? (
           <>
-            <span className="composer-menu-icon">
+            <span className={composerMenuIcon}>
               <IconClock size={22} />
             </span>
             <span>Schedule message</span>
@@ -240,8 +245,9 @@ export function SchedulePromptButton({
 
       {open && (
         // 172px, not the 236px `.composer-schedule-menu` asked for: that rule
-        // has been dead since `.composer-menu` moved below it in the stylesheet
-        // (equal specificity, later wins), so the menu has always been 172px.
+        // had been dead since the popup surface moved below it in the
+        // stylesheet (equal specificity, later wins), so the menu has always
+        // been 172px.
         <div
           className={cn(composerMenuPopup, composerMenuAnchorRight, composerMenuWidth)}
           role="menu"
@@ -291,7 +297,7 @@ export function SchedulePromptButton({
               role="menuitem"
               // text-label: the picks read a step larger than the "+" menu's
               // rows, which is what .composer-schedule-menu used to say.
-              className="composer-menu-item text-label"
+              className={cn(composerMenuItem, "text-label")}
               onClick={() => schedule(o.at)}
               disabled={saving || !hasText}
             >
@@ -302,7 +308,7 @@ export function SchedulePromptButton({
           <button
             type="button"
             role="menuitem"
-            className="composer-menu-item text-label"
+            className={cn(composerMenuItem, "text-label")}
             onClick={openCustom}
             disabled={!hasText}
           >

@@ -148,6 +148,8 @@ import {
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import {
+	composerMenuIcon,
+	composerMenuItem,
 	composerQueue,
 	composerQueueAction,
 	composerQueueActionDanger,
@@ -5313,12 +5315,12 @@ export function SessionViewer({
 											? ({ close }) => (
 													<button
 														type="button"
-														className="composer-menu-item"
+														className={composerMenuItem}
 														disabled={promoting}
 														title="Ask mode — this session can read the code but not change it"
 														onClick={() => void handlePromote(close)}
 													>
-														<span className="composer-menu-icon">
+														<span className={composerMenuIcon}>
 															<IconEye size={22} />
 														</span>
 														{promoting

@@ -94,10 +94,22 @@ export const composerToolbarPill =
 	"shrink min-w-[34px] max-[720px]:max-w-[136px] max-[720px]:px-[9px]";
 
 /* ── Toolbar popover menus ─────────────────────────────────────────
-   The popup surface for the "+" add menu and the send-later menu.
-   `.composer-menu-item` / `.composer-menu-icon` are NOT migrated: SessionViewer
-   renders rows into this menu (its `menuExtra`), so the row styling has to stay
-   in the stylesheet until that file moves too. */
+   The popup surface for the "+" add menu and the send-later menu, and the
+   rows that go in them. */
+/** One row in those menus. The row used to stay in the stylesheet because
+ *  SessionViewer contributes one through the composer's `menuExtra` and
+ *  SchedulePrompt contributes two more — but all three hosts are components,
+ *  so the row lives here and they import it.
+ *
+ *  Only the deviations from the base button reset in styles/base.css are
+ *  written: that already supplies `cursor: pointer`, `background: none`,
+ *  `border: none` and zero padding. */
+export const composerMenuItem =
+	"flex w-full items-center gap-[9px] rounded-control px-[9px] py-[7px] text-left text-[12px] text-fg hover:bg-hover";
+/** The row's leading glyph. A fixed 20px column so the labels line up however
+ *  wide the icons draw. */
+export const composerMenuIcon =
+	"inline-flex w-5 items-center justify-center text-label text-dim";
 export const composerMenuPopup =
 	"absolute bottom-[calc(100%+6px)] z-40 rounded-lg border border-line-strong bg-panel p-1 shadow-[0_8px_28px_rgba(0,0,0,0.28)]";
 /** The menu's own floor width. Kept out of the surface above because a second

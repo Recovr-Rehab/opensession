@@ -689,7 +689,6 @@ button {
 	   legacy deliberately squircles — `rounded-full` is the one utility
 	   spelling that opts OUT, so migrating one of these to it flattens the
 	   corner at the same radius. Use `rounded-[999px]` for a squircled pill. */
-	.composer-menu-item,
 	.session-link,
 	.sidebar-reopen,
 	.sidebar-group-header,
