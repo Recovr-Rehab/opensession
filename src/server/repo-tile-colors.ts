@@ -60,6 +60,41 @@ export const REPO_TILE_COLORS = [
 ];
 
 /**
+ * The palette before it was brightened, slot for slot.
+ *
+ * A color someone PICKED is stored as a hex in the config, so brightening the
+ * palette would otherwise leave those repos — and only those — wearing the old
+ * muted tone, with no swatch in the picker matching what they have. Reading a
+ * legacy hex as its replacement at the same slot keeps the choice (same hue,
+ * same position) and lets the picker ring it again. Old configs are not
+ * rewritten; the mapping happens on the way out.
+ */
+const LEGACY_TILE_COLORS = [
+	"#ad6b6d",
+	"#247967",
+	"#9f6d96",
+	"#58733d",
+	"#7d78b0",
+	"#7f6528",
+	"#5186af",
+	"#925742",
+	"#349092",
+	"#8f536b",
+	"#568f68",
+	"#785b8d",
+	"#858445",
+	"#51679a",
+	"#a47548",
+	"#1f748b",
+];
+
+/** A stored color as it should be shown today. */
+export function currentTileColor(color: string): string {
+	const slot = LEGACY_TILE_COLORS.indexOf(color.toLowerCase());
+	return slot >= 0 ? REPO_TILE_COLORS[slot] : color;
+}
+
+/**
  * FNV-1a over the lowercased id. Mirrored in both clients — change it here and
  * a repo's fallback color moves on every surface at once, so don't, unless you
  * change it in all three.
@@ -99,8 +134,10 @@ export function assignRepoTileColors(
 	// to a repo that hadn't asked for anything.
 	for (const [id, color] of Object.entries(chosen)) {
 		if (!ids.includes(id)) continue;
-		assigned[id] = color;
-		const slot = REPO_TILE_COLORS.indexOf(color);
+		// Through currentTileColor, so a choice made against the old palette
+		// still holds its slot (and still shows as chosen in the picker).
+		assigned[id] = currentTileColor(color);
+		const slot = REPO_TILE_COLORS.indexOf(assigned[id]);
 		if (slot >= 0) taken.add(slot);
 	}
 	// Slots already spoken for by repos starting with the same letter. Those

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	REPO_TILE_COLORS,
 	assignRepoTileColors,
+	currentTileColor,
 	repoTileColor,
 } from "./repo-tile-colors";
 
@@ -81,6 +82,22 @@ describe("assignRepoTileColors", () => {
 		const others = REPOS.filter((id) => id !== "infra").map((id) => colors[id]);
 		expect(others).not.toContain(chosen);
 		expect(new Set(Object.values(colors)).size).toBe(REPOS.length);
+	});
+
+	test("reads a color picked from the old palette as its replacement", () => {
+		// "#5186af" was slot 6 (denim) before the palette was brightened; the
+		// repo that picked it should now wear slot 6 of the palette in use,
+		// and still count as having chosen it.
+		expect(currentTileColor("#5186af")).toBe(REPO_TILE_COLORS[6]);
+		expect(currentTileColor(REPO_TILE_COLORS[6])).toBe(REPO_TILE_COLORS[6]);
+		// A hex from neither palette (hand-edited config) is left alone.
+		expect(currentTileColor("#123456")).toBe("#123456");
+
+		const colors = assignRepoTileColors(REPOS, { "tella-mac": "#5186af" });
+		expect(colors["tella-mac"]).toBe(REPO_TILE_COLORS[6]);
+		// And it still holds that slot against everyone else.
+		const others = REPOS.filter((id) => id !== "tella-mac").map((id) => colors[id]);
+		expect(others).not.toContain(REPO_TILE_COLORS[6]);
 	});
 
 	test("ignores a chosen color for a repo that isn't registered", () => {

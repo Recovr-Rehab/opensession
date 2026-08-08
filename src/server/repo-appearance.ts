@@ -22,7 +22,7 @@ import { configuredRepos } from "./config";
 import { persistRawConfig, rawConfig, withConfigMutationLock } from "./config-mutation";
 import { stateDir } from "./paths";
 import { trimIconMargin } from "./png-trim";
-import { REPO_TILE_COLORS } from "./repo-tile-colors";
+import { REPO_TILE_COLORS, currentTileColor } from "./repo-tile-colors";
 
 /** Where fetched icons live: ~/.opensession-repo-icons/<id>.png. */
 export function repoIconPath(id: string): string {
@@ -131,8 +131,12 @@ function persistAppearance(
 
 		const now = configuredRepos()[id];
 		const resolved = resolveRepoIcon(now?.icon, now?.repo);
+		const stored = now?.color as string | undefined;
 		return {
-			color: (now?.color as string | undefined) ?? null,
+			// Through currentTileColor for the same reason the repo list is: a
+			// color picked before the palette was brightened reads as its
+			// replacement rather than as the old muted tone.
+			color: stored ? currentTileColor(stored) : null,
 			hasIcon: !!resolved,
 			iconRev: repoIconRevision(resolved),
 			iconSource: resolved
