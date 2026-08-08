@@ -15,7 +15,7 @@ import {
 	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { IconArrowUpToLine, IconPlus } from "./icons";
+import { IconArrowUpToLine, IconCheck, IconPlus } from "./icons";
 import { RepoTile } from "./RepoTile";
 import { REPO_TILE_COLORS, REPO_TILE_INK, repoColor } from "../lib/repo-colors";
 import { repoLetter } from "../lib/repo-label";
@@ -177,6 +177,9 @@ function RepoTileButton({
 	const apply = (patch: { color?: string | null; icon?: "github" | null }) =>
 		run(() => setRepoAppearanceApi(id, patch));
 
+	// On automatic when nothing was chosen for it and it wears no art.
+	const autoActive = !repo?.hasIcon && !repo?.colorChosen;
+
 	async function upload(file: File) {
 		await run(async () => {
 			const png = await pngFromImageFile(file);
@@ -192,25 +195,9 @@ function RepoTileButton({
 			>
 				<RepoTile name={id} size={28} />
 			</Popover.Trigger>
-			<Popover.Popup className="w-[272px] p-3" initialFocus>
+			<Popover.Popup className="w-[248px] p-3" initialFocus>
 				<div className="mb-2 text-meta font-medium text-dim">Tile</div>
-				<div className="grid grid-cols-7 gap-2">
-					{/* Automatic leads, because it's what every repo starts on:
-					    a color picked across the whole set so no two match. It
-					    shows the color it would give — with a dashed ring, so
-					    it doesn't read as a thirteenth fixed color. */}
-					<TileChoice
-						label={`Automatic — a color no other repo has${
-							repo?.colorChosen ? "" : " (in use)"
-						}`}
-						active={!repo?.hasIcon && !repo?.colorChosen}
-						disabled={busy}
-						onClick={() => apply({ color: null, icon: null })}
-					>
-						<span className="block h-full w-full rounded-control border border-dashed border-line p-px">
-							<LetterTile id={id} color={repo?.autoColor} />
-						</span>
-					</TileChoice>
+				<div className="grid grid-cols-6 gap-2">
 					{REPO_TILE_COLORS.map((color) => (
 						<TileChoice
 							key={color}
@@ -274,7 +261,34 @@ function RepoTileButton({
 						}}
 					/>
 				</div>
-				<div className="mt-2.5 text-meta leading-relaxed text-faint">
+				{/* The default, named. It isn't a colour among the ten — it's
+				    "let the server keep this repo on one nothing else has" —
+				    so it gets a row that says so, and shows which color that
+				    currently means. */}
+				<button
+					type="button"
+					disabled={busy}
+					aria-pressed={autoActive}
+					onClick={() => apply({ color: null, icon: null })}
+					className={cn(
+						"mt-2.5 flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left",
+						"outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
+						autoActive ? "bg-active" : "hover:bg-hover",
+					)}
+				>
+					<span className="h-5 w-5 shrink-0">
+						<LetterTile id={id} color={repo?.autoColor} />
+					</span>
+					<span className="min-w-0 flex-1 text-control-label text-fg">
+						Automatic
+					</span>
+					{autoActive ? (
+						<IconCheck size={14} className="shrink-0 text-dim" />
+					) : (
+						<span className="shrink-0 text-meta text-faint">Use</span>
+					)}
+				</button>
+				<div className="mt-1.5 text-meta leading-relaxed text-faint">
 					{busy
 						? "Working…"
 						: avatarOk
