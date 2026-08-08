@@ -13,6 +13,9 @@ export interface RepoInfo {
 	color?: string;
 	/** Whether that color was chosen for the repo rather than assigned. */
 	colorChosen?: boolean;
+	/** The color automatic would give it — the same as `color` unless one
+	 *  was chosen. The picker previews it on its Automatic tile. */
+	autoColor?: string;
 	/** Whether the tile paints art rather than the letter. */
 	hasIcon?: boolean;
 	/** Which of the picker's icon choices that art came from. */

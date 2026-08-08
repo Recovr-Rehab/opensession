@@ -192,9 +192,25 @@ function RepoTileButton({
 			>
 				<RepoTile name={id} size={28} />
 			</Popover.Trigger>
-			<Popover.Popup className="w-[248px] p-3" initialFocus>
+			<Popover.Popup className="w-[272px] p-3" initialFocus>
 				<div className="mb-2 text-meta font-medium text-dim">Tile</div>
-				<div className="grid grid-cols-6 gap-2">
+				<div className="grid grid-cols-7 gap-2">
+					{/* Automatic leads, because it's what every repo starts on:
+					    a color picked across the whole set so no two match. It
+					    shows the color it would give — with a dashed ring, so
+					    it doesn't read as a thirteenth fixed color. */}
+					<TileChoice
+						label={`Automatic — a color no other repo has${
+							repo?.colorChosen ? "" : " (in use)"
+						}`}
+						active={!repo?.hasIcon && !repo?.colorChosen}
+						disabled={busy}
+						onClick={() => apply({ color: null, icon: null })}
+					>
+						<span className="block h-full w-full rounded-control border border-dashed border-line p-px">
+							<LetterTile id={id} color={repo?.autoColor} />
+						</span>
+					</TileChoice>
 					{REPO_TILE_COLORS.map((color) => (
 						<TileChoice
 							key={color}
@@ -258,23 +274,12 @@ function RepoTileButton({
 						}}
 					/>
 				</div>
-				{repo?.colorChosen && !repo?.hasIcon && (
-					<Button
-						size="sm"
-						variant="ghost"
-						className="mt-2"
-						disabled={busy}
-						onClick={() => apply({ color: null })}
-					>
-						Use the assigned color
-					</Button>
-				)}
-				<div className="mt-2 text-meta leading-relaxed text-faint">
+				<div className="mt-2.5 text-meta leading-relaxed text-faint">
 					{busy
 						? "Working…"
 						: avatarOk
-							? `Colors are assigned so no two repos match; pick one to override that. The avatar is ${repo?.ghRepo?.split("/")[0]}’s — the same picture for every repo that owner has.`
-							: "Colors are assigned so no two repos match; pick one to override that, or upload art of your own."}
+							? `Automatic keeps this repo on a color no other repo has. The avatar is ${repo?.ghRepo?.split("/")[0]}’s — the same picture for every repo that owner has.`
+							: "Automatic keeps this repo on a color no other repo has."}
 				</div>
 				{error && <InlineAlert className="mt-2">{error}</InlineAlert>}
 			</Popover.Popup>

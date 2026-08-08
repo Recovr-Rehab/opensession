@@ -253,7 +253,17 @@ export async function handleWorkspaceRoutes(
 				.filter((p) => p.color)
 				.map((p) => [p.id, p.color as string]),
 		);
-		const colors = assignRepoTileColors(Object.keys(REPOS), chosen);
+		const ids = Object.keys(REPOS);
+		const colors = assignRepoTileColors(ids, chosen);
+		// What each repo would wear with its own choice dropped — the picker
+		// shows that as its "Automatic" tile, so choosing it is a picture
+		// rather than a promise. Everyone else's choice still stands, which is
+		// what makes it the real answer and not an approximation.
+		const autoColor = (id: string): string => {
+			if (!chosen[id]) return colors[id];
+			const { [id]: _dropped, ...rest } = chosen;
+			return assignRepoTileColors(ids, rest)[id];
+		};
 		return Response.json({
 			repos: Object.values(REPOS).map((p) => {
 				const icon = resolveRepoIcon(p.icon, p.repo);
@@ -268,6 +278,9 @@ export async function handleWorkspaceRoutes(
 					color: colors[p.id],
 					/** Whether that color was chosen rather than assigned. */
 					colorChosen: !!p.color,
+					/** What it would wear on automatic — the same when nothing
+					 *  was chosen for it. */
+					autoColor: autoColor(p.id),
 					/** Whether the tile paints art instead of the letter. */
 					hasIcon: !!icon,
 					/** Which picker choice that art came from, when we stored it. */
