@@ -49,6 +49,17 @@ interface GlanceAgent {
 // ends, so without this someone watching a long plan re-expands every turn.
 const OPEN_KEY = "opensession-composer-status-open";
 
+/** Section caption inside the expanded card (the workflow's name, "Plan · 2/5").
+ *  text-meta rather than the stylesheet's off-scale 12px: it is secondary
+ *  metadata above the list it labels. */
+const sectionName = "truncate text-meta font-semibold text-dim";
+
+/** The live dot. The keyframes stay in the stylesheet (see the report — they
+ *  belong in base.css now that no class of ours carries them), and the
+ *  reduced-motion blanket in base.css deliberately stops this one. */
+const liveDot =
+	"flex-none rounded-full bg-green animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]";
+
 export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 	const [open, setOpen] = useState(
 		() => localStorage.getItem(OPEN_KEY) === "1",
@@ -122,16 +133,25 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 	const planStep = currentPlanItem(planItems);
 
 	return (
-		<div className="composer-agents" data-open={open ? "" : undefined}>
+		// A flap that folds out from behind the composer: inset from its edges,
+		// rounded only on top, bottom tucked under the composer box (negative
+		// margin — the composer is a later positioned sibling, so it paints on
+		// top). The summary row sits at the bottom, nearest the composer, and the
+		// detail card grows upward so the composer stays anchored.
+		<div
+			className="relative mx-[18px] -mb-3.5 flex w-[calc(100%-36px)] flex-col gap-2.5 rounded-t-xl border border-b-0 border-[color:var(--composer-border)] bg-panel px-3.5 pt-2.5 pb-[22px] text-label font-medium text-fg"
+			data-open={open ? "" : undefined}
+		>
 			{open && (
-				<div className="composer-agents-detail">
+				<div className="flex flex-col gap-2.5">
 					{planTotal > 0 && (
-						<div className="composer-agents-plan">
+						// Its own scroller so a long plan doesn't push the composer down.
+						<div className="flex max-h-[168px] flex-col gap-[7px] overflow-y-auto">
 							{/* The pill right below already reads "Plan · 2/5"; the title
 							    only earns its line when there's an agents section under
 							    it to be told apart from. */}
 							{total > 0 && (
-								<div className="composer-agents-name">
+								<div className={sectionName}>
 									Plan · {planDone}/{planTotal}
 								</div>
 							)}
@@ -140,13 +160,15 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 					)}
 
 					{total > 0 && (
+						// Agent half of the card. Carries a rule when the plan sits above
+						// it — without one the two sections read as a single list.
 						<div
 							className={cn(
-								"composer-agents-section",
-								planTotal > 0 && "has-divider",
+								"flex flex-col gap-2.5",
+								planTotal > 0 && "border-t border-line pt-2.5",
 							)}
 						>
-							<div className="composer-agents-name">
+							<div className={sectionName}>
 								{single
 									? single.name
 									: runs.length > 0
@@ -154,62 +176,82 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 										: "Sub-agents"}
 							</div>
 
+							{/* Phase stepper: current step green, past steps checked + dim,
+							    future faint. */}
 							{steps.length > 1 && (
-								<ol className="composer-agents-steps">
+								<ol className="m-0 flex list-none flex-col gap-1.5 p-0">
 									{steps.map((s, i) => (
 										<li
 											key={s}
 											className={cn(
-												"composer-agents-step",
-												i < curIdx && "is-done",
-												i === curIdx && "is-current",
+												"flex items-center gap-2",
+												i < curIdx && "font-medium text-dim",
+												i === curIdx && "font-semibold text-fg",
+												i > curIdx && "font-medium text-faint",
 											)}
 										>
-											<span className="composer-agents-step-mark">
+											<span
+												className={cn(
+													"inline-flex size-4 flex-none items-center justify-center rounded-full text-[10px] font-semibold",
+													i < curIdx
+														? "border border-transparent bg-green-soft text-green"
+														: i === curIdx
+															? "border border-green text-green"
+															: "border border-line",
+												)}
+											>
 												{i < curIdx ? "✓" : i + 1}
 											</span>
-											<span className="composer-agents-step-label">{s}</span>
+											<span>{s}</span>
 										</li>
 									))}
 								</ol>
 							)}
 
-							<div className="composer-agents-tallies">
-								<span>
-									<i className="composer-agents-dot" />
+							<div className="flex flex-wrap gap-x-3 gap-y-1 text-meta font-medium">
+								<span className="inline-flex items-center gap-[5px]">
+									<i className={cn(liveDot, "size-2")} />
 									{runningCount} running
 								</span>
 								{done > 0 && (
-									<span className="is-done">
+									<span className="inline-flex items-center gap-[5px] text-dim">
 										{done}/{total} done
 									</span>
 								)}
-								{pending > 0 && <span className="is-dim">{pending} queued</span>}
-								{error > 0 && <span className="is-error">{error} failed</span>}
+								{pending > 0 && (
+									<span className="inline-flex items-center gap-[5px] text-faint">
+										{pending} queued
+									</span>
+								)}
+								{error > 0 && (
+									<span className="inline-flex items-center gap-[5px] text-red">
+										{error} failed
+									</span>
+								)}
 							</div>
 
 							{running.length > 0 && (
-								<ul className="composer-agents-list">
+								<ul className="m-0 flex max-h-[108px] list-none flex-col gap-[5px] overflow-y-auto p-0 text-meta font-medium">
 									{running.slice(0, 4).map((a) => (
-										<li key={a.key}>
-											<i className="composer-agents-dot sm" />
-											<span className="composer-agents-list-label">
-												{a.label}
-											</span>
+										<li key={a.key} className="flex min-w-0 items-center gap-[7px]">
+											<i className={cn(liveDot, "size-1.5")} />
+											<span className="truncate">{a.label}</span>
 											{a.phase && single?.phases?.length !== 1 ? (
-												<span className="is-dim"> · {a.phase}</span>
+												<span className="flex-none text-faint"> · {a.phase}</span>
 											) : null}
 										</li>
 									))}
 									{running.length > 4 && (
-										<li className="is-dim">+{running.length - 4} more</li>
+										<li className="flex min-w-0 flex-none items-center gap-[7px] text-faint">
+											+{running.length - 4} more
+										</li>
 									)}
 								</ul>
 							)}
 
 							<button
 								type="button"
-								className="composer-agents-open"
+								className="inline-flex items-center gap-0.5 self-start rounded-full border border-line bg-[var(--bg-hover)] py-[5px] pr-2.5 pl-3 text-meta font-semibold text-fg active:bg-pressed"
 								onClick={onOpenPanel}
 							>
 								Open full panel
@@ -222,45 +264,48 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 
 			<button
 				type="button"
-				className="composer-agents-summary"
+				className="flex w-full items-center gap-2 text-left text-label font-medium text-fg"
 				aria-expanded={open}
 				aria-label={open ? "Collapse run status" : "Show run status"}
 				onClick={toggle}
 			>
-				<span className="composer-agents-dot" />
-				<span className="composer-agents-label">
+				<span className={cn(liveDot, "size-2")} />
+				<span className="min-w-0 flex-1 truncate">
 					{total > 0 ? (
 						<>
-							<strong>{runningCount} running</strong>
+							<strong className="font-semibold">{runningCount} running</strong>
 							{total > runningCount ? (
-								<span className="is-dim">
+								<span className="font-medium text-faint">
 									{" "}
 									· {done}/{total} done
 								</span>
 							) : null}
 							{planTotal > 0 ? (
-								<span className="is-dim">
+								<span className="font-medium text-faint">
 									{" "}
 									· Plan {planDone}/{planTotal}
 								</span>
 							) : !open && phase ? (
-								<span className="is-dim"> · {phase}</span>
+								<span className="font-medium text-faint"> · {phase}</span>
 							) : null}
 						</>
 					) : (
 						<>
-							<strong>
+							<strong className="font-semibold">
 								Plan · {planDone}/{planTotal}
 							</strong>
 							{!open && planStep ? (
-								<span className="is-dim"> · {planStep}</span>
+								<span className="font-medium text-faint"> · {planStep}</span>
 							) : null}
 						</>
 					)}
 				</span>
 				<IconChevronDown
 					size={16}
-					className={cn("composer-agents-caret", open && "is-open")}
+					className={cn(
+						"flex-none text-faint transition-transform duration-[var(--dur)]",
+						open && "rotate-180",
+					)}
 				/>
 			</button>
 		</div>

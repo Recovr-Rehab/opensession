@@ -22,6 +22,14 @@ import { fullTime, shortTime } from "../lib/time";
 import { IconChevronDown } from "./icons";
 import { noticeTone, stripNoticeGlyph } from "../lib/notice-tone";
 import {
+	fileChipCard,
+	fileChipCardPadding,
+	fileChipMeta,
+	fileChipName,
+	fileChipSub,
+	fileChipThumb,
+} from "../lib/composer-classes";
+import {
 	msgBody,
 	msgBubbleHuman,
 	msgBubbleUser,
@@ -398,15 +406,19 @@ function EntryFiles({
 			{files.map((f, i) => (
 				<a
 					key={i}
-					className="composer-file-card msg-file-card"
+					className={cn(
+						fileChipCard,
+						fileChipCardPadding,
+						"no-underline hover:border-accent",
+					)}
 					href={`/media?path=${encodeURIComponent(f.path)}`}
 					download={f.name}
 					title={f.name}
 				>
-					<span className="composer-file-thumb">{extBadge(f.name)}</span>
-					<span className="composer-file-meta">
-						<span className="composer-file-name">{f.name}</span>
-						<span className="composer-file-sub">Attachment</span>
+					<span className={fileChipThumb}>{extBadge(f.name)}</span>
+					<span className={fileChipMeta}>
+						<span className={fileChipName}>{f.name}</span>
+						<span className={fileChipSub}>Attachment</span>
 					</span>
 				</a>
 			))}

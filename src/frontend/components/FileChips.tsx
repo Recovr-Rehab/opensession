@@ -1,5 +1,15 @@
 import React from "react";
 import { extBadge, type FileAttachment } from "../lib/images";
+import {
+  fileChipCard,
+  fileChipCardPaddingRemovable,
+  fileChipMeta,
+  fileChipName,
+  fileChipRow,
+  fileChipSub,
+  fileChipThumb,
+} from "../lib/composer-classes";
+import { cn } from "../ui/cn";
 
 interface Props {
   files: FileAttachment[];
@@ -11,17 +21,21 @@ interface Props {
 export function FileChips({ files, onRemove, disabled }: Props) {
   if (files.length === 0) return null;
   return (
-    <div className="composer-files">
+    <div className={fileChipRow}>
       {files.map((f, i) => (
-        <div key={i} className="composer-file-card" title={f.name}>
-          <span className="composer-file-thumb">{extBadge(f.name)}</span>
-          <span className="composer-file-meta">
-            <span className="composer-file-name">{f.name}</span>
-            <span className="composer-file-sub">Attachment</span>
+        <div
+          key={i}
+          className={cn(fileChipCard, fileChipCardPaddingRemovable)}
+          title={f.name}
+        >
+          <span className={fileChipThumb}>{extBadge(f.name)}</span>
+          <span className={fileChipMeta}>
+            <span className={fileChipName}>{f.name}</span>
+            <span className={fileChipSub}>Attachment</span>
           </span>
           <button
             type="button"
-            className="composer-file-remove"
+            className="absolute top-1 right-[5px] shrink-0 text-[15px] leading-none text-faint enabled:hover:text-fg disabled:cursor-default disabled:opacity-50"
             onClick={() => onRemove(i)}
             disabled={disabled}
             title="Remove file"
