@@ -67,7 +67,7 @@ function sessionRepo(session: UnifiedSession): string {
  * empty one — so key equality means exactly what `a.repo === b.repo &&
  * a.branch === b.branch` meant.
  */
-function branchKey(repo: string, branch: string | undefined): string {
+function branchKey(repo: string, branch: string | null | undefined): string {
 	return `${repo}\u0000${branch ?? "\u0001"}`;
 }
 
