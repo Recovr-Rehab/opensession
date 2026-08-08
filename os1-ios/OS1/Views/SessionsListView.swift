@@ -379,22 +379,25 @@ struct SessionsListView: View {
                             // under the 0.867 that reproduced it exactly:
                             // the mark is solid ink against actions that are
                             // a near-transparent capsule holding two ~22pt
-                            // glyphs, so at 35pt it still out-weighed them.
-                            // 44 × 0.78 × 0.93 ≈ 32pt.
+                            // glyphs, so at 35pt it out-weighed them.
+                            // 44 × 0.83 × 0.93 ≈ 34pt.
                             RepoTile(
                                 name: "opensession",
                                 size: 44,
                                 round: true,
-                                artScale: 0.78
+                                artScale: 0.83
                             )
                         }
                         .accessibilityLabel("Settings")
                         // Hiding the glass background leaves the padding the
-                        // capsule reserved, so the bare tile sat at ~34pt while
-                        // every visible thing under it — repo icons, status
-                        // dots, PR glyphs — starts at 20pt. Pull it back onto
-                        // that column.
-                        .padding(.leading, -14)
+                        // capsule reserved, so the bare tile sits well right
+                        // of everything under it. Pull it back until the MARK
+                        // starts on the list's own column — band headings and
+                        // row tiles both begin at ~16pt — which is further
+                        // than the tile's frame suggests: the art is inset
+                        // inside it by `artScale`, so the frame has to sit
+                        // ~5pt left of where the ink should land.
+                        .padding(.leading, -18.5)
                     }
                     // The bare app tile is the control; the toolbar's glass
                     // circle around it read as a stray border.
