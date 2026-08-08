@@ -84,6 +84,16 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     /// Image attachments on conversation messages: `data:` URLs or bounded
     /// transcript `os-blob:` references resolved through the image endpoint.
     var images: [String]?
+    /// Set when this entry is an operational notice rather than a message —
+    /// a runner line, a recap, a worker's report, a heads-up from another
+    /// session. The server classifies it (protocol notices.ts) and strips the
+    /// delivery plumbing out of `content`, so every kind renders through one
+    /// row here instead of each client re-deriving its own.
+    var notice: EntryNotice?
+    /// Who sent this turn when it wasn't the session's driver — a teammate who
+    /// steered in, or one whose answer was routed back from `senderVia`.
+    var sender: String?
+    var senderVia: String?
 
     var text: String { content ?? "" }
 
@@ -95,4 +105,29 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     var isAssistant: Bool { type == "assistant" }
     var isTool: Bool { type == "tool_use" || type == "tool_result" }
     var isSystem: Bool { type == "system" }
+}
+
+/// How an entry that isn't a message reads. One shape for all of them: a
+/// title, how loudly to say it, optionally a body to put underneath, and at
+/// most one action. Unknown `kind`s from a newer server still render, because
+/// nothing here branches on it.
+struct EntryNotice: Decodable, Equatable, Sendable {
+    /// What produced it ("system", "recap", "worker-report", …). Carried for
+    /// diagnostics; deliberately not a rendering switch.
+    let kind: String
+    let title: String
+    /// "info" | "warn" | "error" — an unknown value reads as info.
+    let tone: String
+    /// "inline" (always shown) | "collapsed" (behind show/hide). Absent means
+    /// the title is the whole notice.
+    let body: String?
+    let link: Link?
+
+    struct Link: Decodable, Equatable, Sendable {
+        let label: String
+        let sessionId: String
+    }
+
+    var showsBodyInline: Bool { body == "inline" }
+    var isCollapsible: Bool { body == "collapsed" }
 }

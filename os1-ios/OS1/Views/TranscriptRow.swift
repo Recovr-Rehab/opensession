@@ -18,7 +18,15 @@ struct TranscriptRow: View {
     var body: some View {
         switch block {
         case .message(let entry):
-            if entry.isUser {
+            // A notice is anything that isn't someone talking, whatever
+            // produced it — the server already decided which.
+            if let notice = entry.notice {
+                NoticeRow(
+                    entry: entry,
+                    notice: notice,
+                    state: expansionState("notice-\(entry.id)")
+                )
+            } else if entry.isUser {
                 UserBubble(entry: entry, sessionId: sessionId)
             } else if entry.isAssistant {
                 AssistantMessage(
@@ -27,7 +35,18 @@ struct TranscriptRow: View {
                     state: expansionState("body-\(entry.id)")
                 )
             } else {
-                SystemNoticeRow(entry: entry, state: expansionState("notice-\(entry.id)"))
+                // A system entry from a server too old to classify it.
+                NoticeRow(
+                    entry: entry,
+                    notice: EntryNotice(
+                        kind: "system",
+                        title: entry.text,
+                        tone: NoticeTone.derived(from: entry).rawValue,
+                        body: nil,
+                        link: nil
+                    ),
+                    state: expansionState("notice-\(entry.id)")
+                )
             }
         case .tool(let item):
             ToolCallRow(
@@ -56,7 +75,10 @@ struct TranscriptRow: View {
 // MARK: - Messages
 
 /// The person's own message. No name label — the right alignment already
-/// says who wrote it.
+/// says who wrote it — unless someone ELSE sent this turn (a teammate who
+/// steered in, or one whose answer was routed back from Slack), in which case
+/// the label is the only thing that says so: the server strips the "[Name] "
+/// prefix and the "💬 X answered" header out of the text.
 struct UserBubble: View {
     let entry: TranscriptEntry
     let sessionId: String
@@ -65,6 +87,14 @@ struct UserBubble: View {
         HStack(alignment: .bottom, spacing: 8) {
             Spacer(minLength: 40)
             VStack(alignment: .trailing, spacing: 6) {
+                if let sender = entry.sender {
+                    Text(
+                        entry.senderVia == "slack"
+                            ? "💬 \(sender) · via Slack" : sender
+                    )
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                }
                 ConversationImageRow(sources: entry.images ?? [], sessionId: sessionId)
                 if !entry.text.isEmpty {
                     Text(entry.text)
@@ -280,19 +310,24 @@ private struct ConversationImageRow: View {
 
 // MARK: - System notices
 
-/// System events as a centered pill. Severity is carried by tone rather than
-/// by more text: a failure that reads identically to "model changed" is a
-/// failure nobody notices.
-struct SystemNoticeRow: View {
+/// Everything in a transcript that isn't someone talking, as one centered
+/// pill: a runner line, a recap, a compaction, a worker's report, review
+/// findings, a heads-up from another session, a restart resume.
+///
+/// The server hands over a title, a tone, and at most one body and one action
+/// (`EntryNotice`), so this view never asks what KIND of notice it is —
+/// adding a tenth kind must not add a tenth rendering. Severity rides the tone
+/// rather than more words: a failure that reads identically to "model changed"
+/// is a failure nobody notices.
+struct NoticeRow: View {
     let entry: TranscriptEntry
+    let notice: EntryNotice
     let state: TurnFoldState
 
-    /// Longer than this and the pill folds — a multi-paragraph restart
-    /// explanation should not push the conversation off the screen.
-    private static let foldThreshold = 220
-
-    private var tone: NoticeTone { NoticeTone.of(entry) }
-    private var isFoldable: Bool { entry.text.count > Self.foldThreshold }
+    private var tone: NoticeTone { NoticeTone(rawValue: notice.tone) ?? .info }
+    private var showsBody: Bool {
+        notice.showsBodyInline || (notice.isCollapsible && state.expanded)
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -301,18 +336,25 @@ struct SystemNoticeRow: View {
                     Image(systemName: symbol)
                         .font(.caption2)
                 }
-                Text(headline)
-                    .lineLimit(isFoldable && !state.expanded ? 2 : nil)
-                if isFoldable {
+                // The title is one line and stays one line — the body below
+                // is where the detail lives, which is what kept a folded
+                // notice from printing its whole text twice.
+                Text(notice.title)
+                    .lineLimit(notice.isCollapsible && !state.expanded ? 2 : nil)
+                if notice.isCollapsible {
                     Text(state.expanded ? "hide" : "show")
                         .foregroundStyle(OS1VisualStyle.link)
                 }
             }
             .font(.footnote)
             .foregroundStyle(tone.color)
-            .multilineTextAlignment(isFoldable ? .leading : .center)
+            .multilineTextAlignment(notice.isCollapsible ? .leading : .center)
 
-            if isFoldable, state.expanded {
+            if showsBody, !entry.text.isEmpty {
+                // `notice.link` (e.g. "Open worker") is deliberately not
+                // rendered yet: this app routes to a session by pushing a
+                // whole `Session`, and a transcript row has only an id. The
+                // field is on the wire, so it costs one route to add.
                 Text(entry.text)
                     .font(.footnote)
                     .foregroundStyle(OS1VisualStyle.textDim)
@@ -330,27 +372,20 @@ struct SystemNoticeRow: View {
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .onTapGesture {
-            guard isFoldable else { return }
+            guard notice.isCollapsible else { return }
             withAnimation(.snappy(duration: 0.2, extraBounce: 0)) { state.toggle() }
         }
         .accessibilityAddTraits(tone == .error ? .isStaticText : [])
     }
-
-    /// Folded notices show their first line — server notices lead with the
-    /// headline and explain underneath.
-    private var headline: String {
-        guard isFoldable, !state.expanded else { return entry.text }
-        return entry.text
-            .components(separatedBy: "\n")
-            .first?
-            .trimmingCharacters(in: .whitespaces) ?? entry.text
-    }
 }
 
-enum NoticeTone: Equatable {
+enum NoticeTone: String, Equatable {
     case info, warn, error
 
-    static func of(_ entry: TranscriptEntry) -> NoticeTone {
+    /// The pre-classification heuristic, kept for entries from a server that
+    /// doesn't send a tone yet. New code reads `EntryNotice.tone`, which the
+    /// server derives from the same phrasings in one place.
+    static func derived(from entry: TranscriptEntry) -> NoticeTone {
         if entry.isError == true { return .error }
         let text = entry.text.lowercased()
         for marker in ["failed", "failure", "error", "denied", "crashed", "could not"]
