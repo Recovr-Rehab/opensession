@@ -1365,6 +1365,13 @@ struct SessionsListView: View {
                             #if os(iOS)
                             WebIcon(kind: .archive, size: 22, color: OS1VisualStyle.textDim)
                                 .frame(width: 22, height: 22)
+                                // The glyph is drawn inside its 24-unit box
+                                // with ~3pt of air on the left at this size,
+                                // so the box starting on the column left the
+                                // INK 3pt right of every repo tile above it.
+                                // An offset, not padding: the label keeps the
+                                // 47pt column the row titles use.
+                                .offset(x: -2.5)
                             #else
                             WebIcon(kind: .archive, size: 16, color: OS1VisualStyle.textDim)
                                 .frame(width: 16, height: 16)
@@ -1397,7 +1404,10 @@ struct SessionsListView: View {
                     }
                     .buttonStyle(.plain)
                     #if os(iOS)
-                    .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 16))
+                    // 16 leading, like every other row in this list — the
+                    // archive glyph lands on the same column as the repo
+                    // tiles and band headings above it.
+                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                     #endif
