@@ -1521,25 +1521,6 @@ body.resizing-tab-split {
 	background: var(--hover);
 }
 
-.pr-review {
-	text-transform: capitalize;
-	font-weight: 600;
-}
-
-.pr-checks {
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-	overflow: hidden;
-}
-
-.pr-comments {
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-	overflow: hidden;
-}
-
 /* ── Reviews view ────────────────────────────────────────── */
 
 .sidebar-nav-count {
@@ -2200,14 +2181,6 @@ body.resizing-tab-split {
 	margin: 0 auto;
 }
 
-.page-header {
-	display: flex;
-	align-items: flex-start;
-	justify-content: space-between;
-	gap: 16px;
-	margin-bottom: 22px;
-}
-
 .page-title {
 	margin: 0;
 	font-size: 19px;
@@ -2851,11 +2824,6 @@ body.resizing-tab-split {
 	.connections {
 		padding: 18px 14px 48px;
 	}
-	.page-header {
-		flex-direction: column;
-		gap: 10px;
-	}
-
 	.composer-toolbar {
 		gap: 6px;
 	}
