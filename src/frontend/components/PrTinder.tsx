@@ -13,6 +13,7 @@ import {
 } from "../lib/api";
 import { DEFAULT_REPO_ID } from "../lib/brand";
 import { renderMarkdown } from "../lib/markdown";
+import { PR_BODY_MD } from "../lib/pr-tone-classes";
 import { providerFromUrl } from "../lib/provider";
 import { useCurrentUser } from "./UserPicker";
 import { Textarea } from "../ui/input";
@@ -695,10 +696,8 @@ function PrCard({
 			    overflow flows into the deck's normal page scroll. */}
 			<div className="px-5 py-4">
 				{bodyHtml ? (
-					/* .pr-body-md clamps itself to 360px + inner scroll for the PR
-					   panel — undo that here: the card shows the whole description. */
 					<div
-						className="pr-body-md markdown max-h-none overflow-visible p-0 text-[13px]"
+						className={`markdown ${PR_BODY_MD}`}
 						dangerouslySetInnerHTML={{ __html: bodyHtml }}
 					/>
 				) : (

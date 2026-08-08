@@ -56,7 +56,13 @@ import {
 } from "./icons";
 
 import { checkClass, deriveStatus, isDeployment, summarize } from "../lib/pr-status-derive";
-import { CHECKS_GROUP, GIT_NOTE } from "../lib/pr-tone-classes";
+import {
+  CHECKS_GROUP,
+  GIT_NOTE,
+  PR_BODY_CLAMPED,
+  PR_BODY_MD,
+  PR_BODY_TOGGLE,
+} from "../lib/pr-tone-classes";
 import {
   formatPendingCommentsPrompt,
   formatPrCommentPrompt,
@@ -1665,14 +1671,14 @@ export function PrPanel({
           {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
 
           {!!bodyHtml && (
-            <div className="pr-body pr-body-top">
+            <div className="-mt-1.5">
               <div
                 ref={bodyRef}
-                className={`pr-body-md markdown ${bodyOpen ? "" : "pr-body-clamped"}`}
+                className={`markdown ${PR_BODY_MD} ${bodyOpen ? "" : PR_BODY_CLAMPED}`}
                 dangerouslySetInnerHTML={{ __html: bodyHtml }}
               />
               {(bodyOverflows || bodyOpen) && (
-                <button className="pr-body-toggle" onClick={() => setBodyOpen((o) => !o)}>
+                <button className={PR_BODY_TOGGLE} onClick={() => setBodyOpen((o) => !o)}>
                   {bodyOpen ? "Show less" : "Show more"}
                 </button>
               )}

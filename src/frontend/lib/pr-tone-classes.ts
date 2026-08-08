@@ -247,5 +247,29 @@ export const PR_ROW_MAIN =
 export const PR_ROW_TITLE = "min-w-0 truncate text-dim";
 export const PR_ROW_STATE =
 	"ml-auto shrink-0 whitespace-nowrap text-label font-semibold";
+/* ── PR description ──────────────────────────────────────────────────────
+ *
+ * The description is renderer output (dangerouslySetInnerHTML), so its
+ * headings, lists and edge margins can only be reached from the container —
+ * they were `.pr-body-md h1`, `.pr-body-md li` and friends, and they are child
+ * variants here for the same reason. `.markdown` still supplies the
+ * typography; these are the panel's overrides on top of it, and they keep
+ * winning because the utility sheet is linked after the legacy one.
+ */
+export const PR_BODY_MD =
+	"p-0 text-label leading-[1.42] break-words text-faint " +
+	"[&_:is(h1,h2,h3)]:text-label [&_:is(h1,h2,h3)]:font-medium [&_:is(h1,h2,h3)]:text-faint [&_:is(h1,h2,h3)]:[margin:0.8em_0_0.15em] " +
+	"[&_:is(ul,ol)]:pl-0 [&_:is(ul,ol)]:[list-style-position:inside] [&_li]:[margin:0.15em_0] " +
+	"[&>*:first-child]:mt-0 [&>*:last-child]:mb-0";
+
+/** Collapsed by default — the first couple of lines, so the checks sit right
+ *  under the title, with a soft fade hinting there is more behind "Show more".
+ *  Spelled out rather than composed from a shared fragment: Tailwind scans
+ *  source text, so a class assembled from a variable is never generated. */
+export const PR_BODY_CLAMPED =
+	"max-h-[2.9em] overflow-hidden [mask-image:linear-gradient(to_bottom,#000_55%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_55%,transparent)]";
+
+export const PR_BODY_TOGGLE = "mt-[3px] text-label font-medium text-dim hover:text-fg";
+
 export const PR_ROW_OUT =
 	"inline-flex size-6 shrink-0 items-center justify-center rounded-md text-dim hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)] hover:text-fg";
