@@ -55,19 +55,44 @@ const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
 	{ value: "dark", label: "Dark" },
 ];
 
-// A miniature app mockup used inside the theme swatches. `tone` picks the fixed
-// light/dark palette (independent of the current theme) via CSS-var classes.
+/**
+ * Fixed palettes for the miniature mockup below — deliberately raw values
+ * rather than theme tokens, because each swatch has to keep showing its own
+ * tone no matter which theme is active. Applied as custom properties so the
+ * mock's parts can stay plain utilities.
+ */
+const MOCK_PALETTE: Record<"light" | "dark", React.CSSProperties> = {
+	light: {
+		"--mk-bg": "#e9e9e9",
+		"--mk-panel": "#ffffff",
+		"--mk-line": "#d5d5d5",
+		"--mk-pill": "#cbcbcb",
+	} as React.CSSProperties,
+	dark: {
+		"--mk-bg": "#565656",
+		"--mk-panel": "#3e3e3e",
+		"--mk-line": "#c4c4c4",
+		"--mk-pill": "#8a8a8a",
+	} as React.CSSProperties,
+};
+
+// A miniature app mockup used inside the theme swatches. Its proportions are
+// percentages of the swatch rather than scale steps — it is an illustration
+// that has to rescale with the card, not a piece of chrome on the grid.
 function ThemeMock({ tone }: { tone: "light" | "dark" }) {
 	return (
-		<div className={`theme-mock mk-${tone}`}>
-			<div className="theme-mock-head">
-				<div className="theme-mock-bar w1" />
-				<div className="theme-mock-bar w2" />
+		<div
+			className="absolute inset-0 bg-(--mk-bg) pt-[15%]"
+			style={MOCK_PALETTE[tone]}
+		>
+			<div className="mb-[9px] flex flex-col items-center gap-[5px]">
+				<div className="h-1.5 w-[56%] rounded-sm bg-(--mk-pill)" />
+				<div className="h-1.5 w-[42%] rounded-sm bg-(--mk-pill) opacity-65" />
 			</div>
-			<div className="theme-mock-card">
-				<div className="theme-mock-row" />
-				<div className="theme-mock-row" />
-				<div className="theme-mock-row" />
+			<div className="mr-[9%] ml-[14%] flex h-[56%] flex-col gap-2 rounded-t-md bg-(--mk-panel) px-3 py-[11px]">
+				<div className="h-1.5 w-[68%] rounded-xs bg-(--mk-line)" />
+				<div className="h-1.5 w-[84%] rounded-xs bg-(--mk-line)" />
+				<div className="h-1.5 w-[56%] rounded-xs bg-(--mk-line)" />
 			</div>
 		</div>
 	);
@@ -84,22 +109,30 @@ function ThemeCard({
 }) {
 	const label = THEME_OPTIONS.find((o) => o.value === option)?.label ?? option;
 	return (
+		// Selection reads off `data-active` rather than an `.active` class so the
+		// swatch and label can style themselves with group-data-* variants. The
+		// old rules were compound selectors (`.theme-card.active .theme-swatch`),
+		// which outrank a single utility — leaving the class here would have let
+		// it keep winning against everything below.
 		<button
-			className={`theme-card ${active ? "active" : ""}`}
+			className="group flex cursor-pointer flex-col items-center gap-2.5 border-none bg-transparent p-0"
 			role="radio"
 			aria-checked={active}
+			data-active={active || undefined}
 			onClick={onClick}
 		>
-			<div className="theme-swatch">
+			<div className="relative aspect-16/10 w-full overflow-hidden rounded-row border-2 border-line transition-[border-color,box-shadow] group-hover:border-faint group-data-active:border-accent group-data-active:shadow-[0_0_0_1px_var(--accent)]">
 				{/* System = light base with the dark mock clipped over the right half. */}
 				<ThemeMock tone={option === "dark" ? "dark" : "light"} />
 				{option === "system" && (
-					<div className="theme-swatch-split">
+					<div className="absolute inset-0 [clip-path:inset(0_0_0_50%)]">
 						<ThemeMock tone="dark" />
 					</div>
 				)}
 			</div>
-			<span className="theme-card-label">{label}</span>
+			<span className="text-label text-dim group-data-active:font-semibold group-data-active:text-fg">
+				{label}
+			</span>
 		</button>
 	);
 }
@@ -172,7 +205,11 @@ export function AppearancePanel() {
 			/>
 			<SettingsGroupLabel>Theme</SettingsGroupLabel>
 			<SettingsSection>
-				<div className="theme-cards" role="radiogroup" aria-label="Theme">
+				<div
+					className="grid grid-cols-3 gap-3.5"
+					role="radiogroup"
+					aria-label="Theme"
+				>
 					{THEME_OPTIONS.map((o) => (
 						<ThemeCard
 							key={o.value}

@@ -43,6 +43,7 @@ const APP = process.env.OPENSESSION_URL ?? "http://127.0.0.1:3850";
 const ROUTES: [string, string][] = [
 	["home", "/"],
 	["settings", "/settings"],
+	["appearance", "/settings/appearance"],
 	["reviews", "/reviews"],
 	["notes", "/notes"],
 	["automations", "/automations"],
