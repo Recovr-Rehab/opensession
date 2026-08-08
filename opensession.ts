@@ -612,7 +612,7 @@ if (!g.__opensessionBooted) {
 
 	// Remove worktrees whose work is merged / PR closed, sweep removal husks
 	// (worktree-reaper.ts — in-process port of the cleanup-closed-worktrees cron)
-	startWorktreeReaper();
+	startWorktreeReaper(getAllSessions);
 
 	// Desk todo reminders: push + Slack DM when a remindAt passes (todos.ts)
 	startTodoReminderTicker();

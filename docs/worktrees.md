@@ -91,11 +91,18 @@ never with uncommitted changes or unpushed commits — and a removed worktree ca
 be revived: the branch still exists, so reopening the session re-creates the
 directory.
 
+The worktree reaper also **parks inactive session checkouts after seven days**,
+even when the session was never archived and its PR is still open. Parking only
+removes a clean checkout whose commits all exist on a remote; it retains the
+branch and session, skips any path used by a live process, and the next prompt
+recreates the checkout. Configure the window with
+`OPENSESSION_WORKTREE_IDLE_DAYS`.
+
 ## What does not clean up
 
-**Worktrees for sessions you never archived.** They are cheap individually and
-expensive in aggregate. `opensession doctor` will not nag you about this; check
-your worktrees directory occasionally.
+**Worktrees with local-only work.** Dirty/untracked files and commits absent
+from every remote always prevent automatic parking. Detached, unregistered,
+infrastructure, active, and recently used checkouts are protected too.
 
 **The repository's own history.** If a clone is large, every worktree shares it
 — that part is fine. What is not shared is anything the build produces.

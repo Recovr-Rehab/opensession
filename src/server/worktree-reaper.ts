@@ -1,12 +1,14 @@
 /**
  * Worktree reaper — removes worktrees whose work is already merged (or whose
- * PR is closed), and sweeps husks left behind by earlier failed removals.
+ * PR is closed), parks clean remote-backed checkouts for long-idle sessions,
+ * and sweeps husks left behind by earlier failed removals.
  *
  * In-process port (2026-08-05) of the external `cleanup-closed-worktrees`
  * cron, generalized over every registered repo. The worktree-hygiene family:
  *  - sweepArchivedWorktrees (worktree.ts): session-driven — archived 14d+.
  *  - disk-gc.ts: reclaims rust target/ caches from worktrees we KEEP.
- *  - this module: git-driven — the branch's work is done, the tree is gone.
+ *  - this module: git/session-driven — done work is reaped; idle clean
+ *    checkouts are parked while their branch + session remain revivable.
  *
  * Lessons inherited from the cron (see its history, kept here so they never
  * regress):
@@ -47,19 +49,34 @@ import { audit } from "./audit";
 import type { Repo } from "./config";
 import { configuredPaths, configuredServer } from "./config";
 import { stopPreview } from "./preview";
+import type { UnifiedSession } from "./types";
 import { canonicalPath, REPOS } from "./worktree";
 
 const worktreesDir = () => configuredPaths().worktreesDir;
 
 const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
 const SWEEP_INTERVAL_MS = 60 * MINUTE;
 const FIRST_SWEEP_DELAY_MS = 10 * MINUTE; // staggered after disk-gc's 5m
+
+function positiveNumber(raw: string | undefined, fallback: number): number {
+	const n = Number(raw);
+	return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/** Park clean session worktrees after this much inactivity. */
+const IDLE_DAYS = positiveNumber(
+	process.env.OPENSESSION_WORKTREE_IDLE_DAYS,
+	7,
+);
 
 /** Infrastructure worktrees, never session trees (same set as disk-gc). */
 const PROTECTED_SUFFIXES = ["-warm-template", "-ask-checkout"];
 
 export interface ReapResult {
 	removed: string[];
+	/** Subset of removed whose session was merely idle, not known done. */
+	parked: string[];
 	husksSwept: string[];
 	skipped: {
 		inUse: number;
@@ -67,6 +84,53 @@ export interface ReapResult {
 		unpushed: number;
 		huskWithWork: number;
 	};
+}
+
+export type WorktreeActivitySession = Pick<
+	UnifiedSession,
+	"worktreeDir" | "attachedRepos" | "lastActivity" | "isRunning"
+>;
+
+/**
+ * Session-owned worktrees whose every owner has been idle since `cutoffMs`.
+ * Multiple sessions can share a branch/worktree; one running, recent, or
+ * malformed session record protects the checkout. Attached repos participate
+ * exactly like the primary worktree.
+ */
+export function idleSessionWorktrees(
+	sessions: readonly WorktreeActivitySession[],
+	cutoffMs: number,
+): Set<string> {
+	const activity = new Map<
+		string,
+		{ latestMs: number; protected: boolean }
+	>();
+	for (const session of sessions) {
+		const dirs = [
+			session.worktreeDir,
+			...(session.attachedRepos ?? []).map((repo) => repo.dir),
+		].filter((dir): dir is string => !!dir);
+		const lastActivityMs = Date.parse(session.lastActivity);
+		for (const rawDir of dirs) {
+			const dir = canonicalPath(rawDir);
+			const current = activity.get(dir) ?? {
+				latestMs: Number.NEGATIVE_INFINITY,
+				protected: false,
+			};
+			if (!Number.isFinite(lastActivityMs) || session.isRunning) {
+				current.protected = true;
+			} else {
+				current.latestMs = Math.max(current.latestMs, lastActivityMs);
+			}
+			activity.set(dir, current);
+		}
+	}
+
+	const idle = new Set<string>();
+	for (const [dir, state] of activity) {
+		if (!state.protected && state.latestMs < cutoffMs) idle.add(dir);
+	}
+	return idle;
 }
 
 /** Worktree dirs that are the cwd of ANY live process. Null = /proc unreadable
@@ -202,14 +266,24 @@ async function removeDir(repo: Repo, dir: string): Promise<boolean> {
 
 /** One reaper pass over every directory in the worktrees root. */
 export async function sweepWorktreeReaper(
-	opts: { dryRun?: boolean } = {},
+	opts: {
+		dryRun?: boolean;
+		sessions?: readonly WorktreeActivitySession[];
+		nowMs?: number;
+	} = {},
 ): Promise<ReapResult> {
 	const root = worktreesDir();
 	const result: ReapResult = {
 		removed: [],
+		parked: [],
 		husksSwept: [],
 		skipped: { inUse: 0, dirty: 0, unpushed: 0, huskWithWork: 0 },
 	};
+	const nowMs = opts.nowMs ?? Date.now();
+	const idleWorktrees = idleSessionWorktrees(
+		opts.sessions ?? [],
+		nowMs - IDLE_DAYS * DAY,
+	);
 
 	const inUse = worktreesWithProcesses(root);
 	if (!inUse) {
@@ -292,7 +366,7 @@ export async function sweepWorktreeReaper(
 		if (!owner) continue; // narrowing only — the gitOk && !owner case exited above
 		const repo = owner.repo;
 		const branch = (
-			await $`git -C ${dir} rev-parse --abbrev-ref HEAD`.quiet().nothrow()
+			await $`git -C ${dir} symbolic-ref --quiet --short HEAD`.quiet().nothrow()
 		)
 			.text()
 			.trim();
@@ -313,6 +387,9 @@ export async function sweepWorktreeReaper(
 				.nothrow();
 		if (ancestor.exitCode === 0) reason = `tip in origin/${repo.defaultBranch}`;
 		else reason = await closedPrReason(repo, branch);
+		const idle = idleWorktrees.has(canonicalPath(dir));
+		if (!reason && idle)
+			reason = `session idle>${IDLE_DAYS}d (checkout parked; branch retained)`;
 		if (!reason) continue;
 
 		const dirty = (await $`git -C ${dir} status --porcelain`.quiet().nothrow())
@@ -340,21 +417,36 @@ export async function sweepWorktreeReaper(
 			continue;
 		}
 
+		const parking = idle && !reason.startsWith("tip in ") && !reason.startsWith("PR #");
+		const verb = parking ? "park" : "reap";
 		if (opts.dryRun) {
-			console.log(`[worktree-reaper] would reap ${e.name} (${reason})`);
+			console.log(`[worktree-reaper] would ${verb} ${e.name} (${reason})`);
 			result.removed.push(e.name);
+			if (parking) result.parked.push(e.name);
 			continue;
 		}
 
-		console.log(`[worktree-reaper] reaping ${e.name} (${reason})`);
+		console.log(`[worktree-reaper] ${parking ? "parking" : "reaping"} ${e.name} (${reason})`);
 		const slug = e.name.startsWith(`${repo.wtPrefix}-`)
 			? e.name.slice(repo.wtPrefix.length + 1)
 			: branch;
-		await archiveSlackChannel(slug);
-		await $`tmux kill-session -t ${slug}`.nothrow().quiet();
+		// Parking is reversible session hygiene, not a done signal: keep its Slack
+		// channel and tmux metadata. A live tmux shell is already protected by the
+		// /proc cwd check above.
+		if (!parking) {
+			await archiveSlackChannel(slug);
+			await $`tmux kill-session -t ${slug}`.nothrow().quiet();
+		}
 		if (await removeDir(repo, dir)) {
 			result.removed.push(e.name);
-			audit({ event: "worktree_reap", dir, branch, repo: repo.id, reason });
+			if (parking) result.parked.push(e.name);
+			audit({
+				event: parking ? "worktree_park" : "worktree_reap",
+				dir,
+				branch,
+				repo: repo.id,
+				reason,
+			});
 		} else {
 			console.warn(`[worktree-reaper] could not fully remove ${dir}`);
 		}
@@ -364,11 +456,13 @@ export async function sweepWorktreeReaper(
 		audit({
 			event: "worktree_reap_sweep",
 			removed: result.removed.length,
+			parked: result.parked.length,
 			husks: result.husksSwept.length,
 			skipped: result.skipped,
 		});
 		console.log(
-			`[worktree-reaper] sweep done: ${result.removed.length} reaped, ` +
+			`[worktree-reaper] sweep done: ${result.removed.length} removed ` +
+				`(${result.parked.length} idle parked), ` +
 				`${result.husksSwept.length} husk(s) swept ` +
 				`(skipped: ${result.skipped.inUse} in-use, ${result.skipped.dirty} dirty, ${result.skipped.unpushed} unpushed)`,
 		);
@@ -379,19 +473,29 @@ export async function sweepWorktreeReaper(
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Start the hourly reap. Call once from the __opensessionBooted block. */
-export function startWorktreeReaper(): void {
+export function startWorktreeReaper(
+	getSessions: () => readonly WorktreeActivitySession[] = () => [],
+): void {
 	if (sweepTimer) return;
 	if (process.env.OPENSESSION_WORKTREE_REAPER === "0") {
 		console.log("[worktree-reaper] disabled (OPENSESSION_WORKTREE_REAPER=0)");
 		return;
 	}
-	const run = () =>
-		void sweepWorktreeReaper().catch((e) =>
+	const run = () => {
+		let sessions: readonly WorktreeActivitySession[];
+		try {
+			sessions = getSessions();
+		} catch (e) {
+			console.error("[worktree-reaper] session snapshot failed; skipping:", e);
+			return;
+		}
+		void sweepWorktreeReaper({ sessions }).catch((e) =>
 			console.error("[worktree-reaper] sweep failed:", e),
 		);
+	};
 	setTimeout(run, FIRST_SWEEP_DELAY_MS);
 	sweepTimer = setInterval(run, SWEEP_INTERVAL_MS);
 	console.log(
-		`[worktree-reaper] started (every ${Math.round(SWEEP_INTERVAL_MS / MINUTE)}m)`,
+		`[worktree-reaper] started (every ${Math.round(SWEEP_INTERVAL_MS / MINUTE)}m; idle park>${IDLE_DAYS}d)`,
 	);
 }
