@@ -75,6 +75,53 @@ export const SIDEBAR_STICKY_LANE_NESTED =
  * toggling a blur from the scroll listener re-rasterized the whole sidebar
  * mid-scroll (visible flashing on loaded machines).
  */
+/**
+ * ── Band headings ───────────────────────────────────────────────────────────
+ * The top-level bands (Tools / Automations / People) — small quiet labels that
+ * read like section kickers but behave like Notion's: the whole heading is a
+ * full-width hover row that toggles the band, the collapse chevron sits by the
+ * label (revealed on hover), and the count / any actions live on the right.
+ *
+ * Written phone-first with a `min-[721px]:` desktop override, which is the
+ * exact complement of the `max-width: 720px` these rules came from —
+ * `max-[720px]:` would be `< 720` and leave a one-pixel viewport wearing
+ * neither value.
+ */
+export const SIDEBAR_BAND_LABEL =
+	"text-[15px] font-semibold tracking-[-0.01em] text-faint min-[721px]:text-[12px]";
+
+/**
+ * The heading's toggle button. Horizontal padding is NOT here: each band sits
+ * at a different inset, and two utilities from the same group in one string
+ * would leave the winner to Tailwind's internal ordering rather than to the
+ * call site. Give it `group/band` so the chevron can key off its hover.
+ */
+export const SIDEBAR_BAND_TOGGLE =
+	// `border-none`, not `border-0`: the latter zeroes the width but leaves the
+	// style at Tailwind's `solid` default, which is not what the `border: none`
+	// this replaced computed to. Width resolves to 0 under either.
+	"group/band m-0 flex min-h-[30px] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1.5 text-left text-inherit [font:inherit] hover:bg-hover hover:text-dim";
+
+/**
+ * The inset the Automations and People headings take. 14px on the left, not 8:
+ * it lands the label's ink on the one column every leading mark below it
+ * already uses, because a 22px glyph carries ~4px of its own padding before its
+ * ink starts, so a text label at the same box edge reads 4px further left than
+ * the icons and tiles it heads. The phone layout measures the same step from a
+ * tighter base inset.
+ */
+export const SIDEBAR_BAND_TOGGLE_INSET =
+	"pr-1 pl-2 min-[721px]:pr-2 min-[721px]:pl-[14px]";
+
+/**
+ * The chevron reveals on hover but stays IN LAYOUT at all times (visibility,
+ * not display), so it always reserves its box — otherwise its 18px height,
+ * taller than the 12px label line, would grow the row the moment it appears
+ * and nudge the whole list below. Reserved-but-hidden costs only trailing
+ * space at the row's right edge, which is invisible.
+ */
+export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
+
 export const SIDEBAR_STUCK_BACKING =
 	"min-[721px]:[&.is-stuck::before]:absolute min-[721px]:[&.is-stuck::before]:top-0 min-[721px]:[&.is-stuck::before]:bottom-[-1px] min-[721px]:[&.is-stuck::before]:left-[-400px] min-[721px]:[&.is-stuck::before]:right-[-400px] min-[721px]:[&.is-stuck::before]:z-[-1] min-[721px]:[&.is-stuck::before]:content-[''] min-[721px]:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]";
 

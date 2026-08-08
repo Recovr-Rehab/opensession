@@ -9,6 +9,10 @@ import type {
 } from "../lib/types";
 import {
 	SIDEBAR_ATTN_COUNT,
+	SIDEBAR_BAND_CHEVRON,
+	SIDEBAR_BAND_LABEL,
+	SIDEBAR_BAND_TOGGLE,
+	SIDEBAR_BAND_TOGGLE_INSET,
 	SIDEBAR_FILTER_DOT,
 	SIDEBAR_HEADER_BTN,
 	SIDEBAR_HEADER_BTN_DESKTOP,
@@ -3769,7 +3773,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			{!isPhone && visibleTools.length > 0 && (
 				<div
 					className={cn(
-						"sidebar-band-label px-1.5 pt-3 pb-0.5",
+						SIDEBAR_BAND_LABEL,
+						"px-1.5 pt-3 pb-0.5",
 						SIDEBAR_STICKY_BAND,
 						SIDEBAR_STICKY_BAND_ROW,
 						SIDEBAR_STUCK_BACKING,
@@ -3778,14 +3783,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				>
 					<div className="group flex min-h-[30px] w-full items-center rounded-md hover:bg-hover hover:text-dim">
 						<button
-							className="sidebar-band-toggle w-auto flex-1 hover:bg-transparent"
+							className={cn(
+								SIDEBAR_BAND_TOGGLE,
+								"w-auto flex-1 pr-2 pl-[14px]",
+								// The wrapper paints this row's wash, so the toggle
+								// inside it must not paint a second one.
+								"hover:bg-transparent",
+							)}
 							onClick={() => toggleBand("tools")}
 							aria-expanded={toolsOpen}
 							title={toolsOpen ? "Collapse tools" : "Expand tools"}
 						>
-							<span className="sidebar-band-name">Tools</span>
+							<span className="min-w-0 truncate">Tools</span>
 							<IconChevronDown
-								className="sidebar-band-chevron"
+								className={cn(
+									SIDEBAR_BAND_CHEVRON,
+									"group-hover/band:visible group-hover/band:text-dim",
+								)}
 								size={18}
 								style={{
 									transform: toolsOpen ? "none" : "rotate(-90deg)",
@@ -4009,7 +4023,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										: `${people.find((p) => p.key === filter.person)?.label || filter.person}'s workspaces`}
 						</span>
 						<IconChevronDown
-							className="sidebar-band-chevron group-hover/wstoggle:visible"
+							className={cn(
+								SIDEBAR_BAND_CHEVRON,
+								"group-hover/wstoggle:visible",
+							)}
 							size={18}
 							style={{
 								transform: workspacesOpen ? "none" : "rotate(-90deg)",
@@ -4884,7 +4901,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					>
 						<div
 							className={cn(
-								"sidebar-band-label",
+								SIDEBAR_BAND_LABEL,
+								// A band heading carries no leading mark, so on phones it
+								// takes the 8px a 22px glyph spends on its own padding
+								// before the ink starts — see the toggle's inset below.
+								"py-0 pl-0 pr-2 min-[721px]:pr-0",
 								SIDEBAR_STICKY_BAND,
 								SIDEBAR_STICKY_BAND_ROW,
 								SIDEBAR_STUCK_BACKING,
@@ -4892,7 +4913,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							data-sticky-head
 						>
 							<button
-								className="sidebar-band-toggle"
+								className={cn(SIDEBAR_BAND_TOGGLE, SIDEBAR_BAND_TOGGLE_INSET)}
 								onClick={() => toggleBand("automations")}
 								title={
 									automationsOpen
@@ -4900,10 +4921,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										: "Expand automations"
 								}
 							>
-								<span className="sidebar-band-name">Automations</span>
-								<span className="sidebar-group-count">{groups.reduce((n, g) => n + g.items.length, 0)}</span>
+								<span className="min-w-0 truncate">Automations</span>
+								{/* The count sits right after the heading, not pinned to the
+								    far right; any future action can still be pushed there
+								    with ml-auto. */}
+								<span className="sidebar-group-count m-0 p-0">
+									{groups.reduce((n, g) => n + g.items.length, 0)}
+								</span>
 								<IconChevronDown
-									className="sidebar-band-chevron"
+									className={cn(
+										SIDEBAR_BAND_CHEVRON,
+										"group-hover/band:visible group-hover/band:text-dim",
+									)}
 									size={18}
 									style={{ transform: automationsOpen ? "none" : "rotate(-90deg)" }}
 								/>
@@ -5021,7 +5050,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					>
 						<div
 							className={cn(
-								"sidebar-band-label",
+								SIDEBAR_BAND_LABEL,
+								"py-0 pl-0 pr-2 min-[721px]:pr-0",
 								SIDEBAR_STICKY_BAND,
 								SIDEBAR_STICKY_BAND_ROW,
 								SIDEBAR_STUCK_BACKING,
@@ -5029,14 +5059,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							data-sticky-head
 						>
 							<button
-								className="sidebar-band-toggle pl-[10px]"
+								className={cn(
+									SIDEBAR_BAND_TOGGLE,
+									SIDEBAR_BAND_TOGGLE_INSET,
+									"min-[721px]:pl-[10px]",
+								)}
 								onClick={() => toggleBand("people")}
 								title={open ? "Collapse people" : "Expand people"}
 							>
-								<span className="sidebar-band-name">People</span>
-								<span className="sidebar-group-count">{rows.length}</span>
+								<span className="min-w-0 truncate">People</span>
+								<span className="sidebar-group-count m-0 p-0">
+									{rows.length}
+								</span>
 								<IconChevronDown
-									className="sidebar-band-chevron"
+									className={cn(
+										SIDEBAR_BAND_CHEVRON,
+										"group-hover/band:visible group-hover/band:text-dim",
+									)}
 									size={18}
 									style={{ transform: open ? "none" : "rotate(-90deg)" }}
 								/>
