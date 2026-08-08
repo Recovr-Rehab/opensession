@@ -21,7 +21,7 @@ import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { InlineAlert } from "../ui/state";
+import { InlineAlert, LoadingState } from "../ui/state";
 
 type GoalStatus = "active" | "paused" | "done" | "failed";
 
@@ -182,7 +182,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
       )}
 
       {loading ? (
-        <div className="loading">Loading…</div>
+        <LoadingState>Loading…</LoadingState>
       ) : goals.length === 0 && !showForm ? (
         <div className="automations-empty">
           <p>No goals yet.</p>

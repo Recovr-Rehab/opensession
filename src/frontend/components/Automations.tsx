@@ -23,7 +23,7 @@ import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib
 import { Button } from "../ui/button";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { InlineAlert } from "../ui/state";
+import { InlineAlert, LoadingState } from "../ui/state";
 
 interface AutomationRun {
   at: string;
@@ -229,7 +229,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
       )}
 
       {loading ? (
-        <div className="loading">Loading…</div>
+        <LoadingState>Loading…</LoadingState>
       ) : automations.length === 0 && !showModal ? (
         <div className="automations-empty">
           <p>No automations yet.</p>

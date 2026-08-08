@@ -2407,34 +2407,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	}
 }
 
-.detail-empty {
-	flex: 1;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.detail-empty-inner {
-	text-align: center;
-}
-
-.detail-empty-title {
-	font-size: 19px;
-	font-weight: 600;
-}
-
-.detail-empty-sub {
-	color: var(--text-dim);
-	margin-top: 6px;
-	font-size: 13px;
-}
-
-.loading,
-.empty {
-	color: var(--text-faint);
-	text-align: center;
-	padding: 40px 0;
-}
 
 /* ── Session viewer layout ───────────────────────────────── */
 
@@ -3243,16 +3215,6 @@ body.resizing-panel .panel-resize::after {
 }
 .review-preview-markdown.markdown pre {
 	max-width: 100%;
-}
-
-.panel-placeholder {
-	color: var(--text-faint);
-	text-align: center;
-	padding: 48px 16px;
-	font-size: 13px;
-}
-.panel-error {
-	color: var(--red);
 }
 
 /* ── Sub-agent pane (its own view tab) ───────────────────── */
@@ -6367,15 +6329,6 @@ a.pr-ref:hover {
 	flex-direction: column;
 }
 
-.ask-error {
-	margin-top: 10px;
-	padding: 7px 10px;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	background: var(--red-soft);
-	color: var(--red);
-	font-size: 12px;
-	text-align: center;
-}
 
 .home-rows {
 	display: flex;

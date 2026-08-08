@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { PlainThread } from "../lib/types";
 import { fetchPlainThreadById, startPlainTriageApi } from "../lib/api";
 import { Button } from "../ui/button";
+import { InlineAlert, LoadingState } from "../ui/state";
 import {
 	PlainEntryRow,
 	PlainReplyBox,
@@ -103,11 +104,9 @@ export function ConversationPane({
 		<div className={`flex-1 min-h-0 overflow-y-auto ${className || ""}`}>
 			<div className="w-full max-w-[760px] mx-auto px-5 py-6">
 				{loading && !thread ? (
-					<div className="panel-placeholder">Loading ticket…</div>
+					<LoadingState>Loading ticket…</LoadingState>
 				) : error && !thread ? (
-					<div className="panel-placeholder">
-						Couldn't load this Plain thread: {error}
-					</div>
+					<InlineAlert>Couldn't load this Plain thread: {error}</InlineAlert>
 				) : (
 					<>
 						<div className="flex items-center gap-2.5 min-w-0">

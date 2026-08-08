@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { Button } from "../ui/button";
+import { EmptyState } from "../ui/state";
 
 /**
  * Interactive terminals over server-side PTYs in the session's worktree:
@@ -162,11 +163,13 @@ export function ShellPanel({
         )}
       </div>
       {tabs.length === 0 ? (
-        <div className="panel-placeholder">
-          <Button size="sm" className="border-line-strong bg-transparent shadow-none" onClick={addTab}>
-            Open a terminal
-          </Button>
-        </div>
+        <EmptyState
+          action={
+            <Button size="sm" className="border-line-strong bg-transparent shadow-none" onClick={addTab}>
+              Open a terminal
+            </Button>
+          }
+        />
       ) : (
         // Every tab stays mounted (hidden when inactive) so switching tabs
         // never kills a PTY; only the × / panel unmount / socket does.

@@ -79,7 +79,12 @@ for (const dir of SCAN_DIRS) {
 
 // ── classify the classes defined in the sheet ───────────────────────────────
 const css = readFileSync(SHEET, "utf8");
-const defined = new Set([...css.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+// Comments are stripped first: this file's own header quotes example selectors
+// (".sidebar-item.is-selected .count"), and counting those as defined classes
+// reports them as dead rules that don't exist.
+const defined = new Set(
+	[...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]),
+);
 const keyframes = new Set([...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]));
 
 const dead = new Set<string>();

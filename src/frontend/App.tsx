@@ -164,6 +164,7 @@ import type { UnifiedSession } from "./lib/types";
 // both, so they win source-order ties. See styles/legacy.css for the contract.
 import "./styles/base.css";
 import "./styles/legacy.css";
+import { EmptyState, LoadingState } from "./ui/state";
 
 type Route =
 	| { view: "home" }
@@ -3703,20 +3704,20 @@ export function App(
 									addHandler={addHandler}
 									onOpenSession={openSession}
 								/>
+							) : workspacesLoaded ? (
+								<EmptyState>Workspace not found.</EmptyState>
 							) : (
-								<div className="panel-placeholder">
-									{workspacesLoaded ? "Workspace not found." : "Loading workspace…"}
-								</div>
+								<LoadingState>Loading workspace…</LoadingState>
 							)
 						) : route.view === "pr" ? (
 							route.branch === undefined ? (
 								// Number-only: nothing to preview until the resolve above
 								// finds the PR's workspace and replaces this route.
-								<div className="panel-placeholder">
-									{prRefMissing
-										? `${repoLabel(route.repo)} has no pull request #${route.number}.`
-										: `Opening #${route.number}…`}
-								</div>
+								prRefMissing ? (
+									<EmptyState>{`${repoLabel(route.repo)} has no pull request #${route.number}.`}</EmptyState>
+								) : (
+									<LoadingState>{`Opening #${route.number}…`}</LoadingState>
+								)
 							) : (
 								<PrQueuePreview
 									key={`${route.repo}:${route.branch}`}
@@ -3884,29 +3885,24 @@ export function App(
 									)
 								)
 							) : (
-								<div className="detail-empty">
-									<div className="detail-empty-inner">
-										{(() => {
-											const isLoading =
-												loading || route.id === pendingSessionId;
-											return (
-												<>
-													<div className="detail-empty-title">
-														{!isLoading
-															? "Session not found"
-															: route.id === pendingSessionId
-																? pendingNewWorkspace
-																	? "Starting a new workspace…"
-																	: "Starting a new session…"
-																: "Loading session…"}
-													</div>
-													<div className="detail-empty-sub">
-														{isLoading ? "" : "It may have been deleted."}
-													</div>
-												</>
-											);
-										})()}
-									</div>
+								<div className="flex flex-1 items-center justify-center">
+									{(() => {
+										const isLoading = loading || route.id === pendingSessionId;
+										const title = !isLoading
+											? "Session not found"
+											: route.id === pendingSessionId
+												? pendingNewWorkspace
+													? "Starting a new workspace…"
+													: "Starting a new session…"
+												: "Loading session…";
+										return isLoading ? (
+											<LoadingState>{title}</LoadingState>
+										) : (
+											<EmptyState title={title}>
+												It may have been deleted.
+											</EmptyState>
+										);
+									})()}
 								</div>
 							)
 						) : (

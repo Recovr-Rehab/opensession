@@ -14,6 +14,7 @@ import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
+import { InlineAlert } from "../ui/state";
 
 interface Props {
 	workspace: Workspace;
@@ -341,7 +342,7 @@ export function WorkspacePane({
 					onModelChange={setModel}
 					modelTitle="Model for this session"
 				/>
-				{startError && <div className="ask-error">{startError}</div>}
+				{startError && <InlineAlert className="mt-2.5">{startError}</InlineAlert>}
 			</div>
 		</div>,
 	);

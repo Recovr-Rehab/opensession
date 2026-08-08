@@ -19,7 +19,7 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { InlineAlert } from "../ui/state";
+import { InlineAlert, LoadingState } from "../ui/state";
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -154,7 +154,7 @@ export function Security({ onOpenSession }: Props) {
       )}
 
       {loading ? (
-        <div className="loading">Loading…</div>
+        <LoadingState>Loading…</LoadingState>
       ) : tab === "profiles" ? (
         <div className="automation-list">
           <div>

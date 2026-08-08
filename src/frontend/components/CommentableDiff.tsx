@@ -16,6 +16,7 @@ import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { useResolvedTheme } from "./CodeHighlight";
 import { PixelSpinner } from "./PixelSpinner";
+import { EmptyState } from "../ui/state";
 
 export interface CommentTarget {
   path: string;
@@ -524,7 +525,7 @@ export function CommentableDiff({
   }, [pendingComments]);
 
   if (files.length === 0) {
-    return <div className="panel-placeholder">Nothing to display</div>;
+    return <EmptyState>Nothing to display</EmptyState>;
   }
 
   const renderFile = (file: FileDiffMetadata, i: number) => {

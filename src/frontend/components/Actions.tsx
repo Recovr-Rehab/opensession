@@ -18,7 +18,7 @@ import { Button } from "../ui/button";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageSection } from "../ui/page";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { InlineAlert } from "../ui/state";
+import { InlineAlert, LoadingState } from "../ui/state";
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -126,7 +126,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
       )}
 
       {loading ? (
-        <div className="loading">Loading…</div>
+        <LoadingState>Loading…</LoadingState>
       ) : actions.length === 0 ? (
         <div className="automations-empty">
           <p>No actions yet.</p>

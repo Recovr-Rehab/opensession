@@ -70,6 +70,7 @@ import { PrCard } from "./pr/PrCard";
 import { StackCard, StackSection } from "./pr/Stack";
 import { FileRow, ReviewerRow } from "./pr/PrRows";
 import { GitDivergenceStrip, GitStatusRows } from "./pr/GitStatus";
+import { InlineAlert, LoadingState } from "../ui/state";
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export { checkClass, isDeployment, formatPrCommentPrompt, CheckRow, PrStateIcon };
@@ -1044,7 +1045,7 @@ export function PrPanel({
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {switcher}
-        <div className="panel-placeholder">Loading pull request…</div>
+        <LoadingState>Loading pull request…</LoadingState>
       </div>
     );
 
@@ -1052,20 +1053,17 @@ export function PrPanel({
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {switcher}
-        <div className="panel-placeholder panel-error">
-          <div>{loadError}</div>
-          <Button
-            size="sm"
-            className="mt-3"
-            onClick={() => {
-              setLoading(true);
-              setLoadError(null);
-              void load(true);
-            }}
-          >
-            Retry
-          </Button>
-        </div>
+        <InlineAlert
+          className="m-4"
+          retryLabel="Retry"
+          onRetry={() => {
+            setLoading(true);
+            setLoadError(null);
+            void load(true);
+          }}
+        >
+          {loadError}
+        </InlineAlert>
       </div>
     );
 
@@ -1865,26 +1863,25 @@ export function PrPanel({
 
       {(diffLoading || diffOutOfDate || diffError) && !diff?.patch && (
         <div className="flex min-h-0 flex-1 flex-col border-t border-line lg:border-l lg:border-t-0">
-          <div className={`panel-placeholder ${diffError ? "panel-error" : ""}`}>
-            {diffError ? (
-              <>
-                <div>{diffError}</div>
-                <Button
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => {
-                    setDiffLoading(true);
-                    setDiffError(null);
-                    void load(true);
-                  }}
-                >
-                  Retry
-                </Button>
-              </>
-            ) : diffOutOfDate
-              ? "The pull request changed while loading. It will refresh automatically."
-              : "Loading pull request changes…"}
-          </div>
+          {diffError ? (
+            <InlineAlert
+              className="m-4"
+              retryLabel="Retry"
+              onRetry={() => {
+                setDiffLoading(true);
+                setDiffError(null);
+                void load(true);
+              }}
+            >
+              {diffError}
+            </InlineAlert>
+          ) : (
+            <LoadingState>
+              {diffOutOfDate
+                ? "The pull request changed while loading. It will refresh automatically."
+                : "Loading pull request changes…"}
+            </LoadingState>
+          )}
         </div>
       )}
       {diff?.patch && (

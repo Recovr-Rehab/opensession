@@ -15,6 +15,7 @@ import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { PixelSpinner } from "./PixelSpinner";
 import { AGENT_NAME } from "../lib/brand";
+import { InlineAlert, LoadingState } from "../ui/state";
 
 interface Props {
   sessionId: string;
@@ -193,8 +194,8 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
     });
   }
 
-  if (loading) return <div className="panel-placeholder">Loading diff…</div>;
-  if (error) return <div className="panel-placeholder panel-error">{error}</div>;
+  if (loading) return <LoadingState>Loading diff…</LoadingState>;
+  if (error) return <InlineAlert className="m-4">{error}</InlineAlert>;
   if (!repos || !repos.length) return <DiffEmptyState isRunning={isRunning} />;
 
   // Repos that actually have changes; if none, show the empty state.

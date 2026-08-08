@@ -7,6 +7,7 @@ import { useCurrentUser } from "./UserPicker";
 import { ConversationPane } from "./ConversationPane";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
+import { InlineAlert } from "../ui/state";
 
 interface Props {
 	/** The Plain thread id — the preview's key. */
@@ -150,7 +151,7 @@ export function SupportPreview({
 					onModelChange={setModel}
 					modelTitle="Model for this session"
 				/>
-				{startError && <div className="ask-error">{startError}</div>}
+				{startError && <InlineAlert className="mt-2.5">{startError}</InlineAlert>}
 			</div>
 		</div>
 	);

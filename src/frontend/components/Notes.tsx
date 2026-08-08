@@ -26,6 +26,7 @@ import {
 import type { WSClientMessage, WSServerMessage } from "../lib/types";
 import type { MentionKind } from "./NoteEditor";
 import { PRODUCT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { LoadingState } from "../ui/state";
 
 const NoteEditor = lazy(() => import("./NoteEditor"));
 
@@ -389,7 +390,7 @@ export function Notes({
 					/>
 				) : selDocPath ? (
 					loadingDoc ? (
-						<div className="loading">Loading…</div>
+						<LoadingState>Loading…</LoadingState>
 					) : (
 						<>
 							<div className="wiki-doc-path">{selDocPath}</div>
@@ -576,7 +577,7 @@ function NotePane({
 						dangerouslySetInnerHTML={{ __html: preview }}
 					/>
 				) : (
-					<Suspense fallback={<div className="loading">Loading editor…</div>}>
+					<Suspense fallback={<LoadingState>Loading editor…</LoadingState>}>
 						<NoteEditor
 							noteId={noteId}
 							user={user}

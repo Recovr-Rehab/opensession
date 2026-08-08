@@ -5,6 +5,7 @@ import type { UnifiedSession, WSServerMessage } from "../lib/types";
 import { relativeTime } from "../lib/api";
 import { PrPanel } from "./PrPanel";
 import { providerFromUrl, avatarUrl } from "../lib/provider";
+import { EmptyState } from "../ui/state";
 
 interface Props {
   sessions: UnifiedSession[];
@@ -332,18 +333,15 @@ export function Reviews({
 
         {filtered.length === 0 ? (
           <div className="reviews-empty">
-            <div className="detail-empty-inner">
-              <div className="detail-empty-title">
-                {prSessions.length === 0 ? "No pull requests yet" : "Nothing here"}
-              </div>
-              <div className="detail-empty-sub">
-                {prSessions.length === 0
-                  ? `Pull requests opened by ${AGENT_NAME} sessions show up here.`
-                  : filter === "review"
-                    ? "All caught up. Nothing needs review."
-                    : "No pull requests match this filter."}
-              </div>
-            </div>
+            <EmptyState
+              title={prSessions.length === 0 ? "No pull requests yet" : "Nothing here"}
+            >
+              {prSessions.length === 0
+                ? `Pull requests opened by ${AGENT_NAME} sessions show up here.`
+                : filter === "review"
+                  ? "All caught up. Nothing needs review."
+                  : "No pull requests match this filter."}
+            </EmptyState>
           </div>
         ) : (
           <div className="reviews-table" role="table">

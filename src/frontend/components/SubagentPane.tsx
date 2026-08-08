@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { fetchSubagent, type SubagentTranscript } from "../lib/api";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { TranscriptBlocks } from "./TranscriptBlocks";
+import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 
 export interface SubagentRef {
   agentId: string;
@@ -117,9 +118,9 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
 
       <div className="panel-body subagent-body" ref={bodyRef} onScroll={onScroll}>
         {loading ? (
-          <div className="panel-placeholder">Loading sub-agent…</div>
+          <LoadingState>Loading sub-agent…</LoadingState>
         ) : error ? (
-          <div className="panel-placeholder panel-error">{error}</div>
+          <InlineAlert className="m-4">{error}</InlineAlert>
         ) : data && data.entries.length > 0 ? (
           <div className="subagent-messages">
             <TranscriptBlocks
@@ -129,7 +130,7 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
             />
           </div>
         ) : (
-          <div className="panel-placeholder">No transcript yet for this sub-agent.</div>
+          <EmptyState>No transcript yet for this sub-agent.</EmptyState>
         )}
       </div>
     </div>
