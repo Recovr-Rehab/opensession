@@ -257,17 +257,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
    left of that rail (see .sidebar-lane-group), which reads as a divider over
    its rows without pushing them right. Stepping the rows in as well cost real
    title width on every level and fanned the list out across three left edges. */
-/* The count on a group heading or a workspace row. Still legacy because the
-   row families position their trailing metadata against it as a sibling
-   (`.sidebar-group-count + .sidebar-ws-time`); it migrates with them. */
-.sidebar-group-count {
-	margin-left: auto;
-	padding-right: 4px;
-	color: var(--text-faint);
-	font-size: 12px;
-	font-weight: 500;
-}
-
 /* 2px of breathing room between list rows — covers both the swipe-wrapped
    rows (workspace + session) and the bare rows (PR / support). The inner
    .sidebar-item of a swipe row must not add its own margin, or wrapped rows
@@ -331,16 +320,10 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.sidebar-ws-row:hover .sidebar-ws-actions {
 		display: none;
 	}
-	.sidebar-ws-row:hover .sidebar-group-count {
-		display: inline-flex;
-	}
 }
 @media (max-width: 720px) {
 	.sidebar-ws-row:hover .sidebar-ws-actions {
 		display: none;
-	}
-	.sidebar-ws-row:hover .sidebar-group-count {
-		display: inline-flex;
 	}
 	.sidebar-ws-row:hover .sidebar-ws-time,
 	.sidebar-ws-row:hover .sidebar-ws-ticker,
@@ -1893,9 +1876,6 @@ body.resizing-tab-split {
      rounded corner; a slightly smaller circle + more right padding sits it
      fully inside. */
 @media (max-width: 720px) {
-	.sidebar-group-count {
-		font-size: 13px;
-	}
 	.sidebar-ws-time,
 	.sidebar-ws-ticker {
 		font-size: 12px;
@@ -2217,9 +2197,6 @@ body.resizing-tab-split {
 	.sidebar-swipe-row.is-open .sidebar-ws-row:hover .sidebar-ws-actions {
 		display: none;
 	}
-	.sidebar-ws-row:hover .sidebar-group-count {
-		display: none;
-	}
 }
 .sidebar-ws-action {
 	display: inline-flex;
@@ -2278,9 +2255,6 @@ body.resizing-tab-split {
 	font-size: 11px;
 	color: var(--text-faint);
 }
-.sidebar-group-count + .sidebar-ws-time {
-	margin-left: 6px;
-}
 /* The last-used time is revealed on row hover in every enabled mode — and the
    "hover" mode (the default) shows it ONLY then. A running row hides the idle
    badge too (its live ticker owns the resting slot until you hover). On touch
@@ -2318,9 +2292,6 @@ body.resizing-tab-split {
 	font-variant-numeric: tabular-nums;
 	color: var(--yellow);
 }
-.sidebar-group-count + .sidebar-ws-ticker {
-	margin-left: 6px;
-}
 @media (hover: hover) {
 	.sidebar-ws-row:hover .sidebar-ws-ticker {
 		display: none;
@@ -2345,7 +2316,6 @@ body.resizing-tab-split {
 .sidebar-ws-row .sidebar-ws-draft {
 	margin-left: auto;
 }
-.sidebar-group-count + .sidebar-ws-draft,
 .sidebar-ws-ticker + .sidebar-ws-draft {
 	margin-left: 6px;
 }
@@ -2371,7 +2341,6 @@ body.resizing-tab-split {
 }
 /* Something ahead of it already pushed the cluster right — a second auto
    margin would split the free space and strand a badge mid-row. */
-.sidebar-group-count + .sidebar-ws-snooze,
 .sidebar-ws-ticker + .sidebar-ws-snooze {
 	margin-left: 6px;
 }

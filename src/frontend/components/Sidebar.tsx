@@ -17,11 +17,13 @@ import {
 	SIDEBAR_FILTER_DOT,
 	SIDEBAR_GROUP,
 	SIDEBAR_GROUP_CHEVRON,
+	SIDEBAR_GROUP_COUNT,
 	SIDEBAR_GROUP_DOT,
 	SIDEBAR_GROUP_HEADER,
 	SIDEBAR_GROUP_HEADER_INSET,
 	SIDEBAR_GROUP_ICON,
 	SIDEBAR_GROUP_NAME,
+	SIDEBAR_LANE_COUNT,
 	SIDEBAR_LANE_HEADER,
 	SIDEBAR_LANE_NAME,
 	SIDEBAR_HEADER_BTN,
@@ -2399,7 +2401,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									</svg>
 								</span>
 								<span className={SIDEBAR_GROUP_NAME}>Archived</span>
-								<span className="sidebar-group-count ml-0 pr-0">{archivedCount}</span>
+								<span className={SIDEBAR_GROUP_COUNT}>{archivedCount}</span>
 								<IconChevronDown
 									className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 									size={22}
@@ -3034,7 +3036,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					onClick={() => toggleGroup(gkey)}
 				>
 					<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>Snoozed</span>
-					<span className="sidebar-group-count ml-0 pr-0 text-[12px]">{rows.length}</span>
+					<span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
 					<IconChevronDown
 						className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 						size={22}
@@ -3106,9 +3108,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					>
 						<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>{meta.label}</span>
 						{/* Count rides directly behind the lane name, not pinned right. */}
-						<span className="sidebar-group-count ml-0 pr-0 text-[12px]">
-							{items.length + prs.length}
-						</span>
+						<span className={SIDEBAR_LANE_COUNT}>{items.length + prs.length}</span>
 						<IconChevronDown
 							className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 							size={22}
@@ -3217,9 +3217,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onClick={() => toggleGroup(gkey)}
 						>
 							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>{b.label}</span>
-							<span className="sidebar-group-count ml-0 pr-0 text-[12px]">
-								{b.rows.length + b.prs.length}
-							</span>
+							<span className={SIDEBAR_LANE_COUNT}>{b.rows.length + b.prs.length}</span>
 							<IconChevronDown
 								className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 								size={22}
@@ -3448,7 +3446,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 							<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
 							{/* Count rides directly behind the repo name, not pinned right. */}
-							<span className="sidebar-group-count ml-0 pr-0">
+							<span className={SIDEBAR_GROUP_COUNT}>
 								{rows.length + snoozedRows.length + prs.length}
 							</span>
 							{/* Urgent rows must not vanish into a closed band — a collapsed
@@ -3574,7 +3572,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						>
 							{group.label}
 						</span>
-						<span className={cn("sidebar-group-count ml-0 pr-0 text-[12px]", group.cls)}>
+						<span className={cn(SIDEBAR_LANE_COUNT, group.cls)}>
 							{items.length}
 						</span>
 						<IconChevronDown
@@ -3737,7 +3735,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />
 						</span>
 						<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{feed.title}</span>
-						<span className="sidebar-group-count ml-0 pr-0">{count}</span>
+						<span className={SIDEBAR_GROUP_COUNT}>{count}</span>
 						{!open && attentionCount > 0 && (
 							<span
 								className={SIDEBAR_ATTN_COUNT}
@@ -4432,7 +4430,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										style={{ color: "var(--accent)" }}
 									/>
 									<span className={SIDEBAR_GROUP_NAME}>Needs review</span>
-									<span className="sidebar-group-count ml-0 pr-0">
+									<span className={SIDEBAR_GROUP_COUNT}>
 										{needsReviewRows.length + requestedPrItems.length}
 									</span>
 									<IconChevronDown
@@ -4476,7 +4474,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										style={{ color: "var(--yellow)" }}
 									/>
 									<span className={SIDEBAR_GROUP_NAME}>Awaiting review</span>
-									<span className="sidebar-group-count ml-0 pr-0">
+									<span className={SIDEBAR_GROUP_COUNT}>
 										{awaitingReviewRows.length}
 									</span>
 									<IconChevronDown
@@ -4792,7 +4790,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									style={{ color: "var(--text-faint)" }}
 								/>
 								<span className={SIDEBAR_GROUP_NAME}>Pinned</span>
-								<span className="sidebar-group-count ml-0 pr-0">{pinnedCount}</span>
+								<span className={SIDEBAR_GROUP_COUNT}>{pinnedCount}</span>
 								<IconChevronDown
 									className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 									size={22}
@@ -4972,7 +4970,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								{/* The count sits right after the heading, not pinned to the
 								    far right; any future action can still be pushed there
 								    with ml-auto. */}
-								<span className="sidebar-group-count m-0 p-0">
+								<span className={SIDEBAR_GROUP_COUNT}>
 									{groups.reduce((n, g) => n + g.items.length, 0)}
 								</span>
 								<IconChevronDown
@@ -5013,7 +5011,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 													transform: open ? "none" : "rotate(-90deg)",
 												}}
 											/>
-											<span className="sidebar-group-count group-hover/gh:hidden">
+											<span
+												className={cn(
+													SIDEBAR_GROUP_COUNT,
+													// The one heading that still wants the old rule's
+													// right-hand pin: its cog takes this slot on hover.
+													"ml-auto pr-1 group-hover/gh:hidden",
+												)}
+											>
 												{group.items.length}
 											</span>
 											{/* Hover swaps the count for a cog that jumps to this
@@ -5115,7 +5120,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								title={open ? "Collapse people" : "Expand people"}
 							>
 								<span className="min-w-0 truncate">People</span>
-								<span className="sidebar-group-count m-0 p-0">
+								<span className={SIDEBAR_GROUP_COUNT}>
 									{rows.length}
 								</span>
 								<IconChevronDown

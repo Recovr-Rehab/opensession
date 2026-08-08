@@ -166,6 +166,29 @@ export const SIDEBAR_LANE_NAME = "pl-1";
 export const SIDEBAR_GROUP_CHEVRON =
 	"shrink-0 text-faint opacity-0 transition-[transform,opacity] group-hover/gh:text-fg group-hover/gh:opacity-100";
 
+/**
+ * The count on a group or band heading. Written phone-first for the same
+ * reason the containers above are: the rule this replaces bumped to 13px under
+ * `max-width: 720px`, and `max-[720px]:` compiles to `< 720`.
+ *
+ * Horizontal spacing is deliberately NOT here. The old rule pinned every count
+ * to the right with `margin-left: auto` and a 4px inset, and then all but one
+ * call site turned both back off — so the pin belongs to the one heading that
+ * actually wants it, not to the shared string.
+ */
+export const SIDEBAR_GROUP_COUNT =
+	"text-[13px] font-medium text-faint min-[721px]:text-[12px]";
+
+/**
+ * The same count on a status-lane heading, which pins 12px at both widths.
+ * That is what the shipped build renders: the lane headings already carried a
+ * `text-[12px]` utility, and a utility out-ranks the phone rule in legacy.css,
+ * so their counts never took the bump their neighbours' did. Spelled as its
+ * own constant rather than reproduced by stacking a second `text-*` on
+ * {@link SIDEBAR_GROUP_COUNT}, where the winner would be Tailwind's ordering.
+ */
+export const SIDEBAR_LANE_COUNT = "text-[12px] font-medium text-faint";
+
 /** The 7px liveness dot a lane or automation heading leads with. */
 export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
 
