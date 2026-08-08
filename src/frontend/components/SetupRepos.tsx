@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/button";
 import { Popover } from "../ui/popover";
+import { Switch } from "../ui/switch";
 import { cn } from "../ui/cn";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import {
@@ -15,7 +16,7 @@ import {
 	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { IconArrowUpToLine, IconCheck, IconPlus } from "./icons";
+import { IconArrowUpToLine, IconPlus } from "./icons";
 import { RepoTile } from "./RepoTile";
 import { REPO_TILE_COLORS, REPO_TILE_INK, repoColor } from "../lib/repo-colors";
 import { repoLetter } from "../lib/repo-label";
@@ -191,22 +192,30 @@ function RepoTileButton({
 		<Popover.Root>
 			<Popover.Trigger
 				className="shrink-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]"
-				aria-label={`Change ${id}'s tile`}
+				aria-label={`Change ${id}'s icon`}
 			>
 				<RepoTile name={id} size={28} />
 			</Popover.Trigger>
 			<Popover.Popup className="w-[248px] p-3" initialFocus>
-				<div className="mb-2 text-meta font-medium text-dim">Tile</div>
-				<div className="grid grid-cols-6 gap-2">
+				<div className="mb-2 text-meta font-medium text-dim">Icon</div>
+				{/* Faded while automatic is on: these choices aren't in effect.
+				    Still live, though — picking one is how you leave automatic,
+				    so the fade never becomes a mode you have to escape first. */}
+				<div
+					className={cn(
+						"grid grid-cols-6 gap-2 transition-opacity duration-150",
+						autoActive && "opacity-40",
+					)}
+				>
 					{REPO_TILE_COLORS.map((color) => (
 						<TileChoice
 							key={color}
 							// Named by what it does, not by its hex: "#b04e90"
 							// tells a screen reader nothing.
-							label={`Letter tile, color ${REPO_TILE_COLORS.indexOf(color) + 1} of ${REPO_TILE_COLORS.length}`}
+							label={`Letter icon, color ${REPO_TILE_COLORS.indexOf(color) + 1} of ${REPO_TILE_COLORS.length}`}
 							// Picking a color takes art off too — otherwise the
-							// choice would be invisible on a repo wearing an icon.
-							active={!repo?.hasIcon && repo?.color === color}
+							// choice would be invisible on a repo wearing art.
+							active={!autoActive && !repo?.hasIcon && repo?.color === color}
 							disabled={busy}
 							onClick={() => apply({ color, icon: null })}
 						>
@@ -261,33 +270,28 @@ function RepoTileButton({
 						}}
 					/>
 				</div>
-				{/* The default, named. It isn't a colour among the ten — it's
-				    "let the server keep this repo on one nothing else has" —
-				    so it gets a row that says so, and shows which color that
-				    currently means. */}
-				<button
-					type="button"
-					disabled={busy}
-					aria-pressed={autoActive}
-					onClick={() => apply({ color: null, icon: null })}
-					className={cn(
-						"mt-2.5 flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left",
-						"outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
-						autoActive ? "bg-active" : "hover:bg-hover",
-					)}
-				>
+				{/* The default, as a switch: it's a mode, not a thirteenth
+				    choice. Off pins whatever it was giving, so leaving
+				    automatic never lands the repo somewhere it wasn't. */}
+				<label className="mt-3 flex cursor-pointer items-center gap-2 pt-1">
 					<span className="h-5 w-5 shrink-0">
 						<LetterTile id={id} color={repo?.autoColor} />
 					</span>
 					<span className="min-w-0 flex-1 text-control-label text-fg">
 						Automatic
 					</span>
-					{autoActive ? (
-						<IconCheck size={14} className="shrink-0 text-dim" />
-					) : (
-						<span className="shrink-0 text-meta text-faint">Use</span>
-					)}
-				</button>
+					<Switch
+						checked={autoActive}
+						disabled={busy}
+						onCheckedChange={(on: boolean) =>
+							apply(
+								on
+									? { color: null, icon: null }
+									: { color: repo?.autoColor ?? repo?.color ?? null },
+							)
+						}
+					/>
+				</label>
 				<div className="mt-1.5 text-meta leading-relaxed text-faint">
 					{busy
 						? "Working…"

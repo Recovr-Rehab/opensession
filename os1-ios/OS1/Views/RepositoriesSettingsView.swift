@@ -136,7 +136,7 @@ private struct RepoTileEditorView: View {
                     ForEach(Array(RepoTilePalette.colors.enumerated()), id: \.offset) { index, rgb in
                         let hex = String(format: "#%06x", rgb)
                         TileChoice(
-                            active: !hasIcon && color?.lowercased() == hex,
+                            active: !autoActive && !hasIcon && color?.lowercased() == hex,
                             busy: busy,
                             // Picking a color takes art off too — otherwise the
                             // choice would be invisible on a repo wearing an icon.
@@ -145,7 +145,7 @@ private struct RepoTileEditorView: View {
                             LetterTile(name: repo.id, color: Color(rgb: rgb))
                         }
                         .accessibilityLabel(
-                            "Letter tile, color \(index + 1) of \(RepoTilePalette.colors.count)"
+                            "Letter icon, color \(index + 1) of \(RepoTilePalette.colors.count)"
                         )
                     }
 
@@ -166,30 +166,30 @@ private struct RepoTileEditorView: View {
                     uploadChoice
                 }
                 .padding(.vertical, 4)
+                // Faded while automatic is on: these choices aren't in
+                // effect. Still live, though — picking one is how you leave
+                // automatic, so the fade never becomes a mode to escape first.
+                .opacity(autoActive ? 0.4 : 1)
+                .animation(.easeOut(duration: 0.15), value: autoActive)
             } header: {
-                Text("Tile")
+                Text("Icon")
             }
 
             Section {
-                Button {
-                    Task { await apply(color: .some(nil), icon: .some(nil)) }
-                } label: {
+                // A mode, not an eleventh choice — so a switch. Off pins
+                // whatever automatic was giving, so leaving it never lands the
+                // repo on something it wasn't already wearing.
+                Toggle(isOn: automaticBinding) {
                     HStack(spacing: 11) {
                         LetterTile(
                             name: repo.id,
                             color: parsed(repo.autoColor) ?? parsed(color) ?? OS1VisualStyle.textDim
                         )
                         .frame(width: 24, height: 24)
-                        Text("Automatic").foregroundStyle(OS1VisualStyle.text)
-                        Spacer()
-                        if autoActive {
-                            Image(systemName: "checkmark").foregroundStyle(.secondary)
-                        } else {
-                            Text("Use").font(.footnote).foregroundStyle(.secondary)
-                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        Text("Automatic")
                     }
                 }
-                .buttonStyle(.plain)
                 .disabled(busy)
             } footer: {
                 // Worth saying out loud: this is why the avatar isn't
@@ -350,6 +350,23 @@ private struct RepoTileEditorView: View {
         if text.hasPrefix("#") { text.removeFirst() }
         guard text.count == 6, let rgb = UInt32(text, radix: 16) else { return nil }
         return Color(rgb: rgb)
+    }
+
+    /// On writes through to the server, so the switch reflects what is stored
+    /// rather than a local guess.
+    private var automaticBinding: Binding<Bool> {
+        Binding(
+            get: { autoActive },
+            set: { on in
+                Task {
+                    if on {
+                        await apply(color: .some(nil), icon: .some(nil))
+                    } else {
+                        await apply(color: .some(repo.autoColor ?? color))
+                    }
+                }
+            }
+        )
     }
 
     private func apply(color: String?? = nil, icon: String?? = nil) async {
