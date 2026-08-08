@@ -107,6 +107,33 @@ if (argv[0] === "--diff") {
 	type Diff = { key: string; path: string; cls: string; prop: string; a: string; b: string };
 	const all: Diff[] = [];
 
+	/** Style bags are stored deduplicated and joined; decode each one at most
+	 *  once into a name→value map. Two elements sharing a bag id are provably
+	 *  identical, which is the common case and costs nothing to compare. */
+	const decoder = (snap: any) => {
+		const cache = new Map<number, Map<string, string>>();
+		const names = new Map<number, string[]>();
+		return (id: number | undefined) => {
+			if (id === undefined) return undefined;
+			let m = cache.get(id);
+			if (!m) {
+				const raw = String(snap.bags[id]);
+				const cut = raw.indexOf("\u0002");
+				const lid = Number(raw.slice(0, cut));
+				let ns = names.get(lid);
+				if (!ns) {
+					ns = String(snap.lists[lid]).split("\u0001");
+					names.set(lid, ns);
+				}
+				const vs = raw.slice(cut + 1).split("\u0001");
+				m = new Map();
+				for (let i = 0; i < ns.length; i++) m.set(ns[i], vs[i]);
+				cache.set(id, m);
+			}
+			return m;
+		};
+	};
+
 	for (const key of Object.keys(A)) {
 		const ea = A[key]?.els as any[];
 		const eb = B[key]?.els as any[];
@@ -114,6 +141,8 @@ if (argv[0] === "--diff") {
 			console.log(`${key}: missing snapshot`);
 			continue;
 		}
+		const decA = decoder(A[key]);
+		const decB = decoder(B[key]);
 		const ma = new Map(ea.map((e) => [e.path, e]));
 		const mb = new Map(eb.map((e) => [e.path, e]));
 
@@ -146,20 +175,17 @@ if (argv[0] === "--diff") {
 			if (only && !(ela.cls || "").includes(only) && !(elb.cls || "").includes(only)) continue;
 			compared++;
 			for (const bag of ["s", "b", "a"] as const) {
-				const pa = ela[bag] || {};
-				const pb = elb[bag] || {};
+				// Identical bag ids mean identical values by construction, but a
+				// pseudo-element present on one side only still has to be reported.
+				if (ela[bag] === elb[bag]) continue;
+				const va = decA(ela[bag]);
+				const vb = decB(elb[bag]);
 				const label = bag === "s" ? "" : `::${bag === "b" ? "before" : "after"} `;
-				for (const prop of new Set([...Object.keys(pa), ...Object.keys(pb)])) {
+				for (const prop of new Set([...(va?.keys() ?? []), ...(vb?.keys() ?? [])])) {
 					if (DERIVED.has(prop)) continue;
-					if (pa[prop] !== pb[prop])
-						all.push({
-							key,
-							path: p,
-							cls: ela.cls,
-							prop: label + prop,
-							a: pa[prop] ?? "<absent>",
-							b: pb[prop] ?? "<absent>",
-						});
+					const x = va?.get(prop) ?? "<absent>";
+					const y = vb?.get(prop) ?? "<absent>";
+					if (x !== y) all.push({ key, path: p, cls: ela.cls, prop: label + prop, a: x, b: y });
 				}
 			}
 			if (withRect)
@@ -214,26 +240,66 @@ const hoverSel = flag("hover");
  *  unless the noise floor says otherwise. */
 const freeze = argv.includes("--freeze");
 
-const WALK = `((rootSel) => {
+/**
+ * Chrome resolves ~546 longhands per element, and a real page is thousands of
+ * elements — sent naively that is hundreds of megabytes, which does not fail
+ * cleanly: the `returnByValue` call simply never returns and the run dies with
+ * no output at all, looking like a broken script rather than a size limit.
+ *
+ * Two things make it tractable, both page-side so the bytes are never
+ * transferred at all. Every element's values are joined into ONE string and
+ * deduplicated — a list of 200 rows has 200 identical style bags and stores
+ * one — and the property NAMES are stored once for the whole snapshot instead
+ * of per element. What crosses the wire is a bag id per element.
+ *
+ * The names are captured from the first element and asserted identical for
+ * every later one. Chrome enumerates the same longhand set for every element
+ * and pseudo-element of a document, so this holds; if it ever stopped holding,
+ * values would silently misalign against the wrong names, so it fails loudly
+ * instead.
+ */
+const COLLECT = `((rootSel) => {
   const roots = [...document.querySelectorAll(rootSel)];
-  if (!roots.length) return { error: 'no element matches ' + rootSel };
-  const out = [];
+  // Name where we actually ended up. This app can restore a previous session on
+  // load, so "/" does not reliably render the home route — without the landing
+  // path in the message that reads as a broken selector.
+  if (!roots.length) return { error: 'no element matches ' + rootSel + ' (landed on ' + location.pathname + ')' };
   // corner-shape and its longhands are NOT enumerable on a computed style, so
   // the index walk below never yields them. They are the whole point of the
   // squircle check — grab them by name.
   const extra = ['corner-shape','corner-top-left-shape','corner-top-right-shape','corner-bottom-left-shape','corner-bottom-right-shape'];
-  const grab = (cs, bag) => {
-    for (let i = 0; i < cs.length; i++) bag[cs[i]] = cs.getPropertyValue(cs[i]);
-    for (const p of extra) { const v = cs.getPropertyValue(p); if (v) bag[p] = v; }
+  // The property list is NOT the same for every element: Chrome enumerates
+  // custom properties too, so an element carrying its own --vars yields a
+  // longer list than its neighbour. Names therefore travel WITH each bag —
+  // but the distinct name lists are themselves few, so they are deduplicated
+  // separately and a bag references one by id.
+  const lists = [];
+  const byList = new Map();
+  const bags = [];
+  const byBag = new Map();
+  const SEP = '\\u0001';
+  const LSEP = '\\u0002';
+  const bagId = (cs) => {
+    const names = [];
+    const vals = [];
+    for (let i = 0; i < cs.length; i++) { names.push(cs[i]); vals.push(cs.getPropertyValue(cs[i])); }
+    for (const p of extra) { const v = cs.getPropertyValue(p); if (v) { names.push(p); vals.push(v); } }
+    const nkey = names.join(SEP);
+    let lid = byList.get(nkey);
+    if (lid === undefined) { lid = lists.length; lists.push(nkey); byList.set(nkey, lid); }
+    const key = lid + LSEP + vals.join(SEP);
+    let id = byBag.get(key);
+    if (id === undefined) { id = bags.length; bags.push(key); byBag.set(key, id); }
+    return id;
   };
+  const out = [];
   const walk = (el, path) => {
     const cls = el.className && el.className.baseVal !== undefined ? el.className.baseVal : String(el.className || '');
-    const rec = { path, tag: el.tagName, cls, s: {}, b: {}, a: {} };
-    grab(getComputedStyle(el), rec.s);
+    const rec = { path, tag: el.tagName, cls, s: bagId(getComputedStyle(el)) };
     const before = getComputedStyle(el, '::before');
-    if (before.content && before.content !== 'none') grab(before, rec.b);
+    if (before.content && before.content !== 'none') rec.b = bagId(before);
     const after = getComputedStyle(el, '::after');
-    if (after.content && after.content !== 'none') grab(after, rec.a);
+    if (after.content && after.content !== 'none') rec.a = bagId(after);
     const r = el.getBoundingClientRect();
     rec.rect = [r.x, r.y, r.width, r.height].map((n) => Math.round(n * 100) / 100);
     // Live data reorders. Text is what tells two same-shaped rows apart.
@@ -243,8 +309,13 @@ const WALK = `((rootSel) => {
     for (const c of el.children) walk(c, path + '/' + (i++) + ':' + c.tagName);
   };
   roots.forEach((r, i) => walk(r, 'root' + (roots.length > 1 ? '#' + i : '')));
-  return { count: out.length, els: out };
+  window.__cssab = { lists, bags, els: out };
+  return { count: out.length, bags: bags.length, lists: lists.length };
 })(${JSON.stringify(rootSel)})`;
+
+const CHUNK = 500;
+const sliceEls = (i: number) => `window.__cssab.els.slice(${i}, ${i + CHUNK})`;
+const sliceBags = (i: number) => `window.__cssab.bags.slice(${i}, ${i + CHUNK})`;
 
 const FREEZE = `*, *::before, *::after { animation: none !important; transition: none !important; }`;
 
@@ -341,13 +412,29 @@ for (const theme of THEMES) {
 			await sleep(400);
 		}
 
-		const snap = await evaluate(WALK);
-		result[`${vname}:${theme}`] = snap;
-		console.log(`  ${vname} ${theme}: ${snap.count ?? snap.error}`);
+		const head = await evaluate(COLLECT);
+		if (head.error) {
+			result[`${vname}:${theme}`] = head;
+			console.log(`  ${vname} ${theme}: ${head.error}`);
+			continue;
+		}
+		const els: any[] = [];
+		for (let i = 0; i < head.count; i += CHUNK) els.push(...(await evaluate(sliceEls(i))));
+		const bags: string[] = [];
+		for (let i = 0; i < head.bags; i += CHUNK) bags.push(...(await evaluate(sliceBags(i))));
+		const lists: string[] = await evaluate("window.__cssab.lists");
+		result[`${vname}:${theme}`] = { count: els.length, lists, bags, els };
+		console.log(
+			`  ${vname} ${theme}: ${els.length} els, ${bags.length} distinct style bags, ${lists.length} property list(s)`,
+		);
 	}
 }
 
 mkdirSync(SNAPS, { recursive: true });
 writeFileSync(join(SNAPS, `${label}.json`), JSON.stringify(result));
+// Close the tab, not just the socket. Each run opens one and every one holds a
+// full copy of the app; leaving them behind slows the browser down until a
+// later run hangs with no output at all, which reads as a broken script.
+await fetch(`http://127.0.0.1:${PORT}/json/close/${target.id}`).catch(() => {});
 ws.close();
 console.log(`wrote ${join(SNAPS, `${label}.json`).replace(`${ROOT}/`, "")}`);
