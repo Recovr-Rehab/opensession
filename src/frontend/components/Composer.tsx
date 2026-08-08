@@ -35,7 +35,16 @@ import {
   composerTextarea,
   composerTextareaPadding,
   composerTextareaPaddingMinimized,
+  composerToolbar,
+  composerToolbarMinimized,
+  composerToolbarPill,
+  composerToolbarSelect,
 } from "../lib/composer-classes";
+import {
+  paletteIconBtn,
+  paletteIconBtnRound,
+  palettePill,
+} from "../lib/palette-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -721,11 +730,11 @@ export function Composer({
         }}
         transition={composerMorph}
         // `composer` and `composer-min` stay on the markup as hooks, not as
-        // styling: legacy.css still reaches through them into controls this file
-        // doesn't own — the "+" and mic circles in the resting pill
-        // (`.composer.composer-min .palette-icon-btn`, whose hover wash is a
-        // pseudo-element) — and `body.kb-open .viewer-input:has(.composer:not(
-        // .composer-min))` keys the phone keyboard gap off the pair.
+        // styling: the viewer's input wrap keys the phone keyboard gap off the
+        // pair with `body.kb-open .viewer-input:has(.composer:not(
+        // .composer-min))` (see lib/session-viewer-classes.ts), and
+        // VoiceInput's recording overlay fills `.composer` as its positioned
+        // ancestor.
         className={cn(
           "composer",
           minimized && "composer-min",
@@ -832,7 +841,7 @@ export function Composer({
           />
         </motion.div>
         <div
-          className="composer-toolbar"
+          className={cn(composerToolbar, minimized && composerToolbarMinimized)}
           ref={toolbarRef}
           // Phones: a toolbar tap must not blur the textarea — the blur would
           // collapse the empty composer mid-tap (unmounting the model pill and
@@ -876,7 +885,8 @@ export function Composer({
                   // sits about where the send circle does. The resting pill
                   // insets everything by 4px already, so it stays put there.
                   className={cn(
-                    "palette-icon-btn",
+                    paletteIconBtn,
+                    minimized && paletteIconBtnRound,
                     minimized ? "ml-0" : "-ml-1.5",
                   )}
                   {...tapProps(() => setMenu(menu === "add" ? null : "add"))}
@@ -988,8 +998,8 @@ export function Composer({
                 key="mode-marker"
                 layout="position"
                 {...composerChipMotion}
-                // Phones pull the model pill to the front of the toolbar
-                // (order:-1 in legacy.css), which would otherwise wedge it
+                // Phones pull the model pill to the front of the toolbar (see
+                // composerToolbarSelect), which would otherwise wedge it
                 // between the "+" and this marker. Same order as the "+" wrap
                 // keeps the pair together — equal order falls back to DOM
                 // order, and the "+" is rendered first.
@@ -998,7 +1008,7 @@ export function Composer({
                 <Tooltip label="Ask mode — this session can read the code but not change it">
                   <button
                     type="button"
-                    // Same "on" language as .palette-icon-btn.is-on: the state
+                    // Same "on" language as paletteIconBtnOn: the state
                     // lives in a filled wash, not a ring — a full-strength
                     // border reads as a validation outline, and it's the one
                     // thing that survives when the fill lands on the tinted
@@ -1023,24 +1033,25 @@ export function Composer({
               </motion.div>
             )}
           </AnimatePresence>
-          {/* `grow basis-0` rather than `flex-1`: the toolbar pins every direct
-              child at flex-shrink 0, and a shorthand would take that back. */}
-          {!minimized && <div className="grow basis-0" />}
+          {/* `grow basis-0 shrink-0` rather than `flex-1`: every direct child of
+              the toolbar is pinned at flex-shrink 0 so the model pill is the
+              only thing that gives way, and a shorthand would take that back. */}
+          {!minimized && <div className="shrink-0 grow basis-0" />}
 
           {/* Model + effort live together on the right edge (ChatGPT-style):
               one pill, effort levels up top, the model behind a submenu.
-              Phones reorder it next to the + button via flex order (see the
-              "Lightweight phone inputs" block in legacy.css). */}
+              Phones reorder it next to the + button via flex order (see
+              composerToolbarSelect). */}
           <AnimatePresence initial={false}>
             {!minimized && (
               <motion.div
                 key="model-effort"
                 layout="position"
                 {...composerChipMotion}
-                className="palette-select-motion"
+                className={composerToolbarSelect}
               >
                 <ModelEffortSelect
-                  className="palette-pill"
+                  className={cn(palettePill, composerToolbarPill)}
                   title={modelTitle || "Model and reasoning effort for this session"}
                   models={models}
                   defaultModel={defaultModel}
@@ -1087,7 +1098,14 @@ export function Composer({
               minimized && "order-3",
             )}
           >
-            <VoiceInput onText={insertDictation} disabled={disabled} />
+            {/* The mic is one of the resting pill's circles, so it takes the
+                round variant with the "+" — that pairing used to come from a
+                `.composer.composer-min .palette-icon-btn` descendant rule. */}
+            <VoiceInput
+              className={cn(paletteIconBtn, minimized && paletteIconBtnRound)}
+              onText={insertDictation}
+              disabled={disabled}
+            />
           </motion.div>
 
           {busy && onStop && (

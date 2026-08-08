@@ -62,6 +62,37 @@ export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
  *  carries the horizontal breathing room and no vertical padding at all. */
 export const composerTextareaPaddingMinimized = "px-1 py-0";
 
+/* ── The toolbar row ──────────────────────────────────────────────
+   The row under the draft: "+", the mode marker, a spacer, the model pill,
+   the usage meter, the mic and the send disc.
+
+   The stylesheet pinned every DIRECT child at `flex-shrink: 0` from here, so
+   that when the row ran out of room the model/effort pill gave way (its label
+   ellipsizes) and never the icon buttons or the send button, which would
+   otherwise be pushed past the composer's edge on phones. That is now written
+   on the children themselves rather than as `[&>*]:shrink-0`: a descendant
+   utility and a child's own `shrink` are the same specificity, so the pill's
+   opt-back-in would have depended on the compiled sheet's order. */
+export const composerToolbar =
+	"mt-2.5 flex items-center gap-2 max-[720px]:mt-1.5 max-[720px]:gap-1.5";
+/** Resting phone pill: `display: contents` lifts the toolbar's buttons into
+ *  the composer's own flex row, so the textarea can sit between the "+" and
+ *  the mic/send and `order` can sequence them. Combine through `cn()` —
+ *  tailwind-merge is what drops the `flex` above. */
+export const composerToolbarMinimized = "contents";
+/** The one flexible item in the row, and the wrapper it has to be granted to:
+ *  the model pill sits inside a Motion layout box, and pinning the shrink on
+ *  the pill itself left the WRAPPER rigid — the row stayed wider than the
+ *  composer and pushed the send button off its right edge on phones. Phones
+ *  also pull it to the front of the row, next to the "+". */
+export const composerToolbarSelect =
+	"inline-flex min-w-0 shrink max-[720px]:order-[-1]";
+/** The pill's toolbar-only metrics: it may shrink to a 34px stub here (the
+ *  new-session footer lets it go to 0 instead), and phones tighten its
+ *  padding and cap it so the whole row fits without clipping the send. */
+export const composerToolbarPill =
+	"shrink min-w-[34px] max-[720px]:max-w-[136px] max-[720px]:px-[9px]";
+
 /* ── Toolbar popover menus ─────────────────────────────────────────
    The popup surface for the "+" add menu and the send-later menu.
    `.composer-menu-item` / `.composer-menu-icon` are NOT migrated: SessionViewer

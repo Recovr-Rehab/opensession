@@ -9,6 +9,7 @@ import {
 	composerSendDefault,
 	composerTextarea,
 	composerTextareaPadding,
+	composerToolbar,
 } from "../lib/composer-classes";
 import { IconArrowUp } from "./icons";
 
@@ -424,8 +425,8 @@ export function SlackChannelPane({
 						}}
 						rows={1}
 					/>
-					<div className="composer-toolbar">
-						<div className="grow basis-0" />
+					<div className={composerToolbar}>
+						<div className="shrink-0 grow basis-0" />
 						<button
 							className={cn(composerSend, composerSendDefault)}
 							onClick={send}

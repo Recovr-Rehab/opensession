@@ -34,6 +34,12 @@ import { IconTile, displayName } from "./BrandTile";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
+import { cn } from "../ui/cn";
+import {
+	paletteIconBtn,
+	paletteIconBtnOn,
+	palettePill,
+} from "../lib/palette-classes";
 
 interface Props {
   /** Close the palette (Esc, backdrop click, or after a create without "Create more"). */
@@ -84,8 +90,8 @@ const SCRATCH_REPO_VALUE = "__scratch__";
    colour utility onto a shared base — two competing colour utilities on one
    element don't compose, the compiled sheet's order picks the winner.
 
-   `palette-icon-btn` and `palette-pill` stay as legacy classes on purpose:
-   Composer.tsx still uses both, so their rules can't be deleted yet. */
+   The icon button and the model pill are shared with the composer toolbar, so
+   they live in lib/palette-classes.ts rather than being restated here. */
 
 const HEADER = "flex items-center justify-between gap-2 border-b border-line px-3 py-[11px]";
 /** Header pickers. `relative` is load-bearing — PaletteSelect's phone branch
@@ -111,12 +117,14 @@ const FOOTER =
 	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-line px-[11px] py-[9px] max-[720px]:flex-wrap max-[560px]:gap-x-1.5 max-[560px]:px-2";
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1";
 const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 max-[720px]:ml-auto";
-const FOOTER_ICON_BTN = "palette-icon-btn shrink-0 max-[560px]:w-9";
+const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
 /** The one flexible footer item. `[&_[data-effort]]` reaches the effort suffix
  *  inside ModelEffortSelect: on ultra-narrow screens it cedes its space to the
  *  model name, which would otherwise truncate to a single letter. */
-const MODEL_PILL =
-	"palette-pill shrink min-w-0 max-[560px]:px-[9px] max-[374px]:[&_[data-effort]]:hidden";
+const MODEL_PILL = cn(
+	palettePill,
+	"shrink min-w-0 max-[560px]:px-[9px] max-[374px]:[&_[data-effort]]:hidden",
+);
 
 const MCP_CONTAINER = "relative shrink-0";
 /** Phone-only full-width sheet; desktop opens the shared Base UI Menu. */
@@ -126,10 +134,10 @@ const MCP_HEADER = "mb-2 px-1 text-meta font-semibold tracking-[-0.01em] text-di
 const MCP_GRID = "grid grid-cols-1 gap-1";
 const MCP_ROW =
 	"flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-label text-dim transition-colors hover:bg-hover hover:text-fg";
-/** `relative`, not `absolute`: `.palette-icon-btn > *` pins every child of the
- *  button to `position: relative` (it lifts glyphs above the hover wash), and
- *  it wins the tie on source order — so this badge has always sat in flow,
- *  nudged 4px up and right. Kept as-is; squaring it up is a visual change. */
+/** `relative`, not `absolute`: paletteIconBtn pins every child of the button
+ *  to `position: relative` (it lifts glyphs above the hover wash), and it wins
+ *  the tie on source order — so this badge has always sat in flow, nudged 4px
+ *  up and right. Kept as-is; squaring it up is a visual change. */
 const MCP_BADGE =
 	"relative -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent text-meta font-semibold text-panel";
 
@@ -920,7 +928,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             {isPhone && (
               <button
                 type="button"
-                className={`${FOOTER_ICON_BTN} ${showOptions ? "is-on" : ""}`}
+                className={cn(FOOTER_ICON_BTN, showOptions && paletteIconBtnOn)}
                 onClick={() => setShowOptions((v) => !v)}
                 disabled={creating}
                 aria-label="Advanced options — base branch, plan first, run environment"
@@ -959,7 +967,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 >
                   <Menu.Trigger
                     type="button"
-                    className={`${FOOTER_ICON_BTN} ${selectedMcpServers.length ? "is-on" : ""}`}
+                    className={cn(FOOTER_ICON_BTN, selectedMcpServers.length > 0 && paletteIconBtnOn)}
                     disabled={creating}
                     aria-label="Choose connected services"
                   >
@@ -997,7 +1005,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             <div className={MCP_CONTAINER} ref={mcpPickerRef}>
               <button
                 type="button"
-                className={`${FOOTER_ICON_BTN} ${selectedMcpServers.length ? "is-on" : ""}`}
+                className={cn(FOOTER_ICON_BTN, selectedMcpServers.length > 0 && paletteIconBtnOn)}
                 onClick={() => setMcpPickerOpen((v) => !v)}
                 disabled={creating}
                 title={`Connected services${selectedMcpServers.length ? ` (${selectedMcpServers.length})` : ""}`}
@@ -1037,7 +1045,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               <Tooltip label={planFirst ? "Exit plan mode" : "Enter plan mode"}>
                 <button
                   type="button"
-                  className={`${FOOTER_ICON_BTN} ${planFirst ? "is-on" : ""}`}
+                  className={cn(FOOTER_ICON_BTN, planFirst && paletteIconBtnOn)}
                   onClick={() => setPlanFirst((v) => !v)}
                   disabled={creating}
                   aria-label={planFirst ? "Exit plan mode" : "Enter plan mode"}
@@ -1058,7 +1066,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 >
                   <Menu.Trigger
                     type="button"
-                    className={`${FOOTER_ICON_BTN} ${sandboxProvider ? "is-on" : ""}`}
+                    className={cn(FOOTER_ICON_BTN, sandboxProvider && paletteIconBtnOn)}
                     disabled={creating}
                     aria-label="Run environment"
                   >
@@ -1118,7 +1126,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 <Tooltip label={`Engine — ${engineLabel(currentEngine)}`}>
                   <Menu.Trigger
                     type="button"
-                    className={`${FOOTER_ICON_BTN} ${currentEngine === "pi" ? "is-on" : ""}`}
+                    className={cn(FOOTER_ICON_BTN, currentEngine === "pi" && paletteIconBtnOn)}
                     disabled={creating}
                     aria-label="Engine"
                   >

@@ -129,15 +129,16 @@ function Content({
 					palette
 						? "z-[6000] bg-black/42 backdrop-blur-[3px] duration-[var(--dur-micro)]"
 						: "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
-					// `palette-backdrop` rides along purely as a runtime marker:
-					// SessionViewer (⌘P) and Sidebar (archive chord) suppress their
-					// window-level shortcuts via
+					// `palette-backdrop` rides along purely as a runtime marker, and
+					// nothing styles it any more: SessionViewer (⌘P) and Sidebar
+					// (archive chord) suppress their window-level shortcuts via
 					// `document.querySelector(".palette-backdrop, …)`, and a palette
-					// must keep matching it. The legacy rule's own declarations are
-					// the same z-index/tint/blur written above, and its flex+padding
-					// are inert on a childless backdrop, so it changes nothing
-					// visually. Removable once those two guards move to
-					// `[role=dialog]`, which App already uses for its bare-"n" check.
+					// must keep matching it. The stylesheet rule it used to carry
+					// said the same z-index/tint/blur written above, plus flex and
+					// padding that are inert on a childless backdrop, so deleting it
+					// changed nothing visually. The NAME is removable once those two
+					// guards move to `[role=dialog]`, which App already uses for its
+					// bare-"n" check.
 					palette && "palette-backdrop",
 				)}
 			/>

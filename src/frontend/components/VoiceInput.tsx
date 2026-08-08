@@ -3,6 +3,7 @@ import { transcribeClip } from "../lib/api";
 import { IconCheck, IconMic, IconPlus, IconX } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { PRODUCT_NAME } from "../lib/brand";
+import { paletteIconBtn } from "../lib/palette-classes";
 
 type Phase = "idle" | "recording" | "transcribing";
 
@@ -55,13 +56,14 @@ const SPINNER =
 export function VoiceInput({
   onText,
   disabled,
-  className = "palette-icon-btn",
+  className = paletteIconBtn,
 }: {
   onText: (text: string) => void;
   disabled?: boolean;
-  /** Classes for the idle mic button. The new-session footer passes its own
-   *  so the mic keeps the sizing its neighbours get there — that used to come
-   *  from a `.palette-footer .palette-icon-btn` descendant rule. */
+  /** Classes for the idle mic button. Both hosts pass their own: the
+   *  new-session footer so the mic keeps the sizing its neighbours get there,
+   *  the composer so it turns into a circle with the "+" in the resting
+   *  pill. */
   className?: string;
 }) {
   const [phase, setPhase] = useState<Phase>("idle");

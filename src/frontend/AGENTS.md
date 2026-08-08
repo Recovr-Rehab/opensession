@@ -57,7 +57,8 @@ language instead of introducing a new local style for each feature.
   segmented-control track, the scroll-fade `box-shadow` masks).
 - Keep a hover wash proportional to the control. A small icon button should
   paint roughly the box its neighbours do, not its whole 40px target — see
-  `.palette-icon-btn`, which paints on a pseudo-element inset by 4px.
+  `paletteIconBtn` in `lib/palette-classes.ts`, which paints on a
+  pseudo-element inset by 4px (`before:inset-1`).
 - Follow the existing spacing, type, radius, border, and icon scales. Prefer a
   nearby shared component or token over a new arbitrary value.
 - Match the surrounding surface before adding visual emphasis. Accent colors,

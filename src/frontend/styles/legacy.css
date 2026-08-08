@@ -663,78 +663,13 @@ body.resizing-tab-split {
 	}
 }
 
-.source-chip {
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-	padding: 2px 8px;
-	border-radius: 999px;
-	flex-shrink: 0;
-}
-.source-slack {
-	background: rgba(74, 21, 75, 0.55);
-	color: #d9a8db;
-}
-.source-linear {
-	background: rgba(94, 106, 210, 0.25);
-	color: #9da6ee;
-}
-.source-backstage {
-	background: rgba(13, 148, 136, 0.22);
-	color: #5eead4;
-}
-.source-cli {
-	background: var(--bg-active);
-	color: var(--text-dim);
-}
-.source-ask {
-	background: rgba(210, 153, 34, 0.18);
-	color: #e3b341;
-}
 /* Which automation produced a session, shown beside its title. Deliberately the
    quiet neutral the CLI chip uses — it names the session's origin, it shouldn't
    outshout the title. It's a link to the automation's settings, so it hints on
    hover. */
-.source-automation {
-	background: var(--bg-active);
-	color: var(--text-dim);
-	text-decoration: none;
-	/* Truncate only when the name is genuinely long — shrinking with the row
-	   ellipsized it while there was still free space beside it. The title next
-	   to it carries its own cap, so it absorbs the squeeze instead. */
-	max-width: 160px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	transition:
-		background var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease);
-}
-.source-automation:hover {
-	background: var(--hover);
-	color: var(--text);
-}
 
 /* Archived chip in the viewer header doubles as an unarchive button — give it a
    touch more room than the read-only source chips, and hint the click. */
-.archived-chip {
-	font-size: 11px;
-	padding: 3px 10px;
-	border: 0;
-	cursor: pointer;
-	line-height: 1.2;
-	transition:
-		background var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease);
-}
-.archived-chip:hover:not(:disabled) {
-	background: var(--hover);
-	color: var(--text);
-}
-.archived-chip:disabled {
-	cursor: default;
-	opacity: 0.6;
-}
 
 @keyframes pulse {
 	0%,
@@ -1397,68 +1332,6 @@ body.resizing-tab-split {
 .composer-queue-item.is-github .composer-queue-body {
 	color: var(--text-dim);
 }
-/* ── Minimized composer (phone resting state) ────────────────────
-   A ChatGPT-style single-row pill: "+ · placeholder · mic · send". Applied
-   (from Composer.tsx) only on phones while the field is empty and unfocused;
-   focusing or typing drops the class and restores the full stacked toolbar.
-   `display: contents` on the toolbar lifts its buttons into this flex row so
-   the textarea can sit between the "+" and the mic/send, and `order` sequences
-   them. The model/effort/goal chips are unmounted in this state (they animate
-   in via AnimatePresence on expand); the spacer is hidden. Motion drives the
-   morph between the two states — see composerMorph in ui/motion.ts. The
-   border-radius is animated inline by Motion, so it isn't set here. */
-.composer.composer-min .composer-toolbar {
-	display: contents;
-}
-
-/* The one place the composer keeps circles, deliberately: this resting state IS
-   a 999px pill (Motion animates the box to it), and its + / mic / send sit
-   flush in its rounded ends — a squircle inside a pill end reads as a mistake.
-   Round buttons stay round for exactly as long as their container is round; the
-   shared control corner returns the moment it expands, carried by the
-   border-radius transition on each control.
-
-   `corner-shape: round` is load-bearing, not decoration. Everything in the
-   composer now inherits `var(--cs)` (squircle where supported), and a squircle
-   at 50% is a lobed blob, not a circle. Previously only the "+" was rounded
-   here (and it WAS getting the blob, since .palette-icon-btn carries --cs)
-   while the mic stayed square — so the resting pill held three different
-   shapes. The fill-shrinking rule that used to live here now covers every
-   phone composer, expanded or not (see the phone block). */
-/* The icon buttons paint on an inset pseudo-element, so the wash needs the
-   same treatment or a circular button hovers into a squircle. */
-.composer.composer-min .palette-icon-btn,
-.composer.composer-min .palette-icon-btn::before {
-	border-radius: 50%;
-	corner-shape: round;
-}
-
-.composer-toolbar {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 10px;
-}
-/* When the toolbar runs out of room, the model/effort pills give way (their
-   labels ellipsize) — never the icon buttons or the send button, which would
-   otherwise get pushed past the composer edge on phones. */
-.composer-toolbar > * {
-	flex-shrink: 0;
-}
-.composer-toolbar .palette-pill {
-	flex-shrink: 1;
-	min-width: 34px;
-}
-/* The model/effort pill sits inside a Motion layout box, so the giving-way has
-   to be granted to that WRAPPER: `.composer-toolbar > *` pins every direct
-   child at flex-shrink: 0, which left the pill's own shrink rule above inert —
-   the row stayed wider than the composer and pushed the send button off its
-   right edge (and off-screen) on phones. */
-.composer-toolbar > .palette-select-motion {
-	flex-shrink: 1;
-	min-width: 0;
-}
-
 /* Custom-time dialog — centered modal with date + time fields, mirroring
    Slack's "Schedule message" sheet. */
 
@@ -2118,9 +1991,6 @@ body.resizing-tab-split {
 	.connections {
 		padding: 18px 14px 48px;
 	}
-	.composer-toolbar {
-		gap: 6px;
-	}
 
 	.msg-body {
 		font-size: 14px;
@@ -2215,14 +2085,6 @@ body.resizing-tab-split {
 		   inside that — the two cancel. */
 		margin-left: 4px;
 	}
-	.palette-icon-btn {
-		width: 40px;
-		height: 40px;
-	}
-	.palette-icon-btn svg {
-		width: 20px;
-		height: 20px;
-	}
 }
 
 /* ── Phone page-stack polish ─────────────────────────────────────
@@ -2266,14 +2128,6 @@ body.resizing-tab-split {
 	   falls back to Stop alone, since the send-split only renders with content).
 	   No mobile-only hiding of either button — the two-button row matches desktop
 	   so the queue/steer affordance is never lost on a phone. */
-	/* Fit the whole toolbar at phone widths so the send button never clips:
-	   drop the pill chevrons (the pill is obviously tappable), collapse the
-	   effort pill to its bars icon, and tighten pill padding. The shrink rules
-	   at the base .composer-toolbar block handle the rest via ellipsis. */
-	.composer-toolbar .palette-pill {
-		padding: 5px 9px;
-		max-width: 136px;
-	}
 }
 
 /* ── Phone touch targets: the last mile ──────────────────────────
@@ -2450,149 +2304,6 @@ body.resizing-tab-split {
 	}
 }
 
-/* ── New-session ⌘K palette ──────────────────────────────────────
-   Centered command-palette overlay that replaces the old full-page
-   new-session view. See src/frontend/components/NewSession.tsx. */
-.palette-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 6000;
-	background: rgba(0, 0, 0, 0.42);
-	backdrop-filter: blur(3px);
-	-webkit-backdrop-filter: blur(3px);
-	display: flex;
-	align-items: flex-start;
-	justify-content: center;
-	padding: 11vh 16px 16px;
-	/* The 0.12s `palette-fade` keyframe that used to live here is gone: this
-	   element is the shared Modal's backdrop (ui/modal.tsx adds the class), and
-	   that already runs an opacity transition on it via Base UI's
-	   [data-starting-style]. The two were animating the same property at the
-	   same time, and the keyframe was the worse of the pair — it only covered
-	   the enter, so the exit was the transition's alone. One fade, and it is
-	   interruptible, which a keyframe is not. */
-}
-.palette-select-motion {
-	display: inline-flex;
-	min-width: 0;
-}
-
-/* Palette dropdowns (model/effort, repo/branch, connected-services) now style
-   the shared Base UI Menu (ui/menu.tsx) directly with Tailwind — no bespoke
-   skin here. */
-.palette-pill:disabled {
-	cursor: default;
-	opacity: 0.55;
-}
-
-/* The model/effort control (composer toolbar + new-session palette footer —
-   both are ModelEffortSelect, this class has no other caller). It stays a pill:
-   it is a text readout you can change, not a plate you press, and it sits
-   beside the cost readout, which is the same kind of thing and the same shape.
-   Squaring it off (and the readout with it) left the toolbar reading as a row
-   of small boxes.
-
-   Its hover DID need fixing, and that part stays: the trigger sets
-   border-transparent at rest ("quiet pill: no outline at rest, hover state
-   only"), so a border-colour hover materialised a full-strength ring out of
-   nothing instead of brightening. It paints --hover now, the same wash as the
-   icon button beside it, which is what that comment always meant. */
-.palette-pill {
-	position: relative;
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	min-height: 32px;
-	box-sizing: border-box;
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	padding: 5px 11px;
-	color: var(--text-dim);
-	font-size: 12px;
-	font-weight: 500;
-	max-width: 180px;
-	transition:
-		background var(--dur-micro) var(--ease),
-		border-color var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease);
-}
-.palette-pill:hover {
-	background: var(--hover);
-	color: var(--text);
-}
-
-.palette-icon-btn {
-	position: relative;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 40px;
-	height: 40px;
-	/* The box agrees with the wash it paints (::before, below) and with the
-	   shared control corner. It was calc(8px * var(--rf)) — a third radius,
-	   visible on the focus ring, which followed neither. */
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid transparent;
-	background: none;
-	color: var(--text-dim);
-	font-size: 14px;
-	cursor: pointer;
-	transition: color var(--dur-micro) var(--ease);
-}
-/* Hover and on states paint on an inset pseudo-element rather than the button
-   box: the button keeps its 40px pointer target on every viewport, but the wash
-   it paints is 32px — the same visual weight as the model pill and the send
-   button it sits beside in the composer toolbar. Filling all 40px read as a
-   slab twice the size of its 20px glyph. */
-.palette-icon-btn::before {
-	content: "";
-	position: absolute;
-	inset: 4px;
-	z-index: 0;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	transition:
-		background var(--dur-micro) var(--ease),
-		box-shadow var(--dur-micro) var(--ease);
-}
-/* Keep the glyph (and the goal/note label) above that wash — the pseudo-element
-   is positioned, so it would otherwise paint over static in-flow content. */
-.palette-icon-btn > * {
-	position: relative;
-	z-index: 1;
-}
-.palette-icon-btn:hover {
-	color: var(--text);
-}
-.palette-icon-btn:hover::before {
-	background: var(--hover);
-}
-/* On reads as one filled accent chip: the glyph lights up with its wash. The
-   old state left the glyph at --text-dim and drew a full-strength 1px accent
-   ring around it, which read as a validation outline around a disabled icon —
-   and on the plan-mode surface, which carries its own accent tint, the pale
-   fill disappeared and only that hard ring was left doing the work. Keeping the
-   state in the wash (no border) also matches how the rest of the app paints
-   state, and gives it somewhere to go on hover. */
-.palette-icon-btn.is-on {
-	color: var(--accent);
-}
-.palette-icon-btn.is-on::before {
-	background: color-mix(in srgb, var(--accent) 16%, transparent);
-	box-shadow: none;
-}
-/* Without this an already-on toggle is inert under the cursor: the shared
-   :hover rules lose to .is-on on both color and fill. */
-.palette-icon-btn.is-on:hover::before {
-	background: color-mix(in srgb, var(--accent) 24%, transparent);
-}
-.palette-icon-btn:disabled {
-	opacity: 0.5;
-	cursor: default;
-}
-
-@media (max-width: 560px) {
-	.palette-backdrop { padding-top: 7vh; }
-}
 /* ── Settings page (full-window: sub-nav + scrolling body) ──────────────── */
 .settings-page {
 	display: flex;
@@ -2986,33 +2697,6 @@ body.resizing-tab-split {
 	}
 	.desk-fab:active {
 		transform: scale(0.92);
-	}
-}
-
-/* ── Lightweight phone inputs ────────────────────────────────────
-   Phones get the ChatGPT-style minimal bar: input plus + / model /
-   mic / send. The model+effort pill stays in the expanded toolbar
-   (reordered next to the + button via flex order below); goal keeps
-   its default and stays out of the composer, and the new-session
-   palette hides repo/base/model/effort behind the sliders toggle. */
-@media (max-width: 720px) {
-	/* The corner is --composer-radius now (:root), which is the value this
-	   block used to restate — desktop was the odd one out at 64px/32px. */
-	/* No resting floor on phones: the field hugs one line and grows with the
-	   draft (the tall inviting box is a desktop affordance). A 48px floor left
-	   an empty — or single-line — composer with a band of dead space under the
-	   text, which is most of what read as "weird height" on a phone. */
-	.composer-toolbar {
-		margin-top: 6px;
-	}
-	.composer-toolbar .palette-select-motion {
-		order: -1;
-	}
-	
-	/* Comfortable thumb targets for what remains. */
-.composer-toolbar .palette-icon-btn {
-		width: 40px;
-		height: 40px;
 	}
 }
 
