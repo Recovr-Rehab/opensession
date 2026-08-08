@@ -2248,12 +2248,12 @@ a.pr-ref:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	/* Inset just enough to read as a drawer behind the composer, and no more:
-	   at 18px + 16px the queued text sat 20px further in than the composer's
-	   own text, so the flap read as a differently-aligned panel rather than
-	   the same column. 6 + 1px border + 8 lands on --composer-inset-left. */
-	margin: 0 6px -14px;
-	padding: 10px 8px 26px;
+	/* Flush with the composer's own edges rather than inset from them: the
+	   flap is that same column continued upward, and any indent read as a
+	   second, narrower surface behind it. 1px border + 14px padding puts the
+	   queued text on --composer-inset-left, where the draft below starts. */
+	margin: 0 0 -14px;
+	padding: 10px 14px 26px;
 	/* Same edge as the composer it tucks under — the two hairlines meet. */
 	border: 1px solid var(--composer-border);
 	border-bottom: none;
