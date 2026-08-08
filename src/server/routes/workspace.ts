@@ -10,9 +10,12 @@ import { requestUser, type RouteContext } from "./context";
 import { searchRepoEntries } from "../file-index";
 import {
 	RepoAppearanceError,
+	fetchOwnerAvatar,
+	repoAvatarOwner,
 	repoIconRevision,
 	resolveRepoIcon,
 	updateRepoAppearance,
+	uploadRepoIcon,
 	type RepoAppearancePatch,
 } from "../repo-appearance";
 import { assignRepoTileColors } from "../repo-tile-colors";
@@ -267,11 +270,58 @@ export async function handleWorkspaceRoutes(
 					colorChosen: !!p.color,
 					/** Whether the tile paints art instead of the letter. */
 					hasIcon: !!icon,
+					/** Which picker choice that art came from, when we stored it. */
+					iconSource: icon ? (p.iconSource ?? null) : null,
 					/** Bumped when that art changes, so tiles don't stay cached. */
 					iconRev: repoIconRevision(icon),
 				};
 			}),
 		});
+	}
+
+	// The owner's GitHub avatar, so the tile picker can OFFER the picture
+	// rather than a button promising one. Proxied rather than linked straight
+	// at github.com: the browser then needs no reach the server doesn't
+	// already have, and the bytes are the same ones applying it would store.
+	const avatar = path.match(/^\/api\/repos\/([\w.-]+)\/github-avatar$/);
+	if (avatar && req.method === "GET") {
+		const owner = repoAvatarOwner(avatar[1]);
+		// No GitHub repo, no avatar — the picker hides the choice on a 404.
+		if (!owner) return new Response("Not found", { status: 404 });
+		try {
+			const bytes = await fetchOwnerAvatar(owner);
+			return new Response(bytes.slice().buffer as ArrayBuffer, {
+				headers: {
+					"Content-Type": "image/png",
+					// An avatar changes about never, and this is a preview: an
+					// hour of cache saves a GitHub round trip per popover open.
+					"Cache-Control": "private, max-age=3600",
+				},
+			});
+		} catch {
+			return new Response("Not found", { status: 404 });
+		}
+	}
+
+	// Art someone uploaded for the tile. Raw PNG bytes rather than multipart:
+	// the picker re-encodes whatever file was chosen through a canvas, so what
+	// arrives is always one already-square PNG.
+	const iconUpload = path.match(/^\/api\/repos\/([\w.-]+)\/icon$/);
+	if (iconUpload && req.method === "POST") {
+		try {
+			const bytes = new Uint8Array(await req.arrayBuffer());
+			return Response.json(await uploadRepoIcon(iconUpload[1], bytes));
+		} catch (e) {
+			return Response.json(
+				{
+					error:
+						e instanceof RepoAppearanceError
+							? e.message
+							: "Couldn’t store that icon",
+				},
+				{ status: e instanceof RepoAppearanceError ? 400 : 500 },
+			);
+		}
 	}
 
 	// Tile appearance: pick one of the palette colors, or give the repo real

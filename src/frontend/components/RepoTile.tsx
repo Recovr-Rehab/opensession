@@ -35,7 +35,10 @@ export function RepoTile({
 	size?: number;
 	round?: boolean;
 }) {
-	// Failure is tracked per name so a tile that switches repo retries the img.
+	// Failure is tracked per name AND icon revision, so a tile retries the img
+	// both when it switches repo and when this repo's art changes — a repo
+	// given an icon from Settings had already 404'd, and without the revision
+	// in the key it would keep painting its letter until a reload.
 	const [failedFor, setFailedFor] = React.useState<string | null>(null);
 	const style: React.CSSProperties = {};
 	if (size) {
@@ -46,8 +49,9 @@ export function RepoTile({
 	} else if (round) {
 		style.borderRadius = "50%";
 	}
-	if (failedFor !== name) {
-		const rev = repoIconRevision(name);
+	const rev = repoIconRevision(name);
+	const attempt = `${name}:${rev ?? 0}`;
+	if (failedFor !== attempt) {
 		return (
 			<span className="repo-tile repo-tile--img" style={style}>
 				<img
@@ -56,7 +60,7 @@ export function RepoTile({
 					}`}
 					alt=""
 					loading="lazy"
-					onError={() => setFailedFor(name)}
+					onError={() => setFailedFor(attempt)}
 				/>
 			</span>
 		);

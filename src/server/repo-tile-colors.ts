@@ -23,14 +23,16 @@
  */
 
 /**
- * Sixteen earthy tile colors: muted mid-tones rather than the pastels this
- * started as, so a wall of tiles reads as quiet texture instead of confetti.
+ * Sixteen tile colors: saturated mid-tones, bright enough to read as color at
+ * 18px without becoming the pastels this started as (those sat near 2:1
+ * against white and lost their letter).
  *
- * Generated in OKLCH — sixteen hues at even 22.5° steps, chroma a flat 0.085,
- * lightness alternating 0.60/0.52 so neighbouring hues separate on brightness
- * as well as hue. Being that much darker than the old pastels is also what
- * makes the white letter legible: these run 3.8–5.8:1 against white, where the
- * pastels sat near 2:1.
+ * Generated in OKLCH — sixteen hues at even 22.5° steps, chroma 0.15 (clipped
+ * to the sRGB boundary where a hue can't hold it), lightness alternating
+ * 0.64/0.57 so neighbouring hues separate on brightness as well as hue. That
+ * lands every entry at 3.2–4.9:1 against white, which is what keeps the white
+ * letter legible on all of them; raising either number further starts eating
+ * into that, so don't without checking the contrast.
  *
  * The order is deliberately NOT the hue wheel: entries are laid out in steps of
  * seven around it, so two repos whose colors collide — the assignment below
@@ -39,22 +41,22 @@
  * order).
  */
 export const REPO_TILE_COLORS = [
-	"#ad6b6d", // brick
-	"#247967", // sage
-	"#9f6d96", // rose
-	"#58733d", // moss
-	"#7d78b0", // plum
-	"#7f6528", // ochre
-	"#5186af", // denim
-	"#925742", // rust
-	"#349092", // teal
-	"#8f536b", // clay
-	"#568f68", // fern
-	"#785b8d", // mauve
-	"#858445", // olive
-	"#51679a", // indigo
-	"#a47548", // umber
-	"#1f748b", // slate
+	"#d86069", // coral
+	"#008b74", // emerald
+	"#c066b3", // orchid
+	"#58880d", // moss
+	"#897ae1", // iris
+	"#967100", // ochre
+	"#1394df", // azure
+	"#be5227", // rust
+	"#00a0a4", // teal
+	"#b84b7b", // raspberry
+	"#29a55e", // jade
+	"#935ab8", // violet
+	"#959100", // olive
+	"#4c72cf", // indigo
+	"#c97500", // amber
+	"#0085a2", // cerulean
 ];
 
 /**

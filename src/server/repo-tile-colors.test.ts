@@ -84,7 +84,7 @@ describe("assignRepoTileColors", () => {
 	});
 
 	test("ignores a chosen color for a repo that isn't registered", () => {
-		const colors = assignRepoTileColors(REPOS, { "not-here": "#ad6b6d" });
+		const colors = assignRepoTileColors(REPOS, { "not-here": REPO_TILE_COLORS[0] });
 		expect(colors["not-here"]).toBeUndefined();
 		expect(Object.keys(colors).sort()).toEqual([...REPOS].sort());
 	});

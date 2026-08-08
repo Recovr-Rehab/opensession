@@ -15,10 +15,18 @@ import {
 	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { IconPlus } from "./icons";
+import { IconArrowUpToLine, IconPlus } from "./icons";
 import { RepoTile } from "./RepoTile";
-import { REPO_TILE_COLORS } from "../lib/repo-colors";
-import { fetchRepos, setRepoAppearanceApi, type RepoInfo } from "../lib/api";
+import { REPO_TILE_COLORS, repoColor } from "../lib/repo-colors";
+import { repoLetter } from "../lib/repo-label";
+import { pngFromImageFile } from "../lib/icon-image";
+import {
+	fetchRepos,
+	repoGithubAvatarUrl,
+	setRepoAppearanceApi,
+	uploadRepoIconApi,
+	type RepoInfo,
+} from "../lib/api";
 import {
 	StateChip,
 	repoLifecycleState,
@@ -124,9 +132,12 @@ export function ReposSection({
  * it's the thing being edited — a separate "edit tile" button would say less
  * than the picture it changes.
  *
- * A repo shows a colored letter by default. That's deliberate: the art GitHub
- * has is the OWNER's avatar, so taking it automatically put the same tile on
- * every repo in an org. Here it's a choice, per repo.
+ * Everything a tile can be is laid out as a choice you can see: the sixteen
+ * palette colors, the owner's GitHub avatar (fetched up front, so the picture
+ * itself is the button rather than something a "Fetch from GitHub" press might
+ * produce), and art of your own. A repo still wears a colored letter by
+ * default — GitHub has no per-repo art, so taking the owner's avatar for every
+ * repo put one identical tile on all of them.
  */
 function RepoTileButton({
 	id,
@@ -139,22 +150,33 @@ function RepoTileButton({
 }) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	// The avatar is offered only once we know there is one: the route 404s for
+	// a repo with no GitHub remote, and GitHub can be unreachable.
+	const [avatarOk, setAvatarOk] = useState(false);
+	const fileInput = React.useRef<HTMLInputElement>(null);
 
-	async function apply(patch: {
-		color?: string | null;
-		icon?: "github" | null;
-	}) {
+	async function run(work: () => Promise<unknown>) {
 		if (busy) return;
 		setBusy(true);
 		setError(null);
 		try {
-			await setRepoAppearanceApi(id, patch);
+			await work();
 			await onChanged();
 		} catch (e: any) {
 			setError(e.message);
 		} finally {
 			setBusy(false);
 		}
+	}
+
+	const apply = (patch: { color?: string | null; icon?: "github" | null }) =>
+		run(() => setRepoAppearanceApi(id, patch));
+
+	async function upload(file: File) {
+		await run(async () => {
+			const png = await pngFromImageFile(file);
+			await uploadRepoIconApi(id, png);
+		});
 	}
 
 	return (
@@ -202,33 +224,119 @@ function RepoTileButton({
 				<div className="mt-3 mb-2 border-t border-line pt-3 text-meta font-medium text-dim">
 					Icon
 				</div>
-				<div className="flex flex-wrap gap-1.5">
-					<Button
-						size="sm"
-						disabled={busy || !repo?.ghRepo}
-						onClick={() => apply({ icon: "github" })}
+				<div className="flex flex-wrap items-center gap-2">
+					<IconChoice
+						label="The colored letter"
+						active={!repo?.hasIcon}
+						disabled={busy}
+						onClick={() => apply({ icon: null })}
 					>
-						{busy ? "Working…" : "Fetch from GitHub"}
-					</Button>
-					{repo?.hasIcon && (
-						<Button
-							size="sm"
-							variant="ghost"
+						<LetterTile id={id} />
+					</IconChoice>
+					{/* Fetched as soon as the popover opens, so the avatar is a
+					    picture you pick rather than one a button might produce.
+					    The route 404s when there's nothing to take, and the
+					    choice simply doesn't appear. */}
+					<img
+						src={repoGithubAvatarUrl(id)}
+						alt=""
+						className="hidden"
+						onLoad={() => setAvatarOk(true)}
+						onError={() => setAvatarOk(false)}
+					/>
+					{avatarOk && (
+						<IconChoice
+							label={`${repo?.ghRepo?.split("/")[0]}’s GitHub avatar`}
+							active={repo?.iconSource === "github"}
 							disabled={busy}
-							onClick={() => apply({ icon: null })}
+							onClick={() => apply({ icon: "github" })}
 						>
-							Remove
-						</Button>
+							<img
+								src={repoGithubAvatarUrl(id)}
+								alt=""
+								className="h-full w-full rounded-control object-cover"
+							/>
+						</IconChoice>
 					)}
+					<IconChoice
+						label="Upload an image"
+						active={repo?.iconSource === "upload"}
+						disabled={busy}
+						onClick={() => fileInput.current?.click()}
+					>
+						<span className="flex h-full w-full items-center justify-center rounded-control border border-dashed border-line text-dim">
+							<IconArrowUpToLine size={14} />
+						</span>
+					</IconChoice>
+					<input
+						ref={fileInput}
+						type="file"
+						accept="image/*"
+						className="hidden"
+						onChange={(e) => {
+							const file = e.target.files?.[0];
+							// Cleared so picking the same file twice still fires.
+							e.target.value = "";
+							if (file) upload(file);
+						}}
+					/>
 				</div>
 				<div className="mt-2 text-meta leading-relaxed text-faint">
-					{repo?.ghRepo
-						? `Takes ${repo.ghRepo.split("/")[0]}’s avatar — the same picture for every repo that owner has, so it suits the one that IS the product.`
-						: "No GitHub repository configured, so there’s no avatar to take."}
+					{busy
+						? "Working…"
+						: avatarOk
+							? `The GitHub avatar belongs to ${repo?.ghRepo?.split("/")[0]} — the same picture for every repo that owner has, so it suits the one that IS the product. Upload art to give this repo its own.`
+							: "No GitHub avatar to take, so it’s the letter or art you upload."}
 				</div>
 				{error && <InlineAlert className="mt-2">{error}</InlineAlert>}
 			</Popover.Popup>
 		</Popover.Root>
+	);
+}
+
+/** One 28px tile in the icon row, sized and ringed like the color swatches. */
+function IconChoice({
+	label,
+	active,
+	disabled,
+	onClick,
+	children,
+}: {
+	label: string;
+	active?: boolean;
+	disabled?: boolean;
+	onClick: () => void;
+	children: React.ReactNode;
+}) {
+	return (
+		<button
+			type="button"
+			title={label}
+			aria-label={label}
+			aria-pressed={!!active}
+			disabled={disabled}
+			onClick={onClick}
+			className={cn(
+				"h-7 w-7 rounded-control outline-none transition-transform",
+				"hover:scale-110 focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
+				active && "ring-2 ring-fg ring-offset-2 ring-offset-panel",
+			)}
+		>
+			{children}
+		</button>
+	);
+}
+
+/** The letter tile as it would look — RepoTile paints the art when there is
+ *  any, and this choice is precisely "no art". */
+function LetterTile({ id }: { id: string }) {
+	return (
+		<span
+			className="flex h-full w-full items-center justify-center rounded-control text-[15px] font-bold text-white"
+			style={{ background: repoColor(id) }}
+		>
+			{repoLetter(id)}
+		</span>
 	);
 }
 

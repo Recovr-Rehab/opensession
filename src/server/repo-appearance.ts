@@ -6,11 +6,12 @@
  * repo-tile-colors.ts). This is how that gets overridden by hand from
  * Settings → Setup: pick one of the palette colors, or give the repo real art.
  *
- * Art can be fetched from GitHub — a repo has no avatar of its own there, so
- * what's available is its OWNER's. That used to be the automatic fallback for
- * every repo, which is exactly what made every repo in one org wear the same
- * tile; as a per-repo choice it's fine, because someone decided this repo
- * should be the one wearing it.
+ * Art comes from one of two places: GitHub — a repo has no avatar of its own
+ * there, so what's available is its OWNER's — or a PNG someone uploads. The
+ * GitHub one used to be the automatic fallback for every repo, which is
+ * exactly what made every repo in one org wear the same tile; as a per-repo
+ * choice it's fine, because someone decided this repo should be the one
+ * wearing it.
  *
  * Fetched art is stored in the instance state dir rather than the checkout:
  * it's instance configuration, and a worktree is not ours to write into.
@@ -45,7 +46,18 @@ function validColor(color: string): boolean {
 	return REPO_TILE_COLORS.includes(color.toLowerCase());
 }
 
-async function fetchOwnerAvatar(owner: string): Promise<Uint8Array> {
+/** The GitHub account whose avatar this repo can wear, if it has one. */
+export function repoAvatarOwner(id: string): string | undefined {
+	return configuredRepos()[id]?.ghRepo?.split("/")[0] || undefined;
+}
+
+/**
+ * The owner's avatar bytes, tile-shaped. Also serves the picker's preview:
+ * showing the actual picture as one of the choices beats a button that only
+ * promises one, and it comes from here rather than github.com directly so the
+ * browser needs no reach the server doesn't already have.
+ */
+export async function fetchOwnerAvatar(owner: string): Promise<Uint8Array> {
 	const res = await fetch(
 		`https://github.com/${encodeURIComponent(owner)}.png?size=256`,
 		{ redirect: "follow", signal: AbortSignal.timeout(10_000) },
@@ -72,6 +84,64 @@ export interface RepoAppearancePatch {
 	icon?: "github" | null;
 }
 
+export interface RepoAppearance {
+	color: string | null;
+	hasIcon: boolean;
+	iconRev: number | null;
+	/** Which of the picker's icon choices produced the art in use. */
+	iconSource: "github" | "upload" | null;
+}
+
+/**
+ * Write the config half of a change and report what the repo ended up with,
+ * so the caller doesn't have to re-read the config to answer the request.
+ * `icon` is the path to point at, null to clear, undefined to leave alone.
+ */
+function persistAppearance(
+	id: string,
+	edits: {
+		color?: string | null;
+		icon?: string | null;
+		iconSource?: "github" | "upload";
+	},
+): Promise<RepoAppearance> {
+	return withConfigMutationLock(async () => {
+		const config = rawConfig();
+		const repos = (config.repos ??= {}) as Record<string, Record<string, unknown>>;
+		const section = (repos[id] ??= {});
+
+		if (edits.color !== undefined) {
+			if (edits.color === null) delete section.color;
+			else section.color = edits.color.toLowerCase();
+		}
+		if (edits.icon !== undefined) {
+			// Clearing only drops what we manage. A repo pointed at art inside
+			// its own checkout keeps it — that's a config choice, not ours to
+			// undo from a settings toggle.
+			if (edits.icon === null) {
+				delete section.icon;
+				delete section.iconSource;
+			} else {
+				section.icon = edits.icon;
+				if (edits.iconSource) section.iconSource = edits.iconSource;
+				else delete section.iconSource;
+			}
+		}
+		persistRawConfig(config);
+
+		const now = configuredRepos()[id];
+		const resolved = resolveRepoIcon(now?.icon, now?.repo);
+		return {
+			color: (now?.color as string | undefined) ?? null,
+			hasIcon: !!resolved,
+			iconRev: repoIconRevision(resolved),
+			iconSource: resolved
+				? ((now?.iconSource as "github" | "upload" | undefined) ?? null)
+				: null,
+		};
+	});
+}
+
 /**
  * Apply a patch and persist it. Returns what the repo ended up with, so the
  * caller doesn't have to re-read the config to answer the request.
@@ -79,7 +149,7 @@ export interface RepoAppearancePatch {
 export async function updateRepoAppearance(
 	id: string,
 	patch: RepoAppearancePatch,
-): Promise<{ color: string | null; hasIcon: boolean; iconRev: number | null }> {
+): Promise<RepoAppearance> {
 	const repo = configuredRepos()[id];
 	if (!repo) throw new RepoAppearanceError(`Unknown repository: ${id}`);
 	if (patch.color != null && !validColor(patch.color)) {
@@ -90,7 +160,7 @@ export async function updateRepoAppearance(
 	// half, and a failed download shouldn't hold every other config write.
 	let fetched: Uint8Array | null = null;
 	if (patch.icon === "github") {
-		const owner = repo.ghRepo?.split("/")[0];
+		const owner = repoAvatarOwner(id);
 		if (!owner) {
 			throw new RepoAppearanceError(
 				`${id} has no GitHub repository configured to take an avatar from`,
@@ -107,32 +177,44 @@ export async function updateRepoAppearance(
 		rmSync(iconPath, { force: true });
 	}
 
-	return withConfigMutationLock(async () => {
-		const config = rawConfig();
-		const repos = (config.repos ??= {}) as Record<string, Record<string, unknown>>;
-		const section = (repos[id] ??= {});
-
-		if (patch.color !== undefined) {
-			if (patch.color === null) delete section.color;
-			else section.color = patch.color.toLowerCase();
-		}
-		if (patch.icon !== undefined) {
-			// Clearing only drops what we manage. A repo pointed at art inside
-			// its own checkout keeps it — that's a config choice, not ours to
-			// undo from a settings toggle.
-			if (patch.icon === null) delete section.icon;
-			else section.icon = iconPath;
-		}
-		persistRawConfig(config);
-
-		const now = configuredRepos()[id];
-		const resolved = resolveRepoIcon(now?.icon, now?.repo);
-		return {
-			color: (now?.color as string | undefined) ?? null,
-			hasIcon: !!resolved,
-			iconRev: repoIconRevision(resolved),
-		};
+	return persistAppearance(id, {
+		color: patch.color,
+		icon: patch.icon === undefined ? undefined : patch.icon === null ? null : iconPath,
+		...(patch.icon === "github" ? { iconSource: "github" as const } : {}),
 	});
+}
+
+/** Uploaded icons are small art, not photographs — 4 MB is already generous. */
+const MAX_ICON_BYTES = 4 * 1024 * 1024;
+
+const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+
+/**
+ * Store art someone uploaded as this repo's icon.
+ *
+ * PNG only, and deliberately so: the tile route serves one content type, and
+ * nothing here decodes anything else (png-trim.ts is dependency-free on
+ * purpose). The browser does the converting — it can already decode whatever
+ * the person picked, so the picker re-encodes through a canvas before sending.
+ */
+export async function uploadRepoIcon(
+	id: string,
+	bytes: Uint8Array,
+): Promise<RepoAppearance> {
+	if (!configuredRepos()[id]) {
+		throw new RepoAppearanceError(`Unknown repository: ${id}`);
+	}
+	if (!bytes.length) throw new RepoAppearanceError("The upload was empty");
+	if (bytes.length > MAX_ICON_BYTES) {
+		throw new RepoAppearanceError("That image is too large — icons cap at 4 MB");
+	}
+	if (PNG_SIGNATURE.some((byte, i) => bytes[i] !== byte)) {
+		throw new RepoAppearanceError("An uploaded icon has to be a PNG");
+	}
+	const iconPath = repoIconPath(id);
+	mkdirSync(stateDir("repo-icons"), { recursive: true });
+	writeFileSync(iconPath, trimIconMargin(bytes) ?? bytes);
+	return persistAppearance(id, { icon: iconPath, iconSource: "upload" });
 }
 
 /** A repo's icon as an absolute path, or undefined when it has none. */

@@ -90,6 +90,10 @@ export interface RepoSection {
    *  checkout); unset = the colored letter tile. Settings → Setup can fetch
    *  the owner's GitHub avatar into one of these. */
   icon?: string;
+  /** Where that icon came from, when we fetched or stored it — so the tile
+   *  picker can show which of its choices is the one in use. Absent for an
+   *  `icon` written by hand into the config. */
+  iconSource?: "github" | "upload";
   /** Overrides the tile color the server would otherwise assign, as
    *  "#rrggbb". Set from Settings → Setup; see repo-tile-colors.ts. */
   color?: string;
@@ -231,6 +235,8 @@ export interface Repo {
   default?: boolean;
   /** Tile-icon PNG path (see RepoSection.icon). */
   icon?: string;
+  /** Where that icon came from (see RepoSection.iconSource). */
+  iconSource?: "github" | "upload";
   /** Chosen tile color, "#rrggbb" (see RepoSection.color). */
   color?: string;
   /** Dev-server bring-up command for previews. */
@@ -326,6 +332,11 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
   // Unknown host values are dropped → the repo stays a plain GitHub repo.
   const host: RepoSection["host"] =
     rawHost === "github" || rawHost === "codestorage" ? rawHost : undefined;
+  const rawIconSource = str(o.iconSource);
+  const iconSource: RepoSection["iconSource"] =
+    rawIconSource === "github" || rawIconSource === "upload"
+      ? rawIconSource
+      : undefined;
   return defined({
     label: str(o.label),
     description: str(o.description),
@@ -338,6 +349,7 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
     sharedCheckout: bool(o.sharedCheckout),
     default: bool(o.default),
     icon: str(o.icon),
+    iconSource,
     color: str(o.color),
     previewCommand: str(o.previewCommand),
     worktreeSetup: str(o.worktreeSetup),
@@ -607,6 +619,7 @@ export function configuredRepos(): Record<string, Repo> {
           sharedCheckout: entry.sharedCheckout,
           default: entry.default,
           icon: entry.icon,
+          iconSource: entry.iconSource,
           color: entry.color,
           previewCommand: entry.previewCommand,
           worktreeSetup: entry.worktreeSetup,

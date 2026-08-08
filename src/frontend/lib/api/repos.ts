@@ -1,4 +1,4 @@
-import { ApiError, request } from "./request";
+import { API_BASE, ApiError, request } from "./request";
 import { rememberRepoColors } from "../repo-colors";
 
 export interface RepoInfo {
@@ -15,6 +15,8 @@ export interface RepoInfo {
 	colorChosen?: boolean;
 	/** Whether the tile paints art rather than the letter. */
 	hasIcon?: boolean;
+	/** Which of the picker's icon choices that art came from. */
+	iconSource?: "github" | "upload" | null;
 	/** Changes when that art does, so a replaced icon isn't served stale. */
 	iconRev?: number | null;
 }
@@ -29,6 +31,41 @@ export async function setRepoAppearanceApi(
 		body: patch,
 		label: "Failed to update the repository tile",
 	});
+}
+
+/**
+ * The owner's GitHub avatar, served by us. 404s when the repo has no GitHub
+ * repository configured (or GitHub didn't answer), which is what lets the tile
+ * picker show the picture as a choice and simply drop it when there isn't one.
+ */
+export function repoGithubAvatarUrl(id: string): string {
+	return `${API_BASE}/repos/${encodeURIComponent(id)}/github-avatar`;
+}
+
+/** Give a repo art of its own. Takes PNG bytes — see the picker's re-encode. */
+export async function uploadRepoIconApi(
+	id: string,
+	png: Blob,
+): Promise<{ color: string | null; hasIcon: boolean; iconRev: number | null }> {
+	const res = await fetch(`${API_BASE}/repos/${encodeURIComponent(id)}/icon`, {
+		method: "POST",
+		headers: { "Content-Type": "image/png" },
+		body: png,
+	});
+	const body = (await res.json().catch(() => null)) as {
+		error?: string;
+		color?: string | null;
+		hasIcon?: boolean;
+		iconRev?: number | null;
+	} | null;
+	if (!res.ok) {
+		throw new ApiError(body?.error || `Failed to upload the icon: ${res.status}`, res.status);
+	}
+	return {
+		color: body?.color ?? null,
+		hasIcon: !!body?.hasIcon,
+		iconRev: body?.iconRev ?? null,
+	};
 }
 
 const REPO_FETCH_RETRY_DELAYS_MS = [250, 750, 1_500];
