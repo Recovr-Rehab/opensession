@@ -23,6 +23,18 @@ enum OS1VisualStyle {
             ? UIColor(white: 0.192, alpha: 1)
             : UIColor(white: 0.949, alpha: 1)
     })
+    /// The queue flap tucked behind the composer. Deliberately not `raised`:
+    /// on iOS that resolves to `.secondarySystemBackground`, whose blue-grey
+    /// cast reads cold beside the composer's near-white glass in light mode,
+    /// and which sits within a couple of points of the page in dark mode, so
+    /// the flap all but disappeared against it. A neutral instead — a shade
+    /// under the composer on light, a shade over the page on dark, which is
+    /// the only direction left when the page is already black.
+    static let flapSurface = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.145, alpha: 1)
+            : UIColor(white: 0.953, alpha: 1)
+    })
     #else
     static let background = Color(nsColor: .windowBackgroundColor)
     static let raised = Color(nsColor: .underPageBackgroundColor)
@@ -38,6 +50,14 @@ enum OS1VisualStyle {
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             ? NSColor(white: 0.192, alpha: 1)
             : NSColor(white: 0.949, alpha: 1)
+    })
+    /// The queue flap behind the composer — same neutrals as iOS, so the two
+    /// apps read as one product. See the iOS note above for why it isn't
+    /// `raised`.
+    static let flapSurface = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 0.145, alpha: 1)
+            : NSColor(white: 0.953, alpha: 1)
     })
     #endif
     /// The brand mark: black on light, white on dark. It is a FILL colour —

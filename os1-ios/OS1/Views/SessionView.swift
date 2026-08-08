@@ -1789,13 +1789,13 @@ private struct SessionInputBar: View {
         }
         .padding(.top, 10)
         .padding(.bottom, 26)
-        // Opaque page colour, NOT a material: a material takes its tone from
-        // whatever is behind it, so a code block scrolling under the bar
-        // turned the flap (and the messages in it) dark in a light-mode app.
-        // Chrome you type into has to hold its own colour. `raised` rather
-        // than `background` keeps it a shade off the composer, so the two
-        // still read as two layers of one piece.
-        .background(OS1VisualStyle.raised, in: flapShape)
+        // Opaque, NOT a material: a material takes its tone from whatever is
+        // behind it, so a code block scrolling under the bar turned the flap
+        // (and the messages in it) dark in a light-mode app. Chrome you type
+        // into has to hold its own colour, and `flapSurface` keeps it a shade
+        // off the composer in either appearance so the two still read as two
+        // layers of one piece.
+        .background(OS1VisualStyle.flapSurface, in: flapShape)
         .overlay { flapShape.stroke(OS1VisualStyle.border, lineWidth: 0.5) }
         // Flush with the composer, not inset from it: the flap is that same
         // column continued upward, and an 18pt inset each side read as a
