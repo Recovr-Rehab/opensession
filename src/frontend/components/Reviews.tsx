@@ -23,6 +23,59 @@ type FilterKey = "review" | "open" | "merged" | "closed" | "all";
 
 const STATE_RANK: Record<string, number> = { OPEN: 0, CLOSED: 1, MERGED: 2 };
 
+/* ── Table geometry ──────────────────────────────────────────────────────────
+   The row grid and its cells are shared by the header row and every PR row, so
+   they live here as finished utility strings rather than being repeated (and
+   drifting) at each call site.
+
+   Two responsive steps, and both are ranges rather than a stack of max-*
+   variants: ≤1180px drops the Review and Author columns, and ≤720px turns the
+   grid into a wrapped card that shows them again. Writing the middle step as
+   `min-[721px]:max-[1180px]` keeps it independent of how Tailwind happens to
+   order two max-* variants against each other. */
+const ROW =
+	"grid w-full grid-cols-[92px_minmax(0,1fr)_156px_132px_116px_132px_78px] items-center gap-3.5 border-b border-line px-[22px] text-left max-[1180px]:grid-cols-[88px_minmax(0,1fr)_150px_118px_78px]";
+
+const C_STATE = "flex items-center gap-[7px] text-meta font-medium max-[720px]:order-1";
+const C_TITLE =
+	"flex min-w-0 flex-col gap-[3px] max-[720px]:order-2 max-[720px]:flex-[1_1_calc(100%-90px)]";
+const C_CHECKS = "max-[720px]:order-3 max-[720px]:inline-flex";
+const C_CHANGES =
+	"max-[720px]:order-4 max-[720px]:inline-flex max-[720px]:flex-row max-[720px]:items-center max-[720px]:gap-2";
+const C_REVIEW =
+	"min-[721px]:max-[1180px]:hidden max-[720px]:order-5 max-[720px]:inline-flex";
+const C_AUTHOR =
+	"flex min-w-0 items-center gap-2 min-[721px]:max-[1180px]:hidden max-[720px]:order-6 max-[720px]:inline-flex";
+const C_UPDATED =
+	"text-meta whitespace-nowrap text-faint tabular-nums max-[720px]:order-7 max-[720px]:ml-auto";
+
+/** "—" and other absent values, wherever a cell has nothing to say. */
+const DIM = "text-meta text-faint";
+
+/** Ink per PR state — replaces the render-time `rv-state-${key}`. */
+const STATE_TONE: Record<string, string> = {
+	open: "text-green",
+	draft: "text-dim",
+	merged: "text-purple",
+	closed: "text-red",
+};
+
+type ChecksTone = "pass" | "fail" | "pending";
+
+/** Dot fill and label ink per CI rollup tone — replaces `rv-checks-${tone}`
+ *  and `rv-check-dot-${tone}`, both of which were built at render time.
+ *  `rv-check-dot-pending` stays on the markup as a bare hook: base.css names it
+ *  in the reduced-motion exceptions, so dropping it would freeze the one dot
+ *  that means "still running". */
+const CHECKS_TONE: Record<ChecksTone, { dot: string; label: string }> = {
+	pass: { dot: "bg-green", label: "text-green" },
+	fail: { dot: "bg-red", label: "text-red" },
+	pending: {
+		dot: "bg-yellow rv-check-dot-pending animate-[pulse_1.4s_ease-in-out_infinite]",
+		label: "text-yellow",
+	},
+};
+
 function prNum(s: UnifiedSession): string | null {
   if (s.prNumber) return `#${s.prNumber}`;
   const m = s.prUrl?.match(/\/pull\/(\d+)/);
@@ -84,9 +137,8 @@ function StateIcon({ kind }: { kind: string }) {
 /** Compact CI rollup: a tone dot, count, and a thin proportional bar. */
 function ChecksCell({ s }: { s: UnifiedSession }) {
   const c = s.prChecks;
-  if (!c || c.total === 0)
-    return <span className="rv-checks rv-checks-empty">—</span>;
-  const tone = c.failed > 0 ? "fail" : c.pending > 0 ? "pending" : "pass";
+  if (!c || c.total === 0) return <span className={DIM}>—</span>;
+  const tone: ChecksTone = c.failed > 0 ? "fail" : c.pending > 0 ? "pending" : "pass";
   const label =
     tone === "fail"
       ? `${c.failed} failing`
@@ -95,13 +147,19 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
         : `${c.passed} passed`;
   const pct = (n: number) => `${(n / c.total) * 100}%`;
   return (
-    <span className={`rv-checks rv-checks-${tone}`} title={`${c.passed} passed · ${c.failed} failed · ${c.pending} pending · ${c.total} total`}>
-      <span className={`rv-check-dot rv-check-dot-${tone}`} />
-      <span className="rv-checks-label">{label}</span>
-      <span className="rv-checks-bar" aria-hidden>
-        <span className="rv-bar-seg rv-bar-pass" style={{ width: pct(c.passed) }} />
-        <span className="rv-bar-seg rv-bar-fail" style={{ width: pct(c.failed) }} />
-        <span className="rv-bar-seg rv-bar-pending" style={{ width: pct(c.pending) }} />
+    <span
+      className="inline-flex items-center gap-[7px] text-meta"
+      title={`${c.passed} passed · ${c.failed} failed · ${c.pending} pending · ${c.total} total`}
+    >
+      <span className={`size-2 shrink-0 rounded-full ${CHECKS_TONE[tone].dot}`} />
+      <span className={`whitespace-nowrap ${CHECKS_TONE[tone].label}`}>{label}</span>
+      <span
+        className="inline-flex h-1 w-[46px] shrink-0 overflow-hidden rounded-full bg-active max-[720px]:hidden"
+        aria-hidden
+      >
+        <span className="h-full bg-green" style={{ width: pct(c.passed) }} />
+        <span className="h-full bg-red" style={{ width: pct(c.failed) }} />
+        <span className="h-full bg-yellow" style={{ width: pct(c.pending) }} />
       </span>
     </span>
   );
@@ -109,40 +167,43 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
 
 function ReviewCell({ s }: { s: UnifiedSession }) {
   const d = s.prReviewDecision || "";
-  if ((s.prState || "OPEN") !== "OPEN") return <span className="rv-dim">—</span>;
-  if (d === "APPROVED")
-    return <span className="rv-review rv-review-approved">Approved</span>;
+  const review = "text-meta font-medium whitespace-nowrap";
+  if ((s.prState || "OPEN") !== "OPEN") return <span className={DIM}>—</span>;
+  if (d === "APPROVED") return <span className={`${review} text-green`}>Approved</span>;
   if (d === "CHANGES_REQUESTED")
-    return <span className="rv-review rv-review-changes">Changes</span>;
-  if (s.prIsDraft) return <span className="rv-review rv-review-pending">Draft</span>;
-  return <span className="rv-review rv-review-pending">Review required</span>;
+    return <span className={`${review} text-yellow`}>Changes</span>;
+  if (s.prIsDraft) return <span className={`${review} text-faint`}>Draft</span>;
+  return <span className={`${review} text-faint`}>Review required</span>;
 }
 
 function ChangesCell({ s }: { s: UnifiedSession }) {
   const add = s.prAdditions ?? 0;
   const del = s.prDeletions ?? 0;
   const files = s.prChangedFiles ?? 0;
-  if (!s.prChangedFiles && !add && !del) return <span className="rv-dim">—</span>;
+  if (!s.prChangedFiles && !add && !del) return <span className={DIM}>—</span>;
   const total = add + del || 1;
   const blocks = 5;
   const greens = Math.max(add > 0 ? 1 : 0, Math.round((add / total) * blocks));
   const reds = Math.max(del > 0 ? 1 : 0, Math.round((del / total) * blocks));
   const grays = Math.max(0, blocks - greens - reds);
   return (
-    <span className="rv-changes" title={`${files} file${files === 1 ? "" : "s"} changed`}>
-      <span className="rv-diffstat">
-        <span className="rv-add">+{add}</span>
-        <span className="rv-del">−{del}</span>
+    <span
+      className="inline-flex flex-col gap-1"
+      title={`${files} file${files === 1 ? "" : "s"} changed`}
+    >
+      <span className="inline-flex gap-[7px] text-meta tabular-nums">
+        <span className="text-green">+{add}</span>
+        <span className="text-red">−{del}</span>
       </span>
-      <span className="rv-diffsquares" aria-hidden>
+      <span className="inline-flex gap-0.5" aria-hidden>
         {Array.from({ length: greens }).map((_, i) => (
-          <span key={`g${i}`} className="rv-sq rv-sq-add" />
+          <span key={`g${i}`} className="size-2 rounded-xs bg-green" />
         ))}
         {Array.from({ length: reds }).map((_, i) => (
-          <span key={`r${i}`} className="rv-sq rv-sq-del" />
+          <span key={`r${i}`} className="size-2 rounded-xs bg-red" />
         ))}
         {Array.from({ length: grays }).map((_, i) => (
-          <span key={`n${i}`} className="rv-sq rv-sq-none" />
+          <span key={`n${i}`} className="size-2 rounded-xs bg-line-strong" />
         ))}
       </span>
     </span>
@@ -289,16 +350,17 @@ export function Reviews({
   }
 
   return (
-    <div className="reviews">
-      <div className="reviews-main">
-        <div className="reviews-header">
-          <div className="reviews-header-top">
-            <h1 className="reviews-title">Reviews</h1>
-            <div className="reviews-search">
+    <div className="relative flex min-h-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto max-[720px]:overflow-x-hidden">
+        <div className="sticky top-0 z-[3] bg-surface px-[22px] pt-4">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <h1 className="m-0 text-section-title font-semibold tracking-[-0.01em]">Reviews</h1>
+            <div className="flex w-60 items-center gap-[7px] rounded-md border border-line bg-raised px-2.5 py-1.5 text-faint transition-[border-color,background-color] focus-within:border-line-strong focus-within:bg-panel">
               <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                 <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z" />
               </svg>
               <input
+                className="min-w-0 flex-1 border-0 bg-transparent text-label text-fg outline-none placeholder:text-faint"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search pull requests…"
@@ -306,33 +368,54 @@ export function Reviews({
               />
             </div>
           </div>
-          <div className="reviews-tabs">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                className={`reviews-tab ${filter === t.key ? "active" : ""}`}
-                onClick={() => setFilter(t.key)}
-              >
-                {t.label}
-                <span className="reviews-tab-count">{t.count}</span>
-              </button>
-            ))}
+          {/* Full-bleed hairline under the tab strip; the active tab's -1px
+              underline sits on top of it. The negative margin cancels the
+              header's 22px padding. Five tabs + counts don't fit a phone, so
+              below 720px the strip scrolls edge to edge instead. */}
+          <div className="-mx-[22px] flex gap-0.5 border-b border-line px-[22px] max-[720px]:overflow-x-auto max-[720px]:[scrollbar-width:none] max-[720px]:[&::-webkit-scrollbar]:hidden">
+            {TABS.map((t) => {
+              const on = filter === t.key;
+              return (
+                <button
+                  key={t.key}
+                  className={`-mb-px flex items-center gap-[7px] border-b-2 px-[13px] pt-2 pb-[11px] text-label font-medium transition-colors max-[720px]:shrink-0 max-[720px]:px-3.5 max-[720px]:pt-[11px] max-[720px]:pb-[13px] max-[720px]:text-body max-[720px]:whitespace-nowrap ${
+                    on ? "border-b-accent text-fg" : "border-b-transparent text-dim hover:text-fg"
+                  }`}
+                  onClick={() => setFilter(t.key)}
+                >
+                  {t.label}
+                  <span
+                    className={`min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold ${
+                      on ? "bg-accent-soft text-accent" : "bg-active text-dim"
+                    }`}
+                  >
+                    {t.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
+          {/* The header row lives inside the sticky header, so it pins with it
+              as one block. Negative side margins cancel the 22px padding so its
+              divider spans the full width. */}
           {filtered.length > 0 && (
-            <div className="reviews-row reviews-row-head" role="row">
-              <span className="rv-c-state">Status</span>
-              <span className="rv-c-title">Pull request</span>
-              <span className="rv-c-checks">Checks</span>
-              <span className="rv-c-review">Review</span>
-              <span className="rv-c-changes">Changes</span>
-              <span className="rv-c-author">Author</span>
-              <span className="rv-c-updated">Updated</span>
+            <div
+              className={`${ROW} -mx-[22px] bg-surface py-[9px] text-meta font-semibold tracking-[-0.01em] text-faint max-[720px]:hidden`}
+              role="row"
+            >
+              <span className={C_STATE}>Status</span>
+              <span className={C_TITLE}>Pull request</span>
+              <span className={C_CHECKS}>Checks</span>
+              <span className={C_REVIEW}>Review</span>
+              <span className={C_CHANGES}>Changes</span>
+              <span className={C_AUTHOR}>Author</span>
+              <span className={C_UPDATED}>Updated</span>
             </div>
           )}
         </div>
 
         {filtered.length === 0 ? (
-          <div className="reviews-empty">
+          <div className="flex flex-1 items-center justify-center">
             <EmptyState
               title={prSessions.length === 0 ? "No pull requests yet" : "Nothing here"}
             >
@@ -344,27 +427,33 @@ export function Reviews({
             </EmptyState>
           </div>
         ) : (
-          <div className="reviews-table" role="table">
+          <div className="flex flex-col" role="table">
             {filtered.map((s) => {
               const meta = stateMeta(s);
               return (
                 <button
                   key={s.prUrl}
-                  className="reviews-row"
+                  className={`${ROW} group cursor-pointer py-[11px] text-body text-fg hover:bg-hover max-[720px]:flex max-[720px]:flex-wrap max-[720px]:items-center max-[720px]:gap-x-3 max-[720px]:gap-y-[9px] max-[720px]:px-4 max-[720px]:py-3.5`}
                   onClick={() => onSelect(s.id)}
                   role="row"
                 >
-                  <span className={`rv-c-state rv-state-${meta.key}`} role="cell">
+                  <span className={`${C_STATE} ${STATE_TONE[meta.key]}`} role="cell">
                     <StateIcon kind={meta.key} />
-                    <span className="rv-state-label">{meta.label}</span>
+                    <span className="whitespace-nowrap">{meta.label}</span>
                   </span>
-                  <span className="rv-c-title" role="cell">
-                    <span className="rv-title-line">
-                      <span className="rv-title-text">{cleanTitle(s)}</span>
-                      {prNum(s) && <span className="rv-num">{prNum(s)}</span>}
+                  <span className={C_TITLE} role="cell">
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className="truncate text-body leading-[1.3] font-medium">
+                        {cleanTitle(s)}
+                      </span>
+                      {prNum(s) && (
+                        <span className="shrink-0 text-meta text-faint tabular-nums">
+                          {prNum(s)}
+                        </span>
+                      )}
                       {s.prUrl && (
                         <span
-                          className="rv-open-gh"
+                          className="inline-flex shrink-0 items-center self-center rounded-sm p-0.5 text-faint opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-link"
                           title={`Open on ${providerFromUrl(s.prUrl).name}`}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -377,34 +466,40 @@ export function Reviews({
                         </span>
                       )}
                     </span>
-                    <span className="rv-sub-line">
+                    <span className="flex min-w-0 items-center gap-3 text-meta text-faint">
                       {multiRepo && (
-                        <span className="rv-repo">{s.repo ? repoLabel(s.repo) : "repository"}</span>
+                        <span className="shrink-0 rounded-sm bg-active px-1.5 py-px text-meta font-semibold text-dim">
+                          {s.repo ? repoLabel(s.repo) : "repository"}
+                        </span>
                       )}
                       {s.branch && (
-                        <span className="rv-branch">
+                        <span className="inline-flex min-w-0 max-w-full items-center gap-1 overflow-hidden text-meta text-dim [&>svg]:shrink-0 [&>svg]:opacity-70">
                           <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                             <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
                           </svg>
-                          <span className="rv-branch-name">{s.branch}</span>
+                          <span className="truncate">{s.branch}</span>
                         </span>
                       )}
                       {s.linearIssue && (
-                        <span className="rv-linear">{s.linearIssue.identifier}</span>
+                        <span className="shrink-0 rounded-sm bg-active px-1.5 py-px text-meta font-semibold tracking-[0.02em] text-dim">
+                          {s.linearIssue.identifier}
+                        </span>
                       )}
-                      {s.isRunning && <span className="rv-running">● running</span>}
+                      {s.isRunning && (
+                        <span className="shrink-0 text-meta text-green">● running</span>
+                      )}
                     </span>
                   </span>
-                  <span className="rv-c-checks" role="cell">
+                  <span className={C_CHECKS} role="cell">
                     <ChecksCell s={s} />
                   </span>
-                  <span className="rv-c-review" role="cell">
+                  <span className={C_REVIEW} role="cell">
                     <ReviewCell s={s} />
                   </span>
-                  <span className="rv-c-changes" role="cell">
+                  <span className={C_CHANGES} role="cell">
                     <ChangesCell s={s} />
                   </span>
-                  <span className="rv-c-author" role="cell">
+                  <span className={C_AUTHOR} role="cell">
                     {s.prAuthor ? (
                       <>
                         {(() => {
@@ -412,23 +507,28 @@ export function Reviews({
                           // to an initial instead of a broken <img src="">.
                           const src = avatarUrl(s.prAuthor, providerFromUrl(s.prUrl), 40);
                           return src ? (
-                            <img className="rv-avatar" src={src} alt="" loading="lazy" />
+                            <img
+                              className="size-[22px] shrink-0 rounded-[32%] bg-active"
+                              src={src}
+                              alt=""
+                              loading="lazy"
+                            />
                           ) : (
                             <span
-                              className="rv-avatar inline-flex items-center justify-center text-meta font-semibold text-faint"
+                              className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-[32%] bg-active text-meta font-semibold text-faint"
                               aria-hidden
                             >
                               {s.prAuthor.charAt(0).toUpperCase()}
                             </span>
                           );
                         })()}
-                        <span className="rv-author-name">{s.prAuthor}</span>
+                        <span className="truncate text-meta text-dim">{s.prAuthor}</span>
                       </>
                     ) : (
-                      <span className="rv-dim">—</span>
+                      <span className={DIM}>—</span>
                     )}
                   </span>
-                  <span className="rv-c-updated" role="cell">
+                  <span className={C_UPDATED} role="cell">
                     {relativeTime(s.prUpdatedAt || s.lastActivity)}
                   </span>
                 </button>
