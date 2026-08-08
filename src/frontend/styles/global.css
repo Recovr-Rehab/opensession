@@ -395,16 +395,6 @@ html[data-theme="light"] {
 			0 4px 20px rgba(0, 0, 0, 0.08);
 	}
 }
-
-/* Spots that hardcode light-on-dark colors and would break on a light surface. */
-html[data-theme="light"] .diff-line-add {
-	background: rgba(26, 127, 55, 0.12);
-	color: #1a7f37;
-}
-html[data-theme="light"] .diff-line-del {
-	background: rgba(207, 34, 46, 0.1);
-	color: #b3261e;
-}
 html[data-theme="light"] .markdown code {
 	background: rgba(0, 0, 0, 0.06);
 	color: #953b39;
@@ -543,6 +533,7 @@ body {
 	-webkit-touch-callout: none;
 }
 
+
 /* Text the user may legitimately want to select and copy: message rows and
    their prose, names, system text, code, diffs, inputs. The row wrapper is
    included on purpose — a drag has to be able to start in a bubble's padding
@@ -562,8 +553,6 @@ select,
 .msg-system-text,
 .markdown,
 .markdown *,
-.diff-line,
-.diff-line *,
 code,
 pre,
 .selectable,
@@ -641,7 +630,6 @@ button {
 
 	.diff-file,
 	.pr-checks,
-	.pr-git,
 	.pr-body,
 	.composer-schedule-modal,
 	.composer-schedule-input,
@@ -651,32 +639,24 @@ button {
 	.composer-file-thumb,
 	.composer-queue-item,
 	.composer-queue-action,
-	.composer-queue-images img,
 	.mention-popup,
 	.mention-item,
 	.mention-repo,
 	.composer-menu,
 	.composer-menu-item,
-	.fork-banner,
 	.palette-card,
 	.palette-trigger,
 	.plain-entry,
 	.setting-card,
-	.ui-select,
 	.user-avatar,
 	.user-avatar img,
 	.rv-avatar,
-	.slack-avatar,
 	.viewer-branch-editable,
 	.viewer-branch-rename,
 	.session-info-list,
-	.btn-viewer-overflow,
 	.session-link,
 	.btn-panel-toggle,
-	.btn-viewer-delete,
-	.btn-viewer-archive,
 	.btn-viewer-newsession,
-	.btn-viewer-share,
 	.pr-num-chip,
 	.btn-viewer-pin,
 	.sidebar-nav-item,
@@ -928,64 +908,6 @@ html.wco .app-body.sidebar-collapsed
 		--header-h: 0px;
 	}
 }
-
-.app-title {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	font-size: 15px;
-	font-weight: 600;
-	color: var(--text);
-	text-decoration: none;
-	letter-spacing: -0.01em;
-}
-
-/* ── Settings dropdown (chevron behind the product title) ── */
-.settings-hint {
-	margin-top: 8px;
-	font-size: 11px;
-	color: var(--text-faint);
-}
-
-/* KITT scanner: black tile, glowing red M, a red beam sweeping across it */
-.app-logo {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 32px;
-	height: 32px;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	background: radial-gradient(120% 120% at 50% 38%, #1c0405 0%, #0a0608 70%);
-	border: 1px solid rgba(255, 40, 40, 0.22);
-	color: #ff2a2a;
-	font-weight: 800;
-	font-size: 17px;
-	text-shadow:
-		0 0 6px rgba(255, 30, 30, 0.85),
-		0 0 2px rgba(255, 90, 90, 0.9);
-	position: relative;
-	overflow: hidden;
-}
-.app-logo::after {
-	content: "";
-	position: absolute;
-	top: -10%;
-	bottom: -10%;
-	width: 42%;
-	left: 0;
-	background: linear-gradient(
-		90deg,
-		transparent,
-		rgba(255, 30, 30, 0.85) 45%,
-		rgba(255, 120, 120, 0.95) 50%,
-		rgba(255, 30, 30, 0.85) 55%,
-		transparent
-	);
-	filter: blur(1px);
-	mix-blend-mode: screen;
-	pointer-events: none;
-	animation: kitt-scan 2.6s ease-in-out infinite alternate;
-}
 .app-logo-button {
 	display: inline-flex;
 	align-items: center;
@@ -1024,13 +946,6 @@ html.wco .app-body.sidebar-collapsed
 	}
 	to {
 		transform: translateX(270%);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.app-logo::after {
-		animation: none;
-		opacity: 0.5;
-		transform: translateX(80%);
 	}
 }
 
@@ -1161,16 +1076,6 @@ html.wco .app-body.sidebar-collapsed
 	color: var(--text-dim);
 }
 
-.sidebar-section-label {
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.02em;
-	color: var(--text-faint);
-	padding: 12px 16px 0;
-	border-top: 1px solid var(--border);
-	margin-top: 4px;
-}
-
 .app-body {
 	display: flex;
 	flex: 1;
@@ -1207,20 +1112,6 @@ html[data-platform="windows"] .workspace-shell {
 }
 .app-body.sidebar-collapsed .workspace-shell {
 	margin-left: 3px;
-}
-.hamburger {
-	display: none;
-	flex-direction: column;
-	gap: 4px;
-	background: none;
-	border: none;
-	padding: 6px;
-}
-.hamburger span {
-	width: 18px;
-	height: 2px;
-	background: var(--text-dim);
-	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
 }
 
 /* ── Sidebar ─────────────────────────────────────────────── */
@@ -1285,15 +1176,6 @@ html[data-platform="windows"] .workspace-shell {
 	height: auto;
 	padding: 3px 5px;
 	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-}
-
-/* Smaller logo tile for the brand trigger (the KITT scanner scales via % so it
-   still animates). The default .app-logo (32px) is used elsewhere. */
-.app-logo--sm {
-	width: 26px;
-	height: 26px;
-	font-size: 14px;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
 }
 
 /* Live connection dot on the logo corner — sits on a relative wrapper because
@@ -1395,13 +1277,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	display: none;
 }
 
-.sidebar-header {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 10px 18px 8px;
-}
-
 /* Workspace header: "My sessions" title row (+ optional repo chip + action
    icons), with the session search bar directly below it. */
 .sidebar-workspace {
@@ -1439,10 +1314,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	   heading starts on the column its repo tiles and lane captions do rather
 	   than 4px left of them (see .sidebar-band-toggle). */
 	padding-left: 4px;
-}
-.sidebar-workspace-spacer {
-	flex: 1;
-	min-width: 0;
 }
 /* The filter + new-session buttons, grouped so their combined width can be
    measured when deciding whether the repo chip fits inline. */
@@ -1513,13 +1384,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	height: 17px;
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
 	font-size: 10px;
-}
-.sidebar-repo-chip-name {
-	color: var(--text-dim);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
 }
 .sidebar-repo-chip-x {
 	display: inline-flex;
@@ -1759,9 +1623,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	margin-right: 6px;
 	margin-left: 6px;
 }
-.sidebar-independent-section.sidebar-group--band-start {
-	margin-top: 28px;
-}
 .sidebar-independent-scroll {
 	overflow-y: visible;
 	min-width: 0;
@@ -1778,31 +1639,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 .sidebar-archived-row.active {
 	color: var(--text);
 	background: var(--bg-active);
-}
-.sidebar-archived-icon {
-	display: inline-flex;
-	align-items: center;
-	color: var(--text-faint);
-	flex-shrink: 0;
-}
-.sidebar-archived-row:hover .sidebar-archived-icon,
-.sidebar-archived-row.active .sidebar-archived-icon {
-	color: var(--text-dim);
-}
-
-.sidebar-empty {
-	color: var(--text-faint);
-	text-align: center;
-	padding: 24px 0;
-	font-size: 13px;
-}
-
-.sidebar-workspace-empty {
-	margin: 28px 16px;
-	text-align: center;
-	font-size: 13px;
-	line-height: 1.4;
-	color: var(--text-faint);
 }
 
 .sidebar-group {
@@ -1867,35 +1703,11 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	line-height: 16px;
 	text-align: center;
 }
-/* Hover action at the far end: "+" that starts a session in this repo. Sits
-   right, reveals on hover like the chevron, and never squeezes the name. */
-.sidebar-repo-new {
-	margin-left: auto;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	flex-shrink: 0;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-faint);
-	opacity: 0;
-	cursor: pointer;
-	transition:
-		opacity var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease),
-		background var(--dur-micro) var(--ease);
-}
-.sidebar-repo-head:hover .sidebar-repo-new {
-	opacity: 1;
-}
-.sidebar-repo-new:hover {
-	color: var(--text);
-	background: var(--hover);
-}
 .sidebar-repo-lanes {
 	margin-top: 2px;
 }
+
+
 /* Rows nested under a repo band, a status lane or an inbox band take no inset
    of their own: every row in the list keeps the base 10px edge, so all their
    marks and titles share one rail top to bottom. The nesting is carried by the
@@ -1903,12 +1715,10 @@ body:is(.resizing-sidebar, .resizing-panel) {
    left of that rail (see .sidebar-lane-group), which reads as a divider over
    its rows without pushing them right. Stepping the rows in as well cost real
    title width on every level and fanned the list out across three left edges. */
-
 /* People and Automations render one collapsed row per group, so the 14px
    inter-group margin leaves them floating far apart. Drop it so consecutive
    people/automation rows stack flush, like the session items above them. The
    band-start divider still separates the sections. */
-.sidebar-group--people,
 .sidebar-group--automations {
 	margin-bottom: 0;
 }
@@ -1916,18 +1726,12 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	padding-bottom: 28px;
 }
 
-/* Whitespace (not a divider line) separates one band from the next
-   (personal → people → automations). */
-.sidebar-group--band-start {
-	margin-top: 28px;
-}
 
 /* Top-level band labels (Support / People / Automations) — small quiet labels
    that read like section kickers but behave like Notion's: the whole heading is
    a full-width hover row that toggles the band; the collapse chevron sits by the
    label (revealed on hover), and the count / any actions live on the right. */
-.sidebar-band-label,
-.sidebar-mine-label {
+.sidebar-band-label {
 	font-size: 12px;
 	font-weight: 600;
 	letter-spacing: -0.01em;
@@ -2429,22 +2233,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.sidebar-ws-row:hover .sidebar-group-count {
 		display: inline-flex;
 	}
-	/* No hover to reveal the row's new-session action on touch, so keep it
-	   visible, and give it a 44px hit target (iOS guideline) via a
-	   pseudo-element while the visual box stays 28px. */
-	.sidebar-repo-new {
-		opacity: 1;
-		position: relative;
-	}
-	.sidebar-repo-new::before {
-		content: "";
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		width: 44px;
-		height: 44px;
-		transform: translate(-50%, -50%);
-	}
 }
 @media (max-width: 720px) {
 	.sidebar-item:hover .sidebar-item-x,
@@ -2551,14 +2339,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	flex: 0 0 auto;
 	color: var(--text-faint);
 }
-.mobile-sheet-item-chevron {
-	margin-left: auto;
-	color: var(--text-faint);
-}
-.mobile-sheet-item-check {
-	margin-left: auto;
-	color: var(--accent);
-}
 .mobile-sheet-item--danger {
 	color: #e5484d;
 }
@@ -2569,11 +2349,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	height: 1px;
 	background: var(--border);
 	margin: 6px 10px;
-}
-.mobile-sheet-empty {
-	font-size: 14px;
-	color: var(--text-faint);
-	padding: 12px 14px;
 }
 .sidebar-item:hover {
 	background: var(--hover);
@@ -2613,11 +2388,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--blue);
 	box-shadow: 0 0 6px var(--blue);
 	animation: pulse 1.2s ease-in-out infinite;
-}
-/* A completed session with unread activity — solid green means the result is
-   ready; opening it returns the marker to the quiet gray idle state. */
-.sidebar-status-unread {
-	background: var(--green);
 }
 
 /* A session blocked on an AskUserQuestion — draw the eye so it gets answered. */
@@ -2846,10 +2616,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 .hovercard-pr-review {
 	color: var(--text-dim);
-}
-.hovercard-checks {
-	margin-left: auto;
-	color: var(--text-faint);
 }
 
 /* ── Detail pane / empty state ───────────────────────────── */
@@ -3318,17 +3084,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--blue-soft);
 }
 
-/* A transient tab (the current session when it isn't pinned) reads as
-   provisional: dashed top edge, like a Chrome tab that hasn't been pinned. */
-.session-tab-transient {
-	/* Dash only the visible edges — `border-style: dashed` would re-enable the
-     bottom border (reset to the 3px default width by `border-bottom: none`),
-     making transient tabs 3px taller than solid ones and the strip jumpy. */
-	border-top-style: dashed;
-	border-left-style: dashed;
-	border-right-style: dashed;
-}
-
 /* A user-colored tab: a colored top edge plus a faint tint of the chosen
    swatch (`--tab-color`, set inline). Lets a row of lookalike tabs be told
    apart at a glance. The active colored tab leans into the tint a touch more.
@@ -3346,10 +3101,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 .session-tab-colored.session-tab-active {
 	background: color-mix(in srgb, var(--tab-color) 26%, var(--bg-active));
 	border-color: color-mix(in srgb, var(--tab-color) 60%, transparent);
-}
-/* Keep the dashed top edge readable on a transient colored tab. */
-.session-tab-colored.session-tab-transient {
-	border-top-style: dashed;
 }
 
 /* Right-click swatch menu — a floating row of color chips anchored at the
@@ -3401,43 +3152,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	border-top: 1px solid var(--text-faint);
 	transform: rotate(45deg);
 	transform-origin: center;
-}
-
-/* Pin control: ★ on a pinned tab unpins (removes it); ☆ on a transient tab
-   pins it. Always shown on touch; reveal-on-hover (or for the active tab) on
-   desktop. The ☆ stays visible on transient tabs so the pin affordance is
-   discoverable. */
-.session-tab-pin {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 16px;
-	height: 16px;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	font-size: 11px;
-	line-height: 1;
-	color: var(--text-dim);
-	flex-shrink: 0;
-}
-.session-tab-pin-on {
-	color: var(--yellow);
-}
-.session-tab-pin:hover {
-	background: var(--hover-strong);
-	color: #e3b341;
-}
-
-@media (hover: hover) and (pointer: fine) {
-	.session-tab-pin {
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity var(--dur-micro) var(--ease);
-	}
-	.session-tab:hover .session-tab-pin,
-	.session-tab-active .session-tab-pin {
-		opacity: 1;
-		pointer-events: auto;
-	}
 }
 
 /* Per-tab close (×) — reset the <button> chrome, sit at the tab's trailing
@@ -3542,20 +3256,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	text-align: center;
 }
 
-.detail-empty-logo {
-	width: 56px;
-	height: 56px;
-	margin: 0 auto 14px;
-	border-radius: calc(18px * var(--rf)); corner-shape: var(--cs);
-	background: linear-gradient(135deg, #ff5a5a, #b00000);
-	color: #fff;
-	font-size: 30px;
-	font-weight: 700;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
 .detail-empty-title {
 	font-size: 19px;
 	font-weight: 600;
@@ -3565,20 +3265,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	color: var(--text-dim);
 	margin-top: 6px;
 	font-size: 13px;
-}
-
-.btn-new-session {
-	margin-top: 18px;
-	background: var(--accent);
-	color: var(--on-accent);
-	border: none;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 9px 18px;
-	font-size: 13px;
-	font-weight: 500;
-}
-.btn-new-session:hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
 .loading,
@@ -3719,16 +3405,6 @@ body.resizing-tab-split {
 	border-radius: 999px;
 	flex-shrink: 0;
 }
-.goal-phase-chip {
-	max-width: 340px;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	text-transform: none;
-	letter-spacing: 0;
-	flex-shrink: 1;
-}
 .source-slack {
 	background: rgba(74, 21, 75, 0.55);
 	color: #d9a8db;
@@ -3842,15 +3518,6 @@ html.wco .viewer-branch {
 	outline: none;
 }
 
-.viewer-started-by {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	color: var(--text-faint);
-	font-size: 12px;
-	flex-shrink: 0;
-}
-
 .working-pill {
 	display: inline-flex;
 	align-items: center;
@@ -3870,14 +3537,6 @@ html.wco .viewer-branch {
 	border-radius: 50%;
 	background: var(--green);
 	animation: pulse 1.4s ease-in-out infinite;
-}
-
-/* Pixel spinner standing in for the pulsing dot inside the Working pill. It
-   inherits the pill's green via currentColor; nudge it down to the text size. */
-.working-spinner {
-	flex-shrink: 0;
-	transform: scale(0.85);
-	transform-origin: center;
 }
 
 @keyframes pulse {
@@ -3911,15 +3570,6 @@ html.wco .viewer-branch {
 .viewer-header-actions .pr-head {
 	margin-inline: 6px;
 }
-
-/* Narrow (non-phone) top bar: give the title room first. Drop the "by X" line
-   and shrink the Working pill to just its dot before any action is hidden. */
-.viewer-header-compact .viewer-started-by {
-	display: none;
-}
-.viewer-header-compact .working-label {
-	display: none;
-}
 .viewer-header-compact .working-pill {
 	padding: 4px;
 }
@@ -3929,23 +3579,6 @@ html.wco .viewer-branch {
 .viewer-overflow {
 	position: relative;
 	display: inline-flex;
-}
-.btn-viewer-overflow {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	background: none;
-	border: 1px solid transparent;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	padding: 3px 5px;
-	font-size: 20px;
-	line-height: 1;
-}
-.btn-viewer-overflow.active,
-.btn-viewer-overflow:hover {
-	color: var(--text);
-	background: var(--hover);
 }
 /* Squircle user picture (GitHub avatar, initial fallback) — see UserAvatar.tsx.
    Size + font-size come inline from the component; the count badge the
@@ -3983,26 +3616,6 @@ html.wco .viewer-branch {
 	box-shadow: var(--avatar-edge);
 }
 
-/* Small "reviewed" checkmark badge nested over the reviewer's avatar in the
-   green Reviewed chip — bottom-right, ringed against the chip tint. */
-.wi-chip-avatar-check {
-	position: absolute;
-	right: -3px;
-	bottom: -3px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 13px;
-	height: 13px;
-	border-radius: 50%;
-	color: #fff;
-	background: var(--green, #16a34a);
-	box-shadow: 0 0 0 1.5px var(--bg-panel);
-}
-.wi-chip-avatar-check svg {
-	display: block;
-}
-
 /* presence facepile (the Figma/Notion-style user row before Share) */
 .presence {
 	display: flex;
@@ -4018,34 +3631,6 @@ html.wco .viewer-branch {
 }
 .presence-avatar:first-child {
 	margin-left: 0;
-}
-.presence-me {
-	background: var(--accent-soft);
-	color: var(--text-dim);
-}
-.presence-me::after {
-	content: "";
-	position: absolute;
-	left: 50%;
-	bottom: -4px;
-	z-index: 2;
-	width: 8px;
-	height: 3px;
-	border-radius: 999px;
-	background: var(--accent);
-	box-shadow: 0 0 0 2px var(--bg-raised);
-	transform: translateX(-50%);
-}
-.presence-count {
-	position: absolute;
-	bottom: -3px;
-	right: -3px;
-	background: var(--accent);
-	color: var(--on-accent);
-	font-size: 9px;
-	border-radius: 999px;
-	padding: 0 3.5px;
-	line-height: 1.3;
 }
 
 .session-link {
@@ -4174,56 +3759,10 @@ html.wco .viewer-branch {
 	   like its button siblings. */
 	text-decoration: none;
 }
-/* The Workspace toggle is icon-only (23px glyph) — keep its padding tight so
-   it doesn't balloon past the text buttons it sits next to. Borderless: the
-   tint/icon color carries the affordance (the border stays on the text-y
-   .btn-panel-toggle siblings like the PR button). */
-.btn-panel-toggle.btn-workspace {
-	padding: 3px 5px;
-	border-color: transparent;
-	/* Match the left sidebar toggle's rest tone (text-faint) — the base
-	   .btn-panel-toggle is text-dim, which read a shade darker than its mirror. */
-	color: var(--text-faint);
-}
-/* The Workspace toggle's affordance is neutral, not the red accent — hover
-   leans toward the text color over a plain row-hover wash (same as the ⋯
-   overflow button), so only genuinely alarming controls wear red. Note: no
-   .active rule — an open panel is already visible beside the toggle, so
-   highlighting the button too is redundant; only hover gets the wash. */
-.btn-panel-toggle.btn-workspace:hover {
-	border-color: transparent;
-	color: var(--text);
-	background: var(--hover);
-}
-.btn-panel-toggle-icon {
-	font-size: 14px;
-	line-height: 1;
-}
-/* PR button label stays visible everywhere (incl. mobile, where the generic
-   .btn-panel-toggle-label is hidden) — the PR number is the point of it. */
-.btn-pr-label {
-	font-size: 13px;
-	line-height: 1;
-}
 .btn-panel-toggle:hover {
 	color: var(--accent);
 	border-color: var(--accent);
 	background: var(--hover);
-}
-.btn-panel-toggle.active:not(.btn-workspace) {
-	color: var(--accent);
-	border-color: var(--accent);
-	background: var(--accent-soft);
-}
-
-/* Session-header code affordances (Preview ▶ / Staging 🌐) rendered icon-only,
-   sized and padded to sit flush beside the .btn-workspace panel toggle. State
-   is carried entirely by icon color (dim = off, amber = in flight, green =
-   live), so no label is needed. */
-.viewer-code-icon-wrap {
-	position: relative;
-	display: inline-flex;
-	align-items: center;
 }
 .viewer-code-icon {
 	display: inline-flex;
@@ -4282,36 +3821,6 @@ html.wco .viewer-branch {
 	color: var(--green);
 	background: var(--green-soft);
 }
-.btn-viewer-delete,
-.btn-viewer-archive {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	white-space: nowrap;
-	background: none;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-faint);
-	padding: 5px 12px;
-	font-size: 13px;
-}
-/* Archive is the safe, reversible action — it leans toward the text color on
-   hover (not red), keeping Delete as the only alarming item in the menu. */
-.btn-viewer-archive:hover:not(:disabled) {
-	color: var(--text);
-	background: var(--hover);
-}
-.btn-viewer-archive:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
-.btn-viewer-shortcut {
-	margin-left: auto;
-	color: var(--text-faint);
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0;
-}
 
 /* New-session-in-workspace row (phone ⋯ menu). Matches the archive/delete rows:
    icon + label, neutral until hover. It's a create action, so hover leans to
@@ -4333,84 +3842,10 @@ html.wco .viewer-branch {
 	background: var(--hover);
 }
 
-/* Session name titling the phone ⋯ menu (WhatsApp/ChatGPT-style header). It's a
-   label, not an action — dimmed, with a hairline rule under it. */
-.viewer-menu-title {
-	padding: 2px 6px 8px;
-	margin-bottom: 2px;
-	border-bottom: 1px solid var(--border);
-	color: var(--text-dim);
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-/* The workspace side panel (changes / terminal / PR / Plain) is reached from the
-   ⋯ menu on phones, as a deeper page — a full-width row with a trailing chevron
-   marking "opens another panel". It's the menu's primary destination, so it
-   reads at full strength (accent glyph, real text). */
-.btn-viewer-panelrow {
-	display: inline-flex;
-	align-items: center;
-	gap: 9px;
-	white-space: nowrap;
-	background: none;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	padding: 8px 12px;
-	font-size: 13px;
-	font-weight: 500;
-}
-.btn-viewer-panelrow > svg:first-child {
-	color: var(--accent);
-	flex-shrink: 0;
-}
-.btn-viewer-panelrow-caret {
-	margin-left: auto;
-	color: var(--text-faint);
-}
-.btn-viewer-panelrow:hover {
-	background: var(--hover);
-}
-
 @keyframes preview-spin {
 	to {
 		transform: rotate(360deg);
 	}
-}
-/* Header Share: a soft-filled chip (not a floating hairline outline) matched to
-   the PR split-button beside it — same 32px height, 8px squircle radius, raised
-   fill. The subtle fill + border reads as a solid, deliberate control instead of
-   the thin ring it used to be. In the ⋯ menu the list styling overrides all this. */
-.btn-viewer-share {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	min-height: 32px;
-	background: var(--control-surface);
-	border: 1px solid var(--border);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: var(--control-shadow);
-	color: var(--text-dim);
-	padding: 0 13px;
-	font-size: 13px;
-	font-weight: 500;
-	white-space: nowrap;
-}
-.btn-viewer-share:hover {
-	color: var(--text);
-	border-color: var(--border-strong);
-	background: var(--hover);
-}
-.btn-viewer-share-done {
-	color: var(--green);
-	border-color: color-mix(in srgb, var(--green) 40%, transparent);
-	background: var(--green-soft);
 }
 
 .btn-viewer-pin {
@@ -4434,29 +3869,6 @@ html.wco .viewer-branch {
 .viewer-delete-confirm {
 	display: flex;
 	gap: 6px;
-}
-
-.btn-delete-wt,
-.btn-delete-only,
-.btn-delete-cancel {
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	padding: 5px 12px;
-	font-size: 13px;
-	white-space: nowrap;
-	border: 1px solid var(--border-strong);
-	background: none;
-	color: var(--text-dim);
-}
-.btn-delete-wt {
-	color: var(--red);
-	border-color: var(--red);
-}
-.btn-delete-only {
-	color: var(--yellow);
-	border-color: var(--yellow);
-}
-.btn-delete-cancel:hover {
-	color: var(--text);
 }
 
 /* split layout: session + workspace panel */
@@ -4502,24 +3914,6 @@ html.wco .viewer-branch {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
-}
-
-/* Action row under the PR status strip at the top of the right panel: Preview /
-   Staging — the code-workspace testing affordances that used to sit lost at the
-   bottom of the panel. It rides directly below the merge-actions row so it reads
-   as a first-class "test this change" action, visible on every tab (tab-agnostic).
-   Each child self-gates (renders null when N/A), so :empty collapses the row on
-   sessions with no code affordances (e.g. Plain-only). */
-.panel-actions {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 8px;
-	padding: 10px 12px;
-	border-bottom: 1px solid var(--border);
-}
-.panel-actions:empty {
-	display: none;
 }
 
 /* Left-edge drag handle of the right panel — mirror of .sidebar-resize. */
@@ -4622,18 +4016,6 @@ body.resizing-panel .panel-resize::after {
 	background: var(--yellow);
 }
 
-.panel-close {
-	background: none;
-	border: none;
-	color: var(--text-faint);
-	font-size: 13px;
-	padding: 4px 8px 8px;
-	margin-left: 6px;
-}
-.panel-close:hover {
-	color: var(--text);
-}
-
 .panel-overlay {
 	display: none;
 }
@@ -4651,19 +4033,6 @@ body.resizing-panel .panel-resize::after {
 	padding: 12px 12px 22px;
 }
 
-.workspace-info-head {
-	display: grid;
-	gap: 4px;
-}
-
-.workspace-info-kicker,
-.workspace-info-label {
-	color: var(--text-faint);
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-}
-
 .workspace-info-title {
 	color: var(--text);
 	font-size: 17px;
@@ -4671,484 +4040,11 @@ body.resizing-panel .panel-resize::after {
 	line-height: 1.2;
 	overflow-wrap: anywhere;
 }
-
-.workspace-info-meta {
-	color: var(--text-faint);
-	font-size: 12px;
-	line-height: 1.35;
-}
-
-/* Status chips (checks / review / PR state) — compact, tinted by tone. */
-.workspace-info-status {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	margin-top: 10px;
-}
-
-.wi-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	/* Symmetric vertical padding — an earlier 5px/6px split shifted every
-	   icon/avatar 0.5px above the pill's center, which read as "riding high"
-	   and invited per-glyph margin nudges to compensate. Keep it symmetric and
-	   let flex centering do the work: iconic glyphs are drawn centered in
-	   their viewbox (sub-¼px offsets at most), so no nudges are needed. */
-	padding: 5.5px 11px;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	font-size: 12px;
-	font-weight: 600;
-	line-height: 1.35;
-	border: 1px solid transparent;
-	cursor: pointer;
-	white-space: nowrap;
-	transition:
-		background-color var(--dur-micro) var(--ease),
-		border-color var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease);
-}
-.wi-chip-icon {
-	display: inline-flex;
-	align-items: center;
-	/* De-emphasize the glyph so the label stays the dominant read (ported from
-	   tella-fusion's ButtonWithIcon, which dims leading icons to ~50-70%). */
-	opacity: 0.65;
-}
-/* Leading icon: pull the icon-side padding in 2px. Iconic glyphs only draw
-   ~60% of their box, so with symmetric padding the icon side looks padded
-   out — tella-fusion's buttons do the same px-3 → pl-2.5 tightening. */
-.wi-chip:has(> .wi-chip-icon:first-child) {
-	padding-left: 9px;
-}
-.wi-chip-icon svg {
-	display: block;
-}
-.wi-chip-green {
-	color: var(--green, #16a34a);
-	background: color-mix(in srgb, var(--green, #16a34a) 12%, transparent);
-	border-color: color-mix(in srgb, var(--green, #16a34a) 26%, transparent);
-}
-.wi-chip-red {
-	color: var(--red, #dc2626);
-	background: color-mix(in srgb, var(--red, #dc2626) 12%, transparent);
-	border-color: color-mix(in srgb, var(--red, #dc2626) 26%, transparent);
-}
-.wi-chip-yellow {
-	color: var(--yellow, #ca8a04);
-	background: color-mix(in srgb, var(--yellow, #ca8a04) 14%, transparent);
-	border-color: color-mix(in srgb, var(--yellow, #ca8a04) 30%, transparent);
-}
-.wi-chip-purple {
-	color: var(--purple, #7c3aed);
-	background: color-mix(in srgb, var(--purple, #7c3aed) 12%, transparent);
-	border-color: color-mix(in srgb, var(--purple, #7c3aed) 26%, transparent);
-}
-.wi-chip-muted {
-	color: var(--text-dim);
-	background: var(--bg-surface);
-	border-color: var(--border);
-}
-
-/* Hover feedback: deepen the tint a touch and pull the border in. */
-.wi-chip-green:hover {
-	background: color-mix(in srgb, var(--green, #16a34a) 20%, transparent);
-	border-color: color-mix(in srgb, var(--green, #16a34a) 40%, transparent);
-}
-.wi-chip-red:hover {
-	background: color-mix(in srgb, var(--red, #dc2626) 20%, transparent);
-	border-color: color-mix(in srgb, var(--red, #dc2626) 40%, transparent);
-}
-.wi-chip-yellow:hover {
-	background: color-mix(in srgb, var(--yellow, #ca8a04) 22%, transparent);
-	border-color: color-mix(in srgb, var(--yellow, #ca8a04) 44%, transparent);
-}
-.wi-chip-purple:hover {
-	background: color-mix(in srgb, var(--purple, #7c3aed) 20%, transparent);
-	border-color: color-mix(in srgb, var(--purple, #7c3aed) 40%, transparent);
-}
-.wi-chip-muted:hover {
-	color: var(--text);
-	background: var(--hover);
-	border-color: var(--border-strong);
-}
-
-.workspace-info-body {
-	display: grid;
-	gap: 16px;
-}
-
-/* Horizontal filmstrip — bigger thumbs, still one scrolling row so screenshots
-   read clearly without pushing the text sections off-screen. */
-.workspace-info-media {
-	display: flex;
-	gap: 8px;
-	overflow-x: auto;
-	padding-bottom: 4px;
-	scrollbar-width: thin;
-}
-
-.workspace-info-thumb {
-	position: relative;
-	flex: none;
-	display: block;
-	width: 240px;
-	aspect-ratio: 16 / 10;
-	overflow: hidden;
-	border: 1px solid var(--border);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-surface);
-}
-
-/* Files changed — compact preview that drills into the Changes tab. */
-.workspace-info-files-label {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-}
-.workspace-info-files {
-	display: grid;
-	gap: 1px;
-	border: 1px solid var(--border);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	overflow: hidden;
-}
-.workspace-info-file {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 6px 9px;
-	background: var(--bg-panel);
-	border: none;
-	text-align: left;
-	cursor: pointer;
-	min-width: 0;
-}
-.workspace-info-file:hover {
-	background: var(--hover);
-}
-.workspace-info-file-path {
-	font-size: 12px;
-	display: flex;
-	align-items: baseline;
-	min-width: 0;
-	flex: 1;
-}
-.workspace-info-file-dir {
-	color: var(--text-faint);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-}
-.workspace-info-file-base {
-	color: var(--text-dim);
-	white-space: nowrap;
-	flex: none;
-}
-.workspace-info-more {
-	padding: 7px 9px;
-	background: var(--bg-surface);
-	border: none;
-	color: var(--text-faint);
-	font-size: 12px;
-	font-weight: 600;
-	text-align: left;
-	cursor: pointer;
-}
-.workspace-info-more:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-
-/* PR comments — an avatar beside a markdown body with a muted source/time
-   footer. Clamped by default; hovering floats the full comment in a popover. */
-.workspace-info-comments {
-	display: grid;
-	gap: 8px;
-}
-/* Comments heading + its right-aligned "Fix" button. */
-.workspace-info-comments-label {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-}
-.workspace-info-fix {
-	flex: none;
-	padding: 2px 10px;
-	border-radius: 999px;
-	border: 1px solid var(--border-strong);
-	background: var(--bg-surface);
-	color: var(--text-dim);
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	cursor: pointer;
-	transition:
-		color var(--dur-micro) var(--ease),
-		border-color var(--dur-micro) var(--ease),
-		background var(--dur-micro) var(--ease);
-}
-.workspace-info-fix:hover {
-	color: var(--text);
-	border-color: var(--text-faint);
-	background: var(--hover);
-}
-/* One-line row: avatar · title · time. Dense list — the full comment opens in
-   the hover popover, never by growing the row. */
-/* Clean text rows — no outline/box. Avatar · title · time, aligned flush with
-   the section heading above. Hovering floats the full comment popover. */
-.workspace-info-comment {
-	position: relative;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 3px 0;
-	text-align: left;
-	cursor: pointer;
-	min-width: 0;
-}
-.workspace-info-comment:hover .workspace-info-comment-time {
-	color: var(--text-dim);
-}
-.workspace-info-comment-avatar {
-	flex: none;
-	width: 18px;
-	height: 18px;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	display: grid;
-	place-items: center;
-	color: #fff;
-	font-size: 10px;
-	font-weight: 600;
-}
-/* Real GitHub avatar variant (author's logo) — fill the same 18px tile. */
-img.workspace-info-comment-avatar {
-	object-fit: cover;
-	background: var(--bg-active);
-}
-.workspace-info-comment-title {
-	flex: 1;
-	min-width: 0;
-	color: var(--text);
-	font-size: 12px;
-	font-weight: 500;
-	line-height: 1.35;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.workspace-info-comment-time {
-	flex: none;
-	color: var(--text-faint);
-	font-size: 11px;
-}
-.workspace-info-comment-author {
-	color: var(--text-faint);
-	font-size: 11px;
-	font-weight: 600;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-}
-/* Hover "Add to session" — floats over the right end of the row (covers time). */
-.workspace-info-comment-add {
-	position: absolute;
-	top: 50%;
-	right: 6px;
-	transform: translateY(-50%);
-	z-index: 1;
-	padding: 2px 8px;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid var(--border-strong);
-	background: var(--bg-panel);
-	color: var(--text-dim);
-	font-size: 11px;
-	font-weight: 600;
-	cursor: pointer;
-	opacity: 0;
-	transition: opacity var(--dur-micro) var(--ease);
-}
-.workspace-info-comment:hover .workspace-info-comment-add {
-	opacity: 1;
-}
-.workspace-info-comment-add:hover {
-	color: var(--text);
-	border-color: var(--text-faint);
-	background: var(--hover);
-}
-/* Popover-only: author/time header above the full markdown body. */
-.workspace-info-comment-main {
-	position: relative;
-	min-width: 0;
-	flex: 1;
-}
-.workspace-info-comment-pop-head {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 8px;
-	min-width: 0;
-	margin-bottom: 6px;
-}
-
-/* Hover popover — the full comment floated on top of the list. */
-.workspace-info-comment-pop {
-	position: fixed;
-	z-index: 60;
-	display: flex;
-	align-items: stretch;
-	gap: 9px;
-	padding: 11px 12px;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-panel);
-	overflow: hidden;
-	cursor: pointer;
-	box-shadow:
-		0 12px 40px -8px rgba(0, 0, 0, 0.5),
-		0 0 0 1px var(--border);
-}
-.workspace-info-comment-pop .workspace-info-comment-main {
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
-}
 .workspace-info-comment-pop-body {
 	flex: 1;
 	overflow-y: auto;
 	min-height: 0;
 	margin-bottom: 5px;
-}
-
-/* Hover popover for a "file changed" row — the file's actual diff floated on
-   top of the list, mirroring the comment popover's floated-card chrome. */
-.workspace-info-file-pop {
-	position: fixed;
-	z-index: 60;
-	display: flex;
-	flex-direction: column;
-	padding: 10px 12px;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-panel);
-	overflow: hidden;
-	cursor: pointer;
-	box-shadow:
-		0 12px 40px -8px rgba(0, 0, 0, 0.5),
-		0 0 0 1px var(--border);
-}
-.workspace-info-file-pop-head {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 8px;
-	min-width: 0;
-	margin-bottom: 8px;
-}
-.workspace-info-file-pop-body {
-	flex: 1;
-	overflow: auto;
-	min-height: 0;
-	font-size: 12px;
-}
-
-/* Checks hover overview — the full per-check list floated off the checks chip
-   (GitHub-style: status icon · name · outcome word). Shares the comment-pop's
-   floated-card chrome. */
-.workspace-info-checks-pop {
-	position: fixed;
-	z-index: 60;
-	display: flex;
-	flex-direction: column;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-panel);
-	overflow: hidden;
-	box-shadow:
-		0 12px 40px -8px rgba(0, 0, 0, 0.5),
-		0 0 0 1px var(--border);
-}
-.workspace-info-checks-head {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 10px;
-	padding: 9px 12px;
-	border-bottom: 1px solid var(--border);
-	background: var(--bg-surface);
-}
-.workspace-info-checks-title {
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--text);
-}
-.workspace-info-checks-summary {
-	display: inline-flex;
-	gap: 8px;
-	font-size: 11px;
-	font-weight: 600;
-}
-.workspace-info-checks-list {
-	overflow-y: auto;
-	padding: 4px;
-}
-.workspace-info-check-row {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	padding: 6px 8px;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	text-decoration: none;
-}
-a.workspace-info-check-row {
-	cursor: pointer;
-}
-.workspace-info-check-row:hover {
-	background: var(--bg-surface);
-}
-.workspace-info-check-name {
-	flex: 1;
-	min-width: 0;
-	font-size: 13px;
-	font-weight: 500;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.workspace-info-check-status {
-	flex-shrink: 0;
-	font-size: 12px;
-	font-weight: 500;
-	color: var(--text-dim);
-}
-.wi-check-icon {
-	flex-shrink: 0;
-	display: inline-flex;
-	width: 16px;
-	height: 16px;
-}
-.wi-check-ico {
-	display: block;
-	width: 16px;
-	height: 16px;
-}
-.wi-check-success {
-	color: var(--green, #16a34a);
-}
-.wi-check-failure {
-	color: var(--red, #dc2626);
-}
-.wi-check-pending {
-	color: var(--yellow, #ca8a04);
-}
-.wi-check-skipped,
-.wi-check-neutral {
-	color: var(--text-dim);
 }
 /* Indeterminate running spinner (no determinate SVG) — centered in the 16px slot. */
 .wi-check-spin {
@@ -5164,54 +4060,6 @@ a.workspace-info-check-row {
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-/* Compact markdown scale (base .markdown is sized for session) — shared by the
-   inline card body and the popover body. */
-:is(.workspace-info-comment-md, .workspace-info-comment-pop-body) .markdown {
-	font-size: 13px;
-	line-height: 1.45;
-	color: var(--text-dim);
-}
-:is(.workspace-info-comment-md, .workspace-info-comment-pop-body)
-	.markdown
-	> :first-child {
-	margin-top: 0;
-}
-:is(.workspace-info-comment-md, .workspace-info-comment-pop-body)
-	.markdown
-	> :last-child {
-	margin-bottom: 0;
-}
-:is(.workspace-info-comment-md, .workspace-info-comment-pop-body)
-	.markdown
-	:where(h1, h2, h3, h4, h5, h6) {
-	font-size: 12px;
-	font-weight: 700;
-	color: var(--text);
-	margin: 9px 0 3px;
-	letter-spacing: -0.01em;
-}
-:is(.workspace-info-comment-md, .workspace-info-comment-pop-body)
-	.markdown
-	:where(p) {
-	margin: 5px 0;
-}
-:is(.workspace-info-comment-md, .workspace-info-comment-pop-body)
-	.markdown
-	:where(ul, ol) {
-	margin: 5px 0;
-	padding-left: 18px;
-}
-:is(.workspace-info-comment-md, .workspace-info-comment-pop-body)
-	.markdown
-	:where(li) {
-	margin: 2px 0;
-}
-:is(.workspace-info-comment-md, .workspace-info-comment-pop-body)
-	.markdown
-	:where(table) {
-	font-size: 12px;
 }
 
 /* Full automated-review preview: a readable long-form scale, bounded by the
@@ -5233,88 +4081,6 @@ a.workspace-info-check-row {
 }
 .review-preview-markdown.markdown pre {
 	max-width: 100%;
-}
-
-.workspace-info-section {
-	display: grid;
-	gap: 5px;
-}
-
-/* Status section (info panel): the PR/branch state line + one row per
-   outstanding git fact (ahead → Push, behind → Update, dirty → Commit). The
-   Conductor-style status header, in the info panel's own idiom. */
-.wi-git-state {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	flex-wrap: wrap;
-}
-.wi-git-state-label {
-	font-size: 14px;
-	font-weight: 600;
-}
-.wi-git-state-green {
-	color: var(--green, #16a34a);
-}
-.wi-git-state-purple {
-	color: var(--purple, #7c3aed);
-}
-.wi-git-state-muted {
-	color: var(--text-dim);
-}
-.wi-git-badge {
-	margin-left: 1px;
-	cursor: default;
-	padding: 3px 8px;
-	font-size: 11px;
-}
-.wi-git-rows {
-	display: grid;
-	gap: 8px;
-	margin-top: 3px;
-}
-.wi-git-row {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	min-height: 28px;
-}
-.wi-git-dot {
-	flex: 0 0 auto;
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background: var(--yellow, #ca8a04);
-}
-.wi-git-label {
-	color: var(--text-dim);
-	font-size: 13px;
-	line-height: 1.3;
-}
-.wi-git-row .wi-git-btn {
-	margin-left: auto;
-	min-height: 28px;
-	padding: 4px 12px;
-}
-.wi-git-prompted {
-	margin-left: auto;
-}
-.wi-git-error {
-	color: var(--red);
-	font-size: 11px;
-	margin-top: 2px;
-}
-
-.workspace-info-text {
-	color: var(--text-dim);
-	font-size: 14px;
-	line-height: 1.42;
-}
-
-.workspace-info-empty {
-	color: var(--text-faint);
-	font-size: 13px;
-	padding-top: 2px;
 }
 
 .panel-placeholder {
@@ -5364,9 +4130,6 @@ a.workspace-info-check-row {
 	background: var(--green);
 	flex-shrink: 0;
 	animation: pulse 1.6s ease-in-out infinite;
-}
-.subagent-head-top .panel-close {
-	margin-left: auto;
 }
 .subagent-back {
 	margin-top: 8px;
@@ -5466,39 +4229,6 @@ a.workspace-info-check-row {
 .pr-repo-tab-x:hover {
 	color: var(--text);
 }
-/* "Link PR" affordance: the + chip / inline paste-a-URL form. */
-.pr-link-form {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-}
-.pr-link-input {
-	font-size: 12px;
-	color: var(--text);
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 3px 10px;
-	width: min(280px, 50vw);
-}
-.pr-link-input:focus {
-	outline: none;
-	border-color: var(--accent);
-}
-.pr-link-submit {
-	font-size: 12px;
-	white-space: nowrap;
-	color: var(--text);
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 3px 10px;
-	cursor: pointer;
-}
-.pr-link-submit:disabled {
-	color: var(--text-dim);
-	cursor: default;
-}
 
 /* Per-repo tabs in a multi-repo session's diff */
 .diff-repo-tabs {
@@ -5548,20 +4278,6 @@ a.workspace-info-check-row {
 .diff-del {
 	color: var(--red);
 	font-weight: 600;
-}
-
-.btn-icon {
-	margin-left: auto;
-	background: none;
-	border: none;
-	color: var(--text-faint);
-	font-size: 14px;
-	padding: 2px 6px;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-}
-.btn-icon:hover {
-	color: var(--text);
-	background: var(--hover);
 }
 
 .diff-truncated {
@@ -6088,118 +4804,6 @@ a.workspace-info-check-row {
 	overflow-wrap: anywhere;
 }
 
-/* Floating "you have pending comments" bar — sticks to the bottom of whichever
-   container scrolls the diff (the split drawer's diff pane, or the panel body). */
-.pr-review-bar {
-	position: sticky;
-	bottom: 0;
-	z-index: 5;
-	margin-top: 10px;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.35);
-	padding: 10px 12px;
-	padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-.pr-review-bar-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-}
-.pr-review-count {
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text);
-}
-.pr-review-toggle {
-	background: var(--accent);
-	color: var(--on-accent);
-	border: none;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 7px 14px;
-	font-size: 13px;
-	font-weight: 600;
-	cursor: pointer;
-}
-.pr-review-toggle:hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
-}
-.pr-review-form {
-	display: flex;
-	flex-direction: column;
-	gap: 9px;
-	border-top: 1px solid var(--border);
-	padding-top: 10px;
-}
-.pr-review-summary {
-	background: var(--bg-raised);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	padding: 8px 10px;
-	font-size: 13px;
-	font-family: var(--sans);
-	line-height: 1.45;
-	resize: vertical;
-	outline: none;
-}
-.pr-review-summary:focus {
-	border-color: var(--accent);
-}
-.pr-review-events {
-	display: flex;
-	gap: 6px;
-	flex-wrap: wrap;
-}
-.pr-review-event {
-	flex: 1 1 auto;
-	background: var(--bg-raised);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	padding: 7px 10px;
-	font-size: 12px;
-	font-weight: 500;
-	cursor: pointer;
-	white-space: nowrap;
-}
-.pr-review-event:hover {
-	color: var(--text);
-}
-.pr-review-event.active {
-	background: color-mix(in srgb, var(--accent) 16%, transparent);
-	border-color: var(--accent);
-	color: var(--text);
-}
-.pr-review-submit {
-	background: var(--accent);
-	color: var(--on-accent);
-	border: none;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 9px 12px;
-	font-size: 13px;
-	font-weight: 600;
-	cursor: pointer;
-}
-.pr-review-submit:disabled {
-	opacity: 0.5;
-	cursor: default;
-}
-.pr-review-submit:not(:disabled):hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
-}
-
-.pr-diff-section {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
 .pr-comment-link {
 	margin-left: 8px;
 	color: var(--link);
@@ -6207,10 +4811,6 @@ a.workspace-info-check-row {
 	text-transform: none;
 	letter-spacing: 0;
 	font-weight: 500;
-}
-
-.diff-files {
-	padding: 8px 10px 24px;
 }
 
 .diff-file {
@@ -6236,85 +4836,11 @@ a.workspace-info-check-row {
 	background: var(--hover);
 }
 
-.diff-status {
-	font-size: 11px;
-	font-weight: 700;
-	width: 18px;
-	height: 18px;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
-}
-.diff-status-added,
-.diff-status-untracked {
-	background: var(--green-soft);
-	color: var(--green);
-}
-.diff-status-modified {
-	background: rgba(210, 153, 34, 0.15);
-	color: var(--yellow);
-}
-.diff-status-deleted {
-	background: var(--red-soft);
-	color: var(--red);
-}
-.diff-status-renamed {
-	background: var(--blue-soft);
-	color: var(--blue);
-}
-
-.diff-file-path {
-	font-size: 12px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-	flex: 1;
-	text-align: left;
-}
-
 .diff-file-stats {
 	display: flex;
 	gap: 6px;
 	font-size: 11px;
 	flex-shrink: 0;
-}
-
-.diff-chevron {
-	color: var(--text-faint);
-	font-size: 10px;
-	flex-shrink: 0;
-}
-
-.diff-patch {
-	margin: 0;
-	border-top: 1px solid var(--border);
-	font-family: var(--mono);
-	font-size: 11px;
-	line-height: 1.55;
-	overflow-x: auto;
-	max-height: 480px;
-	overflow-y: auto;
-}
-
-.diff-line {
-	padding: 0 10px;
-	white-space: pre;
-}
-.diff-line-add {
-	background: rgba(63, 185, 80, 0.13);
-	color: #7ee787;
-}
-.diff-line-del {
-	background: rgba(248, 81, 73, 0.12);
-	color: #ffa198;
-}
-.diff-line-hunk {
-	background: var(--accent-soft);
-	color: var(--text-dim);
-	padding: 2px 10px;
 }
 
 /* ── PR status bar (Conductor-style strip atop the right panel) ── */
@@ -6795,90 +5321,10 @@ a.workspace-info-check-row {
 	text-overflow: ellipsis;
 }
 
-/* ── PR panel ────────────────────────────────────────────── */
-
-.pr-panel {
-	padding: 14px;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-/* The info region (header, checks, body, actions) keeps the vertical rhythm
-   whether or not it's beside the diff. */
-.pr-panel-info {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	min-width: 0;
-}
-
-/* Split layout (Reviews drawer + session Review tab): metadata/checks/actions
-   on the left, the code diff filling the rest — each scrolls on its own. The
-   info column caps at 384px but yields in narrower hosts (the session viewer
-   panel can be as narrow as 320px). The PR tab bar sits ABOVE the split, so
-   the row lives on .pr-panel-body (a plain wrapper — display:contents — in
-   the stacked layout), not on the panel itself. */
-.pr-panel-split {
-	height: 100%;
-	padding: 0;
-	gap: 0;
-}
-.pr-panel-body {
-	display: contents;
-}
-.pr-panel-split .pr-panel-body {
-	display: flex;
-	flex-direction: row;
-	align-items: stretch;
-	flex: 1;
-	min-height: 0;
-}
-.pr-panel-split .pr-panel-info {
-	width: min(384px, 45%);
-	flex-shrink: 0;
-	overflow-y: auto;
-	padding: 16px 20px 22px;
-	border-right: 1px solid var(--border);
-}
-.pr-panel-split .pr-panel-diff {
-	flex: 1;
-	min-width: 0;
-	overflow-y: auto;
-	padding: 18px 20px;
-	background: var(--bg);
-}
-.pr-panel-split .pr-diff-section {
-	margin-top: 0;
-}
-
 .pr-head {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-}
-
-.pr-pill {
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-	padding: 3px 10px;
-	border-radius: 999px;
-}
-.pr-pill-open {
-	background: var(--green-soft);
-	color: var(--green);
-}
-.pr-pill-merged {
-	background: rgba(163, 113, 247, 0.16);
-	color: var(--purple);
-}
-.pr-pill-closed {
-	background: var(--red-soft);
-	color: var(--red);
-}
-.pr-pill-draft {
-	background: var(--bg-active);
-	color: var(--text-dim);
 }
 
 .pr-number {
@@ -6890,46 +5336,9 @@ a.workspace-info-check-row {
 	color: var(--link);
 }
 
-.pr-title {
-	font-size: 14px;
-	font-weight: 600;
-	color: var(--text);
-	text-decoration: none;
-	line-height: 1.28;
-}
-.pr-title:hover {
-	color: var(--link);
-}
-
-.pr-meta {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 14px;
-	font-size: 12px;
-	color: var(--text-dim);
-	align-items: center;
-}
-
-.pr-branch {
-	font-size: 11px;
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	padding: 2px 8px;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-}
-
 .pr-review {
 	text-transform: capitalize;
 	font-weight: 600;
-}
-.pr-review-approved {
-	color: var(--green);
-}
-.pr-review-changes_requested {
-	color: var(--red);
-}
-.pr-review-review_required {
-	color: var(--yellow);
 }
 
 .pr-checks {
@@ -6937,50 +5346,6 @@ a.workspace-info-check-row {
 	border-radius: 0;
 	background: transparent;
 	overflow: hidden;
-}
-
-.pr-checks-title {
-	font-size: 13px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	color: var(--text-faint);
-	padding: 0 0 6px;
-}
-
-.pr-checks-summary {
-	display: none;
-	align-items: center;
-	gap: 10px;
-	width: 100%;
-	background: none;
-	border: none;
-	padding: 10px 12px;
-	cursor: pointer;
-	color: var(--text);
-	font: inherit;
-	text-align: left;
-}
-.pr-checks-summary:hover {
-	background: var(--hover);
-}
-.pr-checks-status {
-	font-size: 13px;
-	font-weight: 600;
-}
-.pr-checks-status.pr-sum-pass {
-	color: var(--green);
-}
-.pr-checks-status.pr-sum-fail {
-	color: var(--red);
-}
-.pr-checks-status.pr-sum-pending {
-	color: var(--yellow);
-}
-.pr-checks-counts {
-	display: flex;
-	gap: 10px;
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
 }
 .check-success-text {
 	color: var(--green);
@@ -6990,11 +5355,6 @@ a.workspace-info-check-row {
 }
 .check-pending-text {
 	color: var(--yellow);
-}
-.pr-checks-chevron {
-	margin-left: auto;
-	color: var(--text-faint);
-	font-size: 11px;
 }
 
 .pr-check {
@@ -7028,9 +5388,6 @@ a.workspace-info-check-row {
 }
 .pr-check-mark-pending {
 	animation: pulse 1.4s infinite;
-}
-.check-neutral-text {
-	color: var(--text-faint);
 }
 
 .pr-checks-group {
@@ -7068,16 +5425,6 @@ a.workspace-info-check-row {
 	border-radius: 0;
 	background: transparent;
 	overflow: hidden;
-}
-.pr-comments-head {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	border-bottom: 0;
-}
-.pr-comments-title {
-	flex: 1;
-	padding-bottom: 6px;
 }
 .pr-comments-add-all,
 .pr-comment-add {
@@ -7166,14 +5513,6 @@ a.workspace-info-check-row {
 .pr-comment-add:focus-visible {
 	opacity: 1;
 }
-
-/* Git status rows — one local/remote discrepancy per line, action on the right. */
-.pr-git {
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-	padding-bottom: 0;
-}
 .pr-git-row {
 	display: flex;
 	align-items: center;
@@ -7240,18 +5579,6 @@ a.workspace-info-check-row {
 	color: var(--red);
 }
 
-/* Placeholder identity for a branch with no PR yet (mirrors Conductor). */
-.pr-no-pr-title {
-	font-size: 15px;
-	font-weight: 600;
-	color: var(--text-faint);
-}
-.pr-no-pr-desc {
-	font-size: 12px;
-	color: var(--text-faint);
-	margin-top: -6px;
-}
-
 .pr-body {
 	border: 0;
 	border-radius: 0;
@@ -7259,18 +5586,6 @@ a.workspace-info-check-row {
 }
 .pr-body-top {
 	margin-top: -6px;
-}
-
-.pr-body-text {
-	margin: 0;
-	padding: 4px 12px 12px;
-	font-family: var(--sans);
-	font-size: 12px;
-	color: var(--text-dim);
-	white-space: pre-wrap;
-	word-break: break-word;
-	max-height: 280px;
-	overflow-y: auto;
 }
 
 /* Markdown-rendered PR description (inherits .markdown for headings/lists/code). */
@@ -7405,254 +5720,15 @@ a.workspace-info-check-row {
 	color: var(--accent);
 	white-space: nowrap;
 }
-
-.btn-open-pr {
-	display: block;
-	text-align: center;
-	background: var(--accent);
-	color: var(--on-accent);
-	text-decoration: none;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 9px;
-	font-size: 13px;
-	font-weight: 500;
-}
-.btn-open-pr:hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
-}
-
-/* PR action row (Open on GitHub / Squash & merge / Open session) */
-.pr-actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	align-items: stretch;
-}
-.pr-actions .btn-open-pr {
-	flex: 1;
-	min-width: 150px;
-}
-
-.btn-merge-pr {
-	flex: 1;
-	min-width: 150px;
-	text-align: center;
-	background: #238636;
-	color: #fff;
-	border: none;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 9px;
-	font-size: 13px;
-	font-weight: 500;
-	cursor: pointer;
-}
-.btn-merge-pr:hover:not(:disabled) {
-	background: #2ea043;
-}
-.btn-merge-pr:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
-.btn-merge-confirm {
-	background: #cf222e;
-}
-.btn-merge-confirm:hover:not(:disabled) {
-	background: #e5484d;
-}
-
-.btn-open-session {
-	background: var(--bg-active);
-	color: var(--text);
-	border: 1px solid var(--border);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 9px 14px;
-	font-size: 13px;
-	cursor: pointer;
-}
-.btn-open-session:hover {
-	background: var(--hover);
-}
-
-.pr-merge-error {
-	color: var(--red);
-	font-size: 12px;
-	background: var(--red-soft);
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	padding: 8px 10px;
-}
-
-/* ── PR panel: Linear-style cards (Status / Reviewers / Checks / Files) ──── */
-
-/* Header: title + one meta line (author · #num · base ← head · +/−). */
-.prc-header {
-	display: flex;
-	flex-direction: column;
-	gap: 5px;
-}
-.prc-title {
-	font-size: 15px;
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	line-height: 1.3;
-	color: var(--text);
-	text-decoration: none;
-}
-.prc-title:hover {
-	color: var(--link);
-}
-.prc-meta {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 8px;
-	font-size: 12px;
-	color: var(--text-faint);
-	font-variant-numeric: tabular-nums;
-}
-.prc-meta-author {
-	color: var(--text-dim);
-	font-weight: 500;
-}
-.prc-meta-branches {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	min-width: 0;
-}
-.prc-branch {
-	font-size: 11px;
-	color: var(--text-dim);
-	background: var(--bg-active);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 1px 6px;
-	max-width: 130px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.prc-branch-arrow {
-	color: var(--text-faint);
-}
-.prc-meta-diffstat {
-	display: inline-flex;
-	gap: 6px;
-	font-variant-numeric: tabular-nums;
-	font-weight: 600;
-}
-.prc-add {
-	color: var(--green);
-}
-.prc-del {
-	color: var(--red);
-}
-
-/* The card: a titled, bordered surface — the Linear right-rail module. */
-.prc-card {
-	border: 1px solid var(--border);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-panel);
-	overflow: hidden;
-}
-.prc-card-head {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 9px 12px;
-	min-height: 22px;
-}
-.prc-card-title {
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: -0.005em;
-	color: var(--text-faint);
-	white-space: nowrap;
-}
-.prc-card-body {
-	display: flex;
-	flex-direction: column;
-	padding: 0 6px 6px;
-	gap: 1px;
-}
-/* Card with no title-only content still needs its rows to breathe. */
-.prc-card-head + .prc-card-body:empty {
-	display: none;
-}
-
-/* A collapse toggle sitting on the right of a card head. */
-.prc-card-toggle {
-	margin-left: auto;
-	display: inline-flex;
-	align-items: center;
-	gap: 10px;
-	background: none;
-	border: none;
-	padding: 0;
-	cursor: pointer;
-	color: var(--text-dim);
-	font: inherit;
-}
 .prc-chevron {
 	color: var(--text-faint);
 	font-size: 10px;
-}
-.prc-checks-rollup {
-	font-size: 12px;
-	font-weight: 600;
 }
 .prc-checks-counts {
 	display: inline-flex;
 	gap: 8px;
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
-}
-
-/* Compact action row at the top of the panel — primary merge + quiet pills. */
-.prc-actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	align-items: center;
-}
-.prc-btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	border: 1px solid var(--border);
-	background: var(--bg-panel);
-	color: var(--text-dim);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 4px 10px;
-	font-size: 12px;
-	font-weight: 500;
-	line-height: 18px;
-	cursor: pointer;
-	text-decoration: none;
-	white-space: nowrap;
-}
-.prc-btn:hover {
-	background: var(--hover);
-	color: var(--text);
-}
-.prc-btn-primary {
-	background: var(--accent);
-	border-color: var(--accent);
-	color: var(--on-accent);
-}
-.prc-btn-primary:hover:not(:disabled) {
-	background: var(--accent);
-	color: var(--on-accent);
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
-}
-.prc-btn-primary:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
-.prc-btn-confirm {
-	background: var(--red);
-	border-color: var(--red);
-}
-.prc-btn-confirm:hover:not(:disabled) {
-	background: var(--red);
 }
 
 /* Checks rollup row — the whole card body when collapsed (Linear's "All passed"). */
@@ -7695,236 +5771,6 @@ a.workspace-info-check-row {
 	font-weight: 600;
 }
 
-/* Head-right diffstat label (not a button). */
-.prc-head-diffstat {
-	margin-left: auto;
-	font-size: 11px;
-}
-
-/* "Show all N files" expander at the foot of a long files card. */
-.prc-show-more {
-	background: none;
-	border: none;
-	padding: 5px 6px;
-	font-size: 12px;
-	font-weight: 500;
-	color: var(--text-faint);
-	cursor: pointer;
-	text-align: left;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-}
-.prc-show-more:hover {
-	background: var(--hover);
-	color: var(--text-dim);
-}
-
-/* Check rows sit denser inside a card than in the legacy checks panel. */
-.prc-card-body .pr-check {
-	font-size: 12px;
-	padding: 3px 6px;
-}
-.prc-card-body .pr-checks-group {
-	font-size: 11px;
-	font-weight: 600;
-	padding: 8px 6px 3px;
-}
-
-/* Status card */
-.prc-status-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 4px 6px;
-}
-.prc-state {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 13px;
-	font-weight: 600;
-}
-.prc-state svg {
-	flex-shrink: 0;
-}
-.prc-state-green {
-	color: var(--green);
-}
-.prc-state-purple {
-	color: var(--purple);
-}
-.prc-state-red {
-	color: var(--red);
-}
-.prc-state-yellow {
-	color: var(--yellow);
-}
-.prc-state-muted {
-	color: var(--text-dim);
-}
-.prc-badge {
-	font-size: 11px;
-	font-weight: 600;
-	padding: 2px 8px;
-	border-radius: 999px;
-}
-.prc-badge-green {
-	background: var(--green-soft);
-	color: var(--green);
-}
-.prc-badge-red {
-	background: var(--red-soft);
-	color: var(--red);
-}
-.prc-badge-yellow {
-	background: rgba(210, 153, 34, 0.16);
-	color: var(--yellow);
-}
-.prc-badge-muted {
-	background: var(--bg-active);
-	color: var(--text-dim);
-}
-
-/* Git-status rows inside the Status card (Push / Create PR / Resolve / …). */
-.prc-git-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 5px 6px;
-	font-size: 13px;
-	color: var(--text-dim);
-}
-/* Attention row (e.g. behind main) — lift the label out of the dim tone. */
-.prc-git-row-strong .prc-git-label {
-	color: var(--text);
-	font-weight: 500;
-}
-.prc-git-dot {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	flex-shrink: 0;
-	background: var(--text-faint);
-}
-.prc-git-label {
-	flex: 1;
-	min-width: 0;
-}
-.prc-action {
-	border: 1px solid var(--border-strong);
-	background: var(--bg-active);
-	color: var(--text);
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	padding: 3px 10px;
-	font-size: 12px;
-	font-weight: 500;
-	white-space: nowrap;
-	cursor: pointer;
-}
-.prc-action:hover:not(:disabled) {
-	background: var(--hover);
-	border-color: var(--text-faint);
-}
-.prc-action:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
-.prc-git-note {
-	padding: 4px 6px;
-	font-size: 12px;
-	color: var(--accent);
-}
-.prc-git-note-error {
-	color: var(--red);
-}
-
-/* Reviewers card */
-.prc-reviewer {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	padding: 5px 6px;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-}
-.prc-reviewer:hover {
-	background: var(--hover);
-}
-.prc-reviewer-avatar {
-	width: 20px;
-	height: 20px;
-	border-radius: 50%;
-	flex-shrink: 0;
-	object-fit: cover;
-}
-.prc-reviewer-avatar-fallback {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--bg-active);
-	color: var(--text-dim);
-	font-size: 10px;
-	font-weight: 700;
-}
-.prc-reviewer-name {
-	flex: 1;
-	min-width: 0;
-	font-size: 13px;
-	color: var(--text);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.prc-reviewer-state {
-	display: inline-flex;
-	flex-shrink: 0;
-}
-
-/* Files-changed card */
-.prc-file {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 4px 6px;
-	background: none;
-	border: none;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	font: inherit;
-	text-align: left;
-	cursor: pointer;
-}
-.prc-file:disabled {
-	cursor: default;
-}
-.prc-file:not(:disabled):hover {
-	background: var(--hover);
-}
-.prc-file-icon {
-	flex-shrink: 0;
-	color: var(--text-faint);
-}
-.prc-file-name {
-	flex: 1;
-	min-width: 0;
-	font-size: 12px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	direction: rtl; /* keep the filename visible, clip the leading dirs */
-	text-align: left;
-}
-.prc-file-dir {
-	color: var(--text-faint);
-}
-.prc-file-stat {
-	display: inline-flex;
-	gap: 6px;
-	flex-shrink: 0;
-	font-size: 11px;
-	font-weight: 600;
-	font-variant-numeric: tabular-nums;
-}
-
 /* Tone helpers shared by reviewer state, git dots, check rollups. */
 .prc-tone-green {
 	color: var(--green);
@@ -7934,71 +5780,6 @@ a.workspace-info-check-row {
 }
 .prc-tone-yellow {
 	color: var(--yellow);
-}
-.prc-tone-muted {
-	color: var(--text-faint);
-}
-.prc-git-dot.prc-tone-green {
-	background: var(--green);
-}
-.prc-git-dot.prc-tone-red {
-	background: var(--red);
-}
-.prc-git-dot.prc-tone-yellow {
-	background: var(--yellow);
-}
-.prc-git-dot.prc-tone-muted {
-	background: var(--text-faint);
-}
-
-/* Diff column head: Diff/Guide switcher + the pending-review hint. */
-.pr-diff-head {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin-bottom: 10px;
-}
-.pr-diff-head .pr-checks-title {
-	margin: 0;
-	min-width: 0;
-}
-.pr-diff-tabs {
-	display: inline-flex;
-	gap: 2px;
-	padding: 2px;
-	border-radius: calc(8px * var(--rf));
-	background: var(--surface);
-	flex-shrink: 0;
-}
-.pr-diff-tab {
-	appearance: none;
-	border: none;
-	background: transparent;
-	color: var(--text-dim);
-	font: inherit;
-	font-size: 12px;
-	font-weight: 600;
-	padding: 3px 10px;
-	border-radius: calc(6px * var(--rf));
-	cursor: pointer;
-}
-.pr-diff-tab:hover {
-	color: var(--text);
-}
-.pr-diff-tab.active {
-	background: var(--panel);
-	color: var(--text);
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-/* AI review guide — narrative sections, each with its own diff slice. */
-.pr-guide-status {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 18px 4px;
-	font-size: 12px;
-	color: var(--text-dim);
 }
 .pr-guide-section {
 	margin-bottom: 28px;
@@ -8478,111 +6259,6 @@ a.workspace-info-check-row {
 	justify-content: center;
 }
 
-/* ── Detail drawer ──────────────────────────────────────── */
-.reviews-drawer {
-	flex: 1 1 auto;
-	min-width: 0;
-	border-left: 1px solid var(--border);
-	background: var(--bg-panel);
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
-}
-.reviews-drawer-head {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--border);
-	flex-shrink: 0;
-}
-.reviews-drawer-close {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	background: none;
-	border: none;
-	color: var(--text-dim);
-	cursor: pointer;
-	flex-shrink: 0;
-}
-.reviews-drawer-close:hover {
-	background: var(--hover);
-	color: var(--text);
-}
-.reviews-drawer-back {
-	display: none;
-	align-items: center;
-	gap: 7px;
-	background: none;
-	border: none;
-	padding: 4px 6px;
-	margin: -4px 0 -4px -2px;
-	font: inherit;
-	font-size: 14px;
-	font-weight: 500;
-	color: var(--text);
-	cursor: pointer;
-}
-.reviews-drawer-back svg {
-	color: var(--text-dim);
-}
-.reviews-drawer-title {
-	flex: 1;
-	min-width: 0;
-	font-size: 13px;
-	font-weight: 600;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.reviews-drawer-body {
-	flex: 1;
-	min-height: 0;
-	overflow: hidden;
-}
-
-/* When a PR is open the list collapses to a compact rail (GitHub split view):
-   the diff is the hero, the list just keeps you oriented. */
-.reviews-has-detail .reviews-main {
-	flex: 0 0 360px;
-	border-right: 1px solid var(--border);
-}
-.reviews-has-detail .reviews-search {
-	display: none;
-}
-.reviews-has-detail .reviews-header {
-	padding: 14px 16px 0;
-}
-.reviews-has-detail .reviews-title {
-	font-size: 16px;
-}
-.reviews-has-detail .reviews-tabs {
-	overflow-x: auto;
-	margin: 0 -16px;
-	padding: 0 16px;
-}
-.reviews-has-detail .reviews-row {
-	grid-template-columns: 22px minmax(0, 1fr) auto;
-	gap: 10px;
-	padding: 10px 16px;
-}
-.reviews-has-detail .reviews-row-head,
-.reviews-has-detail .rv-state-label,
-.reviews-has-detail .rv-checks-bar,
-.reviews-has-detail .rv-c-review,
-.reviews-has-detail .rv-c-author,
-.reviews-has-detail .rv-c-changes,
-.reviews-has-detail .rv-c-updated {
-	display: none;
-}
-.reviews-has-detail .rv-checks-label {
-	font-size: 12px;
-}
-
 @media (max-width: 1180px) {
 	.reviews-row {
 		grid-template-columns: 88px minmax(0, 1fr) 150px 118px 78px;
@@ -8826,39 +6502,6 @@ a.workspace-info-check-row {
 	overflow-anchor: none;
 }
 
-/* "Load earlier history" — shown when the initial view is only the tail of a
-   large transcript. Excluded from scroll anchoring so the click-to-expand keeps
-   the reader's place via the content below it. */
-.load-history {
-	display: flex;
-	justify-content: center;
-	/* .viewer-messages already pads its top to clear the floating tab strip, so
-	   this only needs its own small breathing room as the first row. */
-	padding: 4px 0 14px;
-	overflow-anchor: none;
-}
-.load-history-btn {
-	font: inherit;
-	font-size: 12px;
-	color: var(--text-dim);
-	background: var(--bg-raised);
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	padding: 5px 14px;
-	cursor: pointer;
-	transition:
-		background var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease);
-}
-.load-history-btn:hover:not(:disabled) {
-	background: var(--hover);
-	color: var(--text);
-}
-.load-history-btn:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
-
 /* Bottom spacer that lets the latest turn reach the top of the viewport. Height is
    set imperatively by the scroll hook; no transition so it tracks streaming exactly. */
 .turn-spacer {
@@ -8866,54 +6509,6 @@ a.workspace-info-check-row {
 	height: 0;
 	pointer-events: none;
 	overflow-anchor: none;
-}
-
-/* Make it easy to return to the latest reply (principles 8 & 9). Floats just
-   above the composer; appears only when the reader has scrolled away. */
-.jump-latest {
-	position: absolute;
-	left: 50%;
-	/* Sit the pill above the composer's top edge with a little breathing room —
-	   a small fixed lift, not keyed to --session-under (that pushed it too far up
-	   over the transcript). */
-	bottom: 24px;
-	transform: translateX(-50%);
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	padding: 8px 14px;
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text);
-	background: var(--bg-raised);
-	border: 1px solid var(--border);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: var(--control-shadow);
-	cursor: pointer;
-	z-index: 5;
-	animation: jump-rise var(--dur) var(--ease);
-	transition:
-		background var(--dur-micro) var(--ease),
-		border-color var(--dur-micro) var(--ease);
-}
-.jump-latest:hover {
-	border-color: var(--accent);
-	background: var(--hover);
-}
-.jump-latest-arrow {
-	font-size: 14px;
-	line-height: 1;
-}
-/* Content arrived out of view — draw the eye. Blue, not the accent: the accent
-   is ink now, so an "unread" pill would have been the same colour as the idle
-   one it replaces, and only the pulsing arrow would have said anything. */
-.jump-latest-new,
-.jump-latest-new:hover {
-	border-color: var(--blue);
-	color: var(--blue);
-}
-.jump-latest-new .jump-latest-arrow {
-	animation: pulse 1s ease-in-out infinite;
 }
 
 @keyframes jump-rise {
@@ -8978,10 +6573,6 @@ a.workspace-info-check-row {
 .msg-user .msg-images,
 .msg-human .msg-images {
 	justify-content: flex-end;
-}
-.msg-label-assistant::before {
-	border-radius: 50%;
-	background: linear-gradient(135deg, #ff5a5a, #b00000);
 }
 
 .msg-body {
@@ -9081,10 +6672,6 @@ a.workspace-info-check-row {
 	height: 7px;
 }
 
-.msg-busy-inline .queue-count {
-	color: var(--text-faint);
-}
-
 .msg-system {
 	text-align: center;
 	/* `auto` left/right keeps this in the same centered column as user/assistant
@@ -9144,13 +6731,6 @@ a.workspace-info-check-row {
 .msg-system-text[data-tone="warn"] {
 	color: var(--yellow);
 	background: color-mix(in srgb, var(--yellow) 12%, transparent);
-}
-
-.app-title-wrap {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
 }
 
 /* "A new version is available" toast, docked to the sidebar bottom (see UpdatePill.tsx).
@@ -9342,17 +6922,6 @@ a.workspace-info-check-row {
 	justify-content: center;
 	background: color-mix(in srgb, var(--bg) 72%, transparent);
 	backdrop-filter: blur(2px);
-}
-.session-delete-card {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 14px;
-	padding: 26px 32px;
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 .session-delete-label {
 	font-size: 13px;
@@ -9657,92 +7226,6 @@ a.pr-ref:hover {
 	flex-direction: column;
 }
 
-.home-inner {
-	max-width: 760px;
-	width: 100%;
-	/* Center the start screen vertically, nudged up for optical balance. */
-	margin: auto;
-	padding: 24px 24px 10vh;
-}
-
-.home-hello {
-	font-size: 14px;
-	color: var(--text-dim);
-	margin-bottom: 6px;
-	text-align: center;
-}
-
-.home-greeting {
-	font-size: 24px;
-	font-weight: 600;
-	letter-spacing: -0.02em;
-	margin-bottom: 18px;
-	text-align: center;
-}
-
-.ask-box {
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-	padding: 12px;
-	transition: border-color var(--dur-micro) var(--ease);
-}
-.ask-box:focus-within {
-	border-color: var(--accent);
-}
-
-.ask-input {
-	width: 100%;
-	background: none;
-	border: none;
-	color: var(--text);
-	font-size: 14px;
-	line-height: 1.5;
-	resize: none;
-	outline: none;
-	padding: 2px 4px 8px;
-}
-.ask-input::placeholder {
-	color: var(--text-faint);
-}
-
-.ask-actions {
-	display: flex;
-	justify-content: space-between;
-	gap: 10px;
-}
-
-.btn-task {
-	background: none;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	padding: 7px 14px;
-	font-size: 13px;
-	font-weight: 500;
-}
-.btn-task:hover {
-	color: var(--text);
-	border-color: var(--text-faint);
-}
-
-.btn-ask {
-	background: var(--accent);
-	color: var(--on-accent);
-	border: none;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 7px 22px;
-	font-size: 13px;
-	font-weight: 600;
-}
-.btn-ask:disabled {
-	opacity: 0.4;
-	cursor: default;
-}
-.btn-ask:not(:disabled):hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
-}
-
 .ask-error {
 	margin-top: 10px;
 	padding: 7px 10px;
@@ -9751,90 +7234,6 @@ a.pr-ref:hover {
 	color: var(--red);
 	font-size: 12px;
 	text-align: center;
-}
-
-.ask-suggestions {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: center;
-	gap: 7px;
-	margin-top: 12px;
-}
-
-.ask-suggestion {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	color: var(--text-dim);
-	font-size: 12px;
-	padding: 5px 12px;
-	max-width: 100%;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.ask-suggestion:hover {
-	color: var(--text);
-	border-color: var(--border-strong);
-	background: var(--hover);
-}
-
-.ask-suggestion-dot {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	flex-shrink: 0;
-}
-
-/* Ambient status line under the start-screen suggestions. */
-.home-whisper {
-	display: flex;
-	justify-content: center;
-	align-items: center;
-	gap: 8px;
-	margin-top: 28px;
-	font-size: 12px;
-	color: var(--text-faint);
-}
-.home-whisper-part {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	color: inherit;
-	font-size: inherit;
-}
-.home-whisper-part + .home-whisper-part::before {
-	content: "·";
-	margin-right: 8px;
-	color: var(--text-faint);
-}
-.home-whisper-part .working-dot {
-	width: 6px;
-	height: 6px;
-}
-button.home-whisper-link {
-	background: none;
-	border: none;
-	padding: 0;
-	cursor: pointer;
-}
-button.home-whisper-link:hover {
-	color: var(--text);
-}
-
-.home-section {
-	margin-bottom: 26px;
-}
-
-.home-section-title {
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-	color: var(--text-faint);
-	margin-bottom: 8px;
 }
 
 .home-rows {
@@ -9869,33 +7268,12 @@ button.home-whisper-link:hover {
 	gap: 4px;
 }
 
-.home-row-titleline {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	min-width: 0;
-}
-
 .home-row-title {
 	font-size: 13px;
 	font-weight: 500;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-}
-
-/* Unread activity since you last opened the session — a solid iMessage/WhatsApp
-   -style accent dot (no pulse; it's a marker, not a live-status indicator). */
-.home-row-unread-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	flex-shrink: 0;
-	background: var(--accent);
-}
-.home-row-unread .home-row-title {
-	font-weight: 600;
-	color: var(--text);
 }
 
 .home-row-meta {
@@ -9907,68 +7285,10 @@ button.home-whisper-link:hover {
 	min-width: 0;
 }
 
-.home-row-branch {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
 .home-empty {
 	color: var(--text-faint);
 	font-size: 13px;
 	padding: 14px 4px;
-}
-
-.status-pill {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: 11px;
-	font-weight: 700;
-	padding: 3px 10px;
-	border-radius: 999px;
-	flex-shrink: 0;
-	min-width: 70px;
-	justify-content: center;
-}
-.status-green {
-	background: var(--green-soft);
-	color: var(--green);
-}
-.status-blue {
-	background: var(--blue-soft);
-	color: var(--blue);
-}
-.status-purple {
-	background: rgba(163, 113, 247, 0.16);
-	color: var(--purple);
-}
-.status-red {
-	background: var(--red-soft);
-	color: var(--red);
-}
-.status-yellow {
-	background: rgba(210, 153, 34, 0.15);
-	color: var(--yellow);
-}
-.status-gray {
-	background: var(--bg-active);
-	color: var(--text-faint);
-}
-
-.pin-btn {
-	color: var(--text-faint);
-	font-size: 15px;
-	padding: 4px 6px;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	flex-shrink: 0;
-}
-.pin-btn:hover {
-	color: var(--yellow);
-	background: var(--hover-strong);
-}
-.pin-active {
-	color: var(--yellow);
 }
 
 /* Work blocks + tool calls are Tailwind-styled in WorkBlock.tsx /
@@ -9978,92 +7298,6 @@ button.home-whisper-link:hover {
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-/* ── Spin-off menu ───────────────────────────────────────── */
-
-.spinoff {
-	position: relative;
-}
-
-.spinoff-form {
-	position: absolute;
-	top: calc(100% + 6px);
-	right: 0;
-	z-index: 50;
-	width: 380px;
-	max-width: 90vw;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
-	padding: 14px;
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-
-.spinoff-form-title {
-	font-weight: 600;
-	font-size: 13px;
-}
-
-.spinoff-form label {
-	display: flex;
-	flex-direction: column;
-	gap: 5px;
-	font-size: 12px;
-	font-weight: 500;
-	color: var(--text-dim);
-}
-
-.spinoff-form input,
-.spinoff-form textarea {
-	background: var(--bg-raised);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	padding: 7px 10px;
-	font-size: 13px;
-	outline: none;
-}
-.spinoff-form input:focus,
-.spinoff-form textarea:focus {
-	border-color: var(--accent);
-}
-.spinoff-form textarea {
-	resize: vertical;
-	line-height: 1.45;
-}
-
-.spinoff-form-actions {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
-}
-
-.spinoff-note {
-	color: var(--text-faint);
-	font-size: 11px;
-}
-
-/* automation webhook row */
-.automation-webhook {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 10px;
-	padding-top: 10px;
-	border-top: 1px solid var(--border);
-	min-width: 0;
-}
-
-.automation-webhook-label {
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-	color: var(--text-faint);
-	flex-shrink: 0;
 }
 
 .automation-webhook-url {
@@ -10086,36 +7320,6 @@ button.home-whisper-link:hover {
 	font-size: 11px;
 	line-height: 1.55;
 	background: #08080a;
-}
-
-.terminal-entry {
-	margin-bottom: 12px;
-}
-
-.terminal-cmd {
-	color: var(--text);
-	white-space: pre-wrap;
-	word-break: break-word;
-	font-weight: 600;
-}
-
-.terminal-prompt {
-	color: var(--green);
-}
-
-.terminal-output {
-	margin: 4px 0 0;
-	color: var(--text-dim);
-	white-space: pre-wrap;
-	word-break: break-word;
-	max-height: 360px;
-	overflow-y: auto;
-}
-
-.terminal-running {
-	color: var(--yellow);
-	margin-top: 4px;
-	animation: pulse 1.4s infinite;
 }
 
 /* ── Tool calls (rows styled in ToolCallBlock.tsx) ───────── */
@@ -10233,43 +7437,6 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	/* It lies over the transcript — selecting and scrolling must go through it. */
 	pointer-events: none;
 	background: var(--wash-down);
-}
-
-.viewer-input-row {
-	display: flex;
-	gap: 10px;
-	align-items: flex-end;
-	max-width: var(--session-col);
-	margin: 0 auto;
-}
-
-/* Live cost/context pill, aligned under the composer's right edge. */
-.viewer-usage-row {
-	display: flex;
-	justify-content: flex-end;
-	max-width: var(--session-col);
-	margin: 4px auto 0;
-	padding: 0 2px;
-}
-
-.prompt-input {
-	flex: 1;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	padding: 10px 14px;
-	font-size: 13px;
-	line-height: 1.5;
-	resize: vertical;
-	min-height: 44px;
-	outline: none;
-}
-.prompt-input:focus {
-	border-color: var(--accent);
-}
-.prompt-input::placeholder {
-	color: var(--text-faint);
 }
 
 .btn-send {
@@ -10763,9 +7930,6 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .composer.composer-min .composer-voice-wrap {
 	order: 3;
 }
-.composer.composer-min .composer-send-queue {
-	order: 4;
-}
 .composer.composer-min .composer-send-split {
 	order: 5;
 }
@@ -10964,52 +8128,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	flex-shrink: 1;
 	min-width: 0;
 }
-.composer-toolbar .palette-effort-icon {
-	flex-shrink: 0;
-}
-
-.composer-model {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	position: relative;
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	padding: 3px 9px 3px 9px;
-	color: var(--text-dim);
-	font-size: 12px;
-	max-width: 240px;
-	transition:
-		border-color var(--dur-micro) var(--ease),
-		color var(--dur-micro) var(--ease);
-}
-.composer-model:hover {
-	border-color: var(--text-faint);
-	color: var(--text);
-}
-.composer-model select {
-	appearance: none;
-	-webkit-appearance: none;
-	background: none;
-	border: none;
-	outline: none;
-	color: inherit;
-	font-size: 12px;
-	font-weight: 500;
-	cursor: pointer;
-	max-width: 180px;
-	text-overflow: ellipsis;
-	padding-right: 2px;
-}
-.composer-model select:disabled {
-	cursor: default;
-	opacity: 0.7;
-}
-.composer-model-chevron {
-	font-size: 9px;
-	color: var(--text-faint);
-	pointer-events: none;
-}
 /* The one filled control in the toolbar, and the one place a circle is right.
    It was briefly folded onto the shared control corner on the argument that
    nothing else in the app is round — which had it backwards. The disc is the
@@ -11043,11 +8161,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .composer-send:not(:disabled):hover {
 	filter: brightness(1.12);
 	transform: scale(1.05);
-}
-.composer-send-queue {
-	background: var(--bg-raised);
-	color: var(--text-dim);
-	border: 1px solid var(--border-strong);
 }
 /* The queue state is a ring rather than a plate, so it needs the weight to
    register at 32px — at 1px it read as a disabled send rather than a different
@@ -11083,14 +8196,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	display: inline-flex;
 	align-items: stretch;
 	flex-shrink: 0;
-}
-.composer-send-split.has-menu .composer-send {
-	width: 34px;
-	border-radius: calc(14px * var(--rf)) 0 0 calc(14px * var(--rf)); corner-shape: var(--cs);
-}
-.composer-send-split.has-menu .composer-send:not(:disabled):hover {
-	/* No scale on a fused half — it would tear the seam open. */
-	transform: none;
 }
 .composer-schedule-wrap {
 	position: relative;
@@ -11149,14 +8254,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 .composer-send-caret.is-open svg {
 	transform: rotate(180deg);
-}
-/* Busy → the caret matches the interrupt-red send half. */
-.composer-send-split.is-interrupt .composer-send-caret {
-	background: var(--red-soft);
-	color: var(--red);
-}
-.composer-send-split.is-interrupt .composer-send-caret::before {
-	background: rgba(248, 81, 73, 0.4);
 }
 .composer-schedule-badge {
 	position: absolute;
@@ -11358,26 +8455,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	margin-top: 7px;
 }
 
-.chip-fallback {
-	opacity: 0.65;
-}
-
-.prompt-hint {
-	color: var(--text-faint);
-	font-size: 11px;
-	margin-top: 5px;
-}
-
-.input-busy {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	color: var(--text-dim);
-	font-size: 13px;
-	max-width: var(--session-col);
-	margin: 0 auto;
-}
-
 .pulse-dot {
 	width: 8px;
 	height: 8px;
@@ -11390,43 +8467,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text-faint);
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
-}
-
-.btn-cancel {
-	margin-left: auto;
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	background: none;
-	border: 1px solid transparent;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-faint);
-	padding: 5px 12px;
-	font-size: 12px;
-	font-weight: 500;
-	cursor: pointer;
-	transition:
-		color var(--dur-micro) var(--ease),
-		background var(--dur-micro) var(--ease),
-		border-color var(--dur-micro) var(--ease);
-}
-.btn-cancel-icon {
-	width: 8px;
-	height: 8px;
-	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
-	background: currentColor;
-}
-.btn-cancel:hover {
-	color: var(--red);
-	background: var(--red-soft);
-	border-color: var(--red-soft);
-}
-
-.input-disabled {
-	color: var(--text-faint);
-	font-size: 13px;
-	max-width: var(--session-col);
-	margin: 0 auto;
 }
 
 /* ── New session form ────────────────────────────────────── */
@@ -11454,78 +8494,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	background: var(--hover);
 }
 
-.new-session-form {
-	max-width: 560px;
-	width: 100%;
-	margin: 32px auto;
-	padding: 0 20px;
-	display: flex;
-	flex-direction: column;
-	gap: 18px;
-}
-
-.new-session-form label {
-	display: flex;
-	flex-direction: column;
-	gap: 7px;
-	font-size: 13px;
-	font-weight: 500;
-	color: var(--text-dim);
-}
-
-.new-session-form .label-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-.new-session-form .branch-suggesting {
-	font-weight: 500;
-	font-size: 12px;
-	color: var(--text-dim);
-	opacity: 0.8;
-}
-
-.new-session-form select,
-.new-session-form input,
-.new-session-form textarea {
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	padding: 10px 12px;
-	font-size: 13px;
-	outline: none;
-}
-.new-session-form select:focus,
-.new-session-form input:focus,
-.new-session-form textarea:focus {
-	border-color: var(--accent);
-}
-
-.new-session-form textarea {
-	resize: vertical;
-	line-height: 1.5;
-	width: 100%;
-	box-sizing: border-box;
-}
-
-.btn-create {
-	background: var(--accent);
-	color: var(--on-accent);
-	border: none;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	padding: 11px;
-	font-size: 14px;
-	font-weight: 500;
-}
-.btn-create:disabled {
-	opacity: 0.4;
-	cursor: default;
-}
-.btn-create:not(:disabled):hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
-}
-
 .form-error {
 	background: var(--red-soft);
 	border: 1px solid rgba(248, 81, 73, 0.4);
@@ -11533,12 +8501,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
 	padding: 10px 12px;
 	font-size: 13px;
-}
-
-.create-note {
-	color: var(--text-faint);
-	font-size: 12px;
-	text-align: center;
 }
 
 /* ── Automations ─────────────────────────────────────────── */
@@ -11566,21 +8528,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	font-size: 19px;
 	font-weight: 600;
 	letter-spacing: -0.01em;
-}
-
-.page-sub {
-	color: var(--text-faint);
-	font-size: 12px;
-	margin-top: 4px;
-}
-
-/* Archived-page filter bar: segmented owner (Mine / Everyone) + repo controls. */
-.archived-filters {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 10px;
-	margin: -6px 0 18px;
 }
 .seg-control {
 	display: inline-flex;
@@ -11633,9 +8580,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
 	padding: 14px 16px;
 }
-.automation-disabled {
-	opacity: 0.55;
-}
 
 .automation-top {
 	display: flex;
@@ -11657,27 +8601,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	display: flex;
 	gap: 6px;
 	flex-shrink: 0;
-}
-
-.btn-small {
-	background: none;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	padding: 3px 10px;
-	font-size: 12px;
-}
-.btn-small:hover {
-	color: var(--text);
-	border-color: var(--text-faint);
-}
-.btn-small:disabled {
-	opacity: 0.4;
-	cursor: default;
-}
-.btn-small-danger:hover {
-	color: var(--red);
-	border-color: var(--red);
 }
 
 .auto-toggle {
@@ -11965,24 +8888,10 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	flex-direction: column;
 	gap: 14px;
 }
-.automations-drawer-chips {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 8px;
-}
 .automations-drawer-section-label {
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--text-faint);
-}
-/* The card list clamps prompts to two lines — the drawer shows the whole thing. */
-.automation-prompt.automations-drawer-prompt {
-	display: block;
-	-webkit-line-clamp: unset;
-	white-space: pre-wrap;
-	overflow: visible;
-	margin: 0;
 }
 
 /* Inline edit hosted in the drawer: drop the form's card chrome — the drawer
@@ -12004,7 +8913,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .automations-page-has-detail .automations-page-inner {
 	max-width: none;
 }
-.automations-page-has-detail .page-sub,
 .automations-page-has-detail .automations-row-graph,
 .automations-page-has-detail .automations-row-next {
 	display: none;
@@ -12080,139 +8988,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	margin: 0 auto;
 }
 
-.conn-section-title {
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-	color: var(--text-faint);
-	margin: 22px 0 10px;
-}
-
-.conn-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-	gap: 10px;
-}
-
-.conn-card {
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	padding: 14px;
-	min-width: 0;
-}
-
-.conn-card-top {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin-bottom: 8px;
-}
-
-.conn-logo {
-	width: 28px;
-	height: 28px;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	font-weight: 700;
-	font-size: 13px;
-	color: #fff;
-	background: var(--bg-active);
-	flex-shrink: 0;
-}
-.conn-logo-slack {
-	background: #4a154b;
-}
-.conn-logo-linear {
-	background: #5e6ad2;
-}
-.conn-logo-plain {
-	background: #0d9488;
-}
-.conn-logo-sentry {
-	background: #584774;
-}
-.conn-logo-workos {
-	background: #6363f1;
-}
-.conn-logo-tinybird {
-	background: #27f795;
-	color: #08080a;
-}
-
-.conn-name {
-	font-weight: 600;
-	font-size: 14px;
-	text-transform: capitalize;
-	flex: 1;
-	min-width: 0;
-}
-
-.conn-blurb {
-	color: var(--text-dim);
-	font-size: 12px;
-	line-height: 1.45;
-	margin-bottom: 8px;
-}
-
-.conn-detail {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 11px;
-	color: var(--text-faint);
-	min-width: 0;
-}
-
-.conn-transport {
-	background: var(--bg-active);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 1px 6px;
-	flex-shrink: 0;
-}
-
-.conn-target {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-}
-
-.conn-error {
-	margin-top: 8px;
-	color: var(--red);
-	font-size: 11px;
-}
-
-.conn-remove {
-	margin-top: 10px;
-	background: none;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-faint);
-	padding: 2px 9px;
-	font-size: 11px;
-}
-.conn-remove:hover {
-	color: var(--red);
-	border-color: var(--red);
-}
-
-.conn-footnote {
-	margin-top: 24px;
-	color: var(--text-faint);
-	font-size: 12px;
-}
-.conn-footnote code {
-	font-family: var(--mono);
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 1px 5px;
-}
-
 /* ── Wiki ────────────────────────────────────────────────── */
 
 .wiki {
@@ -12270,42 +9045,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	/* The tree's shadow styles use light-dark(); force the dark arm —
      the app is dark-only regardless of OS preference */
 	color-scheme: dark;
-}
-
-.wiki-dir,
-.wiki-file {
-	display: block;
-	width: 100%;
-	text-align: left;
-	background: none;
-	border: none;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	font-size: 13px;
-	padding: 5px 8px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.wiki-dir {
-	font-weight: 600;
-	color: var(--text);
-}
-.wiki-dir:hover,
-.wiki-file:hover {
-	background: var(--hover);
-}
-.wiki-file-selected,
-.wiki-file-selected:hover {
-	background: var(--accent-soft);
-	color: var(--text);
-}
-
-.wiki-chevron {
-	display: inline-block;
-	width: 13px;
-	font-size: 9px;
-	color: var(--text-faint);
 }
 
 .wiki-empty {
@@ -12681,9 +9420,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		box-shadow: -10px 0 28px rgba(0, 0, 0, 0.35);
 	}
 
+	
 	/* The drawer affordances are gone in the page model. */
-	.hamburger,
-	.sidebar-overlay {
+.sidebar-overlay {
 		display: none;
 	}
 
@@ -12896,11 +9635,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		pointer-events: auto;
 		cursor: pointer;
 		-webkit-tap-highlight-color: transparent;
-	}
-	.app-header-title-caret {
-		flex-shrink: 0;
-		opacity: 0.5;
-		color: var(--text-dim);
 	}
 	.app-header-title-tappable:active .app-header-title-text {
 		opacity: 0.6;
@@ -13153,14 +9887,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		line-height: 16px;
 		color: var(--text-dim);
 	}
-	/* Repo chip: tile + name, sized to the thin subtitle line. */
-	.header-sessionbar-repo {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		min-width: 0;
-		max-width: 45vw;
-	}
 	.header-sessionbar-model {
 		min-width: 0;
 		max-width: 45vw;
@@ -13189,32 +9915,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	   popup, and the composer's meter still shows it on wider screens. */
 	.header-sessionbar .sessionbar-usage .usage-cache-rate {
 		display: none;
-	}
-	/* Model line as a tap target: a compact label + chevron with a full-bleed
-	   transparent native <select> over it (opens the OS picker). Kept tiny to
-	   read as a subtitle until tapped. */
-	.header-model-select {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		gap: 3px;
-		max-width: 100%;
-		color: var(--text-dim);
-	}
-	.header-model-label {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.header-model-chevron {
-		flex-shrink: 0;
-		opacity: 0.6;
-	}
-	/* Grow the touch area past the thin text line without shifting layout. */
-	.header-model-select .palette-select-overlay {
-		top: -8px;
-		bottom: -8px;
-		height: auto;
 	}
 	/* The title now lives in the top bar — the in-page copy under it is
 	   duplicate chrome. */
@@ -13343,49 +10043,11 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		display: inline-flex;
 		align-items: center;
 	}
-	/* The ⋯ is the phone's main gateway to session actions, so give it a real
-	   iOS-style circular touch target (matching .mobile-search-btn) with a
-	   larger glyph — the tiny 18px text-only button read as an afterthought. */
-	.viewer-header-actions .btn-viewer-overflow {
-		width: 40px;
-		height: 40px;
-		min-height: 40px;
-		padding: 0;
-		font-size: 24px;
-		border-radius: 50%;
-		border-color: var(--border);
-		/* White floating bubble matching the Back bubble + title pill. */
-		background: var(--bg);
-		color: var(--accent);
-		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-	}
-	.viewer-header-actions .btn-viewer-overflow.active {
-		background: var(--accent-soft);
-		border-color: var(--accent-soft);
-	}
-	/* Icon-only workspace toggle on phones — the label is kept on desktop */
-	.btn-panel-toggle-label {
-		display: none;
-	}
-	/* Make the Workspace toggle the one standout control — it's how you reach the
-     diff / terminal / PR on a phone. (Scoped to .btn-workspace so the Spin-off
-     trigger, which shares .btn-panel-toggle, stays neutral.) */
-	.viewer-header-actions .btn-workspace {
-		order: 2;
-		color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 12%, transparent);
-		padding: 5px 7px;
-		font-size: 15px;
-	}
-	.viewer-header-actions .btn-workspace.active {
-		background: color-mix(in srgb, var(--accent) 12%, transparent);
-		color: var(--accent);
-	}
 
+	
 	/* The keyboard-shortcut hint is irrelevant on touch and eats vertical space
      right where the keyboard appears — hide it. */
-	.composer-hint,
-	.prompt-hint {
+.composer-hint {
 		display: none;
 	}
 
@@ -13400,11 +10062,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		   session (not the composer) so the transcript's matching bottom inset
 		   reads the same number. */
 		--wash-depth: 40px;
-	}
-	/* Sit the pill just above the composer's top edge — a small fixed lift, not
-	   keyed to --session-under (that pushed it too far up over the transcript). */
-	.jump-latest {
-		bottom: 24px;
 	}
 
 	.viewer-messages {
@@ -13504,25 +10161,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		mask-image: none;
 	}
 
+	
 	/* 16px stops iOS Safari from zooming into focused inputs, and reads at a
 	   comfortable iOS body size. Includes the in-session composer textarea — the
 	   primary session input — which otherwise zoomed on focus at 13.5px, and the
 	   Plain reply box now that Conversation is a primary phone surface. */
-	.prompt-input,
-	.composer-textarea,
-	.ask-input,
-	.plain-reply-textarea,
-	.new-session-form select,
-	.new-session-form input,
-	.new-session-form textarea {
+.composer-textarea,
+	.plain-reply-textarea {
 		font-size: 16px;
-	}
-
-	.home-inner {
-		padding: 24px 14px 8vh;
-	}
-	.home-greeting {
-		font-size: 21px;
 	}
 	.home-row {
 		padding: 12px 11px;
@@ -13533,10 +10179,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 	.home-row-meta {
 		font-size: 12px;
-	}
-	.status-pill {
-		min-width: 0;
-		padding: 3px 8px;
 	}
 
 	.automations {
@@ -13566,14 +10208,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.btn-send {
 		padding: 10px 14px;
 	}
-	.prompt-hint {
-		display: none;
-	}
-
-	/* Keep the home Ask toolbar on one tidy row */
-	.btn-task {
-		white-space: nowrap;
-	}
 	.composer-toolbar {
 		gap: 6px;
 	}
@@ -13599,23 +10233,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.msg-body {
 		font-size: 14px;
 		line-height: 24px;
-	}
-
-	.diff-patch {
-		font-size: 11px;
-	}
-	.diff-files {
-		padding: 6px 6px 20px;
-	}
-
-	.pr-panel {
-		padding: 10px;
-	}
-
-	.new-session-form {
-		margin: 16px auto;
-		/* Clear the home indicator / nav so the Start button isn't flush to the edge. */
-		padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
 	}
 
 	.user-gate-card {
@@ -13709,16 +10326,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		background: var(--bg);
 		min-height: var(--header-h);
 	}
-	/* In that solid state the controls sit ON the bar, not floating over the
-	   transcript — so drop their white-bubble fill, border and shadow. The Back
-	   chevron, the title and the ⋯ read as flat bar controls instead of white
-	   chips on a white bar. (Single-session keeps the floating bubbles.) */
-	.app:has(.session-tab-view) .app-header-overlay :is(.mobile-back, .app-header-title, .btn-viewer-overflow),
-	.app:has(.session-tab-reorder ~ .session-tab-reorder) .app-header-overlay :is(.mobile-back, .app-header-title, .btn-viewer-overflow) {
-		background: transparent;
-		border-color: transparent;
-		box-shadow: none;
-	}
 	/* View-tab panes (Review/Conversation/Staging/Assets — .viewer-review-main
 	   in a session, .workspace-view-main on the session-less workspace route) fill
 	   the pane from the very top. Unlike the transcript, they don't self-pad
@@ -13730,14 +10337,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.viewer-review-main,
 	.workspace-view-main {
 		padding-top: calc(var(--pane-header-h) + var(--strip-clearance, 0px));
-	}
-
-	/* Brand logo in the top bar. */
-	.app-brand .app-title-wrap {
-		display: contents;
-	}
-	.app-brand .app-title {
-		order: 1;
 	}
 	.app-brand > button[aria-label="Account menu"],
 	.app-brand > button[aria-label="Settings"] {
@@ -13761,19 +10360,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		padding: 0 18px;
 		font-size: 15px;
 	}
-	.app-title {
-		font-size: 16px;
-	}
-
-	/* Hamburger: bigger bars and a 44px tap target. */
-	.hamburger {
-		gap: 5px;
-		padding: 10px;
-	}
-	.hamburger span {
-		width: 22px;
-		height: 2.5px;
-	}
 
 	/* Composer send / attach / toolbar icon buttons — larger circles and icons
 	   that clear the 44pt guideline once padding is counted. */
@@ -13786,10 +10372,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		width: 24px;
 		height: 24px;
 	}
-	.composer-attach-btn {
-		width: 36px;
-		height: 36px;
-	}
 	.palette-icon-btn {
 		width: 40px;
 		height: 40px;
@@ -13797,13 +10379,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.palette-icon-btn svg {
 		width: 20px;
 		height: 20px;
-	}
-	.composer-model {
-		font-size: 13px;
-		padding: 5px 11px;
-	}
-	.composer-model select {
-		font-size: 13px;
 	}
 }
 
@@ -14396,53 +10971,6 @@ html[data-theme="light"] .md-mermaid {
 	padding: 0;
 }
 
-.composer-attach-row {
-	margin-top: 8px;
-}
-.btn-attach {
-	background: none;
-	border: 1px solid var(--border-strong);
-	color: var(--text-dim);
-	font-size: 13px;
-	padding: 6px 12px;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	cursor: pointer;
-}
-.btn-attach:hover:not(:disabled) {
-	color: var(--text);
-	background: var(--hover);
-}
-.btn-attach:disabled {
-	opacity: 0.5;
-	cursor: default;
-}
-
-/* Round attach button in the in-session composer toolbar */
-.composer-attach-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	background: none;
-	color: var(--text-dim);
-	font-size: 14px;
-	line-height: 1;
-	cursor: pointer;
-	flex-shrink: 0;
-}
-.composer-attach-btn:hover:not(:disabled) {
-	color: var(--text);
-	border-color: var(--border-strong);
-	background: var(--hover);
-}
-.composer-attach-btn:disabled {
-	opacity: 0.5;
-	cursor: default;
-}
-
 /* Non-image file attachments: preview cards (type badge + name + remove) */
 .composer-files {
 	display: flex;
@@ -14528,16 +11056,6 @@ html[data-theme="light"] .md-mermaid {
 .composer-toolbar .composer-add-btn {
 	margin-left: -6px;
 }
-.composer-goal-btn.is-on {
-	width: auto;
-	gap: 5px;
-	padding: 0 9px;
-	color: var(--accent);
-}
-.composer-goal-label {
-	font-size: 12px;
-	font-weight: 500;
-}
 .composer-menu {
 	position: absolute;
 	bottom: calc(100% + 6px);
@@ -14586,99 +11104,6 @@ html[data-theme="light"] .md-mermaid {
 	width: 20px;
 	color: var(--text-dim);
 	font-size: 13px;
-}
-
-/* The session-goal editor is now the shared <Modal> primitive (ui/modal.tsx). */
-
-/* Fork mode banner above the composer */
-.fork-banner {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 7px 12px;
-	margin-bottom: 8px;
-	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-	background: color-mix(in srgb, var(--accent) 12%, transparent);
-	border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-	font-size: 12px;
-	color: var(--text);
-}
-.fork-banner-cancel {
-	border: none;
-	background: none;
-	color: var(--text-dim);
-	cursor: pointer;
-	font-size: 12px;
-}
-.fork-banner-cancel:hover {
-	color: var(--text);
-}
-
-.queue-count {
-	font-size: 11px;
-	color: var(--accent);
-	font-weight: 600;
-}
-
-/* ── Claude account pool (Connections page) ── */
-.conn-logo-claude {
-	background: #d97757;
-}
-
-.acct-usage-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-top: 8px;
-	font-size: 11px;
-	color: var(--text-dim);
-}
-
-.acct-usage-label {
-	width: 18px;
-	flex-shrink: 0;
-	color: var(--text-faint);
-}
-
-.acct-usage-bar {
-	flex: 1;
-	height: 6px;
-	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-active);
-	overflow: hidden;
-	min-width: 40px;
-}
-
-.acct-usage-fill {
-	height: 100%;
-	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
-	transition: width var(--dur-lg) var(--ease);
-}
-.acct-usage-green {
-	background: #34d399;
-}
-.acct-usage-yellow {
-	background: #fbbf24;
-}
-.acct-usage-red {
-	background: #f87171;
-}
-.acct-usage-gray {
-	background: var(--border);
-}
-
-.acct-usage-pct {
-	width: 34px;
-	text-align: right;
-	flex-shrink: 0;
-	font-variant-numeric: tabular-nums;
-}
-
-.acct-usage-reset {
-	color: var(--text-faint);
-	white-space: nowrap;
-	flex-shrink: 0;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -14851,9 +11276,6 @@ html[data-theme="light"] .md-mermaid {
 	min-height: 0;
 	overflow: hidden;
 }
-.note-cm .cm-editor {
-	height: 100%;
-}
 
 /* Inline @-mention chips */
 .note-chip {
@@ -14993,18 +11415,6 @@ html[data-theme="light"] .md-mermaid {
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-/* Note tabs in the tab bar + drag-reorder affordances */
-.session-tab-note .session-tab-glyph {
-	font-size: 12px;
-	margin-right: 2px;
-}
-.session-tab-dragging {
-	opacity: 0.45;
-}
-.session-tab-dragover {
-	box-shadow: inset 2px 0 0 var(--accent);
 }
 
 /* ── Plain conversation sidebar ──────────────────────────────────
@@ -15402,20 +11812,6 @@ html[data-theme="light"] .md-mermaid {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.palette-effort-icon {
-	display: inline-flex;
-	align-items: flex-end;
-	gap: 2px;
-	height: 15px;
-}
-.palette-effort-icon span {
-	width: 3.5px;
-	background: currentColor;
-	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
-}
-.palette-effort-icon span:nth-child(1) { height: 6px; }
-.palette-effort-icon span:nth-child(2) { height: 10px; }
-.palette-effort-icon span:nth-child(3) { height: 15px; }
 
 /* Connected-services picker (footer icon button). Desktop opens the shared
    Base UI Menu; the popover below is the phone-only full-width sheet. */
@@ -16084,39 +12480,11 @@ html.wco .settings-sidenav {
 	padding: 0;
 	min-height: 0;
 }
-.settings-panel {
-	width: 100%;
-	max-width: 720px;
-}
 .settings-panel-frame {
 	width: 100%;
 	max-width: 720px;
 	padding-bottom: 88px;
 	align-self: flex-start;
-}
-.settings-title {
-	font-size: 24px;
-	font-weight: 700;
-	letter-spacing: -0.02em;
-	color: var(--text);
-	margin: 0 0 20px;
-	padding: 0 10px;
-}
-.settings-group-label {
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--text-faint);
-	margin: 22px 0 8px;
-	padding: 0 10px;
-}
-/* Panel-level intro/description text and hints sit directly on the surface (not
-   inside a card), so they'd otherwise butt against the rounded card edge — give
-   them the same 6px inset as the labels. In-card descriptions are padded by
-   .setting-row, so scope this to direct children of the panel only. */
-.settings-panel > .setting-row-desc,
-.settings-panel > .settings-hint {
-	padding-left: 10px;
-	padding-right: 10px;
 }
 
 /* On phones Settings renders as a bottom sheet (Settings.tsx MobileSettings)
@@ -16129,111 +12497,12 @@ html.wco .settings-sidenav {
 .settings-sheet .settings-panel-frame {
 	padding-bottom: 48px;
 }
-.settings-sheet .settings-title {
-	display: none;
-}
 
 .setting-card {
 	background: var(--bg-panel);
 	border: 1px solid var(--border);
 	border-radius: calc(18px * var(--rf)); corner-shape: var(--cs);
 	overflow: hidden;
-}
-.setting-row {
-	display: flex;
-	align-items: center;
-	gap: 16px;
-	padding: 14px 16px;
-}
-.setting-row + .setting-row {
-	border-top: 1px solid var(--border);
-}
-.setting-row-text {
-	flex: 1;
-	min-width: 0;
-}
-.setting-row-title {
-	font-size: 14px;
-	font-weight: 500;
-	color: var(--text);
-}
-.setting-row-desc {
-	font-size: 12px;
-	color: var(--text-dim);
-	margin-top: 2px;
-}
-.setting-row-control {
-	flex-shrink: 0;
-}
-.setting-inline {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-/* Toggle switch */
-.ui-switch {
-	width: 38px;
-	height: 22px;
-	flex-shrink: 0;
-	padding: 0;
-	border: none;
-	border-radius: 999px;
-	corner-shape: round;
-	background: var(--bg-active);
-	position: relative;
-	cursor: pointer;
-	transition: background var(--dur-micro) var(--ease);
-}
-.ui-switch.on {
-	background: var(--accent);
-}
-.ui-switch-knob {
-	position: absolute;
-	top: 2px;
-	left: 2px;
-	width: 18px;
-	height: 18px;
-	border-radius: 50%;
-	background: #fff;
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-	transition: transform var(--dur-micro) var(--ease);
-}
-.ui-switch.on .ui-switch-knob {
-	transform: translateX(16px);
-}
-
-/* Native-ish select + Test button */
-.ui-select {
-	background: var(--bg-raised);
-	color: var(--text);
-	border: 1px solid var(--border);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	padding: 6px 10px;
-	font-size: 13px;
-	font-family: inherit;
-	cursor: pointer;
-}
-.ui-testbtn {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	background: none;
-	border: none;
-	cursor: pointer;
-	color: var(--text-dim);
-	font-size: 13px;
-	font-family: inherit;
-	padding: 6px;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-}
-.ui-testbtn:hover:not(:disabled) {
-	color: var(--text);
-	background: var(--hover);
-}
-.ui-testbtn:disabled {
-	opacity: 0.4;
-	cursor: default;
 }
 
 /* "Settings" entry in the product-menu dropdown */
@@ -16374,51 +12643,6 @@ html.wco .settings-sidenav {
 	white-space: nowrap;
 }
 .session-tab-new-menu-item:hover {
-	background: var(--hover);
-}
-/* Promote button on ask sessions (header, next to the ask chip). */
-.viewer-promote-btn {
-	flex: 0 0 auto;
-	font-size: 12px;
-	padding: 2px 8px;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid var(--border-strong);
-	background: var(--bg-panel);
-	color: var(--text);
-	cursor: pointer;
-	white-space: nowrap;
-}
-.viewer-promote-btn:hover {
-	border-color: var(--accent);
-	color: var(--link);
-}
-.viewer-promote-btn:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
-
-/* Lone-session "+ New tab" beside the session title — the tab strip's + relocated
-   here while the workspace has a single session. A quiet plus-only icon button, same
-   weight/footprint as the header ⋯ menu: no label, no border, hover-lit. */
-.viewer-newtab-btn {
-	flex: 0 0 auto;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	/* Tighter than the 3px 5px of its ▶/▐ row-mates: the plus glyph is drawn
-	   larger (size 28 — see SessionViewer) to match their visible weight, so the
-	   box is trimmed to keep the hover pill the same ~34px height as the sidebar
-	   toggle rather than ballooning taller. */
-	padding: 2px 4px;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid transparent;
-	background: none;
-	color: var(--text-dim);
-	line-height: 1;
-	cursor: pointer;
-}
-.viewer-newtab-btn:hover {
-	color: var(--text);
 	background: var(--hover);
 }
 
@@ -16694,41 +12918,6 @@ html.wco .settings-sidenav {
 	}
 }
 
-/* Conductor-style diff stat on workspace rows (repo grouping only): the row's
-   PR size, "+adds -dels", resting in the right slot the idle time badge would
-   occupy (the time drops to hover-reveal while this shows). Yields to the
-   hover actions like the count/time do. */
-.sidebar-ws-diff {
-	flex: 0 0 auto;
-	margin-left: auto;
-	display: inline-flex;
-	gap: 5px;
-	padding-right: 16px;
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-}
-.sidebar-ws-diff-add {
-	color: var(--green);
-}
-.sidebar-ws-diff-del {
-	color: var(--red);
-}
-/* A count/ticker already pushed the cluster to the right edge — keep a small
-   fixed gap instead of a second auto margin (two autos would split the free
-   space and strand a badge mid-row). Same for the badges after the stat. */
-.sidebar-group-count + .sidebar-ws-diff,
-.sidebar-ws-ticker + .sidebar-ws-diff {
-	margin-left: 6px;
-}
-.sidebar-ws-diff ~ .sidebar-ws-draft {
-	margin-left: 6px;
-}
-@media (hover: hover) {
-	.sidebar-ws-row:hover .sidebar-ws-diff {
-		display: none;
-	}
-}
-
 /* Wake countdown on a snoozed workspace row (moon + "1h"): it stands in for
    the idle time badge, so it rests in that same right-edge slot and matches
    its type — and yields it to the pin/archive actions on hover, like every
@@ -16749,7 +12938,6 @@ html.wco .settings-sidenav {
 .sidebar-ws-ticker + .sidebar-ws-snooze {
 	margin-left: 6px;
 }
-.sidebar-ws-snooze ~ .sidebar-ws-diff,
 .sidebar-ws-snooze ~ .sidebar-ws-draft {
 	margin-left: 6px;
 }
@@ -17669,150 +13857,12 @@ html.wco .settings-sidenav {
   }
 }
 
-/* ===== PIXEL SPINNER PATTERNS ===== */
-
-/* Wave Left-Right */
-.pixel-spinner.wave-lr .pixel:nth-child(1),
-.pixel-spinner.wave-lr .pixel:nth-child(4),
-.pixel-spinner.wave-lr .pixel:nth-child(7) {
-  animation-name: pixel-wave-trail-1;
-}
-.pixel-spinner.wave-lr .pixel:nth-child(2),
-.pixel-spinner.wave-lr .pixel:nth-child(5),
-.pixel-spinner.wave-lr .pixel:nth-child(8) {
-  animation-name: pixel-wave-trail-2;
-}
-.pixel-spinner.wave-lr .pixel:nth-child(3),
-.pixel-spinner.wave-lr .pixel:nth-child(6),
-.pixel-spinner.wave-lr .pixel:nth-child(9) {
-  animation-name: pixel-wave-trail-3;
-}
-
-/* Wave Top-Bottom */
-.pixel-spinner.wave-tb .pixel:nth-child(1),
-.pixel-spinner.wave-tb .pixel:nth-child(2),
-.pixel-spinner.wave-tb .pixel:nth-child(3) {
-  animation-name: pixel-wave-trail-1;
-}
-.pixel-spinner.wave-tb .pixel:nth-child(4),
-.pixel-spinner.wave-tb .pixel:nth-child(5),
-.pixel-spinner.wave-tb .pixel:nth-child(6) {
-  animation-name: pixel-wave-trail-2;
-}
-.pixel-spinner.wave-tb .pixel:nth-child(7),
-.pixel-spinner.wave-tb .pixel:nth-child(8),
-.pixel-spinner.wave-tb .pixel:nth-child(9) {
-  animation-name: pixel-wave-trail-3;
-}
-
-/* Ripple Out */
-.pixel-spinner.ripple-out .pixel:nth-child(5) {
-  animation-name: pixel-ripple-out-center;
-}
-.pixel-spinner.ripple-out .pixel:nth-child(2),
-.pixel-spinner.ripple-out .pixel:nth-child(4),
-.pixel-spinner.ripple-out .pixel:nth-child(6),
-.pixel-spinner.ripple-out .pixel:nth-child(8) {
-  animation-name: pixel-ripple-out-mid;
-}
-.pixel-spinner.ripple-out .pixel:nth-child(1),
-.pixel-spinner.ripple-out .pixel:nth-child(3),
-.pixel-spinner.ripple-out .pixel:nth-child(7),
-.pixel-spinner.ripple-out .pixel:nth-child(9) {
-  animation-name: pixel-ripple-out-outer;
-}
-
-/* Snake */
-.pixel-spinner.snake .pixel:nth-child(1) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 0ms;
-}
-.pixel-spinner.snake .pixel:nth-child(2) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 133ms;
-}
-.pixel-spinner.snake .pixel:nth-child(3) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 266ms;
-}
-.pixel-spinner.snake .pixel:nth-child(6) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 400ms;
-}
-.pixel-spinner.snake .pixel:nth-child(5) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 533ms;
-}
-.pixel-spinner.snake .pixel:nth-child(4) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 666ms;
-}
-.pixel-spinner.snake .pixel:nth-child(7) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 800ms;
-}
-.pixel-spinner.snake .pixel:nth-child(8) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 933ms;
-}
-.pixel-spinner.snake .pixel:nth-child(9) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 1066ms;
-}
-
-/* Spiral Clockwise */
-.pixel-spinner.spiral-cw .pixel:nth-child(1) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 0ms;
-}
-.pixel-spinner.spiral-cw .pixel:nth-child(2) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 133ms;
-}
-.pixel-spinner.spiral-cw .pixel:nth-child(3) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 266ms;
-}
-.pixel-spinner.spiral-cw .pixel:nth-child(6) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 400ms;
-}
-.pixel-spinner.spiral-cw .pixel:nth-child(9) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 533ms;
-}
-.pixel-spinner.spiral-cw .pixel:nth-child(8) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 666ms;
-}
-.pixel-spinner.spiral-cw .pixel:nth-child(7) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 800ms;
-}
-.pixel-spinner.spiral-cw .pixel:nth-child(4) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 933ms;
-}
-.pixel-spinner.spiral-cw .pixel:nth-child(5) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 1066ms;
-}
-
 /* Cross */
 .pixel-spinner.cross .pixel:nth-child(2),
 .pixel-spinner.cross .pixel:nth-child(4),
 .pixel-spinner.cross .pixel:nth-child(5),
 .pixel-spinner.cross .pixel:nth-child(6),
 .pixel-spinner.cross .pixel:nth-child(8) {
-  animation-name: pixel-pulse-trail;
-}
-
-/* X-Shape */
-.pixel-spinner.x-shape .pixel:nth-child(1),
-.pixel-spinner.x-shape .pixel:nth-child(3),
-.pixel-spinner.x-shape .pixel:nth-child(5),
-.pixel-spinner.x-shape .pixel:nth-child(7),
-.pixel-spinner.x-shape .pixel:nth-child(9) {
   animation-name: pixel-pulse-trail;
 }
 
@@ -17852,93 +13902,6 @@ html.wco .settings-sidenav {
   animation-delay: 900ms;
 }
 
-/* Checkerboard */
-.pixel-spinner.checkerboard .pixel:nth-child(1),
-.pixel-spinner.checkerboard .pixel:nth-child(3),
-.pixel-spinner.checkerboard .pixel:nth-child(5),
-.pixel-spinner.checkerboard .pixel:nth-child(7),
-.pixel-spinner.checkerboard .pixel:nth-child(9) {
-  animation-name: pixel-checker-a-trail;
-}
-.pixel-spinner.checkerboard .pixel:nth-child(2),
-.pixel-spinner.checkerboard .pixel:nth-child(4),
-.pixel-spinner.checkerboard .pixel:nth-child(6),
-.pixel-spinner.checkerboard .pixel:nth-child(8) {
-  animation-name: pixel-checker-b-trail;
-}
-
-/* Stripes Horizontal */
-.pixel-spinner.stripes-h .pixel:nth-child(1),
-.pixel-spinner.stripes-h .pixel:nth-child(2),
-.pixel-spinner.stripes-h .pixel:nth-child(3) {
-  animation-name: pixel-wave-trail-1;
-}
-.pixel-spinner.stripes-h .pixel:nth-child(4),
-.pixel-spinner.stripes-h .pixel:nth-child(5),
-.pixel-spinner.stripes-h .pixel:nth-child(6) {
-  animation-name: pixel-wave-trail-2;
-}
-.pixel-spinner.stripes-h .pixel:nth-child(7),
-.pixel-spinner.stripes-h .pixel:nth-child(8),
-.pixel-spinner.stripes-h .pixel:nth-child(9) {
-  animation-name: pixel-wave-trail-3;
-}
-
-/* Stripes Vertical */
-.pixel-spinner.stripes-v .pixel:nth-child(1),
-.pixel-spinner.stripes-v .pixel:nth-child(4),
-.pixel-spinner.stripes-v .pixel:nth-child(7) {
-  animation-name: pixel-wave-trail-1;
-}
-.pixel-spinner.stripes-v .pixel:nth-child(2),
-.pixel-spinner.stripes-v .pixel:nth-child(5),
-.pixel-spinner.stripes-v .pixel:nth-child(8) {
-  animation-name: pixel-wave-trail-2;
-}
-.pixel-spinner.stripes-v .pixel:nth-child(3),
-.pixel-spinner.stripes-v .pixel:nth-child(6),
-.pixel-spinner.stripes-v .pixel:nth-child(9) {
-  animation-name: pixel-wave-trail-3;
-}
-
-/* Rain */
-.pixel-spinner.rain .pixel:nth-child(1) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 0ms;
-}
-.pixel-spinner.rain .pixel:nth-child(4) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 133ms;
-}
-.pixel-spinner.rain .pixel:nth-child(7) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 266ms;
-}
-.pixel-spinner.rain .pixel:nth-child(2) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 400ms;
-}
-.pixel-spinner.rain .pixel:nth-child(5) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 533ms;
-}
-.pixel-spinner.rain .pixel:nth-child(8) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 666ms;
-}
-.pixel-spinner.rain .pixel:nth-child(3) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 800ms;
-}
-.pixel-spinner.rain .pixel:nth-child(6) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 933ms;
-}
-.pixel-spinner.rain .pixel:nth-child(9) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 1066ms;
-}
-
 /* Diagonal */
 .pixel-spinner.diagonal-br .pixel:nth-child(1) {
   animation-name: pixel-snake-trail;
@@ -17963,32 +13926,6 @@ html.wco .settings-sidenav {
 .pixel-spinner.diagonal-br .pixel:nth-child(9) {
   animation-name: pixel-snake-trail;
   animation-delay: 840ms;
-}
-
-/* Sidebar in-progress spinners — a touch larger and a bit faster than the
- * default so the "working right now" sessions read clearly at a glance in the
- * dense session list. The diagonal-br delays are scaled with the shortened
- * duration (0.82×) so the wave keeps its shape and just runs quicker. */
-.pixel-spinner.sidebar-spinner .pixel {
-  width: 3.5px;
-  height: 3.5px;
-  animation-duration: 1.15s;
-}
-.pixel-spinner.sidebar-spinner.diagonal-br .pixel:nth-child(2),
-.pixel-spinner.sidebar-spinner.diagonal-br .pixel:nth-child(4) {
-  animation-delay: 170ms;
-}
-.pixel-spinner.sidebar-spinner.diagonal-br .pixel:nth-child(3),
-.pixel-spinner.sidebar-spinner.diagonal-br .pixel:nth-child(5),
-.pixel-spinner.sidebar-spinner.diagonal-br .pixel:nth-child(7) {
-  animation-delay: 345ms;
-}
-.pixel-spinner.sidebar-spinner.diagonal-br .pixel:nth-child(6),
-.pixel-spinner.sidebar-spinner.diagonal-br .pixel:nth-child(8) {
-  animation-delay: 520ms;
-}
-.pixel-spinner.sidebar-spinner.diagonal-br .pixel:nth-child(9) {
-  animation-delay: 690ms;
 }
 
 /* Frame */
@@ -18023,105 +13960,6 @@ html.wco .settings-sidenav {
 .pixel-spinner.frame .pixel:nth-child(4) {
   animation-name: pixel-snake-trail;
   animation-delay: 700ms;
-}
-
-/* Breathe */
-.pixel-spinner.breathe .pixel {
-  animation-name: pixel-breathe-trail;
-}
-
-/* Orbit */
-.pixel-spinner.orbit .pixel:nth-child(1) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 0ms;
-}
-.pixel-spinner.orbit .pixel:nth-child(2) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 150ms;
-}
-.pixel-spinner.orbit .pixel:nth-child(3) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 300ms;
-}
-.pixel-spinner.orbit .pixel:nth-child(6) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 450ms;
-}
-.pixel-spinner.orbit .pixel:nth-child(9) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 600ms;
-}
-.pixel-spinner.orbit .pixel:nth-child(8) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 750ms;
-}
-.pixel-spinner.orbit .pixel:nth-child(7) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 900ms;
-}
-.pixel-spinner.orbit .pixel:nth-child(4) {
-  animation-name: pixel-snake-trail;
-  animation-delay: 1050ms;
-}
-
-/* Scan Horizontal */
-.pixel-spinner.scan-h .pixel:nth-child(1),
-.pixel-spinner.scan-h .pixel:nth-child(2),
-.pixel-spinner.scan-h .pixel:nth-child(3) {
-  animation-name: pixel-scan-line;
-  animation-delay: 0ms;
-}
-.pixel-spinner.scan-h .pixel:nth-child(4),
-.pixel-spinner.scan-h .pixel:nth-child(5),
-.pixel-spinner.scan-h .pixel:nth-child(6) {
-  animation-name: pixel-scan-line;
-  animation-delay: 400ms;
-}
-.pixel-spinner.scan-h .pixel:nth-child(7),
-.pixel-spinner.scan-h .pixel:nth-child(8),
-.pixel-spinner.scan-h .pixel:nth-child(9) {
-  animation-name: pixel-scan-line;
-  animation-delay: 800ms;
-}
-
-/* Scan Vertical */
-.pixel-spinner.scan-v .pixel:nth-child(1),
-.pixel-spinner.scan-v .pixel:nth-child(4),
-.pixel-spinner.scan-v .pixel:nth-child(7) {
-  animation-name: pixel-scan-line;
-  animation-delay: 0ms;
-}
-.pixel-spinner.scan-v .pixel:nth-child(2),
-.pixel-spinner.scan-v .pixel:nth-child(5),
-.pixel-spinner.scan-v .pixel:nth-child(8) {
-  animation-name: pixel-scan-line;
-  animation-delay: 400ms;
-}
-.pixel-spinner.scan-v .pixel:nth-child(3),
-.pixel-spinner.scan-v .pixel:nth-child(6),
-.pixel-spinner.scan-v .pixel:nth-child(9) {
-  animation-name: pixel-scan-line;
-  animation-delay: 800ms;
-}
-
-/* Loading Bar */
-.pixel-spinner.loading-bar .pixel:nth-child(1),
-.pixel-spinner.loading-bar .pixel:nth-child(4),
-.pixel-spinner.loading-bar .pixel:nth-child(7) {
-  animation-name: pixel-bar-fill;
-  animation-delay: 0ms;
-}
-.pixel-spinner.loading-bar .pixel:nth-child(2),
-.pixel-spinner.loading-bar .pixel:nth-child(5),
-.pixel-spinner.loading-bar .pixel:nth-child(8) {
-  animation-name: pixel-bar-fill;
-  animation-delay: 200ms;
-}
-.pixel-spinner.loading-bar .pixel:nth-child(3),
-.pixel-spinner.loading-bar .pixel:nth-child(6),
-.pixel-spinner.loading-bar .pixel:nth-child(9) {
-  animation-name: pixel-bar-fill;
-  animation-delay: 400ms;
 }
 
 /* Heartbeat */
@@ -18220,35 +14058,6 @@ html.wco .settings-sidenav {
 	min-height: 0;
 	display: flex;
 	flex-direction: column;
-}
-.viewer-review-main > .pr-panel {
-	flex: 1;
-	min-height: 0;
-}
-
-/* Prominent Review button in the Info panel head. */
-.workspace-info-review-btn {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 7px;
-	width: 100%;
-	margin-top: 10px;
-	padding: 9px 12px;
-	border: 1px solid var(--border);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-active);
-	color: var(--text);
-	font-size: 13px;
-	font-weight: 600;
-	cursor: pointer;
-	transition:
-		background var(--dur-micro) var(--ease),
-		border-color var(--dur-micro) var(--ease);
-}
-.workspace-info-review-btn:hover {
-	background: var(--hover);
-	border-color: var(--text-faint);
 }
 .transcript-settled {
 	content-visibility: auto;
