@@ -30,7 +30,7 @@ final class QueueMessageTests: XCTestCase {
 
     func testWorkerReportIsLabelledAndStripped() {
         let message = present("[worker os-42] <!--os:worker-report-->\nInspection complete.")
-        XCTAssertEqual(message.label, "🤖 Worker report")
+        XCTAssertEqual(message.label, "Worker report")
         XCTAssertEqual(message.body, "Inspection complete.")
     }
 
@@ -38,7 +38,7 @@ final class QueueMessageTests: XCTestCase {
         let message = present(
             "<!--os:worker-report:os-42--><!--os:workflow-notice:wf-1-->\n✅ Workflow finished"
         )
-        XCTAssertEqual(message.label, "🤖 Worker report")
+        XCTAssertEqual(message.label, "Worker report")
         XCTAssertEqual(message.body, "✅ Workflow finished")
     }
 
@@ -46,7 +46,7 @@ final class QueueMessageTests: XCTestCase {
         let message = present(
             "[Alex Rivera] <!--os:workflow-notice:wf-1-->\n✅ Workflow \"review\" finished"
         )
-        XCTAssertEqual(message.label, "⚙️ Workflow")
+        XCTAssertEqual(message.label, "Workflow")
         XCTAssertEqual(message.body, "✅ Workflow \"review\" finished")
     }
 
@@ -58,7 +58,7 @@ final class QueueMessageTests: XCTestCase {
 
     func testHumanReplyCreditsTheTeammate() {
         let message = present("💬 **Kent** answered your question\n\nShip it.")
-        XCTAssertEqual(message.label, "💬 Kent")
+        XCTAssertEqual(message.label, "Kent")
         XCTAssertEqual(message.body, "Ship it.")
     }
 

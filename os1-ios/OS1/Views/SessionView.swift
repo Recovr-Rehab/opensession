@@ -1797,16 +1797,20 @@ private struct SessionInputBar: View {
         // still read as two layers of one piece.
         .background(OS1VisualStyle.raised, in: flapShape)
         .overlay { flapShape.stroke(OS1VisualStyle.border, lineWidth: 0.5) }
-        .padding(.horizontal, 18)
+        // Flush with the composer, not inset from it: the flap is that same
+        // column continued upward, and an 18pt inset each side read as a
+        // second, narrower panel parked behind the input.
         .padding(.bottom, -14)
     }
 
+    /// Shares the composer's own corner now that it shares its edges — a
+    /// tighter radius on a box the same width read as a different surface.
     private var flapShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
-            topLeadingRadius: 20,
+            topLeadingRadius: composerCornerRadius,
             bottomLeadingRadius: 0,
             bottomTrailingRadius: 0,
-            topTrailingRadius: 20,
+            topTrailingRadius: composerCornerRadius,
             style: .continuous
         )
     }
@@ -2436,9 +2440,10 @@ private struct SessionInputBar: View {
             .contextMenu { rowActions }
         }
 
-        /// One control in the row's trailing cluster. 32pt of hit area around
-        /// a 13pt glyph — the most a flap row can give without pushing the
-        /// message into a column too narrow to read.
+        /// One control in the row's trailing cluster. 40pt of hit area around
+        /// a 16pt glyph: these are peers of the composer's own buttons a few
+        /// points below them, and at 32/13 they read as a smaller, more
+        /// tentative class of control on the one surface you act from.
         private func rowAction(
             _ symbol: String,
             _ label: String,
@@ -2446,9 +2451,9 @@ private struct SessionInputBar: View {
         ) -> some View {
             Button(action: action) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(OS1VisualStyle.textDim)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 40, height: 40)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)

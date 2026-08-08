@@ -36,13 +36,13 @@ struct QueueMessagePresentation: Equatable {
         // carries its own attribution prefix, which the generic strip below
         // would eat along with the name the chip wants to credit.
         if let match = Self.humanReply.match(content) {
-            label = "💬 \(match.groups.first ?? "Teammate")"
+            label = match.groups.first ?? "Teammate"
             body = Self.humanReplyHeader.stripPrefix(from: content)
             return
         }
 
         if let worker = Self.workerAttribution.match(content) {
-            label = "🤖 Worker report"
+            label = "Worker report"
             body = Self.stripLeadingSentinels(worker.rest)
             return
         }
@@ -53,9 +53,9 @@ struct QueueMessagePresentation: Equatable {
         // "[WIP] …" and must survive intact.
         let unprefixed = Self.attributionPrefix.match(content)?.rest ?? content
         if Self.workerSentinel.match(unprefixed) != nil {
-            label = "🤖 Worker report"
+            label = "Worker report"
         } else if Self.workflowSentinel.match(unprefixed) != nil {
-            label = "⚙️ Workflow"
+            label = "Workflow"
         } else if Self.sessionNoticeSentinel.match(unprefixed) != nil {
             label = "Heads-up from another session"
         } else if isGitHub {
