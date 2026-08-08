@@ -27,6 +27,7 @@ import {
 	SIDEBAR_HEADER_BTN_DESKTOP,
 	SIDEBAR_HEADER_BTN_PHONE,
 	SIDEBAR_RAIL,
+	SIDEBAR_REPO_TILE,
 	SIDEBAR_STATUS_DOT,
 	SIDEBAR_STICKY_BAND,
 	SIDEBAR_STICKY_BAND_ROW,
@@ -3313,7 +3314,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			let target = visibleOrder.indexOf(targetRepo);
 			if (target < 0) return;
 			const header = event.currentTarget.querySelector<HTMLElement>(
-				":scope > .sidebar-repo-head",
+				":scope > [data-sticky-head]",
 			);
 			const rect = (header ?? event.currentTarget).getBoundingClientRect();
 			if (event.clientY > rect.top + rect.height / 2) target++;
@@ -3350,7 +3351,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						)}
 					</div>
 				)}
-				<div className="sidebar-repo-order-list">
+				{/* Every band after the first opens with whitespace, whatever
+				    precedes it: a sibling band, this drag-reorder list, or the loose
+				    workspace rows above it. `+ band` only matched two bands with the
+				    same parent, so the feed projects (Plain, Slack) — which follow
+				    this list rather than sit inside it — started flush against the
+				    last workspace row of the band above and read as one more of its
+				    rows. The gap is wider than a band's own rows (2px) and its lane
+				    headers (8px) by enough to separate one project from the next. */}
+				<div className="[&:not(:first-child)]:mt-4">
 				{order.map((repo) => {
 				const rows = byRepo.get(repo) || [];
 				const snoozedRows = snoozedByRepo.get(repo) || [];
@@ -3377,10 +3386,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				return (
 					<div
 						className={cn(
-							"sidebar-repo-group",
+							"[&:not(:first-child)]:mt-4",
 							canReorder && "cursor-grab active:cursor-grabbing",
 							repoDragKey === repo &&
-								"[&>.sidebar-repo-head]:rounded-md [&>.sidebar-repo-head]:bg-hover [&>.sidebar-repo-head]:opacity-50 [&>.sidebar-repo-head]:ring-1 [&>.sidebar-repo-head]:ring-inset [&>.sidebar-repo-head]:ring-line-strong",
+								"[&>[data-sticky-head]]:rounded-md [&>[data-sticky-head]]:bg-hover [&>[data-sticky-head]]:opacity-50 [&>[data-sticky-head]]:ring-1 [&>[data-sticky-head]]:ring-inset [&>[data-sticky-head]]:ring-line-strong",
 						)}
 						key={gkey}
 						data-repo-id={repo}
@@ -3399,7 +3408,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							className={cn(
 								SIDEBAR_GROUP_HEADER,
 								SIDEBAR_GROUP_HEADER_INSET,
-								"sidebar-repo-head group transition-colors",
+								"group transition-colors",
 								SIDEBAR_STICKY_LANE,
 								SIDEBAR_STUCK_BACKING,
 							)}
@@ -3418,10 +3427,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onDragEnd={() => finishRepoDrag(false)}
 							onClick={() => toggleGroup(gkey)}
 						>
-							{/* The tile is 18px; the rail holds it on the same column
-							    (and text rail) as every other header's mark. */}
+							{/* The rail holds the tile on the same column (and text rail)
+							    as every other header's mark; the tile fills it. */}
 							<span className={SIDEBAR_RAIL}>
-								<RepoTile name={repo} />
+								<RepoTile name={repo} className={SIDEBAR_REPO_TILE} />
 							</span>
 							<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
 							{/* Count rides directly behind the repo name, not pinned right. */}
@@ -3465,7 +3474,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 						</button>
 						{open ? (
-							<div className="sidebar-repo-lanes">
+							<div className="mt-0.5">
 								{mode === "status"
 									? renderStatusLanes(
 											rows,
@@ -3491,7 +3500,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</div>
 						) : (
 							(selectedRows.length > 0 || selectedPrs.length > 0) && (
-								<div className="sidebar-repo-lanes">
+								<div className="mt-0.5">
 									{selectedRows.map(renderWsRow)}
 									{selectedPrs.map(renderPrRow)}
 								</div>
@@ -3666,7 +3675,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			</div>
 		);
 		const openBody = isPlain ? (
-			<div className="sidebar-repo-lanes">
+			<div className="mt-0.5">
 				{count === 0
 					? noMatches
 					: withLanes
@@ -3676,23 +3685,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								.map(renderSupportRow)}
 			</div>
 		) : (
-			<div className="sidebar-repo-lanes">
+			<div className="mt-0.5">
 				{count === 0 ? noMatches : items.map(renderRow)}
 			</div>
 		);
 		const collapsedBody = isPlain
 			? activeThreads.length > 0 && (
-					<div className="sidebar-repo-lanes">
+					<div className="mt-0.5">
 						{activeThreads.map(renderSupportRow)}
 					</div>
 				)
 			: activeItems.length > 0 && (
-					<div className="sidebar-repo-lanes">
+					<div className="mt-0.5">
 						{activeItems.map(renderRow)}
 					</div>
 				);
 		return (
-			<div className="sidebar-repo-group" key={gkey}>
+			<div className="[&:not(:first-child)]:mt-4" key={gkey}>
 				<ContextMenu.Root>
 					<ContextMenu.Trigger
 						render={
@@ -3700,7 +3709,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								className={cn(
 									SIDEBAR_GROUP_HEADER,
 								SIDEBAR_GROUP_HEADER_INSET,
-								"sidebar-repo-head group transition-colors",
+								"group transition-colors",
 									SIDEBAR_STICKY_LANE,
 									SIDEBAR_STUCK_BACKING,
 								)}
@@ -3710,7 +3719,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						}
 					>
 						<span className={SIDEBAR_RAIL}>
-							<RepoTile name={feed.id} />
+							<RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />
 						</span>
 						<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{feed.title}</span>
 						<span className="sidebar-group-count ml-0 pr-0">{count}</span>

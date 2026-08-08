@@ -23,6 +23,23 @@ export const SIDEBAR_RAIL =
 	"relative flex size-[22px] flex-[0_0_22px] items-center justify-center";
 
 /**
+ * The RepoTile a repo/feed band header leads with. It fills the 22px leading
+ * slot rather than riding centred inside it at its 18px default: centred, the
+ * tile's ink started 2px right of every other mark in the sidebar (the nav
+ * icons and the Pinned/Needs-review glyphs are 22px and start at the slot's own
+ * edge), which read as the repo band being indented under headers that aren't.
+ * At full size its left AND right edges land on theirs, and the letter scales
+ * with it.
+ *
+ * Passed as RepoTile's `className`, NOT as its `size`: `size` also recomputes
+ * the tile's radius (round(22 * 0.28) = 6px) as inline style, where the band
+ * header's tile keeps the `.repo-tile` base radius of 4px. The type size is
+ * arbitrary rather than `text-xs` because it is the tile's geometry — it tracks
+ * the 22px box, not the sidebar's type scale.
+ */
+export const SIDEBAR_REPO_TILE = "size-[22px] shrink-0 text-[13px]";
+
+/**
  * ── Group headers ───────────────────────────────────────────────────────────
  * The collapsible headings INSIDE the workspace list: Needs review, Pinned,
  * Archived, the repo bands, the automation groups. `group/gh` is what the

@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "../ui/cn";
 import { repoLetter } from "../lib/repo-label";
 import { REPO_TILE_INK, repoColor, repoIconFill, repoIconRevision } from "../lib/repo-colors";
 
@@ -26,14 +27,23 @@ const ICON_VERSION = 4;
 // `size` (px) shrinks it for tight spots like the phone header's model line;
 // omitted = the 18px default. `round` makes it a full circle (e.g. the phone
 // title pill, where it sits against the pill's own rounding).
+//
+// `className` is merged so a caller can adjust the tile in place instead of
+// reaching through `.repo-tile` from an ancestor's stylesheet — the sidebar's
+// repo bands wear a 22px tile that way. Note it cannot override what `size`
+// sets: those land as INLINE style below, which beats any utility. Geometry a
+// caller wants scaled proportionally (radius and letter together) belongs in
+// `size`; a caller that needs only some of it passes utilities here.
 export function RepoTile({
 	name,
 	size,
 	round,
+	className,
 }: {
 	name: string;
 	size?: number;
 	round?: boolean;
+	className?: string;
 }) {
 	// Failure is tracked per name AND icon revision, so a tile retries the img
 	// both when it switches repo and when this repo's art changes — a repo
@@ -53,7 +63,7 @@ export function RepoTile({
 	const attempt = `${name}:${rev ?? 0}`;
 	if (failedFor !== attempt) {
 		return (
-			<span className="repo-tile repo-tile--img" style={style}>
+			<span className={cn("repo-tile repo-tile--img", className)} style={style}>
 				<img
 					src={`/repo-icon/${encodeURIComponent(name)}.png?v=${ICON_VERSION}${
 						rev ? `&r=${rev}` : ""
@@ -71,7 +81,7 @@ export function RepoTile({
 	style.color = REPO_TILE_INK;
 	const letter = repoLetter(name);
 	return (
-		<span className="repo-tile" style={style}>
+		<span className={cn("repo-tile", className)} style={style}>
 			{letter}
 		</span>
 	);
