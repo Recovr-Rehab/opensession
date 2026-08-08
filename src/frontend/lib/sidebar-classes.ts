@@ -20,7 +20,7 @@
  * where a 22px box would be wrong.
  */
 export const SIDEBAR_RAIL =
-	"relative flex size-[22px] flex-none items-center justify-center";
+	"relative flex size-[22px] flex-[0_0_22px] items-center justify-center";
 
 /**
  * The live-state dot a row, group header or hover card carries, minus the
