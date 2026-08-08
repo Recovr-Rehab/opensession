@@ -1262,40 +1262,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		display: none;
 	}
 }
-/* On touch, the full action set (Rename / Move / Archive) is still reached by
-   long-pressing a row, which opens the mobile action sheet. */
-
-/* Mobile action sheet — a bottom sheet raised by long-pressing a session row.
-   Slides up over a dimmed backdrop; holds the per-session actions that live in
-   the desktop hover-X / right-click menu. */
-.mobile-action-sheet-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 4000;
-	background: rgba(0, 0, 0, 0.4);
-	animation: sheet-fade var(--dur) var(--ease);
-}
-.mobile-action-sheet {
-	position: fixed;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	z-index: 4001;
-	background: var(--bg-panel);
-	border-top-left-radius: 16px;
-	border-top-right-radius: 16px;
-	padding: 6px 10px calc(14px + env(safe-area-inset-bottom));
-	box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
-	animation: sheet-up var(--dur) var(--ease);
-}
-@keyframes sheet-fade {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
-	}
-}
 @keyframes sheet-up {
 	from {
 		transform: translateY(100%);
@@ -1303,53 +1269,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	to {
 		transform: translateY(0);
 	}
-}
-.mobile-sheet-grip {
-	width: 36px;
-	height: 4px;
-	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
-	background: var(--border-strong);
-	margin: 8px auto 6px;
-}
-.mobile-sheet-title {
-	font-size: 13px;
-	color: var(--text-faint);
-	padding: 6px 12px 8px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.mobile-sheet-item {
-	display: flex;
-	align-items: center;
-	gap: 13px;
-	width: 100%;
-	padding: 15px 14px;
-	font-size: 16px;
-	background: none;
-	border: none;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	text-align: left;
-	cursor: pointer;
-}
-.mobile-sheet-item:active {
-	background: var(--hover-strong);
-}
-.mobile-sheet-item svg {
-	flex: 0 0 auto;
-	color: var(--text-faint);
-}
-.mobile-sheet-item--danger {
-	color: #e5484d;
-}
-.mobile-sheet-item--danger svg {
-	color: #e5484d;
-}
-.mobile-sheet-sep {
-	height: 1px;
-	background: var(--border);
-	margin: 6px 10px;
 }
 .sidebar-status-running {
 	/* Yellow to match the "In progress" lane — green means "In review". */
