@@ -1,16 +1,16 @@
 /* ─────────────────────────────────────────────────────────────
    Tailwind v4 entry (CSS-first config — there is no tailwind.config.js).
 
-   Compiled by the @tailwindcss/cli step inside buildFrontend() (backstage.ts),
-   NOT by Bun — do not import this file from App.tsx; Bun's bundler would ship
-   the raw directives without running the Tailwind compiler. The compiled sheet
-   is linked AFTER base.css + legacy.css, and utilities are imported *unlayered*
-   below, so
-   a utility class wins a tie against the unlayered legacy.css rules by
-   source order. (Preflight is deliberately not imported: base.css was
-   written against browser defaults and a global reset would reskin the app.)
+   Compiled by the @tailwindcss/cli step inside buildFrontend()
+   (src/server/frontend-build.ts), NOT by Bun — do not import this file from
+   App.tsx; Bun's bundler would ship the raw directives without running the
+   Tailwind compiler. The compiled sheet is linked AFTER base.css + legacy.css,
+   and utilities are imported *unlayered* below, so a utility class wins a tie
+   against the unlayered legacy.css rules by source order. (Preflight is
+   deliberately not imported: base.css was written against browser defaults and
+   a global reset would reskin the app.)
 
-   BACKSTAGE_DEV=1 (HTML-import dev mode) doesn't run this compile step and
+   OPENSESSION_DEV=1 (HTML-import dev mode) doesn't run this compile step and
    gets no utilities — the prod path with in-process rebuilds is the dev loop.
    ───────────────────────────────────────────────────────────── */
 @import "tailwindcss/theme.css" layer(theme);
@@ -18,6 +18,22 @@
 
 /* Only scan the frontend tree for class names (not agents/server/prompts). */
 @source "../";
+
+/* The app's one breakpoint, as a variant rather than an arbitrary value.
+   `max-[720px]:` looks like the stylesheet's `@media (max-width: 720px)` but is
+   not: Tailwind compiles it to `not all and (min-width: 720px)`, i.e. < 720,
+   where the stylesheet's rule includes 720 exactly. Measured at 720px wide, on
+   /archived: sidebar row titles and archived row titles already paint their
+   desktop 14px/13px while group headers still paint their phone 16px and 11px
+   padding — the migrated families flip a pixel early and the unmigrated ones
+   don't, so the UI at exactly 720 is a mix of the two rather than either.
+
+   `phone:` is the stylesheet's semantics exactly; `desktop:` is its exact
+   complement, and the same query the `min-[721px]:` call sites already spell.
+   Prefer these for new and touched UI — one word, and the boundary stops
+   depending on which spelling a call site happened to use. */
+@custom-variant phone (@media (max-width: 720px));
+@custom-variant desktop (@media (min-width: 721px));
 
 /* Design tokens: map the existing base.css variables (which already carry
    dark/light theming via html[data-theme]) into Tailwind's namespace, so
