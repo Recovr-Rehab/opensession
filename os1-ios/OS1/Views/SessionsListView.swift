@@ -375,15 +375,17 @@ struct SessionsListView: View {
                             // margin left the mark on ~80% of the picture.
                             // The icon route now crops that margin off
                             // (png-trim.ts), so reproducing the old look
-                            // takes the inset back as `artScale`: the mark
-                            // measures 44 × 0.867 × 0.93 ≈ 35pt, exactly
-                            // what it did then, and the circle shaves its
-                            // corners exactly as much as it did then.
+                            // takes the inset back as `artScale`, a notch
+                            // under the 0.867 that reproduced it exactly:
+                            // the mark is solid ink against actions that are
+                            // a near-transparent capsule holding two ~22pt
+                            // glyphs, so at 35pt it still out-weighed them.
+                            // 44 × 0.78 × 0.93 ≈ 32pt.
                             RepoTile(
                                 name: "opensession",
                                 size: 44,
                                 round: true,
-                                artScale: 0.867
+                                artScale: 0.78
                             )
                         }
                         .accessibilityLabel("Settings")
