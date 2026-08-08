@@ -23,6 +23,73 @@ export const SIDEBAR_RAIL =
 	"relative flex size-[22px] flex-[0_0_22px] items-center justify-center";
 
 /**
+ * ── Group headers ───────────────────────────────────────────────────────────
+ * The collapsible headings INSIDE the workspace list: Needs review, Pinned,
+ * Archived, the repo bands, the automation groups. `group/gh` is what the
+ * chevron and the automation cog key their reveal off, so it has to ride on
+ * every one of them.
+ *
+ * Padding is deliberately not here — the Archived heading wears its own,
+ * and two utilities from the same group in one string would leave the winner
+ * to Tailwind's internal ordering rather than to the call site.
+ */
+export const SIDEBAR_GROUP_HEADER =
+	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim min-[721px]:text-[14px] hover:bg-hover hover:text-fg";
+
+/** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
+export const SIDEBAR_GROUP_HEADER_INSET =
+	"pt-[11px] pr-1 pb-[11px] pl-1 min-[721px]:pt-1 min-[721px]:pr-1.5 min-[721px]:pb-1 min-[721px]:pl-2.5";
+
+/**
+ * Status lanes, inbox bands and Snoozed — the groups nested inside a list or a
+ * project band. They label the rows rather than lead anywhere, so they read as
+ * captions: a size down from the rows, semibold to hold their own at that size,
+ * and no leading glyph at all (the rows under them already carry the status
+ * marks, and the lane's own name says what it is). Size and weight are what
+ * separate a caption from a title, not a third left edge. The phone size is one
+ * step up from the desktop caption so it survives arm's-length reading.
+ */
+export const SIDEBAR_LANE_HEADER =
+	"pt-[9px] pb-[5px] text-[13px] font-semibold min-[721px]:pt-1 min-[721px]:pb-1 min-[721px]:text-[12px]";
+
+/**
+ * The heading's own name. `truncate` before any width utility: it is the pair
+ * of overflow rules that makes the ellipsis, and a min-width of 0 is what lets
+ * a flex child shrink far enough to need one.
+ */
+export const SIDEBAR_GROUP_NAME = "min-w-0 truncate text-left";
+
+/**
+ * A glyph's 22px slot carries ~4px of its own padding before the ink starts, so
+ * a bare lane caption at the slot's box edge still sat 4px LEFT of every mark
+ * around it — the repo tile above read as indented against its own lanes. The
+ * pad goes on the label rather than the header, so it holds at both
+ * breakpoints and the hover pill keeps running the sidebar's full width.
+ */
+export const SIDEBAR_LANE_NAME = "pl-1";
+
+/**
+ * The collapse chevron. Revealed by the header's hover, and rotated to mark the
+ * collapsed state by the call site's inline transform.
+ */
+export const SIDEBAR_GROUP_CHEVRON =
+	"shrink-0 text-faint opacity-0 transition-[transform,opacity] group-hover/gh:text-fg group-hover/gh:opacity-100";
+
+/** The 7px liveness dot a lane or automation heading leads with. */
+export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
+
+/** The 22px glyph a top-level heading (Needs review, Pinned) leads with. */
+export const SIDEBAR_GROUP_ICON = "size-[22px] shrink-0 opacity-90";
+
+/**
+ * Automation headings swap their run count for a cog that jumps to that
+ * automation's settings. Hover-device only, like the row action clusters — on
+ * touch the count stays, because there is no hover to reveal the cog with.
+ */
+export const SIDEBAR_AUTO_COG =
+	"mt-[-4px] mr-0 mb-[-4px] ml-auto hidden size-6 shrink-0 cursor-pointer items-center justify-center rounded-[calc(6px*var(--rf))] text-dim group-hover/gh:inline-flex hover:bg-pressed hover:text-fg";
+
+/**
  * ── Sticky machinery ────────────────────────────────────────────────────────
  * The desktop sidebar is ONE scroll rail, and two tiers of heading pin inside
  * it: a band heading (Tools / Workspaces / Automations / People) holds the top

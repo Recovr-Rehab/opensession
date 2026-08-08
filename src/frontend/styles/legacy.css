@@ -313,17 +313,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	height: 22px;
 	font-size: 13px;
 }
-.sidebar-repo-head .sidebar-group-name {
-	font-weight: 600;
-	/* Hug the name's content so the count sits right behind it, but still allow
-	   truncation before it would collide with the trailing actions. */
-	flex: 0 1 auto;
-}
-/* Count rides directly behind the repo name (not pinned to the right edge). */
-.sidebar-repo-head .sidebar-group-count {
-	margin-left: 0;
-	padding-right: 0;
-}
 /* Needs-input count on a COLLAPSED repo band — urgent rows must not vanish
    inside a closed group. Wears the needs-input lane color. */
 .sidebar-repo-lanes {
@@ -348,133 +337,15 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	padding-bottom: 28px;
 }
 
-.sidebar-group-header {
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	width: 100%;
-	background: none;
-	border: none;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	font-size: 14px;
-	font-weight: 500;
-	letter-spacing: 0;
-	/* Left pad aligns the icon with a base row (list 6 + row/header 10 = 16). */
-	padding: 4px 6px 4px 10px;
-}
-.sidebar-group-header:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-
-/* Status lanes, Inbox bands and Snoozed — the groups nested inside a list or a
-   project band. They label the rows rather than lead anywhere, so they read as
-   captions: a size down from the rows, semibold to hold their own at that size,
-   and no leading glyph at all (the rows under them already carry the status
-   marks, and the lane's own name says what it is). With no glyph the label
-   starts at the leading-mark edge instead of the text rail — the same column
-   the repo tile above it and the nav icons start on — so a caption reads as
-   the divider over its rows rather than another row. Size and weight are what
-   separate it from the titles, not a third left edge. */
-.sidebar-lane-group > .sidebar-group-header {
-	font-size: 12px;
-	font-weight: 600;
-}
-/* A glyph's 22px slot carries ~4px of its own padding before the ink starts, so
-   a bare label at the slot's box edge still sat 4px LEFT of every mark around
-   it — the repo tile above read as indented against its own lanes. Pad the
-   label, not the header, so this holds at both breakpoints (the list's base
-   inset differs) and the hover pill keeps running the sidebar's full width. */
-.sidebar-lane-group > .sidebar-group-header > .sidebar-group-name {
-	padding-left: 4px;
-}
-
-.sidebar-group-chevron {
-	color: var(--text-faint);
-	flex-shrink: 0;
-	opacity: 0;
-	transition:
-		transform var(--dur-micro) var(--ease),
-		opacity var(--dur-micro) var(--ease);
-}
-.sidebar-group-header:hover .sidebar-group-chevron {
-	color: var(--text);
-	opacity: 1;
-}
-
-.sidebar-group-dot {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	flex-shrink: 0;
-	opacity: 0.85;
-}
-
-.sidebar-group-icon {
-	width: 22px;
-	height: 22px;
-	flex-shrink: 0;
-	opacity: 0.9;
-}
-
-.sidebar-group-name {
-	text-align: left;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-}
-
+/* The count on a group heading or a workspace row. Still legacy because the
+   row families position their trailing metadata against it as a sibling
+   (`.sidebar-group-count + .sidebar-ws-time`); it migrates with them. */
 .sidebar-group-count {
 	margin-left: auto;
 	padding-right: 4px;
 	color: var(--text-faint);
 	font-size: 12px;
 	font-weight: 500;
-}
-/* In the status lanes the count rides directly behind its label (like the repo
-   heads) rather than being pinned to the far right edge. The chevron that
-   follows takes the trailing space instead. */
-.sidebar-status-group .sidebar-group-count,
-.sidebar-group--pinned .sidebar-group-count,
-.sidebar-group--review .sidebar-group-count,
-.sidebar-archived-row .sidebar-group-count {
-	margin-left: 0;
-	padding-right: 0;
-}
-.sidebar-status-group .sidebar-group-chevron,
-.sidebar-group--pinned .sidebar-group-chevron,
-.sidebar-group--review .sidebar-group-chevron {
-	margin-left: auto;
-}
-
-/* Automation group headers: hovering swaps the run count for a cog that jumps
-   to that automation's settings (the Automations list + detail page). Gated to
-   real hover devices like .sidebar-ws-actions — on touch the count stays. */
-.sidebar-auto-cog {
-	display: none;
-	align-items: center;
-	justify-content: center;
-	width: 24px;
-	height: 24px;
-	margin: -4px 0 -4px auto;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	flex-shrink: 0;
-	cursor: pointer;
-}
-.sidebar-auto-cog:hover {
-	color: var(--text);
-	background: var(--hover-strong);
-}
-@media (hover: hover) {
-	.sidebar-group--automations .sidebar-group-header:hover .sidebar-group-count {
-		display: none;
-	}
-	.sidebar-group--automations .sidebar-group-header:hover .sidebar-auto-cog {
-		display: inline-flex;
-	}
 }
 
 /* 2px of breathing room between list rows — covers both the swipe-wrapped
@@ -2482,23 +2353,6 @@ body.resizing-tab-split {
      rounded corner; a slightly smaller circle + more right padding sits it
      fully inside. */
 @media (max-width: 720px) {
-	/* Group rows (automations, status lanes, Pinned/Archived/Open PRs) are tap
-	   targets just like workspace rows — same 16px text, taller rows. */
-	.sidebar-group-header {
-		font-size: 16px;
-		padding: 11px 8px 11px 6px;
-	}
-	/* …except the lane / band headers, which stay captions — see
-	   .sidebar-lane-group. Their phone size is one step up from the desktop
-	   caption so it survives arm's-length reading. */
-	.sidebar-lane-group > .sidebar-group-header {
-		font-size: 13px;
-		padding-top: 9px;
-		padding-bottom: 5px;
-	}
-	.sidebar-lane-group > .sidebar-group-header .sidebar-group-count {
-		font-size: 12px;
-	}
 	.sidebar-group-count {
 		font-size: 13px;
 	}
@@ -2575,8 +2429,6 @@ body.resizing-tab-split {
 	/* Once the outer surfaces share a gutter, use one symmetric inner inset for
 	   every row family too. This keeps People, workspace/status, pinned, repo,
 	   support, and automation marks and trailing metadata on common rails. */
-.sidebar-list .sidebar-group-header,
-	.sidebar-independent-section .sidebar-group-header,
 	.sidebar-independent-section .sidebar-people-row {
 		padding-right: 4px;
 		padding-left: 4px;

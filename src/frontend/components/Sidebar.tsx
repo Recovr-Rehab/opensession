@@ -13,7 +13,16 @@ import {
 	SIDEBAR_BAND_LABEL,
 	SIDEBAR_BAND_TOGGLE,
 	SIDEBAR_BAND_TOGGLE_INSET,
+	SIDEBAR_AUTO_COG,
 	SIDEBAR_FILTER_DOT,
+	SIDEBAR_GROUP_CHEVRON,
+	SIDEBAR_GROUP_DOT,
+	SIDEBAR_GROUP_HEADER,
+	SIDEBAR_GROUP_HEADER_INSET,
+	SIDEBAR_GROUP_ICON,
+	SIDEBAR_GROUP_NAME,
+	SIDEBAR_LANE_HEADER,
+	SIDEBAR_LANE_NAME,
 	SIDEBAR_HEADER_BTN,
 	SIDEBAR_HEADER_BTN_DESKTOP,
 	SIDEBAR_HEADER_BTN_PHONE,
@@ -2356,7 +2365,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<div className="sidebar-status-group">
 							<button
 								className={cn(
-									"sidebar-group-header flex w-full items-center gap-[9px] rounded-md px-[10px] py-1 text-[14px] font-medium text-dim transition-colors hover:bg-hover hover:text-fg",
+									SIDEBAR_GROUP_HEADER,
+									"rounded-md px-1 py-1 text-[14px] transition-colors min-[721px]:px-[10px]",
 									SIDEBAR_STICKY_LANE,
 									SIDEBAR_STUCK_BACKING,
 								)}
@@ -2377,10 +2387,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										<path d="M6.5 8.5h3" strokeLinecap="round" />
 									</svg>
 								</span>
-								<span className="sidebar-group-name">Archived</span>
-								<span className="sidebar-group-count">{archivedCount}</span>
+								<span className={SIDEBAR_GROUP_NAME}>Archived</span>
+								<span className="sidebar-group-count ml-0 pr-0">{archivedCount}</span>
 								<IconChevronDown
-									className="sidebar-group-chevron"
+									className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 									size={22}
 									style={{ transform: open ? "none" : "rotate(-90deg)" }}
 								/>
@@ -2998,13 +3008,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const gkey = `${ns}status:snoozed`;
 		const open = isOpen(gkey);
 		return (
-			<div className="sidebar-status-group sidebar-lane-group" key={gkey}>
+			<div className="sidebar-status-group" key={gkey}>
 				<button
-					// Same bare .sidebar-group-header as the lanes: utilities here
-					// would out-specify its phone/nesting overrides and leave this
-					// one header out of line with the rest.
 					className={cn(
-						"sidebar-group-header transition-colors",
+						SIDEBAR_GROUP_HEADER,
+						SIDEBAR_GROUP_HEADER_INSET,
+						SIDEBAR_LANE_HEADER,
+						"transition-colors",
 						SIDEBAR_STICKY_LANE,
 						ns && SIDEBAR_STICKY_LANE_NESTED,
 						SIDEBAR_STUCK_BACKING,
@@ -3012,10 +3022,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					data-sticky-head
 					onClick={() => toggleGroup(gkey)}
 				>
-					<span className="sidebar-group-name">Snoozed</span>
-					<span className="sidebar-group-count">{rows.length}</span>
+					<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>Snoozed</span>
+					<span className="sidebar-group-count ml-0 pr-0 text-[12px]">{rows.length}</span>
 					<IconChevronDown
-						className="sidebar-group-chevron"
+						className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 						size={22}
 						style={{ transform: open ? "none" : "rotate(-90deg)" }}
 					/>
@@ -3056,7 +3066,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const dropHover = dropEligible && laneDropHover?.gkey === gkey;
 			return (
 				<div
-					className={`sidebar-status-group sidebar-lane-group${
+					className={`sidebar-status-group${
 						dropEligible && items.length === 0 && prs.length === 0
 							? " is-lane-empty"
 							: ""
@@ -3067,11 +3077,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					data-lane-repo={dropEligible && laneRepo ? laneRepo : undefined}
 				>
 					<button
-						// Layout, padding and type all come from .sidebar-group-header —
-						// utilities here would out-specify its phone overrides and leave
-						// these two headers indented (and smaller) than the rest.
 						className={cn(
-							"sidebar-group-header transition-colors",
+							SIDEBAR_GROUP_HEADER,
+							SIDEBAR_GROUP_HEADER_INSET,
+							SIDEBAR_LANE_HEADER,
+							"transition-colors",
 							SIDEBAR_STICKY_LANE,
 							ns && SIDEBAR_STICKY_LANE_NESTED,
 							SIDEBAR_STUCK_BACKING,
@@ -3079,13 +3089,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						data-sticky-head
 						onClick={() => toggleGroup(gkey)}
 					>
-						<span className="sidebar-group-name">{meta.label}</span>
+						<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>{meta.label}</span>
 						{/* Count rides directly behind the lane name, not pinned right. */}
-						<span className="sidebar-group-count">
+						<span className="sidebar-group-count ml-0 pr-0 text-[12px]">
 							{items.length + prs.length}
 						</span>
 						<IconChevronDown
-							className="sidebar-group-chevron"
+							className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 							size={22}
 							style={{ transform: open ? "none" : "rotate(-90deg)" }}
 						/>
@@ -3177,12 +3187,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				const gkey = `${ns}inbox:${b.key}`;
 				const open = isOpen(gkey);
 				return (
-					<div className="sidebar-status-group sidebar-lane-group" key={gkey}>
+					<div className="sidebar-status-group" key={gkey}>
 						<button
-							// Bare .sidebar-group-header like the status lanes — see
-							// renderStatusLanes for why utilities stay off it.
 							className={cn(
-								"sidebar-group-header transition-colors",
+								SIDEBAR_GROUP_HEADER,
+								SIDEBAR_GROUP_HEADER_INSET,
+								SIDEBAR_LANE_HEADER,
+								"transition-colors",
 								SIDEBAR_STICKY_LANE,
 								ns && SIDEBAR_STICKY_LANE_NESTED,
 								SIDEBAR_STUCK_BACKING,
@@ -3190,12 +3201,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							data-sticky-head
 							onClick={() => toggleGroup(gkey)}
 						>
-							<span className="sidebar-group-name">{b.label}</span>
-							<span className="sidebar-group-count">
+							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>{b.label}</span>
+							<span className="sidebar-group-count ml-0 pr-0 text-[12px]">
 								{b.rows.length + b.prs.length}
 							</span>
 							<IconChevronDown
-								className="sidebar-group-chevron"
+								className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 								size={22}
 								style={{ transform: open ? "none" : "rotate(-90deg)" }}
 							/>
@@ -3386,7 +3397,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					>
 						<button
 							className={cn(
-								"sidebar-group-header sidebar-repo-head group transition-colors",
+								SIDEBAR_GROUP_HEADER,
+								SIDEBAR_GROUP_HEADER_INSET,
+								"sidebar-repo-head group transition-colors",
 								SIDEBAR_STICKY_LANE,
 								SIDEBAR_STUCK_BACKING,
 							)}
@@ -3410,9 +3423,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<span className={SIDEBAR_RAIL}>
 								<RepoTile name={repo} />
 							</span>
-							<span className="sidebar-group-name">{repoLabel(repo)}</span>
+							<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
 							{/* Count rides directly behind the repo name, not pinned right. */}
-							<span className="sidebar-group-count">
+							<span className="sidebar-group-count ml-0 pr-0">
 								{rows.length + snoozedRows.length + prs.length}
 							</span>
 							{/* Urgent rows must not vanish into a closed band — a collapsed
@@ -3426,7 +3439,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</span>
 							)}
 							<IconChevronDown
-								className="sidebar-group-chevron"
+								className={SIDEBAR_GROUP_CHEVRON}
 								size={22}
 								style={{ transform: open ? "none" : "rotate(-90deg)" }}
 							/>
@@ -3517,12 +3530,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const groupIsOpen = isOpen(gkey);
 			return (
 				<div
-					className="sidebar-status-group sidebar-lane-group"
+					className="sidebar-status-group"
 					key={`support-prio-${group.p}`}
 				>
 					<button
 						className={cn(
-							"sidebar-group-header",
+							SIDEBAR_GROUP_HEADER,
+							SIDEBAR_GROUP_HEADER_INSET,
+							SIDEBAR_LANE_HEADER,
 							SIDEBAR_STICKY_LANE,
 							nested && SIDEBAR_STICKY_LANE_NESTED,
 							SIDEBAR_STUCK_BACKING,
@@ -3531,15 +3546,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						onClick={() => toggleGroup(gkey)}
 					>
 						<span
-							className={`sidebar-group-name ${group.p <= 1 ? group.cls : ""}`}
+							className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME, group.p <= 1 && group.cls)}
 						>
 							{group.label}
 						</span>
-						<span className={`sidebar-group-count ${group.cls}`}>
+						<span className={cn("sidebar-group-count ml-0 pr-0 text-[12px]", group.cls)}>
 							{items.length}
 						</span>
 						<IconChevronDown
-							className="sidebar-group-chevron"
+							className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 							size={20}
 							style={{
 								transform: groupIsOpen ? "none" : "rotate(-90deg)",
@@ -3683,7 +3698,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						render={
 							<button
 								className={cn(
-									"sidebar-group-header sidebar-repo-head group transition-colors",
+									SIDEBAR_GROUP_HEADER,
+								SIDEBAR_GROUP_HEADER_INSET,
+								"sidebar-repo-head group transition-colors",
 									SIDEBAR_STICKY_LANE,
 									SIDEBAR_STUCK_BACKING,
 								)}
@@ -3695,8 +3712,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span className={SIDEBAR_RAIL}>
 							<RepoTile name={feed.id} />
 						</span>
-						<span className="sidebar-group-name">{feed.title}</span>
-						<span className="sidebar-group-count">{count}</span>
+						<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{feed.title}</span>
+						<span className="sidebar-group-count ml-0 pr-0">{count}</span>
 						{!open && attentionCount > 0 && (
 							<span
 								className={SIDEBAR_ATTN_COUNT}
@@ -3706,7 +3723,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 						)}
 						<IconChevronDown
-							className="sidebar-group-chevron"
+							className={SIDEBAR_GROUP_CHEVRON}
 							size={22}
 							style={{ transform: open ? "none" : "rotate(-90deg)" }}
 						/>
@@ -4378,7 +4395,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<div className="sidebar-group sidebar-group--review">
 								<button
 									className={cn(
-										"sidebar-group-header",
+										SIDEBAR_GROUP_HEADER,
+										SIDEBAR_GROUP_HEADER_INSET,
 										SIDEBAR_STICKY_LANE,
 										SIDEBAR_STUCK_BACKING,
 									)}
@@ -4386,15 +4404,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onClick={() => toggleGroup("needsreview")}
 								>
 									<IconBell
-										className="sidebar-group-icon"
+										className={SIDEBAR_GROUP_ICON}
 										style={{ color: "var(--accent)" }}
 									/>
-									<span className="sidebar-group-name">Needs review</span>
-									<span className="sidebar-group-count">
+									<span className={SIDEBAR_GROUP_NAME}>Needs review</span>
+									<span className="sidebar-group-count ml-0 pr-0">
 										{needsReviewRows.length + requestedPrItems.length}
 									</span>
 									<IconChevronDown
-										className="sidebar-group-chevron"
+										className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 										size={22}
 										style={{ transform: open ? "none" : "rotate(-90deg)" }}
 									/>
@@ -4421,7 +4439,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<div className="sidebar-group sidebar-group--review">
 								<button
 									className={cn(
-										"sidebar-group-header",
+										SIDEBAR_GROUP_HEADER,
+										SIDEBAR_GROUP_HEADER_INSET,
 										SIDEBAR_STICKY_LANE,
 										SIDEBAR_STUCK_BACKING,
 									)}
@@ -4429,15 +4448,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onClick={() => toggleGroup("awaitingreview")}
 								>
 									<IconEye
-										className="sidebar-group-icon"
+										className={SIDEBAR_GROUP_ICON}
 										style={{ color: "var(--yellow)" }}
 									/>
-									<span className="sidebar-group-name">Awaiting review</span>
-									<span className="sidebar-group-count">
+									<span className={SIDEBAR_GROUP_NAME}>Awaiting review</span>
+									<span className="sidebar-group-count ml-0 pr-0">
 										{awaitingReviewRows.length}
 									</span>
 									<IconChevronDown
-										className="sidebar-group-chevron"
+										className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 										size={22}
 										style={{ transform: open ? "none" : "rotate(-90deg)" }}
 									/>
@@ -4736,7 +4755,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							{/* Same header treatment as the status lanes below. */}
 							<button
 								className={cn(
-									"sidebar-group-header",
+									SIDEBAR_GROUP_HEADER,
+									SIDEBAR_GROUP_HEADER_INSET,
 									SIDEBAR_STICKY_LANE,
 									SIDEBAR_STUCK_BACKING,
 								)}
@@ -4744,13 +4764,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								onClick={() => toggleGroup("pinned")}
 							>
 								<IconPin
-									className="sidebar-group-icon"
+									className={SIDEBAR_GROUP_ICON}
 									style={{ color: "var(--text-faint)" }}
 								/>
-								<span className="sidebar-group-name">Pinned</span>
-								<span className="sidebar-group-count">{pinnedCount}</span>
+								<span className={SIDEBAR_GROUP_NAME}>Pinned</span>
+								<span className="sidebar-group-count ml-0 pr-0">{pinnedCount}</span>
 								<IconChevronDown
-									className="sidebar-group-chevron"
+									className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 									size={22}
 									style={{ transform: pinnedOpen ? "none" : "rotate(-90deg)" }}
 								/>
@@ -4945,7 +4965,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									return (
 									<React.Fragment key={group.key}>
 										<button
-											className="sidebar-group-header"
+											className={cn(SIDEBAR_GROUP_HEADER, SIDEBAR_GROUP_HEADER_INSET)}
 											onClick={() => toggleGroup(group.key)}
 										>
 											{/* The dot is 7px but the header's leading column is a
@@ -4953,20 +4973,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											<span className={SIDEBAR_RAIL}>
 												{group.dotColor && (
 													<span
-														className="sidebar-group-dot"
+														className={SIDEBAR_GROUP_DOT}
 														style={{ backgroundColor: group.dotColor }}
 													/>
 												)}
 											</span>
-											<span className="sidebar-group-name">{group.label}</span>
+											<span className={SIDEBAR_GROUP_NAME}>{group.label}</span>
 											<IconChevronDown
-												className="sidebar-group-chevron"
+												className={SIDEBAR_GROUP_CHEVRON}
 												size={22}
 												style={{
 													transform: open ? "none" : "rotate(-90deg)",
 												}}
 											/>
-											<span className="sidebar-group-count">
+											<span className="sidebar-group-count group-hover/gh:hidden">
 												{group.items.length}
 											</span>
 											{/* Hover swaps the count for a cog that jumps to this
@@ -4974,7 +4994,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											    inside the header button). */}
 											<span
 												role="button"
-												className="sidebar-auto-cog"
+												className={SIDEBAR_AUTO_COG}
 												title="Automation settings"
 												onClick={(e) => {
 													e.stopPropagation();
