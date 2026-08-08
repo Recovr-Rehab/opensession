@@ -23,6 +23,7 @@
  * contains a dead class. Rules that merely lose one selector from a list keep
  * the rest, and the file's one-selector-per-line formatting is preserved.
  */
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -103,6 +104,26 @@ function stripComments(src: string): string {
 	return out;
 }
 
+/** Source files with uncommitted edits, as they read at HEAD. */
+function dirtySourcesAtHead(): { path: string; text: string }[] {
+	let status: string;
+	try {
+		status = spawnSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" }).stdout ?? "";
+	} catch {
+		return [];
+	}
+	const out: { path: string; text: string }[] = [];
+	for (const line of status.split("\n")) {
+		// " M path" / "MM path"; skip additions, which have no HEAD version.
+		const path = line.slice(3).trim();
+		if (!path || line.startsWith("??") || !SCAN_EXT.test(path)) continue;
+		if (!SCAN_DIRS.some((d) => path.startsWith(d + "/"))) continue;
+		const blob = spawnSync("git", ["show", `HEAD:${path}`], { cwd: ROOT, encoding: "utf8" });
+		if (blob.status === 0 && blob.stdout) out.push({ path, text: blob.stdout });
+	}
+	return out;
+}
+
 const markup = new Set(MARKUP_DIRS.flatMap((d) => sourceFiles(join(ROOT, d))));
 
 const idents = new Set<string>();
@@ -125,6 +146,22 @@ for (const dir of SCAN_DIRS) {
 			if (/[a-z]-$/.test(tail)) prefixes.add(tail);
 		}
 	}
+}
+
+/**
+ * This repo is developed in one shared checkout, so at any moment another
+ * session may have a component half-migrated in the working tree. Its
+ * uncommitted state would make the classes it has *temporarily* removed look
+ * dead, and pruning them deletes styling that is about to be needed again. So
+ * a modified file is read at HEAD as well as on disk: a class survives if
+ * either version can still reach it. Costs a few rules staying one sweep
+ * longer than necessary; the next run picks them up once the file is
+ * committed.
+ */
+for (const f of dirtySourcesAtHead()) {
+	const text = stripComments(f.text);
+	for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
+	for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
 }
 
 // ── classify the classes defined in the sheet ───────────────────────────────
