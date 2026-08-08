@@ -56,7 +56,6 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
-const SNAPS = join(ROOT, ".css-ab");
 const PORT = Number(process.env.CDP_PORT ?? 9222);
 const APP = process.env.OPENSESSION_URL ?? "http://127.0.0.1:3850";
 
@@ -72,18 +71,87 @@ const flag = (name: string) => {
 };
 /** Positional = anything that is neither a flag nor a flag's value. The
  *  booleans are listed so they can't swallow the label standing after them. */
-const BOOLEANS = new Set(["--rect", "--freeze", "--diff"]);
+const BOOLEANS = new Set(["--rect", "--freeze", "--diff", "--selftest"]);
 const positionals = argv.filter(
 	(a, i) =>
 		!a.startsWith("--") &&
 		!(i > 0 && argv[i - 1].startsWith("--") && !argv[i - 1].includes("=") && !BOOLEANS.has(argv[i - 1])),
 );
 
+/** Where snapshots live. Overridable because the alternative — copying this
+ *  script to /tmp to change a constant — is how a stale copy of it gets used:
+ *  every session that pins one lands on the same `/tmp/.css-ab`, and a hand
+ *  edit can silently drop something the tracked version does (one pinned copy
+ *  applied the viewport override BEFORE navigating, and captured a "phone" run
+ *  at desktop metrics). Point this at a private directory instead. */
+const SNAPS = flag("snaps") ?? process.env.CSS_AB_SNAPS ?? join(ROOT, ".css-ab");
+
+// ── self-test ───────────────────────────────────────────────────────────────
+
+/**
+ * Prove this tool can see a difference before you trust it reporting none.
+ *
+ * It shipped a silent false negative once: the diff short-circuited on style-
+ * bag IDs, which are assigned per snapshot in first-occurrence order, so two
+ * structurally identical trees handed out identical IDs whatever values sat
+ * behind them — and every A/B in a migration compares two structurally
+ * identical trees. A noise floor of two identical captures passes either way,
+ * which is why it isn't enough on its own.
+ *
+ * So this runs both halves: two resting captures, which MUST agree, and a
+ * resting capture against a forced-hover one of the same page, which MUST NOT.
+ * Any dedupe or short-circuit added here can only ever produce a false
+ * negative, so re-run this after touching one.
+ */
+if (argv.includes("--selftest")) {
+	const sel = flag("root");
+	if (!sel) {
+		console.error("usage: bun scripts/css-ab.ts --selftest --root '<selector>' [--hover '<selector>']");
+		process.exit(2);
+	}
+	/** Hovering the ROOT proves nothing — a container usually has no hover
+	 *  styling of its own, and the test then fails for the wrong reason. Force
+	 *  it on the controls inside instead, which is also what a real A/B run
+	 *  should be pointing at. */
+	const hover = flag("hover") ?? `${sel} button, ${sel} a, ${sel} [role="button"]`;
+	const dir = `${SNAPS}/selftest-${process.pid}`;
+	const me = import.meta.path;
+	const run = async (args: string[]) => {
+		const p = Bun.spawn(["bun", me, ...args, "--snaps", dir], { stdout: "pipe", stderr: "pipe" });
+		await p.exited;
+		return new Response(p.stdout).text();
+	};
+	const diff = async (a: string, b: string) => {
+		const p = Bun.spawn(["bun", me, "--diff", a, b, "--snaps", dir], { stdout: "pipe", stderr: "pipe" });
+		await p.exited;
+		const out = await new Response(p.stdout).text();
+		return Number(out.match(/prop diffs: (\d+)/)?.[1] ?? -1);
+	};
+	console.log(`self-test on ${sel} — capturing rest, rest again, and forced-hover…`);
+	await run(["st-rest1", "--root", sel]);
+	await run(["st-rest2", "--root", sel]);
+	await run(["st-hover", "--root", sel, "--hover", hover]);
+	const floor = await diff("st-rest1", "st-rest2");
+	const known = await diff("st-rest1", "st-hover");
+	console.log(`\n  noise floor   (rest vs rest)  : ${floor}   ${floor === 0 ? "PASS" : "FAIL — the page is not settling; fix that before measuring anything"}`);
+	console.log(`  known difference (rest vs hover): ${known}   ${known > 0 ? "PASS" : "FAIL — either the tool reports no difference where one provably exists (any 0 it gives you is then worthless), or --hover matched nothing that paints a hover state. Check the selector first."}`);
+	const ok = floor === 0 && known > 0;
+	console.log(`\n${ok ? "usable" : "NOT USABLE"} — snapshots in ${dir}`);
+	process.exit(ok ? 0 : 1);
+}
+
 // ── diff mode ───────────────────────────────────────────────────────────────
 
 /** Computed values that are USED values derived from content or layout. A row
  *  whose title gained one character moves all of these, so they say nothing
- *  about whether the styling changed. `--rect` opts geometry back in. */
+ *  about whether the styling changed. `--rect` opts geometry back in.
+ *
+ *  Deliberately short. `margin-inline-start` under `ml-auto`, and
+ *  `grid-template-columns` resolving `fr`, are used values too, and show up
+ *  as a handful of 1px diffs whenever two captures differ in viewport width.
+ *  They stay visible anyway: they are also exactly where a real margin or
+ *  column change lands, and suppressing a property is how a diff tool starts
+ *  lying. Read them, do not hide them. */
 const DERIVED = new Set([
 	"width",
 	"height",
@@ -96,7 +164,7 @@ const DERIVED = new Set([
 if (argv[0] === "--diff") {
 	const [a, b] = [argv[1], argv[2]];
 	if (!a || !b) {
-		console.error("usage: bun scripts/css-ab.ts --diff <before> <after> [--rect] [--cls=<substr>]");
+		console.error("usage: bun scripts/css-ab.ts --diff <before> <after> [--rect] [--cls=<substr>] [--snaps <dir>]");
 		process.exit(2);
 	}
 	const withRect = argv.includes("--rect");
@@ -241,7 +309,11 @@ if (argv[0] === "--diff") {
 const label = positionals[0];
 const rootSel = flag("root");
 if (!label || !rootSel) {
-	console.error("usage: bun scripts/css-ab.ts <label> --root '<selector>' [--hover='<selector>'] [--freeze]");
+	console.error(
+		"usage: bun scripts/css-ab.ts <label> --root '<selector>' [--hover='<selector>'] [--freeze]\n" +
+			"                            [--views 719,720,1440] [--snaps <dir>]\n" +
+			"       bun scripts/css-ab.ts --selftest --root '<selector>'   # do this before trusting a 0",
+	);
 	process.exit(2);
 }
 /** Forced :hover, so hover styling is part of the same measurement instead of
@@ -332,10 +404,17 @@ const sliceBags = (i: number) => `window.__cssab.bags.slice(${i}, ${i + CHUNK})`
 
 const FREEZE = `*, *::before, *::after { animation: none !important; transition: none !important; }`;
 
-const VIEWS: [string, number, number][] = [
-	["desktop", 1440, 1000],
-	["phone", 390, 844],
-];
+/** Default pair, overridable with `--views 719,720,1440` (a bare width keeps
+ *  the desktop height) or `--views tall:1440x1600`. Measuring a breakpoint's
+ *  own edge needs widths this file can't guess, and editing a pinned copy to
+ *  get them is how a rig drifts from the tracked one. */
+const VIEWS: [string, number, number][] = (flag("views") ?? "desktop:1440x1000,phone:390x844")
+	.split(",")
+	.map((spec) => {
+		const [name, size] = spec.includes(":") ? spec.split(":") : [spec, spec];
+		const [w, h] = size.split("x");
+		return [name, Number(w), Number(h ?? 1000)] as [string, number, number];
+	});
 const THEMES = ["dark", "light"];
 
 let id = 0;
