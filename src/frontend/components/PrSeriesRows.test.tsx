@@ -23,7 +23,7 @@ test("a session with one PR beyond its own branch renders one row", () => {
 		/>,
 	);
 
-	expect(html.match(/class="pr-bar-extra"/g)).toHaveLength(1);
+	expect(html.match(/data-tone="/g)).toHaveLength(1);
 	expect(html).toContain("Fix the uploader");
 	// Same repo as the session's own → the chip is the bare number.
 	expect(html).toContain(">#72</span>");
@@ -66,7 +66,7 @@ test("a four-PR series renders a row each, every one openable", () => {
 		<PrSeriesRows refs={refs} primaryRepo="tella-fusion" />,
 	);
 
-	expect(html.match(/class="pr-bar-extra"/g)).toHaveLength(4);
+	expect(html.match(/data-tone="/g)).toHaveLength(4);
 	// Repo, number and title are all legible per row; the repo hint only shows
 	// where it disambiguates.
 	expect(html).toContain(">#5253</span>");
@@ -99,10 +99,11 @@ test("each row is toned by its own state, not the series'", () => {
 		/>,
 	);
 
-	expect(html).toContain("pr-num-chip-green");
-	expect(html).toContain("pr-num-chip-red");
-	expect(html).toContain("pr-bar-state-green");
-	expect(html).toContain("pr-bar-state-red");
+	expect(html).toContain('data-tone="green"');
+	expect(html).toContain('data-tone="red"');
+	// …and the tone is on the row's own parts, not just the wrapper.
+	expect(html).toContain("text-green");
+	expect(html).toContain("text-red");
 });
 
 test("rows carry no surface of their own — the strip's treatment continues", () => {
@@ -110,13 +111,13 @@ test("rows carry no surface of their own — the strip's treatment continues", (
 		<PrSeriesRows refs={[ref({ title: "Fix the uploader" })]} />,
 	);
 
-	// The chip is the primary strip's chip one size down, which is what makes
-	// the series read as more status rather than a second card.
-	expect(html).toContain("pr-num-chip pr-sib-chip");
+	// The chip keeps the toned ink of the strip's chip but drops its fill, so
+	// the series reads as more status rather than a row of badges.
+	expect(html).toContain("bg-control");
 	// A PR with no URL still gets its row, minus the outbound link.
 	const noUrl = renderToStaticMarkup(
 		<PrSeriesRows refs={[ref({ url: undefined })]} />,
 	);
-	expect(noUrl).toContain("pr-bar-extra");
-	expect(noUrl).not.toContain("pr-bar-extra-out");
+	expect(noUrl).toContain('data-tone="');
+	expect(noUrl).not.toContain('aria-label="Open ');
 });

@@ -23,6 +23,26 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { providerFromUrl } from "../lib/provider";
 import { sessionPrPresentation } from "../lib/session-prs";
+import {
+	prChipClass,
+	prChipExternalClass,
+	PR_BAR,
+	PR_BAR_BG,
+	PR_BAR_CHECKING,
+	PR_BAR_ERROR,
+	PR_BAR_IN_CARD,
+	PR_BAR_PROMPTED,
+	PR_BAR_STACK,
+	PR_BAR_STATE,
+	PR_CHIP_SEAM,
+	PR_HEAD,
+	PR_HEAD_BTN,
+	PR_HEAD_ERROR,
+	PR_HEAD_PROMPTED,
+	PR_SIB_DOT,
+	PR_SIB_DOT_BG,
+	PR_STATE_TEXT,
+} from "../lib/pr-tone-classes";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
@@ -260,10 +280,13 @@ const PR_CHORD = isApple ? "⌘G" : "Ctrl+G";
 function PrNumberChip({
 	pr,
 	tone,
+	size,
 	onOpenPrTab,
 }: {
 	pr: PrDetails;
 	tone: PrHeadline["tone"];
+	/** The strip and the session header size the pair differently. */
+	size: "bar" | "head";
 	onOpenPrTab?: () => void;
 }) {
 	const [copied, setCopied] = useState<"link" | "number" | null>(null);
@@ -277,13 +300,13 @@ function PrNumberChip({
 	}, []);
 
 	return (
-		<div className="pr-num-chip-group">
+		<div className="inline-flex items-center">
 			<ContextMenu.Root>
 				<ContextMenu.Trigger
 					render={
 						<button
 							type="button"
-							className={`pr-num-chip pr-num-chip-${tone}`}
+							className={`${prChipClass(tone, size)} ${PR_CHIP_SEAM}`}
 							onClick={onOpenPrTab}
 							title={`Review #${pr.number}: ${pr.title}`}
 						/>
@@ -335,7 +358,7 @@ function PrNumberChip({
 			</ContextMenu.Root>
 			<Tooltip label={`Open on ${provider.name} (${PR_CHORD})`}>
 				<a
-					className={`pr-num-chip-external pr-num-chip-${tone}`}
+					className={`${prChipExternalClass(tone, size)} ${PR_CHIP_SEAM}`}
 					href={pr.url}
 					target="_blank"
 					rel="noopener"
@@ -381,12 +404,12 @@ function PrRefChips({
 					? "green"
 					: "muted";
 	return (
-		<div className="pr-sib-chips">
+		<div className="inline-flex min-w-0 items-center gap-1">
 			{inline.map((ref) => (
 				<Tooltip key={`${ref.repo} ${ref.branch}`} label={refLabel(ref)}>
 					<button
 						type="button"
-						className={`pr-num-chip pr-sib-chip pr-num-chip-${refTone(ref)}`}
+						className={prChipClass(refTone(ref), "sib")}
 						onClick={() => onOpen?.(ref)}
 					>
 						{refChipText(ref, primaryRepo)}
@@ -399,7 +422,7 @@ function PrRefChips({
 						render={
 							<button
 								type="button"
-								className={`pr-num-chip pr-sib-chip pr-num-chip-${restTone}`}
+								className={prChipClass(restTone, "sib")}
 								aria-label={`${rest.length} more pull request${rest.length === 1 ? "" : "s"}`}
 							/>
 						}
@@ -412,7 +435,9 @@ function PrRefChips({
 								key={`${ref.repo} ${ref.branch}`}
 								onClick={() => onOpen?.(ref)}
 							>
-								<span className={`pr-sib-dot pr-sib-dot-${refTone(ref)}`} />
+								<span
+								className={`${PR_SIB_DOT} ${PR_SIB_DOT_BG[refTone(ref)]}`}
+							/>
 								<span className="grow">
 									{repoLabel(ref.repo)} #{ref.number}
 								</span>
@@ -580,9 +605,9 @@ export function PrStatusBar({
 	// session reads "Up to date" rather than vanishing.
 	if (!loaded && variant !== "header") {
 		return (
-			<div className="pr-bar pr-bar-muted">
+			<div className={`${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}>
 				{leading}
-				<span className="pr-bar-checking">Checking status…</span>
+				<span className={PR_BAR_CHECKING}>Checking status…</span>
 			</div>
 		);
 	}
@@ -597,10 +622,19 @@ export function PrStatusBar({
 	// PRs all live elsewhere (nothing on its own branch) still gets its chips.
 	if (variant === "header" && !pr && siblings.length === 0) return null;
 
-	// Primary action for the current headline (right side of the strip).
+	// Primary action for the current headline (right side of the strip). In the
+	// session header it sizes up to the header's other bordered controls, so the
+	// chip and the action read as a matched pair.
+	const actionBtn = variant === "header" ? PR_HEAD_BTN : "";
 	function renderAction(): React.ReactNode {
 		if (prompted)
-			return <span className="pr-bar-prompted">{prompted}</span>;
+			return (
+				<span
+					className={variant === "header" ? PR_HEAD_PROMPTED : PR_BAR_PROMPTED}
+				>
+					{prompted}
+				</span>
+			);
 		switch (headline.key) {
 			case "merged":
 				// Don't offer to archive a session that still has open PRs in its
@@ -608,6 +642,7 @@ export function PrStatusBar({
 				if (openSiblings > 0) return null;
 				return isArchived ? null : (
 					<PrBarButton
+						className={actionBtn}
 						tone="purple"
 						disabled={!!busy}
 						onClick={() =>
@@ -624,6 +659,7 @@ export function PrStatusBar({
 			case "ahead":
 				return (
 					<PrBarButton
+						className={actionBtn}
 						tone="solid"
 						icon={<IconArrowUp size={18} />}
 						disabled={!!busy}
@@ -636,6 +672,7 @@ export function PrStatusBar({
 			case "behind-base":
 				return (
 					<PrBarButton
+						className={actionBtn}
 						tone="solid"
 						icon={<IconArrowDown size={18} />}
 						disabled={!!busy}
@@ -656,6 +693,7 @@ export function PrStatusBar({
 			case "conflicts":
 				return send ? (
 					<PrBarButton
+						className={actionBtn}
 						tone="red"
 						onClick={() =>
 							promptSession(
@@ -670,6 +708,7 @@ export function PrStatusBar({
 			case "no-pr":
 				return send ? (
 					<PrBarButton
+						className={actionBtn}
 						tone="secondary"
 						icon={<IconPullRequest size={18} />}
 						onClick={() =>
@@ -688,6 +727,7 @@ export function PrStatusBar({
 			case "changes-requested":
 				return (
 					<PrBarButton
+						className={actionBtn}
 						tone="green"
 						confirm={confirmMerge}
 						icon={!busy && !confirmMerge ? <IconGitMerge size={18} /> : undefined}
@@ -709,11 +749,12 @@ export function PrStatusBar({
 
 	if (variant === "header") {
 		return (
-			<div className="pr-head">
+			<div className={PR_HEAD}>
 				{pr && (
 					<PrNumberChip
 						pr={pr}
 						tone={headline.tone}
+						size="head"
 						onOpenPrTab={() => onOpenPrTab?.()}
 					/>
 				)}
@@ -729,21 +770,21 @@ export function PrStatusBar({
 					<PrChecksPopover
 						checks={pr.checks}
 						trigger={
-							<button
-								type="button"
-								className={`pr-bar-state pr-bar-state-${headline.tone}`}
-								onClick={onOpenChecksTab}
-							>
-								{headlineLabel}
-							</button>
-						}
-					/>
-				)}
-				{error && (
-					<span className="pr-bar-error" title={error}>
-						{error}
-					</span>
-				)}
+								<button
+									type="button"
+									className={`${PR_BAR_STATE} ${PR_STATE_TEXT[headline.tone]}`}
+									onClick={onOpenChecksTab}
+								>
+									{headlineLabel}
+								</button>
+							}
+						/>
+					)}
+					{error && (
+						<span className={PR_HEAD_ERROR} title={error}>
+							{error}
+						</span>
+					)}
 				{renderAction()}
 			</div>
 		);
@@ -752,12 +793,13 @@ export function PrStatusBar({
 	// The primary row is the session's own branch — the one this worktree can
 	// push, pull and merge. Its other PRs stack underneath, one row each.
 	const primaryRow = (
-		<div className={`pr-bar pr-bar-${headlineTone}`}>
+		<div className={`${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}>
 			{leading}
 			{pr && (
 				<PrNumberChip
 					pr={pr}
 					tone={headlineTone}
+					size="bar"
 					onOpenPrTab={() => onOpenPrTab?.()}
 				/>
 			)}
@@ -765,11 +807,11 @@ export function PrStatusBar({
 				<PrChecksPopover
 					checks={pr.checks}
 					trigger={
-						<button
-							type="button"
-							className={`pr-bar-state pr-bar-state-${headlineTone}`}
-							onClick={onOpenChecksTab}
-						>
+							<button
+								type="button"
+								className={`${PR_BAR_STATE} ${PR_STATE_TEXT[headlineTone]}`}
+								onClick={onOpenChecksTab}
+							>
 							{headlineLabel}
 						</button>
 					}
@@ -777,21 +819,21 @@ export function PrStatusBar({
 			) : (headline.key !== "no-pr" || siblings.length > 0) && (
 				<Tooltip label="Open the PR tab">
 					<button
-						className={`pr-bar-state pr-bar-state-${headlineTone}`}
+						className={`${PR_BAR_STATE} ${PR_STATE_TEXT[headlineTone]}`}
 						onClick={() => onOpenPrTab?.()}
 					>
 						{headlineLabel}
 					</button>
 				</Tooltip>
 			)}
-			<span className="pr-bar-spacer" />
-			{error && <span className="pr-bar-error" title={error}>{error}</span>}
+			<span className="flex-1" />
+			{error && <span className={PR_BAR_ERROR} title={error}>{error}</span>}
 			{renderAction()}
 		</div>
 	);
 	if (siblings.length === 0) return primaryRow;
 	return (
-		<div className="pr-bar-stack">
+		<div className={PR_BAR_STACK}>
 			{primaryRow}
 			<PrSeriesRows
 				refs={siblings}

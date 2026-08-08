@@ -8,6 +8,15 @@ import {
 	refTone,
 	type SessionPrRef,
 } from "../lib/pr-refs";
+import {
+	prChipClass,
+	PR_ROW,
+	PR_ROW_MAIN,
+	PR_ROW_OUT,
+	PR_ROW_STATE,
+	PR_ROW_TITLE,
+	PR_STATE_TEXT,
+} from "../lib/pr-tone-classes";
 import { IconArrowUpRight } from "./icons";
 
 /**
@@ -41,28 +50,26 @@ export function PrSeriesRow({
 	const tone = refTone(prRef);
 	const provider = providerFromUrl(prRef.url || "");
 	return (
-		<div className="pr-bar-extra">
+		<div className={PR_ROW} data-tone={tone}>
 			<button
 				type="button"
-				className="pr-bar-extra-main"
+				className={PR_ROW_MAIN}
 				onClick={() => onOpen?.({ repo: prRef.repo, branch: prRef.branch })}
 				title={`${refLabel(prRef)} — open in the PR tab`}
 				aria-label={`Review ${repoLabel(prRef.repo)} pull request #${prRef.number}`}
 			>
-				<span className={`pr-num-chip pr-sib-chip pr-num-chip-${tone}`}>
+				<span className={prChipClass(tone, "row")}>
 					{refChipText(prRef, primaryRepo)}
 				</span>
-				{prRef.title && (
-					<span className="pr-bar-extra-title">{prRef.title}</span>
-				)}
-				<span className={`pr-bar-extra-state pr-bar-state-${tone}`}>
+				{prRef.title && <span className={PR_ROW_TITLE}>{prRef.title}</span>}
+				<span className={`${PR_ROW_STATE} ${PR_STATE_TEXT[tone]}`}>
 					{refState(prRef)}
 				</span>
 			</button>
 			{prRef.url && (
 				<Tooltip label={`Open on ${provider.name}`}>
 					<a
-						className="pr-bar-extra-out"
+						className={PR_ROW_OUT}
 						href={prRef.url}
 						target="_blank"
 						rel="noopener"
