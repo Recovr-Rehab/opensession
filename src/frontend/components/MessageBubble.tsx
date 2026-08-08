@@ -32,6 +32,7 @@ import {
 	msgRow,
 	msgSystemRow,
 	msgSystemText,
+	msgSystemTone,
 	msgSystemToned,
 	msgTime,
 } from "../lib/msg-classes";
@@ -190,9 +191,7 @@ function NoticeRow({
 				className={cn(
 					msgSystemText,
 					toned && msgSystemToned,
-					notice.tone === "error" && "bg-red-soft text-red",
-					notice.tone === "warn" &&
-						"bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] text-yellow",
+					toned && msgSystemTone(notice.tone),
 				)}
 				data-tone={toned ? notice.tone : undefined}
 				role={notice.tone === "error" ? "alert" : undefined}

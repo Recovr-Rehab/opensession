@@ -179,6 +179,7 @@ import {
 	msgMedia,
 	msgOwnTurn,
 	msgRow,
+	msgStreamingRow,
 } from "../lib/msg-classes";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
@@ -4373,9 +4374,9 @@ export function SessionViewer({
 									// element at EVERY width and it renders plain-round while
 									// its neighbours are squircles. Set it back explicitly,
 									// and keep a true circle on mobile.
-									"[corner-shape:squircle] max-[720px]:[corner-shape:round]",
-									"max-[720px]:h-10 max-[720px]:min-h-10 max-[720px]:w-10 max-[720px]:rounded-full max-[720px]:border-line max-[720px]:bg-bg max-[720px]:text-accent max-[720px]:shadow-[0_2px_12px_rgba(0,0,0,0.1)]",
-									overflowOpen && "bg-hover text-fg max-[720px]:border-[color-mix(in_srgb,var(--accent)_12%,transparent)] max-[720px]:bg-accent-soft max-[720px]:text-accent",
+									"[corner-shape:squircle] phone:[corner-shape:round]",
+									"phone:h-10 phone:min-h-10 phone:w-10 phone:rounded-full phone:border-line phone:bg-bg phone:text-accent phone:shadow-[0_2px_12px_rgba(0,0,0,0.1)]",
+									overflowOpen && "bg-hover text-fg phone:border-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:bg-accent-soft phone:text-accent",
 								)}
 								title="More actions"
 								aria-label="More actions"
@@ -4454,7 +4455,7 @@ export function SessionViewer({
 								// from when both were narrow padded controls, and now that all
 								// three are equal squares it just made this gap 4px where the
 								// share → ⋯ one is the row's 8px.
-								className="rounded-control text-dim hover:bg-hover hover:text-fg max-[720px]:order-2 max-[720px]:h-[38px] max-[720px]:min-h-[38px] max-[720px]:w-[38px] max-[720px]:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] max-[720px]:text-accent"
+								className="rounded-control text-dim hover:bg-hover hover:text-fg phone:order-2 phone:h-[38px] phone:min-h-[38px] phone:w-[38px] phone:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:text-accent"
 								onClick={() => setPanelOpen(!panelOpen)}
 								aria-label="Toggle side panel"
 								// Iconic sidebar-right glyph — reads as "right side panel".
@@ -4788,7 +4789,7 @@ export function SessionViewer({
 			)}
 
 			<div className="flex min-h-0 flex-1">
-				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px] max-[720px]:[--wash-depth:40px]">
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px] phone:[--wash-depth:40px]">
 					{showPreviewTab ? (
 						<div className={VIEWER_REVIEW_MAIN}>
 							<PreviewPane
@@ -5730,7 +5731,7 @@ function StreamingMessage({ store }: { store: LiveTurnStore }) {
 		/* .msg-streaming + .msg-body-assistant stay as hooks: the streaming caret
 		   is a ::after on that pair, and base.css's reduced-motion exception
 		   keeps it blinking by naming the same selector. */
-		<div className={cn(msgRow, "msg-streaming")}>
+		<div className={cn(msgRow, msgStreamingRow)}>
 			{snapshot.rapid ? (
 				<div className={cn(msgBodyStreaming, "whitespace-pre-wrap")}>
 					{snapshot.text}

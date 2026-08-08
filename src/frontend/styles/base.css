@@ -437,6 +437,10 @@ html[data-theme="light"] {
 		animation-duration: 1.4s !important;
 		animation-iteration-count: infinite !important;
 	}
+	/* This one and the caret below are the only exceptions whose ANIMATION
+	   also lives in this file (see "Transcript liveness" further down): each
+	   duration here restates the one on the rule, so the pair has to move
+	   together or the indicator changes rate under this preference. */
 	.msg-sending .msg-label-user {
 		animation-duration: 1.2s !important;
 		animation-iteration-count: infinite !important;
@@ -1318,6 +1322,62 @@ a.pr-ref:hover {
 }
 .wiki-doc a {
 	color: var(--link);
+}
+
+/* ── Transcript liveness ─────────────────────────────────────
+   The two rules the reduced-motion block near the top of this file names by
+   selector. Both are the only implementation of the thing they animate, and
+   both hang off an ancestor — `.msg-streaming`, `.msg-sending` — so neither
+   can be expressed as a utility on the element that paints. Their class names
+   survive on the markup purely as hooks for them (see lib/msg-classes.ts).
+
+   They live here rather than in legacy.css, which is being emptied, and being
+   here puts each duration in the same file as the exception that restates it:
+   1s and 1.2s appear twice each, and the pair has to agree or the indicator
+   changes rate for anyone with the preference set.
+
+   The caret animates `msg-caret-pulse`, not the bare `pulse` the legacy rule
+   used. `pulse` was never ours: tailwind.css emits its own
+   `@keyframes pulse { 50% { opacity: .5 } }` unlayered and last, which had been
+   quietly beating legacy.css's `0%,100% { 1 } 50% { 0.35 }` — so 0.5 is what
+   shipped, and it is what this restates, the same call ui/status.tsx and
+   lib/session-tab-classes made when they hit this. Those two keep spelling it
+   `animate-[pulse_…]`, which is the only reason the utility sheet emits those
+   keyframes at all; a rule here should not be resting on that. */
+.msg-streaming .msg-body-assistant::after {
+	content: "";
+	display: inline-block;
+	width: 7px;
+	height: 14px;
+	margin-left: 3px;
+	vertical-align: -2px;
+	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
+	background: var(--accent);
+	animation: msg-caret-pulse 1s ease-in-out infinite;
+}
+@keyframes msg-caret-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
+}
+
+/* Optimistic just-sent bubble: the label breathes until the send is confirmed.
+   The row's 0.6 opacity is a utility on the markup; only this needs a rule. */
+.msg-sending .msg-label-user {
+	animation: msg-sending-pulse 1.2s ease-in-out infinite;
+}
+@keyframes msg-sending-pulse {
+	0%,
+	100% {
+		opacity: 0.55;
+	}
+	50% {
+		opacity: 1;
+	}
 }
 
 /* ── Keyframes the markup reaches directly ───────────────────

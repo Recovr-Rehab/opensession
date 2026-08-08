@@ -15,6 +15,7 @@ import {
 	msgBubbleUser,
 	msgOwnTurn,
 	msgRow,
+	msgStreamingRow,
 } from "../lib/msg-classes";
 
 interface DeskConversationProps {
@@ -267,7 +268,7 @@ export function DeskConversation({
 							onOpenSubagent={onOpenSubagent}
 						/>
 						{streamText && (
-							<div className={cn(msgRow, "msg-streaming")}>
+							<div className={cn(msgRow, msgStreamingRow)}>
 								<div
 									className={cn(msgBodyStreaming, "markdown")}
 									dangerouslySetInnerHTML={{ __html: renderMarkdown(streamText) }}

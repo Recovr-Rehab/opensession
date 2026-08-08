@@ -12,8 +12,10 @@
  *
  *   · base.css's selection policy (`chrome isn't selectable, content is`)
  *     names .msg, .msg-label, .msg-body and .msg-system-text;
- *   · base.css's reduced-motion exceptions name `.msg-sending .msg-label-user`
- *     and `.msg-streaming .msg-body-assistant::after`;
+ *   · base.css owns the two transcript animations that hang off an ancestor —
+ *     `.msg-sending .msg-label-user` (the sending pulse) and
+ *     `.msg-streaming .msg-body-assistant::after` (the streaming caret) — and
+ *     names the same two selectors again in its reduced-motion exceptions;
  *   · useSessionScroll queries `.msg` and `.msg-user` to find turn boundaries.
  *
  * Drop one of those class names and copy/paste, the sending pulse or the
@@ -48,12 +50,13 @@ export const msgOwnTurn = "mt-1";
  * only: it paints a highlight over unselectable label text caught inside a
  * selection range, and a fully transparent background is ignored — 1% sticks.
  *
- * `before:content-none` is load-bearing while legacy.css still holds
- * `.msg-label::before` (the dot used to be a pseudo-element; it is a real span
- * now). Without it the kept .msg-label hook paints a second dot.
+ * The dot is a real span (msgDotUser / msgDotHuman), not a pseudo-element. It
+ * used to be `.msg-label::before`, which is why this carried
+ * `before:content-none` to stop the kept hook painting a second one; that rule
+ * is gone from legacy.css, so the suppression went with it.
  */
 export const msgLabel =
-	"msg-label mb-1.25 flex flex-row-reverse items-center gap-1.75 text-meta font-semibold tracking-[-0.01em] text-faint before:content-none selection:bg-[rgba(0,0,0,0.01)] [&_*::selection]:bg-[rgba(0,0,0,0.01)]";
+	"msg-label mb-1.25 flex flex-row-reverse items-center gap-1.75 text-meta font-semibold tracking-[-0.01em] text-faint selection:bg-[rgba(0,0,0,0.01)] [&_*::selection]:bg-[rgba(0,0,0,0.01)]";
 
 /** Identity dot in front of a label. No token: these two are identity marks
  *  (a person's own turns, a teammate stepping in), not palette colours. */
@@ -81,8 +84,16 @@ const msgBubble =
 export const msgBubbleUser = `${msgBubble} rounded-lg bg-panel px-3.5 py-2.5`;
 export const msgBubbleHuman = `${msgBubble} rounded-row bg-[rgba(31,158,138,0.12)] px-3.5 py-2.25`;
 
-/** Assistant prose. Block while streaming so the caret ::after (legacy.css,
- *  kept for base.css's reduced-motion exception) stays on the text's line. */
+/**
+ * The row a live turn streams into. `overflow-anchor: none` keeps the browser's
+ * scroll anchoring off the growing tail, which would otherwise fight a
+ * glued-to-bottom follow as tokens append.
+ */
+export const msgStreamingRow = "msg-streaming [overflow-anchor:none]";
+
+/** Assistant prose. Block while streaming so the caret ::after (base.css, with
+ *  the reduced-motion exception that keeps it blinking) stays on the text's
+ *  line — as a flex child it would wrap onto its own row. */
 export const msgBodyStreaming =
 	"msg-body msg-body-assistant block text-body leading-6 break-words text-fg";
 
@@ -94,8 +105,37 @@ export const msgSystemText =
  * A toned notice reads as a sentence, not a banner: everything the server and
  * the runner write lands in this one pill, so "switched account and retried"
  * and "your run died 40 minutes ago" used to be typographically identical.
+ *
+ * Every utility here is written as a `data-[tone…]:` variant, and that is
+ * load-bearing rather than decorative. The pill it overrides sets `bg-panel`,
+ * `inline-block` and `text-center` as plain single-class utilities, so a plain
+ * tone utility only wins by Tailwind's OUTPUT ORDER — and it doesn't always:
+ * deleting legacy.css's `.msg-system-text[data-tone="warn"]` (0,1,1, so it had
+ * always won) dropped the warn pill straight back to the neutral panel wash,
+ * measured, while the error pill happened to keep its red. Matching the
+ * attribute restores the specificity legacy had, so which one wins stops
+ * depending on where the compiler happened to emit them.
  */
-export const msgSystemToned = "inline-flex items-start gap-1.5 text-left";
+export const msgSystemToned =
+	"data-[tone]:inline-flex data-[tone]:items-start data-[tone]:gap-1.5 data-[tone]:text-left";
+
+/**
+ * The colour a toned notice wears — a LOOKUP of literal strings, never a built
+ * `` `tone-${x}` ``: Tailwind only compiles class names it can find in the
+ * source, so an assembled one compiles to nothing at all. Same shape as
+ * `sourceChipTone` in lib/source-chip-classes.
+ */
+const SYSTEM_TONE: Record<string, string> = {
+	error: "data-[tone=error]:bg-red-soft data-[tone=error]:text-red",
+	warn:
+		"data-[tone=warn]:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] " +
+		"data-[tone=warn]:text-yellow",
+};
+
+/** `info` deliberately resolves to nothing: it is the pill's resting look. */
+export function msgSystemTone(tone: string): string {
+	return SYSTEM_TONE[tone] ?? "";
+}
 
 /** Inline attachments under a turn. Right-aligned inside a bubble's column. */
 export const msgMedia = "mt-1.5 flex flex-wrap gap-2";
