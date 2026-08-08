@@ -199,6 +199,17 @@ import {
 	VIEWER_OVERFLOW,
 	VIEWER_REVIEW_MAIN,
 	VIEWER_TITLE,
+	INFO_CONTENT,
+	INFO_HERO,
+	INFO_LIST,
+	INFO_NAME,
+	INFO_OVERVIEW,
+	INFO_PAGE,
+	INFO_SECTION,
+	INFO_STATUS,
+	INFO_SUB,
+	infoTopbarClass,
+	infoTopbarTitleClass,
 } from "../lib/session-viewer-classes";
 
 type QueueReceipt = {
@@ -4397,16 +4408,14 @@ export function SessionViewer({
 					isPhone && infoPageOpen ? (
 						createPortal(
 							<div
-								className="session-info-page"
+								className={INFO_PAGE}
 								ref={infoPageRef}
 								role="dialog"
 								aria-modal="true"
 								aria-label="Workspace details"
 							>
 								<div
-									className={`session-info-topbar${
-										infoPageScrolled ? " session-info-topbar-scrolled" : ""
-									}`}
+									className={infoTopbarClass(infoPageScrolled)}
 								>
 									<button
 										className={`${PANEL_BACK} relative z-[1]`}
@@ -4424,16 +4433,16 @@ export function SessionViewer({
 											/>
 										</svg>
 									</button>
-									<div className="session-info-topbar-title">
+									<div className={infoTopbarTitleClass(infoPageScrolled)}>
 										{workspaceName || session.title}
 									</div>
 								</div>
-								<div className="session-info-hero">
+								<div className={INFO_HERO}>
 									<RepoTile name={session.repo || "repository"} size={40} />
-									<div className="session-info-name" ref={infoHeroNameRef}>
+									<div className={INFO_NAME} ref={infoHeroNameRef}>
 										{workspaceName || session.title}
 									</div>
-									<div className="session-info-sub">
+									<div className={INFO_SUB}>
 										{[
 											session.repo || "repository",
 											models.length > 0
@@ -4445,7 +4454,7 @@ export function SessionViewer({
 									</div>
 								</div>
 								{hasWorkspace && (
-									<div className="session-info-status">
+									<div className={INFO_STATUS}>
 										<PrStatusBar
 											sessionId={session.id}
 											repo={session.repo || undefined}
@@ -4473,8 +4482,8 @@ export function SessionViewer({
 										/>
 									</div>
 								)}
-								<div className="session-info-content">
-									<div className="session-info-list">
+								<div className={INFO_CONTENT}>
+									<div className={INFO_LIST}>
 										{hasWorkspace && (
 											<RepoBar
 												sessionId={session.id}
@@ -4494,7 +4503,7 @@ export function SessionViewer({
 											/>
 										)}
 									</div>
-									<div className="session-info-overview">
+									<div className={INFO_OVERVIEW}>
 										<WorkspaceInfo
 											sessionId={session.id}
 											workspaceId={session.workspaceId || null}
@@ -4564,7 +4573,7 @@ export function SessionViewer({
 										/>
 									</div>
 									{(workflowRuns.length > 0 || subagents.length > 0) && (
-										<div className="session-info-section">
+										<div className={INFO_SECTION}>
 											<WorkflowPanel
 												sessionId={session.id}
 												runs={workflowRuns}
@@ -4578,7 +4587,7 @@ export function SessionViewer({
 										</div>
 									)}
 									{sessionReports.length > 0 && (
-										<div className="session-info-section">
+										<div className={INFO_SECTION}>
 											<SessionReportsPanel
 												reports={sessionReports}
 												onOpenNewSession={onOpenNewSession}

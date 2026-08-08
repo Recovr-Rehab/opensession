@@ -217,3 +217,91 @@ export const SESSION_BANNER =
  *  cleanup can take a few seconds, so the view shows progress instead of
  *  looking frozen. */
 export const SESSION_DELETE_LABEL = "text-label text-dim";
+
+/* ── Session info page (phone) ──────────────────────────────────────────────
+ *
+ * Tapping the top-bar title opens this as a deeper page, WhatsApp-style: a
+ * full-screen sheet with the session identity up top and every action below,
+ * with its own chevron-back to the session.
+ *
+ * The whole page renders only when `useIsPhone()` is true, so none of it is
+ * written as a `max-[720px]:` override — which also keeps it clear of the
+ * one-pixel disagreement between Tailwind's `max-[720px]` (`width < 720px`)
+ * and the `max-width: 720px` that `useIsPhone` and the old sheet mean.
+ *
+ * `session-info-topbar` and `session-info-status` stay on the markup as bare
+ * hooks: the scroll handler finds the bar with `querySelector`, and
+ * lib/pr-tone-classes.ts fits the PR strip to the status card with
+ * `[.session-info-status_&]`.
+ */
+
+export const INFO_PAGE =
+	"fixed inset-0 z-[60] flex flex-col gap-0.5 overflow-y-auto overscroll-contain bg-surface " +
+	"pb-[max(16px,env(safe-area-inset-bottom,0px))] " +
+	"[animation:session-info-in_var(--dur)_var(--ease)]";
+
+const INFO_TOPBAR =
+	"session-info-topbar sticky top-0 z-[4] flex items-center border-b " +
+	"min-h-[calc(env(safe-area-inset-top,0px)+52px)] " +
+	"pt-[env(safe-area-inset-top,0px)] px-2 pb-0 " +
+	"[transition:background-color_var(--dur)_var(--ease),border-color_var(--dur)_var(--ease)]";
+
+/** Transparent until the page scrolls, then a frosted bar with a hairline —
+ *  each state carries its whole set, since two background utilities in one
+ *  variant bucket resolve by Tailwind's output order. */
+export const infoTopbarClass = (scrolled: boolean) =>
+	`${INFO_TOPBAR} ` +
+	(scrolled
+		? "border-b-line bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] " +
+			"backdrop-blur-[18px] backdrop-saturate-[1.35]"
+		: "border-b-transparent bg-transparent");
+
+const INFO_TOPBAR_TITLE =
+	"pointer-events-none absolute right-14 bottom-0 left-14 flex h-[52px] items-center justify-center " +
+	"overflow-hidden text-ellipsis whitespace-nowrap text-item-title font-semibold tracking-[-0.01em] text-fg " +
+	// `transform`, not Tailwind's `translate` property: that is what the
+	// transition beside it names.
+	"[transition:opacity_var(--dur)_var(--ease),transform_var(--dur)_var(--ease)]";
+
+/** The bar's own title fades up as the hero scrolls away. 15px in the old
+ *  sheet, which is not a step on the type scale; it is an item title, so it
+ *  snaps to `text-item-title` (14px). */
+export const infoTopbarTitleClass = (scrolled: boolean) =>
+	`${INFO_TOPBAR_TITLE} ` +
+	(scrolled ? "opacity-100 [transform:translateY(0)]" : "opacity-0 [transform:translateY(5px)]");
+
+/** Identity block: repo tile, name, and the repo · model line. The tile gets a
+ *  soft key shadow here that it doesn't carry elsewhere. */
+export const INFO_HERO =
+	"flex flex-col items-center gap-[9px] px-5 pt-0.5 pb-5 text-center " +
+	"[&_.repo-tile]:shadow-[0_4px_16px_rgba(0,0,0,0.18)]";
+
+/** 20px in the old sheet — the page's one heading, so it snaps to
+ *  `text-page-title` (19px). */
+export const INFO_NAME =
+	"max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg";
+export const INFO_SUB = "text-label font-medium text-dim";
+
+/** The PR strip, as a card. */
+export const INFO_STATUS =
+	"session-info-status mx-3 mb-3 rounded-xl border border-line bg-panel p-2";
+
+export const INFO_CONTENT = "min-h-[320px]";
+export const INFO_SECTION = "mt-2 border-t border-line p-3";
+
+/**
+ * A static, full-width settings list. Its rows come from RepoBar and
+ * ModelMenuRow, so their shape is a child variant here rather than a prop two
+ * components away — the same relationship the old `> button` rule expressed.
+ */
+export const INFO_LIST =
+	"session-info-list mx-3 flex flex-col items-stretch gap-1 rounded-xl border border-line bg-panel p-1.5 " +
+	"[&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
+	"[&>button]:rounded-[calc(6px*var(--rf))] [&>button]:border [&>button]:border-transparent " +
+	"[&>button]:bg-transparent [&>button]:px-2.5 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
+	"[&>button:hover]:bg-hover";
+
+/** The whole-workspace view embedded below the actions. Its own title repeats
+ *  the page hero, so it goes; the meta line and PR chips still add detail. */
+export const INFO_OVERVIEW =
+	"pt-2 [&_.workspace-info-title]:hidden [&_.workspace-info-panel]:pt-0";
