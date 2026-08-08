@@ -3715,7 +3715,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				</div>
 			)}
 			<div
-				className="sidebar-sticky-section sidebar-tools-section"
+				className="sidebar-sticky-section"
 				style={{ order: 0 }}
 			>
 			{!isPhone && visibleTools.length > 0 && (
@@ -3773,27 +3773,36 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				</div>
 			)}
 			{visibleTools.length > 0 && (isPhone || toolsOpen) && (
-				<nav className="sidebar-nav">
+				<nav
+					className={cn(
+						"flex [--sidebar-nav-x:6px]",
+						isPhone
+							? // One horizontally-scrollable line of tap cards (Slack-home
+								// style) rather than a wrapping grid, so all the tools sit on
+								// a single row and the rest peek in from the right edge to
+								// signal the scroll. flex-none so the sidebar's column layout
+								// can't shrink this container down to its padding and clip
+								// the cards; the left edge lines up with the Workspaces
+								// header and the list at 16px. No
+								// `-webkit-overflow-scrolling: touch`: on iOS it promotes the
+								// strip to its own composited layer, which then paints ABOVE
+								// the sidebar's vertical overlay scrollbar — the scrollbar
+								// vanishes "under" the cards as it passes over them. Momentum
+								// scroll is on by default on modern iOS anyway.
+								"flex-none flex-row flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pt-3 pr-3 pb-2.5 pl-4 [overscroll-behavior-x:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+							: "-mt-2 flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-1 pb-1.5",
+					)}
+				>
 					{visibleTools.map((tool) => {
 						const rowClass = cn(
-							// The desktop look lives in these utilities and MUST stay
-							// desktop-only: utilities win cascade ties against the phone
-							// card CSS (legacy.css @media), so an unconditional w-full/
-							// py-* here is exactly the "full-width Home card on mobile"
-							// bug. Phones render the Slack-home style 132px card strip
-							// purely from .sidebar-nav-item's media rules.
-							"sidebar-nav-item group flex text-left transition-colors",
-							// `active` is what the phone card CSS keys its selected state
-							// off (.sidebar-nav-item.active in legacy.css's @media block);
-							// the desktop selected look comes from the utilities below.
-							// Dropping it in the Tailwind migration left the phone cards
-							// with no "you are here".
-							tool.active && "active",
-							// Desktop-only for the same reason as the block below: a bare
-							// items-center wins the cascade tie against the phone rule's
-							// align-items:flex-start (media queries add no specificity),
-							// which centers the Slack-home cards instead of left-aligning
-							// their icon + label.
+							// Two complete looks, not one look with tweaks — so each
+							// viewport carries its whole set and neither has to out-rank
+							// the other. Phones get a Slack-home style 132px tap card;
+							// desktop gets a compact full-width row.
+							"group flex text-left transition-colors",
+							isPhone &&
+								"relative w-[132px] min-h-[84px] flex-[0_0_auto] flex-col items-start justify-between gap-2.5 rounded-lg border border-line bg-panel p-3 text-[13px] leading-[1.25] font-semibold text-fg hover:bg-hover",
+							isPhone && tool.active && "border-line-strong bg-active",
 							!isPhone && "items-center",
 							!isPhone &&
 								// Compact rows use control-label type and tight padding, with glyphs
@@ -3810,8 +3819,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<>
 								<span
 									className={cn(
-										"sidebar-nav-icon inline-flex",
-										!isPhone && "text-faint [&_svg]:size-[22px]",
+										"inline-flex [&_svg]:size-[22px]",
+										isPhone && (tool.active ? "text-fg" : "text-dim"),
+										!isPhone && "text-faint",
 										!isPhone && tool.active && "text-dim",
 										!isPhone && !tool.active && "group-hover:text-dim",
 									)}
@@ -3820,7 +3830,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</span>
 								{tool.label}
 								{!!tool.count && (
-									<span className="sidebar-nav-count">{tool.count}</span>
+									// `rounded-full`, not `rounded-[999px]`: this pill never
+									// carried a corner-shape, and rounded-full is the one
+									// radius spelling base.css does NOT squircle. On phones
+									// the count sits as a corner badge on the card rather
+									// than inline.
+									<span
+										className={cn(
+											"rounded-full bg-accent px-[7px] py-px text-meta leading-[1.5] font-semibold text-on-accent",
+											isPhone
+												? "absolute top-2.5 right-2.5 ml-0"
+												: "ml-auto",
+										)}
+									>
+										{tool.count}
+									</span>
 								)}
 							</>
 						);

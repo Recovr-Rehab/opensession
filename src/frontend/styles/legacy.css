@@ -159,57 +159,7 @@
 		padding-top: 7px;
 		padding-bottom: 7px;
 	}
-	.sidebar-tools-head + .sidebar-nav {
-		margin-top: -8px;
-	}
 }
-@media (max-width: 720px) {
-	/* Tools has no heading on phones, but its wrapper must remain a flex item so
-	   the user's configured section order applies to the card strip too. */
-	.sidebar-tools-section {
-		display: block;
-	}
-}
-.sidebar-nav {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	--sidebar-nav-x: 6px;
-	padding: 4px var(--sidebar-nav-x) 6px;
-}
-
-.sidebar-nav-item {
-	display: flex;
-	align-items: center;
-	gap: 11px;
-	width: 100%;
-	text-align: left;
-	background: none;
-	border: none;
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	font-size: 14px;
-	font-weight: 500;
-	padding: 6px 10px 6px calc(var(--sidebar-icon-left) - var(--sidebar-nav-x));
-}
-.sidebar-nav-item:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-.sidebar-nav-item.active {
-	color: var(--text);
-	background: var(--bg-active);
-}
-
-.sidebar-nav-icon {
-	display: inline-flex;
-	color: var(--text-faint);
-}
-.sidebar-nav-item.active .sidebar-nav-icon,
-.sidebar-nav-item:hover .sidebar-nav-icon {
-	color: var(--text-dim);
-}
-
 .app-body {
 	display: flex;
 	flex: 1;
@@ -1378,17 +1328,6 @@ body.resizing-tab-split {
 }
 
 /* ── Reviews view ────────────────────────────────────────── */
-
-.sidebar-nav-count {
-	margin-left: auto;
-	background: var(--accent);
-	color: var(--on-accent);
-	font-size: 11px;
-	font-weight: 600;
-	border-radius: 999px;
-	padding: 1px 7px;
-	line-height: 1.5;
-}
 
 .reviews {
 	flex: 1;
@@ -2797,10 +2736,6 @@ body.resizing-tab-split {
      rounded corner; a slightly smaller circle + more right padding sits it
      fully inside. */
 @media (max-width: 720px) {
-	.sidebar-nav-item {
-		font-size: 16px;
-		padding: 10px 8px;
-	}
 	.sidebar-band-label {
 		font-size: 15px;
 	}
@@ -2915,75 +2850,6 @@ body.resizing-tab-split {
 		padding-left: 8px;
 	}
 
-	/* One horizontally-scrollable line of tap cards (Slack-home style) rather
-	   than a wrapping grid, so all four tools sit on a single row and the rest
-	   peek in from the right edge to signal the scroll. */
-	.sidebar-nav {
-		display: flex;
-		/* flex:none so the sidebar's column layout can't shrink this scroll
-		   container down to its padding (it would clip the 84px cards). */
-		flex: none;
-		flex-direction: row;
-		flex-wrap: nowrap;
-		gap: 8px;
-		/* Left edge aligns with the Workspaces header / list content (16px). */
-		padding: 12px 12px 10px 16px;
-		overflow-x: auto;
-		overflow-y: hidden;
-		/* No `-webkit-overflow-scrolling: touch`: on iOS it promotes this strip to
-		   its own composited layer, which then paints ABOVE the sidebar's vertical
-		   overlay scrollbar — the scrollbar vanishes "under" the horizontal cards as
-		   it passes over them. Momentum scroll is on by default on modern iOS, so
-		   dropping it keeps the feel and lets the scrollbar sit above this section. */
-		scrollbar-width: none;
-		overscroll-behavior-x: contain;
-	}
-	.sidebar-nav::-webkit-scrollbar {
-		display: none;
-	}
-	.sidebar-nav-item {
-		flex: 0 0 auto;
-		width: 132px;
-		flex-direction: column;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 10px;
-		position: relative;
-		min-height: 84px;
-		background: var(--bg-panel);
-		border: 1px solid var(--border);
-		border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-		padding: 12px;
-		font-size: 13px;
-		font-weight: 600;
-		color: var(--text);
-		line-height: 1.25;
-	}
-	.sidebar-nav-item.active {
-		background: var(--bg-active);
-		border-color: var(--border-strong);
-		color: var(--text);
-	}
-	.sidebar-nav-item:hover {
-		background: var(--hover);
-	}
-	.sidebar-nav-icon {
-		color: var(--text-dim);
-	}
-	.sidebar-nav-item.active .sidebar-nav-icon {
-		color: var(--text);
-	}
-	.sidebar-nav-icon svg {
-		width: 22px;
-		height: 22px;
-	}
-	/* Count sits as a corner badge on the card rather than inline. */
-	.sidebar-nav-count {
-		position: absolute;
-		top: 10px;
-		right: 10px;
-		margin-left: 0;
-	}
 	/* Filter, docked in the top bar beside Search (portaled from the sidebar).
 	   `order: -1` seats it left of Search. Same 40px circle as the search
 	   button (::after pads the hit area to 44pt); muted until a filter is set. */

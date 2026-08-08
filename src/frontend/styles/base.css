@@ -687,13 +687,9 @@ button {
 	.composer-queue-action,
 	.composer-menu-item,
 	.session-link,
-	.sidebar-nav-item,
 	.sidebar-reopen,
 	.sidebar-group-header,
-	.sidebar-item,
-	.sidebar-item-x,
-	.sidebar-swipe-row,
-	.sidebar-item-rename {
+	.sidebar-swipe-row {
 		corner-shape: squircle;
 	}
 }
