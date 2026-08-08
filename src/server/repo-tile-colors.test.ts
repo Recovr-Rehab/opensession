@@ -39,6 +39,7 @@ describe("assignRepoTileColors", () => {
 	test("keeps same-letter repos on plainly different hues", () => {
 		// Two `T` tiles are told apart by color alone, so "not identical"
 		// isn't the bar — they have to not read as the same color either.
+		// Measured in degrees: the palette's own spacing is uneven.
 		const colors = assignRepoTileColors(REPOS);
 		const apart = (a: string, b: string) =>
 			tileHueDistance(
@@ -53,7 +54,7 @@ describe("assignRepoTileColors", () => {
 			["gitops", "gst-plugins-rs"],
 			["gstreamer", "gst-plugins-rs"],
 		]) {
-			expect(apart(a, b)).toBeGreaterThanOrEqual(3);
+			expect(apart(a, b)).toBeGreaterThanOrEqual(60);
 		}
 	});
 

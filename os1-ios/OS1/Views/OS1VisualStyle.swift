@@ -130,21 +130,21 @@ final class RepoTilePalette {
     static let shared = RepoTilePalette()
 
     static let colors: [UInt32] = [
-        0xc73f_15,  // vermilion
-        0x0079_14,  // green
-        0x0075_d2,  // azure
-        0xad21_5f,  // raspberry
-        0x7c79_00,  // olive
-        0x006f_83,  // petrol
-        0xa546_af,  // orchid
-        0x8857_00,  // bronze
-        0x0088_77,  // emerald
-        0x6349_c1,  // violet
+        0xff31_56,  // rose
+        0xe858_00,  // orange
+        0xb37d_00,  // gold
+        0x4e98_00,  // lime
+        0x009a_69,  // jade
+        0x0096_97,  // teal
+        0x0090_c8,  // azure
+        0x4d80_ff,  // blue
+        0x946c_ff,  // violet
+        0xd744_e2,  // magenta
     ]
 
-    /// The letter every tile carries. It is what keeps the palette deep —
-    /// these run 4.4–6.7:1 against it — so colors and ink move together; see
-    /// REPO_TILE_INK in src/server/repo-tile-colors.ts.
+    /// The letter every tile carries. It is the ceiling on the palette —
+    /// these sit at a flat 3.6:1 against it — so colors and ink move
+    /// together; see REPO_TILE_INK in src/server/repo-tile-colors.ts.
     static let ink = Color.white
 
     private var assigned: [String: Color] = [:]

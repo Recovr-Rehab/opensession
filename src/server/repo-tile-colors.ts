@@ -23,40 +23,35 @@
  */
 
 /**
- * Ten jewel-toned tile colors.
+ * Ten tile colors, in the shape of a multiplayer cursor palette: every hue
+ * pushed to the edge of sRGB at the lightest it can be while a WHITE label
+ * still reads on it. That is the whole trick, and it is why earlier versions
+ * felt dull — they fixed a lightness first (0.50/0.56) and took whatever
+ * chroma was left, which in the yellow-to-teal band is almost none. Fixing
+ * the CONTRAST instead (a flat 3.6:1 against white) and maximising chroma per
+ * hue buys roughly a stop of colour everywhere.
  *
- * Ten, not the sixteen this had, because the palette is also the picker: every
- * entry is a choice someone reads through, and sixteen near-neighbours asked
- * them to tell ochre from olive for no gain. Ten still covers the wheel and is
- * more colors than most instances have repos.
+ * Generated in OKLCH: lightness lands between 0.61 and 0.66 depending on hue,
+ * chroma is the sRGB boundary capped at 0.25 (uncapped, the magenta goes
+ * fluorescent). Lighten these and the letter goes — 3.6:1 is already the
+ * floor, so check the contrast before touching either these or
+ * REPO_TILE_INK.
  *
- * Generated in OKLCH — ten hues at even 36° steps, chroma 0.18 (clipped to the
- * sRGB boundary where a hue can't hold it), lightness alternating 0.56/0.50 so
- * neighbouring hues separate on brightness as well as hue. Deep and saturated
- * rather than bright: the letter is white (REPO_TILE_INK), and these run
- * 4.4–6.7:1 against it. That is the whole constraint on this palette — lighten
- * it and the letter goes with it, so check the contrast before touching either.
- *
- * The hues sit 18° off where earlier versions put them, which is what makes
- * this a different set rather than a dimmer one: vermilion and true green
- * where there used to be a soft red and a leaf.
- *
- * The order is deliberately NOT the hue wheel: entries are laid out in strides
- * around it, so two repos whose colors collide — the assignment below takes
- * the next free slot — land on plainly different colors rather than
- * neighbouring hues.
+ * Ten, not sixteen, because the palette is also the picker: every entry is a
+ * choice someone reads through. Ten still covers the wheel and is more colors
+ * than most instances have repos.
  */
 export const REPO_TILE_COLORS = [
-	"#c73f15", // vermilion
-	"#007914", // green
-	"#0075d2", // azure
-	"#ad215f", // raspberry
-	"#7c7900", // olive
-	"#006f83", // petrol
-	"#a546af", // orchid
-	"#885700", // bronze
-	"#008877", // emerald
-	"#6349c1", // violet
+	"#ff3156", // rose
+	"#e85800", // orange
+	"#b37d00", // gold
+	"#4e9800", // lime
+	"#009a69", // jade
+	"#009697", // teal
+	"#0090c8", // azure
+	"#4d80ff", // blue
+	"#946cff", // violet
+	"#d744e2", // magenta
 ];
 
 /**
@@ -67,11 +62,22 @@ export const REPO_TILE_COLORS = [
 export const REPO_TILE_INK = "#ffffff";
 
 /**
- * How far apart consecutive slots sit on the hue wheel, and the stride that
- * undoes it (3 × 7 ≡ 1 mod 10) so a slot can be mapped back to its wheel
- * position. Change one and the other has to follow.
+ * Where each entry above sits on the hue wheel, in degrees.
+ *
+ * Spelled out rather than derived because the spacing is deliberately UNEVEN
+ * (24° from rose to orange, 57° from gold to lime): the palette follows where
+ * sRGB actually has chroma to give, not a tidy wheel. Counting slots would
+ * therefore say nothing about how far apart two colors look, which is what
+ * the same-letter rule below depends on. Keep in step with REPO_TILE_COLORS.
  */
-const HUE_STRIDE_INVERSE = 7;
+const TILE_HUES = [18, 42, 78, 135, 162, 195, 235, 265, 292, 325];
+
+/**
+ * How far apart two same-letter repos' colors have to sit, in degrees. Two
+ * `T` tiles are told apart on color alone, and neighbours in this palette are
+ * as close as 24°, which reads as "the other blue-ish one".
+ */
+const MIN_SIBLING_HUE_GAP = 60;
 
 /**
  * The two palettes this replaced, and where each of their slots lands now.
@@ -111,6 +117,13 @@ const LEGACY_PALETTES: Array<{ colors: string[]; toCurrent: number[] }> = [
 		colors: ["#ff6f7a", "#79a300", "#00b2f4", "#df55b4", "#c89f00", "#00a7ab",
 			"#c281ff", "#dd7000", "#00c285", "#6887ff"],
 		toCurrent: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+	},
+	// The jewel tones, which were laid out in strides of three: slot 0 was
+	// hue 18, slot 1 hue 126, and so on. Mapped to the nearest hue here.
+	{
+		colors: ["#c73f15", "#007914", "#0075d2", "#ad215f", "#7c7900", "#006f83",
+			"#a546af", "#885700", "#008877", "#6349c1"],
+		toCurrent: [0, 3, 7, 9, 2, 6, 8, 1, 4, 8],
 	},
 ];
 
@@ -190,10 +203,14 @@ export function assignRepoTileColors(
 			const candidate = (start + step) % REPO_TILE_COLORS.length;
 			if (taken.has(candidate)) continue;
 			if (fallback === null) fallback = candidate;
-			// Distinct isn't enough between two `T`s: a color a step or two
+			// Distinct isn't enough between two `T`s: a color a few degrees
 			// from a sibling's still reads as "the other blue-green one". Keep
 			// probing for one that doesn't.
-			if (siblings.every((s) => tileHueDistance(candidate, s) >= 3)) {
+			if (
+				siblings.every(
+					(s) => tileHueDistance(candidate, s) >= MIN_SIBLING_HUE_GAP,
+				)
+			) {
 				index = candidate;
 				fallback = null;
 				break;
@@ -216,12 +233,10 @@ function tileLetter(id: string): string {
 }
 
 /**
- * How far apart two slots sit on the hue wheel, counted in palette steps
- * (36° each). Exported because the tests hold the palette to it.
+ * How far apart two palette entries sit on the hue wheel, in degrees.
+ * Exported because the tests hold the palette to it.
  */
 export function tileHueDistance(a: number, b: number): number {
-	const size = REPO_TILE_COLORS.length;
-	const wheel = (index: number) => (index * HUE_STRIDE_INVERSE) % size;
-	const gap = Math.abs(wheel(a) - wheel(b));
-	return Math.min(gap, size - gap);
+	const gap = Math.abs(TILE_HUES[a] - TILE_HUES[b]);
+	return Math.min(gap, 360 - gap);
 }

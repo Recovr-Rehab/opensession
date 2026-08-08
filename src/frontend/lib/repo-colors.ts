@@ -15,22 +15,22 @@
  */
 
 export const REPO_TILE_COLORS = [
-	"#c73f15", // vermilion
-	"#007914", // green
-	"#0075d2", // azure
-	"#ad215f", // raspberry
-	"#7c7900", // olive
-	"#006f83", // petrol
-	"#a546af", // orchid
-	"#885700", // bronze
-	"#008877", // emerald
-	"#6349c1", // violet
+	"#ff3156", // rose
+	"#e85800", // orange
+	"#b37d00", // gold
+	"#4e9800", // lime
+	"#009a69", // jade
+	"#009697", // teal
+	"#0090c8", // azure
+	"#4d80ff", // blue
+	"#946cff", // violet
+	"#d744e2", // magenta
 ];
 
 /**
- * The letter every tile carries. It is what keeps the palette deep: these run
- * 4.4–6.7:1 against it, and a lighter set would take the letter with it — so
- * the two move together, here and in the server and native copies.
+ * The letter every tile carries. It is the ceiling on the palette: these sit
+ * at a flat 3.6:1 against it, which is as light as they can go — so the two
+ * move together, here and in the server and native copies.
  */
 export const REPO_TILE_INK = "#ffffff";
 
