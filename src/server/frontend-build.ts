@@ -28,6 +28,29 @@ export type FrontendBundle = {
 };
 
 /**
+ * Name of the newest Tailwind sheet that compiled successfully, so a failed
+ * rebuild can keep serving it rather than shipping the app with no utilities
+ * at all (see the Tailwind pass in buildFrontend). Parked on globalThis with
+ * the rest of the bundle state, and seeded from disk on first use so the
+ * fallback survives a server restart as well as a hot reload.
+ */
+function lastGoodTailwind(): string | null {
+	if (g.__opensessionLastGoodTailwind === undefined) {
+		let newest: string | null = null;
+		let newestAt = 0;
+		try {
+			for (const f of readdirSync(FRONTEND_DIST)) {
+				if (!/^tailwind-.+\.css$/.test(f)) continue;
+				const at = statSync(join(FRONTEND_DIST, f)).mtimeMs;
+				if (at >= newestAt) [newest, newestAt] = [f, at];
+			}
+		} catch {}
+		g.__opensessionLastGoodTailwind = newest;
+	}
+	return g.__opensessionLastGoodTailwind ?? null;
+}
+
+/**
  * Compile src/frontend/styles/tailwind.css with the real Tailwind CLI. Bun
  * cannot compile Tailwind, so this subprocess (~100ms) is the only way to get
  * the utilities layer — in the prod bundle AND in dev, where the UI is served
@@ -117,7 +140,18 @@ export async function buildFrontend(): Promise<string> {
 	// .panel-overlay / .sidebar-overlay inset (and a few color-mix percentages),
 	// which knocks out the mobile overlay layer. Bypass it: write the source CSS
 	// unmodified with a content-hashed name and serve it ourselves.
-	let cssSrc = await Bun.file(`${FRONTEND_SRC}/styles/global.css`).text();
+	// base.css is the permanent foundation (tokens, reset, platform chrome);
+	// legacy.css is the component styling being migrated to Tailwind and is
+	// meant to reach zero. Concatenated in this order so the split is purely
+	// organisational — every rule keeps the cascade position it had when the
+	// two were one file. Each has its own doc header explaining the contract.
+	let cssSrc = (
+		await Promise.all(
+			["base", "legacy"].map((n) =>
+				Bun.file(`${FRONTEND_SRC}/styles/${n}.css`).text(),
+			),
+		)
+	).join("\n");
 	// xterm stylesheet (the Shell tab) rides along in the same file, vendored
 	// straight from the installed package so it can't drift from the JS.
 	try {
@@ -153,19 +187,35 @@ export async function buildFrontend(): Promise<string> {
 	// Tailwind pass (see styles/tailwind.css). Bun can't compile Tailwind, so
 	// the real compiler runs as a subprocess (~50ms); its lightningcss minifier
 	// doesn't have the var() bug above. Linked after global.css so utilities win
-	// source-order ties against legacy rules. Fail-soft: a broken Tailwind
-	// compile ships the bundle without utilities rather than taking down the
-	// whole server (this build also runs at boot, before Bun.serve).
+	// source-order ties against legacy rules.
+	//
+	// Fail-soft, but NOT by dropping the sheet: as components migrate off
+	// global.css the utilities stop being a garnish and start carrying the
+	// layout, so "serve without utilities" degrades from a cosmetic loss to a
+	// destroyed page. Fall back to the last sheet that compiled instead — it is
+	// stale by exactly the edit that broke the build, which is survivable, and
+	// the watcher replaces it on the next good compile. Only a failure with no
+	// previous sheet at all (a broken first build at boot) ships bare.
 	let twName: string | null = null;
 	try {
 		const twCss = await compileTailwind(`${FRONTEND_DIST}/.tailwind-build.css`);
 		twName = `tailwind-${Bun.hash(twCss).toString(36)}.css`;
 		writeFileAtomic(`${FRONTEND_DIST}/${twName}`, twCss);
+		g.__opensessionLastGoodTailwind = twName;
 	} catch (e) {
-		console.error(
-			"[frontend] Tailwind build FAILED — serving without utilities:",
-			e,
-		);
+		const prev = lastGoodTailwind();
+		if (prev && existsSync(`${FRONTEND_DIST}/${prev}`)) {
+			twName = prev;
+			console.error(
+				`[frontend] Tailwind build FAILED — reusing last good sheet (${prev}):`,
+				e,
+			);
+		} else {
+			console.error(
+				"[frontend] Tailwind build FAILED and no previous sheet exists — serving without utilities:",
+				e,
+			);
+		}
 	}
 
 	let indexHtml = await Bun.file(`${FRONTEND_SRC}/index.html`).text();
