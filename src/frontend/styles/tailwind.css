@@ -31,7 +31,17 @@
    `phone:` is the stylesheet's semantics exactly; `desktop:` is its exact
    complement, and the same query the `min-[721px]:` call sites already spell.
    Prefer these for new and touched UI — one word, and the boundary stops
-   depending on which spelling a call site happened to use. */
+   depending on which spelling a call site happened to use.
+
+   One consequence of naming them, worth knowing before you mix breakpoints on
+   one element: a custom variant is emitted in a different group than the
+   arbitrary `min-[…]:` ones, so `desktop:` moved from FIRST among the
+   min-width blocks (where sm:/md:/lg:/min-[861px]: outranked it) to LAST
+   (where it outranks them). `phone:` is unaffected — its query can never be
+   live at the same time as those. Nothing in the app is styled by both a
+   `desktop:` utility and a wider-breakpoint one on the same property today
+   (checked across every element of every route), so the move changed nothing;
+   put a `desktop:` and an `lg:` on one property and it will. */
 @custom-variant phone (@media (max-width: 720px));
 @custom-variant desktop (@media (min-width: 721px));
 
