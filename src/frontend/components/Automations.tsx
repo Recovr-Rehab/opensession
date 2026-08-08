@@ -21,10 +21,38 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { InlineAlert, LoadingState } from "../ui/state";
+import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
+
+/* The old .automation-form family, as utilities. Two of its rules reached in
+   from the form to the fields inside it and have to stay descendant selectors:
+   every field goes to 16px on phones (below that iOS zooms a focused field),
+   and a multi-line brief keeps paragraph leading, which the type scale
+   doesn't set. */
+const FORM_FIELDS =
+  "[&_textarea]:leading-normal max-[720px]:[&_input]:text-[16px] max-[720px]:[&_select]:text-[16px] max-[720px]:[&_textarea]:text-[16px]";
+/** .automation-form.automation-form-inline — no card chrome; the drawer body
+ *  already provides the surface and the padding. */
+const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
+/** .automation-form */
+const FORM_CARD = `${FORM_INLINE} rounded-panel border border-line-strong bg-panel p-4.5`;
+/** .automation-form label */
+const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
+/** .automation-form-title */
+const FORM_TITLE = "text-body font-semibold";
+/** .automation-form-actions */
+const FORM_ACTIONS = "flex justify-end gap-2.5";
+/** .automation-form-row */
+const FORM_ROW = "flex gap-3.5 max-[720px]:flex-col";
+/** .automations-drawer-section-label */
+const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
+/** .automation-session-link */
+const LINK = "cursor-pointer text-link no-underline hover:underline";
+/** .automation-cron — the cron/event chip in the Configuration grid. */
+const CHIP = "rounded-sm bg-active px-1.75 py-px text-meta";
 
 interface AutomationRun {
   at: string;
@@ -203,9 +231,18 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div className={`automations-page ${sel ? "automations-page-has-detail" : ""}`}>
-    <div className="automations-page-main">
-    <div className="automations-page-inner">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
+    {/* Drawer open: the list compresses to a narrow rail (Reviews-style), and
+        on phones it steps aside entirely — Back returns to it. */}
+    <div
+      className={cn(
+        "min-w-0 overflow-y-auto",
+        sel
+          ? "flex-[0_0_340px] border-r border-line px-3.5 pt-4 pb-10 max-[900px]:hidden"
+          : "flex-1 px-6 pt-7 pb-15 max-[560px]:px-4 max-[560px]:pt-5 max-[560px]:pb-12",
+      )}
+    >
+    <div className={cn("mx-auto", !sel && "max-w-[860px]")}>
       <PageHeader
         className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${sel ? "mb-3.5 items-center" : ""}`}
       >
@@ -232,21 +269,22 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
       {loading ? (
         <LoadingState>Loading…</LoadingState>
       ) : automations.length === 0 && !showModal ? (
-        <div className="automations-empty">
-          <p>No automations yet.</p>
-          <p className="automations-empty-sub">
-            Schedule recurring work: daily PR-review sweeps, dependency checks, weekly
-            changelog drafts, flaky-test hunts…
-          </p>
-        </div>
+        <EmptyState title="No automations yet.">
+          Schedule recurring work: daily PR-review sweeps, dependency checks, weekly
+          changelog drafts, flaky-test hunts…
+        </EmptyState>
       ) : (
-        <div className="automations-table">
+        <div className="flex flex-col border-t border-line">
           {automations.map((a) => {
             const running = a.isRunning || a.lastRunStatus === "running";
             return (
               <button
                 key={a.id}
-                className={`automations-row ${sel?.id === a.id ? "active" : ""} ${a.enabled ? "" : "automations-row-off"}`}
+                className={cn(
+                  "flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-body text-fg",
+                  "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
+                  sel?.id === a.id ? "bg-active" : "hover:bg-hover",
+                )}
                 onClick={() => onSelect(a.id)}
               >
                 {/* Inner controls are spans — the row itself is a button. */}
@@ -261,9 +299,14 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 >
                   <span className="auto-toggle-knob" />
                 </span>
-                <span className="automations-row-main">
-                  <span className="automations-row-name">{a.name}</span>
-                  <span className="automations-row-trigger">{triggerSummary(a)}</span>
+                <span
+                  className={cn(
+                    "flex min-w-0 flex-1 flex-col gap-0.75 max-[560px]:-order-1",
+                    !a.enabled && "opacity-55",
+                  )}
+                >
+                  <span className="truncate text-body font-semibold">{a.name}</span>
+                  <span className="truncate text-meta text-faint">{triggerSummary(a)}</span>
                 </span>
                 {running ? (
                   <WorkingPill className="max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis" />
@@ -279,10 +322,19 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     ✗
                   </span>
                 ) : null}
-                <span className="automations-row-graph">
+                {/* The graph and the next-run column are the first things to
+                    go when width is scarce: the drawer's rail and phones. */}
+                <span
+                  className={cn("shrink-0", sel ? "hidden" : "flex max-[560px]:hidden")}
+                >
                   {(a.runs?.length ?? 0) > 0 && <TriggerGraph runs={a.runs!} compact />}
                 </span>
-                <span className="automations-row-next">
+                <span
+                  className={cn(
+                    "w-21 shrink-0 text-right text-meta text-faint",
+                    sel ? "hidden" : "max-[560px]:hidden",
+                  )}
+                >
                   {!a.enabled ? "off" : a.nextRunAt ? `next ${formatNext(a.nextRunAt)}` : ""}
                 </span>
               </button>
@@ -294,23 +346,24 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
     </div>
 
       {sel && (
-        <aside className="automations-drawer">
-          <div className="automations-drawer-head">
+        <aside className="flex min-h-0 min-w-0 flex-auto flex-col border-l border-line bg-panel max-[900px]:border-l-0">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
+            {/* Phones get Back instead of Close: there the drawer is the page. */}
             <button
-              className="automations-drawer-back"
+              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
               onClick={() => onSelect("")}
               title="Back to automations"
             >
-              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" className="text-dim" aria-hidden>
                 <path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 1 1 1.06 1.06L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z" />
               </svg>
               Automations
             </button>
-            <span className="automations-drawer-title">
+            <span className="min-w-0 truncate text-label font-semibold">
               {editMode ? `Edit — ${sel.name}` : sel.name}
             </span>
             {!editMode && (
-              <div className="automations-drawer-actions">
+              <div className="ml-auto flex shrink-0 gap-1.5">
                 <Button
                   size="sm"
                   className="border-line-strong bg-transparent shadow-none hover:bg-transparent"
@@ -332,7 +385,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               </div>
             )}
             <button
-              className="automations-drawer-close"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-dim hover:bg-hover hover:text-fg max-[900px]:hidden"
               onClick={() => onSelect("")}
               title="Close"
             >
@@ -341,9 +394,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
             </button>
           </div>
-          <div className="automations-drawer-body">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pt-4.5 pb-10">
             {editMode ? (
-              <div className="automation-form automation-form-inline">
+              <div className={FORM_INLINE}>
                 <AutomationForm
                   key={sel.id}
                   kind={sel.slackWatch?.channel ? "watch" : "classic"}
@@ -382,21 +435,21 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Instructions</div>
+                  <div className={SECTION_LABEL}>Instructions</div>
                   <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim whitespace-pre-wrap">
                     {sel.prompt}
                   </div>
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Configuration</div>
+                  <div className={SECTION_LABEL}>Configuration</div>
                   <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-[13px]">
                     <DetailKey>Trigger</DetailKey>
                     <span className="text-dim min-w-0">
                       {sel.slackWatch?.channel ? (
                         <>
                           watches{" "}
-                          <span className="automation-cron automation-event">
+                          <span className={`${CHIP} text-yellow`}>
                             #{sel.slackWatch.channel}
                           </span>{" "}
                           — one run per top-level message
@@ -407,7 +460,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                             <>
                               {scheduleLabel(sel.schedule) &&
                                 `${scheduleLabel(sel.schedule)} · `}
-                              <span className="automation-cron" title="Cron, UTC">
+                              <span className={CHIP} title="Cron, UTC">
                                 {sel.schedule}
                               </span>
                             </>
@@ -485,7 +538,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Activity</div>
+                  <div className={SECTION_LABEL}>Activity</div>
                   {sel.lastRunAt ? (
                     <div className="text-dim text-supporting">
                       last run {relativeTime(sel.lastRunAt)}
@@ -498,7 +551,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                         <>
                           {" · "}
                           <a
-                            className="automation-session-link"
+                            className={LINK}
                             onClick={(e) => {
                               e.preventDefault();
                               onOpenSession(sel.lastRunSessionId!);
@@ -682,7 +735,7 @@ function RunLedger({
             </span>
           )}
           <a
-            className="automation-session-link ml-auto shrink-0"
+            className={cn(LINK, "ml-auto shrink-0")}
             href={`${BASE_PATH}/session/${r.sessionId}`}
             onClick={(e) => {
               e.preventDefault();
@@ -693,7 +746,7 @@ function RunLedger({
           </a>
           {r.status !== "running" && (
             <button
-              className="automation-session-link shrink-0 bg-transparent border-none p-0 font-[inherit] text-label"
+              className={cn(LINK, "shrink-0 text-label")}
               title={
                 r.trigger === "event" || r.trigger === "webhook"
                   ? "Start a fresh run replaying this run's triggering event"
@@ -717,7 +770,7 @@ function WebhookUrl({ id, secret }: { id: string; secret: string }) {
 
   return (
     <span className="flex items-center gap-2 min-w-0">
-      <span className="automation-webhook-url" title={url}>
+      <span className="min-w-0 flex-1 truncate text-meta text-dim" title={url}>
         POST {url.replace(secret, secret.slice(0, 6) + "…")}
       </span>
       <Button
@@ -782,7 +835,7 @@ function CreateAutomationModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="automation-form w-full max-w-[680px] my-auto shadow-2xl">
+      <div className={cn(FORM_CARD, "my-auto w-full max-w-[680px] shadow-2xl")}>
         {step === "type" ? (
           <TypeChooser
             onPick={(draft, s) => {
@@ -838,7 +891,7 @@ function TypeChooser({
   return (
     <>
       <div>
-        <div className="automation-form-title">Create automation</div>
+        <div className={FORM_TITLE}>Create automation</div>
         <div className="text-dim text-[13px] mt-0.5">
           Choose the type of automation you want to create.
         </div>
@@ -914,7 +967,7 @@ function TypeChooser({
         </div>
       )}
 
-      <div className="automation-form-actions">
+      <div className={FORM_ACTIONS}>
         <Button size="sm" className="px-3 text-[13px]" onClick={onClose}>
           Cancel
         </Button>
@@ -996,8 +1049,7 @@ function McpPicker({
           </span>
         </div>
         <label
-          className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-hover border-b border-line"
-          style={{ flexDirection: "row", fontSize: 13 }}
+          className="flex items-center gap-2.5 border-b border-line px-3 py-2 text-label cursor-pointer hover:bg-hover"
         >
           <input
             type="checkbox"
@@ -1014,8 +1066,7 @@ function McpPicker({
           {shown.map((s) => (
             <label
               key={s.name}
-              className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-hover"
-              style={{ flexDirection: "row", fontSize: 13 }}
+              className="flex items-center gap-2.5 px-3 py-1.5 text-label cursor-pointer hover:bg-hover"
             >
               <input
                 type="checkbox"
@@ -1173,7 +1224,7 @@ function AutomationForm({
               ←
             </Button>
           )}
-          <div className="automation-form-title" style={{ marginBottom: 0 }}>
+          <div className={FORM_TITLE}>
             {initial
               ? `Edit "${initial.name}"`
               : isWatch
@@ -1183,7 +1234,7 @@ function AutomationForm({
         </div>
       )}
 
-      <label>
+      <label className={FIELD_LABEL}>
         Automation name
         <Input
           value={name}
@@ -1193,7 +1244,7 @@ function AutomationForm({
       </label>
 
       {isWatch ? (
-        <label>
+        <label className={FIELD_LABEL}>
           Slack channel — what channel should {AGENT_NAME} watch?
           <Input
             value={watchChannel}
@@ -1216,7 +1267,7 @@ function AutomationForm({
             </span>
           </div>
           <div className="bg-surface border border-line rounded-panel px-3 py-2.5 flex flex-col gap-2.5">
-            <label style={{ marginBottom: 0 }}>
+            <label className={FIELD_LABEL}>
               Schedule
               <Select value={preset} onChange={(e) => setPreset(e.target.value)}>
                 {PRESETS.map((p) => (
@@ -1227,7 +1278,7 @@ function AutomationForm({
               </Select>
             </label>
             {preset === CUSTOM && (
-              <label style={{ marginBottom: 0 }}>
+              <label className={FIELD_LABEL}>
                 Cron expression (UTC)
                 <Input
                   value={customCron}
@@ -1237,7 +1288,7 @@ function AutomationForm({
                 />
               </label>
             )}
-            <label style={{ marginBottom: 0 }}>
+            <label className={FIELD_LABEL}>
               Internal event
               <Select value={eventKey} onChange={(e) => setEventKey(e.target.value)}>
                 <option value="">None</option>
@@ -1256,7 +1307,7 @@ function AutomationForm({
         </div>
       )}
 
-      <label>
+      <label className={FIELD_LABEL}>
         Instructions — what {AGENT_NAME} does {isWatch ? "with each message" : "when triggers activate"}
         <Textarea
           value={prompt}
@@ -1283,8 +1334,8 @@ function AutomationForm({
       </div>
 
       {showAdvanced && (
-        <div className="automation-form-row">
-          <label>
+        <div className={FORM_ROW}>
+          <label className={FIELD_LABEL}>
             Mode
             <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
               <option value="ask">Ask — read-only on main</option>
@@ -1292,7 +1343,7 @@ function AutomationForm({
             </Select>
           </label>
 
-          <label>
+          <label className={FIELD_LABEL}>
             Model
             <Select value={model} onChange={(e) => setModel(e.target.value)}>
               <option value="">Default{defaultModel ? ` — ${defaultModel}` : ""}</option>
@@ -1305,7 +1356,7 @@ function AutomationForm({
             </Select>
           </label>
 
-          <label>
+          <label className={FIELD_LABEL}>
             Fallback (when all accounts hit usage limits)
             <Select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
               <option value="">None — fail instead of falling back</option>
@@ -1318,7 +1369,7 @@ function AutomationForm({
             </Select>
           </label>
 
-          <label title="Pin runs to one account from the selected model's provider pool.">
+          <label className={FIELD_LABEL} title="Pin runs to one account from the selected model's provider pool.">
             Provider account
             <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               <option value="">Auto — shared pool rotation</option>
@@ -1332,7 +1383,7 @@ function AutomationForm({
           </label>
 
           {accountId && (
-            <label title="This account only: when it's out of usage, runs switch to the fallback model — never the shared pool — so this account's limits are the automation's cost ceiling. Prefer it: exhausted runs rotate into the shared pool instead.">
+            <label className={FIELD_LABEL} title="This account only: when it's out of usage, runs switch to the fallback model — never the shared pool — so this account's limits are the automation's cost ceiling. Prefer it: exhausted runs rotate into the shared pool instead.">
               When the pinned account is out of usage
               <Select
                 value={accountStrict ? "strict" : "pool"}
@@ -1344,7 +1395,7 @@ function AutomationForm({
             </label>
           )}
 
-          <label title="Usage-credits are pay-as-you-go spend past the subscription's included limits. Only takes effect on accounts with extra usage enabled at claude.ai — and their monthly credit cap still bounds the spend.">
+          <label className={FIELD_LABEL} title="Usage-credits are pay-as-you-go spend past the subscription's included limits. Only takes effect on accounts with extra usage enabled at claude.ai — and their monthly credit cap still bounds the spend.">
             Usage credits
             <Select
               value={usageCredits ? "allow" : "never"}
@@ -1359,7 +1410,7 @@ function AutomationForm({
 
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
-      <div className="automation-form-actions">
+      <div className={FORM_ACTIONS}>
         <Button size="sm" className="px-3 text-[13px]" onClick={onClose} disabled={saving}>
           Cancel
         </Button>

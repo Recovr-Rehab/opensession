@@ -15,10 +15,34 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageSection } from "../ui/page";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { InlineAlert, LoadingState } from "../ui/state";
+import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+
+/* The old .automation-form family, as utilities (see Automations.tsx — this
+   page shares its list/drawer/form shapes). The descendant variants keep the
+   two rules that reached in from the form to its fields: 16px on phones, so
+   iOS doesn't zoom a focused field, and paragraph leading in a textarea. */
+const FORM_FIELDS =
+  "[&_textarea]:leading-normal max-[720px]:[&_input]:text-[16px] max-[720px]:[&_select]:text-[16px] max-[720px]:[&_textarea]:text-[16px]";
+/** .automation-form.automation-form-inline — the drawer body is the surface. */
+const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
+/** .automation-form */
+const FORM_CARD = `${FORM_INLINE} mb-4.5 rounded-panel border border-line-strong bg-panel p-4.5`;
+/** .automation-form label */
+const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
+/** .automation-form-title */
+const FORM_TITLE = "text-body font-semibold";
+/** .automation-form-actions */
+const FORM_ACTIONS = "flex justify-end gap-2.5";
+/** .automation-form-row */
+const FORM_ROW = "flex gap-3.5 max-[720px]:flex-col";
+/** .automations-drawer-section-label */
+const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
+/** .automation-session-link */
+const LINK = "cursor-pointer text-link no-underline hover:underline";
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -92,8 +116,17 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div className={`automations-page ${sel ? "automations-page-has-detail" : ""}`}>
-    <div className="automations-page-main">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
+    {/* Drawer open: the list compresses to a narrow rail, and on phones it
+        steps aside entirely — Back returns to it. */}
+    <div
+      className={cn(
+        "min-w-0 overflow-y-auto",
+        sel
+          ? "flex-[0_0_340px] border-r border-line px-3.5 pt-4 pb-10 max-[900px]:hidden"
+          : "flex-1 px-6 pt-7 pb-15 max-[560px]:px-4 max-[560px]:pt-5 max-[560px]:pb-12",
+      )}
+    >
     <PageSection>
       <PageHeader
         className={sel ? "mb-3.5 items-center" : "max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5"}
@@ -128,34 +161,43 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
       {loading ? (
         <LoadingState>Loading…</LoadingState>
       ) : actions.length === 0 ? (
-        <div className="automations-empty">
-          <p>No actions yet.</p>
-          <p className="automations-empty-sub">
-            Register a script from a repo (e.g. scripts/run-maintenance.sh).
-          </p>
-        </div>
+        <EmptyState title="No actions yet.">
+          Register a script from a repo (e.g. scripts/run-maintenance.sh).
+        </EmptyState>
       ) : (
-        <div className="automations-table">
+        <div className="flex flex-col border-t border-line">
           {actions.map((a) => (
             <button
               key={a.id}
-              className={`automations-row ${sel?.id === a.id ? "active" : ""}`}
+              className={cn(
+                "flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-body text-fg",
+                "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
+                sel?.id === a.id ? "bg-active" : "hover:bg-hover",
+              )}
               onClick={() => onSelect(a.id)}
             >
-              <span className="automations-row-main">
-                <span className="automations-row-name">{a.name}</span>
-                <span className="automations-row-trigger">
+              <span className="flex min-w-0 flex-1 flex-col gap-0.75 max-[560px]:-order-1">
+                <span className="truncate text-body font-semibold">{a.name}</span>
+                <span className="truncate text-meta text-faint">
                   {a.kind === "mcp"
                     ? `${a.mcpServer} · ${a.toolName}`
                     : `${a.repo ? repoLabel(a.repo) : ""} · ${a.scriptPath}`}
                 </span>
               </span>
               {a.confirm && (
-                <span className="source-chip" title="Asks for a confirm before running">
+                <span
+                  className="source-chip max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis"
+                  title="Asks for a confirm before running"
+                >
                   confirm
                 </span>
               )}
-              <span className="automations-row-next">
+              <span
+                className={cn(
+                  "w-21 shrink-0 text-right text-meta text-faint",
+                  sel ? "hidden" : "max-[560px]:hidden",
+                )}
+              >
                 {a.lastRunAt ? relativeTime(a.lastRunAt) : ""}
               </span>
             </button>
@@ -166,26 +208,27 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
     </div>
 
       {sel && (
-        <aside className="automations-drawer">
-          <div className="automations-drawer-head">
+        <aside className="flex min-h-0 min-w-0 flex-auto flex-col border-l border-line bg-panel max-[900px]:border-l-0">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
+            {/* Phones get Back instead of Close: there the drawer is the page. */}
             <button
-              className="automations-drawer-back"
+              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
               onClick={() => onSelect("")}
               title="Back to actions"
             >
-              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" className="text-dim" aria-hidden>
                 <path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 1 1 1.06 1.06L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z" />
               </svg>
               Actions
             </button>
-            <span className="automations-drawer-title">{sel.name}</span>
-            <div className="automations-drawer-actions">
+            <span className="min-w-0 truncate text-label font-semibold">{sel.name}</span>
+            <div className="ml-auto flex shrink-0 gap-1.5">
               <Button size="sm" variant="danger" onClick={() => handleDelete(sel)}>
                 Delete
               </Button>
             </div>
             <button
-              className="automations-drawer-close"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-dim hover:bg-hover hover:text-fg max-[900px]:hidden"
               onClick={() => onSelect("")}
               title="Close"
             >
@@ -194,7 +237,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
             </button>
           </div>
-          <div className="automations-drawer-body">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pt-4.5 pb-10">
             {sel.description && (
               <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim">
                 {sel.description}
@@ -202,7 +245,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
             )}
 
             <div>
-              <div className="automations-drawer-section-label mb-1.5">Run</div>
+              <div className={SECTION_LABEL}>Run</div>
               <RunForm
                 key={sel.id}
                 action={sel}
@@ -214,7 +257,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
             </div>
 
             <div>
-              <div className="automations-drawer-section-label mb-1.5">Configuration</div>
+              <div className={SECTION_LABEL}>Configuration</div>
               <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-[13px]">
                 <DetailKey>Type</DetailKey>
                 <span className="text-dim">
@@ -225,7 +268,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
 
                 <DetailKey>{sel.kind === "mcp" ? "Tool" : "Script"}</DetailKey>
                 <span className="text-dim min-w-0">
-                  <span className="automation-cron">
+                  <span className="rounded-sm bg-active px-1.75 py-px text-meta">
                     {sel.kind === "mcp"
                       ? `${sel.mcpServer} · ${sel.toolName}`
                       : `${sel.repo ? repoLabel(sel.repo) : ""}:${sel.scriptPath}`}
@@ -254,7 +297,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
             </div>
 
             <div>
-              <div className="automations-drawer-section-label mb-1.5">Activity</div>
+              <div className={SECTION_LABEL}>Activity</div>
               {sel.lastRunAt ? (
                 <div className="text-dim text-supporting">
                   last run {relativeTime(sel.lastRunAt)}
@@ -262,7 +305,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
                     <>
                       {" · "}
                       <a
-                        className="automation-session-link"
+                        className={LINK}
                         onClick={(e) => {
                           e.preventDefault();
                           onOpenSession(sel.lastRunSessionId!);
@@ -322,13 +365,13 @@ function RunForm({
   }
 
   return (
-    <div className="automation-form automation-form-inline">
+    <div className={FORM_INLINE}>
       {action.inputs.length === 0 && (
         <div className="mt-1 text-supporting text-faint">This action takes no inputs.</div>
       )}
 
       {action.inputs.map((input) => (
-        <label key={input.name}>
+        <label key={input.name} className={FIELD_LABEL}>
           {input.label || input.name}
           {input.required ? " *" : ""}
           {input.type === "select" ? (
@@ -372,7 +415,7 @@ function RunForm({
 
       {error && <InlineAlert>{error}</InlineAlert>}
 
-      <div className="automation-form-actions" style={{ justifyContent: "flex-start" }}>
+      <div className={cn(FORM_ACTIONS, "justify-start")}>
         <Button variant="primary" className="px-[22px]" onClick={run} disabled={busy}>
           {busy ? "Starting…" : action.confirm ? "Confirm & run" : "Run"}
         </Button>
@@ -466,15 +509,15 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
   }
 
   return (
-    <div className="automation-form">
-      <div className="automation-form-title">New action</div>
+    <div className={FORM_CARD}>
+      <div className={FORM_TITLE}>New action</div>
 
-      <label>
+      <label className={FIELD_LABEL}>
         Name
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Run maintenance task" />
       </label>
 
-      <label>
+      <label className={FIELD_LABEL}>
         Description (optional)
         <Input
           value={description}
@@ -483,7 +526,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
         />
       </label>
 
-      <label>
+      <label className={FIELD_LABEL}>
         Type
         <Select value={kind} onChange={(e) => setKind(e.target.value as "repo" | "mcp")}>
           <option value="repo">Repo script — run a script from a repo</option>
@@ -492,8 +535,8 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
       </label>
 
       {kind === "repo" ? (
-        <div className="automation-form-row">
-          <label>
+        <div className={FORM_ROW}>
+          <label className={FIELD_LABEL}>
             Repo
             <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
               {repos.map((item) => (
@@ -501,7 +544,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
               ))}
             </Select>
           </label>
-          <label style={{ flex: 2 }}>
+          <label className={cn(FIELD_LABEL, "flex-2")}>
             Script path (relative to repo root)
             <Input
               className="mono-input"
@@ -511,7 +554,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
               onBlur={detect}
             />
           </label>
-          <label>
+          <label className={FIELD_LABEL}>
             Arg mode
             <Select value={argMode} onChange={(e) => setArgMode(e.target.value as "positional" | "env")}>
               <option value="positional">Positional ($1 $2 …)</option>
@@ -520,8 +563,8 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </label>
         </div>
       ) : (
-        <div className="automation-form-row">
-          <label style={{ flex: 2 }}>
+        <div className={FORM_ROW}>
+          <label className={cn(FIELD_LABEL, "flex-2")}>
             MCP server
             <Input
               className="mono-input"
@@ -530,7 +573,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
               placeholder="support"
             />
           </label>
-          <label style={{ flex: 2 }}>
+          <label className={cn(FIELD_LABEL, "flex-2")}>
             Tool name
             <Input
               className="mono-input"
@@ -550,7 +593,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
       )}
 
       {kind === "repo" && (
-        <div className="automation-form-actions" style={{ justifyContent: "flex-start" }}>
+        <div className={cn(FORM_ACTIONS, "justify-start")}>
           <Button
             size="sm"
             className="border-line-strong bg-transparent"
@@ -562,13 +605,13 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
         </div>
       )}
 
-      <div className="automation-form-title" style={{ fontSize: 14, marginTop: 8 }}>
+      <div className={cn(FORM_TITLE, "mt-2")}>
         Inputs {kind === "mcp" ? "(arg names)" : argMode === "positional" ? "(in order →)" : ""}
       </div>
       {inputs.length === 0 && <div className="mt-1 text-supporting text-faint">No inputs — the script runs with no args.</div>}
       {inputs.map((input, idx) => (
-        <div className="automation-form-row" key={idx} style={{ alignItems: "flex-end" }}>
-          <label>
+        <div className={cn(FORM_ROW, "items-end")} key={idx}>
+          <label className={FIELD_LABEL}>
             Variable name
             <Input
               className="mono-input"
@@ -577,7 +620,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
               placeholder={argMode === "env" ? "STORY_ID" : "ID"}
             />
           </label>
-          <label>
+          <label className={FIELD_LABEL}>
             Label
             <Input
               value={input.label || ""}
@@ -585,7 +628,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
               placeholder="Story ID"
             />
           </label>
-          <label>
+          <label className={FIELD_LABEL}>
             Type
             <Select
               value={input.type}
@@ -598,7 +641,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
               ))}
             </Select>
           </label>
-          <label style={{ flex: "0 0 auto" }}>
+          <label className={cn(FIELD_LABEL, "flex-none")}>
             Required
             <input
               type="checkbox"
@@ -611,13 +654,13 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </Button>
         </div>
       ))}
-      <div className="automation-form-actions" style={{ justifyContent: "flex-start" }}>
+      <div className={cn(FORM_ACTIONS, "justify-start")}>
         <Button size="sm" className="border-line-strong bg-transparent" onClick={addInput}>
           + Add input
         </Button>
       </div>
 
-      <label style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <label className={cn(FIELD_LABEL, "flex-row items-center gap-2")}>
         <input
           type="checkbox"
           checked={confirmFlag}
@@ -628,7 +671,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
 
       {error && <InlineAlert>{error}</InlineAlert>}
 
-      <div className="automation-form-actions">
+      <div className={FORM_ACTIONS}>
         <Button
           size="sm"
           className="min-h-7 border-line-strong bg-transparent px-3 text-[13px]"

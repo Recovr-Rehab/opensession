@@ -7,6 +7,7 @@ import { relativeTime, archiveSessionApi } from "../lib/api";
 import { useCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { PageLayout } from "../ui/page";
+import { EmptyState } from "../ui/state";
 
 interface Props {
   sessions: UnifiedSession[];
@@ -200,9 +201,9 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
       }
     >
       {archived.length === 0 ? (
-        <div className="automations-empty">
-          <p>Nothing archived{search || owner === "mine" || repo !== "all" ? " matches" : " yet"}.</p>
-        </div>
+        <EmptyState>
+          Nothing archived{search || owner === "mine" || repo !== "all" ? " matches" : " yet"}.
+        </EmptyState>
       ) : (
         <div className="home-rows">
           {archived.slice(0, 200).map((s) => (

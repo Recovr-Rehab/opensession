@@ -19,10 +19,34 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { InlineAlert, LoadingState } from "../ui/state";
+import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
+
+/* The old .automation-form family, as utilities (see Automations.tsx — this
+   page shares its list/drawer/form shapes). The descendant variants keep the
+   two rules that reached in from the form to its fields: 16px on phones, so
+   iOS doesn't zoom a focused field, and paragraph leading in a textarea. */
+const FORM_FIELDS =
+  "[&_textarea]:leading-normal max-[720px]:[&_input]:text-[16px] max-[720px]:[&_select]:text-[16px] max-[720px]:[&_textarea]:text-[16px]";
+/** .automation-form.automation-form-inline — the drawer body is the surface. */
+const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
+/** .automation-form */
+const FORM_CARD = `${FORM_INLINE} mb-4.5 rounded-panel border border-line-strong bg-panel p-4.5`;
+/** .automation-form label */
+const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
+/** .automation-form-title */
+const FORM_TITLE = "text-body font-semibold";
+/** .automation-form-actions */
+const FORM_ACTIONS = "flex justify-end gap-2.5";
+/** .automation-form-row */
+const FORM_ROW = "flex gap-3.5 max-[720px]:flex-col";
+/** .automations-drawer-section-label */
+const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
+/** .automation-session-link */
+const LINK = "cursor-pointer text-link no-underline hover:underline";
 
 type GoalStatus = "active" | "paused" | "done" | "failed";
 
@@ -140,9 +164,18 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div className={`automations-page ${sel ? "automations-page-has-detail" : ""}`}>
-    <div className="automations-page-main">
-    <div className="automations-page-inner">
+    <div className="relative flex min-h-0 min-w-0 flex-1">
+    {/* Drawer open: the list compresses to a narrow rail, and on phones it
+        steps aside entirely — Back returns to it. */}
+    <div
+      className={cn(
+        "min-w-0 overflow-y-auto",
+        sel
+          ? "flex-[0_0_340px] border-r border-line px-3.5 pt-4 pb-10 max-[900px]:hidden"
+          : "flex-1 px-6 pt-7 pb-15 max-[560px]:px-4 max-[560px]:pt-5 max-[560px]:pb-12",
+      )}
+    >
+    <div className={cn("mx-auto", !sel && "max-w-[860px]")}>
       <PageHeader
         className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${
           sel ? "mb-3.5 items-center" : ""
@@ -185,21 +218,22 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
       {loading ? (
         <LoadingState>Loading…</LoadingState>
       ) : goals.length === 0 && !showForm ? (
-        <div className="automations-empty">
-          <p>No goals yet.</p>
-          <p className="automations-empty-sub">
-            A goal pursues one mission over days/weeks — it wakes itself, reads its ledger,
-            ships work via PRs, measures, and iterates until the objective is met.
-          </p>
-        </div>
+        <EmptyState title="No goals yet.">
+          A goal pursues one mission over days/weeks — it wakes itself, reads its ledger,
+          ships work via PRs, measures, and iterates until the objective is met.
+        </EmptyState>
       ) : (
-        <div className="automations-table">
+        <div className="flex flex-col border-t border-line">
           {goals.map((g) => {
             const running = g.isRunning || g.lastRunStatus === "running";
             return (
               <button
                 key={g.id}
-                className={`automations-row ${sel?.id === g.id ? "active" : ""} ${g.status === "active" ? "" : "automations-row-off"}`}
+                className={cn(
+                  "flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-body text-fg",
+                  "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
+                  sel?.id === g.id ? "bg-active" : "hover:bg-hover",
+                )}
                 onClick={() => onSelect(g.id)}
               >
                 <span
@@ -207,9 +241,14 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                   style={{ background: STATUS_COLOR[g.status] }}
                   title={g.pauseReason || g.doneReason || g.status}
                 />
-                <span className="automations-row-main">
-                  <span className="automations-row-name">{g.name}</span>
-                  <span className="automations-row-trigger">
+                <span
+                  className={cn(
+                    "flex min-w-0 flex-1 flex-col gap-0.75 max-[560px]:-order-1",
+                    g.status !== "active" && "opacity-55",
+                  )}
+                >
+                  <span className="truncate text-body font-semibold">{g.name}</span>
+                  <span className="truncate text-meta text-faint">
                     {g.status}
                     {g.phase ? ` · ${g.phase}` : ""}
                     {` · wake #${g.wakeCount}${g.maxWakes ? ` / ${g.maxWakes}` : ""}`}
@@ -229,7 +268,12 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                     ✗
                   </span>
                 ) : null}
-                <span className="automations-row-next">
+                <span
+                  className={cn(
+                    "w-21 shrink-0 text-right text-meta text-faint",
+                    sel ? "hidden" : "max-[560px]:hidden",
+                  )}
+                >
                   {g.status === "active" && g.nextWakeAt
                     ? `next ${formatNext(g.nextWakeAt)}`
                     : g.status}
@@ -243,23 +287,24 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
     </div>
 
       {sel && (
-        <aside className="automations-drawer">
-          <div className="automations-drawer-head">
+        <aside className="flex min-h-0 min-w-0 flex-auto flex-col border-l border-line bg-panel max-[900px]:border-l-0">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
+            {/* Phones get Back instead of Close: there the drawer is the page. */}
             <button
-              className="automations-drawer-back"
+              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
               onClick={() => onSelect("")}
               title="Back to goals"
             >
-              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+              <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" className="text-dim" aria-hidden>
                 <path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.749.749 0 1 1 1.06 1.06L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06Z" />
               </svg>
               Goals
             </button>
-            <span className="automations-drawer-title">
+            <span className="min-w-0 truncate text-label font-semibold">
               {editMode ? `Edit — ${sel.name}` : sel.name}
             </span>
             {!editMode && (
-              <div className="automations-drawer-actions">
+              <div className="ml-auto flex shrink-0 gap-1.5">
                 {sel.status === "active" && (
                   <Button
                     size="sm"
@@ -288,7 +333,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
               </div>
             )}
             <button
-              className="automations-drawer-close"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-dim hover:bg-hover hover:text-fg max-[900px]:hidden"
               onClick={() => onSelect("")}
               title="Close"
             >
@@ -297,7 +342,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
               </svg>
             </button>
           </div>
-          <div className="automations-drawer-body">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pt-4.5 pb-10">
             {editMode ? (
               <GoalForm
                 key={sel.id}
@@ -339,14 +384,14 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 )}
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Mission</div>
+                  <div className={SECTION_LABEL}>Mission</div>
                   <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim whitespace-pre-wrap">
                     {sel.mission}
                   </div>
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Configuration</div>
+                  <div className={SECTION_LABEL}>Configuration</div>
                   <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-[13px]">
                     <DetailKey>Mode</DetailKey>
                     <span className="text-dim">
@@ -391,7 +436,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                         <DetailKey>Session</DetailKey>
                         <span className="min-w-0">
                           <a
-                            className="automation-session-link"
+                            className={LINK}
                             onClick={(e) => {
                               e.preventDefault();
                               onOpenSession(sel.bksSessionId!);
@@ -410,7 +455,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 </div>
 
                 <div>
-                  <div className="automations-drawer-section-label mb-1.5">Activity</div>
+                  <div className={SECTION_LABEL}>Activity</div>
                   <div className="text-dim text-supporting mb-2">
                     wake #{sel.wakeCount}
                     {sel.maxWakes ? ` of ${sel.maxWakes}` : ""}
@@ -573,14 +618,14 @@ function GoalForm({
   }
 
   return (
-    <div className={`automation-form ${inline ? "automation-form-inline" : ""}`}>
+    <div className={inline ? FORM_INLINE : FORM_CARD}>
       {!inline && (
-        <div className="automation-form-title">
+        <div className={FORM_TITLE}>
           {initial ? `Edit "${initial.name}"` : "New goal"}
         </div>
       )}
 
-      <label>
+      <label className={FIELD_LABEL}>
         Name
         <Input
           value={name}
@@ -589,7 +634,7 @@ function GoalForm({
         />
       </label>
 
-      <label>
+      <label className={FIELD_LABEL}>
         Mission
         <Textarea
           value={mission}
@@ -599,8 +644,8 @@ function GoalForm({
         />
       </label>
 
-      <div className="automation-form-row">
-        <label>
+      <div className={FORM_ROW}>
+        <label className={FIELD_LABEL}>
           Mode
           <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
             <option value="ask">Ask — read-only research/measure</option>
@@ -608,7 +653,7 @@ function GoalForm({
           </Select>
         </label>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Repo (code mode)
           <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
             {repos.map((item) => (
@@ -619,7 +664,7 @@ function GoalForm({
           </Select>
         </label>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Model
           <Select value={model} onChange={(e) => setModel(e.target.value)}>
             <option value="">Default{defaultModel ? ` — ${defaultModel}` : ""}</option>
@@ -632,7 +677,7 @@ function GoalForm({
           </Select>
         </label>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Fallback (all accounts hit limits)
           <Select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
             <option value="">None — fail instead</option>
@@ -646,8 +691,8 @@ function GoalForm({
         </label>
       </div>
 
-      <div className="automation-form-row">
-        <label>
+      <div className={FORM_ROW}>
+        <label className={FIELD_LABEL}>
           MCP servers (comma-separated; blank = all)
           <Input
             value={mcpServers}
@@ -657,7 +702,7 @@ function GoalForm({
           />
         </label>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Min minutes between wakes
           <Input
             type="number"
@@ -667,7 +712,7 @@ function GoalForm({
           />
         </label>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Max wakes (safety cap; blank = none)
           <Input
             type="number"
@@ -680,7 +725,7 @@ function GoalForm({
 
       {error && <InlineAlert>{error}</InlineAlert>}
 
-      <div className="automation-form-actions">
+      <div className={FORM_ACTIONS}>
         <Button size="md" onClick={onClose} disabled={saving}>
           Cancel
         </Button>

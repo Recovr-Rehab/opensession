@@ -19,7 +19,41 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
-import { InlineAlert, LoadingState } from "../ui/state";
+import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+
+/* The old .automation-form / .automation-card families, as utilities (see
+   Automations.tsx — this page shares their shapes). The descendant variants
+   keep the two rules that reached in from the form to its fields: 16px on
+   phones, so iOS doesn't zoom a focused field, and paragraph leading in a
+   textarea. */
+const FORM_FIELDS =
+  "[&_textarea]:leading-normal max-[720px]:[&_input]:text-[16px] max-[720px]:[&_select]:text-[16px] max-[720px]:[&_textarea]:text-[16px]";
+/** .automation-form */
+const FORM_CARD = `flex flex-col gap-3.5 rounded-panel border border-line-strong bg-panel p-4.5 ${FORM_FIELDS}`;
+/** .automation-form label */
+const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
+/** .automation-form-title */
+const FORM_TITLE = "text-body font-semibold";
+/** .automation-form-actions */
+const FORM_ACTIONS = "flex justify-end gap-2.5";
+/** .automation-card */
+const CARD = "rounded-panel border border-line bg-panel px-4 py-3.5";
+/** .automation-top — one row on desktop; on phones the title takes the first
+ *  line, chips flow after it and the actions drop to a row of their own. */
+const CARD_TOP = "flex min-w-0 items-center gap-2.5 max-[720px]:flex-wrap max-[720px]:gap-y-2";
+/** .automation-name */
+const CARD_NAME =
+  "truncate text-body font-semibold max-[720px]:min-w-0 max-[720px]:flex-[1_1_60%] max-[720px]:whitespace-normal max-[720px]:[overflow-wrap:anywhere]";
+/** .automation-actions */
+const CARD_ACTIONS = "ml-auto flex shrink-0 gap-1.5 max-[720px]:ml-0 max-[720px]:w-full";
+/** .automation-prompt */
+const CARD_PROMPT = "my-2.25 line-clamp-2 text-supporting leading-normal text-dim";
+/** .automation-meta */
+const CARD_META = "flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-meta text-faint";
+/** .automation-by — the trailing "by <person>", dropped on phones. */
+const CARD_BY = "ml-auto max-[720px]:hidden";
+/** .automation-session-link */
+const LINK = "cursor-pointer text-link no-underline hover:underline";
 
 interface Props {
   onOpenSession: (sessionId: string) => void;
@@ -87,7 +121,7 @@ export function Security({ onOpenSession }: Props) {
   }
 
   return (
-    <div className="automations">
+    <div className="mx-auto min-h-0 w-full max-w-[860px] flex-1 overflow-y-auto px-6 pt-7 pb-15 max-[720px]:px-3.5 max-[720px]:pt-4.5 max-[720px]:pb-12">
       <PageHeader>
         <div>
           <PageTitle>Security</PageTitle>
@@ -156,26 +190,23 @@ export function Security({ onOpenSession }: Props) {
       {loading ? (
         <LoadingState>Loading…</LoadingState>
       ) : tab === "profiles" ? (
-        <div className="automation-list">
+        <div className="flex flex-col gap-2.5">
           <div>
             <Button size="sm" onClick={() => setEditProfile("new")}>
               + Create a profile
             </Button>
           </div>
           {profiles.length === 0 ? (
-            <div className="automations-empty">
-              <p>No scan profiles yet</p>
-              <p className="automations-empty-sub">
-                Profiles customize how scans analyze your code — threat model
-                focus, known false positives, severity bar.
-              </p>
-            </div>
+            <EmptyState title="No scan profiles yet">
+              Profiles customize how scans analyze your code — threat model
+              focus, known false positives, severity bar.
+            </EmptyState>
           ) : (
             profiles.map((p) => (
-              <div key={p.id} className="automation-card">
-                <div className="automation-top">
-                  <span className="automation-name">{p.name}</span>
-                  <div className="automation-actions">
+              <div key={p.id} className={CARD}>
+                <div className={CARD_TOP}>
+                  <span className={CARD_NAME}>{p.name}</span>
+                  <div className={CARD_ACTIONS}>
                     <Button size="sm" onClick={() => setEditProfile(p)}>
                       Edit
                     </Button>
@@ -196,16 +227,16 @@ export function Security({ onOpenSession }: Props) {
                     </Button>
                   </div>
                 </div>
-                <div className="automation-prompt">{p.prompt}</div>
-                <div className="automation-meta">
-                  <span className="automation-by">by {p.createdBy}</span>
+                <div className={CARD_PROMPT}>{p.prompt}</div>
+                <div className={CARD_META}>
+                  <span className={CARD_BY}>by {p.createdBy}</span>
                 </div>
               </div>
             ))
           )}
         </div>
       ) : (
-        <div className="automation-list">
+        <div className="flex flex-col gap-2.5">
           {recurring.length > 0 && (
             <div className="bg-panel border border-line rounded-panel px-3.5 py-3">
               <div className="text-fg text-[13px] font-medium mb-1.5">Recurring</div>
@@ -221,7 +252,7 @@ export function Security({ onOpenSession }: Props) {
                         {r.lastRunStatus === "ok" ? " ✓" : r.lastRunStatus === "error" ? " ✗" : ""}
                       </span>
                     )}
-                    <a className="automation-session-link ml-auto shrink-0" href={`${BASE_PATH}/automations`}>
+                    <a className={cn(LINK, "ml-auto shrink-0")} href={`${BASE_PATH}/automations`}>
                       manage
                     </a>
                   </div>
@@ -231,18 +262,15 @@ export function Security({ onOpenSession }: Props) {
           )}
 
           {scans.length === 0 ? (
-            <div className="automations-empty">
-              <p>No scans yet</p>
-              <p className="automations-empty-sub">
-                Start a scan to search for findings across your repositories.
-              </p>
-            </div>
+            <EmptyState title="No scans yet">
+              Start a scan to search for findings across your repositories.
+            </EmptyState>
           ) : (
             scans.map((s) => (
-              <div key={s.id} className="automation-card">
-                <div className="automation-top">
+              <div key={s.id} className={CARD}>
+                <div className={CARD_TOP}>
                   <StatusPill status={s.status} />
-                  <span className="automation-name">
+                  <span className={CARD_NAME}>
                     {s.interactive ? "Interactive scan" : "Scan"} —{" "}
                     {s.repos.map(repoLabel).join(", ")}
                   </span>
@@ -251,7 +279,7 @@ export function Security({ onOpenSession }: Props) {
                       {s.profileName}
                     </span>
                   )}
-                  <div className="automation-actions">
+                  <div className={CARD_ACTIONS}>
                     <Button
                       size="sm"
                       variant="danger"
@@ -263,7 +291,7 @@ export function Security({ onOpenSession }: Props) {
                 </div>
 
                 {s.instructions && (
-                  <div className="automation-prompt">{s.instructions}</div>
+                  <div className={CARD_PROMPT}>{s.instructions}</div>
                 )}
 
                 <div className="mt-1.5 flex flex-col gap-1">
@@ -287,7 +315,7 @@ export function Security({ onOpenSession }: Props) {
                       )}
                       {ref.sessionId && (
                         <a
-                          className="automation-session-link ml-auto shrink-0"
+                          className={cn(LINK, "ml-auto shrink-0")}
                           href={`${BASE_PATH}/session/${ref.sessionId}`}
                           onClick={(e) => {
                             e.preventDefault();
@@ -301,10 +329,10 @@ export function Security({ onOpenSession }: Props) {
                   ))}
                 </div>
 
-                <div className="automation-meta">
+                <div className={CARD_META}>
                   <span>started {relativeTime(s.createdAt)}</span>
                   {s.finishedAt && <span>finished {relativeTime(s.finishedAt)}</span>}
-                  <span className="automation-by">by {s.createdBy}</span>
+                  <span className={CARD_BY}>by {s.createdBy}</span>
                 </div>
               </div>
             ))
@@ -399,9 +427,9 @@ function NewScanModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="automation-form w-full max-w-[560px] my-auto shadow-2xl">
+      <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] shadow-2xl")}>
         <div>
-          <div className="automation-form-title">New scan</div>
+          <div className={FORM_TITLE}>New scan</div>
           <div className="text-dim text-[13px] mt-0.5">
             Start a search for findings across your repositories.
           </div>
@@ -429,7 +457,7 @@ function NewScanModal({
         </div>
 
         {scope === "single" && (
-          <label>
+          <label className={FIELD_LABEL}>
             Select repository
             <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
               {repos.map((r) => (
@@ -441,7 +469,7 @@ function NewScanModal({
           </label>
         )}
 
-        <label>
+        <label className={FIELD_LABEL}>
           Scan profile
           <Select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
             <option value="">None — default threat model</option>
@@ -459,7 +487,7 @@ function NewScanModal({
           )}
         </label>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Instructions for this scan (optional)
           <Textarea
             value={instructions}
@@ -469,7 +497,7 @@ function NewScanModal({
           />
         </label>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Repeats
           <Select
             value={canRecur ? recurrence : "none"}
@@ -488,8 +516,10 @@ function NewScanModal({
         </label>
 
         <label
-          className={`flex items-start gap-2.5 ${canInteractive ? "cursor-pointer" : "opacity-50"}`}
-          style={{ flexDirection: "row" }}
+          className={cn(
+            "flex flex-row items-start gap-2.5 text-label font-medium text-dim",
+            canInteractive ? "cursor-pointer" : "opacity-50",
+          )}
         >
           <input
             type="checkbox"
@@ -510,7 +540,7 @@ function NewScanModal({
 
         {error && <InlineAlert className="text-[13px]">{error}</InlineAlert>}
 
-        <div className="automation-form-actions">
+        <div className={FORM_ACTIONS}>
           <Button size="sm" onClick={onClose} disabled={starting}>
             Cancel
           </Button>
@@ -578,12 +608,12 @@ function ProfileModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="automation-form w-full max-w-[560px] my-auto shadow-2xl">
-        <div className="automation-form-title">
+      <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] shadow-2xl")}>
+        <div className={FORM_TITLE}>
           {initial ? `Edit "${initial.name}"` : "New scan profile"}
         </div>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Name
           <Input
             value={name}
@@ -592,7 +622,7 @@ function ProfileModal({
           />
         </label>
 
-        <label>
+        <label className={FIELD_LABEL}>
           Threat model — how should scans analyze the code?
           <Textarea
             value={prompt}
@@ -606,7 +636,7 @@ function ProfileModal({
 
         {error && <InlineAlert className="text-[13px]">{error}</InlineAlert>}
 
-        <div className="automation-form-actions">
+        <div className={FORM_ACTIONS}>
           <Button size="sm" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
