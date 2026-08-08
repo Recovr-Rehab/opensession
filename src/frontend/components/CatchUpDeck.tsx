@@ -221,7 +221,7 @@ export function CatchUpDeck({
 			    on desktop the sidebar (and its ‹ caret) is always there, no other
 			    view offers a back control, and the pane's left edge belongs to the
 			    collapsed-sidebar controls. Esc still leaves the deck. */}
-			<div className="deck-header flex w-full items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
+			<div className="relative flex w-full items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
 				<button
 					className="hidden h-10 w-10 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"
 					onClick={onExit}
@@ -238,7 +238,7 @@ export function CatchUpDeck({
 						/>
 					</svg>
 				</button>
-				<div className="deck-header-title text-sm font-semibold text-fg">
+				<div className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-fg">
 					{done ? "All caught up" : `${remaining} Left`}
 				</div>
 				{/* ml-auto, not just justify-between: with the chevron hidden this is

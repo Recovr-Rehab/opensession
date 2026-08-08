@@ -408,7 +408,7 @@ export function PrTinder({ onExit }: Props) {
 			{/* Header: back + "N Left" counter (same chrome as the catch-up deck).
 			    The chevron is phone-only for the same reason it is there — see
 			    CatchUpDeck; Esc leaves the deck on both. */}
-			<div className="deck-header flex w-full items-center justify-between px-4 py-3">
+			<div className="relative flex w-full items-center justify-between px-4 py-3">
 				<button
 					className="hidden h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"
 					onClick={onExit}
@@ -425,7 +425,7 @@ export function PrTinder({ onExit }: Props) {
 						/>
 					</svg>
 				</button>
-				<div className="deck-header-title text-sm font-semibold text-fg">
+				<div className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-fg">
 					{deck === null
 						? "PR Tinder"
 						: done

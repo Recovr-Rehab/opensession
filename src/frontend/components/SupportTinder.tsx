@@ -296,7 +296,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 		<div className="relative flex min-h-0 flex-1 flex-col items-center bg-surface">
 			{/* Header: back + "N Left" counter (same chrome as PR Tinder), with the
 			    same phone-only back chevron. */}
-			<div className="deck-header flex w-full items-center justify-between px-4 py-3">
+			<div className="relative flex w-full items-center justify-between px-4 py-3">
 				<button
 					className="hidden h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"
 					onClick={onExit}
@@ -313,7 +313,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						/>
 					</svg>
 				</button>
-				<div className="deck-header-title text-sm font-semibold text-fg">
+				<div className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-fg">
 					{deck === null
 						? "Support Tinder"
 						: done
