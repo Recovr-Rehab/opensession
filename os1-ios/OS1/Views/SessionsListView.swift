@@ -379,13 +379,21 @@ struct SessionsListView: View {
                             // under the 0.867 that reproduced it exactly:
                             // the mark is solid ink against actions that are
                             // a near-transparent capsule holding two ~22pt
-                            // glyphs, so at 35pt it out-weighed them.
-                            // 44 × 0.83 × 0.93 ≈ 34pt.
+                            // glyphs, so it stays under their 44pt capsule:
+                            // 44 × 0.88 × 0.93 ≈ 36pt.
+                            //
+                            // Square clip, not `round`, once the art is this
+                            // close to the tile's edge: a circle inscribed in
+                            // the same 44pt box crosses inside the mark's own
+                            // rounded-square corners and flattens them, which
+                            // is the "cutting off the radius" this button was
+                            // reported for. Nothing is clipped either way at
+                            // this size — the square is just the shape that
+                            // stays true if the art grows again.
                             RepoTile(
                                 name: "opensession",
                                 size: 44,
-                                round: true,
-                                artScale: 0.83
+                                artScale: 0.88
                             )
                         }
                         .accessibilityLabel("Settings")
@@ -397,7 +405,7 @@ struct SessionsListView: View {
                         // than the tile's frame suggests: the art is inset
                         // inside it by `artScale`, so the frame has to sit
                         // ~5pt left of where the ink should land.
-                        .padding(.leading, -18.5)
+                        .padding(.leading, -17.5)
                     }
                     // The bare app tile is the control; the toolbar's glass
                     // circle around it read as a stray border.
