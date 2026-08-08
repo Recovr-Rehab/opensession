@@ -1,4 +1,5 @@
 import type { GitDotTone } from "./pr-git-tasks";
+import type { checkClass } from "./pr-status-derive";
 
 /**
  * The shared vocabulary of the PR surfaces, as finished utility classes.
@@ -44,3 +45,20 @@ export const GIT_ACTION =
  *  utilities on one element resolve by Tailwind output order, not by the
  *  order they are written. */
 export const GIT_NOTE = "pt-0.5 pb-1.5 pl-5 text-meta";
+
+/** Ink for a check's mark and its rollup count. Replaces `${checkClass(…)}-text`,
+ *  which was built from the rank string at render time. `check-neutral` had no
+ *  rule of its own and keeps inheriting the row's colour. */
+/** pr-status-derive.ts keeps its rank union private; read it off the function. */
+type CheckRank = ReturnType<typeof checkClass>;
+
+export const CHECK_TEXT: Record<CheckRank, string> = {
+	"check-success": "text-green",
+	"check-failure": "text-red",
+	"check-pending": "text-yellow",
+	"check-neutral": "",
+};
+
+/** The "Deployments" / "Checks" divider inside the checks card. */
+export const CHECKS_GROUP =
+	"pb-1.5 text-label font-semibold tracking-[-0.01em] text-faint";

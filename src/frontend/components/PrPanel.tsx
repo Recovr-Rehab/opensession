@@ -56,7 +56,7 @@ import {
 } from "./icons";
 
 import { checkClass, deriveStatus, isDeployment, summarize } from "../lib/pr-status-derive";
-import { GIT_NOTE } from "../lib/pr-tone-classes";
+import { CHECKS_GROUP, GIT_NOTE } from "../lib/pr-tone-classes";
 import {
   formatPendingCommentsPrompt,
   formatPrCommentPrompt,
@@ -1731,17 +1731,17 @@ export function PrPanel({
           {caps.checks && pr.checks.length > 0 && (
             <PrCard title="Checks">
               <button
-                className="prc-summary-row"
+                className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-body text-fg transition-[background] hover:bg-hover"
                 onClick={() => setChecksOpen((o) => !o)}
                 aria-expanded={checksOpen}
               >
                 <span
-                  className={`prc-summary-mark ${
+                  className={`inline-flex w-4 shrink-0 items-center justify-center text-meta [&>svg]:block ${
                     checkSummary.failed > 0
-                      ? "prc-tone-red"
+                      ? "text-red"
                       : checkSummary.pending > 0
-                        ? "prc-tone-yellow prc-mark-pending"
-                        : "prc-tone-green"
+                        ? "text-yellow animate-[pulse_1.4s_infinite]"
+                        : "text-green"
                   }`}
                 >
                   {checkSummary.failed > 0 ? (
@@ -1752,36 +1752,36 @@ export function PrPanel({
                     <IconCheck size={15} />
                   )}
                 </span>
-                <span className="prc-summary-label">
+                <span className="min-w-0 flex-1 text-label font-semibold">
                   {checkSummary.failed > 0
                     ? "Some checks failed"
                     : checkSummary.pending > 0
                       ? "Checks running"
                       : "All passed"}
                 </span>
-                <span className="prc-checks-counts">
+                <span className="inline-flex gap-2 text-meta tabular-nums">
                   {checkSummary.passed > 0 && (
-                    <span className="check-success-text">✓ {checkSummary.passed}</span>
+                    <span className="text-green">✓ {checkSummary.passed}</span>
                   )}
                   {checkSummary.failed > 0 && (
-                    <span className="check-failure-text">✕ {checkSummary.failed}</span>
+                    <span className="text-red">✕ {checkSummary.failed}</span>
                   )}
                   {checkSummary.pending > 0 && (
-                    <span className="check-pending-text">● {checkSummary.pending}</span>
+                    <span className="text-yellow">● {checkSummary.pending}</span>
                   )}
                 </span>
-                <span className="prc-chevron">{checksOpen ? "▾" : "▸"}</span>
+                <span className="text-meta text-faint">{checksOpen ? "▾" : "▸"}</span>
               </button>
               {checksOpen && (
                 <>
                   {checkSummary.deployments.length > 0 && (
-                    <div className="pr-checks-group">Deployments</div>
+                    <div className={CHECKS_GROUP}>Deployments</div>
                   )}
                   {checkSummary.deployments.map((check, i) => (
                     <CheckRow key={`d${i}`} check={check} />
                   ))}
                   {checkSummary.deployments.length > 0 && checkSummary.checks.length > 0 && (
-                    <div className="pr-checks-group">Checks</div>
+                    <div className={CHECKS_GROUP}>Checks</div>
                   )}
                   {checkSummary.checks.map((check, i) => (
                     <CheckRow key={`c${i}`} check={check} />

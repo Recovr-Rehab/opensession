@@ -1,4 +1,5 @@
 import { checkClass, formatCheckDuration } from "../../lib/pr-status-derive";
+import { CHECK_TEXT } from "../../lib/pr-tone-classes";
 import type { PrCheck } from "../../lib/types";
 
 export function CheckRow({ check }: { check: PrCheck }) {
@@ -6,14 +7,25 @@ export function CheckRow({ check }: { check: PrCheck }) {
   const mark = cls === "check-success" ? "✓" : cls === "check-failure" ? "✕" : "●";
   const duration = formatCheckDuration(check);
   return (
-    <div className="pr-check pr-check-row">
-      <a className="pr-check-main" href={check.url} target="_blank" rel="noopener">
-        <span className={`pr-check-mark ${cls}-text ${cls === "check-pending" ? "pr-check-mark-pending" : ""}`}>
+    <div className="group flex items-center gap-2 rounded-md px-1.5 py-1 text-label text-fg transition-[background] hover:bg-hover">
+      <a
+        className="flex min-w-0 flex-1 items-center gap-2 text-inherit no-underline"
+        href={check.url}
+        target="_blank"
+        rel="noopener"
+      >
+        <span
+          className={`w-3.5 shrink-0 text-center text-label ${CHECK_TEXT[cls]} ${
+            cls === "check-pending" ? "animate-[pulse_1.4s_infinite]" : ""
+          }`}
+        >
           {mark}
         </span>
-        <span className="pr-check-name">{check.name}</span>
-        {duration && <span className="pr-check-duration">{duration}</span>}
-        {check.url && <span className="pr-check-open">↗</span>}
+        <span className="flex-1 truncate">{check.name}</span>
+        {duration && <span className="text-meta tabular-nums text-faint">{duration}</span>}
+        {check.url && (
+          <span className="text-body text-faint group-hover:text-fg">↗</span>
+        )}
       </a>
     </div>
   );
