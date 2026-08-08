@@ -226,6 +226,15 @@ direction, and have to be found by hand. `bun scripts/css-shots.ts <name>`
 captures the routes × viewport × theme screenshot gate; `--diff` compares two
 runs.
 
+`bun scripts/css-ab.ts <label> --root '<selector>'` is the measurement half of
+that gate: it records every computed longhand (plus `::before`/`::after`, and
+the `corner-*-shape` properties, which are not enumerable and are exactly where
+a lost squircle hides) for a whole subtree across viewport × theme, and
+`--diff` reports what moved. Capture the same label twice first — that noise
+floor should be 0, and if it isn't you are measuring the app's live data rather
+than your change. A screenshot says a surface still looks right; this says
+nothing resolved differently, which is what a migration actually promises.
+
 - **Tokens**: `src/frontend/styles/tailwind.css` maps the existing `base.css`
   variables (`--bg`, `--text-dim`, …) into Tailwind's namespace via
   `@theme inline` — use `bg-panel text-dim border-line text-fg bg-surface` etc.,
