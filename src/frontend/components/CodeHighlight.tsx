@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ShikiRequest } from "../lib/shiki-engine";
+import { TOOL_PRE, TOOL_PRE_CODE } from "../lib/tool-classes";
 
 const MAX_HIGHLIGHT_CHARS = 20_000;
 const CACHE_MAX = 300;
@@ -181,10 +182,10 @@ export function CodeHighlight({ code, lang, gutter, requireGutter }: Props) {
 	return (
 		<div ref={ref}>
 			{html === null ? (
-				<pre className="tool-pre">{code}</pre>
+				<pre className={TOOL_PRE}>{code}</pre>
 			) : (
 				<div
-					className="tool-pre tool-pre-code"
+					className={TOOL_PRE_CODE}
 					dangerouslySetInnerHTML={{ __html: html }}
 				/>
 			)}

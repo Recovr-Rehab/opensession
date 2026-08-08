@@ -76,6 +76,13 @@
 	--color-tool-mcp: var(--tool-mcp);
 	--color-tool-skill: var(--tool-skill);
 
+	/* The code well a tool call's input/output sits in — its own scheme, not a
+	   step of the chrome ramp. See the note on the tokens in base.css. */
+	--color-code-well: var(--code-well);
+	--color-code-well-line: var(--code-well-line);
+	--color-code-well-ink: var(--code-well-ink);
+	--color-code-well-gutter: var(--code-well-gutter);
+
 	/* Tooltip chip (near-black in both themes) */
 	--color-tooltip: var(--tooltip-bg);
 	--color-tooltip-fg: var(--tooltip-fg);

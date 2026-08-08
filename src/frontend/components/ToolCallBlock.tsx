@@ -6,6 +6,7 @@ import { PlanChecklist } from "./PlanChecklist";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { BASE_PATH } from "../lib/base";
 import { cn } from "../ui/cn";
+import { TOOL_CODE_WELL, TOOL_PRE, TOOL_RESULT_MEDIA } from "../lib/tool-classes";
 import { tidyPath, type PathRoot } from "../lib/tidy-path";
 import { openGalleryFrom } from "./MediaLightbox";
 import {
@@ -39,7 +40,7 @@ function CodeHighlight(props: {
   requireGutter?: boolean;
 }) {
   return (
-    <Suspense fallback={<pre className="tool-pre">{props.code}</pre>}>
+    <Suspense fallback={<pre className={TOOL_PRE}>{props.code}</pre>}>
       <CodeHighlightLazy {...props} />
     </Suspense>
   );
@@ -671,12 +672,12 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
                 )}
               >
                 {resultContent && (
-                  <div className="tool-code-surface">
+                  <div className={TOOL_CODE_WELL}>
                     {renderResultContent(canonical, shownInput, resultContent)}
                   </div>
                 )}
                 {shownResult.images && shownResult.images.length > 0 && (
-                  <div className={cn("tool-result-images", !resultContent && "!mt-0")}>
+                  <div className={cn(TOOL_RESULT_MEDIA, !resultContent && "!mt-0")}>
                     {shownResult.images.map((raw, i) => {
                       const src = resolveEntryImageSrc(raw, sessionId);
                       return (
@@ -693,7 +694,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
                   </div>
                 )}
                 {shownResult.videos && shownResult.videos.length > 0 && (
-                  <div className="tool-result-videos">
+                  <div className={TOOL_RESULT_MEDIA}>
                     {shownResult.videos.map((src, i) => (
                       <div key={i} className="md-video-wrap">
                         <video className="md-video" src={src} controls playsInline preload="metadata" />
@@ -737,14 +738,14 @@ export function visibleResultContent(
  * The call's input, rendered by what it is rather than as raw JSON where we
  * can: Bash as a highlighted script, Edit as a unified diff, Write as the file
  * content in the file's language. Everything else falls back to pretty JSON.
- * All variants sit on a .tool-code-surface (dark in both themes).
+ * All variants sit on a code well (its own surface in both themes).
  */
 function toolInputNode(toolName: string, input: unknown): React.ReactNode | null {
   const inp = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
 
   if (toolName === "Bash" && bashCommand(input)) {
     return (
-      <div className="tool-code-surface">
+      <div className={TOOL_CODE_WELL}>
         <CodeHighlight code={bashCommand(input)!} lang="bash" />
       </div>
     );
@@ -765,7 +766,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
         : "");
     if (diff) {
       return (
-        <div className="tool-code-surface">
+        <div className={TOOL_CODE_WELL}>
           <ExpandableCode code={diff} lang="diff" />
         </div>
       );
@@ -774,7 +775,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
 
   if (toolName === "Write" && typeof inp.content === "string") {
     return (
-      <div className="tool-code-surface">
+      <div className={TOOL_CODE_WELL}>
         <ExpandableCode
           code={inp.content}
           lang={langForFile(filePathOf(inp)) || "markdown"}
@@ -798,7 +799,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
     );
     if (extras.length === 0) return null;
     return (
-      <pre className="tool-pre tool-code-surface">
+      <pre className={cn(TOOL_PRE, TOOL_CODE_WELL)}>
         {extras.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n")}
       </pre>
     );
@@ -806,7 +807,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
 
   const text = formatInput(input);
   if (!text) return null;
-  return <ExpandablePre text={text} className="tool-pre tool-code-surface" />;
+  return <ExpandablePre text={text} className={cn(TOOL_PRE, TOOL_CODE_WELL)} />;
 }
 
 /**
@@ -837,7 +838,7 @@ function renderResultContent(toolName: string, input: unknown, content: string) 
   if (toolName === "Bash" && (text.startsWith("diff --git") || /^@@ -\d/m.test(text))) {
     return <ExpandableCode code={text} lang="diff" />;
   }
-  return <ExpandablePre text={text} className="tool-pre" />;
+  return <ExpandablePre text={text} className={TOOL_PRE} />;
 }
 
 const TOOL_DETAIL_PREVIEW_CHARS = 32 * 1024;

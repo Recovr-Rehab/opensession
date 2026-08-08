@@ -29,6 +29,15 @@ interface Props {
  * transcript fills in. Sub-agents that spawn their own sub-agents are
  * navigable via the breadcrumb stack.
  */
+/** The pane's own liveness dot: 1.6s, slower than the sidebar's 1.4s. The
+ * reduced-motion exception rides on the element — base.css blanks every
+ * animation with !important and hands specific "still working" signals back,
+ * and a name in that list stops matching the moment a migration renames the
+ * element. */
+const LIVE_DOT =
+  "size-[7px] shrink-0 rounded-full bg-green animate-[pulse_1.6s_ease-in-out_infinite] " +
+  "motion-reduce:[animation-duration:1.6s]! motion-reduce:[animation-iteration-count:infinite]!";
+
 export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props) {
   const current = stack[stack.length - 1];
   const [data, setData] = useState<SubagentTranscript | null>(null);
@@ -92,10 +101,15 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="subagent-head">
-        <div className="subagent-head-top">
-          <span className="subagent-chip">sub-agent</span>
-          <span className="subagent-title" title={meta?.description || current.label}>
+      <div className="border-b border-line bg-raised px-2.5 pt-2 pb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="rounded-sm bg-accent-soft px-1.5 py-0.5 text-meta font-semibold tracking-[-0.01em] whitespace-nowrap text-accent">
+            sub-agent
+          </span>
+          <span
+            className="overflow-hidden text-ellipsis whitespace-nowrap text-label font-semibold text-fg"
+            title={meta?.description || current.label}
+          >
             {title}
           </span>
           {modelLabel && (
@@ -107,23 +121,29 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
             </span>
           )}
           {/* No close button: the tab's × owns that, like Review and Assets. */}
-          {data?.sessionRunning && <span className="subagent-live-dot" title="Session running" />}
+          {data?.sessionRunning && <span
+              className={LIVE_DOT}
+              title="Session running"
+            />}
         </div>
         {stack.length > 1 && (
-          <button className="subagent-back" onClick={onBack}>
+          <button
+            className="mt-2 max-w-full overflow-hidden border-none bg-transparent p-0 text-ellipsis whitespace-nowrap text-supporting text-dim hover:text-fg"
+            onClick={onBack}
+          >
             ← {stack[stack.length - 2].label}
           </button>
         )}
-        {meta?.description && <div className="subagent-desc">{meta.description}</div>}
+        {meta?.description && <div className="mt-1.5 text-supporting leading-[1.4] text-dim">{meta.description}</div>}
       </div>
 
-      <div className={`${PANEL_BODY} subagent-body`} ref={bodyRef} onScroll={onScroll}>
+      <div className={`${PANEL_BODY} px-3.5 py-3`} ref={bodyRef} onScroll={onScroll}>
         {loading ? (
           <LoadingState>Loading sub-agent…</LoadingState>
         ) : error ? (
           <InlineAlert className="m-4">{error}</InlineAlert>
         ) : data && data.entries.length > 0 ? (
-          <div className="subagent-messages">
+          <div className="min-w-0">
             <TranscriptBlocks
               entries={data.entries}
               live={data.sessionRunning}

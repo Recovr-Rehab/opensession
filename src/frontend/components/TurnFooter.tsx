@@ -4,6 +4,7 @@ import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
+import { TOOL_CODE_WELL, TOOL_PRE } from "../lib/tool-classes";
 import {
   IconBranches,
   IconCheck,
@@ -216,7 +217,8 @@ function FileChip({ file }: { file: TouchedFile }) {
               <div
                 key={i}
                 className={cn(
-                  "tool-code-surface overflow-hidden rounded-md",
+                  TOOL_CODE_WELL,
+                  "overflow-hidden",
                   i > 0 && "mt-1.5"
                 )}
               >
@@ -244,7 +246,7 @@ function truncateDiff(s: string): string {
 
 function DiffHighlight({ code }: { code: string }) {
   return (
-    <Suspense fallback={<pre className="tool-pre">{code}</pre>}>
+    <Suspense fallback={<pre className={TOOL_PRE}>{code}</pre>}>
       <CodeHighlightLazy code={code} lang="diff" />
     </Suspense>
   );

@@ -172,6 +172,18 @@
 	--tool-agent: #f778ba;
 	--tool-mcp: #a371f7;
 	--tool-skill: #2dd4bf;
+	/* The well a tool call's input and output sit in. It is a code colour
+	   scheme (GitHub's), not a step of the chrome ramp, which is why it is its
+	   own group rather than another --bg-*: the surface has to read as sunk
+	   under whatever card the tool block lands on, in both themes.
+	   NB the light value is the one `.markdown pre` moved away from — see the
+	   note above that rule — so a snippet here reads a touch raised in light
+	   where a pasted one reads sunk. Kept as-is by the migration; changing it
+	   is a visual call, not a mechanical one. */
+	--code-well: #0d0f13;
+	--code-well-line: rgba(255, 255, 255, 0.06);
+	--code-well-ink: #b6bcc8;
+	--code-well-gutter: #565d6b;
 	--mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
 	--sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
 	--radius: 14px;
@@ -269,6 +281,10 @@ html[data-theme="light"] {
 	--tool-agent: #bf3989;
 	--tool-mcp: #8250df;
 	--tool-skill: #0f766e;
+	--code-well: #f6f8fa;
+	--code-well-line: #d8dee4;
+	--code-well-ink: #57606a;
+	--code-well-gutter: #8c959f;
 }
 
 /* ── Motion ──────────────────────────────────────────────────
@@ -401,7 +417,6 @@ html[data-theme="light"] {
 		animation-duration: 1.2s !important;
 		animation-iteration-count: infinite !important;
 	}
-	.subagent-live-dot,
 	.pr-bar-checking {
 		animation-duration: 1.6s !important;
 		animation-iteration-count: infinite !important;
