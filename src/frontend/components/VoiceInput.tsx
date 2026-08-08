@@ -10,6 +10,36 @@ type Phase = "idle" | "recording" | "transcribing";
 const MAX_SECONDS = 120;
 const BAR_COUNT = 72;
 
+/* The recording bar's chrome. Every variant is written out in full rather than
+   composed from a fragment: Tailwind scans source text, so a class assembled
+   from a variable is never generated. */
+
+const OVERLAY =
+	"absolute inset-x-0 bottom-0 z-[6] flex h-[54px] items-center gap-2.5 rounded-b-xl border-t border-line bg-raised py-0 pl-3 pr-3.5";
+
+/* Waveform bars. Colour lives on the variant, never alongside a second colour
+   utility on the same element — two of those don't compose, the sheet's order
+   decides the winner. Bars without a sample yet are a 2px baseline dot; live
+   ones get their height inline from the level meter. */
+const WAVE_BAR_IDLE = "mx-auto h-0.5 w-0.5 min-w-0 max-w-0.5 flex-1 rounded-xs bg-faint";
+const WAVE_BAR_LIVE =
+	"mx-auto h-0.5 w-0.5 min-w-0 max-w-0.5 flex-1 rounded-xs bg-dim transition-[height] duration-[90ms] ease-linear";
+
+/* Plain glyph buttons — no fill, no border; the ✓ picks up the accent. */
+const GLYPH_CANCEL =
+	"inline-flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg";
+const GLYPH_ACCEPT =
+	"inline-flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-fg transition-colors hover:bg-hover hover:text-accent";
+
+/* `voice-spinner` stays on the markup as a HOOK, not for styling: base.css's
+   reduced-motion block names it with `!important` to pin the rotation to a
+   constant 0.8s, and a utility cannot outrank that. Its legacy.css rule is
+   still deletable. The border is written one side at a time on purpose — a
+   `border-color` shorthand next to a `border-top-color` is the same
+   two-utilities-one-property race as the waveform colours above. */
+const SPINNER =
+	"voice-spinner h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-l-line-strong border-r-line-strong border-b-line-strong border-t-dim [animation-duration:0.8s]";
+
 /**
  * Wispr-Flow-style dictation control shared by the session Composer and the
  * New-session palette. Idle it's just a mic button; tapping it swaps the whole
@@ -18,8 +48,9 @@ const BAR_COUNT = 72;
  * /api/transcribe, and finally hands the text to `onText`.
  *
  * The bar renders as an absolutely-positioned overlay filling the nearest
- * positioned ancestor — the host container (.composer / .palette-card) must be
- * `position: relative`.
+ * positioned ancestor, so the host container must be positioned: `.composer`
+ * in the session view, and the palette's Modal.Content, whose `variant="palette"`
+ * carries `relative` for exactly this.
  */
 export function VoiceInput({
   onText,
@@ -159,7 +190,7 @@ export function VoiceInput({
       <Tooltip label="Dictate">
         <button
           type="button"
-          className="palette-icon-btn voice-mic-btn"
+          className="palette-icon-btn"
           onClick={start}
           disabled={disabled || phase !== "idle"}
           aria-label="Dictate"
@@ -167,24 +198,28 @@ export function VoiceInput({
           <IconMic size={20} />
         </button>
       </Tooltip>
-      {error && phase === "idle" && <div className="voice-error">{error}</div>}
+      {error && phase === "idle" && (
+        <div className="absolute bottom-[calc(100%+8px)] right-0 z-[7] whitespace-nowrap rounded-control border border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-red-soft px-[11px] py-[7px] text-supporting font-medium text-red">
+          {error}
+        </div>
+      )}
       {phase !== "idle" && (
-        <div className="voice-overlay">
-          <span className="voice-lead" aria-hidden="true">
+        <div className={OVERLAY}>
+          <span className="inline-flex shrink-0 items-center text-faint" aria-hidden="true">
             <IconPlus size={22} />
           </span>
           {phase === "recording" ? (
             <>
               {/* Full-width track: baseline dots on the quiet/older left, live
                   bars accumulating on the right by the accept button. */}
-              <div className="voice-wave" aria-hidden="true">
+              <div className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-hidden" aria-hidden="true">
                 {Array.from({ length: BAR_COUNT }, (_, i) => {
                   const l = levels[levels.length - BAR_COUNT + i];
                   const active = l !== undefined;
                   return (
                     <span
                       key={i}
-                      className={active ? "is-live" : ""}
+                      className={active ? WAVE_BAR_LIVE : WAVE_BAR_IDLE}
                       style={{ height: active ? `${16 + l * 84}%` : undefined }}
                     />
                   );
@@ -193,7 +228,7 @@ export function VoiceInput({
               <Tooltip label="Cancel">
                 <button
                   type="button"
-                  className="voice-glyph voice-cancel"
+                  className={GLYPH_CANCEL}
                   onClick={() => stop(false)}
                   aria-label="Cancel dictation"
                 >
@@ -203,7 +238,7 @@ export function VoiceInput({
               <Tooltip label="Stop and transcribe">
                 <button
                   type="button"
-                  className="voice-glyph voice-accept"
+                  className={GLYPH_ACCEPT}
                   onClick={() => stop(true)}
                   aria-label="Stop and transcribe"
                 >
@@ -213,9 +248,9 @@ export function VoiceInput({
             </>
           ) : (
             <>
-              <span className="voice-spinner" aria-hidden="true" />
-              <span className="voice-status">Transcribing…</span>
-              <span className="voice-wave-spacer" />
+              <span className={SPINNER} aria-hidden="true" />
+              <span className="shrink-0 text-label font-medium text-dim">Transcribing…</span>
+              <span className="flex-1" />
             </>
           )}
         </div>

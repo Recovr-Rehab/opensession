@@ -421,10 +421,19 @@ export function ModelEffortSelect({
 							: "Model"
 				}
 			>
-				<span className="palette-pill-label">{modelLabel}</span>
-				{hasEffort && <span className="palette-pill-effort flex-none text-faint">{effortLabel}</span>}
+				{/* `data-effort` is a styling hook for the caller, not state: the
+				    new-session footer hides the suffix on ultra-narrow screens so the
+				    model name keeps the room, and the composer toolbar does not. */}
+				<span className="truncate">{modelLabel}</span>
+				{hasEffort && (
+					<span data-effort className="flex-none text-faint">
+						{effortLabel}
+					</span>
+				)}
 				{hasFastMode && fastMode && (
-					<span className="palette-pill-effort flex-none text-faint">Fast</span>
+					<span data-effort className="flex-none text-faint">
+						Fast
+					</span>
 				)}
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={6} className="max-w-[min(360px,calc(100vw-1rem))]">

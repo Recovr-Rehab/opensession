@@ -40,8 +40,10 @@ export function PaletteSelect({
 		return (
 			<div className={className} title={title}>
 				{children}
+				{/* Invisible native <select> stacked over the styled trigger so we
+				    get a real OS menu without hand-rolling a popover. */}
 				<select
-					className="palette-select-overlay"
+					className="absolute inset-0 h-full w-full cursor-pointer appearance-none border-none opacity-0 disabled:cursor-default"
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
 					disabled={disabled}

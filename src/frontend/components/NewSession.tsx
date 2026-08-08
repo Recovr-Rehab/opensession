@@ -77,6 +77,77 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
 const ADD_REPO_VALUE = "__add_repo__";
 const SCRATCH_REPO_VALUE = "__scratch__";
 
+/* ── Palette chrome ───────────────────────────────────────────────────────
+   Every class is written out in full: Tailwind scans source TEXT, so a name
+   assembled from a variable compiles to nothing. Variants that differ in
+   colour or corner carry a COMPLETE string rather than stacking a second
+   colour utility onto a shared base — two competing colour utilities on one
+   element don't compose, the compiled sheet's order picks the winner.
+
+   `palette-icon-btn` and `palette-pill` stay as legacy classes on purpose:
+   Composer.tsx still uses both, so their rules can't be deleted yet. */
+
+const HEADER = "flex items-center justify-between gap-2 border-b border-line px-3 py-[11px]";
+/** Header pickers. `relative` is load-bearing — PaletteSelect's phone branch
+ *  stacks an invisible native <select> over the trigger. */
+const TRIGGER =
+	"relative inline-flex max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-55";
+/** The repo picker doubles as the palette's title: bigger, solid, heavier. */
+const TRIGGER_STRONG =
+	"relative inline-flex max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
+const CHEVRON = "-ml-0.5 shrink-0 text-faint";
+
+/** No bottom padding: a long, scrolled draft ends flush against the footer
+ *  divider instead of leaving a stray gap under the last line. */
+const BODY = "relative px-4 pt-3";
+const TEXTAREA =
+	"max-h-[62vh] min-h-[132px] w-full resize-none border-none bg-transparent font-sans text-[15px] leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
+const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red";
+
+/* Single-line footer: the model pill is the only flexible item — it gives way
+   (its label ellipsizes) while the icon buttons and Create keep their size.
+   Phones let the row wrap instead of crushing every pill to one letter. */
+const FOOTER =
+	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-line px-[11px] py-[9px] max-[720px]:flex-wrap max-[560px]:gap-x-1.5 max-[560px]:px-2";
+const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1";
+const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 max-[720px]:ml-auto";
+const FOOTER_ICON_BTN = "palette-icon-btn shrink-0 max-[560px]:w-9";
+/** The one flexible footer item. `[&_[data-effort]]` reaches the effort suffix
+ *  inside ModelEffortSelect: on ultra-narrow screens it cedes its space to the
+ *  model name, which would otherwise truncate to a single letter. */
+const MODEL_PILL =
+	"palette-pill shrink min-w-0 max-[560px]:px-[9px] max-[374px]:[&_[data-effort]]:hidden";
+
+const MCP_CONTAINER = "relative shrink-0";
+/** Phone-only full-width sheet; desktop opens the shared Base UI Menu. */
+const MCP_POPOVER =
+	"fixed bottom-[60px] left-3 right-3 z-[1000] max-h-[50vh] overflow-y-auto rounded-lg border border-line-strong bg-panel p-3 shadow-[0_8px_24px_rgba(0,0,0,0.3)]";
+const MCP_HEADER = "mb-2 px-1 text-meta font-semibold tracking-[-0.01em] text-dim";
+const MCP_GRID = "grid grid-cols-1 gap-1";
+const MCP_ROW =
+	"flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-label text-dim transition-colors hover:bg-hover hover:text-fg";
+/** `relative`, not `absolute`: `.palette-icon-btn > *` pins every child of the
+ *  button to `position: relative` (it lifts glyphs above the hover wash), and
+ *  it wins the tie on source order — so this badge has always sat in flow,
+ *  nudged 4px up and right. Kept as-is; squaring it up is a visual change. */
+const MCP_BADGE =
+	"relative -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent text-meta font-semibold text-panel";
+
+/* Split button: primary Create action + a caret that opens a mode dropdown.
+   The two halves' corners are scoped to mutually exclusive media queries, so
+   no two radius utilities ever race: phones drop the caret and round the main
+   button out to a full pill. */
+const CREATE_SPLIT = "relative inline-flex shrink-0 items-stretch";
+const CREATE_MAIN =
+	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-40 min-[721px]:rounded-l-md max-[720px]:rounded-[999px] max-[560px]:px-3";
+const CREATE_CARET =
+	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-md border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] max-[720px]:hidden";
+const CREATE_KBD = "opacity-70";
+const CREATE_MENU =
+	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control border border-line bg-raised p-[5px] shadow-[0_10px_30px_rgba(0,0,0,0.28)]";
+const CREATE_MENU_ITEM =
+	"flex w-full cursor-pointer items-start gap-[9px] rounded-md border-none bg-transparent px-[9px] py-[7px] text-left text-fg transition-colors hover:bg-hover";
+
 function lastSelectedRepo(): string | null {
   try {
     return localStorage.getItem(LAST_REPO_KEY) || null;
@@ -686,9 +757,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         {/* Header: repo (left) · create-from (right). The repo picker is
             always visible — on phones the create-from picker hides until the
             options toggle in the footer opens it. */}
-        <div className="palette-header">
+        <div className={HEADER}>
           <PaletteSelect
-            className="palette-trigger palette-trigger-strong"
+            className={TRIGGER_STRONG}
             title="Repository"
             value={mode === "scratch" ? SCRATCH_REPO_VALUE : repo}
             options={[
@@ -734,17 +805,17 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             ) : (
               <RepoTile name={repo} />
             )}
-            <span className="palette-trigger-label">
+            <span className="truncate">
               {mode === "scratch"
                 ? "Scratch · no repo"
                 : repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
             </span>
-            <IconChevronDown className="palette-chevron" size={22} />
+            <IconChevronDown className={CHEVRON} size={22} />
           </PaletteSelect>
 
           {optionsVisible && mode !== "scratch" && (
           <PaletteSelect
-            className="palette-trigger"
+            className={TRIGGER}
             title="What to create from"
             value={createFromValue}
             options={createFromOptions}
@@ -760,8 +831,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               <circle cx="12" cy="5.5" r="1.7" stroke="currentColor" strokeWidth="1.3" />
               <path d="M4 5.7v4.6M4 8h4a4 4 0 004-4" stroke="currentColor" strokeWidth="1.3" />
             </svg>
-            <span className="palette-trigger-label">{createFromLabel}</span>
-            <IconChevronDown className="palette-chevron" size={22} />
+            <span className="truncate">{createFromLabel}</span>
+            <IconChevronDown className={CHEVRON} size={22} />
           </PaletteSelect>
           )}
         </div>
@@ -785,7 +856,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 
         {/* Prompt */}
         <div
-          className="palette-body"
+          className={BODY}
           style={planBody}
           onDrop={(e) => {
             if (e.dataTransfer?.files?.length) {
@@ -799,7 +870,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
           {mentions.popup}
           <textarea
             ref={promptRef}
-            className="palette-textarea"
+            className={TEXTAREA}
             value={prompt}
             onChange={(e) => {
               setPrompt(e.target.value);
@@ -836,20 +907,20 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
           <FileChips files={files} onRemove={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />
         </div>
 
-        {error && <div className="palette-error">{error}</div>}
+        {error && <div className={ERROR}>{error}</div>}
         {sandboxModelWarning && (
-          <div className="palette-error" role="alert">
+          <div className={ERROR} role="alert">
             {sandboxModelWarning}
           </div>
         )}
 
         {/* Footer toolbar */}
-        <div className="palette-footer" style={planSurface}>
-          <div className="palette-footer-left">
+        <div className={FOOTER} style={planSurface}>
+          <div className={FOOTER_LEFT}>
             {isPhone && (
               <button
                 type="button"
-                className={`palette-icon-btn palette-options-btn ${showOptions ? "is-on" : ""}`}
+                className={`${FOOTER_ICON_BTN} ${showOptions ? "is-on" : ""}`}
                 onClick={() => setShowOptions((v) => !v)}
                 disabled={creating}
                 aria-label="Advanced options — base branch, plan first, run environment"
@@ -861,7 +932,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             <Tooltip label="Attach a file">
               <button
                 type="button"
-                className="palette-icon-btn"
+                className={FOOTER_ICON_BTN}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={creating}
                 aria-label="Attach a file"
@@ -888,13 +959,13 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 >
                   <Menu.Trigger
                     type="button"
-                    className={`palette-icon-btn palette-mcp-picker-btn ${selectedMcpServers.length ? "is-on" : ""}`}
+                    className={`${FOOTER_ICON_BTN} ${selectedMcpServers.length ? "is-on" : ""}`}
                     disabled={creating}
                     aria-label="Choose connected services"
                   >
                     <IconConnections size={20} />
                     {selectedMcpServers.length > 0 && (
-                      <span className="palette-mcp-picker-badge">{selectedMcpServers.length}</span>
+                      <span className={MCP_BADGE}>{selectedMcpServers.length}</span>
                     )}
                   </Menu.Trigger>
                 </Tooltip>
@@ -923,10 +994,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 </Menu.Popup>
               </Menu.Root>
             ) : (
-            <div className="palette-mcp-picker-container" ref={mcpPickerRef}>
+            <div className={MCP_CONTAINER} ref={mcpPickerRef}>
               <button
                 type="button"
-                className={`palette-icon-btn palette-mcp-picker-btn ${selectedMcpServers.length ? "is-on" : ""}`}
+                className={`${FOOTER_ICON_BTN} ${selectedMcpServers.length ? "is-on" : ""}`}
                 onClick={() => setMcpPickerOpen((v) => !v)}
                 disabled={creating}
                 title={`Connected services${selectedMcpServers.length ? ` (${selectedMcpServers.length})` : ""}`}
@@ -935,17 +1006,18 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               >
                 <IconConnections size={20} />
                 {selectedMcpServers.length > 0 && (
-                  <span className="palette-mcp-picker-badge">{selectedMcpServers.length}</span>
+                  <span className={MCP_BADGE}>{selectedMcpServers.length}</span>
                 )}
               </button>
               {mcpPickerOpen && (
-                <div className="palette-mcp-picker-popover">
-                  <div className="palette-mcp-picker-header">Connected services</div>
-                  <div className="palette-mcp-picker-grid">
+                <div className={MCP_POPOVER}>
+                  <div className={MCP_HEADER}>Connected services</div>
+                  <div className={MCP_GRID}>
                     {availableMcpServers.map((mcp) => (
-                      <label key={mcp} className="palette-mcp-checkbox-compact">
+                      <label key={mcp} className={MCP_ROW}>
                         <input
                           type="checkbox"
+                          className="cursor-pointer accent-accent"
                           checked={selectedMcpServers.includes(mcp)}
                           onChange={(e) => toggleMcpServer(mcp, e.target.checked)}
                           disabled={creating}
@@ -965,7 +1037,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               <Tooltip label={planFirst ? "Exit plan mode" : "Enter plan mode"}>
                 <button
                   type="button"
-                  className={`palette-icon-btn ${planFirst ? "is-on" : ""}`}
+                  className={`${FOOTER_ICON_BTN} ${planFirst ? "is-on" : ""}`}
                   onClick={() => setPlanFirst((v) => !v)}
                   disabled={creating}
                   aria-label={planFirst ? "Exit plan mode" : "Enter plan mode"}
@@ -986,7 +1058,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 >
                   <Menu.Trigger
                     type="button"
-                    className={`palette-icon-btn ${sandboxProvider ? "is-on" : ""}`}
+                    className={`${FOOTER_ICON_BTN} ${sandboxProvider ? "is-on" : ""}`}
                     disabled={creating}
                     aria-label="Run environment"
                   >
@@ -1046,7 +1118,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 <Tooltip label={`Engine — ${engineLabel(currentEngine)}`}>
                   <Menu.Trigger
                     type="button"
-                    className={`palette-icon-btn ${currentEngine === "pi" ? "is-on" : ""}`}
+                    className={`${FOOTER_ICON_BTN} ${currentEngine === "pi" ? "is-on" : ""}`}
                     disabled={creating}
                     aria-label="Engine"
                   >
@@ -1081,11 +1153,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             )}
           </div>
 
-          <div className="palette-footer-right">
+          <div className={FOOTER_RIGHT}>
             {/* Always visible — on phones too, so a non-default (dumber) model
                 is never silently in effect behind the options toggle. */}
             <ModelEffortSelect
-              className="palette-pill"
+              className={MODEL_PILL}
               title="Model and reasoning effort"
               models={models}
               defaultModel={defaultModel}
@@ -1108,9 +1180,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               }}
             />
 
-            <div className="palette-create-split" ref={createSplitRef}>
+            <div className={CREATE_SPLIT} ref={createSplitRef}>
               <button
-                className="palette-create palette-create-main"
+                className={CREATE_MAIN}
                 onClick={handleCreate}
                 disabled={!canCreate}
               >
@@ -1127,26 +1199,41 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
                 {sendKey === "mod-enter" ? (
-                  <span className="palette-create-kbd mx-0 text-xs">
+                  <span className={`${CREATE_KBD} mx-0 max-[720px]:hidden text-xs`}>
                     {MOD_ENTER_GLYPH}
                   </span>
                 ) : (
-                  <IconReturn className="palette-create-kbd" size={20} />
+                  /* Snug the return glyph up to the label and nudge it off the
+                     button edge. "Create more" is a desktop workflow, so the
+                     hint goes away with the caret on phones. */
+                  <IconReturn
+                    className={`${CREATE_KBD} -mx-[3px] max-[720px]:hidden`}
+                    size={20}
+                  />
                 )}
               </button>
               <button
                 type="button"
-                className={`palette-create palette-create-caret ${createMenuOpen ? "is-open" : ""}`}
+                className={`${CREATE_CARET} ${
+                  // Keep the caret usable (to preview modes) even before a
+                  // prompt is typed, and while its menu is open.
+                  createMenuOpen || !canCreate
+                    ? "cursor-pointer opacity-100"
+                    : "disabled:cursor-default disabled:opacity-40"
+                }`}
                 onClick={() => setCreateMenuOpen((v) => !v)}
                 disabled={creating}
                 aria-haspopup="menu"
                 aria-expanded={createMenuOpen}
                 aria-label="Create options"
               >
-                <IconChevronDown size={22} />
+                <IconChevronDown
+                  className={`transition-transform ${createMenuOpen ? "rotate-180" : ""}`}
+                  size={22}
+                />
               </button>
               {createMenuOpen && (
-                <div className="palette-create-menu" role="menu">
+                <div className={CREATE_MENU} role="menu">
                   {auth?.local && (
                     <>
                       {[
@@ -1158,20 +1245,20 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                           type="button"
                           role="menuitemradio"
                           aria-checked={createTarget === opt.target}
-                          className={`palette-create-menu-item ${createTarget === opt.target ? "is-active" : ""}`}
+                          className={CREATE_MENU_ITEM}
                           onClick={() => {
                             setCreateTarget(opt.target);
                             setCreateMenuOpen(false);
                           }}
                         >
                           <IconCheck
-                            className="palette-create-menu-check"
+                            className="mt-px shrink-0 text-dim"
                             size={22}
                             style={{ visibility: createTarget === opt.target ? "visible" : "hidden" }}
                           />
-                          <span className="palette-create-menu-text">
-                            <span className="palette-create-menu-title">{opt.title}</span>
-                            <span className="palette-create-menu-desc">{opt.desc}</span>
+                          <span className="flex min-w-0 flex-col gap-px">
+                            <span className="text-label font-semibold">{opt.title}</span>
+                            <span className="text-meta text-dim">{opt.desc}</span>
                           </span>
                         </button>
                       ))}
@@ -1187,20 +1274,20 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                       type="button"
                       role="menuitemradio"
                       aria-checked={createMore === opt.more}
-                      className={`palette-create-menu-item ${createMore === opt.more ? "is-active" : ""}`}
+                      className={CREATE_MENU_ITEM}
                       onClick={() => {
                         setCreateMore(opt.more);
                         setCreateMenuOpen(false);
                       }}
                     >
                       <IconCheck
-                        className="palette-create-menu-check"
+                        className="mt-px shrink-0 text-dim"
                         size={22}
                         style={{ visibility: createMore === opt.more ? "visible" : "hidden" }}
                       />
-                      <span className="palette-create-menu-text">
-                        <span className="palette-create-menu-title">{opt.title}</span>
-                        <span className="palette-create-menu-desc">{opt.desc}</span>
+                      <span className="flex min-w-0 flex-col gap-px">
+                        <span className="text-label font-semibold">{opt.title}</span>
+                        <span className="text-meta text-dim">{opt.desc}</span>
                       </span>
                     </button>
                   ))}
