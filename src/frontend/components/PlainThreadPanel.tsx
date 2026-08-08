@@ -27,6 +27,7 @@ import { useCurrentUser } from "./UserPicker";
 import { cn } from "../ui/cn";
 import { PLAIN_WORKSPACE_ID, PRODUCT_NAME } from "../lib/brand";
 import { Textarea } from "../ui/input";
+import { plainStatusClass } from "../lib/plain-status";
 
 interface Props {
 	sessionId: string;
@@ -123,20 +124,20 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 	const status = thread?.status;
 
 	return (
-		<div className="plain-panel">
-			<div className="plain-panel-head">
-				<div className="plain-head-info">
-					<span className="plain-customer" title={thread?.customer?.email || ""}>
+		<div className="flex h-full min-h-0 flex-col bg-raised">
+			<div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+				<div className="flex min-w-0 items-center gap-2">
+					<span className="truncate text-label font-semibold text-fg" title={thread?.customer?.email || ""}>
 						{thread?.customer?.name || thread?.customer?.email || "Plain thread"}
 					</span>
 					{status && (
-						<span className={`plain-status plain-status-${status.toLowerCase()}`}>
+						<span className={plainStatusClass(status)}>
 							{STATUS_LABEL[status] || status}
 						</span>
 					)}
 				</div>
 				<a
-					className="plain-open"
+					className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
 					href={plainUrl}
 					target="_blank"
 					rel="noreferrer"
@@ -162,15 +163,15 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 				/>
 			)}
 
-			{thread?.title && <div className="plain-title">{thread.title}</div>}
+			{thread?.title && <div className="shrink-0 border-b border-line px-3 py-2 text-label font-semibold text-fg">{thread.title}</div>}
 
-			<div className="plain-timeline" ref={bodyRef}>
+			<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3" ref={bodyRef}>
 				{loading && !thread ? (
-					<div className="plain-loading">Loading conversation…</div>
+					<div className="mt-5 text-center text-label text-faint">Loading conversation…</div>
 				) : error && !thread ? (
-					<div className="plain-loading">Couldn't load Plain thread: {error}</div>
+					<div className="mt-5 text-center text-label text-faint">Couldn't load Plain thread: {error}</div>
 				) : thread && thread.entries.length === 0 ? (
-					<div className="plain-loading">No messages in this thread yet.</div>
+					<div className="mt-5 text-center text-label text-faint">No messages in this thread yet.</div>
 				) : (
 					thread?.entries.map((e) => (
 						<PlainEntryRow key={e.id} entry={e} threadId={threadId} />
@@ -593,7 +594,7 @@ export function PlainReplyBox({
 			</div>
 			<Textarea
 				size="sm"
-				className="plain-reply-textarea min-h-[128px] p-2 leading-normal"
+				className="min-h-[128px] p-2 text-[16px] leading-normal"
 				placeholder={
 					kind === "note"
 						? "Internal note for the team (English)…"
@@ -802,22 +803,22 @@ export function PlainEntryRow({
 	if (entry.kind === "note") {
 		const author = noteAuthor(entry);
 		return (
-			<div className="plain-entry plain-entry-note">
-				<div className="plain-entry-head">
-					<span className="plain-kind-badge plain-kind-note">note</span>
-					<span className="plain-actor">{author.name}</span>
+			<div className="flex flex-col gap-1 rounded-lg border px-[11px] py-2 max-w-full self-stretch border-[color-mix(in_srgb,var(--yellow)_24%,var(--border))] bg-[color-mix(in_srgb,var(--yellow)_8%,var(--bg-panel))]">
+				<div className="flex flex-wrap items-baseline gap-[7px]">
+					<span className="rounded-sm border px-1 text-meta font-bold tracking-[-0.01em] border-[color-mix(in_srgb,var(--yellow)_40%,var(--border))] text-yellow">note</span>
+					<span className="text-label font-bold text-fg">{author.name}</span>
 					{author.isAgent && (
 						<span
-							className="plain-kind-badge"
+							className="rounded-sm border px-1 text-meta font-bold tracking-[-0.01em] border-line-strong text-faint"
 							title="Written by an agent run, not a teammate"
 						>
 							agent
 						</span>
 					)}
-					<span className="plain-time">{timeOf(entry.timestamp)}</span>
+					<span className="text-meta text-faint">{timeOf(entry.timestamp)}</span>
 					{author.isAgent && threadId && (
 						<a
-							className="plain-open ml-auto"
+							className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline ml-auto"
 							href={`${BASE_PATH}/plain-triage/${encodeURIComponent(threadId)}`}
 							target="_blank"
 							rel="noreferrer"
@@ -828,7 +829,7 @@ export function PlainEntryRow({
 					)}
 				</div>
 				<div
-					className="plain-note-body markdown"
+					className="break-words text-label leading-[1.45] text-fg [&>:first-child]:mt-0 [&>:last-child]:mb-0 markdown"
 					dangerouslySetInnerHTML={{ __html: renderMarkdown(author.text) }}
 				/>
 				{entry.attachments?.length ? (
@@ -840,14 +841,14 @@ export function PlainEntryRow({
 
 	const side = entry.actorType === "customer" ? "in" : "out";
 	return (
-		<div className={`plain-entry plain-entry-${side}`}>
-			<div className="plain-entry-head">
-				<span className="plain-actor">{entry.actorName}</span>
-				<span className="plain-kind-badge">{entry.kind}</span>
-				<span className="plain-time">{timeOf(entry.timestamp)}</span>
+		<div className={side === "in" ? "flex flex-col gap-1 rounded-lg border px-[11px] py-2 max-w-[88%] self-start rounded-bl-[3px] border-line bg-panel" : "flex flex-col gap-1 rounded-lg border px-[11px] py-2 max-w-[88%] self-end rounded-br-[3px] border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_9%,var(--bg-panel))]"}>
+			<div className="flex flex-wrap items-baseline gap-[7px]">
+				<span className="text-label font-bold text-fg">{entry.actorName}</span>
+				<span className="rounded-sm border px-1 text-meta font-bold tracking-[-0.01em] border-line-strong text-faint">{entry.kind}</span>
+				<span className="text-meta text-faint">{timeOf(entry.timestamp)}</span>
 			</div>
-			{entry.subject && <div className="plain-subject">{entry.subject}</div>}
-			{entry.text && <div className="plain-entry-text">{entry.text}</div>}
+			{entry.subject && <div className="text-label font-semibold text-fg">{entry.subject}</div>}
+			{entry.text && <div className="whitespace-pre-wrap break-words text-label leading-[1.45] text-fg">{entry.text}</div>}
 			{entry.attachments?.length ? (
 				<PlainAttachments attachments={entry.attachments} />
 			) : null}

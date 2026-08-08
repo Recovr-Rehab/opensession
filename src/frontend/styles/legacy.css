@@ -8774,12 +8774,12 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 
 	
-	/* 16px stops iOS Safari from zooming into focused inputs, and reads at a
+	
+/* 16px stops iOS Safari from zooming into focused inputs, and reads at a
 	   comfortable iOS body size. Includes the in-session composer textarea — the
 	   primary session input — which otherwise zoomed on focus at 13.5px, and the
 	   Plain reply box now that Conversation is a primary phone surface. */
-.composer-textarea,
-	.plain-reply-textarea {
+.composer-textarea {
 		font-size: 16px;
 	}
 	.home-row {
@@ -9943,175 +9943,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-/* ── Plain conversation sidebar ──────────────────────────────────
-   Read-only timeline of a session's linked Plain support thread, shown
-   as the session viewer's "Plain" workspace tab. See PlainThreadPanel.tsx. */
-.plain-panel {
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
-	height: 100%;
-	background: var(--bg-raised);
-}
-.plain-panel-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	padding: 8px 12px;
-	border-bottom: 1px solid var(--border);
-	flex-shrink: 0;
-}
-.plain-head-info {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-}
-.plain-customer {
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.plain-status {
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-	padding: 2px 7px;
-	border-radius: 999px;
-	flex-shrink: 0;
-	background: var(--bg-active);
-	color: var(--text-faint);
-}
-.plain-status-todo {
-	background: color-mix(in srgb, var(--blue) 18%, transparent);
-	color: var(--blue);
-}
-.plain-status-done {
-	background: color-mix(in srgb, var(--green, #3fb950) 18%, transparent);
-	color: var(--green, #3fb950);
-}
-.plain-status-snoozed {
-	background: color-mix(in srgb, var(--amber, #d29922) 20%, transparent);
-	color: var(--amber, #d29922);
-}
-.plain-open {
-	font-size: 11px;
-	font-weight: 600;
-	color: var(--link);
-	text-decoration: none;
-	white-space: nowrap;
-	flex-shrink: 0;
-}
-.plain-open:hover {
-	text-decoration: underline;
-}
-.plain-title {
-	padding: 8px 12px;
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text);
-	border-bottom: 1px solid var(--border);
-	flex-shrink: 0;
-}
-.plain-timeline {
-	flex: 1;
-	min-height: 0;
-	overflow-y: auto;
-	padding: 12px;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-.plain-loading {
-	color: var(--text-faint);
-	font-size: 13px;
-	text-align: center;
-	margin-top: 20px;
-}
-.plain-entry {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	max-width: 88%;
-	padding: 8px 11px;
-	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid var(--border);
-	background: var(--bg-panel);
-}
-/* Customer messages on the left, our replies on the right — like a chat. */
-.plain-entry-in {
-	align-self: flex-start;
-	border-bottom-left-radius: 3px;
-}
-.plain-entry-out {
-	align-self: flex-end;
-	background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
-	border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-	border-bottom-right-radius: 3px;
-}
-.plain-entry-note {
-	align-self: stretch;
-	max-width: 100%;
-	background: color-mix(in srgb, var(--amber, #d29922) 8%, var(--bg-panel));
-	border-color: color-mix(in srgb, var(--amber, #d29922) 24%, var(--border));
-}
-.plain-entry-head {
-	display: flex;
-	align-items: baseline;
-	gap: 7px;
-	flex-wrap: wrap;
-}
-.plain-actor {
-	font-weight: 700;
-	font-size: 12px;
-	color: var(--text);
-}
-.plain-time {
-	font-size: 11px;
-	color: var(--text-faint);
-}
-.plain-kind-badge {
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
-	color: var(--text-faint);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 0 4px;
-}
-.plain-kind-note {
-	color: var(--amber, #d29922);
-	border-color: color-mix(in srgb, var(--amber, #d29922) 40%, var(--border));
-}
-.plain-subject {
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--text);
-}
-.plain-entry-text {
-	font-size: 13px;
-	line-height: 1.45;
-	color: var(--text);
-	white-space: pre-wrap;
-	word-break: break-word;
-}
-.plain-note-body {
-	font-size: 13px;
-	line-height: 1.45;
-	color: var(--text);
-	word-break: break-word;
-}
-.plain-note-body > :first-child {
-	margin-top: 0;
-}
-.plain-note-body > :last-child {
-	margin-bottom: 0;
 }
 
 /* ── New-session ⌘K palette ──────────────────────────────────────

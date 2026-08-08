@@ -3,6 +3,7 @@ import type { PlainThread } from "../lib/types";
 import { fetchPlainThreadById, startPlainTriageApi } from "../lib/api";
 import { Button } from "../ui/button";
 import { InlineAlert, LoadingState } from "../ui/state";
+import { plainStatusClass } from "../lib/plain-status";
 import {
 	PlainEntryRow,
 	PlainReplyBox,
@@ -123,13 +124,13 @@ export function ConversationPane({
 							)}
 							{status && (
 								<span
-									className={`plain-status plain-status-${status.toLowerCase()}`}
+									className={plainStatusClass(status)}
 								>
 									{STATUS_LABEL[status] || status}
 								</span>
 							)}
 							<a
-								className="plain-open ml-auto shrink-0"
+								className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline ml-auto"
 								href={plainThreadUrl(threadId)}
 								target="_blank"
 								rel="noreferrer"
@@ -192,7 +193,7 @@ export function ConversationPane({
 
 						<div className="flex flex-col gap-3 mt-5">
 							{thread && thread.entries.length === 0 ? (
-								<div className="plain-loading">
+								<div className="mt-5 text-center text-label text-faint">
 									No messages in this thread yet.
 								</div>
 							) : (
