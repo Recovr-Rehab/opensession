@@ -10,6 +10,7 @@ import {
 } from "../lib/api";
 import { IconPullRequest, IconSearch } from "./icons";
 import { Modal, useEnterOnMount } from "../ui/modal";
+import { cn } from "../ui/cn";
 
 export interface CommandPaletteAction {
 	id: string;
@@ -41,12 +42,23 @@ function sessionRepo(s: UnifiedSession): string {
 // order: a blocked question first, then live activity, then PR lifecycle.
 type Status = "needsinput" | "running" | "review" | "merged" | "pending";
 
+/** A keycap. Hidden below 720px, where the palette is driven by touch and the
+ *  keyboard hints are noise. */
+const KBD =
+	"mx-px inline-flex min-w-4 items-center justify-center rounded-sm border border-line-strong bg-raised px-1 py-px font-sans text-meta text-dim max-[720px]:hidden";
+
+/** A result row. The selected wash rides on `aria-selected`, which the button
+ *  already carries for the listbox — so the icon and keycap tones that used to
+ *  need `.ss-item-active` descendant rules are `group-aria-selected:` here. */
+const ITEM =
+	"group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none bg-transparent px-2.5 py-2 text-left text-fg aria-selected:bg-active";
+
 const STATUS_META: Record<Status, { label: string; dotClass: string }> = {
-	needsinput: { label: "Needs input", dotClass: "ss-dot-accent" },
-	running: { label: "Running", dotClass: "ss-dot-green" },
-	review: { label: "In review", dotClass: "ss-dot-yellow" },
-	merged: { label: "Merged", dotClass: "ss-dot-purple" },
-	pending: { label: "Pending", dotClass: "ss-dot-dim" },
+	needsinput: { label: "Needs input", dotClass: "bg-accent" },
+	running: { label: "Running", dotClass: "bg-green" },
+	review: { label: "In review", dotClass: "bg-yellow" },
+	merged: { label: "Merged", dotClass: "bg-purple" },
+	pending: { label: "Pending", dotClass: "bg-faint" },
 };
 
 const STATUS_ORDER: Status[] = [
@@ -128,12 +140,21 @@ function FilterPill({
 	const active = value !== "all";
 	const current = options.find((option) => option.value === value);
 	return (
-		<div className={`ss-pill${active ? " ss-pill-active" : ""}`}>
-			<span className="ss-pill-key">{label}</span>
-			<span className="ss-pill-val">{current?.label ?? value}</span>
-			<span className="ss-pill-caret">▾</span>
+		<div
+			className={cn(
+				"relative inline-flex cursor-pointer items-center gap-[5px] rounded-full border bg-raised px-[9px] py-1 text-label",
+				"transition-[border-color,color] duration-[var(--dur-micro)] ease-[var(--ease)]",
+				// Hover outranked `.ss-pill-active` on specificity, so an active
+				// pill has always dimmed to the plain hover tone. Kept.
+				"hover:border-faint hover:text-fg",
+				active ? "border-accent text-fg" : "border-line-strong text-dim",
+			)}
+		>
+			<span className={cn("font-medium", active ? "text-accent" : "text-faint")}>{label}</span>
+			<span className="font-medium">{current?.label ?? value}</span>
+			<span className="text-[8px] text-faint">▾</span>
 			<select
-				className="ss-pill-select"
+				className="absolute inset-0 size-full cursor-pointer appearance-none border-none opacity-0"
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
 				aria-label={label}
@@ -376,18 +397,19 @@ export function SessionSearch({
 		>
 			<Modal.Content
 				variant="palette"
-				// .ss-card also scopes the touch rule that hides the keyboard chrome.
 				widthClassName="w-[min(640px,100%)]"
-				className="ss-card h-[min(500px,76vh)] max-[560px]:h-[min(560px,82vh)]"
+				className="h-[min(500px,76vh)] max-[560px]:h-[min(560px,82vh)]"
 				aria-label="Command menu"
 				initialFocus={inputRef}
 				onKeyDown={onKeyDown}
 			>
-				<div className="ss-search-row">
-					<IconSearch className="ss-search-icon" size={22} />
+				<div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
+					<IconSearch className="shrink-0 text-faint" size={22} />
 					<input
 						ref={inputRef}
-						className="ss-search-input"
+						// 16px at every width on purpose: anything smaller makes iOS zoom
+						// the page when the palette's field takes focus.
+						className="flex-1 border-none bg-transparent font-sans text-[16px] leading-[1.4] text-fg outline-none placeholder:text-faint"
 						value={query}
 						onChange={(e) => {
 							setQuery(e.target.value);
@@ -403,12 +425,18 @@ export function SessionSearch({
 						aria-activedescendant={results[active] ? `command-result-${active}` : undefined}
 					/>
 					{(searching || loadingPrs) && (
-						<span className="ss-searching" aria-label="Searching" />
+						<span
+							className="size-[13px] shrink-0 animate-[spin_0.7s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent"
+							aria-label="Searching"
+						/>
 					)}
-					<kbd className="ss-kbd">esc</kbd>
+					<kbd className={KBD}>esc</kbd>
 				</div>
 
-				<div className="ss-filters" aria-label="Session filters">
+				<div
+					className="flex flex-wrap items-center gap-[7px] border-b border-line px-3.5 py-2"
+					aria-label="Session filters"
+				>
 					<FilterPill
 						label="Person"
 						value={person}
@@ -429,7 +457,7 @@ export function SessionSearch({
 					/>
 					{hasSessionFilter && (
 						<button
-							className="ss-clear"
+							className="ml-auto rounded-md border-none bg-transparent px-1.5 py-1 text-label text-faint hover:bg-hover hover:text-fg"
 							onClick={() => {
 								setPerson("all");
 								setRepo("all");
@@ -443,12 +471,12 @@ export function SessionSearch({
 
 				<div
 					id="command-palette-results"
-					className="ss-results"
+					className="min-h-0 flex-1 overflow-y-auto p-1.5"
 					ref={listRef}
 					role="listbox"
 				>
 					{results.length === 0 && (
-						<div className="ss-empty">
+						<div className="px-4 py-7 text-center text-label text-faint">
 							{searching ? "Searching conversations…" : "Nothing found"}
 						</div>
 					)}
@@ -457,7 +485,11 @@ export function SessionSearch({
 						if (result.type === "action") {
 							return (
 								<React.Fragment key={`action:${result.action.id}`}>
-									{startsGroup && <div className="ss-group-heading">{result.category}</div>}
+									{startsGroup && (
+										<div className="px-2.5 pb-[5px] pt-2.5 text-meta font-semibold text-faint">
+											{result.category}
+										</div>
+									)}
 									<button
 										id={`command-result-${i}`}
 										data-idx={i}
@@ -465,22 +497,22 @@ export function SessionSearch({
 										role="option"
 										aria-selected={i === active}
 										tabIndex={-1}
-										className={`ss-item ss-command-item${i === active ? " ss-item-active" : ""}`}
+										className={ITEM}
 										onMouseMove={() => setActiveKey(resultKey(result))}
 										onClick={() => selectResult(result)}
 									>
 										{result.action.icon && (
-											<span className="ss-command-icon">{result.action.icon}</span>
+											<span className="inline-flex size-5 shrink-0 items-center justify-center text-dim group-aria-selected:text-fg">{result.action.icon}</span>
 										)}
-										<span className="ss-item-main">
-											<span className="ss-item-title">{result.action.label}</span>
+										<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+											<span className="truncate text-label font-medium">{result.action.label}</span>
 											{result.action.description && (
-												<span className="ss-item-snippet">{result.action.description}</span>
+												<span className="max-w-full truncate text-meta leading-[1.35] text-dim">{result.action.description}</span>
 											)}
 										</span>
 										{result.action.shortcut && (
-											<span className="ss-shortcut">
-												{result.action.shortcut.map((key) => <kbd key={key} className="ss-kbd">{key}</kbd>)}
+											<span className="inline-flex shrink-0 items-center gap-[3px] max-[560px]:hidden">
+												{result.action.shortcut.map((key) => <kbd key={key} className={`${KBD} group-aria-selected:border-faint`}>{key}</kbd>)}
 											</span>
 										)}
 									</button>
@@ -491,7 +523,11 @@ export function SessionSearch({
 							const pr = result.pr;
 							return (
 								<React.Fragment key={`pr:${pr.url}`}>
-									{startsGroup && <div className="ss-group-heading">{result.category}</div>}
+									{startsGroup && (
+										<div className="px-2.5 pb-[5px] pt-2.5 text-meta font-semibold text-faint">
+											{result.category}
+										</div>
+									)}
 									<button
 										id={`command-result-${i}`}
 										data-idx={i}
@@ -499,20 +535,20 @@ export function SessionSearch({
 										role="option"
 										aria-selected={i === active}
 										tabIndex={-1}
-										className={`ss-item${i === active ? " ss-item-active" : ""}`}
+										className={ITEM}
 										onMouseMove={() => setActiveKey(resultKey(result))}
 										onClick={() => selectResult(result)}
 									>
-										<span className="ss-command-icon"><IconPullRequest size={18} /></span>
-										<span className="ss-item-main">
-											<span className="ss-item-title">{pr.title}</span>
-											<span className="ss-item-meta">
-												<span className="ss-item-repo">{repoLabel(pr.repo)} #{pr.number}</span>
-												<span className="ss-item-branch">{pr.branch}</span>
+										<span className="inline-flex size-5 shrink-0 items-center justify-center text-dim group-aria-selected:text-fg"><IconPullRequest size={18} /></span>
+										<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+											<span className="truncate text-label font-medium">{pr.title}</span>
+											<span className="flex items-center gap-2 overflow-hidden whitespace-nowrap text-meta text-faint">
+												<span className="text-dim">{repoLabel(pr.repo)} #{pr.number}</span>
+												<span className="max-w-[220px] truncate max-[560px]:hidden">{pr.branch}</span>
 												<span>{pr.author}</span>
 											</span>
 										</span>
-										<span className="ss-item-status">{prStatus(pr)}</span>
+										<span className="shrink-0 text-meta text-faint max-[560px]:hidden">{prStatus(pr)}</span>
 									</button>
 								</React.Fragment>
 							);
@@ -522,7 +558,11 @@ export function SessionSearch({
 						const meta = STATUS_META[st];
 						return (
 							<React.Fragment key={`session:${s.id}`}>
-								{startsGroup && <div className="ss-group-heading">{result.category}</div>}
+								{startsGroup && (
+										<div className="px-2.5 pb-[5px] pt-2.5 text-meta font-semibold text-faint">
+											{result.category}
+										</div>
+									)}
 								<button
 									id={`command-result-${i}`}
 									data-idx={i}
@@ -530,43 +570,43 @@ export function SessionSearch({
 									role="option"
 									aria-selected={i === active}
 									tabIndex={-1}
-									className={`ss-item${i === active ? " ss-item-active" : ""}`}
+									className={ITEM}
 									onMouseMove={() => setActiveKey(resultKey(result))}
 									onClick={() => selectResult(result)}
 								>
-									<span className={`ss-item-dot ${meta.dotClass}`} />
-									<span className="ss-item-main">
-										<span className="ss-item-title">{s.title}</span>
+									<span className={`size-2 shrink-0 rounded-full ${meta.dotClass}`} />
+									<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+										<span className="truncate text-label font-medium">{s.title}</span>
 										{result.snippet && (
-											<span className="ss-item-snippet">{result.snippet}</span>
+											<span className="max-w-full truncate text-meta leading-[1.35] text-dim">{result.snippet}</span>
 										)}
-										<span className="ss-item-meta">
+										<span className="flex items-center gap-2 overflow-hidden whitespace-nowrap text-meta text-faint">
 											{s.automation ? (
-												<span className="ss-tag ss-tag-auto">{s.automation}</span>
+												<span className="rounded-sm bg-[color-mix(in_srgb,var(--yellow)_16%,transparent)] px-1.5 py-px text-meta text-yellow">{s.automation}</span>
 											) : (
 												s.startedBy && <span>{s.startedBy}</span>
 											)}
-											<span className="ss-item-repo">{sessionRepo(s)}</span>
-											{s.branch && <span className="ss-item-branch">{s.branch}</span>}
-											<span className="ss-item-time">{relativeTime(s.lastActivity)}</span>
+											<span className="text-dim">{sessionRepo(s)}</span>
+											{s.branch && <span className="max-w-[220px] truncate max-[560px]:hidden">{s.branch}</span>}
+											<span className="ml-auto shrink-0">{relativeTime(s.lastActivity)}</span>
 										</span>
 									</span>
-									<span className="ss-item-status">{meta.label}</span>
+									<span className="shrink-0 text-meta text-faint max-[560px]:hidden">{meta.label}</span>
 								</button>
 							</React.Fragment>
 						);
 					})}
 				</div>
 
-				<div className="ss-hint">
-					<span>
-						<kbd className="ss-kbd">↑</kbd>
-						<kbd className="ss-kbd">↓</kbd> navigate
+				<div className="flex items-center gap-4 border-t border-line px-3.5 py-2 text-meta text-faint">
+					<span className="max-[720px]:hidden">
+						<kbd className={KBD}>↑</kbd>
+						<kbd className={KBD}>↓</kbd> navigate
 					</span>
-					<span>
-						<kbd className="ss-kbd">↵</kbd> open
+					<span className="max-[720px]:hidden">
+						<kbd className={KBD}>↵</kbd> open
 					</span>
-					<span className="ss-hint-count">
+					<span className="ml-auto">
 						{results.length} result{results.length === 1 ? "" : "s"}
 					</span>
 				</div>
