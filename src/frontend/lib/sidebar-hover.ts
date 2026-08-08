@@ -7,9 +7,14 @@ import { useEffect, useState } from "react";
 
 // The single prominent status line + its dot/tone. Ordering mirrors how a person
 // triages: a blocked question first, then live activity, then PR/lifecycle.
+//
+// `dotClass` is either a `sidebar-status-*` class (that dot is part of the
+// sidebar row's own subtree, still on the legacy sheet) or a plain colour
+// utility for the states only the hover card shows. Both are just a class on
+// the same span, and the two sets never co-occur.
 export function hoverState(s: UnifiedSession): {
 	label: string;
-	tone: "accent" | "blue" | "green" | "purple" | "yellow" | "dim";
+	tone: HoverTone;
 	dotClass: string;
 } {
 	if (s.waitingForInput)
@@ -31,23 +36,43 @@ export function hoverState(s: UnifiedSession): {
 			dotClass: "sidebar-status-running",
 		};
 	if (s.prState === "MERGED")
-		return { label: "Merged", tone: "purple", dotClass: "hovercard-dot-purple" };
+		return { label: "Merged", tone: "purple", dotClass: "bg-purple" };
 	if (s.prState === "CLOSED")
-		return { label: "PR closed", tone: "dim", dotClass: "hovercard-dot-red" };
+		return { label: "PR closed", tone: "dim", dotClass: "bg-red" };
 	if (s.prState === "OPEN")
 		return {
 			label: s.prIsDraft ? "Draft PR — in review" : "In review",
 			tone: "green",
-			dotClass: "hovercard-dot-green",
+			dotClass: "bg-green",
 		};
-	return { label: "Idle", tone: "dim", dotClass: "hovercard-dot-dim" };
+	return { label: "Idle", tone: "dim", dotClass: "bg-faint" };
 }
 
 export function prTone(s: UnifiedSession): string {
-	if (s.prState === "MERGED") return "merged";
-	if (s.prState === "CLOSED") return "closed";
-	return "open";
+	if (s.prState === "MERGED") return "text-purple";
+	if (s.prState === "CLOSED") return "text-red";
+	return "text-green";
 }
+
+/** Status-line colour per hoverState tone. A lookup rather than
+ *  `hovercard-state-${tone}`: a class built at runtime can never be proven
+ *  unused, so it pins its rules in the stylesheet forever. */
+export type HoverTone =
+	| "accent"
+	| "blue"
+	| "green"
+	| "purple"
+	| "yellow"
+	| "dim";
+
+export const TONE_TEXT: Record<HoverTone, string> = {
+	accent: "text-accent",
+	blue: "text-blue",
+	green: "text-green",
+	purple: "text-purple",
+	yellow: "text-yellow",
+	dim: "text-faint",
+};
 export function prettyReview(d: string): string {
 	if (d === "APPROVED") return "approved";
 	if (d === "CHANGES_REQUESTED") return "changes requested";

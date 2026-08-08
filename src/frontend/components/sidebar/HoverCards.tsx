@@ -2,7 +2,7 @@ import { relativeTime, type WorkspaceOverview } from "../../lib/api";
 import { DEFAULT_REPO_ID } from "../../lib/brand";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
-import { MAX_HOVERCARD_MEDIA, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
+import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { useSheetDismiss } from "../../lib/sidebar-swipe";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
@@ -37,14 +37,14 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 	if (s.branch)
 		rows.push([
 			"Branch",
-			<span className="hovercard-mono">{s.branch}</span>,
+			<span className="text-[0.95em]">{s.branch}</span>,
 		]);
 
 	if (s.linearIssue)
 		rows.push([
 			"Linear",
 			<span>
-				<span className="hovercard-mono">{s.linearIssue.identifier}</span>{" "}
+				<span className="text-[0.95em]">{s.linearIssue.identifier}</span>{" "}
 				{s.linearIssue.title}
 			</span>,
 		]);
@@ -62,52 +62,52 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 
 	return (
 		<>
-			<div className="hovercard-head">
+			<div className="flex min-w-0 items-center gap-[7px]">
 				<span
-					className={`sidebar-item-status hovercard-dot ${state.dotClass}`}
+					className={`sidebar-item-status shrink-0 ${state.dotClass}`}
 				/>
-				<span className="hovercard-branch">
+				<span className="min-w-0 flex-1 truncate text-meta text-dim">
 					{s.branch || s.title}
 				</span>
 				{s.prAdditions != null && s.prDeletions != null && (
-					<span className="hovercard-diff">
-						<span className="hovercard-add">
+					<span className="shrink-0 text-meta">
+						<span className="text-green">
 							+{compactNum(s.prAdditions)}
 						</span>{" "}
-						<span className="hovercard-del">
+						<span className="text-red">
 							-{compactNum(s.prDeletions)}
 						</span>
 					</span>
 				)}
 			</div>
 
-			<div className="hovercard-title">{s.title}</div>
+			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{s.title}</div>
 
-			<div className={`hovercard-state hovercard-state-${state.tone}`}>
+			<div className={`mt-[3px] text-meta font-medium ${TONE_TEXT[state.tone]}`}>
 				{state.label}
 			</div>
 
 			{s.waitingForInput && (
-				<div className="hovercard-callout">
+				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
 					Blocked on a question — open the session to answer.
 				</div>
 			)}
 			{!s.waitingForInput && runNeedsAttention(s) && (
-				<div className="hovercard-callout">
+				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
 					Run failed: {s.lastRunError!.message.slice(0, 200)}
 				</div>
 			)}
 			{!s.waitingForInput && (s.queuedCount ?? 0) > 0 && (
-				<div className="hovercard-callout">
+				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
 					{s.queuedCount} prompt{s.queuedCount === 1 ? "" : "s"} queued.
 				</div>
 			)}
 
-			<div className="hovercard-rows">
+			<div className="mt-[9px] flex flex-col gap-[3px]">
 				{rows.map(([label, value], i) => (
-					<div className="hovercard-row" key={i}>
-						<span className="hovercard-label">{label}</span>
-						<span className="hovercard-value">{value}</span>
+					<div className="flex gap-2 text-meta leading-[1.35]" key={i}>
+						<span className="w-[74px] shrink-0 text-faint">{label}</span>
+						<span className="min-w-0 truncate text-dim">{value}</span>
 					</div>
 				))}
 			</div>
@@ -121,7 +121,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 						href={s.prUrl}
 						title={`Open on ${providerFromUrl(s.prUrl).name}`}
 					>
-						<span className="hovercard-mono">
+						<span className="text-[0.95em]">
 							{s.prNumber ? `#${s.prNumber}` : "PR"}
 						</span>{" "}
 						↗
@@ -307,16 +307,16 @@ function WsOverviewInfo({
 	const media = ov?.media || [];
 	return (
 		<>
-			<div className="hovercard-head">
-				<span className="hovercard-branch">
+			<div className="flex min-w-0 items-center gap-[7px]">
+				<span className="min-w-0 flex-1 truncate text-meta text-dim">
 					{branch || repoLabel(row.sessions[0]?.repo || DEFAULT_REPO_ID)}
 				</span>
 				{prSession?.prAdditions != null && prSession?.prDeletions != null && (
-					<span className="hovercard-diff">
-						<span className="hovercard-add">
+					<span className="shrink-0 text-meta">
+						<span className="text-green">
 							+{compactNum(prSession.prAdditions)}
 						</span>{" "}
-						<span className="hovercard-del">
+						<span className="text-red">
 							-{compactNum(prSession.prDeletions)}
 						</span>
 					</span>
@@ -326,12 +326,12 @@ function WsOverviewInfo({
 				</span>
 			</div>
 
-			<div className="hovercard-title">{row.name}</div>
+			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{row.name}</div>
 
 			{/* What os-review made of this PR — the question a Ready-to-merge row
 			    raises, answered without opening GitHub. */}
 			{prSession?.prOsReview && (
-				<div className="hovercard-state">
+				<div className="mt-[3px] text-meta font-medium">
 					<span className="text-faint">OS review </span>
 					{osReviewLabel(prSession.prOsReview)}
 				</div>
@@ -339,11 +339,11 @@ function WsOverviewInfo({
 
 			{row.status === "needsinput" &&
 				(row.sessions.some((c) => c.waitingForInput) ? (
-					<div className="hovercard-callout">
+					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
 						Blocked on a question — open to answer.
 					</div>
 				) : (
-					<div className="hovercard-callout">
+					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
 						Run failed:{" "}
 						{row.sessions
 							.find((c) => runNeedsAttention(c))
@@ -488,7 +488,7 @@ export function WsCardBody({
 						href={prSession.prUrl}
 						title={`Open on ${providerFromUrl(prSession.prUrl).name}`}
 					>
-						<span className="hovercard-mono">
+						<span className="text-[0.95em]">
 							{prSession.prNumber ? `#${prSession.prNumber}` : "PR"}
 						</span>{" "}
 						↗
@@ -595,7 +595,7 @@ export function WsMobileSheet({
 						<div className="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-faint">
 							{prSession?.prNumber != null && (
 								<span
-									className={`hovercard-mono shrink-0 hovercard-pr-${prTone(prSession)}`}
+									className={`shrink-0 text-[0.95em] font-semibold ${prTone(prSession)}`}
 								>
 									#{prSession.prNumber}
 								</span>
