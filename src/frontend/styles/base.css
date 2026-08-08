@@ -676,34 +676,17 @@ button {
 		corner-shape: squircle;
 	}
 
-	.diff-file,
-	.pr-checks,
-	.pr-body,
-	.composer-schedule-modal,
-	.composer-schedule-input,
-	.composer-schedule-cancel,
-	.composer-schedule-submit,
-	.composer-file-card,
-	.composer-file-thumb,
+	/* Legacy classes that set a radius without any `rounded-*` utility on the
+	   markup, so the rule above cannot reach them. An entry dies with its
+	   class: once a component migrates, its radius comes from a utility and
+	   the name here matches nothing. Read this list as the set of elements
+	   legacy deliberately squircles — `rounded-full` is the one utility
+	   spelling that opts OUT, so migrating one of these to it flattens the
+	   corner at the same radius. Use `rounded-[999px]` for a squircled pill. */
 	.composer-queue-item,
 	.composer-queue-action,
-	.mention-popup,
-	.mention-item,
-	.mention-repo,
-	.composer-menu,
 	.composer-menu-item,
-	.palette-card,
-	.palette-trigger,
-	.plain-entry,
-	.setting-card,
-	.user-avatar,
-	.user-avatar img,
-	.rv-avatar,
 	.session-link,
-	.btn-panel-toggle,
-	.btn-viewer-newsession,
-	.pr-num-chip,
-	.btn-viewer-pin,
 	.sidebar-nav-item,
 	.sidebar-reopen,
 	.sidebar-group-header,
