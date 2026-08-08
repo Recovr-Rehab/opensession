@@ -17,6 +17,25 @@ interface SelectOption {
 	icon?: React.ReactNode;
 }
 
+/** Full-screen transparent catcher that closes a popover/menu on outside
+ *  click. The nested one sits above the popover it opens out of, so its z-index
+ *  is written out rather than layered on top of the base string — two `z-*`
+ *  utilities on one element would leave the winner to Tailwind's output order. */
+const BACKDROP = "fixed inset-0 z-[300]";
+const BACKDROP_NESTED = "fixed inset-0 z-[320]";
+
+/** The filter panel itself (group / repo / person / PRs / sort), portalled and
+ *  fixed-positioned at the anchor. Same entrance and shadow as MINI_MENU below;
+ *  one step rounder, and it sits under the menus it opens. */
+const FILTER_POPOVER =
+	"fixed z-[301] flex flex-col gap-2.5 rounded-[calc(12px*var(--rf))] border border-line-strong bg-panel " +
+	"px-3.5 py-3 shadow-[0_12px_34px_rgba(0,0,0,0.4)] animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
+
+/** One labelled control per row: the label holds its width, the select takes
+ *  the rest. */
+const FILTER_ROW = "flex items-center justify-between gap-3.5";
+const FILTER_ROW_LABEL = "shrink-0 text-body text-dim";
+
 export function FilterPopover({
 	anchor,
 	filter,
@@ -68,10 +87,10 @@ export function FilterPopover({
 
 	return createPortal(
 		<>
-			<div className="menu-backdrop" onClick={onClose} />
-			<div className="filter-popover" style={{ left, top, width }}>
-				<div className="filter-row">
-					<span className="filter-row-label">Group by</span>
+			<div className={BACKDROP} onClick={onClose} />
+			<div className={FILTER_POPOVER} style={{ left, top, width }}>
+				<div className={FILTER_ROW}>
+					<span className={FILTER_ROW_LABEL}>Group by</span>
 					<MiniSelect
 						value={filter.groupBy}
 						options={[
@@ -84,16 +103,16 @@ export function FilterPopover({
 						onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 					/>
 				</div>
-				<div className="filter-row">
-					<span className="filter-row-label">Repo</span>
+				<div className={FILTER_ROW}>
+					<span className={FILTER_ROW_LABEL}>Repo</span>
 					<MiniSelect
 						value={filter.repo}
 						options={repoOptions}
 						onSelect={(v) => onChange({ repo: v })}
 					/>
 				</div>
-				<div className="filter-row">
-					<span className="filter-row-label">Person</span>
+				<div className={FILTER_ROW}>
+					<span className={FILTER_ROW_LABEL}>Person</span>
 					<MiniSelect
 						value={filter.person}
 						options={personOptions}
@@ -102,8 +121,8 @@ export function FilterPopover({
 				</div>
 				{/* Session-less PR rows in the project lanes (the dissolved PR
 				    band): whose PRs surface. */}
-				<div className="filter-row">
-					<span className="filter-row-label">Pull requests</span>
+				<div className={FILTER_ROW}>
+					<span className={FILTER_ROW_LABEL}>Pull requests</span>
 					<MiniSelect
 						value={filter.prs}
 						options={[
@@ -114,8 +133,8 @@ export function FilterPopover({
 						onSelect={(v) => onChange({ prs: v as PrsFilter })}
 					/>
 				</div>
-				<div className="filter-row">
-					<span className="filter-row-label">Sort by</span>
+				<div className={FILTER_ROW}>
+					<span className={FILTER_ROW_LABEL}>Sort by</span>
 					<MiniSelect
 						value={filter.sort}
 						options={[
@@ -171,7 +190,7 @@ function MiniSelect({
 		menu = createPortal(
 			<>
 				<div
-					className="menu-backdrop menu-backdrop--nested"
+					className={BACKDROP_NESTED}
 					onClick={() => setOpen(false)}
 				/>
 				<div
@@ -281,7 +300,7 @@ export const RepoFilterChip = React.forwardRef<
 		const left = Math.max(8, Math.min(r.left, window.innerWidth - menuW - 8));
 		menu = createPortal(
 			<>
-				<div className="menu-backdrop" onClick={() => setOpen(false)} />
+				<div className={BACKDROP} onClick={() => setOpen(false)} />
 				<div
 					className={MINI_MENU}
 					style={{ left, top: r.bottom + 5, minWidth: menuW }}

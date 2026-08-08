@@ -168,44 +168,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	user-select: none;
 }
 
-/* ── Filter popover (group / repo / sort) ─────────────────── */
-
-/* Full-screen transparent catcher that closes a popover/menu on outside click. */
-.menu-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 300;
-}
-.menu-backdrop--nested {
-	z-index: 320;
-}
-
-.filter-popover {
-	position: fixed;
-	z-index: 301;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
-	padding: 12px 14px;
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	animation: hovercard-in var(--dur-micro) var(--ease);
-}
-
-.filter-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 14px;
-}
-.filter-row-label {
-	font-size: 14px;
-	color: var(--text-dim);
-	flex-shrink: 0;
-}
-
 /* Rows nested under a repo band, a status lane or an inbox band take no inset
    of their own: every row in the list keeps the base 10px edge, so all their
    marks and titles share one rail top to bottom. The nesting is carried by the
