@@ -10706,25 +10706,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	min-height: 0;
 	background: var(--bg);
 }
-.settings-sidenav {
-	width: 232px;
-	flex-shrink: 0;
-	border-right: 1px solid var(--border);
-	background: var(--bg-raised);
-	padding: 16px 12px;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	overflow-y: auto;
-}
-/* In the desktop shell (os1-mac) the settings page fills the whole window,
-   including the titlebar band — but it has no .sidebar-brand to reserve it, so
-   the traffic lights overlay the first row and land on "Back to app". Reserve
-   the app's titlebar band at the top so the button clears the lights.
-   Keyed off html.wco (the WCO/desktop-shell flag); web keeps the base 16px. */
-html.wco .settings-sidenav {
-	padding-top: var(--desktop-header-h);
-}
 .settings-back {
 	display: flex;
 	align-items: center;
@@ -10744,60 +10725,6 @@ html.wco .settings-sidenav {
 .settings-back:hover {
 	color: var(--text);
 	background: var(--hover);
-}
-.settings-sidenav-group {
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
-	margin-bottom: 12px;
-}
-.settings-sidenav-label {
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.02em;
-	color: var(--text-faint);
-	padding: 8px 10px 4px;
-}
-.settings-sidenav-item {
-	display: flex;
-	align-items: center;
-	gap: 11px;
-	background: none;
-	border: none;
-	cursor: pointer;
-	text-align: left;
-	width: 100%;
-	color: var(--text-dim);
-	font-size: 14px;
-	font-weight: 500;
-	padding: 8px 10px;
-	/* The same corner as .sidebar-item. Both are a full-width selectable row in
-	   a left rail, and they already agreed on type, dim colour, hover wash and
-	   --bg-active fill -- the 8px corner was the one thing that made settings
-	   read as a different app's rail. */
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-}
-.settings-sidenav-icon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex: none;
-	width: 18px;
-	height: 18px;
-	color: var(--text-faint);
-}
-.settings-sidenav-item:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-.settings-sidenav-item:hover .settings-sidenav-icon,
-.settings-sidenav-item.active .settings-sidenav-icon {
-	color: var(--text);
-}
-.settings-sidenav-item.active {
-	color: var(--text);
-	background: var(--bg-active);
-	font-weight: 500;
 }
 
 .settings-content {

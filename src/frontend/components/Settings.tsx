@@ -589,7 +589,7 @@ export function Settings({
 
 	return (
 		<div className="settings-page">
-			<aside className="settings-sidenav">
+			<aside className="flex w-58 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-raised px-3 py-4 [html.wco_&]:pt-(--desktop-header-h)">
 				<button className="settings-back" onClick={onBack}>
 					<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
 						<path
@@ -603,17 +603,16 @@ export function Settings({
 					Back to app
 				</button>
 				{groups.map((g) => (
-					<div className="settings-sidenav-group" key={g.group}>
-						<div className="settings-sidenav-label">{g.group}</div>
+					<div className="mb-3 flex flex-col gap-px" key={g.group}>
+						<div className="px-2.5 pt-2 pb-1 text-meta font-bold tracking-[0.02em] text-faint">{g.group}</div>
 						{g.items.map((s) => (
 							<button
 								key={s.key}
-								className={`settings-sidenav-item ${
-									active === s.key ? "active" : ""
-								}`}
+								className="group flex w-full cursor-pointer items-center gap-[11px] rounded-row border-none bg-transparent px-2.5 py-2 text-left text-body font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg"
+								data-active={active === s.key || undefined}
 								onClick={() => onSelect(s.key)}
 							>
-								<span className="settings-sidenav-icon">{s.icon}</span>
+								<span className="inline-flex size-[18px] flex-none items-center justify-center text-faint group-hover:text-fg group-data-active:text-fg">{s.icon}</span>
 								{s.label}
 							</button>
 						))}

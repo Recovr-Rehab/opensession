@@ -118,8 +118,8 @@ export function SettingsAccountFooter() {
 				</Menu.Root>
 			)}
 			{canSignOut && (
-				<button className="settings-sidenav-item" onClick={() => void signOut()}>
-					<span className="settings-sidenav-icon">
+				<button className="group flex w-full cursor-pointer items-center gap-[11px] rounded-row border-none bg-transparent px-2.5 py-2 text-left text-body font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg" onClick={() => void signOut()}>
+					<span className="inline-flex size-[18px] flex-none items-center justify-center text-faint group-hover:text-fg group-data-active:text-fg">
 						<IconLogOut size={18} />
 					</span>
 					Sign out
