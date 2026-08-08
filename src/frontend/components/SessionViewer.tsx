@@ -209,6 +209,7 @@ import {
 	panelTabClass,
 	panelTabCountClass,
 } from "../lib/session-panel-classes";
+import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
 	SESSION_BANNER,
 	SESSION_BANNERS,
@@ -5237,7 +5238,7 @@ export function SessionViewer({
 
 							{/* Reserves room so a freshly-sent turn can sit near the top while its
                 reply streams into the space below; sized by the scroll hook. */}
-							<div ref={spacerRef} className="turn-spacer" aria-hidden="true" />
+							<div ref={spacerRef} className={TURN_SPACER} aria-hidden="true" />
 						</div>
 
 								{showScrollToBottom && entries.length > 0 && (

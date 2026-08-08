@@ -95,44 +95,6 @@
 	height: 52px;
 }
 
-.app-body {
-	display: flex;
-	flex: 1;
-	min-height: 0;
-	background: var(--bg-raised);
-}
-
-/* The detail pane and its optional right workspace panel form one inset object.
-   The sidebar remains unchanged; only a narrow strip of its raised app surface
-   shows around the workspace. Platform-specific
-   base radii follow the host window language, while --rf/--cs keep the app's
-   existing round-vs-squircle treatment. */
-.workspace-shell {
-	--workspace-shell-radius: 12px;
-	display: flex;
-	flex: 1;
-	position: relative;
-	z-index: 1;
-	min-width: 0;
-	min-height: 0;
-	margin: 4px;
-	overflow: hidden;
-	background: var(--bg);
-	border: 1px solid var(--border);
-	border-radius: calc(var(--workspace-shell-radius) * var(--rf));
-	corner-shape: var(--cs);
-	box-shadow: -2px 1px 5px -1px rgba(0, 0, 0, 0.1);
-}
-html[data-platform="mac"] .workspace-shell {
-	--workspace-shell-radius: 8px;
-}
-html[data-platform="windows"] .workspace-shell {
-	--workspace-shell-radius: 8px;
-}
-.app-body.sidebar-collapsed .workspace-shell {
-	margin-left: 3px;
-}
-
 /* ── Sidebar ─────────────────────────────────────────────── */
 
 /* Shared desktop chrome material for the app body and the exposed workspace
@@ -143,13 +105,6 @@ html[data-platform="windows"] .workspace-shell {
    while forcing the compositor to re-rasterize the whole sidebar whenever
    anything behind it repainted (scroll-flash amplifier). Keep the phone root
    page opaque below. */
-@media (min-width: 721px) {
-	.app-body {
-		background:
-			linear-gradient(var(--sidebar-material), var(--sidebar-material)),
-			var(--bg-raised);
-	}
-}
 
 /* Live connection dot on the logo corner — sits on a relative wrapper because
    the tile itself is overflow:hidden for the scanner beam. */
@@ -161,11 +116,6 @@ html[data-platform="windows"] .workspace-shell {
 	height: 10px;
 	border-radius: 50%;
 	border: 2px solid var(--bg-raised);
-}
-
-body:is(.resizing-sidebar, .resizing-panel) {
-	cursor: col-resize;
-	user-select: none;
 }
 
 /* Rows nested under a repo band, a status lane or an inbox band take no inset
@@ -197,66 +147,10 @@ body:is(.resizing-sidebar, .resizing-panel) {
 
 /* ── Detail pane / empty state ───────────────────────────── */
 
-.detail-pane {
-	flex: 1;
-	min-width: 0;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-	/* Anchor for the floating .sidebar-reopen control when the sidebar collapses. */
-	position: relative;
-}
-
 /* ── Collapsed desktop sidebar ──────────────────────────────
    Hide the static left column entirely and reveal the floating re-open control.
    Scoped to desktop; on mobile the page-stack (mobile-root/mobile-detail) owns
    the sidebar and this class is inert. */
-@media (min-width: 721px) {
-	/* Hiding the column itself and revealing the floating re-open control both
-	   ride on the collapsed flag in App.tsx, as utilities on those two
-	   elements. */
-	/* Clear the floating re-open control AND the fallback nav/search cluster
-	   beside it, so neither sits on top of the topbar title. The session
-	   header's first row does the same from a utility (see VIEWER_HEADER). */
-	.app-body.sidebar-collapsed .detail-topbar-title {
-		padding-left: 148px;
-	}
-}
-
-/* Top bar above the tab strip. On session routes the SessionViewer portals its
-   header (name + actions) in here; other views render a plain title. Collapses
-   when empty (e.g. Home) so it costs no vertical space. */
-.detail-topbar {
-	display: flex;
-	flex-direction: column;
-	flex-shrink: 0;
-	min-width: 0;
-}
-.detail-topbar:empty {
-	display: none;
-}
-.detail-topbar-title {
-	display: flex;
-	align-items: center;
-	/* Match .viewer-header and the sidebar brand row. */
-	height: var(--desktop-header-h);
-	padding: 0 16px;
-	font-size: 14px;
-	font-weight: 600;
-	color: var(--text);
-	background: var(--topbar-bg);
-	border-bottom: 1px solid var(--top-divider);
-}
-/* When the tab strip follows the top bar, drop the topbar's OWN border-bottom: BOTH
-   dividers (strip↔topbar and the baseline below the tabs) are inset shadows on the
-   strip itself, so they share one element's sub-pixel rounding and stay identical at
-   fractional display scales (Safari at !=100% zoom rounded a border and an inset
-   shadow to different opacities — Kent's "one divider lighter"). The strip also pulls
-   up 1px (margin-top) so its opaque fill covers this border even if :has doesn't fire. */
-.detail-topbar:has(+ .session-tabs) .viewer-header,
-.detail-topbar:has(+ .session-tabs) .detail-topbar-title {
-	border-bottom: none;
-}
 
 /* Edge fades so a tab clipped by the scroll boundary reads as "there's more this
    way" rather than as a broken, half-drawn tab — the strip hides its scrollbar,
@@ -281,11 +175,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	syntax: "<length>";
 	inherits: false;
 	initial-value: 0px;
-}
-
-body.resizing-tab-split {
-	cursor: col-resize;
-	user-select: none;
 }
 
 .tab-split-drop-preview {
@@ -322,14 +211,6 @@ body.resizing-tab-split {
 	margin-right: 6px;
 }
 
-/* The panel portals into this app-level slot. `display: contents` dissolves the
-   slot so the panel (and its overlay) become direct flex children of `.app-body`
-   — making the panel a full-height right column at the same level as the left
-   sidebar, rather than a box confined below the session header. */
-.right-panel-slot {
-	display: contents;
-}
-
 .viewer-panel {
 	/* Drag-resizable from the left edge (.panel-resize sets --panel-w). The cap
 	   only reserves the left sidebar + a readable session column — reviewing code
@@ -346,22 +227,6 @@ body.resizing-tab-split {
 	min-height: 0;
 }
 /* ── Reviews view ────────────────────────────────────────── */
-
-.reviews {
-	flex: 1;
-	min-height: 0;
-	display: flex;
-	position: relative;
-}
-
-/* Bottom spacer that lets the latest turn reach the top of the viewport. Height is
-   set imperatively by the scroll hook; no transition so it tracks streaming exactly. */
-.turn-spacer {
-	flex-shrink: 0;
-	height: 0;
-	pointer-events: none;
-	overflow-anchor: none;
-}
 
 /* Covers the session view while a delete (optionally + worktree) is in flight —
    worktree cleanup can take a few seconds, so show clear progress instead of a
@@ -479,53 +344,6 @@ body.resizing-tab-split {
 }
 
 @media (max-width: 720px) {
-	/* iOS-style page stack. The sidebar is the root page (full screen); any
-	   non-home route is a page pushed over it, sliding in from the right. The
-	   `.mobile-detail` / `.mobile-root` class on `.app-body` toggles which is on
-	   top. No overlay drawer or hamburger — you drill a layer deeper and swipe /
-	   tap Back to return. */
-	.app-body {
-		position: relative;
-		overflow: hidden;
-		background: var(--bg);
-	}
-
-	/* Phones keep their existing edge-to-edge page stack. Dissolving the desktop
-	   shell also restores .detail-pane and the fixed panel portal to the layout
-	   relationship their mobile positioning rules expect. */
-	.workspace-shell {
-		display: contents;
-	}
-
-	.detail-pane {
-		position: absolute;
-		inset: 0;
-		z-index: 10;
-		transform: translateX(100%);
-		transition: transform var(--dur-lg) var(--ease);
-		background: var(--bg);
-		/* How much room the pane's OWN chrome (docked tab strip, transcript and
-		   view-pane top padding) must leave for the top bar. The pane is
-		   `inset: 0` inside .app-body, so it starts wherever the bar leaves off:
-		   under a floating .app-header-overlay (home/session) the bar covers the
-		   pane's first --header-h pixels and pane-relative offsets have to clear
-		   it; on every other route (workspace, wiki, settings…) the bar stays in
-		   flow ABOVE .app-body, so the pane already starts below it and counting
-		   --header-h again would push the strip a full bar-height down the
-		   screen. Note this is only for pane-RELATIVE offsets: position:fixed
-		   chrome inside the pane (.viewer-panel, .panel-overlay, .wiki-nav) is
-		   viewport-relative and keeps using --header-h. */
-		--pane-header-h: var(--header-h);
-	}
-	.app:not(:has(.app-header-overlay)) .detail-pane {
-		--pane-header-h: 0px;
-	}
-	/* Shadow only while the pane is pushed on top — otherwise its left-side shadow
-	   (the pane rests just off the right edge) bleeds back onto the sidebar. */
-	.app-body.mobile-detail .detail-pane {
-		transform: translateX(0);
-		box-shadow: -10px 0 28px rgba(0, 0, 0, 0.35);
-	}
 
 	/* Back control on a pushed page: a floating circular bubble carrying just the
 	   chevron (no "Back" word) — matches the ⋯ / search bubbles so the pushed-page
@@ -819,11 +637,7 @@ body.resizing-tab-split {
 	.header-sessionbar .sessionbar-usage .usage-cache-rate {
 		display: none;
 	}
-	/* The title now lives in the top bar — the in-page copy under it is
-	   duplicate chrome. */
-	.detail-topbar-title {
-		display: none;
-	}
+
 	/* On phones the session header portals INTO the top bar's right slot (see
 	   headerActionsEl in App/SessionViewer): the title row is hidden — the
 	   centered bar title replaces it — and the actions sit flat beside it.

@@ -725,6 +725,29 @@ a {
 	}
 }
 
+/* The workspace shell's base corner, as a token rather than a rule on the
+   element: the only thing that varies is the PLATFORM, and a host-window
+   language is exactly what this file owns. It inherits down to the shell,
+   which spends it as `calc(var(--workspace-shell-radius) * var(--rf))` — so
+   --rf/--cs keep their say over round-vs-squircle either way. */
+:root {
+	--workspace-shell-radius: 12px;
+}
+html[data-platform="mac"],
+html[data-platform="windows"] {
+	--workspace-shell-radius: 8px;
+}
+
+/* A drag in progress owns the cursor for the whole document, not just the
+   handle under the pointer — the pointer routinely leaves the 4px handle
+   mid-drag, and without this the cursor flickers back to a caret over the
+   text it passes. Set on <body> by the resize handlers, which is why it can't
+   be a utility: React never renders that element. */
+body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
+	cursor: col-resize;
+	user-select: none;
+}
+
 /* The reclaimed PWA back/forward cluster (see TitleBar.tsx) only exists in
    Window Controls Overlay mode — hidden everywhere else. */
 .wco-nav {

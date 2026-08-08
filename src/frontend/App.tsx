@@ -10,6 +10,14 @@ import { MarkdownRepoProvider } from "./components/MarkdownBody";
 import { Sidebar, type SidebarHandle } from "./components/Sidebar";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { cn } from "./ui/cn";
+import {
+	APP_BODY,
+	DETAIL_PANE,
+	DETAIL_TOPBAR,
+	DETAIL_TOPBAR_TITLE,
+	RIGHT_PANEL_SLOT,
+	WORKSPACE_SHELL,
+} from "./lib/app-shell-classes";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { ToastHost, toast } from "./ui/toast";
 import { Modal } from "./ui/modal";
@@ -3385,9 +3393,15 @@ export function App(
 				    full page and replaces it. */}
 				{(!settingsActive || isPhone) && (
 				<div
-					className={`app-body ${mobileDetail ? "mobile-detail" : "mobile-root"}${
-						sidebarCollapsed ? " sidebar-collapsed" : ""
-					}`}
+					className={cn(
+						APP_BODY,
+						/* `mobile-detail` / `mobile-root` and `sidebar-collapsed` stay as
+						   state hooks: the pane, the workspace shell and the session
+						   header all read them from an ancestor, and base.css hides the
+						   WCO nav pane by the same pair. */
+						mobileDetail ? "mobile-detail" : "mobile-root",
+						sidebarCollapsed && "sidebar-collapsed",
+					)}
 				>
 					{/* `sidebar-container` stays on the markup as a hook: base.css's
 					    platform chrome (html.material-backdrop, the reduced-transparency
@@ -3689,8 +3703,8 @@ export function App(
 						/>
 					</div>
 
-					<div className="workspace-shell">
-						<main className="detail-pane" ref={detailPaneRef}>
+					<div className={WORKSPACE_SHELL}>
+						<main className={DETAIL_PANE} ref={detailPaneRef}>
 						{/* WCO back/forward fallback: the primary cluster lives in the
 						    sidebar's top chrome row, which vanishes when the sidebar is
 						    collapsed — this floating copy shows only then (CSS-gated). */}
@@ -3719,9 +3733,9 @@ export function App(
 						{/* Top bar: session name + actions (portaled in by SessionViewer)
 						    on session routes, a plain title otherwise. Sits above the tab
 						    strip so the session identity reads first, tabs below it. */}
-						<div className="detail-topbar" ref={setTopbarEl}>
+						<div className={DETAIL_TOPBAR} ref={setTopbarEl}>
 							{route.view !== "session" && topbarTitle && (
-								<span className="detail-topbar-title">{topbarTitle}</span>
+								<span className={DETAIL_TOPBAR_TITLE}>{topbarTitle}</span>
 							)}
 						</div>
 						{!activeTabSplit && renderTabBar(null)}
@@ -3983,7 +3997,7 @@ export function App(
 						{/* Full-height right column inside the same rounded workspace shell as
 						    the detail pane. The active session's workspace/sub-agent panel
 						    portals in here. */}
-						<div className="right-panel-slot" ref={setRightPanelEl} />
+						<div className={RIGHT_PANEL_SLOT} ref={setRightPanelEl} />
 					</div>
 				</div>
 				)}
