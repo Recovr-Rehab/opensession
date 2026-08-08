@@ -19,7 +19,12 @@
  * a token re-resolves under `html[data-theme]`.
  */
 
-/** Monospace body. Ink is `text-dim`; a well overrides it. */
+/** Monospace body. Ink is `text-dim`; a well overrides it.
+ *
+ * `[tab-size:2]` is not decoration: code output is full of tab indentation
+ * (`cat -n` / `rg -n`), and at the default 8 columns a deeply indented line
+ * out-runs a phone-width pane — the run of tabs hangs past the edge instead
+ * of wrapping. */
 export const TOOL_PRE =
 	"tool-pre m-0 max-h-80 overflow-y-auto font-mono text-meta leading-[1.5] " +
 	"whitespace-pre-wrap [word-break:break-word] [tab-size:2] text-dim";

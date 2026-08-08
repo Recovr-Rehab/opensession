@@ -1675,78 +1675,6 @@ body.resizing-tab-split {
 		transform: rotate(360deg);
 	}
 }
-
-/* ── Sub-agent pane (its own view tab) ───────────────────── */
-
-.subagent-head {
-	padding: 8px 10px 10px;
-	border-bottom: 1px solid var(--border);
-	background: var(--bg-raised);
-}
-.subagent-head-top {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-.subagent-chip {
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	color: var(--accent);
-	background: var(--accent-soft);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 2px 6px;
-	white-space: nowrap;
-}
-.subagent-title {
-	font-weight: 600;
-	font-size: 13px;
-	color: var(--text);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.subagent-live-dot {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background: var(--green);
-	flex-shrink: 0;
-	animation: pulse 1.6s ease-in-out infinite;
-}
-.subagent-back {
-	margin-top: 8px;
-	background: none;
-	border: none;
-	color: var(--text-dim);
-	font-size: 12px;
-	padding: 0;
-	max-width: 100%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.subagent-back:hover {
-	color: var(--text);
-}
-.subagent-desc {
-	margin-top: 6px;
-	color: var(--text-dim);
-	font-size: 12px;
-	line-height: 1.4;
-}
-.subagent-body {
-	padding: 12px 14px;
-}
-.subagent-messages {
-	/* Block, not flex-column: as flex items the mx-auto transcript turn
-	   wrappers shrink-to-fit, so unbreakable content (code lines) sizes them
-	   to their full 1000px --session-col cap and the pane scrolls sideways when
-	   it is narrower than that. Block children just fill the pane and wide
-	   content scrolls inside its own pre, like the main session column.
-	   Vertical rhythm comes from the turn wrappers' own margins. */
-	min-width: 0;
-}
 .diff-file-header {
 	display: flex;
 	align-items: center;
@@ -2269,70 +2197,6 @@ a.pr-ref:hover {
 	background: #08080a;
 }
 
-/* ── Tool calls (rows styled in ToolCallBlock.tsx) ───────── */
-
-.tool-pre {
-	margin: 0;
-	font-family: var(--mono);
-	font-size: 11px;
-	line-height: 1.5;
-	white-space: pre-wrap;
-	word-break: break-word;
-	/* Code output is full of tab indentation (cat -n / rg -n); at the default
-	   8-column tabs a deeply indented line out-runs a phone-width pane and the
-	   run of tabs hangs past the edge instead of wrapping. */
-	tab-size: 2;
-	color: var(--text-dim);
-	max-height: 320px;
-	overflow-y: auto;
-}
-
-/* Code surface inside an expanded tool call. */
-.tool-code-surface {
-	background: #0d0f13;
-	border: 1px solid rgba(255, 255, 255, 0.06);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 8px 10px;
-	/* Content wraps (.tool-pre / pre.shiki are pre-wrap), but anything that
-	   still measures wider — hanging whitespace, an unbreakable run — scrolls
-	   inside the pane rather than being clipped or widening the session. */
-	overflow-x: auto;
-	tab-size: 2;
-}
-.tool-code-surface .tool-pre,
-.tool-pre.tool-code-surface {
-	color: #b6bcc8;
-}
-.tool-code-surface .shiki-gutter {
-	color: #565d6b;
-}
-html[data-theme="light"] .tool-code-surface {
-	background: #f6f8fa;
-	border-color: #d8dee4;
-}
-html[data-theme="light"] .tool-code-surface .tool-pre,
-html[data-theme="light"] .tool-pre.tool-code-surface {
-	color: #57606a;
-}
-html[data-theme="light"] .tool-code-surface .shiki-gutter {
-	color: #8c959f;
-}
-
-/* Shiki-highlighted variant: keep .tool-pre's box, strip shiki's own chrome */
-.tool-pre-code pre.shiki {
-	margin: 0;
-	padding: 0;
-	background: transparent !important;
-	font-family: inherit;
-	font-size: inherit;
-	line-height: inherit;
-	white-space: pre-wrap;
-	word-break: break-word;
-}
-.tool-pre-code pre.shiki code {
-	font-family: inherit;
-	font-size: inherit;
-}
 .shiki-gutter {
 	color: var(--text-faint);
 	user-select: none;
@@ -2355,14 +2219,6 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
-/* ── Composer (shared session input — Claude/Codex style) ─────────────── */
-
-.composer-wrap {
-	max-width: calc(var(--session-col) + 40px);
-	margin: 0 auto;
-	width: 100%;
-}
-
 .composer {
 	/* Anchors the dictation overlay (VoiceInput). */
 	position: relative;
@@ -2381,12 +2237,6 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	transition:
 		border-color var(--dur-micro) var(--ease),
 		box-shadow var(--dur-micro) var(--ease);
-}
-/* No accent (red) focus highlight — it read as an error/active state. The
-   composer keeps its resting border on focus; the blinking caret is affordance
-   enough. (Removed the border-color/ring swap on purpose.) */
-.composer-disabled {
-	opacity: 0.6;
 }
 
 /* The queue is a flap that folds out from behind the composer: a dimmer
@@ -2598,35 +2448,11 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .composer.composer-min .composer-toolbar {
 	display: contents;
 }
-.composer.composer-min .composer-input-wrap {
-	order: 2;
-	flex: 1 1 auto;
-	min-width: 0;
-}
 .composer.composer-min .composer-textarea {
 	min-height: 0;
 	padding: 0 4px;
 }
-.composer.composer-min .composer-pop-wrap:has(.composer-add-btn) {
-	order: 1;
-}
-.composer.composer-min .composer-add-btn {
-	/* The pill insets everything by 4px; the expanded field's optical pull
-	   would hang the button off its rounded left end. */
-	margin-left: 0;
-}
-.composer.composer-min .composer-voice-wrap {
-	order: 3;
-}
-.composer.composer-min .composer-send-split {
-	order: 5;
-}
-/* Without an explicit order the stop button defaults to 0 and jumps to the far
-   left of the minimized row; seat it with the right-side cluster, just before
-   send (order 5), so it reads "… mic · stop · send". */
-.composer.composer-min .composer-stop {
-	order: 4;
-}
+
 /* The one place the composer keeps circles, deliberately: this resting state IS
    a 999px pill (Motion animates the box to it), and its + / mic / send sit
    flush in its rounded ends — a squircle inside a pill end reads as a mistake.
@@ -2641,23 +2467,12 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
    while the mic stayed square — so the resting pill held three different
    shapes. The fill-shrinking rule that used to live here now covers every
    phone composer, expanded or not (see the phone block). */
-.composer.composer-min .composer-send,
-.composer.composer-min .palette-icon-btn,
 /* The icon buttons paint on an inset pseudo-element, so the wash needs the
    same treatment or a circular button hovers into a squircle. */
+.composer.composer-min .palette-icon-btn,
 .composer.composer-min .palette-icon-btn::before {
 	border-radius: 50%;
 	corner-shape: round;
-}
-.composer.composer-min .composer-spacer {
-	display: none;
-}
-
-/* Inline wrapper around the dictation mic — lets Motion give it a layout box
-   so it glides between rows during the morph without disturbing either state. */
-.composer-voice-wrap {
-	display: inline-flex;
-	align-items: center;
 }
 
 .composer-textarea {
@@ -2701,14 +2516,6 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	overflow: hidden;
 	z-index: 0;
 }
-.composer-textarea.has-hl {
-	position: relative;
-	z-index: 1;
-	color: transparent;
-	caret-color: var(--text);
-	/* Match the mirror's wrapping so long tokens break identically. */
-	overflow-wrap: break-word;
-}
 .composer-hl .cmp-code {
 	background: rgba(255, 255, 255, 0.09);
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
@@ -2728,19 +2535,11 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: #1f2328;
 }
 
-/* "@"-mention file autocomplete */
-.composer-input-wrap {
-	position: relative;
-}
-
 .composer-toolbar {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	margin-top: 10px;
-}
-.composer-spacer {
-	flex: 1;
 }
 /* When the toolbar runs out of room, the model/effort pills give way (their
    labels ellipsize) — never the icon buttons or the send button, which would
@@ -2761,75 +2560,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	flex-shrink: 1;
 	min-width: 0;
 }
-/* The one filled control in the toolbar, and the one place a circle is right.
-   It was briefly folded onto the shared control corner on the argument that
-   nothing else in the app is round — which had it backwards. The disc is the
-   composer's signature: it is the only control whose whole job is "commit
-   this", and as a squircle the saturated stop plate reads as a red brick
-   sitting in the field rather than a button. Roundness is what keeps a
-   full-strength fill from feeling heavy. Consistency buys nothing here. */
-.composer-send {
-	width: 32px;
-	height: 32px;
-	border-radius: 50%;
-	background: var(--accent);
-	color: var(--on-accent);
-	border: none;
-	font-size: 15px;
-	font-weight: 600;
-	line-height: 1;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
-	transition:
-		filter var(--dur-micro) var(--ease),
-		border-radius var(--dur-micro) var(--ease),
-		transform var(--dur-micro) var(--ease);
-}
-.composer-send:disabled {
-	opacity: 0.35;
-	cursor: default;
-}
-.composer-send:not(:disabled):hover {
-	filter: brightness(1.12);
-	transform: scale(1.05);
-}
-/* The queue state is a ring rather than a plate, so it needs the weight to
-   register at 32px — at 1px it read as a disabled send rather than a different
-   one. */
-.composer-send-queue-main {
-	background: var(--bg-raised);
-	color: var(--accent);
-	border: 2px solid var(--accent);
-}
-.composer-send-interrupt {
-	background: var(--red-soft);
-	color: var(--red);
-	border: 1px solid var(--red);
-}
-/* Only the accent-filled send disc takes the ink hover; .composer-stop and
-   .composer-send-interrupt carry .composer-send too, and they are saturated
-   red, which brightens fine. Without this exclusion, hovering Stop mid-run
-   painted it near-white. */
-.composer-send:not(.composer-stop):not(.composer-send-interrupt):not(:disabled):hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
-	filter: none;
-}
-.composer-stop {
-	background: var(--red);
-	color: #fff;
-	border: none;
-}
-
-/* Right-side send button wrapper. Scheduler actions now live in the + menu;
-   the old split/caret styles remain for SchedulePromptButton's caret variant. */
-.composer-send-split {
-	position: relative;
-	display: inline-flex;
-	align-items: stretch;
-	flex-shrink: 0;
-}
 
 /* Custom-time dialog — centered modal with date + time fields, mirroring
    Slack's "Schedule message" sheet. */
@@ -2842,13 +2572,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	justify-content: center;
 	background: rgba(0, 0, 0, 0.4);
 	padding: 20px;
-}
-
-.composer-hint {
-	color: var(--text-faint);
-	font-size: 11px;
-	text-align: center;
-	margin-top: 7px;
 }
 
 .busy-elapsed {
@@ -3530,13 +3253,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		align-items: center;
 	}
 
-	
-	/* The keyboard-shortcut hint is irrelevant on touch and eats vertical space
-     right where the keyboard appears — hide it. */
-.composer-hint {
-		display: none;
-	}
-
 	.viewer-messages {
 		/* Clear the floating pills at rest, then scroll under them: the top inset
 		   is the bar height (+ a little air) so the newest/first row sits just
@@ -3729,18 +3445,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		   inside that — the two cancel. */
 		margin-left: 4px;
 	}
-
-	/* Composer send / attach / toolbar icon buttons — larger circles and icons
-	   that clear the 44pt guideline once padding is counted. */
-	.composer-send {
-		width: 40px;
-		height: 40px;
-		font-size: 17px;
-	}
-	.composer-send svg {
-		width: 24px;
-		height: 24px;
-	}
 	.palette-icon-btn {
 		width: 40px;
 		height: 40px;
@@ -3820,10 +3524,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 
 	.composer {
 		padding-right: 16px;
-	}
-	.composer-send {
-		width: 36px;
-		height: 36px;
 	}
 	/* Phones show the SAME busy right-edge as desktop: Stop plus the steer/queue
 	   Send side by side once you start composing a follow-up (empty input still
@@ -4071,58 +3771,10 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 }
 
-/* Inline images: markdown images, pasted images, and Read-of-image results */
-.tool-result-images {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	margin-top: 6px;
-}
-.tool-result-videos {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	margin-top: 6px;
-}
-
 /* Toolbar popovers (+ add menu, goal editor) */
 .composer-pop-wrap {
 	position: relative;
 	display: inline-flex;
-}
-/* The "+" is a 40px target around a 20px glyph, so aligning its BOX with the
-   composer's padding parks the visible ink 10px further in than the text above
-   it — the field then reads left-heavy against the send button, whose filled
-   circle is its own edge. Pull the button (not its wrapper, which the menu
-   anchors to) back out so the glyph sits about where the send circle does.
-   Stops short of full symmetry: the hover wash has to stay inside the field's
-   corner (--composer-radius). */
-.composer-toolbar .composer-add-btn {
-	margin-left: -6px;
-}
-.composer-menu {
-	position: absolute;
-	bottom: calc(100% + 6px);
-	right: 0;
-	min-width: 172px;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
-	padding: 4px;
-	z-index: 40;
-}
-/* The add ("+") button sits at the LEFT of the toolbar, so its menu must grow
-   rightward — the default right:0 anchoring pushes it off the left edge, where
-   it's clipped off-screen on narrow/mobile composers. Mirrors the goal
-   popover's left anchoring (its button is also in the left group). */
-.composer-pop-wrap:has(.composer-add-btn) .composer-menu {
-	/* Line the popup up with the composer's outer left edge, not the "+"
-	   button's: the toolbar lives inside the composer's padding, so a plain
-	   left:0 left the menu inset by that padding and hanging off-axis above
-	   the field. */
-	left: calc(-1 * var(--composer-inset-left, 17px));
-	right: auto;
 }
 .composer-menu-item {
 	display: flex;
@@ -4778,40 +4430,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.composer-toolbar {
 		margin-top: 6px;
 	}
-	/* The model pill sits next to the + button on phones (DOM keeps it
-	   on the right edge for desktop; flex order moves it here). The
-	   pill-shrink rules in the earlier phone block (no chevron, 136px
-	   ellipsis cap) keep it from crowding out mic/send. */
-	.composer-toolbar .composer-pop-wrap:has(.composer-add-btn) {
-		order: -2;
-	}
 	.composer-toolbar .palette-select-motion {
 		order: -1;
 	}
+	
 	/* Comfortable thumb targets for what remains. */
-	.composer-toolbar .palette-icon-btn,
-	.composer-send {
+.composer-toolbar .palette-icon-btn {
 		width: 40px;
 		height: 40px;
-	}
-	/* Inside the 50px RESTING pill a 40px disc leaves 5px of air above and
-	   below — a red blob against the hairline + and mic glyphs beside it. There
-	   only, keep the target and shrink the fill: padding + background-clip
-	   paints the disc at 32px without moving the hit area (the
-	   .palette-icon-btn trick, done with the background since these buttons are
-	   filled). The EXPANDED phone composer keeps the full 40px plate — it is
-	   the primary thumb action, and matching it to its neighbours there just
-	   made the one button you reach for smaller. */
-	.composer.composer-min .composer-send {
-		padding: 4px;
-		background-clip: content-box;
-	}
-	/* The arrow comes down with the disc — a 24px glyph all but touches the
-	   smaller plate's edge. The stop square is a 10px mark inside its 24px box,
-	   so it already sits in proportion and keeps its size. */
-	.composer.composer-min .composer-send:not(.composer-stop) svg {
-		width: 20px;
-		height: 20px;
 	}
 }
 
