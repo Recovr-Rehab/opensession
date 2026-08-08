@@ -2394,7 +2394,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<button
 								className={cn(
 									SIDEBAR_GROUP_HEADER,
-									"rounded-md px-1 py-1 text-[14px] transition-colors min-[721px]:px-[10px]",
+									"rounded-md px-1 py-1 text-[14px] transition-colors desktop:px-[10px]",
 									SIDEBAR_STICKY_LANE,
 									SIDEBAR_STUCK_BACKING,
 								)}
@@ -4103,7 +4103,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				data-sticky-head
 			>
 				<div
-					className="group/wshead flex min-w-0 items-center gap-1.5 min-[721px]:w-full"
+					className="group/wshead flex min-w-0 items-center gap-1.5 desktop:w-full"
 					ref={headRef}
 				>
 					<button
@@ -5022,7 +5022,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// A band heading carries no leading mark, so on phones it
 								// takes the 8px a 22px glyph spends on its own padding
 								// before the ink starts — see the toggle's inset below.
-								"py-0 pl-0 pr-2 min-[721px]:pr-0",
+								"py-0 pl-0 pr-2 desktop:pr-0",
 								SIDEBAR_STICKY_BAND,
 								SIDEBAR_STICKY_BAND_ROW,
 								SIDEBAR_STUCK_BACKING,
@@ -5175,7 +5175,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<div
 							className={cn(
 								SIDEBAR_BAND_LABEL,
-								"py-0 pl-0 pr-2 min-[721px]:pr-0",
+								"py-0 pl-0 pr-2 desktop:pr-0",
 								SIDEBAR_STICKY_BAND,
 								SIDEBAR_STICKY_BAND_ROW,
 								SIDEBAR_STUCK_BACKING,
@@ -5186,7 +5186,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								className={cn(
 									SIDEBAR_BAND_TOGGLE,
 									SIDEBAR_BAND_TOGGLE_INSET,
-									"min-[721px]:pl-[10px]",
+									"desktop:pl-[10px]",
 								)}
 								onClick={() => toggleBand("people")}
 								title={open ? "Collapse people" : "Expand people"}
@@ -5222,7 +5222,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									return (
 										<button
 											key={p.name}
-											className={`flex items-center gap-[9px] w-full min-w-0 text-left border-0 cursor-pointer rounded-row px-1 py-2 min-[721px]:pl-3 min-[721px]:pr-2 min-[721px]:py-[5px] ${
+											className={`flex items-center gap-[9px] w-full min-w-0 text-left border-0 cursor-pointer rounded-row px-1 py-2 desktop:pl-3 desktop:pr-2 desktop:py-[5px] ${
 												selected
 													? "bg-active"
 													: "bg-transparent hover:bg-hover"

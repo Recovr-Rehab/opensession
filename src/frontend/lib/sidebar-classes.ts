@@ -24,7 +24,7 @@ export const SIDEBAR_RAIL =
 
 /**
  * ── Containers ──────────────────────────────────────────────────────────────
- * The boxes the row families sit in. Written phone-first with a `min-[721px]:`
+ * The boxes the row families sit in. Written phone-first with a `desktop:`
  * desktop override, which is the exact complement of the `max-width: 720px`
  * these rules came from — `phone:` compiles to `< 720` and would leave a
  * viewport exactly 720px wide wearing neither value.
@@ -44,7 +44,7 @@ export const SIDEBAR_RAIL =
  * class name would read as styling.
  */
 export const SIDEBAR_LIST =
-	"flex-none overflow-y-visible px-3 pt-px pb-0 min-[721px]:px-1.5";
+	"flex-none overflow-y-visible px-3 pt-px pb-0 desktop:px-1.5";
 
 /**
  * Bands that are siblings of the workspace list (Automations, People) but
@@ -52,7 +52,7 @@ export const SIDEBAR_LIST =
  * scroll panes.
  */
 export const SIDEBAR_INDEPENDENT_SECTION =
-	"block min-w-0 flex-none mx-3 min-[721px]:mx-1.5";
+	"block min-w-0 flex-none mx-3 desktop:mx-1.5";
 
 /** The scroll flow inside one of those bands — visible, not a nested pane. */
 export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
@@ -125,11 +125,11 @@ export const SIDEBAR_REPO_TILE = "size-[22px] shrink-0 text-[13px]";
  * to Tailwind's internal ordering rather than to the call site.
  */
 export const SIDEBAR_GROUP_HEADER =
-	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim min-[721px]:text-[14px] hover:bg-hover hover:text-fg";
+	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-[14px] hover:bg-hover hover:text-fg";
 
 /** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
 export const SIDEBAR_GROUP_HEADER_INSET =
-	"pt-[11px] pr-1 pb-[11px] pl-1 min-[721px]:pt-1 min-[721px]:pr-1.5 min-[721px]:pb-1 min-[721px]:pl-2.5";
+	"pt-[11px] pr-1 pb-[11px] pl-1 desktop:pt-1 desktop:pr-1.5 desktop:pb-1 desktop:pl-2.5";
 
 /**
  * Status lanes, inbox bands and Snoozed — the groups nested inside a list or a
@@ -141,7 +141,7 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * step up from the desktop caption so it survives arm's-length reading.
  */
 export const SIDEBAR_LANE_HEADER =
-	"pt-[9px] pb-[5px] text-[13px] font-semibold min-[721px]:pt-1 min-[721px]:pb-1 min-[721px]:text-[12px]";
+	"pt-[9px] pb-[5px] text-[13px] font-semibold desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
@@ -177,7 +177,7 @@ export const SIDEBAR_GROUP_CHEVRON =
  * actually wants it, not to the shared string.
  */
 export const SIDEBAR_GROUP_COUNT =
-	"text-[13px] font-medium text-faint min-[721px]:text-[12px]";
+	"text-[13px] font-medium text-faint desktop:text-[12px]";
 
 /**
  * The same count on a status-lane heading, which pins 12px at both widths.
@@ -218,7 +218,7 @@ export const SIDEBAR_AUTO_COG =
 
 /** Tier 1 — a band heading pinned at the top of the rail. */
 export const SIDEBAR_STICKY_BAND =
-	"min-[721px]:sticky min-[721px]:top-0 min-[721px]:z-20";
+	"desktop:sticky desktop:top-0 desktop:z-20";
 
 /**
  * One invariant row height for the tier-1 headings, which is what stops the
@@ -228,11 +228,11 @@ export const SIDEBAR_STICKY_BAND =
  * breakpoint the pinning is.
  */
 export const SIDEBAR_STICKY_BAND_ROW =
-	"min-[721px]:mt-0 min-[721px]:flex min-[721px]:h-[44px] min-[721px]:min-h-[44px] min-[721px]:items-center min-[721px]:py-[7px]";
+	"desktop:mt-0 desktop:flex desktop:h-[44px] desktop:min-h-[44px] desktop:items-center desktop:py-[7px]";
 
 /** Tier 2 — a lane / repo / status header, pinned one band-row lower. */
 export const SIDEBAR_STICKY_LANE =
-	"min-[721px]:sticky min-[721px]:top-[44px] min-[721px]:z-[15] min-[721px]:h-[30px] min-[721px]:min-h-[30px]";
+	"desktop:sticky desktop:top-[44px] desktop:z-[15] desktop:h-[30px] desktop:min-h-[30px]";
 
 /**
  * A status lane nested inside a repo band sits one row lower again — its repo
@@ -241,7 +241,7 @@ export const SIDEBAR_STICKY_LANE =
  * through `cn()`, which resolves the pair to this one.
  */
 export const SIDEBAR_STICKY_LANE_NESTED =
-	"min-[721px]:top-[74px] min-[721px]:z-[14]";
+	"desktop:top-[74px] desktop:z-[14]";
 
 /**
  * The surface a header paints once it is actually pinned. A full-width backing
@@ -263,13 +263,13 @@ export const SIDEBAR_STICKY_LANE_NESTED =
  * full-width hover row that toggles the band, the collapse chevron sits by the
  * label (revealed on hover), and the count / any actions live on the right.
  *
- * Written phone-first with a `min-[721px]:` desktop override, which is the
+ * Written phone-first with a `desktop:` desktop override, which is the
  * exact complement of the `max-width: 720px` these rules came from —
  * `phone:` would be `< 720` and leave a one-pixel viewport wearing
  * neither value.
  */
 export const SIDEBAR_BAND_LABEL =
-	"text-[15px] font-semibold tracking-[-0.01em] text-faint min-[721px]:text-[12px]";
+	"text-[15px] font-semibold tracking-[-0.01em] text-faint desktop:text-[12px]";
 
 /**
  * The heading's toggle button. Horizontal padding is NOT here: each band sits
@@ -292,7 +292,7 @@ export const SIDEBAR_BAND_TOGGLE =
  * tighter base inset.
  */
 export const SIDEBAR_BAND_TOGGLE_INSET =
-	"pr-1 pl-2 min-[721px]:pr-2 min-[721px]:pl-[14px]";
+	"pr-1 pl-2 desktop:pr-2 desktop:pl-[14px]";
 
 /**
  * The chevron reveals on hover but stays IN LAYOUT at all times (visibility,
@@ -304,7 +304,7 @@ export const SIDEBAR_BAND_TOGGLE_INSET =
 export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
 
 export const SIDEBAR_STUCK_BACKING =
-	"min-[721px]:[&.is-stuck::before]:absolute min-[721px]:[&.is-stuck::before]:top-0 min-[721px]:[&.is-stuck::before]:bottom-[-1px] min-[721px]:[&.is-stuck::before]:left-[-400px] min-[721px]:[&.is-stuck::before]:right-[-400px] min-[721px]:[&.is-stuck::before]:z-[-1] min-[721px]:[&.is-stuck::before]:content-[''] min-[721px]:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]";
+	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-0 desktop:[&.is-stuck::before]:bottom-[-1px] desktop:[&.is-stuck::before]:left-[-400px] desktop:[&.is-stuck::before]:right-[-400px] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]";
 
 /**
  * The live-state dot a row, group header or hover card carries, minus the
@@ -456,7 +456,7 @@ export const SIDEBAR_WS_ACTION =
  * would split the free space and strand one of them mid-row.
  */
 export const SIDEBAR_WS_TIME =
-	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint min-[721px]:min-w-[34px] min-[721px]:pr-0";
+	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint desktop:min-w-[34px] desktop:pr-0";
 
 /** Revealed on row hover, clearing the absolutely-positioned action cluster. */
 export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex group-hover:mr-20";
@@ -472,7 +472,7 @@ export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex group-hover:mr-20"
  * short of the column like every glyph above it.
  */
 export const SIDEBAR_WS_TICKER =
-	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta tabular-nums text-yellow group-hover:hidden min-[721px]:min-w-[34px] min-[721px]:pr-0";
+	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-0";
 
 /**
  * Slack-style unsent-draft pencil. Its left margin is the call site's: on a

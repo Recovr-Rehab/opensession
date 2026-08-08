@@ -11,10 +11,10 @@
  *    and its tabs are floating pills with a fill, a ring and a shadow. The old
  *    sheet wrote the pill unconditionally and then had `@media (min-width:
  *    721px)` undo every paint property of it, and that shape is kept: the pill
- *    is unprefixed and the flat band overrides it at `min-[721px]:`. Tailwind
+ *    is unprefixed and the flat band overrides it at `desktop:`. Tailwind
  *    emits every breakpoint variant after every unprefixed and pseudo-class
  *    utility (verified in the compiled sheet: `hover:bg-hover` at ~93k,
- *    the first `min-[721px]:` rule at ~119k), which is what makes a responsive
+ *    the first `desktop:` rule at ~119k), which is what makes a responsive
  *    override reliable at all. Note that Tailwind's `phone:` is
  *    `width < 720px`, NOT the `max-width: 720px` the old sheet and
  *    `useIsPhone` mean — so phone-only rules are written as overrides on a
@@ -64,8 +64,8 @@ export const TAB_STRIP =
 	// Desktop: the flat band. Both dividers are inset shadows on THIS element
 	// so they share one element's sub-pixel rounding and stay identical at
 	// fractional display scales; the -1px lap hides the topbar's own border.
-	"min-[721px]:-mt-px min-[721px]:h-11 min-[721px]:items-stretch min-[721px]:py-0 " +
-	"min-[721px]:shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--border)] " +
+	"desktop:-mt-px desktop:h-11 desktop:items-stretch desktop:py-0 " +
+	"desktop:shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--border)] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
 	"phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
@@ -100,7 +100,7 @@ export const TAB_SCROLL =
 	// Hug the content on desktop so the pinned "+" sits right after the last tab
 	// rather than being pushed to the far right; full-height so its tabs can
 	// stretch down to the band's baseline hairline.
-	"min-[721px]:flex-[0_1_auto] min-[721px]:items-stretch " +
+	"desktop:flex-[0_1_auto] desktop:items-stretch " +
 	"supports-[animation-timeline:scroll()]:[animation:session-tabs-fade-start_1ms_both,session-tabs-fade-end_1ms_both] " +
 	"supports-[animation-timeline:scroll()]:[animation-timeline:scroll(self_inline),scroll(self_inline)] " +
 	"supports-[animation-timeline:scroll()]:[animation-range:0_24px,calc(100%_-_24px)_100%] " +
@@ -116,13 +116,13 @@ export const TAB_SCROLL =
  */
 export const TAB_GROUP =
 	"relative inline-flex flex-none items-center gap-[3px] " +
-	"min-[721px]:self-stretch min-[721px]:items-stretch";
+	"desktop:self-stretch desktop:items-stretch";
 
 /** Each tab's Reorder.Item wrapper. `relative` lets whileDrag's z-index lift
  *  the dragged tab over its siblings. */
 export const TAB_ITEM =
 	"session-tab-reorder relative inline-flex shrink-0 items-center " +
-	"min-[721px]:self-stretch min-[721px]:items-stretch";
+	"desktop:self-stretch desktop:items-stretch";
 
 /** Picked up: desktop tabs are flat labels on the strip's own background, so a
  *  dragged one has no surface of its own and smears over every tab it passes.
@@ -164,7 +164,7 @@ const TAB_BASE =
 	`border ${PILL} shadow-[0_1px_2px_rgba(0,0,0,0.12)] ` +
 	// Desktop: no fill, ring or rounding — just the label, with a transparent
 	// underline reserved so the active/inactive swap never shifts the row.
-	"min-[721px]:rounded-none min-[721px]:border-0 min-[721px]:bg-transparent min-[721px]:hover:bg-transparent";
+	"desktop:rounded-none desktop:border-0 desktop:bg-transparent desktop:hover:bg-transparent";
 
 export type TabState = {
 	active: boolean;
@@ -187,12 +187,12 @@ export function tabClass(state: TabState): string {
 
 	// Desktop: one — and only one — inset underline.
 	const underline = active
-		? "min-[721px]:shadow-[inset_0_-3px_0_var(--accent)]"
+		? "desktop:shadow-[inset_0_-3px_0_var(--accent)]"
 		: waiting
-			? "min-[721px]:shadow-[inset_0_-2px_0_var(--accent)]"
+			? "desktop:shadow-[inset_0_-2px_0_var(--accent)]"
 			: colored
-				? "min-[721px]:shadow-[inset_0_-2px_0_color-mix(in_srgb,var(--tab-color)_70%,transparent)]"
-				: "min-[721px]:shadow-[inset_0_-2px_0_transparent]";
+				? "desktop:shadow-[inset_0_-2px_0_color-mix(in_srgb,var(--tab-color)_70%,transparent)]"
+				: "desktop:shadow-[inset_0_-2px_0_transparent]";
 
 	// One fill + one ring per state, hover included: a second background
 	// utility in the same variant bucket would be resolved by Tailwind's output
@@ -318,15 +318,15 @@ const CTRL_BASE =
  */
 export const TAB_NEW =
 	`${CTRL_BASE} justify-center text-[15px] ` +
-	"min-[721px]:min-h-auto min-[721px]:self-center min-[721px]:rounded-control " +
-	"min-[721px]:px-[5px] min-[721px]:py-[3px] min-[721px]:text-[22px] " +
+	"desktop:min-h-auto desktop:self-center desktop:rounded-control " +
+	"desktop:px-[5px] desktop:py-[3px] desktop:text-[22px] " +
 	CTRL_REVEAL;
 
 /** Archived-sessions menu. Keeps the tab pill's corner; it stays lit while its
  *  menu is open (`data-popup-open`). */
 export const TAB_HISTORY =
 	`${CTRL_BASE} ` +
-	"min-[721px]:min-h-auto min-[721px]:px-2.5 min-[721px]:py-[7px] " +
+	"desktop:min-h-auto desktop:px-2.5 desktop:py-[7px] " +
 	"data-[popup-open]:bg-hover data-[popup-open]:text-fg " +
 	CTRL_REVEAL;
 

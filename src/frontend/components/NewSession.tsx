@@ -147,7 +147,7 @@ const MCP_BADGE =
    button out to a full pill. */
 const CREATE_SPLIT = "relative inline-flex shrink-0 items-stretch";
 const CREATE_MAIN =
-	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-40 min-[721px]:rounded-l-md phone:rounded-[999px] max-[560px]:px-3";
+	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-40 desktop:rounded-l-md phone:rounded-[999px] max-[560px]:px-3";
 const CREATE_CARET =
 	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-md border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] phone:hidden";
 const CREATE_KBD = "opacity-70";

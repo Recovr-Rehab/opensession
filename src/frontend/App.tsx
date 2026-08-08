@@ -3401,7 +3401,7 @@ export function App(
 							// nothing but our own flat background while forcing the
 							// compositor to re-rasterize the whole sidebar on any repaint
 							// behind it (a scroll-flash amplifier).
-							"min-[721px]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]",
+							"desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]",
 							// On phones the sidebar is the root PAGE of the iOS-style
 							// stack — full bleed under the pushed detail pane — rather than
 							// a fixed-width column.
@@ -3410,7 +3410,7 @@ export function App(
 								: "relative w-[var(--sidebar-w,252px)]",
 							// Collapsed hides the whole left column; on phones the page
 							// stack owns the sidebar and the class is inert.
-							sidebarCollapsed && "min-[721px]:hidden",
+							sidebarCollapsed && "desktop:hidden",
 						)}
 						style={
 							{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties
@@ -3707,7 +3707,7 @@ export function App(
 								className={cn(
 									SIDEBAR_CHROME_BTN,
 									"sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0",
-									sidebarCollapsed && "min-[721px]:inline-flex",
+									sidebarCollapsed && "desktop:inline-flex",
 								)}
 								onClick={toggleSidebarCollapsed}
 								aria-label="Show sidebar"

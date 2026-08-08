@@ -45,7 +45,7 @@ export const VIEWER_HEADER =
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
 	// Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
 	// pane's left edge, so the row's text starts past it.
-	"min-[721px]:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
+	"desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
 	// On phones the bar is a set of floating pills inside the app header, not a
 	// row of its own.
 	"phone:[.app-header-actions_&]:h-auto phone:[.app-header-actions_&]:gap-1.5 " +
@@ -119,24 +119,24 @@ export const VIEWER_REVIEW_MAIN =
  */
 export const VIEWER_MESSAGES_REGION =
 	"relative flex min-h-0 flex-1 flex-col " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:[timeline-scope:--viewer-session-scroll] " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:absolute " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:inset-x-0 " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:top-0 " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:h-[var(--wash-depth)] " +
+	"desktop:supports-[animation-timeline:scroll()]:[timeline-scope:--viewer-session-scroll] " +
+	"desktop:supports-[animation-timeline:scroll()]:before:absolute " +
+	"desktop:supports-[animation-timeline:scroll()]:before:inset-x-0 " +
+	"desktop:supports-[animation-timeline:scroll()]:before:top-0 " +
+	"desktop:supports-[animation-timeline:scroll()]:before:h-[var(--wash-depth)] " +
 	// Above the transcript's flow content, but below the composer (z 1, a later
 	// sibling) and the jump-latest pill (z 5).
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:z-[1] " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:pointer-events-none " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:opacity-0 " +
+	"desktop:supports-[animation-timeline:scroll()]:before:z-[1] " +
+	"desktop:supports-[animation-timeline:scroll()]:before:pointer-events-none " +
+	"desktop:supports-[animation-timeline:scroll()]:before:opacity-0 " +
 	// `background`, not `bg-[…]`: --wash-up is a gradient, and Tailwind would
 	// read a bare var() as a colour and emit background-color.
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:[background:var(--wash-up)] " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:[animation:session-edge-fade-in_1ms_both] " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:[animation-timeline:--viewer-session-scroll] " +
+	"desktop:supports-[animation-timeline:scroll()]:before:[background:var(--wash-up)] " +
+	"desktop:supports-[animation-timeline:scroll()]:before:[animation:session-edge-fade-in_1ms_both] " +
+	"desktop:supports-[animation-timeline:scroll()]:before:[animation-timeline:--viewer-session-scroll] " +
 	// Fully in after a couple of lines of scroll-back.
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:[animation-range:0_56px] " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:before:content-['']";
+	"desktop:supports-[animation-timeline:scroll()]:before:[animation-range:0_56px] " +
+	"desktop:supports-[animation-timeline:scroll()]:before:content-['']";
 
 /**
  * The scroll container.
@@ -158,7 +158,7 @@ export const VIEWER_MESSAGES =
 	// Keep the reader's place when content loads or expands above them.
 	"[overflow-anchor:auto] px-5 pt-[18px] pb-[var(--wash-depth)] " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
-	"min-[721px]:supports-[animation-timeline:scroll()]:[scroll-timeline:--viewer-session-scroll_y] " +
+	"desktop:supports-[animation-timeline:scroll()]:[scroll-timeline:--viewer-session-scroll_y] " +
 	// Phone: clear the floating pills at rest, then scroll under them.
 	// --strip-clearance is 0 by default and the docked tab bar's height on a
 	// multi-session workspace.

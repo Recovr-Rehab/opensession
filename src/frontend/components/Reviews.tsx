@@ -31,7 +31,7 @@ const STATE_RANK: Record<string, number> = { OPEN: 0, CLOSED: 1, MERGED: 2 };
    Two responsive steps, and both are ranges rather than a stack of max-*
    variants: ≤1180px drops the Review and Author columns, and ≤720px turns the
    grid into a wrapped card that shows them again. Writing the middle step as
-   `min-[721px]:max-[1180px]` keeps it independent of how Tailwind happens to
+   `desktop:max-[1180px]` keeps it independent of how Tailwind happens to
    order two max-* variants against each other. */
 const ROW =
 	"grid w-full grid-cols-[92px_minmax(0,1fr)_156px_132px_116px_132px_78px] items-center gap-3.5 border-b border-line px-[22px] text-left max-[1180px]:grid-cols-[88px_minmax(0,1fr)_150px_118px_78px]";
@@ -43,9 +43,9 @@ const C_CHECKS = "phone:order-3 phone:inline-flex";
 const C_CHANGES =
 	"phone:order-4 phone:inline-flex phone:flex-row phone:items-center phone:gap-2";
 const C_REVIEW =
-	"min-[721px]:max-[1180px]:hidden phone:order-5 phone:inline-flex";
+	"desktop:max-[1180px]:hidden phone:order-5 phone:inline-flex";
 const C_AUTHOR =
-	"flex min-w-0 items-center gap-2 min-[721px]:max-[1180px]:hidden phone:order-6 phone:inline-flex";
+	"flex min-w-0 items-center gap-2 desktop:max-[1180px]:hidden phone:order-6 phone:inline-flex";
 const C_UPDATED =
 	"text-meta whitespace-nowrap text-faint tabular-nums phone:order-7 phone:ml-auto";
 
