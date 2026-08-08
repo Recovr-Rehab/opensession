@@ -691,8 +691,7 @@ button {
 	   corner at the same radius. Use `rounded-[999px]` for a squircled pill. */
 	.session-link,
 	.sidebar-reopen,
-	.sidebar-group-header,
-	.sidebar-swipe-row {
+	.sidebar-group-header {
 		corner-shape: squircle;
 	}
 }

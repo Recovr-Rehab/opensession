@@ -383,6 +383,164 @@ export const SIDEBAR_FILTER_DOT =
 export const SIDEBAR_ATTN_COUNT =
 	"min-w-4 flex-[0_0_auto] rounded-full bg-blue px-1 text-center text-[10px] leading-4 font-semibold text-white";
 
+/**
+ * ── Workspace rows: the trailing cluster ────────────────────────────────────
+ * The metadata a workspace / PR / support / feed / archived row carries at its
+ * right edge — count, time, run ticker, snooze countdown, draft pencil — and
+ * the pin/archive actions that take their place under the pointer.
+ *
+ * Which of those is visible was decided by a stack of competing `display`
+ * rules, three of which carried a comment about the SOURCE ORDER they depended
+ * on ("must be @media-gated … it sits after the mobile override blocks",
+ * "Three classes so it outranks …", "it must stay below it to win"). Utilities
+ * cannot reproduce that: two utilities setting one property are settled by
+ * Tailwind's internal output order, not by the order they are written on the
+ * element. So the state is resolved in the components instead — every element
+ * is handed exactly one `display` per variant level, and nothing needs to
+ * out-rank anything. The same rule applies to the action colours below.
+ */
+
+/**
+ * A workspace row: {@link SIDEBAR_ROW} laid out as one flex line, so the rail,
+ * the title and the trailing cluster sit on the sidebar's shared columns. The
+ * gap matches {@link SIDEBAR_GROUP_HEADER} — see {@link SIDEBAR_RAIL}.
+ */
+export const SIDEBAR_WS_ROW = "flex items-center gap-[9px]";
+
+/**
+ * Pin + archive, floated over the row's right edge so revealing them can never
+ * change the row's height. Long titles run under them, so the cluster wears an
+ * opaque row-hover plate with a soft left feather, swapped for the selected
+ * fill on the selected row.
+ *
+ * Resting `display` is the CALL SITE's, because it is the one thing that
+ * differs between a live row (hover only), a row whose swipe action is open
+ * (never) and an archived row on touch (always).
+ */
+export const SIDEBAR_WS_ACTIONS =
+	"absolute top-1/2 right-[7px] -translate-y-1/2 items-center gap-1 rounded-sm bg-[var(--bg-hover)] shadow-[-6px_0_5px_-2px_var(--bg-hover)] group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]";
+
+/**
+ * The hover-only reveal. `group-hover` is gated to real hover devices by
+ * Tailwind, which is exactly what the `@media (hover: hover)` around the old
+ * rule was for: on touch a sticky first-tap `:hover` would otherwise expose
+ * actions that live behind the swipe gesture there.
+ */
+export const SIDEBAR_WS_ACTIONS_HOVER = "hidden group-hover:inline-flex";
+
+/**
+ * An archived row carries no swipe gesture — that is a live-row affordance —
+ * so its unarchive/pin pair is the only way back from the band and has to stay
+ * visible on touch. Resting rather than hover-revealed, so it drops the plate
+ * (which would read as a chip on every row) and the title reserves the space
+ * instead.
+ */
+export const SIDEBAR_WS_ACTIONS_TOUCH =
+	"[@media(hover:none)]:inline-flex [@media(hover:none)]:bg-transparent [@media(hover:none)]:shadow-none";
+
+/**
+ * One icon button in that cluster. Its colour is the call site's: a pinned
+ * action stays accent even under the pointer, and a Support row's "mark done"
+ * tints green rather than plain — three `color` declarations that used to be
+ * settled by where their rules sat in the sheet relative to each other.
+ */
+export const SIDEBAR_WS_ACTION =
+	"inline-flex size-8 cursor-pointer items-center justify-center rounded-md hover:bg-hover";
+
+/**
+ * Compact last-activity time. It has no `display` of its own on purpose: as a
+ * flex item it blockifies, and `text-right` is what right-aligns the digits at
+ * rest, while `justify-end` is what right-aligns them once a reveal turns it
+ * into a flex box. When something precedes it, that element's own
+ * `margin-left: auto` has already pushed the pair right — a second auto margin
+ * would split the free space and strand one of them mid-row.
+ */
+export const SIDEBAR_WS_TIME =
+	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint min-[721px]:min-w-[34px] min-[721px]:pr-0";
+
+/** Revealed on row hover, clearing the absolutely-positioned action cluster. */
+export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex group-hover:mr-20";
+
+/**
+ * Live "in progress" elapsed ticker — it sits where the time badge would, in
+ * the in-progress colour, with tabular figures so the digits don't jitter as
+ * they tick, and yields the slot to the hover actions.
+ *
+ * The phone size is its own: the run clock is text, not a glyph, so a hard
+ * 28px box with centred digits overflowed on both sides as a run crossed the
+ * hour. It sizes to its digits and pins them to the gutter's inner edge, 6px
+ * short of the column like every glyph above it.
+ */
+export const SIDEBAR_WS_TICKER =
+	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta tabular-nums text-yellow group-hover:hidden min-[721px]:min-w-[34px] min-[721px]:pr-0";
+
+/**
+ * Slack-style unsent-draft pencil. Its left margin is the call site's: on a
+ * workspace row it pins itself to the right edge, unless a ticker or a snooze
+ * countdown already did that pushing.
+ */
+export const SIDEBAR_WS_DRAFT = "inline-flex flex-[0_0_auto] items-center text-dim";
+
+/**
+ * Wake countdown on a snoozed workspace row (moon + "1h"). It stands in for
+ * the idle time badge, so it rests in that same right-edge slot, matches its
+ * type, and yields to the pin/archive actions like every other trailing badge.
+ */
+export const SIDEBAR_WS_SNOOZE =
+	"ml-auto inline-flex flex-[0_0_auto] items-center gap-1 text-meta tabular-nums text-faint group-hover:hidden";
+
+/**
+ * ── Swipe rows ──────────────────────────────────────────────────────────────
+ * The phone swipe shell around a workspace or session row: swipe left reveals
+ * Archive, swipe right reveals Star; a long press still opens the full action
+ * sheet. The wrapper carries the 2px gap between rows, so the row inside it
+ * must not add its own or wrapped rows would gap twice.
+ *
+ * `rounded-row` is what clips the revealed actions to the row's own corner —
+ * and, because base.css grants `corner-shape: squircle` to every `rounded-*`
+ * class, it is also what lets this name drop out of the hand-written list of
+ * legacy classes base.css squircles there.
+ */
+export const SIDEBAR_SWIPE_ROW = "relative mt-0.5 overflow-hidden rounded-row";
+
+/**
+ * One revealed action behind the row. Hidden until the gesture opens its side,
+ * and only on touch — on a hover device the same two jobs are the row's hover
+ * actions, and a mouse can never open this. Its width tracks the drag through
+ * `--swipe-action-w`, written straight onto the wrapper per frame.
+ */
+export const SIDEBAR_SWIPE_ACTION =
+	// `border-none`, not `border-0`: the latter zeroes the width but leaves
+	// the style at Tailwind's `solid` default, where the `border: 0` this
+	// replaced computed to `none`. Width resolves to 0 under either.
+	"absolute top-0 bottom-0 z-0 hidden w-[var(--swipe-action-w,82px)] flex-col items-center justify-center gap-0.5 border-none text-meta font-semibold will-change-[width] [&>svg]:shrink-0";
+
+/** Revealed because the gesture opened this side. Touch only, as above. */
+export const SIDEBAR_SWIPE_ACTION_OPEN = "[@media(hover:none)]:flex";
+
+/** The action grows and shrinks with the finger, except while the finger is
+ *  actually down — a transition there would lag the drag by a frame. */
+export const SIDEBAR_SWIPE_ACTION_TRANSITION =
+	"transition-[width] duration-(--dur) ease-(--ease)";
+
+/**
+ * Each side carries its own fill AND its own ink, so exactly one `text-*` ever
+ * lands on the button. Kept off {@link SIDEBAR_SWIPE_ACTION}: a shared
+ * `text-white` there plus a per-side override is two colour utilities on one
+ * element, and which of those wins is Tailwind's output order, not the order
+ * they are written.
+ */
+
+/** Destructive, and on the trailing edge because the swipe travels left. */
+export const SIDEBAR_SWIPE_ACTION_ARCHIVE = "right-0 bg-red text-white";
+
+/** Pin, on the leading edge. Dark ink: the yellow is too light for white. */
+export const SIDEBAR_SWIPE_ACTION_STAR = "left-0 bg-yellow text-[#17130a]";
+
+/** Already pinned — the same action in the accent, so the swipe reads as a
+ *  toggle rather than as a second way to pin. */
+export const SIDEBAR_SWIPE_ACTION_STAR_ON = "left-0 bg-accent text-on-accent";
+
 export const SIDEBAR_STATUS_DOT = {
 	/** Yellow to match the "In progress" lane — green means "In review". */
 	running:

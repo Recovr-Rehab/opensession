@@ -3,13 +3,14 @@ import { DEFAULT_REPO_ID } from "../../lib/brand";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
 import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
-import { SIDEBAR_STATUS_DOT } from "../../lib/sidebar-classes";
+import { SIDEBAR_STATUS_DOT, SIDEBAR_WS_SNOOZE, SIDEBAR_WS_TICKER } from "../../lib/sidebar-classes";
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
 import { formatRemaining, snoozePresets } from "../../lib/snoozes";
 import { elapsedClock } from "../../lib/time";
 import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
+import { cn } from "../../ui/cn";
 import { BottomSheet, SheetBody, SheetItem, SheetSeparator } from "../../ui/sheet";
 import { openLightbox } from "../MediaLightbox";
 import { repoLabel } from "../RepoTile";
@@ -146,7 +147,7 @@ export function RunTicker({ startMs }: { startMs: number }) {
 		return () => clearInterval(t);
 	}, []);
 	return (
-		<span className="sidebar-ws-ticker" title="How long this run has been working">
+		<span className={SIDEBAR_WS_TICKER} title="How long this run has been working">
 			{elapsedClock(startMs, now)}
 		</span>
 	);
@@ -155,7 +156,15 @@ export function RunTicker({ startMs }: { startMs: number }) {
 // Countdown badge for a snoozed row: time until it wakes ("57m", "14h").
 // Isolated 30s ticker (RunTicker-style) so the sidebar doesn't re-render
 // for the countdown.
-export function SnoozeBadge({ until }: { until: string }) {
+export function SnoozeBadge({
+	until,
+	className,
+}: {
+	until: string;
+	/** The row hands this the left margin: the badge pins itself to the right
+	    edge, unless a ticker ahead of it already did that pushing. */
+	className?: string;
+}) {
 	const [now, setNow] = useState(() => Date.now());
 	useEffect(() => {
 		const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -163,7 +172,7 @@ export function SnoozeBadge({ until }: { until: string }) {
 	}, []);
 	return (
 		<span
-			className="sidebar-ws-snooze"
+			className={cn(SIDEBAR_WS_SNOOZE, className)}
 			title={`Snoozed until ${new Date(until).toLocaleString()}`}
 		>
 			<IconMoon size={20} />

@@ -46,6 +46,21 @@ import {
 	SIDEBAR_STICKY_LANE,
 	SIDEBAR_STICKY_LANE_NESTED,
 	SIDEBAR_STUCK_BACKING,
+	SIDEBAR_SWIPE_ACTION,
+	SIDEBAR_SWIPE_ACTION_ARCHIVE,
+	SIDEBAR_SWIPE_ACTION_OPEN,
+	SIDEBAR_SWIPE_ACTION_STAR,
+	SIDEBAR_SWIPE_ACTION_STAR_ON,
+	SIDEBAR_SWIPE_ACTION_TRANSITION,
+	SIDEBAR_SWIPE_ROW,
+	SIDEBAR_WS_ACTION,
+	SIDEBAR_WS_ACTIONS,
+	SIDEBAR_WS_ACTIONS_HOVER,
+	SIDEBAR_WS_ACTIONS_TOUCH,
+	SIDEBAR_WS_DRAFT,
+	SIDEBAR_WS_ROW,
+	SIDEBAR_WS_TIME,
+	SIDEBAR_WS_TIME_HOVER,
 } from "../lib/sidebar-classes";
 import { isScratchWorkspace } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
@@ -2414,9 +2429,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										key={r.key}
 										className={cn(
 											SIDEBAR_ROW,
-											"sidebar-ws-row sidebar-archived-row hover:bg-hover",
+											SIDEBAR_WS_ROW,
+											// It navigates to the archived page rather than
+											// expanding, so it reads as a link, not a heading.
+											"cursor-pointer hover:bg-hover",
 										)}
 										data-sidebar-row=""
+										data-ws-row=""
+										data-archived-row=""
 										onClick={() => onSelect(r.sessions[0])}
 										aria-label={r.name}
 									>
@@ -2438,19 +2458,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											{stripPrTitlePrefix(r.name)}
 										</span>
 										{!isPhone && r.lastActivity && (
-											<span className="sidebar-ws-time">
+											<span className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}>
 												{shortTime(r.lastActivity)}
 											</span>
 										)}
 										{/* Hover actions, mirroring a live row's pin + archive pair:
 										    here they bring the row back, with pin as the one-gesture
 										    "unarchive AND put it where I'll see it". */}
-										<span className="sidebar-ws-actions">
+										<span
+											className={cn(
+												SIDEBAR_WS_ACTIONS,
+												SIDEBAR_WS_ACTIONS_HOVER,
+												SIDEBAR_WS_ACTIONS_TOUCH,
+											)}
+										>
 											<Tooltip label="Unarchive and pin">
 												<span
 													role="button"
 													tabIndex={0}
-													className="sidebar-ws-action"
+													className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
 													aria-label={
 														r.sessions.length > 1
 															? `Unarchive workspace (${r.sessions.length} sessions) and pin`
@@ -2480,7 +2506,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												<span
 													role="button"
 													tabIndex={0}
-													className="sidebar-ws-action"
+													className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
 													aria-label="Unarchive"
 													onClick={(e) => {
 														e.stopPropagation();
@@ -2503,10 +2529,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								<button
 									className={cn(
 										SIDEBAR_ROW,
-										"sidebar-ws-row",
+										SIDEBAR_WS_ROW,
 										archivedActive ? "bg-pressed" : "hover:bg-hover",
 									)}
 									data-sidebar-row=""
+									data-ws-row=""
 									data-selected={archivedActive || undefined}
 									onClick={onOpenArchived}
 									title="View all archived sessions"
@@ -2609,9 +2636,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return (
 			<div
 				key={row.key}
-				className={`sidebar-swipe-row${
-					swipeSide ? ` is-open is-swipe-${swipeSide}` : ""
-				}${draggingRow ? " is-dragging" : ""}`}
+				className={SIDEBAR_SWIPE_ROW}
+				data-swipe-row=""
 				style={
 					swipeOffset
 						? ({
@@ -2625,7 +2651,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			>
 				{isPhone && row.sessions.length > 0 && (
 					<button
-						className="sidebar-swipe-action sidebar-swipe-action--archive"
+						className={cn(
+							SIDEBAR_SWIPE_ACTION,
+							SIDEBAR_SWIPE_ACTION_ARCHIVE,
+							swipeSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
+							draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
+						)}
+						data-swipe-action="archive"
 						onClick={(e) => {
 							e.stopPropagation();
 							setWsSwipe(null);
@@ -2643,7 +2675,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				)}
 				{isPhone && (
 					<button
-						className={`sidebar-swipe-action sidebar-swipe-action--star${pinned ? " is-on" : ""}`}
+						className={cn(
+							SIDEBAR_SWIPE_ACTION,
+							pinned ? SIDEBAR_SWIPE_ACTION_STAR_ON : SIDEBAR_SWIPE_ACTION_STAR,
+							swipeSide === "star" && SIDEBAR_SWIPE_ACTION_OPEN,
+							draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
+						)}
+						data-swipe-action="star"
 						onClick={(e) => {
 							e.stopPropagation();
 							setWsSwipe(null);
@@ -2661,7 +2699,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// Inside a swipe row: the wrapper carries the 2px gap and the
 						// row carries the slide. The drag writes --swipe-x straight onto
 						// the node, so the transform reads it rather than a React style.
-						"sidebar-ws-row z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))] hover:bg-hover",
+						SIDEBAR_WS_ROW,
+						"z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))] hover:bg-hover",
 						waiting ? "bg-blue-soft" : active && "bg-active",
 						draggingRow
 							? "transition-none"
@@ -2671,6 +2710,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						(draggingRow || swipeSide) && "will-change-transform",
 					)}
 					data-sidebar-row=""
+					data-ws-row=""
 					data-selected={active || undefined}
 					data-waiting={waiting || undefined}
 					data-unread={row.unread || undefined}
@@ -2835,7 +2875,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    are reserved for standalone sessions, so an automation review does not
 				    make its PR workspace look recently active. */}
 				{runStartMs !== null && <RunTicker startMs={runStartMs} />}
-				{snoozeIso && !editing && <SnoozeBadge until={snoozeIso} />}
+				{snoozeIso && !editing && (
+					// A ticker ahead of it has already pushed the cluster right; a
+					// second auto margin would split the free space between them.
+					<SnoozeBadge
+						until={snoozeIso}
+						className={runStartMs !== null ? "ml-1.5" : undefined}
+					/>
+				)}
 				{!isPhone &&
 					// Date-banded modes earn a timestamp on every row: the band says
 					// which day, the stamp says when within it. ("Project and inbox"
@@ -2845,9 +2892,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					wsTimePref !== "off" &&
 					row.lastActivity && (
 						<span
-							className={`sidebar-ws-time${
-								wsTimePref === "hover" ? " sidebar-ws-time--hover" : ""
-							}${runStartMs !== null ? " sidebar-ws-time--running" : ""}`}
+							className={cn(
+								SIDEBAR_WS_TIME,
+								SIDEBAR_WS_TIME_HOVER,
+								// The "hover" mode (the default) shows the badge only under
+								// the pointer, and a running row hides the idle badge either
+								// way — its live ticker owns the resting slot. On touch there
+								// is no hover, so the hover-mode badge shows inline like
+								// "always"; a running row still keeps just its ticker.
+								(wsTimePref === "hover" || runStartMs !== null) && "hidden",
+								wsTimePref === "hover" &&
+									runStartMs === null &&
+									"[@media(hover:none)]:inline-flex",
+							)}
+							data-ws-time=""
 							aria-label={new Date(row.lastActivity).toLocaleString()}
 						>
 							{shortTime(row.lastActivity)}
@@ -2857,7 +2915,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    and finish it. Yields to the hover actions like the count/time. */}
 				{row.sessions.some((c) => hasDraft(`session:${c.id}`)) && (
 					<span
-						className="sidebar-ws-draft"
+						className={cn(
+							SIDEBAR_WS_DRAFT,
+							// The pencil pins itself to the row's right edge unless a
+							// ticker or a snooze countdown already did that pushing.
+							runStartMs !== null || snoozeIso ? "ml-1.5" : "ml-auto",
+							"group-hover:hidden",
+						)}
+						data-ws-draft=""
 						aria-label="Unsent draft. Return to finish it."
 					>
 						<IconPencil size={20} />
@@ -2874,16 +2939,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{/* Hover actions: pin + archive, side by side. */}
 				<span
 					className={cn(
-						"sidebar-ws-actions",
-						// The selected row's fill under the cluster, which the
-						// selected-row rule in legacy.css used to carry.
-						"group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]",
+						SIDEBAR_WS_ACTIONS,
+						// A revealed swipe action owns the row's right edge, so the
+						// hover cluster stays out of it entirely rather than being
+						// hidden again by a more specific rule further down the sheet.
+						swipeSide ? "hidden" : SIDEBAR_WS_ACTIONS_HOVER,
 					)}
+					data-ws-actions=""
 				>
 					<span
 						role="button"
 						tabIndex={0}
-						className={`sidebar-ws-action${pinned ? " is-on" : ""}`}
+						className={cn(
+							SIDEBAR_WS_ACTION,
+							// One colour, picked here rather than stacking two `text-*`
+							// utilities, whose winner would be Tailwind's ordering.
+							pinned ? "text-accent" : "text-faint hover:text-fg",
+						)}
 						aria-label={pinned ? "Unpin workspace" : "Pin workspace"}
 						onClick={(e) => {
 							e.stopPropagation();
@@ -2919,7 +2991,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<span
 								role="button"
 								tabIndex={0}
-								className="sidebar-ws-action"
+								className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
 								aria-label="Archive workspace"
 								onClick={(e) => {
 									e.stopPropagation();

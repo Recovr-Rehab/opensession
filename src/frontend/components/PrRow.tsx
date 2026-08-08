@@ -1,7 +1,15 @@
 import React from "react";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { prStatusMark } from "../lib/pr-status";
-import { SIDEBAR_RAIL } from "../lib/sidebar-classes";
+import {
+	SIDEBAR_RAIL,
+	SIDEBAR_WS_ACTION,
+	SIDEBAR_WS_ACTIONS,
+	SIDEBAR_WS_ACTIONS_HOVER,
+	SIDEBAR_WS_ROW,
+	SIDEBAR_WS_TIME,
+	SIDEBAR_WS_TIME_HOVER,
+} from "../lib/sidebar-classes";
 import { providerFromUrl } from "../lib/provider";
 import { shortTime } from "../lib/time";
 import {
@@ -85,10 +93,11 @@ export function PrRow({
 								type="button"
 								className={cn(
 									SIDEBAR_ROW,
-									"sidebar-ws-row",
+									SIDEBAR_WS_ROW,
 									selected ? "bg-pressed" : "hover:bg-hover",
 								)}
 								data-sidebar-row=""
+								data-ws-row=""
 								data-selected={selected || undefined}
 								onClick={onOpen}
 								onContextMenu={card.close}
@@ -104,7 +113,7 @@ export function PrRow({
 			<span className={SIDEBAR_ROW_TITLE}>{item.pr.title}</span>
 			{!isPhone && (
 				<span
-					className="sidebar-ws-time"
+					className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}
 					aria-label={new Date(item.pr.updatedAt).toLocaleString()}
 				>
 					{shortTime(item.pr.updatedAt)}
@@ -115,19 +124,17 @@ export function PrRow({
 			    (confirmed). It deliberately does NOT wear the archive icon —
 			    this row sits beside workspace rows whose trailing icon archives
 			    locally, and a mis-click here closes someone's PR on GitHub. */}
-			<span
-				className={cn(
-					"sidebar-ws-actions",
-					// The selected row's fill under the cluster, which the
-					// selected-row rule in legacy.css used to carry.
-					"group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]",
-				)}
-			>
+			<span className={cn(SIDEBAR_WS_ACTIONS, SIDEBAR_WS_ACTIONS_HOVER)}>
 				<Tooltip label={pinned ? "Unpin pull request" : "Pin pull request"}>
 					<span
 						role="button"
 						tabIndex={0}
-						className={`sidebar-ws-action${pinned ? " is-on" : ""}`}
+						className={cn(
+							SIDEBAR_WS_ACTION,
+							// One colour, picked here rather than stacking two `text-*`
+							// utilities, whose winner would be Tailwind's ordering.
+							pinned ? "text-accent" : "text-faint hover:text-fg",
+						)}
 						aria-label={pinned ? "Unpin pull request" : "Pin pull request"}
 						onMouseEnter={card.close}
 						onClick={(e) => {
@@ -148,7 +155,7 @@ export function PrRow({
 					<span
 						role="button"
 						tabIndex={0}
-						className="sidebar-ws-action"
+						className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
 						aria-label="Close pull request"
 						onMouseEnter={card.close}
 						onClick={(e) => {

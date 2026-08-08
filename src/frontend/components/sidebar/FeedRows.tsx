@@ -4,6 +4,12 @@ import {
 	SIDEBAR_BAND_ACTION,
 	SIDEBAR_FILTER_DOT,
 	SIDEBAR_RAIL,
+	SIDEBAR_WS_ACTION,
+	SIDEBAR_WS_ACTIONS,
+	SIDEBAR_WS_ACTIONS_HOVER,
+	SIDEBAR_WS_ROW,
+	SIDEBAR_WS_TIME,
+	SIDEBAR_WS_TIME_HOVER,
 } from "../../lib/sidebar-classes";
 import { laneCtxEntries, useRowCtxMenu } from "../../lib/sidebar-ctx";
 import { SUPPORT_PRIORITY_DOT, dget, type FeedFilterValues } from "../../lib/sidebar-filter";
@@ -20,11 +26,6 @@ import { IconCheck, IconFilter, IconPin } from "../icons";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "../sidebar/SidebarItem";
 import React, { useEffect, useState } from "react";
-
-/* Restore the selected row's fill under the hover-action cluster, which the
-   selected-row rule in legacy.css used to carry. */
-const WS_ACTIONS_SELECTED =
-	"group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]";
 
 // A Support row: one TODO Plain ticket, single-line in the workspace rows'
 // exact shape. The rail dot wears the linked session's status (the ticket's
@@ -72,10 +73,11 @@ export function SupportRow({
 						type="button"
 						className={cn(
 							SIDEBAR_ROW,
-							"sidebar-ws-row",
+							SIDEBAR_WS_ROW,
 							active ? "bg-pressed" : "hover:bg-hover",
 						)}
 						data-sidebar-row=""
+						data-ws-row=""
 						data-selected={active || undefined}
 						onClick={onOpen}
 						onContextMenu={menu.onContextMenu}
@@ -92,7 +94,7 @@ export function SupportRow({
 				<span className={SIDEBAR_ROW_TITLE}>{label}</span>
 				{!isPhone && t.statusChangedAt && (
 					<span
-						className="sidebar-ws-time"
+						className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}
 						aria-label={new Date(t.statusChangedAt).toLocaleString()}
 					>
 						{shortTime(t.statusChangedAt)}
@@ -101,11 +103,17 @@ export function SupportRow({
 				{/* Hover actions: the same pin + finish pair the workspace rows
 				    wear — pin keeps the ticket in the Pinned band, the check
 				    marks it done in Plain. */}
-				<span className={cn("sidebar-ws-actions", WS_ACTIONS_SELECTED)}>
+				<span className={cn(SIDEBAR_WS_ACTIONS, SIDEBAR_WS_ACTIONS_HOVER)}>
 					<span
 						role="button"
 						tabIndex={0}
-						className={`sidebar-ws-action${pinned ? " is-on" : ""}`}
+						className={cn(
+							SIDEBAR_WS_ACTION,
+							// One colour, picked here: a pinned action keeps its accent
+							// under the pointer, where two `text-*` utilities would leave
+							// the winner to Tailwind's ordering.
+							pinned ? "text-accent" : "text-faint hover:text-fg",
+						)}
 						aria-label={pinned ? "Unpin ticket" : "Pin ticket"}
 						onClick={(e) => {
 							e.stopPropagation();
@@ -124,7 +132,7 @@ export function SupportRow({
 						<span
 							role="button"
 							tabIndex={0}
-							className="sidebar-ws-action sidebar-ws-action--done"
+							className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-green")}
 							aria-label="Mark done in Plain"
 							onClick={(e) => {
 								e.stopPropagation();
@@ -222,10 +230,11 @@ export function FeedRow({
 						type="button"
 						className={cn(
 							SIDEBAR_ROW,
-							"sidebar-ws-row",
+							SIDEBAR_WS_ROW,
 							active ? "bg-pressed" : "hover:bg-hover",
 						)}
 						data-sidebar-row=""
+						data-ws-row=""
 						data-selected={active || undefined}
 						onClick={onOpen}
 						onContextMenu={menu.onContextMenu}
@@ -246,17 +255,23 @@ export function FeedRow({
 				</span>
 				{!isPhone && ts && (
 					<span
-						className="sidebar-ws-time"
+						className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}
 						aria-label={new Date(ts).toLocaleString()}
 					>
 						{shortTime(ts)}
 					</span>
 				)}
-				<span className={cn("sidebar-ws-actions", WS_ACTIONS_SELECTED)}>
+				<span className={cn(SIDEBAR_WS_ACTIONS, SIDEBAR_WS_ACTIONS_HOVER)}>
 					<span
 						role="button"
 						tabIndex={0}
-						className={`sidebar-ws-action${pinned ? " is-on" : ""}`}
+						className={cn(
+							SIDEBAR_WS_ACTION,
+							// One colour, picked here: a pinned action keeps its accent
+							// under the pointer, where two `text-*` utilities would leave
+							// the winner to Tailwind's ordering.
+							pinned ? "text-accent" : "text-faint hover:text-fg",
+						)}
 						aria-label={pinned ? "Unpin" : "Pin"}
 						onClick={(e) => {
 							e.stopPropagation();

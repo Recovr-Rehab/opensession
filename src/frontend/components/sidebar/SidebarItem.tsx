@@ -1,7 +1,18 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { hasDraft } from "../../lib/drafts";
 import { markRead, markUnread } from "../../lib/reads";
-import { SIDEBAR_RAIL, SIDEBAR_STATUS_DOT } from "../../lib/sidebar-classes";
+import {
+	SIDEBAR_RAIL,
+	SIDEBAR_STATUS_DOT,
+	SIDEBAR_SWIPE_ACTION,
+	SIDEBAR_SWIPE_ACTION_ARCHIVE,
+	SIDEBAR_SWIPE_ACTION_OPEN,
+	SIDEBAR_SWIPE_ACTION_STAR,
+	SIDEBAR_SWIPE_ACTION_STAR_ON,
+	SIDEBAR_SWIPE_ACTION_TRANSITION,
+	SIDEBAR_SWIPE_ROW,
+	SIDEBAR_WS_DRAFT,
+} from "../../lib/sidebar-classes";
 import { isClaimed, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
 import { ARCHIVE_SHORTCUT_KEYS, LONG_PRESS_MS, LONG_PRESS_SLOP, PIN_SHORTCUT_KEYS, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
 import { MINE_STATUS_META, type LaneChoice } from "../../lib/sidebar-types";
@@ -24,8 +35,8 @@ import React, { useEffect, useRef, useState } from "react";
  *  the row itself and descendants read it through `group-data-[…]` variants.
  *  `data-sidebar-row` is the hook the ⌘↑/⌘↓ row walker queries by.
  *
- *  Rows wrapped in a `.sidebar-swipe-row` add `mt-0` — the wrapper carries the
- *  2px gap for them — plus the swipe transform; bare rows keep the margin. */
+ *  Rows wrapped in a swipe shell add `mt-0` — the wrapper carries the 2px gap
+ *  for them — plus the swipe transform; bare rows keep the margin. */
 export const SIDEBAR_ROW =
 	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg max-[720px]:px-1 max-[720px]:py-[13px]";
 
@@ -263,17 +274,22 @@ export function SidebarItem({
 	// The swipe row is "open" — a revealed action sits behind it, so the slide
 	// back and forth runs at the shorter duration.
 	const swipeOpen = swipeAction !== null || visibleSwipeOffset !== 0;
+	// Which side the gesture has revealed. This used to ride the wrapper as
+	// `is-swipe-archive` / `is-swipe-star` for a descendant selector to read;
+	// the two actions read it directly now, so each one is handed exactly one
+	// `display` instead of competing for it through the cascade.
+	const openSide: SwipeAction | null =
+		swipeAction === "archive" || visibleSwipeOffset < 0
+			? "archive"
+			: swipeAction === "star" || visibleSwipeOffset > 0
+				? "star"
+				: null;
 
 	return (
 		<Popover.Root {...card.rootProps}>
 		<div
-			className={`sidebar-swipe-row${
-				swipeAction === "archive" || visibleSwipeOffset < 0
-					? " is-open is-swipe-archive"
-					: swipeAction === "star" || visibleSwipeOffset > 0
-						? " is-open is-swipe-star"
-						: ""
-			}${dragging ? " is-dragging" : ""}`}
+			className={SIDEBAR_SWIPE_ROW}
+			data-swipe-row=""
 			style={
 				visibleSwipeOffset
 					? ({
@@ -287,7 +303,13 @@ export function SidebarItem({
 		>
 			{isPhone && (
 				<button
-					className="sidebar-swipe-action sidebar-swipe-action--archive"
+					className={cn(
+						SIDEBAR_SWIPE_ACTION,
+						SIDEBAR_SWIPE_ACTION_ARCHIVE,
+						openSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
+						dragging ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
+					)}
+					data-swipe-action="archive"
 					onClick={(e) => {
 						e.stopPropagation();
 						setSwipeOffset(0);
@@ -301,7 +323,13 @@ export function SidebarItem({
 			)}
 			{isPhone && (
 				<button
-					className={`sidebar-swipe-action sidebar-swipe-action--star${pinned ? " is-on" : ""}`}
+					className={cn(
+						SIDEBAR_SWIPE_ACTION,
+						pinned ? SIDEBAR_SWIPE_ACTION_STAR_ON : SIDEBAR_SWIPE_ACTION_STAR,
+						openSide === "star" && SIDEBAR_SWIPE_ACTION_OPEN,
+						dragging ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
+					)}
+					data-swipe-action="star"
 					onClick={(e) => {
 						e.stopPropagation();
 						setSwipeOffset(0);
@@ -381,7 +409,7 @@ export function SidebarItem({
 				/>
 			}
 		>
-			{/* Same gap as .sidebar-group-header and .sidebar-ws-row: with the
+			{/* Same gap as SIDEBAR_GROUP_HEADER and SIDEBAR_WS_ROW: with the
 			    shared SIDEBAR_RAIL slot in front, that's what puts every title on
 			    one rail. */}
 			<div className="flex min-w-0 items-center gap-[9px]">
@@ -453,7 +481,8 @@ export function SidebarItem({
 				)}
 				{!editing && hasDraft(`session:${session.id}`) && (
 					<span
-						className="sidebar-ws-draft"
+						className={cn(SIDEBAR_WS_DRAFT, "ml-1.5")}
+						data-ws-draft=""
 						aria-label="Unsent draft. Return to finish it."
 					>
 						<IconPencil size={20} />
