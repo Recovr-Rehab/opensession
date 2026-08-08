@@ -28,7 +28,15 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 const SHEET = join(ROOT, "src/frontend/styles/legacy.css");
+/** Scanned for identifiers — deliberately wide, so a class referenced from
+ *  anywhere at all keeps its rule. Being wrong here deletes a live rule. */
 const SCAN_DIRS = ["src", "os1-chrome", "os1-tui", "website"];
+/** Scanned for runtime-built class prefixes. Only the directories that render
+ *  markup: `src/server` builds plenty of hyphenated strings that are not class
+ *  names (`auto-${randomUUIDv7()}` for automation ids), and harvesting those
+ *  as prefixes holds real dead rules hostage — `.auto-status-ok` was kept
+ *  alive by an id generator. */
+const MARKUP_DIRS = ["src/frontend", "os1-chrome", "website"];
 const SCAN_EXT = /\.(tsx?|jsx?|html)$/;
 
 const argv = new Set(process.argv.slice(2));
@@ -56,6 +64,47 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 	return out;
 }
 
+/**
+ * Drop comments before harvesting identifiers. A component that *documents*
+ * the legacy classes it replaced ("these were .working-pill / .pulse-dot")
+ * would otherwise keep those very rules looking reachable — so the better the
+ * migration notes, the less the audit finds. Quote-aware, because "https://"
+ * and a `//` inside a string are not comments; JSX text can't open one either
+ * without being inside braces, which this treats as code and keeps.
+ */
+function stripComments(src: string): string {
+	let out = "";
+	let quote: string | null = null;
+	for (let i = 0; i < src.length; i++) {
+		const c = src[i];
+		if (quote) {
+			out += c;
+			if (c === "\\") out += src[++i] ?? "";
+			else if (c === quote) quote = null;
+			continue;
+		}
+		if (c === '"' || c === "'" || c === "`") {
+			quote = c;
+			out += c;
+			continue;
+		}
+		if (c === "/" && src[i + 1] === "*") {
+			const end = src.indexOf("*/", i + 2);
+			i = end < 0 ? src.length : end + 1;
+			continue;
+		}
+		if (c === "/" && src[i + 1] === "/") {
+			const end = src.indexOf("\n", i);
+			i = end < 0 ? src.length : end - 1;
+			continue;
+		}
+		out += c;
+	}
+	return out;
+}
+
+const markup = new Set(MARKUP_DIRS.flatMap((d) => sourceFiles(join(ROOT, d))));
+
 const idents = new Set<string>();
 const prefixes = new Set<string>();
 const literals = new Set<string>();
@@ -63,17 +112,18 @@ for (const dir of SCAN_DIRS) {
 	for (const f of sourceFiles(join(ROOT, dir))) {
 		let text: string;
 		try {
-			text = readFileSync(f, "utf8");
+			text = stripComments(readFileSync(f, "utf8"));
 		} catch {
 			continue;
 		}
 		for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
+		for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
+		if (!markup.has(f)) continue;
 		// `foo-bar-${x}` / `a b c-${x}` -> the "c-" prefix such a literal can build
 		for (const m of text.matchAll(/`([a-zA-Z0-9 _-]*)\$\{/g)) {
 			const tail = m[1].split(/\s+/).pop() ?? "";
 			if (/[a-z]-$/.test(tail)) prefixes.add(tail);
 		}
-		for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
 	}
 }
 

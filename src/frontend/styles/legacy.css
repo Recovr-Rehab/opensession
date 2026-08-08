@@ -2652,27 +2652,6 @@ html.wco .viewer-branch {
 	outline: none;
 }
 
-.working-pill {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	background: var(--green-soft);
-	color: var(--green);
-	font-size: 12px;
-	font-weight: 600;
-	padding: 3px 10px;
-	border-radius: 999px;
-	flex-shrink: 0;
-}
-
-.working-dot {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background: var(--green);
-	animation: pulse 1.4s ease-in-out infinite;
-}
-
 @keyframes pulse {
 	0%,
 	100% {
@@ -2703,9 +2682,6 @@ html.wco .viewer-branch {
    it needs the gap on both sides rather than just a trailing one. */
 .viewer-header-actions .pr-head {
 	margin-inline: 6px;
-}
-.viewer-header-compact .working-pill {
-	padding: 4px;
 }
 
 /* ⋯ overflow: the secondary actions collapse in the shared Menu popup when
@@ -2877,27 +2853,6 @@ html.wco .viewer-branch {
 .staging-link-pending:hover {
 	background: none;
 }
-
-.btn-panel-toggle {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	background: none;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	padding: 5px 12px;
-	font-size: 13px;
-	white-space: nowrap;
-	/* The PR header affordance is an <a> now (opens GitHub) — keep it looking
-	   like its button siblings. */
-	text-decoration: none;
-}
-.btn-panel-toggle:hover {
-	color: var(--accent);
-	border-color: var(--accent);
-	background: var(--hover);
-}
 .viewer-code-icon {
 	display: inline-flex;
 	align-items: center;
@@ -2956,49 +2911,10 @@ html.wco .viewer-branch {
 	background: var(--green-soft);
 }
 
-/* New-session-in-workspace row (phone ⋯ menu). Matches the archive/delete rows:
-   icon + label, neutral until hover. It's a create action, so hover leans to
-   the full text color. */
-.btn-viewer-newsession {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	white-space: nowrap;
-	background: none;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-faint);
-	padding: 5px 12px;
-	font-size: 13px;
-}
-.btn-viewer-newsession:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-
 @keyframes preview-spin {
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-.btn-viewer-pin {
-	display: inline-flex;
-	align-items: center;
-	gap: 7px;
-	background: none;
-	border: 1px solid var(--border-strong);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	padding: 5px 10px;
-	font-size: 13px;
-	line-height: 1.2;
-}
-.btn-viewer-pin:hover {
-	color: var(--text);
-}
-.btn-viewer-pin.active {
-	color: var(--yellow);
 }
 .viewer-delete-confirm {
 	display: flex;
@@ -5466,24 +5382,6 @@ body.resizing-panel .panel-resize::after {
 	.rv-checks-bar {
 		display: none;
 	}
-
-	/* the PrPanel split stacks: info, then the diff below */
-	.pr-panel-split {
-		height: auto;
-	}
-	.pr-panel-split .pr-panel-body {
-		flex-direction: column;
-	}
-	.pr-panel-split .pr-panel-info {
-		width: auto;
-		flex-shrink: 1;
-		overflow-y: visible;
-		border-right: none;
-		border-bottom: 1px solid var(--border);
-	}
-	.pr-panel-split .pr-panel-diff {
-		overflow-y: visible;
-	}
 }
 
 /* ── Messages ────────────────────────────────────────────── */
@@ -5768,11 +5666,6 @@ body.resizing-panel .panel-resize::after {
 	padding: 5px 0;
 	color: var(--text-dim);
 	font-size: 12px;
-}
-
-.msg-busy-inline .pulse-dot {
-	width: 7px;
-	height: 7px;
 }
 
 .msg-system {
@@ -7549,14 +7442,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	margin-top: 7px;
 }
 
-.pulse-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: var(--green);
-	animation: pulse 1.4s infinite;
-}
-
 .busy-elapsed {
 	color: var(--text-faint);
 	font-size: 12px;
@@ -7586,15 +7471,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .btn-back:hover {
 	color: var(--text);
 	background: var(--hover);
-}
-
-.form-error {
-	background: var(--red-soft);
-	border: 1px solid rgba(248, 81, 73, 0.4);
-	color: var(--red);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	padding: 10px 12px;
-	font-size: 13px;
 }
 
 /* ── Automations ─────────────────────────────────────────── */
@@ -7754,13 +7630,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
 	padding: 1px 7px;
 	font-size: 11px;
-}
-
-.auto-status-ok {
-	color: var(--green);
-}
-.auto-status-err {
-	color: var(--red);
 }
 
 .automation-session-link {
@@ -8062,7 +7931,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.auto-toggle {
 		flex-shrink: 0;
 	}
-	.automations-row .working-pill,
 	.automations-row .source-chip {
 		max-width: 92px;
 		overflow: hidden;
@@ -8510,12 +8378,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		box-shadow: -10px 0 28px rgba(0, 0, 0, 0.35);
 	}
 
-	
-	/* The drawer affordances are gone in the page model. */
-.sidebar-overlay {
-		display: none;
-	}
-
 	/* Back control on a pushed page: a floating circular bubble carrying just the
 	   chevron (no "Back" word) — matches the ⋯ / search bubbles so the pushed-page
 	   chrome reads as a row of floating controls, iOS/WhatsApp-style. */
@@ -8710,9 +8572,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		line-height: 16px;
 		font-weight: 600;
 	}
-	.app-header-title .working-dot {
-		flex-shrink: 0;
-	}
 	.app-header-title-text {
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -8769,12 +8628,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 
 	/* Repo tile leads the metadata line under the title (repo · model · cost). */
 	.header-sessionbar .repo-tile {
-		flex-shrink: 0;
-	}
-
-	/* The running dot moved down from the title into the metadata line — keep it
-	   from shrinking and give it a hair of trailing room before the model label. */
-	.header-sessionbar .working-dot {
 		flex-shrink: 0;
 	}
 
@@ -10685,18 +10538,6 @@ html[data-theme="light"] .md-mermaid {
 	   the enter, so the exit was the transition's alone. One fade, and it is
 	   interruptible, which a keyframe is not. */
 }
-.palette-card {
-	/* Anchors the dictation overlay (VoiceInput). */
-	position: relative;
-	width: min(820px, 100%);
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(18px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
-	display: flex;
-	flex-direction: column;
-	overflow: hidden;
-}
 
 .palette-header {
 	display: flex;
@@ -10779,19 +10620,6 @@ html[data-theme="light"] .md-mermaid {
 	   stay clear of it via the textarea's min-height; attachments keep their
 	   own margin-bottom. */
 	padding: 12px 16px 0;
-}
-.palette-card.is-plan-mode .palette-body {
-	background-color: color-mix(in srgb, var(--bg-panel) 96%, var(--accent));
-	background-image: repeating-linear-gradient(
-		45deg,
-		color-mix(in srgb, var(--accent) 5%, transparent) 0,
-		color-mix(in srgb, var(--accent) 5%, transparent) 12px,
-		transparent 12px,
-		transparent 24px
-	);
-}
-.palette-card.is-plan-mode .palette-footer {
-	background: color-mix(in srgb, var(--bg-panel) 96%, var(--accent));
 }
 .palette-textarea {
 	width: 100%;
@@ -11575,13 +11403,6 @@ html.wco .settings-sidenav {
 	padding-bottom: 48px;
 }
 
-.setting-card {
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: calc(18px * var(--rf)); corner-shape: var(--cs);
-	overflow: hidden;
-}
-
 /* "Settings" entry in the product-menu dropdown */
 
 
@@ -12246,11 +12067,6 @@ html.wco .settings-sidenav {
   border-radius: 50%;
 }
 
-.pixel-spinner .pixel.triangle {
-  border-radius: 0;
-  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-}
-
 /* Pixel Spinner Color - inherits from surrounding text color */
 .pixel-spinner {
   --glow-color: currentColor;
@@ -12825,42 +12641,6 @@ html.wco .settings-sidenav {
   animation-name: pixel-pulse-trail;
 }
 
-/* Corners */
-.pixel-spinner.corners .pixel:nth-child(1) {
-  animation-name: pixel-corner-trail;
-  animation-delay: 0ms;
-}
-.pixel-spinner.corners .pixel:nth-child(3) {
-  animation-name: pixel-corner-trail;
-  animation-delay: 300ms;
-}
-.pixel-spinner.corners .pixel:nth-child(9) {
-  animation-name: pixel-corner-trail;
-  animation-delay: 600ms;
-}
-.pixel-spinner.corners .pixel:nth-child(7) {
-  animation-name: pixel-corner-trail;
-  animation-delay: 900ms;
-}
-
-/* Diamond */
-.pixel-spinner.diamond .pixel:nth-child(2) {
-  animation-name: pixel-corner-trail;
-  animation-delay: 0ms;
-}
-.pixel-spinner.diamond .pixel:nth-child(6) {
-  animation-name: pixel-corner-trail;
-  animation-delay: 300ms;
-}
-.pixel-spinner.diamond .pixel:nth-child(8) {
-  animation-name: pixel-corner-trail;
-  animation-delay: 600ms;
-}
-.pixel-spinner.diamond .pixel:nth-child(4) {
-  animation-name: pixel-corner-trail;
-  animation-delay: 900ms;
-}
-
 /* Diagonal */
 .pixel-spinner.diagonal-br .pixel:nth-child(1) {
   animation-name: pixel-snake-trail;
@@ -12930,20 +12710,6 @@ html.wco .settings-sidenav {
 .pixel-spinner.heartbeat .pixel:nth-child(6),
 .pixel-spinner.heartbeat .pixel:nth-child(8) {
   animation-name: pixel-heartbeat-cross;
-}
-
-/* Dots */
-.pixel-spinner.dots .pixel:nth-child(4) {
-  animation-name: pixel-dot-bounce;
-  animation-delay: 0ms;
-}
-.pixel-spinner.dots .pixel:nth-child(5) {
-  animation-name: pixel-dot-bounce;
-  animation-delay: 150ms;
-}
-.pixel-spinner.dots .pixel:nth-child(6) {
-  animation-name: pixel-dot-bounce;
-  animation-delay: 300ms;
 }
 
 /* Bounce */

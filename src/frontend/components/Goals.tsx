@@ -22,6 +22,7 @@ import { Button } from "../ui/button";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert, LoadingState } from "../ui/state";
+import { WorkingPill } from "../ui/status";
 
 type GoalStatus = "active" | "paused" | "done" | "failed";
 
@@ -215,18 +216,16 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                   </span>
                 </span>
                 {running ? (
-                  <span className="working-pill">
-                    <span className="working-dot" /> Running
-                  </span>
+                  <WorkingPill />
                 ) : g.lastRunStatus === "ok" ? (
                   <span
-                    className="auto-status-ok"
+                    className="text-green"
                     title={`Last wake ok${g.lastRunAt ? ` — ${relativeTime(g.lastRunAt)}` : ""}`}
                   >
                     ✓
                   </span>
                 ) : g.lastRunStatus === "error" ? (
-                  <span className="auto-status-err" title={g.lastRunError || "Last wake failed"}>
+                  <span className="text-red" title={g.lastRunError || "Last wake failed"}>
                     ✗
                   </span>
                 ) : null}
@@ -320,9 +319,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                     {sel.status}
                   </span>
                   {(sel.isRunning || sel.lastRunStatus === "running") && (
-                    <span className="working-pill">
-                      <span className="working-dot" /> Running
-                    </span>
+                    <WorkingPill />
                   )}
                   {sel.status === "active" && sel.nextWakeAt && (
                     <span className="text-faint text-label ml-auto shrink-0" title={sel.nextWakeAt}>
@@ -421,9 +418,9 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                       <>
                         {" · last wake "}
                         {relativeTime(sel.lastRunAt)}
-                        {sel.lastRunStatus === "ok" && <span className="auto-status-ok"> ✓</span>}
+                        {sel.lastRunStatus === "ok" && <span className="text-green"> ✓</span>}
                         {sel.lastRunStatus === "error" && (
-                          <span className="auto-status-err" title={sel.lastRunError}> ✗</span>
+                          <span className="text-red" title={sel.lastRunError}> ✗</span>
                         )}
                       </>
                     )}

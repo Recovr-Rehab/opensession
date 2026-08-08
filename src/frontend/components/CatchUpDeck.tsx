@@ -24,6 +24,7 @@ import { Composer } from "./Composer";
 import { useCurrentUser } from "./UserPicker";
 import { shortTime, elapsedClock } from "../lib/time";
 import { SwipeCard } from "../ui/swipe-deck";
+import { PulseDot } from "../ui/status";
 
 /**
  * Catch-up deck — a Slack-style "swipe through your unread" card stack. Each
@@ -638,7 +639,7 @@ function CatchupWorking({ target }: { target: UnifiedSession }) {
 	}, []);
 	return (
 		<div className="mt-2 flex items-center gap-2 px-1 text-xs text-faint">
-			<span className="pulse-dot" />
+			<PulseDot />
 			<span>Working</span>
 			<span className="tabular-nums">{elapsedClock(since, now)}</span>
 		</div>

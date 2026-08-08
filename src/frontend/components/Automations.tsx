@@ -24,6 +24,7 @@ import { Button } from "../ui/button";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { InlineAlert, LoadingState } from "../ui/state";
+import { WorkingPill } from "../ui/status";
 
 interface AutomationRun {
   at: string;
@@ -265,18 +266,16 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                   <span className="automations-row-trigger">{triggerSummary(a)}</span>
                 </span>
                 {running ? (
-                  <span className="working-pill">
-                    <span className="working-dot" /> Running
-                  </span>
+                  <WorkingPill className="max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis" />
                 ) : a.lastRunStatus === "ok" ? (
                   <span
-                    className="auto-status-ok"
+                    className="text-green"
                     title={`Last run ok${a.lastRunAt ? ` — ${relativeTime(a.lastRunAt)}` : ""}`}
                   >
                     ✓
                   </span>
                 ) : a.lastRunStatus === "error" ? (
-                  <span className="auto-status-err" title={a.lastRunError || "Last run failed"}>
+                  <span className="text-red" title={a.lastRunError || "Last run failed"}>
                     ✗
                   </span>
                 ) : null}
@@ -373,9 +372,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     {sel.enabled ? "Enabled" : "Disabled"}
                   </span>
                   {(sel.isRunning || sel.lastRunStatus === "running") && (
-                    <span className="working-pill">
-                      <span className="working-dot" /> Running
-                    </span>
+                    <WorkingPill />
                   )}
                   {sel.enabled && sel.nextRunAt && (
                     <span className="text-faint text-label ml-auto shrink-0">
@@ -493,9 +490,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     <div className="text-dim text-supporting">
                       last run {relativeTime(sel.lastRunAt)}
                       {sel.lastTrigger ? ` via ${sel.lastTrigger}` : ""}
-                      {sel.lastRunStatus === "ok" && <span className="auto-status-ok"> ✓</span>}
+                      {sel.lastRunStatus === "ok" && <span className="text-green"> ✓</span>}
                       {sel.lastRunStatus === "error" && (
-                        <span className="auto-status-err" title={sel.lastRunError}> ✗</span>
+                        <span className="text-red" title={sel.lastRunError}> ✗</span>
                       )}
                       {sel.lastRunSessionId && (
                         <>

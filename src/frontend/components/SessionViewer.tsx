@@ -157,6 +157,7 @@ import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { isApple, isChromium } from "../lib/platform";
+import { PulseDot } from "../ui/status";
 import {
 	getSessionPanelTab,
 	saveSessionPanelTab,
@@ -4600,7 +4601,7 @@ export function SessionViewer({
 						{/* The engine-running status dot rides the metadata line on
 						    phones (it used to sit next to the title) so the name stays
 						    steady and the working state reads alongside model · cost. */}
-						{isRunningLive && <span className="working-dot" />}
+						{isRunningLive && <PulseDot size={7} />}
 						{/* Repo now leads the pill (portaled into headerRepoEl in front of
 						    the title), so the metadata line is just model · cost. */}
 						{models.length > 0 && (
@@ -5574,7 +5575,7 @@ function BusyInline({
 }) {
 	return (
 		<div className="msg msg-busy-inline">
-			<span className="pulse-dot" />
+			<PulseDot size={7} />
 			{since != null && <BusyElapsed since={since} />}
 		</div>
 	);
