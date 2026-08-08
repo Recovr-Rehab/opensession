@@ -1463,7 +1463,7 @@ struct SessionsListView: View {
                 HStack(spacing: 6) {
                     if let repo {
                         #if os(iOS)
-                        RepoTile(name: repo, size: 24)
+                        RepoTile(name: repo, size: 22)
                         #else
                         RepoTile(name: repo)
                         #endif
