@@ -52,6 +52,43 @@ export const SIDEBAR_RAIL =
 export const SIDEBAR_CHROME_BTN =
 	"shrink-0 items-center justify-center rounded-control text-faint transition-[color,background] hover:bg-hover hover:text-fg";
 
+/**
+ * The square icon buttons in the workspace header — the filter and the new
+ * session "+". 20px glyph type on a 34px box, stepped up to 22 on 38 at phone
+ * widths, where the whole sidebar is a tap surface. The hover wash is applied
+ * by the call site rather than baked in, because the filter button's `active`
+ * state paints a stronger wash that hovering must NOT wash back out.
+ */
+export const SIDEBAR_HEADER_BTN = "shrink-0 rounded-control font-medium";
+/**
+ * Size and type step together, so each viewport carries its whole pair rather
+ * than overriding half of the other's. `leading-none` has to sit AFTER the
+ * `text-*` in the same string: cn() is tailwind-merge, which files `leading`
+ * as a conflict of `font-size`, so a later type size silently drops an earlier
+ * line-height and the glyph starts riding on `normal`.
+ */
+export const SIDEBAR_HEADER_BTN_PHONE = "size-[38px] text-[22px] leading-none";
+export const SIDEBAR_HEADER_BTN_DESKTOP = "size-[34px] text-[20px] leading-none";
+
+/**
+ * The trailing icon button on a band heading (the feed filter). Carries no
+ * resting colour of its own: the call site picks exactly one, because two
+ * `text-*` utilities on one element are decided by Tailwind's internal order,
+ * not by which one you wrote last.
+ */
+export const SIDEBAR_BAND_ACTION =
+	"ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-control hover:bg-hover hover:text-fg";
+
+/**
+ * The dot a filter button wears while a non-default filter is applied — the
+ * mark only; its accent TEXT colour is the call site's, for the reason above.
+ * A bare `border-radius: 50%` with no corner-shape of its own, so
+ * `rounded-full` — the one radius spelling base.css does NOT squircle — is the
+ * correct spelling here.
+ */
+export const SIDEBAR_FILTER_DOT =
+	"relative after:absolute after:top-[5px] after:right-[5px] after:size-1.5 after:rounded-full after:bg-accent after:content-['']";
+
 export const SIDEBAR_STATUS_DOT = {
 	/** Yellow to match the "In progress" lane — green means "In review". */
 	running:

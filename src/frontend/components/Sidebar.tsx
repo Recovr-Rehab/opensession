@@ -7,7 +7,14 @@ import type {
 	FeedDescriptor,
 	FeedItem,
 } from "../lib/types";
-import { SIDEBAR_RAIL, SIDEBAR_STATUS_DOT } from "../lib/sidebar-classes";
+import {
+	SIDEBAR_FILTER_DOT,
+	SIDEBAR_HEADER_BTN,
+	SIDEBAR_HEADER_BTN_DESKTOP,
+	SIDEBAR_HEADER_BTN_PHONE,
+	SIDEBAR_RAIL,
+	SIDEBAR_STATUS_DOT,
+} from "../lib/sidebar-classes";
 import { isScratchWorkspace } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import {
@@ -489,6 +496,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Filter popover (group by / repo / sort) — its choices persist together.
 	const [filter, setFilterState] = useState<FilterState>(readFilter);
 	const [filterOpen, setFilterOpen] = useState(false);
+	// Any non-default choice in that popover — what puts the dot on the button.
+	const hasFilter =
+		filter.groupBy !== DEFAULT_GROUP_BY ||
+		filter.repo !== "all" ||
+		filter.person !== "me" ||
+		filter.prs !== "default";
 	const filterBtnRef = useRef<HTMLButtonElement>(null);
 	// The phone stand-in for the header filter button (portaled into the top
 	// bar next to Search). The popover anchors to whichever button is live.
@@ -3878,14 +3891,29 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			<div
 				className="sidebar-workspace sidebar-sticky-head mt-1 px-[16px] pb-0.5 pr-[7px] pt-3"
 			>
-				<div className="sidebar-workspace-head flex min-w-0 items-center gap-1.5" ref={headRef}>
+				<div
+					className="group/wshead flex min-w-0 items-center gap-1.5 min-[721px]:w-full"
+					ref={headRef}
+				>
 					<button
-						className="sidebar-workspace-toggle flex min-w-0 items-center gap-[5px]"
+						className="group/wstoggle flex min-w-0 items-center gap-[5px] [font:inherit]"
 						onClick={() => toggleBand("workspaces")}
 						aria-expanded={workspacesOpen}
 						title={workspacesOpen ? "Collapse workspaces" : "Expand workspaces"}
 					>
-						<span className="sidebar-workspace-title shrink-0 text-label font-semibold tracking-[-0.01em] text-faint" ref={titleRef}>
+						{/* The heading takes the same 4px optical step every other
+						    glyphless label does, so it starts on the column its repo
+						    tiles and lane captions do rather than 4px left of them (see
+						    the band toggle). The sidebar header already reads as
+						    "Workspaces" on phones, so the in-header title is redundant
+						    there. */}
+						<span
+							className={cn(
+								"shrink-0 pl-1 text-label font-semibold tracking-[-0.01em] text-faint group-hover/wshead:text-dim",
+								isPhone && "hidden",
+							)}
+							ref={titleRef}
+						>
 							{filter.person === "me"
 								? "Workspaces"
 								: filter.person === "unassigned"
@@ -3895,7 +3923,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										: `${people.find((p) => p.key === filter.person)?.label || filter.person}'s workspaces`}
 						</span>
 						<IconChevronDown
-							className="sidebar-band-chevron"
+							className="sidebar-band-chevron group-hover/wstoggle:visible"
 							size={18}
 							style={{
 								transform: workspacesOpen ? "none" : "rotate(-90deg)",
@@ -3913,20 +3941,42 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						/>
 					)}
 					<div className="min-w-0 flex-1" />
-					<div className="sidebar-workspace-actions" ref={actionsRef}>
+					{/* Grouped so the pair's combined width can be measured when deciding
+					    whether the repo chip fits inline. Gone on phones, where filter
+					    moves to the top bar and the red FAB covers new-session. */}
+					<div
+						className={cn(
+							"shrink-0 items-center gap-1.5",
+							isPhone ? "hidden" : "flex",
+						)}
+						ref={actionsRef}
+					>
 						<Tooltip label="Group, filter & sort">
 						<button
 							ref={filterBtnRef}
-							className={`sidebar-new-btn sidebar-filter-btn${
-								filterOpen ? " active" : ""
-							}${
-								filter.groupBy !== DEFAULT_GROUP_BY ||
-								filter.repo !== "all" ||
-								filter.person !== "me" ||
-								filter.prs !== "default"
-									? " has-filter"
-									: ""
-							}`}
+							className={cn(
+								SIDEBAR_HEADER_BTN,
+								isPhone
+									? cn(SIDEBAR_HEADER_BTN_PHONE, "min-h-[38px] min-w-[38px]")
+									: SIDEBAR_HEADER_BTN_DESKTOP,
+								"inline-flex items-center justify-center",
+								// The open state paints the stronger wash, and hovering must
+								// not wash it back out — so the hover pair is withheld while
+								// it is on rather than layered under it.
+								filterOpen
+									? "border-line-strong bg-pressed"
+									: "hover:bg-hover",
+								// Exactly one resting colour, in the old sheet's precedence:
+								// a set filter tints the glyph and keeps that tint through
+								// hover and through the open state; otherwise the button
+								// lifts to full contrast under the pointer or while open.
+								hasFilter
+									? "text-accent"
+									: filterOpen
+										? "text-fg"
+										: "text-dim hover:text-fg",
+								hasFilter && SIDEBAR_FILTER_DOT,
+							)}
 							onClick={() => setFilterOpen((o) => !o)}
 						>
 							<IconFilter size={24} />
@@ -3937,7 +3987,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							shortcut={isApple ? ["⌘", "N"] : ["Ctrl", "N"]}
 						>
 						<button
-							className="sidebar-new-btn inline-flex items-center justify-center"
+							className={cn(
+								SIDEBAR_HEADER_BTN,
+								isPhone
+									? SIDEBAR_HEADER_BTN_PHONE
+									: SIDEBAR_HEADER_BTN_DESKTOP,
+								"inline-flex items-center justify-center text-dim hover:bg-hover hover:text-fg",
+							)}
 							onClick={onNewSession}
 						>
 							<IconPlus size={24} />
@@ -3954,7 +4010,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 				{/* Fallback row: only when the chip doesn't fit inline. */}
 				{filter.repo !== "all" && !repoInline && (
-					<div className="sidebar-repo-row sidebar-workspace-fallback mx-4 mb-2 mt-[-2px] flex min-w-0 md:mr-2 md:ml-4">
+					<div className="mx-4 mt-[-2px] mb-2 flex min-w-0 md:mr-2 md:ml-4">
 						<RepoFilterChip
 							repo={filter.repo}
 							repos={repos}
@@ -3974,12 +4030,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<button
 							ref={mobileFilterBtnRef}
 							className={`mobile-filter-btn${filterOpen ? " active" : ""}${
-								filter.groupBy !== DEFAULT_GROUP_BY ||
-								filter.repo !== "all" ||
-								filter.person !== "me" ||
-								filter.prs !== "default"
-									? " has-filter"
-									: ""
+								hasFilter ? " has-filter" : ""
 							}`}
 							onClick={() => setFilterOpen((o) => !o)}
 							aria-label="Group, filter & sort"

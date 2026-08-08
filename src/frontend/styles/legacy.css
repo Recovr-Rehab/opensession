@@ -159,16 +159,8 @@
 		padding-top: 7px;
 		padding-bottom: 7px;
 	}
-	.sidebar-workspace.sidebar-sticky-head .sidebar-workspace-head {
-		width: 100%;
-		margin-bottom: 0;
-	}
 	.sidebar-tools-head + .sidebar-nav {
 		margin-top: -8px;
-	}
-	.sidebar-workspace-fallback {
-		margin-right: 8px;
-		margin-left: 16px;
 	}
 }
 @media (max-width: 720px) {
@@ -176,10 +168,6 @@
 	   the user's configured section order applies to the card strip too. */
 	.sidebar-tools-section {
 		display: block;
-	}
-	.sidebar-workspace-fallback {
-		margin-right: 10px;
-		margin-left: 12px;
 	}
 }
 .sidebar-nav {
@@ -293,110 +281,6 @@ html[data-platform="windows"] .workspace-shell {
 body:is(.resizing-sidebar, .resizing-panel) {
 	cursor: col-resize;
 	user-select: none;
-}
-
-/* Workspace header: "My sessions" title row (+ optional repo chip + action
-   icons), with the session search bar directly below it. */
-.sidebar-workspace {
-	padding: 12px 7px 2px 16px;
-	margin-top: 4px;
-}
-.sidebar-workspace-head {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin-bottom: 1px;
-	min-width: 0;
-}
-.sidebar-workspace-toggle {
-	display: flex;
-	align-items: center;
-	gap: 5px;
-	min-width: 0;
-	padding: 0;
-	background: none;
-	border: none;
-	font: inherit;
-	cursor: pointer;
-}
-.sidebar-workspace-toggle:hover .sidebar-band-chevron {
-	visibility: visible;
-}
-.sidebar-workspace-title {
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	color: var(--text-faint);
-	flex-shrink: 0;
-	/* The same 4px optical step the other glyphless labels take, so this
-	   heading starts on the column its repo tiles and lane captions do rather
-	   than 4px left of them (see .sidebar-band-toggle). */
-	padding-left: 4px;
-}
-/* The filter + new-session buttons, grouped so their combined width can be
-   measured when deciding whether the repo chip fits inline. */
-.sidebar-workspace-actions {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-shrink: 0;
-}
-
-/* The active repo filter, shown as a removable chip. It prefers to sit inline in
-   the header (--inline); it falls back to its own row (--row) when the sidebar is
-   too narrow. --probe is an off-layout measuring copy. */
-.sidebar-repo-row {
-	display: flex;
-	margin: -2px 0 8px;
-	min-width: 0;
-}
-
-.sidebar-new-btn {
-	width: 34px;
-	height: 34px;
-	background: none;
-	color: var(--text-dim);
-	border: none;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	font-size: 20px;
-	line-height: 1;
-	font-weight: 500;
-	flex-shrink: 0;
-}
-.sidebar-new-btn:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-
-.sidebar-filter-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-}
-.sidebar-filter-btn.active {
-	color: var(--text);
-	border-color: var(--border-strong);
-	background: var(--hover-strong);
-}
-/* Needs-input alert bell, muted state: dimmed so "on" reads as the norm. */
-.sidebar-filter-btn.muted {
-	color: var(--text-faint);
-	opacity: 0.65;
-}
-/* A dot on the icon when a non-default group/repo filter is applied. */
-.sidebar-filter-btn.has-filter {
-	color: var(--accent);
-	position: relative;
-}
-.sidebar-filter-btn.has-filter::after {
-	content: "";
-	position: absolute;
-	top: 5px;
-	right: 5px;
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: var(--accent);
 }
 
 /* ── Filter popover (group / repo / sort) ─────────────────── */
@@ -658,28 +542,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	margin-left: 0;
 	padding: 0;
 }
-.sidebar-workspace-head:hover .sidebar-workspace-title {
-	color: var(--text-dim);
-}
-
-.sidebar-band-action {
-	margin-left: auto;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	background: none;
-	border: none;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	flex-shrink: 0;
-}
-.sidebar-band-action:hover {
-	color: var(--text);
-	background: var(--hover);
-}
-
 .sidebar-group-header {
 	display: flex;
 	align-items: center;
@@ -953,12 +815,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.sidebar-ws-row:hover .sidebar-ws-ticker,
 	.sidebar-ws-row:hover .sidebar-ws-draft {
 		display: inline-flex;
-	}
-	/* The sidebar header already reads as the "Workspaces" section on mobile, so
-	   drop the redundant in-header title (its filter/new actions stay). The
-	   person filter's feedback is the highlighted People row, not this title. */
-	.sidebar-workspace-title {
-		display: none;
 	}
 }
 @keyframes sheet-up {
@@ -2945,9 +2801,6 @@ body.resizing-tab-split {
 		font-size: 16px;
 		padding: 10px 8px;
 	}
-	.sidebar-workspace-title {
-		font-size: 15px;
-	}
 	.sidebar-band-label {
 		font-size: 15px;
 	}
@@ -3020,17 +2873,6 @@ body.resizing-tab-split {
    the settings sub-nav, and inline icon buttons. Scoped to phones so
    desktop keeps its tighter density. */
 @media (max-width: 720px) {
-
-	/* Sidebar header icons: New session (+) and the filter/bell. */
-	.sidebar-new-btn {
-		width: 38px;
-		height: 38px;
-		font-size: 22px;
-	}
-	.sidebar-filter-btn {
-		min-width: 38px;
-		min-height: 38px;
-	}
 
 }
 
@@ -3142,24 +2984,6 @@ body.resizing-tab-split {
 		right: 10px;
 		margin-left: 0;
 	}
-	.sidebar-workspace {
-		margin-top: 0;
-		padding: 5px 14px 1px 16px;
-	}
-	.sidebar-workspace-head {
-		margin-bottom: 0;
-	}
-	.sidebar-workspace-title {
-		font-size: 15px;
-		font-weight: 700;
-	}
-
-	/* The header's filter + "+" cluster is gone on phones (filter → top bar,
-	   new-session → the red FAB). */
-	.sidebar-workspace-actions {
-		display: none;
-	}
-
 	/* Filter, docked in the top bar beside Search (portaled from the sidebar).
 	   `order: -1` seats it left of Search. Same 40px circle as the search
 	   button (::after pads the hit area to 44pt); muted until a filter is set. */

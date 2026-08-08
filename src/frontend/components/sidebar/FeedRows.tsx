@@ -1,6 +1,10 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { fetchFeedFilterOptions, relativeTime } from "../../lib/api";
-import { SIDEBAR_RAIL } from "../../lib/sidebar-classes";
+import {
+	SIDEBAR_BAND_ACTION,
+	SIDEBAR_FILTER_DOT,
+	SIDEBAR_RAIL,
+} from "../../lib/sidebar-classes";
 import { laneCtxEntries, useRowCtxMenu } from "../../lib/sidebar-ctx";
 import { SUPPORT_PRIORITY_DOT, dget, type FeedFilterValues } from "../../lib/sidebar-filter";
 import { mineStatus } from "../../lib/sidebar-lanes";
@@ -383,7 +387,14 @@ export function FeedFilterMenu({
 						tabIndex={0}
 						aria-label={`Filter ${feed.title}`}
 						title={`Filter ${feed.title}`}
-						className={`sidebar-band-action sidebar-filter-btn ml-auto shrink-0${active ? " has-filter" : ""}`}
+						className={cn(
+							SIDEBAR_BAND_ACTION,
+							// Unlike the workspace header's filter, this one's hover beat
+							// its filtered tint in the old sheet's source order — so the
+							// accent is a resting colour here, not a sticky one.
+							active ? "text-accent" : "text-dim",
+							active && SIDEBAR_FILTER_DOT,
+						)}
 						onClick={(e: React.MouseEvent) => e.stopPropagation()}
 					/>
 				}
