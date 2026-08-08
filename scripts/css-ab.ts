@@ -108,8 +108,9 @@ if (argv[0] === "--diff") {
 	const all: Diff[] = [];
 
 	/** Style bags are stored deduplicated and joined; decode each one at most
-	 *  once into a name→value map. Two elements sharing a bag id are provably
-	 *  identical, which is the common case and costs nothing to compare. */
+	 *  once into a name→value map. Two elements sharing a bag id WITHIN one
+	 *  snapshot are provably identical — but ids are snapshot-local, so they say
+	 *  nothing across two snapshots (see `same` below). */
 	const decoder = (snap: any) => {
 		const cache = new Map<number, Map<string, string>>();
 		const names = new Map<number, string[]>();
@@ -132,6 +133,18 @@ if (argv[0] === "--diff") {
 			}
 			return m;
 		};
+	};
+	/** Whether two bags — one from each snapshot — hold the same values. It has
+	 *  to compare CONTENT, not ids: `bags` is deduplicated per snapshot in first
+	 *  -occurrence order, so two structurally identical trees hand out the same
+	 *  ids no matter what the values are. Comparing ids therefore reported "0
+	 *  prop diffs" for every same-shaped pair — including a resting capture
+	 *  against a forced-hover one, where every wash provably differs. */
+	const same = (a: Map<string, string> | undefined, b: Map<string, string> | undefined) => {
+		if (!a || !b) return a === b;
+		if (a.size !== b.size) return false;
+		for (const [k, v] of a) if (b.get(k) !== v) return false;
+		return true;
 	};
 
 	for (const key of Object.keys(A)) {
@@ -175,11 +188,11 @@ if (argv[0] === "--diff") {
 			if (only && !(ela.cls || "").includes(only) && !(elb.cls || "").includes(only)) continue;
 			compared++;
 			for (const bag of ["s", "b", "a"] as const) {
-				// Identical bag ids mean identical values by construction, but a
-				// pseudo-element present on one side only still has to be reported.
-				if (ela[bag] === elb[bag]) continue;
 				const va = decA(ela[bag]);
 				const vb = decB(elb[bag]);
+				// Same values on both sides: nothing to report. A pseudo-element
+				// present on one side only is a difference, and `same` says so.
+				if (same(va, vb)) continue;
 				const label = bag === "s" ? "" : `::${bag === "b" ? "before" : "after"} `;
 				for (const prop of new Set([...(va?.keys() ?? []), ...(vb?.keys() ?? [])])) {
 					if (DERIVED.has(prop)) continue;
