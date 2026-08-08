@@ -55,13 +55,6 @@
 	min-width: 0;
 }
 
-/* Above the mobile breakpoint the top bar is hidden, so nothing is offset by the
-   header — the ≤920px panel/wiki drawer overlays anchor to the true top. */
-@media (min-width: 721px) {
-	:root {
-		--header-h: 0px;
-	}
-}
 .app-logo-button {
 	display: inline-flex;
 	align-items: center;
@@ -118,22 +111,6 @@
 	border: 2px solid var(--bg-raised);
 }
 
-/* Rows nested under a repo band, a status lane or an inbox band take no inset
-   of their own: every row in the list keeps the base 10px edge, so all their
-   marks and titles share one rail top to bottom. The nesting is carried by the
-   headers instead — a lane header is a small glyphless caption that starts
-   left of that rail (see .sidebar-lane-group), which reads as a divider over
-   its rows without pushing them right. Stepping the rows in as well cost real
-   title width on every level and fanned the list out across three left edges. */
-@keyframes sheet-up {
-	from {
-		transform: translateY(100%);
-	}
-	to {
-		transform: translateY(0);
-	}
-}
-
 /* ── Sidebar row hover card ──────────────────────────────────
    The card's chrome (panel, portal, position, arrow, animation) is
    RowCardPopup's — see components/SidebarRowCards.tsx. What's left here is the
@@ -175,56 +152,6 @@
 	syntax: "<length>";
 	inherits: false;
 	initial-value: 0px;
-}
-
-.tab-split-drop-preview {
-	position: absolute;
-	top: calc(var(--desktop-header-h) + 44px);
-	bottom: 8px;
-	z-index: 25;
-	/* Half the pane for the drop that CREATES a split; App.tsx overrides the
-	   share with the target column's real ratio once one exists. */
-	width: calc(var(--split-preview-share, 50%) - 12px);
-	pointer-events: none;
-	border: 2px solid var(--accent);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	background: color-mix(in srgb, var(--accent) 18%, transparent);
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, white 16%, transparent);
-}
-.tab-split-drop-preview-left {
-	left: 8px;
-}
-.tab-split-drop-preview-right {
-	right: 8px;
-}
-
-/* Which automation produced a session, shown beside its title. Deliberately the
-   quiet neutral the CLI chip uses — it names the session's origin, it shouldn't
-   outshout the title. It's a link to the automation's settings, so it hints on
-   hover. */
-
-/* Archived chip in the viewer header doubles as an unarchive button — give it a
-   touch more room than the read-only source chips, and hint the click. */
-
-.viewer-header-actions .session-link,
-.viewer-header-actions .presence {
-	margin-right: 6px;
-}
-
-.viewer-panel {
-	/* Drag-resizable from the left edge (.panel-resize sets --panel-w). The cap
-	   only reserves the left sidebar + a readable session column — reviewing code
-	   needs real width on desktop, not a fixed 900px. */
-	width: var(--panel-w, 44%);
-	max-width: max(480px, calc(100vw - 620px));
-	min-width: 320px;
-	flex-shrink: 0;
-	position: relative;
-	border-left: 1px solid var(--border);
-	background: var(--bg-raised);
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
 }
 /* ── Reviews view ────────────────────────────────────────── */
 
@@ -306,42 +233,6 @@
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
-
-@media (max-width: 920px) {
-	.viewer-panel {
-		position: fixed;
-		top: var(--header-h);
-		right: 0;
-		bottom: 0;
-		width: min(480px, 94vw);
-		min-width: 0;
-		max-width: none;
-		z-index: 30;
-		box-shadow: -12px 0 32px rgba(0, 0, 0, 0.5);
-	}
-}
-
-/* Phones: the workspace panel becomes a full-width bottom sheet in the same
-   language as the composer modal / mobile action sheet — rounded top, sliding
-   up over everything including the floating header pills (z 40), with the dim
-   backdrop covering the whole screen rather than stopping at the header. */
-@media (max-width: 720px) {
-	.viewer-panel {
-		top: calc(env(safe-area-inset-top, 0px) + 10px);
-		left: 0;
-		width: 100%;
-		border-left: none;
-		border-top: 1px solid var(--border);
-		border-radius: calc(18px * var(--rf)) calc(18px * var(--rf)) 0 0;
-		corner-shape: var(--cs);
-		/* Respect the rounded corners; the drag-resize handle is hidden on
-		   phones so nothing inside needs to bleed out. */
-		overflow: hidden;
-		z-index: 50;
-		box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
-		animation: sheet-up var(--dur-lg) var(--ease);
-	}
-}
 
 @media (max-width: 720px) {
 
@@ -711,17 +602,6 @@
 		transition-duration: 0s;
 	}
 
-	/* Comfortably-tappable controls that stay on one row — sized toward the iOS
-	   44pt minimum touch target, with legible labels. */
-	.viewer-header-actions button,
-	.viewer-header-actions .session-link {
-		font-size: 12px;
-		padding: 7px 11px;
-		min-height: 38px;
-		display: inline-flex;
-		align-items: center;
-	}
-
 	/* Immersive reading (Safari-style): SessionViewer toggles body.chrome-collapsed
 	   from the transcript's scroll direction — scrolling down slides the top bar
 	   and the docked tab bar off-screen to maximize the reading area; scrolling
@@ -741,20 +621,7 @@
 	.connections {
 		padding: 18px 14px 48px;
 	}
-
-	/* A one-session workspace's tab strip is pure chrome on a phone: a single tab
-	   repeating the title in the top bar, plus a "+" that's hover-revealed and
-	   so mostly invisible on touch anyway. Hide the strip until the workspace
-	   actually has a second session to switch between. */
-
-	/* Tell the transcript how much extra top room the docked bar takes so the
-	   first row starts just below it (see .viewer-messages). Only set when a
-	   multi-session strip is actually shown. */
-	.detail-pane:has(.session-tab-view),
-	.detail-pane:has(.session-tab-reorder ~ .session-tab-reorder) {
-		--strip-clearance: 46px;
-	}
-	/* …and when the docked bar is present, the floating header above it goes
+	/* When the docked tab bar is present, the floating header above it goes
 	   solid too so the whole top block reads as one opaque bar — otherwise the
 	   transcript ghosts through behind the pills above a solid tab bar, which
 	   looks broken. The header is a sibling of the pane, so key it off the

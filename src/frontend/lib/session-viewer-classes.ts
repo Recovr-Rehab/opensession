@@ -5,9 +5,8 @@
  *
  * Everything that used to be keyed off an ancestor is an arbitrary variant on
  * the element itself, so the whole subtree moves in one step: a compound
- * legacy selector (`.viewer-header-actions .presence`, still in the sheet
- * below) outranks a single utility, and a half-migrated element quietly keeps
- * its old styling.
+ * legacy selector outranks a single utility, and a half-migrated element
+ * quietly keeps its old styling.
  *
  * Three class names stay on the markup as bare hooks with no styling of their
  * own, because things outside this family name them:
@@ -22,14 +21,18 @@
  *     in, and MarkdownBody, VirtualTranscriptBlock and CodeHighlight all find
  *     their scroll container with `closest(".viewer-messages")`.
  *
- * Two more join them from the row's contents:
+ * One more joins them from the row's contents:
  *
- *   · `presence` and `session-link` — legacy.css still spaces both off the
- *     ⋯ cluster from the row (`.viewer-header-actions .presence`), and sizes the
- *     links for touch on phones, which is the same kind of ancestor-state rule;
- *   · `session-link` is also written by lib/markdown.ts into rendered agent
- *     output, where base.css styles the chip form (`.session-link[data-session-id]`).
- *     There is no JSX there to hang utilities on.
+ *   · `session-link` — lib/markdown.ts writes it into rendered agent output,
+ *     where base.css styles the chip form (`.session-link[data-session-id]`).
+ *     There is no JSX there to hang utilities on. The header's own links are a
+ *     different element wearing the same name, and they carry their styling as
+ *     utilities (SESSION_LINK below).
+ *
+ * `presence` used to be a fourth: the only rule that named it spaced the
+ * facepile off the ⋯ cluster, and that margin now sits on VIEWER_PRESENCE
+ * itself, so the name is gone from the markup rather than kept as a hook for
+ * nothing.
  */
 
 /* ── Top bar ────────────────────────────────────────────────────────────── */
@@ -93,10 +96,20 @@ export const VIEWER_BRANCH_RENAME =
  * presence facepile, the PR chip) space themselves.
  */
 export const VIEWER_HEADER_ACTIONS =
-	"viewer-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end";
+	"viewer-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end " +
+	// Phones give every control in the row a real touch target. Keyed off the
+	// row rather than written on each control because these are shared
+	// primitives (Button, and the source links below): a descendant selector is
+	// also what lets it outrank the primitive's own padding, exactly as the
+	// legacy rule did. `inline-flex`/`items-center` are not carried — the
+	// primitive is already both, on every viewport.
+	"phone:[&_button]:min-h-[38px] phone:[&_button]:px-[11px] phone:[&_button]:py-[7px] " +
+	"phone:[&_button]:text-[12px]";
 
-/** The presence facepile (Figma/Notion-style), just before Share. */
-export const VIEWER_PRESENCE = "presence flex items-center";
+/** The presence facepile (Figma/Notion-style), just before Share. Labelled
+ *  items in the row space themselves off the icon cluster; the icons keep the
+ *  row's tight 2px gap. */
+export const VIEWER_PRESENCE = "mr-1.5 flex items-center";
 
 /**
  * One face in it. They overlap by 8px so the pile reads as a stack, and the
@@ -122,8 +135,16 @@ export const VIEWER_PRESENCE_AVATAR = "-ml-2 first:ml-0";
  * for and swapping in one would be a redesign.
  */
 export const SESSION_LINK =
-	"session-link rounded-control border border-line-strong px-[11px] py-[5px] " +
-	"text-label font-semibold text-dim no-underline";
+	"session-link mr-1.5 rounded-control border border-line-strong px-[11px] py-[5px] " +
+	"text-label font-semibold text-dim no-underline " +
+	// Phones give it the same 38px touch target as the buttons beside it. These
+	// sit on the link rather than on the row (where the buttons' copy lives)
+	// because this is the element's own styling and nothing else wears the
+	// class in this row. Only the declarations that actually change are
+	// written: the 11px sides are already the resting value. A `phone:` variant
+	// beats the unprefixed `py-[5px]`/`text-label` on the same element because
+	// Tailwind emits every breakpoint variant after the unprefixed utilities.
+	"phone:inline-flex phone:min-h-[38px] phone:items-center phone:py-[7px] phone:text-[12px]";
 export const SESSION_LINK_LINEAR = "border-[rgba(94,106,210,0.5)] text-[#7b86e8]";
 export const SESSION_LINK_PLAIN = "border-[rgba(13,148,136,0.5)] text-[#5eead4]";
 

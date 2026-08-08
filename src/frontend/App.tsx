@@ -16,6 +16,7 @@ import {
 	DETAIL_TOPBAR,
 	DETAIL_TOPBAR_TITLE,
 	RIGHT_PANEL_SLOT,
+	tabSplitDropPreviewClass,
 	WORKSPACE_SHELL,
 } from "./lib/app-shell-classes";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
@@ -3741,7 +3742,7 @@ export function App(
 						{!activeTabSplit && renderTabBar(null)}
 						{splitDropSide && (
 							<div
-								className={`tab-split-drop-preview tab-split-drop-preview-${splitDropSide}`}
+								className={tabSplitDropPreviewClass(splitDropSide)}
 								// Once there IS a split, the preview outlines the column the
 								// tab would join at its real width — the even halves it
 								// defaults to are only right for the drop that creates one.

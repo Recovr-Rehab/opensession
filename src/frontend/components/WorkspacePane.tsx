@@ -12,6 +12,7 @@ import { PrPanel } from "./PrPanel";
 import { repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { PANEL_SHELL } from "../lib/session-panel-classes";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
@@ -165,7 +166,7 @@ export function WorkspacePane({
 	// surface, so it always shows one — even session-less.
 	// Compact info: identity, linkage (repo/branch/PR/ticket), and its sessions.
 	const infoPanel = !isPhone && (
-		<aside className="viewer-panel">
+		<aside className={PANEL_SHELL}>
 			<div className="flex-1 min-h-0 overflow-y-auto p-4">
 				<div className="text-fg font-semibold text-item-title leading-snug">
 					{workspace.name}

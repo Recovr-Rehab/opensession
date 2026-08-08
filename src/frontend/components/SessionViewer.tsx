@@ -202,6 +202,7 @@ import {
 	PANEL_BODY,
 	PANEL_OVERLAY,
 	PANEL_RESIZE,
+	PANEL_SHELL,
 	PANEL_SHEET_ACTIONS,
 	PANEL_SHEET_HEAD,
 	PANEL_TABS,
@@ -5423,7 +5424,7 @@ export function SessionViewer({
 					<div className={PANEL_OVERLAY} onClick={() => setPanelOpen(false)} />
 				)}
 				{!isPhone && panelAvailable && panelOpen ? (
-					<div className="viewer-panel" style={panelStyle}>
+					<div className={PANEL_SHELL} style={panelStyle}>
 						{panelResizeHandle}
 						{/* Phones open this panel as a full-width bottom sheet, so it
 						    carries one clean header row: chevron-back to the session on the

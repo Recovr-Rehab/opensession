@@ -99,7 +99,35 @@ export const DETAIL_PANE =
 	// or its left-side shadow bleeds back onto the sidebar while it rests just
 	// off the right edge.
 	"phone:[.app-body.mobile-detail_&]:[transform:translateX(0)] " +
-	"phone:[.app-body.mobile-detail_&]:shadow-[-10px_0_28px_rgba(0,0,0,0.35)]";
+	"phone:[.app-body.mobile-detail_&]:shadow-[-10px_0_28px_rgba(0,0,0,0.35)] " +
+	// How much extra top room the phone's DOCKED tab bar takes, published to
+	// everything inside the pane that has to start below it — the transcript
+	// (VIEWER_MESSAGES), the view-tab panes, the review host. It is only set
+	// when a strip is really shown: a lone session with no view tabs hides the
+	// strip, and then the default 0 is the right answer. Two selectors because
+	// "a strip is shown" is either a view tab or a second session tab.
+	"phone:[&:has(.session-tab-view)]:[--strip-clearance:46px] " +
+	"phone:[&:has(.session-tab-reorder~.session-tab-reorder)]:[--strip-clearance:46px]";
+
+/**
+ * The drop target outlined while a tab is dragged to the pane's edge to split
+ * it. Absolutely placed inside the pane, below the header and the tab strip,
+ * and inert — it is a hint, never a hit target.
+ *
+ * The width is the share the dropped column would take. Half the pane is right
+ * only for the drop that CREATES a split; once one exists App.tsx overrides
+ * `--split-preview-share` with the target column's real ratio. The 12px it
+ * subtracts is the 8px inset on its own side plus the gutter to the divider.
+ */
+export const tabSplitDropPreviewClass = (side: "left" | "right") =>
+	"pointer-events-none absolute top-[calc(var(--desktop-header-h)+44px)] bottom-2 z-[25] " +
+	"w-[calc(var(--split-preview-share,50%)-12px)] " +
+	"rounded-[calc(10px*var(--rf))] [corner-shape:var(--cs)] border-2 border-accent " +
+	"bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] " +
+	// A hairline of white inside the accent edge, so the outline still reads
+	// against a light screenshot or a pale diff behind it.
+	"shadow-[inset_0_0_0_1px_color-mix(in_srgb,white_16%,transparent)] " +
+	(side === "left" ? "left-2" : "right-2");
 
 /** Top bar above the tab strip: the session's header portals in here on
  *  session routes, other views render a plain title. `empty:hidden` collapses

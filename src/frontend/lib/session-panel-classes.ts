@@ -2,12 +2,14 @@
  * The session's right-hand workspace panel, as finished utility classes — what
  * used to be the `panel-*` family in legacy.css.
  *
- * The panel is one surface with three shapes: a resizable column beside the
- * transcript on desktop, a fixed overlay column from 920px down, and a
- * full-width bottom sheet on phones. Only the shell itself (`.viewer-panel`)
- * still carries that in legacy.css — WorkspacePane renders the same class, and
- * that component belongs to another surface — so everything here is the
- * panel's CONTENTS: its drag handle, tab strip, body and phone sheet head.
+ * The panel is one surface with two shapes: a resizable column beside the
+ * transcript on desktop, and a fixed overlay column from 920px down. Both the
+ * shell (PANEL_SHELL, shared with WorkspacePane's standing info panel) and the
+ * contents — drag handle, tab strip, body, sheet head — live here.
+ *
+ * It had a third shape, a full-width bottom sheet on phones, and that is gone
+ * rather than migrated: neither call site renders below 720px. See PANEL_SHELL
+ * for what was measured before dropping it.
  *
  * Two conventions carried over from lib/pr-tone-classes.ts, for the same
  * reasons: a state carries its whole colour set rather than layering one over
@@ -20,6 +22,41 @@
  *  it is authored the way base.css authors corners so it tracks the squircle
  *  bump on its own. */
 const PILL = "rounded-[calc(8px*var(--rf))]";
+
+/**
+ * The panel shell itself — a resizable column beside the transcript, and a
+ * fixed overlay column from 920px down. Both of its call sites (SessionViewer's
+ * workspace panel and WorkspacePane's standing info panel) render it.
+ *
+ * `viewer-panel` stays on the markup as a bare hook: lib/pr-tone-classes.ts
+ * reaches into it with `[.viewer-panel_&]` to size the PR strip inside the
+ * panel, which is a rule about a descendant of an element this file doesn't
+ * own.
+ *
+ * The width is the drag handle's to set — PANEL_RESIZE writes `--panel-w` — so
+ * the shell only names the fallback and the bounds. The cap reserves the left
+ * sidebar plus a readable session column rather than a fixed pixel width:
+ * reviewing code wants real width on a wide display.
+ *
+ * There is deliberately no phone shape here, though the old sheet had one (a
+ * full-width bottom sheet: rounded top, `sheet-up` animation, its own shadow).
+ * Neither call site renders on a phone — both are gated on `!isPhone`, and the
+ * content is reached there as a full-width view tab instead (`session-tab-view`
+ * → VIEWER_REVIEW_MAIN). Measured before removing it: at 390px no
+ * `.viewer-panel` element exists on either a session or a workspace route, and
+ * the toggle that would open one isn't rendered either. Reviving the phone
+ * sheet means reviving that JSX first; its styling is not carried here as
+ * decoration.
+ */
+export const PANEL_SHELL =
+	"viewer-panel relative flex min-h-0 w-[var(--panel-w,44%)] min-w-[320px] shrink-0 flex-col " +
+	"max-w-[max(480px,calc(100vw-620px))] border-l border-line bg-raised " +
+	// From 920px down it stops being a column in the layout and becomes an
+	// overlay over the session, anchored under the top bar (--header-h is 0 on
+	// desktop, the bar's height on a phone) with PANEL_OVERLAY dimming behind it.
+	"max-[920px]:fixed max-[920px]:top-[var(--header-h)] max-[920px]:right-0 max-[920px]:bottom-0 " +
+	"max-[920px]:z-30 max-[920px]:w-[min(480px,94vw)] max-[920px]:max-w-none max-[920px]:min-w-0 " +
+	"max-[920px]:shadow-[-12px_0_32px_rgba(0,0,0,0.5)]";
 
 /**
  * Left-edge drag handle — the mirror of the sidebar's. The hairline it paints

@@ -216,6 +216,18 @@
 	--header-h: calc(52px + env(safe-area-inset-top, 0px));
 }
 
+/* Above the phone breakpoint the top bar isn't rendered at all, so nothing is
+   offset by it and the token collapses to zero. It stays a token rather than a
+   rule on an element because everything that clears the bar reads it from
+   somewhere else in the tree: the workspace panel and the notes rail anchor
+   their ≤920px overlays to it, the sidebar masks its scroll by it, and the
+   detail pane spends it as --pane-header-h. */
+@media (min-width: 721px) {
+	:root {
+		--header-h: 0px;
+	}
+}
+
 /* ── Light theme ─────────────────────────────────────────────
    Conductor-inspired neutral gray ramp. Applied when the user picks Light, or picks
    System and the OS is light — see src/frontend/lib/theme.ts + the pre-paint
