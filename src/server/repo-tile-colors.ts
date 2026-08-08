@@ -23,22 +23,23 @@
  */
 
 /**
- * Ten bright tile colors.
+ * Ten jewel-toned tile colors.
  *
  * Ten, not the sixteen this had, because the palette is also the picker: every
  * entry is a choice someone reads through, and sixteen near-neighbours asked
  * them to tell ochre from olive for no gain. Ten still covers the wheel and is
  * more colors than most instances have repos.
  *
- * Generated in OKLCH — ten hues at even 36° steps, chroma 0.20 (clipped to the
- * sRGB boundary where a hue can't hold it), lightness alternating 0.72/0.66 so
- * neighbouring hues separate on brightness as well as hue.
+ * Generated in OKLCH — ten hues at even 36° steps, chroma 0.18 (clipped to the
+ * sRGB boundary where a hue can't hold it), lightness alternating 0.56/0.50 so
+ * neighbouring hues separate on brightness as well as hue. Deep and saturated
+ * rather than bright: the letter is white (REPO_TILE_INK), and these run
+ * 4.4–6.7:1 against it. That is the whole constraint on this palette — lighten
+ * it and the letter goes with it, so check the contrast before touching either.
  *
- * That brightness is what REPO_TILE_INK is for. Every earlier version of this
- * palette was held down by a white letter needing contrast, which is what made
- * it muted; flipping the letter to dark ink lifts the ceiling instead of the
- * floor, and these run 4.9–7.3:1 against that ink. Keep the two together: a
- * lighter palette with white letters is the mistake this replaced.
+ * The hues sit 18° off where earlier versions put them, which is what makes
+ * this a different set rather than a dimmer one: vermilion and true green
+ * where there used to be a soft red and a leaf.
  *
  * The order is deliberately NOT the hue wheel: entries are laid out in strides
  * around it, so two repos whose colors collide — the assignment below takes
@@ -46,27 +47,24 @@
  * neighbouring hues.
  */
 export const REPO_TILE_COLORS = [
-	"#ff6f7a", // red
-	"#79a300", // leaf
-	"#00b2f4", // azure
-	"#df55b4", // plum
-	"#c89f00", // gold
-	"#00a7ab", // teal
-	"#c281ff", // violet
-	"#dd7000", // amber
-	"#00c285", // emerald
-	"#6887ff", // indigo
+	"#c73f15", // vermilion
+	"#007914", // green
+	"#0075d2", // azure
+	"#ad215f", // raspberry
+	"#7c7900", // olive
+	"#006f83", // petrol
+	"#a546af", // orchid
+	"#885700", // bronze
+	"#008877", // emerald
+	"#6349c1", // violet
 ];
 
 /**
- * The letter a tile carries, on every one of those colors. Near-black rather
- * than pure black so it sits on the tile instead of punching through it, and
- * one ink for the whole palette rather than per-color — a row of tiles where
- * some letters are dark and some light reads as a mistake.
- *
- * Mirrored in the web tile (RepoTile.tsx) and the native one, like the colors.
+ * The letter a tile carries, on every one of those colors — see the note
+ * above about what that costs the palette. Mirrored in the web tile
+ * (RepoTile.tsx) and the native one, like the colors.
  */
-export const REPO_TILE_INK = "#1c1c1e";
+export const REPO_TILE_INK = "#ffffff";
 
 /**
  * How far apart consecutive slots sit on the hue wheel, and the stride that
@@ -101,11 +99,17 @@ const LEGACY_PALETTES: Array<{ colors: string[]; toCurrent: number[] }> = [
 			"#959100", "#4c72cf", "#c97500", "#0085a2"],
 		toCurrent: [0, 8, 3, 1, 9, 4, 2, 7, 5, 3, 8, 6, 1, 9, 7, 2],
 	},
-	// The ten muted-but-bright ones this replaced: same ten hues, same order,
-	// so every slot keeps its own.
+	// The two ten-color palettes this replaced. Both were laid out slot for
+	// slot the way this one is, so a choice keeps its position in the picker —
+	// which is what someone picked, more than the exact hue.
 	{
 		colors: ["#d86069", "#628500", "#0098d0", "#b04e90", "#ab8700", "#00888c",
 			"#a371d3", "#b65b00", "#00a671", "#566fcf"],
+		toCurrent: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+	},
+	{
+		colors: ["#ff6f7a", "#79a300", "#00b2f4", "#df55b4", "#c89f00", "#00a7ab",
+			"#c281ff", "#dd7000", "#00c285", "#6887ff"],
 		toCurrent: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
 	},
 ];

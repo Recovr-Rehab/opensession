@@ -15,24 +15,24 @@
  */
 
 export const REPO_TILE_COLORS = [
-	"#ff6f7a", // red
-	"#79a300", // leaf
-	"#00b2f4", // azure
-	"#df55b4", // plum
-	"#c89f00", // gold
-	"#00a7ab", // teal
-	"#c281ff", // violet
-	"#dd7000", // amber
-	"#00c285", // emerald
-	"#6887ff", // indigo
+	"#c73f15", // vermilion
+	"#007914", // green
+	"#0075d2", // azure
+	"#ad215f", // raspberry
+	"#7c7900", // olive
+	"#006f83", // petrol
+	"#a546af", // orchid
+	"#885700", // bronze
+	"#008877", // emerald
+	"#6349c1", // violet
 ];
 
 /**
- * The letter every tile carries. The palette is bright enough that a white
- * letter would be the thing holding it back — these run 4.9–7.3:1 against
- * this ink — so the two belong together: don't lighten one without the other.
+ * The letter every tile carries. It is what keeps the palette deep: these run
+ * 4.4–6.7:1 against it, and a lighter set would take the letter with it — so
+ * the two move together, here and in the server and native copies.
  */
-export const REPO_TILE_INK = "#1c1c1e";
+export const REPO_TILE_INK = "#ffffff";
 
 /** Colors the server assigned, by repo id. */
 const assigned = new Map<string, string>();

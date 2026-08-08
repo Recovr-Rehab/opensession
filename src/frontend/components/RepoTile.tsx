@@ -66,8 +66,8 @@ export function RepoTile({
 		);
 	}
 	style.background = repoColor(name);
-	// Inline, over legacy.css's white: the palette is bright enough that the
-	// letter is dark ink, and the two are set together (lib/repo-colors).
+	// From the same module as the color, because the two are chosen together
+	// (see REPO_TILE_INK) — not left to legacy.css, which would drift.
 	style.color = REPO_TILE_INK;
 	const letter = repoLetter(name);
 	return (
