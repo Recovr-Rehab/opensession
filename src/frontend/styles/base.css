@@ -1341,3 +1341,99 @@ a.pr-ref:hover {
 .wiki-doc a {
 	color: var(--link);
 }
+
+/* ── Keyframes the markup reaches directly ───────────────────
+   These are referenced only from Tailwind utilities in the components —
+   `animate-[preview-spin_0.7s_linear_infinite]`, or the longhand
+   `[animation:session-info-in_var(--dur)_var(--ease)]` — so there is no CSS
+   rule left in legacy.css to carry them, and that file is being emptied.
+   Grep for BOTH spellings before assuming one of these is unused: the
+   underscores in an arbitrary value hide the name from a naive search. */
+
+@keyframes composer-agents-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.35; }
+}
+
+@keyframes preview-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Deploy is on its way but butler hasn't posted the preview URL yet — there's
+   nothing to link to, so the globe just breathes (a skeleton-style shimmer) in
+   a muted tone to read as "loading" until the amber Building link takes over. */
+@keyframes staging-shimmer {
+	0%,
+	100% {
+		opacity: 0.35;
+	}
+	50% {
+		opacity: 0.85;
+	}
+}
+
+@keyframes session-edge-fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/* Was nested inside `@media (max-width: 720px)` in legacy.css. Top level here,
+   which is equivalent: the only thing that uses it is INFO_PAGE, and that page
+   renders solely when `useIsPhone()` is true, so the element cannot exist at a
+   width where this would have been undefined. Un-nesting also removes a trap —
+   a media-scoped keyframe whose consumer is not scoped the same way animates
+   nothing, silently. */
+@keyframes session-info-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes session-tabs-fade-start {
+	from {
+		--tabs-fade-start: 0px;
+	}
+	to {
+		--tabs-fade-start: 24px;
+	}
+}
+
+@keyframes session-tabs-fade-end {
+	from {
+		--tabs-fade-end: 24px;
+	}
+	to {
+		--tabs-fade-end: 0px;
+	}
+}
+
+@keyframes tab-drop-slot-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes update-toast-in {
+	from {
+		opacity: 0;
+		transform: translateY(12px) scale(0.97);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}

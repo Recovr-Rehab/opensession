@@ -1228,22 +1228,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	inherits: false;
 	initial-value: 0px;
 }
-@keyframes session-tabs-fade-start {
-	from {
-		--tabs-fade-start: 0px;
-	}
-	to {
-		--tabs-fade-start: 24px;
-	}
-}
-@keyframes session-tabs-fade-end {
-	from {
-		--tabs-fade-end: 24px;
-	}
-	to {
-		--tabs-fade-end: 0px;
-	}
-}
 /* Each session tab's Reorder.Item wrapper — the draggable flex child. It hugs the
    pill inside it and never shrinks, so a full strip scrolls rather than squishes.
    position:relative lets whileDrag's z-index lift the dragged tab over siblings. */
@@ -1322,14 +1306,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		0 0 0 1px var(--border),
 		0 8px 20px rgba(0, 0, 0, 0.22);
 	cursor: grabbing;
-}
-@keyframes tab-drop-slot-in {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
-	}
 }
 
 /* Right-click swatch menu — a floating row of color chips anchored at the
@@ -1572,21 +1548,6 @@ body.resizing-tab-split {
 	border-color: rgba(13, 148, 136, 0.5);
 }
 
-/* Deploy is on its way but butler hasn't posted the preview URL yet — there's
-   nothing to link to, so the globe just breathes (a skeleton-style shimmer) in
-   a muted tone to read as "loading" until the amber Building link takes over. */
-@keyframes staging-shimmer {
-	0%,
-	100% {
-		opacity: 0.35;
-	}
-	50% {
-		opacity: 0.85;
-	}
-}
-.staging-shimmer {
-	animation: staging-shimmer 1.4s ease-in-out infinite;
-}
 /* The staging globe rides in the header's icon cluster, 2px from the ⋯, so it
    takes the same 32px square box as the share / ⋯ / panel buttons rather than
    the padding-derived 35×31 it used to size itself to. Its glyph stays a touch
@@ -1596,12 +1557,6 @@ body.resizing-tab-split {
 	width: 32px;
 	height: 32px;
 	padding: 0;
-}
-
-@keyframes preview-spin {
-	to {
-		transform: rotate(360deg);
-	}
 }
 
 /* The panel portals into this app-level slot. `display: contents` dissolves the
@@ -1660,21 +1615,6 @@ body.resizing-tab-split {
 	min-height: 0;
 	margin-bottom: 5px;
 }
-/* Indeterminate running spinner (no determinate SVG) — centered in the 16px slot. */
-.wi-check-spin {
-	width: 13px;
-	height: 13px;
-	margin: 1.5px;
-	border-radius: 999px;
-	border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
-	border-top-color: currentColor;
-	animation: wi-check-spin 0.7s linear infinite;
-}
-@keyframes wi-check-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
 .diff-file-header {
 	display: flex;
 	align-items: center;
@@ -1710,15 +1650,6 @@ body.resizing-tab-split {
 }
 .diff-file-header:hover {
 	background: var(--hover);
-}
-
-.pr-number {
-	color: var(--text-dim);
-	text-decoration: none;
-	font-size: 13px;
-}
-.pr-number:hover {
-	color: var(--link);
 }
 
 .pr-review {
@@ -1837,14 +1768,6 @@ body.resizing-tab-split {
 		.viewer-messages {
 			scroll-timeline: --viewer-session-scroll y;
 		}
-	}
-}
-@keyframes session-edge-fade-in {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
 	}
 }
 
@@ -1994,16 +1917,6 @@ body.resizing-tab-split {
 	color: var(--yellow);
 	background: color-mix(in srgb, var(--yellow) 12%, transparent);
 }
-@keyframes update-toast-in {
-	from {
-		opacity: 0;
-		transform: translateY(12px) scale(0.97);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0) scale(1);
-	}
-}
 .restart-spinner {
 	width: 30px;
 	height: 30px;
@@ -2124,23 +2037,6 @@ body.resizing-tab-split {
 	background: #08080a;
 }
 
-.btn-send {
-	background: var(--accent);
-	color: var(--on-accent);
-	border: none;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	padding: 10px 18px;
-	font-size: 13px;
-	font-weight: 500;
-}
-.btn-send:disabled {
-	opacity: 0.4;
-	cursor: default;
-}
-.btn-send:not(:disabled):hover {
-	background: color-mix(in srgb, var(--text) 86%, var(--bg));
-}
-
 /* The queue is a flap that folds out from behind the composer: a dimmer
    panel inset from the composer's edges, rounded only on top, with its
    bottom tucked under the composer box (negative margin — the composer is
@@ -2166,10 +2062,6 @@ body.resizing-tab-split {
 	color: var(--text-faint);
 	font-size: 12px;
 	font-weight: 600;
-}
-@keyframes composer-agents-pulse {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.35; }
 }
 .composer-queue-list {
 	display: flex;
@@ -2425,19 +2317,6 @@ body.resizing-tab-split {
      shrinks it further) — let it scroll so the Start button is always reachable. */
 	min-height: 0;
 	overflow-y: auto;
-}
-
-.btn-back {
-	background: none;
-	border: none;
-	color: var(--text-dim);
-	font-size: 13px;
-	padding: 4px 8px;
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-}
-.btn-back:hover {
-	color: var(--text);
-	background: var(--hover);
 }
 
 /* ── Automations ─────────────────────────────────────────── */
@@ -2827,16 +2706,6 @@ body.resizing-tab-split {
 	.header-sessionbar .repo-tile {
 		flex-shrink: 0;
 	}
-	@keyframes session-info-in {
-		from {
-			opacity: 0;
-			transform: translateY(8px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
 	.session-info-topbar {
 		position: sticky;
 		top: 0;
@@ -3136,9 +3005,6 @@ body.resizing-tab-split {
 		gap: 10px;
 	}
 
-	.btn-send {
-		padding: 10px 14px;
-	}
 	.composer-toolbar {
 		gap: 6px;
 	}
