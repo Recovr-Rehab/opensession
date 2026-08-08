@@ -27,6 +27,8 @@ import type { WSClientMessage, WSServerMessage } from "../lib/types";
 import type { MentionKind } from "./NoteEditor";
 import { PRODUCT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { LoadingState } from "../ui/state";
+import { cn } from "../ui/cn";
+import { NOTE_CHIP, NOTE_CHIP_TONE } from "../lib/note-chip-classes";
 
 const NoteEditor = lazy(() => import("./NoteEditor"));
 
@@ -644,7 +646,7 @@ function NotePane({
 					{backlinks.map((b) => (
 						<button
 							key={b.id}
-							className="note-chip note-chip-note cursor-pointer border-0"
+							className={cn(NOTE_CHIP, NOTE_CHIP_TONE.note, "border-0")}
 							onClick={() => onOpenMention("note", b.id)}
 							title={`Open “${b.title}”`}
 						>

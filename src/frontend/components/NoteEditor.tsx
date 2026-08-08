@@ -22,6 +22,7 @@ import {
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { UndoManager } from "yjs";
 import { createNoteSync, type NoteSync } from "../lib/notes-sync";
+import { NOTE_CHIP, NOTE_CHIP_TONE } from "../lib/note-chip-classes";
 import { fetchWikiTree } from "../lib/api";
 import type { WSClientMessage, WSServerMessage } from "../lib/types";
 
@@ -72,7 +73,7 @@ class ChipWidget extends WidgetType {
 	}
 	toDOM() {
 		const span = document.createElement("span");
-		span.className = `note-chip note-chip-${this.kind}`;
+		span.className = `${NOTE_CHIP} ${NOTE_CHIP_TONE[this.kind]}`;
 		span.textContent = `${ICON[this.kind]} ${this.label}`;
 		span.title = `${this.kind}: ${this.target}`;
 		span.addEventListener("mousedown", (e) => {
@@ -311,7 +312,7 @@ export function NoteEditor({
 		};
 	}, [noteId, user, send, addHandler]);
 
-	return <div className="note-cm" ref={hostRef} />;
+	return <div className="min-h-0 flex-1 overflow-hidden" ref={hostRef} />;
 }
 
 export default NoteEditor;

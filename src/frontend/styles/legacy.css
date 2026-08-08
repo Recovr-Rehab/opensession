@@ -860,56 +860,6 @@
 	}
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Notes — shared collaborative editor (merged with the Docs wiki)
-   ───────────────────────────────────────────────────────────── */
-.notes {
-	flex: 1;
-	display: flex;
-	min-height: 0;
-}
-.note-cm {
-	flex: 1;
-	min-height: 0;
-	overflow: hidden;
-}
-
-/* Inline @-mention chips */
-.note-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
-	padding: 1px 7px;
-	margin: 0 1px;
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	font-size: 12px;
-	font-family: var(--sans);
-	cursor: pointer;
-	white-space: nowrap;
-	vertical-align: baseline;
-	border: 1px solid transparent;
-}
-.note-chip-session {
-	background: var(--blue-soft);
-	color: var(--blue);
-	border-color: color-mix(in srgb, var(--blue) 30%, transparent);
-}
-.note-chip-note {
-	background: var(--green-soft);
-	color: #7ee094;
-	border-color: rgba(63, 185, 80, 0.3);
-}
-.note-chip-doc {
-	background: rgba(163, 113, 247, 0.14);
-	color: #c4a6ff;
-	border-color: rgba(163, 113, 247, 0.3);
-}
-.note-chip:hover {
-	filter: brightness(1.15);
-}
-
-/* Spinner used in the prompt bar */
-
 /* ── Settings page (full-window: sub-nav + scrolling body) ──────────────── */
 .settings-page {
 	display: flex;

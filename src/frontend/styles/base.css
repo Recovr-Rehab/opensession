@@ -488,15 +488,6 @@ html[data-theme="light"] .markdown pre {
 html[data-theme="light"] .markdown pre code {
 	color: inherit;
 }
-html[data-theme="light"] .note-chip-session {
-	color: var(--blue);
-}
-html[data-theme="light"] .note-chip-note {
-	color: #1a7f37;
-}
-html[data-theme="light"] .note-chip-doc {
-	color: #6f42c1;
-}
 /* The command terminal pins a near-black background; in light mode that leaves
    dark text on dark. The text colors already re-theme via vars, so flip the
    surface to white and the terminal reads as a clean light well. */
