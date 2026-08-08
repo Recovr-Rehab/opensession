@@ -1137,33 +1137,13 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	}
 }
 
-.sidebar-item {
-	display: block;
-	width: 100%;
-	text-align: left;
-	background: none;
-	border: none;
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	/* Compact rows: a tight but still-clickable hit target. The left
-	   padding lands the leading icon on the same column as the group-header
-	   icons above it (list pad-left 6 + 10 = 16), so a row's status mark sits
-	   directly under its lane's icon; the right padding lands the trailing
-	   time/number flush under the header's filter/＋ buttons. */
-	padding: 9px 8px 9px 10px;
-	color: var(--text);
-	position: relative;
-}
 
 /* 2px of breathing room between list rows — covers both the swipe-wrapped
    rows (workspace + session) and the bare rows (PR / support). The inner
    .sidebar-item of a swipe row must not add its own margin, or wrapped rows
    would gap twice. */
-.sidebar-swipe-row,
-.sidebar-item {
+.sidebar-swipe-row {
 	margin-top: 2px;
-}
-.sidebar-swipe-row > .sidebar-item {
-	margin-top: 0;
 }
 
 /* Drag-to-reorder wrapper around each Pinned row (Motion Reorder.Item). While
@@ -1232,73 +1212,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 		background: var(--hover);
 	}
 }
-
-/* Other people's sessions stack a "name · time" meta line under the title, so
-   the row is already two lines tall. Trim the vertical padding — otherwise the
-   full 9px top/bottom on each row leaves a big gap between them. */
-.sidebar-item--twoline {
-	padding-top: 7px;
-	padding-bottom: 7px;
-}
-
-/* Pin + archive actions — hover-revealed on desktop. On hover they take the
-   metadata's place at the far right so they don't crowd the title. */
-.sidebar-item-x,
-.sidebar-item-pin {
-	display: none;
-	position: absolute;
-	top: 50%;
-	transform: translateY(-50%);
-	width: 26px;
-	height: 26px;
-	align-items: center;
-	justify-content: center;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	font-size: 15px;
-	line-height: 1;
-	color: var(--text-faint);
-	/* Long titles run under this spot — opaque row-hover bg with a soft left
-	   feather so the icon never sits on top of text. */
-	background: var(--bg-hover);
-	box-shadow: -6px 0 5px -2px var(--bg-hover);
-}
-.sidebar-item-x {
-	right: 7px;
-}
-.sidebar-item-pin {
-	right: 35px;
-}
-.sidebar-item-selected .sidebar-item-x,
-.sidebar-item-selected .sidebar-item-pin {
-	background: var(--bg-active);
-	box-shadow: -6px 0 5px -2px var(--bg-active);
-}
-.sidebar-item:hover .sidebar-item-x,
-.sidebar-item:hover .sidebar-item-pin {
-	display: flex;
-}
-/* Step the inline meta aside on hover so the archive button can sit where it was
-   without overlapping it. Only the inline meta shares the title row (far right,
-   under the button) — the block meta lives on its own line below the title, so it
-   stays readable; just reserve room on the right so it clears the button. */
-.sidebar-item:hover .sidebar-item-inline-meta {
-	opacity: 0;
-}
-.sidebar-item:hover .sidebar-item-meta {
-	padding-right: 58px;
-}
-/* Support rows carry the workspace-style cluster instead — a single button, so
-   they only need to clear ~39px. Hands the difference back to the customer name,
-   which is the first thing to truncate on these rows. */
-.sidebar-item:has(> .sidebar-ws-actions):hover .sidebar-item-meta {
-	padding-right: 46px;
-}
-.sidebar-item-x:hover,
-.sidebar-item-pin:hover,
-.sidebar-item-pin.is-on {
-	color: var(--text);
-	background: var(--bg-active);
-}
 /* Mobile swipe row shell. Swipe left reveals Archive; swipe right reveals Star.
    Long-press still opens the full action sheet. */
 .sidebar-swipe-row {
@@ -1306,43 +1219,9 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	overflow: hidden;
 	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
 }
-.sidebar-swipe-row > .sidebar-item {
-	position: relative;
-	z-index: 1;
-	transform: translateX(var(--swipe-x, 0));
-	transition: transform var(--dur) var(--ease);
-	touch-action: pan-y;
-	/* No will-change here: it promoted EVERY sidebar row to its own compositor
-	   layer (dozens of retina-sized layers just sitting in the list), a real
-	   GPU-memory tax on loaded machines. */
-}
-/* ...but the ONE row under an active drag (or settling after it) does get its
-   own layer. "Implicit promotion by the transform" didn't hold on iOS: without
-   will-change each touchmove re-rasterized the row on the main thread, so the
-   swipe visibly chugged after 4cbb585b. Scoped to is-dragging/is-open the idle
-   list still holds zero extra layers. */
-.sidebar-swipe-row.is-dragging > .sidebar-item,
-.sidebar-swipe-row.is-open > .sidebar-item {
-	will-change: transform;
-}
-.sidebar-swipe-row > .sidebar-item:hover {
-	background: var(--hover);
-}
-.sidebar-swipe-row > .sidebar-item-selected {
-	background: var(--bg-active);
-}
-.sidebar-swipe-row > .sidebar-item-waiting {
-	background: var(--blue-soft);
-}
-.sidebar-swipe-row.is-open > .sidebar-item {
-	transition-duration: var(--dur-micro);
-}
-.sidebar-swipe-row.is-dragging > .sidebar-item,
 .sidebar-swipe-row.is-dragging > .sidebar-swipe-action {
 	transition: none;
 }
-.sidebar-swipe-row.is-open .sidebar-item-x,
-.sidebar-swipe-row.is-open .sidebar-item-pin,
 .sidebar-swipe-row.is-open .sidebar-ws-actions {
 	display: none;
 }
@@ -1385,38 +1264,16 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.sidebar-swipe-row.is-swipe-star > .sidebar-swipe-action--star {
 		display: flex;
 	}
-	.sidebar-item:hover:not(.sidebar-item-selected):not(.sidebar-item-waiting) {
-		background: none;
-	}
-	.sidebar-swipe-row > .sidebar-item:hover:not(.sidebar-item-selected):not(.sidebar-item-waiting) {
-		background: none;
-	}
-	.sidebar-item:hover .sidebar-item-x,
-	.sidebar-item:hover .sidebar-item-pin,
 	.sidebar-ws-row:hover .sidebar-ws-actions {
 		display: none;
-	}
-	.sidebar-item:hover .sidebar-item-inline-meta {
-		opacity: 1;
-	}
-	.sidebar-item:hover .sidebar-item-meta {
-		padding-right: 0;
 	}
 	.sidebar-ws-row:hover .sidebar-group-count {
 		display: inline-flex;
 	}
 }
 @media (max-width: 720px) {
-	.sidebar-item:hover .sidebar-item-x,
-	.sidebar-item:hover .sidebar-item-pin,
 	.sidebar-ws-row:hover .sidebar-ws-actions {
 		display: none;
-	}
-	.sidebar-item:hover .sidebar-item-inline-meta {
-		opacity: 1;
-	}
-	.sidebar-item:hover .sidebar-item-meta {
-		padding-right: 0;
 	}
 	.sidebar-ws-row:hover .sidebar-group-count {
 		display: inline-flex;
@@ -1522,32 +1379,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--border);
 	margin: 6px 10px;
 }
-.sidebar-item:hover {
-	background: var(--hover);
-}
-.sidebar-item-selected,
-.sidebar-item-selected:hover {
-	background: var(--hover-strong);
-}
-.sidebar-item-selected .sidebar-item-title {
-	color: var(--text);
-}
-
-.sidebar-item-top {
-	display: flex;
-	align-items: center;
-	/* Same gap as .sidebar-group-header and .sidebar-ws-row: with the shared
-	   .sidebar-rail slot in front, that's what puts every title on one rail. */
-	gap: 9px;
-	min-width: 0;
-}
-
-.sidebar-item-status {
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	flex-shrink: 0;
-}
 .sidebar-status-running {
 	/* Yellow to match the "In progress" lane — green means "In review". */
 	background: var(--yellow);
@@ -1560,82 +1391,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--blue);
 	box-shadow: 0 0 6px var(--blue);
 	animation: pulse 1.2s ease-in-out infinite;
-}
-
-/* A session blocked on an AskUserQuestion — draw the eye so it gets answered. */
-.sidebar-item-waiting {
-	background: var(--blue-soft);
-}
-.sidebar-item-waiting:hover {
-	background: var(--blue-soft);
-}
-.sidebar-item-waiting .sidebar-item-title {
-	font-weight: 600;
-}
-
-/* Read conversations stay quiet. Unread ones brighten + embolden like Slack;
-	 unlike a blocked session, they don't also need an attention dot. */
-.sidebar-item-unread .sidebar-item-title {
-	font-weight: 600;
-	color: var(--text);
-}
-.sidebar-item-unread .sidebar-item-inline-meta,
-.sidebar-item-unread .sidebar-item-meta {
-	color: var(--text-dim);
-}
-
-.sidebar-item-title {
-	font-size: 14px;
-	font-weight: 500;
-	color: var(--text-dim);
-	line-height: 1.35;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-}
-
-/* Inline rename input in a sidebar row — matches the title's type. */
-.sidebar-item-rename {
-	font-size: 14px;
-	font-weight: 500;
-	font-family: inherit;
-	color: inherit;
-	background: var(--bg);
-	border: 1px solid var(--accent, #6b8afd);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	padding: 0 3px;
-	min-width: 0;
-	flex: 1;
-	outline: none;
-}
-
-.sidebar-item-meta {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	margin-top: 3px;
-	font-size: 12px;
-	color: var(--text-faint);
-	white-space: nowrap;
-	overflow: hidden;
-}
-
-/* Own sessions collapse to one line: the timestamp (+ any PR/Linear badge) rides
-   to the right of the title, flush with the row edge. On hover it fades and the
-   archive button takes its place (see .sidebar-item-x). */
-.sidebar-item-inline-meta {
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 4px;
-	margin-left: auto;
-	padding-left: 10px;
-	min-width: 40px;
-	font-size: 12px;
-	color: var(--text-faint);
-	white-space: nowrap;
-	flex-shrink: 0;
 }
 
 .sidebar-meta-sep {
@@ -4242,78 +3997,6 @@ body.resizing-panel .panel-resize::after {
 	background: transparent;
 	overflow: hidden;
 }
-.check-success-text {
-	color: var(--green);
-}
-.check-failure-text {
-	color: var(--red);
-}
-.check-pending-text {
-	color: var(--yellow);
-}
-
-.pr-check {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 4px 6px;
-	color: var(--text);
-	font-size: 13px;
-	border-top: 0;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	transition: background var(--dur-micro) var(--ease);
-}
-.pr-check:hover {
-	background: var(--hover);
-}
-.pr-check-main {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex: 1;
-	min-width: 0;
-	color: inherit;
-	text-decoration: none;
-}
-.pr-check-mark {
-	width: 14px;
-	text-align: center;
-	flex-shrink: 0;
-	font-size: 13px;
-}
-.pr-check-mark-pending {
-	animation: pulse 1.4s infinite;
-}
-
-.pr-checks-group {
-	font-size: 13px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	color: var(--text-faint);
-	padding: 0 0 6px;
-	border-top: 0;
-}
-
-.pr-check-name {
-	flex: 1;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.pr-check-duration {
-	color: var(--text-faint);
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-}
-
-.pr-check-open {
-	color: var(--text-faint);
-	font-size: 14px;
-}
-.pr-check:hover .pr-check-open {
-	color: var(--text);
-}
 
 .pr-comments {
 	border: 0;
@@ -4407,71 +4090,6 @@ body.resizing-panel .panel-resize::after {
 .pr-comment-row:hover .pr-comment-add,
 .pr-comment-add:focus-visible {
 	opacity: 1;
-}
-.pr-git-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 4px 8px;
-	font-size: 13px;
-	color: var(--text);
-}
-/* A state dot, not a step marker: the old hollow 11px ring read as an
-   unchecked radio, so a stack of them looked like a checklist that never
-   completes. Small and filled with the row's own state colour instead. */
-.pr-git-dot {
-	width: 6px;
-	height: 6px;
-	margin-inline: 2px;
-	border-radius: 50%;
-	background: var(--text-faint);
-	flex-shrink: 0;
-}
-.pr-git-dot-green {
-	background: var(--green);
-}
-.pr-git-dot-yellow {
-	background: var(--yellow);
-}
-.pr-git-dot-red {
-	background: var(--red);
-}
-.pr-git-dot-blue {
-	background: var(--blue);
-}
-.pr-git-dot-purple {
-	background: var(--purple);
-}
-.pr-git-label {
-	flex: 1;
-	white-space: normal;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.pr-git-action {
-	background: none;
-	border: none;
-	color: var(--text-dim);
-	font-size: 12px;
-	font-weight: 600;
-	padding: 2px 0 2px 8px;
-	cursor: pointer;
-	white-space: nowrap;
-}
-.pr-git-action:hover:not(:disabled) {
-	color: var(--text);
-}
-.pr-git-action:disabled {
-	opacity: 0.6;
-	cursor: default;
-}
-.pr-git-note {
-	padding: 2px 0 6px 19px;
-	font-size: 11px;
-	color: var(--text-faint);
-}
-.pr-git-note-error {
-	color: var(--red);
 }
 
 .pr-body {
@@ -4614,67 +4232,6 @@ body.resizing-panel .panel-resize::after {
 	font-size: 12px;
 	color: var(--accent);
 	white-space: nowrap;
-}
-.prc-chevron {
-	color: var(--text-faint);
-	font-size: 10px;
-}
-.prc-checks-counts {
-	display: inline-flex;
-	gap: 8px;
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-}
-
-/* Checks rollup row — the whole card body when collapsed (Linear's "All passed"). */
-.prc-summary-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	background: none;
-	border: none;
-	padding: 5px 6px;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	cursor: pointer;
-	font: inherit;
-	color: var(--text);
-	text-align: left;
-	transition: background var(--dur-micro) var(--ease);
-}
-.prc-summary-row:hover {
-	background: var(--hover);
-}
-.prc-summary-mark {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 16px;
-	flex-shrink: 0;
-	font-size: 11px;
-}
-.prc-summary-mark svg {
-	display: block;
-}
-.prc-mark-pending {
-	animation: pulse 1.4s infinite;
-}
-.prc-summary-label {
-	flex: 1;
-	min-width: 0;
-	font-size: 12px;
-	font-weight: 600;
-}
-
-/* Tone helpers shared by reviewer state, git dots, check rollups. */
-.prc-tone-green {
-	color: var(--green);
-}
-.prc-tone-red {
-	color: var(--red);
-}
-.prc-tone-yellow {
-	color: var(--yellow);
 }
 .pr-guide-section {
 	margin-bottom: 28px;
@@ -5420,15 +4977,11 @@ body.resizing-panel .panel-resize::after {
 	background: #5b7cfa;
 	opacity: 0.9;
 }
+
 /* Human turns sit on the right (assistant stays left). row-reverse keeps the
    identity dot on the outer edge, mirroring the assistant label. */
-.msg-label-user,
-.msg-label-human {
+.msg-label-user {
 	flex-direction: row-reverse;
-}
-.msg-user .msg-images,
-.msg-human .msg-images {
-	justify-content: flex-end;
 }
 
 .msg-body {
@@ -5456,45 +5009,7 @@ body.resizing-panel .panel-resize::after {
 	background: rgba(0, 0, 0, 0.01);
 }
 
-.msg-body-user {
-	display: inline-block;
-	/* Cap short of the column so a long message still reads right-aligned;
-	   assistant text keeps the full column. */
-	max-width: min(600px, 90%);
-	/* Shrink-wrap the bubble as a flex item (inline-block blockifies there);
-	   human turns hug the right edge, assistant text stays left. */
-	align-self: flex-end;
-	background: var(--bg-panel);
-	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-	padding: 10px 14px;
-	color: var(--text);
-}
-
 .msg-body-assistant {
-	color: var(--text);
-}
-
-/* Human-in-the-loop: a teammate's reply routed back into the session. Distinct
-   from the driver's own neutral bubbles — a warm teal, to read as someone
-   else stepping in. */
-.msg-human {
-	/* 4px, not 22px: flex margins don't collapse (see .msg-user). */
-	margin-top: 4px;
-}
-.msg-label-human {
-	color: #1f9e8a;
-}
-.msg-label-human::before {
-	border-radius: 50%;
-	background: linear-gradient(135deg, #28d3b4, #0f8f7a);
-}
-.msg-body-human {
-	display: inline-block;
-	max-width: min(600px, 90%);
-	align-self: flex-end;
-	background: rgba(31, 158, 138, 0.12);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	padding: 9px 14px;
 	color: var(--text);
 }
 
@@ -5508,28 +5023,6 @@ body.resizing-panel .panel-resize::after {
 	border-radius: calc(2px * var(--rf)); corner-shape: var(--cs);
 	background: var(--accent);
 	animation: pulse 1s ease-in-out infinite;
-}
-
-.msg-busy-inline {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	gap: 9px;
-	width: 100%;
-	max-width: var(--session-col);
-	margin-top: 2px;
-	padding: 5px 0;
-	color: var(--text-dim);
-	font-size: 12px;
-}
-
-.msg-system {
-	text-align: center;
-	/* `auto` left/right keeps this in the same centered column as user/assistant
-     bubbles — a bare `0` here pins it to the left edge and the pill reads
-     off-center against the conversation. Top margin 0: flex margins don't
-     collapse, the previous sibling's bottom margin already provides the gap. */
-	margin: 0 auto 12px;
 }
 .msg-system-text {
 	display: inline-block;
@@ -5557,22 +5050,12 @@ body.resizing-panel .panel-resize::after {
 	gap: 6px;
 	text-align: left;
 }
-.msg-system-glyph {
-	flex: none;
-	/* Optical: line-height 1.45 on 11.5px text leaves the cap sitting ~2px
-	   below the box top; nudge the glyph down to sit on the first line. */
-	margin-top: 2px;
-}
 /* Session recap (away-summary): 1-3 sentences, so left-aligned like toned
    notices, italic body with an upright "recap:" prefix — reads as the harness
    whispering a catch-up, not the model speaking. */
 .msg-system-text[data-recap] {
 	text-align: left;
 	font-style: italic;
-}
-.msg-recap-prefix {
-	font-style: normal;
-	font-weight: 600;
 }
 
 .msg-system-text[data-tone="error"] {
@@ -5900,16 +5383,6 @@ a.pr-ref:hover {
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-.automation-webhook-url {
-	font-size: 11px;
-	color: var(--text-dim);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-	flex: 1;
 }
 
 /* ── Terminal panel ──────────────────────────────────────── */
@@ -7140,54 +6613,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text);
 }
 
-.automations-empty {
-	text-align: center;
-	color: var(--text-dim);
-	padding: 48px 16px;
-}
-.automations-empty p {
-	margin: 0 0 8px;
-}
-.automations-empty-sub {
-	color: var(--text-faint);
-	font-size: 13px;
-}
-
-.automation-list {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-
-.automation-card {
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	padding: 14px 16px;
-}
-
-.automation-top {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-width: 0;
-}
-
-.automation-name {
-	font-weight: 600;
-	font-size: 14px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.automation-actions {
-	margin-left: auto;
-	display: flex;
-	gap: 6px;
-	flex-shrink: 0;
-}
-
 .auto-toggle {
 	width: 34px;
 	height: 19px;
@@ -7220,336 +6645,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	background: var(--green);
 }
 
-.automation-prompt {
-	color: var(--text-dim);
-	font-size: 13px;
-	line-height: 1.5;
-	margin: 9px 0;
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	-webkit-box-orient: vertical;
-	overflow: hidden;
-}
-
-.automation-meta {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px 14px;
-	font-size: 12px;
-	color: var(--text-faint);
-}
-
-.automation-cron {
-	background: var(--bg-active);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 1px 7px;
-	font-size: 11px;
-}
-
-.automation-session-link {
-	color: var(--link);
-	text-decoration: none;
-	cursor: pointer;
-}
-.automation-session-link:hover {
-	text-decoration: underline;
-}
-
-.automation-by {
-	margin-left: auto;
-}
-
-.automation-form {
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	padding: 18px;
-	margin-bottom: 18px;
-	display: flex;
-	flex-direction: column;
-	gap: 14px;
-}
-
-.automation-form-title {
-	font-weight: 600;
-	font-size: 14px;
-}
-
-.automation-form label {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	font-size: 12px;
-	font-weight: 500;
-	color: var(--text-dim);
-	flex: 1;
-}
-
-/* The fields themselves are ui/input's primitive now (Automations, Goals,
-   Actions, Security all render <Input>/<Select>/<Textarea>), so this block's
-   own plate is gone — it was a 7px corner against the form's 10px buttons.
-   Only the line-height stays: a multi-line brief needs paragraph leading, and
-   the utility scale doesn't set one. */
-.automation-form textarea {
-	line-height: 1.5;
-}
-
-.automation-form-row {
-	display: flex;
-	gap: 14px;
-}
-
-.automation-form-actions {
-	display: flex;
-	justify-content: flex-end;
-	gap: 10px;
-}
-
-/* ── Automations: list + right detail drawer (mirrors Reviews) ──────────────
-   The generic .automations/.automation-list/.automation-card classes above are
-   shared by Goals/Security/Actions/Archived, so this page has its own set. */
-
-.automations-page {
-	flex: 1;
-	min-height: 0;
-	min-width: 0;
-	display: flex;
-	position: relative;
-}
-.automations-page-main {
-	flex: 1;
-	min-width: 0;
-	overflow-y: auto;
-	padding: 28px 24px 60px;
-}
-.automations-page-inner {
-	max-width: 860px;
-	margin: 0 auto;
-}
-
-.automations-table {
-	display: flex;
-	flex-direction: column;
-	border-top: 1px solid var(--border);
-}
-.automations-row {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	width: 100%;
-	min-width: 0;
-	text-align: left;
-	background: none;
-	border: none;
-	border-bottom: 1px solid var(--border);
-	padding: 11px 10px;
-	cursor: pointer;
-	color: var(--text);
-	font: inherit;
-}
-.automations-row:hover {
-	background: var(--hover);
-}
-.automations-row.active {
-	background: var(--bg-active);
-}
-.automations-row-off .automations-row-main {
-	opacity: 0.55;
-}
-.automations-row-main {
-	flex: 1;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-}
-.automations-row-name {
-	font-size: 14px;
-	font-weight: 600;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.automations-row-trigger {
-	font-size: 11px;
-	color: var(--text-faint);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.automations-row-graph {
-	flex-shrink: 0;
-	display: flex;
-}
-.automations-row-next {
-	flex-shrink: 0;
-	width: 84px;
-	text-align: right;
-	font-size: 12px;
-	color: var(--text-faint);
-}
-
-/* Detail drawer (right side, Reviews-style). */
-.automations-drawer {
-	flex: 1 1 auto;
-	min-width: 0;
-	border-left: 1px solid var(--border);
-	background: var(--bg-panel);
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
-}
-.automations-drawer-head {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 12px 16px;
-	border-bottom: 1px solid var(--border);
-	flex-shrink: 0;
-}
-.automations-drawer-title {
-	min-width: 0;
-	font-size: 13px;
-	font-weight: 600;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.automations-drawer-actions {
-	margin-left: auto;
-	display: flex;
-	gap: 6px;
-	flex-shrink: 0;
-}
-.automations-drawer-close {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 28px;
-	height: 28px;
-	border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-	background: none;
-	border: none;
-	color: var(--text-dim);
-	cursor: pointer;
-	flex-shrink: 0;
-}
-.automations-drawer-close:hover {
-	background: var(--hover);
-	color: var(--text);
-}
-.automations-drawer-back {
-	display: none;
-	align-items: center;
-	gap: 7px;
-	background: none;
-	border: none;
-	padding: 4px 6px;
-	margin: -4px 0 -4px -2px;
-	font: inherit;
-	font-size: 14px;
-	font-weight: 500;
-	color: var(--text);
-	cursor: pointer;
-	flex-shrink: 0;
-}
-.automations-drawer-back svg {
-	color: var(--text-dim);
-}
-.automations-drawer-body {
-	flex: 1;
-	min-height: 0;
-	overflow-y: auto;
-	padding: 18px 20px 40px;
-	display: flex;
-	flex-direction: column;
-	gap: 14px;
-}
-.automations-drawer-section-label {
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--text-faint);
-}
-
-/* Inline edit hosted in the drawer: drop the form's card chrome — the drawer
-   body already provides the panel background and its own padding. */
-.automation-form.automation-form-inline {
-	background: none;
-	border: none;
-	border-radius: 0;
-	padding: 0;
-	margin-bottom: 0;
-}
-
-/* Drawer open: the list compresses to a narrow rail (Reviews-style). */
-.automations-page-has-detail .automations-page-main {
-	flex: 0 0 340px;
-	border-right: 1px solid var(--border);
-	padding: 16px 14px 40px;
-}
-.automations-page-has-detail .automations-page-inner {
-	max-width: none;
-}
-.automations-page-has-detail .automations-row-graph,
-.automations-page-has-detail .automations-row-next {
-	display: none;
-}
-.automations-page-has-detail .page-title {
-	font-size: 16px;
-}
-.automations-page-has-detail .page-header {
-	align-items: center;
-	margin-bottom: 14px;
-}
-
-/* Phones: the drawer takes the full width; Back returns to the list. */
-@media (max-width: 900px) {
-	.automations-page-has-detail .automations-page-main {
-		display: none;
-	}
-	.automations-drawer {
-		border-left: none;
-	}
-	.automations-drawer-back {
-		display: inline-flex;
-	}
-	.automations-drawer-close {
-		display: none;
-	}
-}
-
 @media (max-width: 560px) {
-	.automations-page-main {
-		padding: 20px 16px 48px;
-	}
-	.automations-page .page-header {
-		align-items: flex-start;
-		flex-direction: column;
-		gap: 14px;
-		margin-bottom: 20px;
-	}
-	.automations-row {
-		gap: 10px;
-		padding: 12px 4px;
-	}
-	.automations-row-main {
-		order: -1;
-	}
-	.automations-row-name {
-		font-size: 14px;
-	}
-	.automations-row-graph,
-	.automations-row-next {
-		display: none;
-	}
 	.auto-toggle {
 		flex-shrink: 0;
-	}
-	.automations-row .source-chip {
-		max-width: 92px;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 }
 
@@ -8701,16 +7799,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		flex-direction: column;
 		gap: 10px;
 	}
-	.automation-form-row {
-		flex-direction: column;
-		gap: 14px;
-	}
-	.automation-by {
-		display: none;
-	}
-	.automation-form input,
-	.automation-form textarea,
-	.automation-form select,
 	.wiki-search {
 		font-size: 16px;
 	}
@@ -8722,47 +7810,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		gap: 6px;
 	}
 
-	/* Automation cards: the single top row (toggle · name · chips · buttons)
-     starves the title of width on phones — wrap it instead. Title gets the
-     first line, chips flow after, actions drop to their own row. */
-	.automation-top {
-		flex-wrap: wrap;
-		row-gap: 8px;
-	}
-	.automation-name {
-		flex: 1 1 60%;
-		min-width: 0;
-		white-space: normal;
-		overflow-wrap: anywhere;
-	}
-	.automation-actions {
-		margin-left: 0;
-		width: 100%;
-	}
-
 	.msg-body {
 		font-size: 14px;
 		line-height: 24px;
-	}
-
-	/* ── iOS sizing: bigger text + touch targets on phones ──────
-	   Following iOS HIG — body copy sits nearer the 17px system size and
-	   interactive controls approach the 44pt minimum tap target. Everything
-	   here is scoped to phones; desktop keeps its tighter density. */
-
-	/* Session list (the primary nav) — larger titles + meta. Taller rows for
-	   touch, but the same tight horizontal insets as the base rule so leading
-	   icons align under their group header and trailing times land flush right. */
-	.sidebar-item {
-		padding: 13px 8px 13px 10px;
-	}
-	.sidebar-item-title,
-	.sidebar-item-rename {
-		font-size: 15px;
-	}
-	.sidebar-item-meta,
-	.sidebar-item-inline-meta {
-		font-size: 12px;
 	}
 	/* Pinned session tabs. */
 	.session-tab {
@@ -8888,10 +7938,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 }
 
-.automation-event {
-	color: #e3b341;
-}
-
 /* ── Phone page-stack polish ─────────────────────────────────────
    Refinements on top of the mobile-sizing rules above. Kept as its own
    media block (after them in source order, so equal-specificity selectors
@@ -8957,14 +8003,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		padding-right: 6px;
 		justify-content: flex-end;
 		text-align: right;
-	}
-	.sidebar-item-title,
-	.sidebar-item-rename {
-		font-size: 16px;
-	}
-	.sidebar-item-meta,
-	.sidebar-item-inline-meta {
-		font-size: 13px;
 	}
 
 	.composer {
@@ -9093,14 +8131,13 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		margin-right: 12px;
 		margin-left: 12px;
 	}
+	
 	/* Once the outer surfaces share a gutter, use one symmetric inner inset for
 	   every row family too. This keeps People, workspace/status, pinned, repo,
 	   support, and automation marks and trailing metadata on common rails. */
-	.sidebar-list .sidebar-group-header,
-	.sidebar-list .sidebar-item,
+.sidebar-list .sidebar-group-header,
 	.sidebar-independent-section .sidebar-band-toggle,
 	.sidebar-independent-section .sidebar-group-header,
-	.sidebar-independent-section .sidebar-item,
 	.sidebar-independent-section .sidebar-people-row {
 		padding-right: 4px;
 		padding-left: 4px;
@@ -9287,12 +8324,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .msg-sending {
 	opacity: 0.6;
 }
-/* The "sending…" status reads as a quiet aside, not a shouted label —
-   undo the uppercase/tracking the name part of .msg-label carries. */
-.msg-label .msg-label-status {
-	text-transform: none;
-	letter-spacing: normal;
-}
 .msg-sending .msg-label-user {
 	animation: sendingPulse 1.2s ease-in-out infinite;
 }
@@ -9306,33 +8337,19 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 }
 
+
 /* Inline images: markdown images, pasted images, and Read-of-image results */
-.msg-images,
 .tool-result-images {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
 	margin-top: 6px;
 }
-.tool-result-videos,
-.msg-videos {
+.tool-result-videos {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
 	margin-top: 6px;
-}
-/* Attachment chips on a settled message (composer card look, minus remove) */
-.msg-files {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	margin-top: 6px;
-}
-.msg-user .msg-files,
-.msg-human .msg-files,
-.msg-user .msg-videos,
-.msg-human .msg-videos {
-	justify-content: flex-end;
 }
 .msg-file-card {
 	padding-right: 10px;
@@ -10682,6 +9699,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	background: var(--hover);
 }
 
+
 /* Hover-revealed real timestamps. A message's time is a detail you go looking
    for, not something to read past on every turn — so it fades in while the
    message is hovered and costs nothing the rest of the time. Reveals are
@@ -10692,7 +9710,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
    Touch pointers never get a dead element: display:none outside
    hover-capable devices, where the assistant's time lives in the ⋯ menu
    instead. */
-.msg-hover-time,
 .turn-footer-time {
 	display: none;
 	font-size: 11px;
@@ -10702,56 +9719,24 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	user-select: none;
 }
 @media (hover: hover) {
-	.msg-hover-time,
 	.turn-footer-time {
 		display: block;
 		opacity: 0;
 		transition: opacity var(--dur-micro) var(--ease);
 	}
-	.msg-user-own {
-		/* Keeps the timestamp clear of the following transcript block. */
-		margin-bottom: 35px;
-	}
-	.msg-user-row:hover .msg-hover-time,
 	/* The answer and its footer are adjacent .transcript-window siblings
 	   (see TranscriptBlocks), so hovering either one reveals the time. */
-	.transcript-window:hover .turn-footer-time,
+.transcript-window:hover .turn-footer-time,
 	.transcript-window:hover + .transcript-window .turn-footer-time {
 		opacity: 1;
 	}
 }
+
 /* Same WebKit selection mask as .msg-label: a drag-select sweeping past an
    unselectable label paints a phantom highlight without it, and a fully
    transparent background is ignored (1% alpha sticks). */
-.msg-hover-time::selection,
 .turn-footer-time::selection {
 	background: rgba(0, 0, 0, 0.01);
-}
-
-/* Your own turns carry no label row, so their time sits just below the bubble.
-   It uses the message's existing bottom spacing rather than affecting layout,
-   which keeps virtual transcript measurements stable. */
-.msg-user-row {
-	position: relative;
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
-}
-.msg-user-row .msg-hover-time {
-	position: absolute;
-	top: calc(100% + 8px);
-	right: 0;
-	line-height: 1;
-}
-
-/* Short per-message timestamp in the label row (hover for the full time). */
-.msg-time {
-	margin-left: 6px;
-	font-size: 11px;
-	font-weight: 500;
-	color: var(--text-faint);
-	letter-spacing: 0;
-	cursor: default;
 }
 
 /* Workspace rows reuse the session-row look (.sidebar-item base: roomy padding,
@@ -10784,10 +9769,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	background: var(--bg-hover);
 	box-shadow: -6px 0 5px -2px var(--bg-hover);
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-}
-.sidebar-item-selected .sidebar-ws-actions {
-	background: var(--bg-active);
-	box-shadow: -6px 0 5px -2px var(--bg-active);
 }
 /* Hover-only reveal: swap the count/time cluster for the pin/archive actions
    when the pointer is over the row. Gated to real hover devices — on touch the
@@ -10837,20 +9818,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		   the space in the title instead, so it ellipsizes before the icons. */
 		background: none;
 		box-shadow: none;
-	}
-	.sidebar-ws-row.sidebar-archived-row .sidebar-item-title {
-		padding-right: 72px;
-	}
-}
-/* Support rows (bare .sidebar-item, two-line) borrow the same cluster for their
-   "mark done" button, so a ticket finishes with the same gesture a workspace
-   archives with. Hover-gated exactly like the workspace rows above: on touch the
-   sticky first-tap :hover would flash the button on a row whose tap means "open
-   the ticket". The shared .sidebar-item:hover .sidebar-item-meta padding already
-   steps the meta line clear of it. */
-@media (hover: hover) {
-	.sidebar-item:hover > .sidebar-ws-actions {
-		display: inline-flex;
 	}
 }
 /* Affirmative tint — this completes a ticket rather than filing it away. Equal
