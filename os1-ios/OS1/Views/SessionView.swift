@@ -1803,6 +1803,22 @@ private struct SessionInputBar: View {
         .padding(.bottom, -14)
     }
 
+    /// The composer's own outline. While the flap is open the two are ONE
+    /// piece rather than a pill parked on a panel: the flap keeps the rounded
+    /// top, the composer keeps the rounded bottom, and the seam where they
+    /// meet is square, so the queue reads as a section of the input instead
+    /// of a separate surface behind it.
+    private var composerShape: UnevenRoundedRectangle {
+        let top = hasQueueItems ? 0 : composerCornerRadius
+        return UnevenRoundedRectangle(
+            topLeadingRadius: top,
+            bottomLeadingRadius: composerCornerRadius,
+            bottomTrailingRadius: composerCornerRadius,
+            topTrailingRadius: top,
+            style: .continuous
+        )
+    }
+
     /// Shares the composer's own corner now that it shares its edges — a
     /// tighter radius on a box the same width read as a different surface.
     private var flapShape: UnevenRoundedRectangle {
@@ -1998,15 +2014,15 @@ private struct SessionInputBar: View {
         // shows around and below the pill, just not through it.
         .background(
             OS1VisualStyle.background.opacity(0.7),
-            in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+            in: composerShape
         )
         .background(
             .thickMaterial,
-            in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+            in: composerShape
         )
         #endif
         .glassSurface(
-            in: RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+            in: composerShape
         )
         #if os(iOS)
         // No focus ring: an accent-coloured border around the input read as a
@@ -2014,7 +2030,7 @@ private struct SessionInputBar: View {
         // surface and the caret are affordance enough — same call the web
         // composer made.
         .contentShape(
-            RoundedRectangle(cornerRadius: composerCornerRadius, style: .continuous)
+            composerShape
         )
         .simultaneousGesture(
             TapGesture().onEnded { inputFocused = true }
