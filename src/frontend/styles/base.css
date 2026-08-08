@@ -1216,3 +1216,128 @@ html[data-theme="light"] .md-mermaid {
 	opacity: 1;
 	background: rgba(0, 0, 0, 0.75);
 }
+
+/* ── Chips inside rendered markdown ──────────────────────────
+   Both of these style markup that lib/markdown.ts writes as an innerHTML
+   string, so there is no JSX to hang utilities on — the same case as
+   `.markdown` above, and the reason they live here rather than migrating.
+
+   Position in this file is load-bearing: `a.pr-ref` ties `.markdown a` on
+   specificity (0,1,1) and wins only by sitting later, so keep this block
+   below the `.markdown` rules. */
+
+/* A session reference rendered by markdown.ts as a clickable link into that
+   session (e.g. an orchestrator jumping into the worker it spawned). Labelled
+   with the session's title where we know it, so it reads as prose: a quiet
+   outlined chip in the running text colour, with a dim open-in affordance.
+   Deliberately not accent-coloured — a cross-reference is a destination, not
+   an alert, and the accent chip read as an error inside a sentence. Scoped on
+   the chip's data-session-id attribute: bare .session-link is ALSO the viewer
+   header's Linear/Plain pills (which carry their own literal ↗), and an
+   unscoped rule here clobbered them into mono accent chips with a second
+   arrow. */
+.session-link[data-session-id] {
+	font-size: 0.9em;
+	background: transparent;
+	border: 1px solid var(--border);
+	color: var(--text);
+	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
+	padding: 0.5px 6px;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	transition:
+		background var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease);
+}
+.session-link[data-session-id]::after {
+	content: " ↗";
+	color: var(--text-faint);
+}
+.session-link[data-session-id]:hover {
+	background: var(--hover);
+	border-color: var(--border-strong);
+	/* the chip lights up instead — .markdown a:hover would underline it, which
+	   reads as a text link striking through the chip's own border */
+	text-decoration: none;
+}
+/* A chip can still outgrow a phone-width message bubble (a long title, or a
+   `bks-<uuid>` fallback), where the nowrap above pushed it past the bubble's
+   edge. Let it fold there; box-decoration-break keeps each fragment a proper
+   chip. Wider viewports keep nowrap — with room to spare, a label splitting
+   across lines reads worse than moving the whole chip down a line. */
+@media (max-width: 560px) {
+	.session-link[data-session-id] {
+		white-space: normal;
+		overflow-wrap: anywhere;
+		-webkit-box-decoration-break: clone;
+		box-decoration-break: clone;
+	}
+}
+
+/* A pull-request reference (`#5528`) linked into our own review surface by
+   markdown.ts. Lighter than the session chip beside it: no border and no ↗,
+   because the label is five characters of running text, not a whole title,
+   and a sentence can carry several of them. A tinted token instead — enough
+   to read as a destination, quiet enough to sit inside a sentence. Not
+   accent-coloured, for the same reason the session chip isn't: the accent is
+   the alert colour here, and a red #5528 reads as a failure. Not scoped under
+   .markdown: the chip turns up in every surface that renders session
+   markdown, and a few of those containers don't carry that class. */
+a.pr-ref {
+	background: var(--hover);
+	color: var(--text);
+	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
+	padding: 0.5px 4px;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: background var(--dur-micro) var(--ease);
+}
+a.pr-ref:hover {
+	background: var(--hover-strong);
+	/* the token lights up instead — an underline reads as a strike through
+	   its own fill (same call as the session chip) */
+	text-decoration: none;
+}
+
+/* The line-number gutter shiki writes into highlighted output
+   (lib/shiki-engine.ts). Renderer-emitted, same as the chips above. The code
+   well overrides the colour for its own darker surface, from the markup. */
+.shiki-gutter {
+	color: var(--text-faint);
+	user-select: none;
+}
+
+/* ── Docs (`.markdown wiki-doc`) ─────────────────────────────
+   A wider, roomier variant of `.markdown` for a whole document rather than a
+   message: a longer measure and looser leading, with the heading scale reset
+   to suit a page that opens on an h1. `.wiki-doc` is a class on JSX, but
+   everything it styles is rendered markdown, so it belongs here beside
+   `.markdown` rather than becoming utilities.
+
+   These tie `.markdown`'s own heading rules on specificity (0,1,1) and win by
+   sitting later — keep them below that block. */
+.wiki-doc {
+	max-width: 780px;
+	font-size: 14px;
+	line-height: 1.65;
+}
+.wiki-doc h1 {
+	font-size: 22px;
+	margin: 0 0 14px;
+}
+.wiki-doc h2 {
+	font-size: 17px;
+	margin: 22px 0 10px;
+}
+.wiki-doc h3 {
+	font-size: 15px;
+	margin: 18px 0 8px;
+}
+.wiki-doc img {
+	max-width: 100%;
+	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
+}
+.wiki-doc a {
+	color: var(--link);
+}

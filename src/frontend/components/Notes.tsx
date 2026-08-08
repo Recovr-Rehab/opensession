@@ -133,7 +133,10 @@ function WikiTree({
 			if (p && /\.(md|mdx)$/.test(p)) onOpenRef.current(p);
 		},
 	});
-	return <FileTree model={model} className="wiki-filetree" />;
+	// `color-scheme: dark` is forced because the tree's own shadow styles use
+	// light-dark(). NB the app is no longer dark-only, so this pins the tree to
+	// its dark arm even under the light theme — pre-existing, left as-is here.
+	return <FileTree model={model} className="block h-full [color-scheme:dark]" />;
 }
 
 export function Notes({

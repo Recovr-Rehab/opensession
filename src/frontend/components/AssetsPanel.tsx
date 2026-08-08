@@ -120,7 +120,9 @@ function AssetsTree({
 			if (p && paths.includes(p)) onSelectRef.current(p);
 		},
 	});
-	return <FileTree model={model} className="wiki-filetree" />;
+	// Same forced dark color-scheme as the docs tree (Notes.tsx) — the tree's
+	// own shadow styles use light-dark() and would otherwise follow the OS.
+	return <FileTree model={model} className="block h-full [color-scheme:dark]" />;
 }
 
 const TEXT_CAP = 256 * 1024;

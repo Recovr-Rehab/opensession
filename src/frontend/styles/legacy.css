@@ -2032,84 +2032,11 @@ body.resizing-tab-split {
 	backdrop-filter: blur(2px);
 }
 
-/* A session reference rendered by markdown.ts as a clickable link into that
-   session (e.g. an orchestrator jumping into the worker it spawned). Labelled
-   with the session's title where we know it, so it reads as prose: a quiet
-   outlined chip in the running text colour, with a dim open-in affordance.
-   Deliberately not accent-coloured — a cross-reference is a destination, not
-   an alert, and the accent chip read as an error inside a sentence. Scoped on
-   the chip's data-session-id attribute: bare .session-link is ALSO the viewer
-   header's Linear/Plain pills (which carry their own literal ↗), and an
-   unscoped rule here clobbered them into mono accent chips with a second
-   arrow. */
-.session-link[data-session-id] {
-	font-size: 0.9em;
-	background: transparent;
-	border: 1px solid var(--border);
-	color: var(--text);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 0.5px 6px;
-	cursor: pointer;
-	text-decoration: none;
-	white-space: nowrap;
-	transition:
-		background var(--dur-micro) var(--ease),
-		border-color var(--dur-micro) var(--ease);
-}
-/* No title on hand, so the label is a shortened id — monospace, like any other
-   identifier in the transcript. */
-.session-link[data-session-id][data-session-label="id"] {
-}
-.session-link[data-session-id]::after {
-	content: " ↗";
-	color: var(--text-faint);
-}
-.session-link[data-session-id]:hover {
-	background: var(--hover);
-	border-color: var(--border-strong);
-	/* the chip lights up instead — .markdown a:hover would underline it, which
-	   reads as a text link striking through the chip's own border */
-	text-decoration: none;
-}
 /* A chip can still outgrow a phone-width message bubble (a long title, or a
    `bks-<uuid>` fallback), where the nowrap above pushed it past the bubble's
    edge. Let it fold there; box-decoration-break keeps each fragment a proper
    chip. Wider viewports keep nowrap — with room to spare, a label splitting
    across lines reads worse than moving the whole chip down a line. */
-@media (max-width: 560px) {
-	.session-link[data-session-id] {
-		white-space: normal;
-		overflow-wrap: anywhere;
-		-webkit-box-decoration-break: clone;
-		box-decoration-break: clone;
-	}
-}
-
-/* A pull-request reference (`#5528`) linked into our own review surface by
-   markdown.ts. Lighter than the session chip beside it: no border and no ↗,
-   because the label is five characters of running text, not a whole title,
-   and a sentence can carry several of them. A tinted token instead — enough
-   to read as a destination, quiet enough to sit inside a sentence. Not
-   accent-coloured, for the same reason the session chip isn't: the accent is
-   the alert colour here, and a red #5528 reads as a failure. Not scoped under
-   .markdown: the chip turns up in every surface that renders session
-   markdown, and a few of those containers don't carry that class. It still
-   beats `.markdown a` on equal specificity by sitting later in the file. */
-a.pr-ref {
-	background: var(--hover);
-	color: var(--text);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 0.5px 4px;
-	text-decoration: none;
-	white-space: nowrap;
-	transition: background var(--dur-micro) var(--ease);
-}
-a.pr-ref:hover {
-	background: var(--hover-strong);
-	/* the token lights up instead — an underline reads as a strike through
-	   its own fill (same call as the session chip) */
-	text-decoration: none;
-}
 
 /* ── Home dashboard ──────────────────────────────────────── */
 
@@ -2195,11 +2122,6 @@ a.pr-ref:hover {
 	font-size: 11px;
 	line-height: 1.55;
 	background: #08080a;
-}
-
-.shiki-gutter {
-	color: var(--text-faint);
-	user-select: none;
 }
 
 .btn-send {
@@ -2555,47 +2477,6 @@ a.pr-ref:hover {
 	max-width: 920px;
 	width: 100%;
 	margin: 0 auto;
-}
-
-/* ── Wiki ────────────────────────────────────────────────── */
-
-.wiki {
-	flex: 1;
-	display: flex;
-	min-height: 0;
-}
-
-.wiki-filetree {
-	display: block;
-	height: 100%;
-	/* The tree's shadow styles use light-dark(); force the dark arm —
-     the app is dark-only regardless of OS preference */
-	color-scheme: dark;
-}
-
-.wiki-doc {
-	max-width: 780px;
-	font-size: 14px;
-	line-height: 1.65;
-}
-.wiki-doc h1 {
-	font-size: 22px;
-	margin: 0 0 14px;
-}
-.wiki-doc h2 {
-	font-size: 17px;
-	margin: 22px 0 10px;
-}
-.wiki-doc h3 {
-	font-size: 15px;
-	margin: 18px 0 8px;
-}
-.wiki-doc img {
-	max-width: 100%;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-}
-.wiki-doc a {
-	color: var(--link);
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
