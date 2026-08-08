@@ -184,6 +184,19 @@
 	--code-well-line: rgba(255, 255, 255, 0.06);
 	--code-well-ink: #b6bcc8;
 	--code-well-gutter: #565d6b;
+	/* Source chips — one tinted pill per session origin (slack / linear / ask).
+	   Tokens rather than a rule per source because the theme is the only thing
+	   about them that moves: these are light-on-dark, and light needs the same
+	   hue re-toned dark-on-light to stay legible. A token re-resolves under
+	   html[data-theme] on its own, where the pair of rules it replaced had to
+	   state every chip twice. The neutral origins (cli, automation) use
+	   --bg-active/--text-dim and need no token of their own. */
+	--chip-slack-bg: rgba(74, 21, 75, 0.55);
+	--chip-slack-fg: #d9a8db;
+	--chip-linear-bg: rgba(94, 106, 210, 0.25);
+	--chip-linear-fg: #9da6ee;
+	--chip-ask-bg: rgba(210, 153, 34, 0.18);
+	--chip-ask-fg: #e3b341;
 	--mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
 	--sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
 	--radius: 14px;
@@ -285,6 +298,13 @@ html[data-theme="light"] {
 	--code-well-line: #d8dee4;
 	--code-well-ink: #57606a;
 	--code-well-gutter: #8c959f;
+	/* Same hues as :root, re-toned dark-on-light — see the note there. */
+	--chip-slack-bg: rgba(122, 43, 124, 0.12);
+	--chip-slack-fg: #8a2b8c;
+	--chip-linear-bg: rgba(94, 106, 210, 0.14);
+	--chip-linear-fg: #4650c0;
+	--chip-ask-bg: rgba(210, 153, 34, 0.16);
+	--chip-ask-fg: #9a6700;
 }
 
 /* ── Motion ──────────────────────────────────────────────────
@@ -475,24 +495,6 @@ html[data-theme="light"] .note-chip-note {
 }
 html[data-theme="light"] .note-chip-doc {
 	color: #6f42c1;
-}
-/* Source chips (.source-slack/.linear/.backstage/.ask) use light-on-dark
-   colors for the dark theme; re-tone them to dark-on-light so they stay legible. */
-html[data-theme="light"] .source-slack {
-	background: rgba(122, 43, 124, 0.12);
-	color: #8a2b8c;
-}
-html[data-theme="light"] .source-linear {
-	background: rgba(94, 106, 210, 0.14);
-	color: #4650c0;
-}
-html[data-theme="light"] .source-backstage {
-	background: rgba(13, 148, 136, 0.14);
-	color: #0f766e;
-}
-html[data-theme="light"] .source-ask {
-	background: rgba(210, 153, 34, 0.16);
-	color: #9a6700;
 }
 /* The command terminal pins a near-black background; in light mode that leaves
    dark text on dark. The text colors already re-theme via vars, so flip the

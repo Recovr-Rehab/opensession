@@ -17,6 +17,7 @@ import { getCurrentUser } from "./UserPicker";
 import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { SOURCE_CHIP } from "../lib/source-chip-classes";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
@@ -275,7 +276,7 @@ export function Security({ onOpenSession }: Props) {
                     {s.repos.map(repoLabel).join(", ")}
                   </span>
                   {s.profileName && (
-                    <span className="source-chip" title="Scan profile">
+                    <span className={SOURCE_CHIP} title="Scan profile">
                       {s.profileName}
                     </span>
                   )}

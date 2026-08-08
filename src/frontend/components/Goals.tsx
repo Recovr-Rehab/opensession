@@ -20,6 +20,7 @@ import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { SOURCE_CHIP } from "../lib/source-chip-classes";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
@@ -358,7 +359,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
               <>
                 <div className="flex items-center gap-2.5">
                   <span
-                    className="source-chip"
+                    className={SOURCE_CHIP}
                     style={{ background: STATUS_COLOR[sel.status], color: "#fff" }}
                   >
                     {sel.status}

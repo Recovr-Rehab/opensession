@@ -139,6 +139,12 @@ import {
 } from "./icons";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
 import { PixelSpinner } from "./PixelSpinner";
+import {
+	SOURCE_CHIP,
+	SOURCE_CHIP_ARCHIVED,
+	SOURCE_CHIP_AUTOMATION,
+	sourceChipTone,
+} from "../lib/source-chip-classes";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import {
@@ -4115,7 +4121,7 @@ export function SessionViewer({
 					    sessions it read as the repo said twice. Only the unusual
 					    origins (slack/linear/cli) surface here. */}
 					{session.source !== "opensession" && (
-						<span className={`source-chip source-${session.source}`}>
+						<span className={cn(SOURCE_CHIP, sourceChipTone(session.source))}>
 							{session.source}
 						</span>
 					)}
@@ -4190,7 +4196,7 @@ export function SessionViewer({
 					{session.automation && (
 						<a
 							href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
-							className="source-chip source-automation"
+							className={cn(SOURCE_CHIP, SOURCE_CHIP_AUTOMATION)}
 							title={`Automation — open ${session.automation} settings`}
 						>
 							{automationLabel}
@@ -4245,7 +4251,11 @@ export function SessionViewer({
 					{session.archived && (
 						<button
 							type="button"
-							className="source-chip source-cli archived-chip"
+							className={cn(
+								SOURCE_CHIP,
+								sourceChipTone("cli"),
+								SOURCE_CHIP_ARCHIVED,
+							)}
 							onClick={handleArchive}
 							disabled={archiving}
 							title="Click to unarchive"

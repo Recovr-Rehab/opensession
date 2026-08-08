@@ -16,6 +16,7 @@ import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { SOURCE_CHIP } from "../lib/source-chip-classes";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageSection } from "../ui/page";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
@@ -186,7 +187,10 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
               </span>
               {a.confirm && (
                 <span
-                  className="source-chip max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis"
+                  className={cn(
+                    SOURCE_CHIP,
+                    "max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis",
+                  )}
                   title="Asks for a confirm before running"
                 >
                   confirm
