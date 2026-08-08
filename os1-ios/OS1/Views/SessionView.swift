@@ -2280,6 +2280,11 @@ private struct SessionInputBar: View {
         var onRetry: (() -> Void)?
         var onDelete: (() -> Void)?
 
+        /// Live drag state: how far the row rides the finger, and how much of
+        /// that travel has already been spent swapping with a neighbour.
+        @State private var dragTravel: CGFloat = 0
+        @State private var dragConsumed: CGFloat = 0
+
         /// Sentinels and routing prefixes stripped, plus the "who sent this"
         /// tag — the queue carries agent-to-agent deliveries, not just what
         /// the person typed.
@@ -2420,21 +2425,20 @@ private struct SessionInputBar: View {
                 // thumb's resting path and the primary action rightmost,
                 // directly above the composer's own send button.
                 //
-                // Single-stroke glyphs, so the three read as one set beside
-                // the arrow: a bin and a bare pencil were the two densest
-                // marks on a row whose point is the message. Discard is an
-                // `xmark` — the same dismissal the composer's attachments and
-                // the note-mode chip use, and honest about what happens (the
-                // message never reached the transcript, so nothing is being
-                // destroyed). Edit is the compose square, which unlike a lone
-                // pencil reads as "rewrite this message" rather than a
-                // generic annotation.
+                // Single-stroke glyphs, so the pair reads as one set. Discard
+                // is an `xmark` — the same dismissal the composer's
+                // attachments and the note-mode chip use, and honest about
+                // what happens (the message never reached the transcript, so
+                // nothing is being destroyed).
+                //
+                // Edit is NOT here: a third glyph on every row turned a queue
+                // of five messages into fifteen buttons, and it was the one
+                // action with an obvious gesture — the row itself. Tapping a
+                // message opens it, which is also the only way to read one the
+                // two-line clamp cut off.
                 HStack(spacing: 0) {
                     if let onDelete {
                         rowAction("xmark", "Discard message", onDelete)
-                    }
-                    if canEdit, let onEdit {
-                        rowAction("square.and.pencil", "Edit message", onEdit)
                     }
                     if let onRetry {
                         rowAction("arrow.clockwise", "Try again", onRetry)
@@ -2451,18 +2455,61 @@ private struct SessionInputBar: View {
                     Rectangle()
                         .fill(OS1VisualStyle.border.opacity(0.6))
                         .frame(height: 0.5)
-                        // Inset to the text column, the way a list separator
-                        // clears its row's leading icon — a markless queued
-                        // row starts its text at the row's own edge.
+                        // Inset to the row's own text column at both ends, the
+                        // way a list separator clears its row's leading icon.
+                        // Full-bleed hairlines cut the flap into a stack of
+                        // table cells now that it is part of the input box.
                         .padding(.leading, hasMark ? 34 : 12)
+                        .padding(.trailing, 12)
                 }
             }
-            // No whole-row tap: with an edit button right there, a stray tap
-            // on a message opening a modal is a trap, not a shortcut. The long
-            // press repeats the row's actions and adds reordering.
+            // The row IS the edit affordance now that the pencil is gone —
+            // and the only way to read a message the two-line clamp cut off.
+            // Rows with nothing to edit (a worker report, a GitHub FYI, a
+            // receipt) stay inert rather than opening a sheet on what they
+            // can't change.
             .contentShape(Rectangle())
+            .onTapGesture { if canEdit { onEdit?() } }
+            // Drag to reorder, without leaving for a menu: each row-height of
+            // travel swaps this message with its neighbour, and the row rides
+            // the finger for the remainder so the queue reorders live. The
+            // 12pt minimum keeps it clear of the tap above.
+            //
+            // simultaneousGesture, NOT gesture: as a plain `.gesture` this
+            // competes with the row's own tap and the context menu's press,
+            // and loses — the drag never recognised at all (verified in the
+            // simulator, zero onChanged callbacks).
+            .offset(y: dragTravel)
+            .zIndex(dragTravel == 0 ? 0 : 1)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { value in
+                        guard let onMove else { return }
+                        let travelled = value.translation.height
+                        while travelled - dragConsumed > Self.rowStep {
+                            dragConsumed += Self.rowStep
+                            onMove(1)
+                        }
+                        while travelled - dragConsumed < -Self.rowStep {
+                            dragConsumed -= Self.rowStep
+                            onMove(-1)
+                        }
+                        dragTravel = travelled - dragConsumed
+                    }
+                    .onEnded { _ in
+                        dragConsumed = 0
+                        withAnimation(.snappy(duration: 0.2)) { dragTravel = 0 }
+                    },
+                including: onMove == nil ? .subviews : .all
+            )
             .contextMenu { rowActions }
         }
+
+        /// How far a drag has to travel before this message trades places with
+        /// the one next to it. Rows are one or two lines, so there is no exact
+        /// answer; a step near the shorter height reorders promptly without
+        /// skipping past a neighbour.
+        private static let rowStep: CGFloat = 56
 
         /// One control in the row's trailing cluster. 40x32 of hit area around
         /// a 16pt glyph: these are peers of the composer's own buttons a few

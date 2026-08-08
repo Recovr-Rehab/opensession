@@ -1604,6 +1604,9 @@ body.resizing-tab-split {
 }
 .composer-queue-item {
 	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
 	min-height: calc(13px * 1.45);
 }
 .composer-queue-item + .composer-queue-item {
@@ -1619,19 +1622,22 @@ body.resizing-tab-split {
 .composer-queue-item.is-draggable:active {
 	cursor: grabbing;
 }
-/* Actions hover over the message's top-right corner. The content reserves
-   their width, so the group itself can stay transparent. */
+/* In flow at the row's trailing edge, so each row reserves exactly the width
+   its own actions need. It used to be absolutely positioned over a fixed
+   128px of padding on the content, which fitted the three-glyph rows and
+   clipped the ones carrying a pill ("Steered", "Queueing…") into the text.
+   The negative block margins keep the 40px cluster from setting the height of
+   a row whose point is a single line of message. */
 .composer-queue-actions {
-	position: absolute;
-	top: -11px;
-	right: 0;
+	/* Written before the message in the markup (it owns the row's controls),
+	   painted after it. */
+	order: 1;
 	z-index: 1;
 	display: inline-flex;
 	align-items: center;
 	gap: 2px;
-}
-.composer-queue-item + .composer-queue-item .composer-queue-actions {
-	top: -3px;
+	flex-shrink: 0;
+	margin-block: -11px -10px;
 }
 /* Same 40px box, 10px corner and inset hover wash as the composer's own
    toolbar buttons right below them (.palette-icon-btn) — these are peers of
@@ -1715,8 +1721,7 @@ body.resizing-tab-split {
 	align-items: flex-start;
 	gap: 8px;
 	min-width: 0;
-	/* Reserves the trailing action cluster: 3 × 40px + two 2px gaps. */
-	padding-right: 128px;
+	flex: 1;
 }
 .composer-queue-image {
 	position: relative;
