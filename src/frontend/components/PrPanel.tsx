@@ -70,6 +70,10 @@ import {
   PR_COMMENT_ROW,
   PR_COMMENT_SELECT,
   PR_COMMENTS_ADD_ALL,
+  PR_GUIDE_COUNT,
+  PR_GUIDE_EXPL,
+  PR_GUIDE_SECTION,
+  PR_GUIDE_TITLE,
   PR_REPO_TAB_X,
   PR_REPO_TABS,
   prRepoTabClass,
@@ -1957,12 +1961,12 @@ export function PrPanel({
                 </div>
               ) : guide ? (
                 sectionsWithPatches(guide, diff.patch).map((section, i, all) => (
-                  <div className="pr-guide-section" key={`${section.title}-${i}`}>
-                    <div className="pr-guide-count">
+                  <div className={PR_GUIDE_SECTION} key={`${section.title}-${i}`}>
+                    <div className={PR_GUIDE_COUNT}>
                       {String(i + 1).padStart(2, "0")} / {String(all.length).padStart(2, "0")}
                     </div>
-                    <div className="pr-guide-title">{section.title}</div>
-                    <div className="pr-guide-expl">{section.explanation}</div>
+                    <div className={PR_GUIDE_TITLE}>{section.title}</div>
+                    <div className={PR_GUIDE_EXPL}>{section.explanation}</div>
                     {section.patch && (
                       <CommentableDiff
                         patch={section.patch}

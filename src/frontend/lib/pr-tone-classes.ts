@@ -263,6 +263,18 @@ export const prRepoTabClass = (selected: boolean) =>
 /** Unlink (×) inside the selected linked-PR tab. */
 export const PR_REPO_TAB_X = "-mr-1 inline-flex items-center text-dim hover:text-fg";
 
+/* ── Review guide ────────────────────────────────────────────────────────
+ *
+ * The generated walk through a PR: numbered sections, each a title, an
+ * explanation and the patch it is about.
+ */
+export const PR_GUIDE_SECTION = "mb-7";
+export const PR_GUIDE_COUNT = "mb-1.5 text-meta font-semibold tabular-nums text-faint";
+export const PR_GUIDE_TITLE = "mb-1.5 text-item-title font-bold text-fg";
+/** Capped at 60ch: an explanation is prose, and prose stops being readable
+ *  when it runs the full width of a review canvas. */
+export const PR_GUIDE_EXPL = "mb-3 max-w-[60ch] text-label leading-[1.55] text-dim";
+
 /* ── Review comments ─────────────────────────────────────────────────────
  *
  * One row per comment: a marker, the author, the comment clamped to a line,
