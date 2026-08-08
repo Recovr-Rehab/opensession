@@ -2219,26 +2219,6 @@ a.pr-ref:hover {
 	background: color-mix(in srgb, var(--text) 86%, var(--bg));
 }
 
-.composer {
-	/* Anchors the dictation overlay (VoiceInput). */
-	position: relative;
-	background: var(--composer-surface);
-	border: 1px solid var(--composer-border);
-	border-radius: var(--composer-radius); corner-shape: var(--cs);
-	box-shadow: var(--composer-shadow);
-	/* Symmetric horizontal padding: the old extra 2px on the left stacked with
-	   the leading icon button's own glyph inset and left the field visibly
-	   heavier on that side than the send button is on the right. */
-	padding: 14px 14px 10px;
-	/* Distance from the composer's outer left edge to its content box (padding
-	   + border). Popups anchored to a toolbar control read it to line their own
-	   left edge up with the composer's instead of with the control. */
-	--composer-inset-left: 15px;
-	transition:
-		border-color var(--dur-micro) var(--ease),
-		box-shadow var(--dur-micro) var(--ease);
-}
-
 /* The queue is a flap that folds out from behind the composer: a dimmer
    panel inset from the composer's edges, rounded only on top, with its
    bottom tucked under the composer box (negative margin — the composer is
@@ -2452,26 +2432,8 @@ a.pr-ref:hover {
    in via AnimatePresence on expand); the spacer is hidden. Motion drives the
    morph between the two states — see composerMorph in ui/motion.ts. The
    border-radius is animated inline by Motion, so it isn't set here. */
-.composer.composer-min {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	/* Even 4px on all sides: the 40px +/mic/send/stop buttons are the same
-	   height as the pill's inner box, so equal inset lets the round buttons sit
-	   flush in the corners instead of the old 6px horizontal / 4px vertical
-	   mismatch. */
-	padding: 4px;
-	--composer-inset-left: 5px;
-	/* Inset the resting pill from the screen edges so it clears the iPhone's
-	   rounded bottom corners (Motion animates this away as it expands). */
-	margin: 0 6px;
-}
 .composer.composer-min .composer-toolbar {
 	display: contents;
-}
-.composer.composer-min .composer-textarea {
-	min-height: 0;
-	padding: 0 4px;
 }
 
 /* The one place the composer keeps circles, deliberately: this resting state IS
@@ -2494,66 +2456,6 @@ a.pr-ref:hover {
 .composer.composer-min .palette-icon-btn::before {
 	border-radius: 50%;
 	corner-shape: round;
-}
-
-.composer-textarea {
-	display: block;
-	width: 100%;
-	background: none;
-	border: none;
-	outline: none;
-	resize: none;
-	color: var(--text);
-	font-size: 14px;
-	line-height: 1.55;
-	/* Rests at ONE line and grows with the draft (the auto-grow effect in
-	   Composer.tsx measures scrollHeight for a non-empty draft and clears the
-	   inline height for an empty one, so the floor is whatever this rule says).
-	   It used to be a 128px floor: an empty composer was a ~5-line void with a
-	   placeholder marooned at the top of it, and a one-line reply left four
-	   lines of dead space under the text. Phones already rested at one line —
-	   this brings the desktop in line with them and with the native app, whose
-	   field is a single row until you give it more. Growth stops at the cap
-	   below and the field scrolls internally after that. */
-	min-height: 0;
-	max-height: 320px;
-	padding: 2px 0 4px;
-	font-family: inherit;
-}
-.composer-textarea::placeholder {
-	color: var(--text-faint);
-}
-/* Live code styling: a mirror div (same .composer-textarea metrics) paints the
-   styled draft behind a transparent-text textarea — caret, selection, undo and
-   IME stay native. The tints are color/background ONLY: any font, padding or
-   size change here would desync the caret from the painted glyphs. */
-.composer-hl {
-	position: absolute;
-	inset: 0;
-	pointer-events: none;
-	user-select: none;
-	white-space: pre-wrap;
-	overflow-wrap: break-word;
-	overflow: hidden;
-	z-index: 0;
-}
-.composer-hl .cmp-code {
-	background: rgba(255, 255, 255, 0.09);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	color: #e8b3b9;
-}
-.composer-hl .cmp-fence {
-	background: rgba(255, 255, 255, 0.06);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	color: #dde1f0;
-}
-html[data-theme="light"] .composer-hl .cmp-code {
-	background: rgba(0, 0, 0, 0.07);
-	color: #953b39;
-}
-html[data-theme="light"] .composer-hl .cmp-fence {
-	background: rgba(0, 0, 0, 0.05);
-	color: #1f2328;
 }
 
 .composer-toolbar {
@@ -2584,16 +2486,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 
 /* Custom-time dialog — centered modal with date + time fields, mirroring
    Slack's "Schedule message" sheet. */
-.composer-schedule-modal-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 300;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: rgba(0, 0, 0, 0.4);
-	padding: 20px;
-}
 
 .busy-elapsed {
 	color: var(--text-faint);
@@ -3341,9 +3233,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	   comfortable iOS body size. Includes the in-session composer textarea — the
 	   primary session input — which otherwise zoomed on focus at 13.5px, and the
 	   Plain reply box now that Conversation is a primary phone surface. */
-.composer-textarea {
-		font-size: 16px;
-	}
 	.home-row {
 		padding: 12px 11px;
 		gap: 8px;
@@ -3541,10 +3430,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		padding-right: 6px;
 		justify-content: flex-end;
 		text-align: right;
-	}
-
-	.composer {
-		padding-right: 16px;
 	}
 	/* Phones show the SAME busy right-edge as desktop: Stop plus the steer/queue
 	   Send side by side once you start composing a follow-up (empty input still
@@ -3793,10 +3678,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 
 /* Toolbar popovers (+ add menu, goal editor) */
-.composer-pop-wrap {
-	position: relative;
-	display: inline-flex;
-}
 .composer-menu-item {
 	display: flex;
 	align-items: center;
@@ -4435,19 +4316,10 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 @media (max-width: 720px) {
 	/* The corner is --composer-radius now (:root), which is the value this
 	   block used to restate — desktop was the odd one out at 64px/32px. */
-	.composer {
-		padding: 10px 12px 9px;
-		--composer-inset-left: 13px;
-	}
 	/* No resting floor on phones: the field hugs one line and grows with the
 	   draft (the tall inviting box is a desktop affordance). A 48px floor left
 	   an empty — or single-line — composer with a band of dead space under the
 	   text, which is most of what read as "weird height" on a phone. */
-	.composer-textarea {
-		min-height: 0;
-		max-height: 240px;
-		padding: 2px 0 4px;
-	}
 	.composer-toolbar {
 		margin-top: 6px;
 	}

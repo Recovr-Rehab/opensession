@@ -978,6 +978,35 @@ html.wco .app-body.sidebar-collapsed
 	color: inherit;
 }
 
+/* Live code tints in the composer draft — the same case as `.markdown` above,
+   and here for the same reason: a mirror div paints the styled draft behind a
+   transparent-text textarea (so caret, selection, undo and IME stay native),
+   and its spans are written as an innerHTML string by lib/composer-highlight.ts.
+   There is no JSX to hang utilities on, so this cannot become a utility; it is
+   renderer-emitted markup, which is what base.css keeps.
+
+   The tints are colour and background ONLY. Any font, padding or size change
+   here would desync the painted glyphs from the caret in the textarea behind
+   them — the mirror and the field have to agree on every metric. */
+.composer-hl .cmp-code {
+	background: rgba(255, 255, 255, 0.09);
+	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
+	color: #e8b3b9;
+}
+.composer-hl .cmp-fence {
+	background: rgba(255, 255, 255, 0.06);
+	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
+	color: #dde1f0;
+}
+html[data-theme="light"] .composer-hl .cmp-code {
+	background: rgba(0, 0, 0, 0.07);
+	color: #953b39;
+}
+html[data-theme="light"] .composer-hl .cmp-fence {
+	background: rgba(0, 0, 0, 0.05);
+	color: #1f2328;
+}
+
 .markdown ul,
 .markdown ol {
 	margin: 0 0 8px;

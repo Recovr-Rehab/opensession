@@ -34,9 +34,17 @@ export const composerBoxExpanded =
 
 /** Phone resting pill: one row, even 4px inset, clear of the screen edges.
  *  Motion animates the radius between this and the expanded box; the class is
- *  here so a first paint (and any non-animated host) lands on the same shape. */
+ *  here so a first paint (and any non-animated host) lands on the same shape.
+ *
+ *  `rounded-[999px]` rather than `rounded-full`, and the difference is not
+ *  cosmetic: base.css grants `corner-shape: squircle` to
+ *  `[class*="rounded-"]:not([class*="rounded-full"])`, so `rounded-full` is
+ *  precisely the one spelling that opts OUT of the squircle. The pill is a
+ *  squircle — `.composer` used to say so with `corner-shape: var(--cs)` — and
+ *  `rounded-full` silently flattened it to a plain capsule. Same radius either
+ *  way; only the corner curve differs. */
 export const composerBoxMinimized =
-	"mx-1.5 flex items-center gap-1 rounded-full p-1 [--composer-inset-left:5px]";
+	"mx-1.5 flex items-center gap-1 rounded-[999px] p-1 [--composer-inset-left:5px]";
 
 /* ── The draft field ──────────────────────────────────────────────
    `.composer-textarea` stays on the markup as a hook too: it is read as a
