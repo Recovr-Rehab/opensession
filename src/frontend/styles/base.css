@@ -341,16 +341,16 @@ html[data-theme="light"] {
    preference removes is things flying, sliding, popping and washing about,
    which is exactly what the blanket above takes out.
 
-   Deliberately NOT excepted, though they loop:
-     .app-logo::after   brand shimmer — decoration. Its existing guard parks it
-                        at a fixed offset so the logo still looks intentional.
-     .staging-shimmer   the skeleton block already says "loading"; the
-                        travelling highlight on top of it is decoration, and it
-                        is the one looping thing here that actually translates.
-     .jump-latest-*     an attention-getter on an already-visible button.
-                        Grabbing at the eye is precisely what this preference
-                        is asking us to stop doing.
-     .composer-agents-dot  keeping the existing explicit choice to stop it.
+   Deliberately NOT excepted, though they loop. Named by what the markup
+   actually spells today — most of these are now Tailwind arbitrary
+   animations, and an entry that names a class nobody emits any more is a
+   decision nobody can find:
+     animate-[staging-shimmer_…]  (StagingLink) the skeleton block already
+                        says "loading"; the travelling highlight on top of it
+                        is decoration, and it is the one looping thing here
+                        that actually translates.
+     animate-[composer-agents-pulse_…]  (ComposerAgents) keeping the existing
+                        explicit choice to stop it.
      .pixel-spinner     the decorative pixel loader — snakes, ripples and
                         bounces that travel across the block. However fun, it
                         is the single most motion-heavy thing in the app and
@@ -362,7 +362,11 @@ html[data-theme="light"] {
    wins here (equal specificity, and the utility sheet is linked last) and
    travels with the component. Five indicators silently froze during the
    Tailwind migration because their class name was removed from the markup
-   while its exception stayed behind here, which nothing can detect.
+   while its exception stayed behind here — invisible on screen, since the
+   freeze only happens under the preference. It IS checkable, though: grep
+   each name below against the shipped bundle (every .js file of the current
+   build, not just the entry — the build code-splits), and a name with no hit
+   is an indicator that no longer turns. All eleven were live on 2026-08-08.
 
    The exceptions restate their durations literally rather than trying to undo
    the blanket with `revert` — `revert` rolls back to the *origin* below the
