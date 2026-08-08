@@ -61,39 +61,59 @@ function sessionRepo(session: UnifiedSession): string {
 	return sessionRepoOr(session, FALLBACK_REPO);
 }
 
-function sessionMatchesPr(
-	session: UnifiedSession,
-	pr: ReviewQueuePr,
-	primaryOnly = false,
-): boolean {
-	if (sessionRepo(session) === pr.repo && session.branch === pr.branch) return true;
-	// A `github-pr-review` session checks the PR out on a derived `<head>-os-review`
-	// branch, so its own branch never equals the PR's head and the comparison
-	// above can't see it. The server resolves the real head (sessionPrBranch) and
-	// records it as this session's `primary` PR ref — so that ref, and only that
-	// ref, still counts as owning the PR's branch. Attached/linked/discovered
-	// refs stay secondary and fall through to the check below.
-	if (
-		(session.prs || []).some(
-			(ref) =>
-				ref.source === "primary" &&
-				ref.repo === pr.repo &&
-				ref.branch === pr.branch,
-		)
-	)
-		return true;
-	if (primaryOnly) return false;
-	return (
-		(session.prs || []).some(
-			(ref) => ref.repo === pr.repo && ref.branch === pr.branch,
-		) ||
-		(session.attachedRepos || []).some(
-			(ref) => ref.repo === pr.repo && ref.branch === pr.branch,
-		) ||
-		(session.linkedPrs || []).some(
-			(ref) => ref.repo === pr.repo && ref.branch === pr.branch,
-		)
-	);
+/**
+ * One repo + branch as a single map key. The NUL separator can't occur in
+ * either half, and the sentinel keeps a missing branch from colliding with an
+ * empty one — so key equality means exactly what `a.repo === b.repo &&
+ * a.branch === b.branch` meant.
+ */
+function branchKey(repo: string, branch: string | undefined): string {
+	return `${repo}\u0000${branch ?? "\u0001"}`;
+}
+
+/**
+ * Live sessions that OWN a PR's branch, indexed by repo+branch.
+ *
+ * Built once per queue instead of re-derived per PR. This used to be a
+ * predicate run inside `prs.flatMap(sessions.filter(...))` — 270 open PRs
+ * against 6,107 sessions is 3.3M calls, and each one re-scanned the session's
+ * pr/attached/linked arrays, so a single rebuild blocked the main thread for
+ * ~270ms. It reruns on every sessions update (the memo below keys on the
+ * `sessions` array, which is a fresh identity each time), which put a
+ * multi-hundred-millisecond stall into whatever the reader was doing —
+ * scrolling a transcript, most visibly.
+ *
+ * Ownership is two things, both indexed here. A session normally owns its own
+ * repo + branch. But a `github-pr-review` session checks the PR out on a
+ * derived `<head>-os-review` branch, so its own branch never equals the PR's
+ * head; the server resolves the real head (sessionPrBranch) and records it as
+ * that session's `primary` PR ref, so that ref — and only that ref — also
+ * counts as owning the branch. Attached, linked and non-primary discovered
+ * refs are deliberately NOT ownership.
+ *
+ * Archived sessions are dropped up front: the only caller wants the newest
+ * live owner.
+ */
+function indexOwnedBranches(
+	sessions: UnifiedSession[],
+): Map<string, UnifiedSession[]> {
+	const index = new Map<string, UnifiedSession[]>();
+	for (const session of sessions) {
+		if (session.archived) continue;
+		// A session can reach the same branch twice (its own, and a primary ref
+		// naming it); it should still appear once under that key.
+		const keys = new Set<string>([
+			branchKey(sessionRepo(session), session.branch),
+		]);
+		for (const ref of session.prs || [])
+			if (ref.source === "primary") keys.add(branchKey(ref.repo, ref.branch));
+		for (const key of keys) {
+			const owners = index.get(key);
+			if (owners) owners.push(session);
+			else index.set(key, [session]);
+		}
+	}
+	return index;
 }
 
 function newest(sessions: UnifiedSession[]): UnifiedSession | null {
@@ -172,16 +192,19 @@ export function buildReviewQueue(
 	const github = githubLogin?.toLowerCase() || "";
 	const seen = new Set<string>();
 	const items: ReviewQueueItem[] = [];
+	const ownersByBranch = indexOwnedBranches(sessions);
 
 	for (const pr of prs) {
 		if (!pr.url || seen.has(pr.url)) continue;
 		seen.add(pr.url);
 
-		const related = sessions.filter((session) => sessionMatchesPr(session, pr));
-		const primary = related.filter(
-			(session) =>
-				!session.archived && sessionMatchesPr(session, pr, true),
-		);
+		// Only the newest owner is used, below. There used to be a wider
+		// `related` pass here (every session touching this PR through any
+		// attached/linked/discovered ref) that existed solely to be re-filtered
+		// down to these owners — and owning a branch already implies touching
+		// it, so it never changed the answer. Dropping it removes a second full
+		// scan of every session, per PR.
+		const owners = ownersByBranch.get(branchKey(pr.repo, pr.branch)) || [];
 		const author = pr.author.toLowerCase();
 		const automation =
 			GITHUB_BOT_LOGINS.has(author) ||
@@ -205,7 +228,7 @@ export function buildReviewQueue(
 
 		items.push({
 			pr,
-			sessionId: newest(primary)?.id || null,
+			sessionId: newest(owners)?.id || null,
 			source,
 			...state,
 		});
