@@ -1,4 +1,3 @@
-import React, { useRef, useState } from "react";
 import { isApple, isChromium } from "./platform";
 
 // Archive the active workspace. The viewer's ⌘E/⌘⇧A archives just the open
@@ -66,36 +65,3 @@ export function swipeCommitOffset(action: SwipeAction, rowWidth: number): number
 	return action === "archive" ? -rowWidth : rowWidth;
 }
 
-// Swipe-down-to-dismiss for the bottom sheets: dragging anywhere on the sheet
-// pulls it down with the finger; past the threshold it closes on release,
-// otherwise it snaps back. A plain tap never moves it, so button taps are
-// unaffected.
-export function useSheetDismiss(onClose: () => void) {
-	const [dy, setDy] = useState(0);
-	const startY = useRef<number | null>(null);
-	const end = () => {
-		const passed = dy > 80;
-		startY.current = null;
-		setDy(0);
-		if (passed) onClose();
-	};
-	return {
-		handlers: {
-			onTouchStart: (e: React.TouchEvent) => {
-				startY.current = e.touches[0].clientY;
-			},
-			onTouchMove: (e: React.TouchEvent) => {
-				if (startY.current === null) return;
-				setDy(Math.max(0, e.touches[0].clientY - startY.current));
-			},
-			onTouchEnd: end,
-			onTouchCancel: end,
-		},
-		style: dy
-			? ({
-					transform: `translateY(${dy}px)`,
-					transition: "none",
-				} as React.CSSProperties)
-			: undefined,
-	};
-}

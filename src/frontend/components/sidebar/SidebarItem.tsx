@@ -2,19 +2,19 @@ import { useIsPhone } from "../../hooks/useIsPhone";
 import { hasDraft } from "../../lib/drafts";
 import { markRead, markUnread } from "../../lib/reads";
 import { isClaimed, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
-import { ARCHIVE_SHORTCUT_KEYS, LONG_PRESS_MS, LONG_PRESS_SLOP, PIN_SHORTCUT_KEYS, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, useSheetDismiss, type SwipeAction } from "../../lib/sidebar-swipe";
+import { ARCHIVE_SHORTCUT_KEYS, LONG_PRESS_MS, LONG_PRESS_SLOP, PIN_SHORTCUT_KEYS, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
 import { MINE_STATUS_META, type LaneChoice } from "../../lib/sidebar-types";
 import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { Popover } from "../../ui/popover";
+import { BottomSheet, SheetBody, SheetItem, SheetSeparator, SheetTitle } from "../../ui/sheet";
 import { Tooltip } from "../../ui/tooltip";
 import { RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
 import { IconArchive, IconInbox, IconMail, IconPencil, IconPin } from "../icons";
 import { SessionCardBody, WsPrStatusMark } from "../sidebar/HoverCards";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
 import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 /** The sidebar's selectable row — the shape every list family wears: session,
  *  workspace, PR, support, feed, archived and note rows. Migrated off the
@@ -621,8 +621,9 @@ export function SidebarItem({
 }
 
 // The bottom sheet raised by long-pressing a session row on touch. It gathers
-// the per-session actions (rename, archive) into thumb-sized rows. Rendered in
-// a portal over a dimmed, tap-to-dismiss backdrop.
+// the per-session actions (rename, archive) into thumb-sized rows on the shared
+// `BottomSheet` — backdrop, grabber, drag-to-dismiss and focus handling come
+// from the primitive.
 function MobileActionSheet({
 	session,
 	mine,
@@ -640,7 +641,6 @@ function MobileActionSheet({
 	onSetStatus?: (status: LaneChoice | null) => void;
 	onClose: () => void;
 }) {
-	const drag = useSheetDismiss(onClose);
 	// Lock the page behind the sheet so a scroll drags the list, not the page.
 	useEffect(() => {
 		const prev = document.body.style.overflow;
@@ -649,138 +649,131 @@ function MobileActionSheet({
 			document.body.style.overflow = prev;
 		};
 	}, []);
-	return createPortal(
-		<div className="mobile-action-sheet-backdrop" onClick={onClose}>
-			<div
-				className="mobile-action-sheet"
-				style={drag.style}
-				{...drag.handlers}
-				onClick={(e) => e.stopPropagation()}
-			>
-				<div className="mobile-sheet-grip" />
-				<div className="mobile-sheet-title">{session.title}</div>
-				<button
-					className="mobile-sheet-item"
-					onClick={() => {
-						onRename();
-						onClose();
-					}}
-				>
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 16 16"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="1.4"
-					>
-						<path d="M10.5 2.5l3 3L6 13l-3.5.5L3 10z" />
-					</svg>
-					Rename
-				</button>
-				{/* Claim this run into your own lanes, where it follows its live
-				    state — the phone twin of the row's right-click action. */}
-				{onSetStatus && (!mine || isClaimed(session)) && (
-					<button
-						className="mobile-sheet-item"
+	return (
+		<BottomSheet label={`Actions for ${session.title}`} onClose={onClose}>
+			{(dismiss) => (
+				<SheetBody>
+					<SheetTitle>{session.title}</SheetTitle>
+					<SheetItem
 						onClick={() => {
-							onSetStatus(isClaimed(session) ? null : "mine");
-							onClose();
+							onRename();
+							dismiss();
 						}}
 					>
-						<IconInbox size={22} />
-						{isClaimed(session)
-							? "Remove from my workspaces"
-							: "Add to my workspaces"}
-					</button>
-				)}
-				{/* Same lane chips as the workspace sheet — forcing a specific lane
-				    for a run from a phone. Lanes are per-user: the move happens in
-				    YOUR sidebar only. */}
-				{onSetStatus && (
-					<div className="px-4 py-2">
-						<div className="mb-1.5 text-[11px] font-semibold text-faint">
-							Move to lane
-						</div>
-						<div className="flex flex-wrap gap-1.5">
-							{MINE_STATUS_META.map((m) => {
-								const on = pinnedLane(session) === m.key;
-								return (
-									<Button
-										variant="ghost"
-										size="xs"
-										key={m.key}
-										type="button"
-										className="gap-1.5 whitespace-normal px-2 text-control-label"
-										style={{
-											borderColor: on ? m.dotColor : "var(--border)",
-											color: on ? "var(--text)" : "var(--text-dim)",
-										}}
-										onClick={() => {
-											onSetStatus(on ? null : m.key);
-											onClose();
-										}}
-									>
-										<span
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.4"
+						>
+							<path d="M10.5 2.5l3 3L6 13l-3.5.5L3 10z" />
+						</svg>
+						Rename
+					</SheetItem>
+					{/* Claim this run into your own lanes, where it follows its live
+					    state — the phone twin of the row's right-click action. */}
+					{onSetStatus && (!mine || isClaimed(session)) && (
+						<SheetItem
+							onClick={() => {
+								onSetStatus(isClaimed(session) ? null : "mine");
+								dismiss();
+							}}
+						>
+							<IconInbox size={22} />
+							{isClaimed(session)
+								? "Remove from my workspaces"
+								: "Add to my workspaces"}
+						</SheetItem>
+					)}
+					{/* Same lane chips as the workspace sheet — forcing a specific lane
+					    for a run from a phone. Lanes are per-user: the move happens in
+					    YOUR sidebar only. */}
+					{onSetStatus && (
+						<div className="px-4 py-2">
+							<div className="mb-1.5 text-meta font-semibold text-faint">
+								Move to lane
+							</div>
+							<div className="flex flex-wrap gap-1.5">
+								{MINE_STATUS_META.map((m) => {
+									const on = pinnedLane(session) === m.key;
+									return (
+										<Button
+											variant="ghost"
+											size="xs"
+											key={m.key}
+											type="button"
+											className="gap-1.5 whitespace-normal px-2 text-control-label"
 											style={{
-												width: 8,
-												height: 8,
-												borderRadius: "50%",
-												background: m.dotColor,
-												flexShrink: 0,
+												borderColor: on ? m.dotColor : "var(--border)",
+												color: on ? "var(--text)" : "var(--text-dim)",
 											}}
-										/>
-										{m.label}
-									</Button>
-								);
-							})}
-							<Button
-										variant="ghost"
-										size="xs"
-								type="button"
-								className="whitespace-normal px-2 text-control-label"
-								style={{
-									borderColor: !pinnedLane(session)
-										? "var(--text-dim)"
-										: "var(--border)",
-									color: !pinnedLane(session)
-										? "var(--text)"
-										: "var(--text-dim)",
-								}}
-								onClick={() => {
-									onSetStatus(null);
-									onClose();
-								}}
-							>
-								Auto
-							</Button>
+											onClick={() => {
+												onSetStatus(on ? null : m.key);
+												dismiss();
+											}}
+										>
+											<span
+												style={{
+													width: 8,
+													height: 8,
+													borderRadius: "50%",
+													background: m.dotColor,
+													flexShrink: 0,
+												}}
+											/>
+											{m.label}
+										</Button>
+									);
+								})}
+								<Button
+									variant="ghost"
+									size="xs"
+									type="button"
+									className="whitespace-normal px-2 text-control-label"
+									style={{
+										borderColor: !pinnedLane(session)
+											? "var(--text-dim)"
+											: "var(--border)",
+										color: !pinnedLane(session)
+											? "var(--text)"
+											: "var(--text-dim)",
+									}}
+									onClick={() => {
+										onSetStatus(null);
+										dismiss();
+									}}
+								>
+									Auto
+								</Button>
+							</div>
 						</div>
-					</div>
-				)}
-				<div className="mobile-sheet-sep" />
-				<button
-					className="mobile-sheet-item mobile-sheet-item--danger"
-					onClick={() => {
-						onArchive();
-						onClose();
-					}}
-				>
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 16 16"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="1.4"
+					)}
+					<SheetSeparator />
+					<SheetItem
+						tone="danger"
+						onClick={() => {
+							onArchive();
+							dismiss();
+						}}
 					>
-						<rect x="2.25" y="2.75" width="11.5" height="3" rx="0.6" />
-						<path d="M3.25 5.75v6.5a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6.5" />
-						<path d="M6.5 8.5h3" strokeLinecap="round" />
-					</svg>
-					Archive
-				</button>
-			</div>
-		</div>,
-		document.body,
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.4"
+						>
+							<rect x="2.25" y="2.75" width="11.5" height="3" rx="0.6" />
+							<path d="M3.25 5.75v6.5a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6.5" />
+							<path d="M6.5 8.5h3" strokeLinecap="round" />
+						</svg>
+						Archive
+					</SheetItem>
+				</SheetBody>
+			)}
+		</BottomSheet>
 	);
 }

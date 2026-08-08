@@ -4,18 +4,17 @@ import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
 import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
-import { useSheetDismiss } from "../../lib/sidebar-swipe";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
 import { formatRemaining, snoozePresets } from "../../lib/snoozes";
 import { elapsedClock } from "../../lib/time";
 import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
+import { BottomSheet, SheetBody, SheetItem, SheetSeparator } from "../../ui/sheet";
 import { openLightbox } from "../MediaLightbox";
 import { repoLabel } from "../RepoTile";
 import { CardFooter, CardLink, checksLabel, osReviewLabel } from "../SidebarRowCards";
 import { IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 
 // The session row's card body. Content is state-dependent: the prominent status
 // line and the rows that render depend on whether the session is
@@ -552,7 +551,6 @@ export function WsMobileSheet({
 }) {
 	const ov = useWsOverview(row);
 	const { prSession, prReady, prStatusBits } = wsPrInfo(row);
-	const drag = useSheetDismiss(onClose);
 	// Lock the page behind the sheet so a scroll drags the list, not the page.
 	useEffect(() => {
 		const prev = document.body.style.overflow;
@@ -561,10 +559,6 @@ export function WsMobileSheet({
 			document.body.style.overflow = prev;
 		};
 	}, []);
-	const closing = (fn: () => void) => () => {
-		fn();
-		onClose();
-	};
 	const archiveGlyph = (
 		<svg
 			width="20"
@@ -579,15 +573,15 @@ export function WsMobileSheet({
 			<path d="M6.5 8.5h3" strokeLinecap="round" />
 		</svg>
 	);
-	return createPortal(
-		<div className="mobile-action-sheet-backdrop" onClick={onClose}>
-			<div
-				className="mobile-action-sheet"
-				style={drag.style}
-				{...drag.handlers}
-				onClick={(e) => e.stopPropagation()}
-			>
-				<div className="mobile-sheet-grip" />
+	return (
+		<BottomSheet label={`Actions for ${row.name}`} onClose={onClose}>
+			{(dismiss) => {
+				const closing = (fn: () => void) => () => {
+					fn();
+					dismiss();
+				};
+				return (
+				<SheetBody>
 				<div className="px-2 pb-2.5 pt-1">
 					<WsOverviewInfo row={row} ov={ov} />
 					{(prStatusBits.length > 0 || row.lastActivity) && (
@@ -612,12 +606,11 @@ export function WsMobileSheet({
 						</div>
 					)}
 				</div>
-				<div className="mobile-sheet-sep" />
+				<SheetSeparator />
 				{/* Main action, colored by what the workspace needs next. */}
 				{row.status === "needsinput" && row.sessions.length > 0 && (
-					<button
-						className="mobile-sheet-item"
-						style={{ color: "var(--accent)", fontWeight: 600 }}
+					<SheetItem
+						tone="accent"
 						onClick={closing(() =>
 							onOpen(
 								row.sessions.find((c) => c.waitingForInput) ||
@@ -630,14 +623,11 @@ export function WsMobileSheet({
 						{row.sessions.some((c) => c.waitingForInput)
 							? "Answer question"
 							: "Check failed run"}
-					</button>
+					</SheetItem>
 				)}
 				{row.status === "review" && prSession?.prUrl && (
-					<button
-						className="mobile-sheet-item"
-						style={
-							prReady ? { color: "var(--green)", fontWeight: 600 } : undefined
-						}
+					<SheetItem
+						tone={prReady ? "green" : "default"}
 						onClick={closing(() =>
 							window.open(prSession.prUrl, "_blank", "noopener"),
 						)}
@@ -645,54 +635,45 @@ export function WsMobileSheet({
 						<IconPullRequest size={22} />
 						{prReady ? `Merge on ${providerFromUrl(prSession.prUrl).name}` : "Review PR"}
 						{prSession.prNumber != null && ` #${prSession.prNumber}`}
-					</button>
+					</SheetItem>
 				)}
 				{row.status === "merged" && row.sessions.length > 0 && (
-					<button
-						className="mobile-sheet-item"
-						style={{ color: "var(--purple)", fontWeight: 600 }}
-						onClick={closing(onArchive)}
-					>
+					<SheetItem tone="purple" onClick={closing(onArchive)}>
 						{archiveGlyph}
 						Archive workspace
-					</button>
+					</SheetItem>
 				)}
 				{prSession?.prUrl && row.status !== "review" && (
-					<button
-						className="mobile-sheet-item"
+					<SheetItem
 						onClick={closing(() =>
 							window.open(prSession.prUrl, "_blank", "noopener"),
 						)}
 					>
 						<IconPullRequest size={22} />
 						Open PR{prSession.prNumber != null ? ` #${prSession.prNumber}` : ""}
-					</button>
+					</SheetItem>
 				)}
 				{claimed !== null && (
-					<button
-						className="mobile-sheet-item"
+					<SheetItem
 						onClick={closing(() => onSetStatus(claimed ? null : "mine"))}
 					>
 						<IconInbox size={22} />
 						{claimed
 							? "Remove from my workspaces"
 							: "Add to my workspaces"}
-					</button>
+					</SheetItem>
 				)}
 				{onToggleRead && (
-					<button
-						className="mobile-sheet-item"
-						onClick={closing(onToggleRead)}
-					>
+					<SheetItem onClick={closing(onToggleRead)}>
 						<IconMail size={22} />
 						{unread ? "Mark as read" : "Mark as unread"}
-					</button>
+					</SheetItem>
 				)}
-				<button className="mobile-sheet-item" onClick={closing(onTogglePin)}>
+				<SheetItem onClick={closing(onTogglePin)}>
 					<IconPin size={22} fill={pinned ? "currentColor" : "none"} />
 					{pinned ? "Unpin" : "Pin"}
-				</button>
-				<button className="mobile-sheet-item" onClick={closing(onRename)}>
+				</SheetItem>
+				<SheetItem onClick={closing(onRename)}>
 					<svg
 						width="20"
 						height="20"
@@ -704,12 +685,12 @@ export function WsMobileSheet({
 						<path d="M10.5 2.5l3 3L6 13l-3.5.5L3 10z" />
 					</svg>
 					Rename
-				</button>
+				</SheetItem>
 				{onCopyLink && (
-					<button className="mobile-sheet-item" onClick={closing(onCopyLink)}>
+					<SheetItem onClick={closing(onCopyLink)}>
 						<IconLink size={22} />
 						Copy link
-					</button>
+					</SheetItem>
 				)}
 				{/* Pin the workspace into a lane manually — tap a chip to move it there
 				    (tap the active one, or Auto, to release it back to the derived lane). */}
@@ -803,10 +784,7 @@ export function WsMobileSheet({
 										borderColor: "var(--border)",
 										color: "var(--text-dim)",
 									}}
-									onClick={() => {
-										onSnooze(p.until.toISOString());
-										onClose();
-									}}
+									onClick={closing(() => onSnooze(p.until.toISOString()))}
 								>
 									{p.label}
 								</Button>
@@ -821,10 +799,7 @@ export function WsMobileSheet({
 										borderColor: "var(--text-dim)",
 										color: "var(--text)",
 									}}
-									onClick={() => {
-										onSnooze(null);
-										onClose();
-									}}
+									onClick={closing(() => onSnooze(null))}
 								>
 									Unsnooze
 								</Button>
@@ -833,24 +808,18 @@ export function WsMobileSheet({
 					</div>
 				)}
 				{((row.status !== "merged" && row.sessions.length > 0) || onDelete) && (
-					<div className="mobile-sheet-sep" />
+					<SheetSeparator />
 				)}
 				{/* Archiving stays reachable pre-merge from the explicit menu — the
 				    status coloring only governs which action gets top billing. */}
 				{row.status !== "merged" && row.sessions.length > 0 && (
-					<button
-						className="mobile-sheet-item mobile-sheet-item--danger"
-						onClick={closing(onArchive)}
-					>
+					<SheetItem tone="danger" onClick={closing(onArchive)}>
 						{archiveGlyph}
 						Archive
-					</button>
+					</SheetItem>
 				)}
 				{onDelete && (
-					<button
-						className="mobile-sheet-item mobile-sheet-item--danger"
-						onClick={closing(onDelete)}
-					>
+					<SheetItem tone="danger" onClick={closing(onDelete)}>
 						<svg
 							width="20"
 							height="20"
@@ -862,10 +831,11 @@ export function WsMobileSheet({
 							<path d="M3 4.5h10M6.5 4.5V3.25a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1V4.5M4.25 4.5l.6 8.25a1 1 0 0 0 1 .93h4.3a1 1 0 0 0 1-.93l.6-8.25" />
 						</svg>
 						Delete workspace
-					</button>
+					</SheetItem>
 				)}
-			</div>
-		</div>,
-		document.body,
+				</SheetBody>
+				);
+			}}
+		</BottomSheet>
 	);
 }

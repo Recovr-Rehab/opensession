@@ -273,6 +273,91 @@ export function ResponsiveDialog({
 }
 
 /**
+ * The scrolling, padded interior of a bottom sheet. `ResponsiveDialog` clips
+ * its panel at 94dvh, so a sheet whose action list can grow — the sidebar's
+ * long-press menus do — needs its own scroller or the last rows are simply
+ * unreachable.
+ */
+export function SheetBody({
+	className,
+	children,
+}: {
+	className?: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<div
+			className={cn(
+				"min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5",
+				className,
+			)}
+		>
+			{children}
+		</div>
+	);
+}
+
+/** The sheet's own heading — the object the actions below it act on. */
+export function SheetTitle({
+	className,
+	children,
+}: {
+	className?: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<div className={cn("truncate px-3 pb-2 pt-1.5 text-label text-faint", className)}>
+			{children}
+		</div>
+	);
+}
+
+/** Hairline between two groups of sheet actions. */
+export function SheetSeparator({ className }: { className?: string }) {
+	return <div className={cn("mx-2.5 my-1.5 h-px bg-line", className)} />;
+}
+
+/**
+ * A sheet action row. Thumb-sized and full-bleed, pressed rather than hovered
+ * — a sheet only ever appears on touch.
+ *
+ * `tone` exists instead of a colour className because the row colours its icon
+ * as well as its label: two `text-*` utilities aimed at the same subject don't
+ * compose, so each variant has to name both of its colours in one place.
+ */
+const SHEET_ITEM_TONE = {
+	/** Icons stay quiet against the label — the legacy sheet's look. */
+	default: "text-fg [&_svg]:text-faint",
+	danger: "text-red [&_svg]:text-red",
+	accent: "font-semibold text-accent [&_svg]:text-faint",
+	green: "font-semibold text-green [&_svg]:text-faint",
+	purple: "font-semibold text-purple [&_svg]:text-faint",
+} as const;
+
+export type SheetItemTone = keyof typeof SHEET_ITEM_TONE;
+
+export function SheetItem({
+	tone = "default",
+	className,
+	children,
+	...rest
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: SheetItemTone }) {
+	return (
+		<button
+			type="button"
+			className={cn(
+				"flex w-full items-center gap-[13px] rounded-control px-3.5 py-[15px] text-left text-[16px] active:bg-pressed [&_svg]:shrink-0",
+				SHEET_ITEM_TONE[tone],
+				className,
+			)}
+			{...rest}
+		>
+			{children}
+		</button>
+	);
+}
+
+/**
  * Phone-only bottom sheet with a self-closing contract: owners render it while
  * it should exist and unmount it in `onClose`, so the exit animation has to run
  * before they hear about it.
