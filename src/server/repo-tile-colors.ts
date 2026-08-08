@@ -23,75 +23,80 @@
  */
 
 /**
- * Sixteen tile colors: saturated mid-tones, bright enough to read as color at
- * 18px without becoming the pastels this started as (those sat near 2:1
- * against white and lost their letter).
+ * Ten tile colors: saturated mid-tones, bright enough to read as color at 18px
+ * without becoming the pastels this started as (those sat near 2:1 against
+ * white and lost their letter).
  *
- * Generated in OKLCH — sixteen hues at even 22.5° steps, chroma 0.15 (clipped
- * to the sRGB boundary where a hue can't hold it), lightness alternating
- * 0.64/0.57 so neighbouring hues separate on brightness as well as hue. That
- * lands every entry at 3.2–4.9:1 against white, which is what keeps the white
- * letter legible on all of them; raising either number further starts eating
- * into that, so don't without checking the contrast.
+ * Ten, not the sixteen this had, because the palette is also the picker: every
+ * entry is a choice someone reads through, and sixteen near-neighbours asked
+ * them to tell ochre from olive for no gain. Ten still covers the wheel and is
+ * more colors than most instances have repos.
+ *
+ * Generated in OKLCH — ten hues at even 36° steps, chroma 0.15 (clipped to the
+ * sRGB boundary where a hue can't hold it), lightness alternating 0.64/0.57 so
+ * neighbouring hues separate on brightness as well as hue. That lands every
+ * entry at 3.1–4.9:1 against white, which is what keeps the white letter
+ * legible; raising either number further starts eating into that, so don't
+ * without checking the contrast.
  *
  * The order is deliberately NOT the hue wheel: entries are laid out in steps of
- * seven around it, so two repos whose colors collide — the assignment below
- * takes the next free slot — land on plainly different colors rather than
- * neighbouring hues (ΔE 0.185 between adjacent slots, against 0.065 in wheel
- * order).
+ * HUE_STRIDE around it, so two repos whose colors collide — the assignment
+ * below takes the next free slot — land on plainly different colors rather
+ * than neighbouring hues.
  */
 export const REPO_TILE_COLORS = [
-	"#d86069", // coral
-	"#008b74", // emerald
-	"#c066b3", // orchid
-	"#58880d", // moss
-	"#897ae1", // iris
-	"#967100", // ochre
-	"#1394df", // azure
-	"#be5227", // rust
-	"#00a0a4", // teal
-	"#b84b7b", // raspberry
-	"#29a55e", // jade
-	"#935ab8", // violet
-	"#959100", // olive
-	"#4c72cf", // indigo
-	"#c97500", // amber
-	"#0085a2", // cerulean
+	"#d86069", // red
+	"#628500", // leaf
+	"#0098d0", // azure
+	"#b04e90", // plum
+	"#ab8700", // gold
+	"#00888c", // teal
+	"#a371d3", // violet
+	"#b65b00", // amber
+	"#00a671", // emerald
+	"#566fcf", // indigo
 ];
 
 /**
- * The palette before it was brightened, slot for slot.
- *
- * A color someone PICKED is stored as a hex in the config, so brightening the
- * palette would otherwise leave those repos — and only those — wearing the old
- * muted tone, with no swatch in the picker matching what they have. Reading a
- * legacy hex as its replacement at the same slot keeps the choice (same hue,
- * same position) and lets the picker ring it again. Old configs are not
- * rewritten; the mapping happens on the way out.
+ * How far apart consecutive slots sit on the hue wheel, and the stride that
+ * undoes it (3 × 7 ≡ 1 mod 10) so a slot can be mapped back to its wheel
+ * position. Change one and the other has to follow.
  */
-const LEGACY_TILE_COLORS = [
-	"#ad6b6d",
-	"#247967",
-	"#9f6d96",
-	"#58733d",
-	"#7d78b0",
-	"#7f6528",
-	"#5186af",
-	"#925742",
-	"#349092",
-	"#8f536b",
-	"#568f68",
-	"#785b8d",
-	"#858445",
-	"#51679a",
-	"#a47548",
-	"#1f748b",
+const HUE_STRIDE_INVERSE = 7;
+
+/**
+ * The two palettes this replaced, and where each of their slots lands now.
+ *
+ * A color someone PICKED is stored as a hex in the config, so a new palette
+ * would otherwise leave exactly those repos — the ones somebody cared enough
+ * about to choose for — wearing a color no swatch in the picker matches.
+ * Both old palettes were sixteen entries on one hue layout (the second was the
+ * first, brightened), so one table maps either: slot i of the old sixteen goes
+ * to the closest hue among the ten in use. Old configs aren't rewritten; the
+ * mapping happens on the way out.
+ */
+const LEGACY_PALETTES = [
+	// The original muted earth tones.
+	["#ad6b6d", "#247967", "#9f6d96", "#58733d", "#7d78b0", "#7f6528", "#5186af",
+	 "#925742", "#349092", "#8f536b", "#568f68", "#785b8d", "#858445", "#51679a",
+	 "#a47548", "#1f748b"],
+	// The same sixteen hues, brightened.
+	["#d86069", "#008b74", "#c066b3", "#58880d", "#897ae1", "#967100", "#1394df",
+	 "#be5227", "#00a0a4", "#b84b7b", "#29a55e", "#935ab8", "#959100", "#4c72cf",
+	 "#c97500", "#0085a2"],
 ];
+
+/** Nearest current slot for each of the sixteen legacy slots, by hue. */
+const LEGACY_SLOT_TO_CURRENT = [0, 8, 3, 1, 9, 4, 2, 7, 5, 3, 8, 6, 1, 9, 7, 2];
 
 /** A stored color as it should be shown today. */
 export function currentTileColor(color: string): string {
-	const slot = LEGACY_TILE_COLORS.indexOf(color.toLowerCase());
-	return slot >= 0 ? REPO_TILE_COLORS[slot] : color;
+	const hex = color.toLowerCase();
+	for (const palette of LEGACY_PALETTES) {
+		const slot = palette.indexOf(hex);
+		if (slot >= 0) return REPO_TILE_COLORS[LEGACY_SLOT_TO_CURRENT[slot]];
+	}
+	return color;
 }
 
 /**
@@ -160,10 +165,10 @@ export function assignRepoTileColors(
 			const candidate = (start + step) % REPO_TILE_COLORS.length;
 			if (taken.has(candidate)) continue;
 			if (fallback === null) fallback = candidate;
-			// Distinct isn't enough between two `T`s: a color three hue steps
+			// Distinct isn't enough between two `T`s: a color a step or two
 			// from a sibling's still reads as "the other blue-green one". Keep
 			// probing for one that doesn't.
-			if (siblings.every((s) => hueSteps(candidate, s) >= 3)) {
+			if (siblings.every((s) => tileHueDistance(candidate, s) >= 3)) {
 				index = candidate;
 				fallback = null;
 				break;
@@ -186,15 +191,12 @@ function tileLetter(id: string): string {
 }
 
 /**
- * How far apart two slots sit on the hue wheel, in 22.5° steps.
- *
- * The palette is laid out in strides of seven around the wheel, and seven is
- * its own inverse modulo sixteen — so the same stride maps a slot back to its
- * wheel position.
+ * How far apart two slots sit on the hue wheel, counted in palette steps
+ * (36° each). Exported because the tests hold the palette to it.
  */
-function hueSteps(a: number, b: number): number {
+export function tileHueDistance(a: number, b: number): number {
 	const size = REPO_TILE_COLORS.length;
-	const wheel = (index: number) => (index * 7) % size;
+	const wheel = (index: number) => (index * HUE_STRIDE_INVERSE) % size;
 	const gap = Math.abs(wheel(a) - wheel(b));
 	return Math.min(gap, size - gap);
 }

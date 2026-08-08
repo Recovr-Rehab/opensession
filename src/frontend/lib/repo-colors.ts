@@ -15,22 +15,16 @@
  */
 
 export const REPO_TILE_COLORS = [
-	"#d86069", // coral
-	"#008b74", // emerald
-	"#c066b3", // orchid
-	"#58880d", // moss
-	"#897ae1", // iris
-	"#967100", // ochre
-	"#1394df", // azure
-	"#be5227", // rust
-	"#00a0a4", // teal
-	"#b84b7b", // raspberry
-	"#29a55e", // jade
-	"#935ab8", // violet
-	"#959100", // olive
-	"#4c72cf", // indigo
-	"#c97500", // amber
-	"#0085a2", // cerulean
+	"#d86069", // red
+	"#628500", // leaf
+	"#0098d0", // azure
+	"#b04e90", // plum
+	"#ab8700", // gold
+	"#00888c", // teal
+	"#a371d3", // violet
+	"#b65b00", // amber
+	"#00a671", // emerald
+	"#566fcf", // indigo
 ];
 
 /** Colors the server assigned, by repo id. */

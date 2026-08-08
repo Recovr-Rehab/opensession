@@ -132,12 +132,17 @@ export function ReposSection({
  * it's the thing being edited — a separate "edit tile" button would say less
  * than the picture it changes.
  *
- * Everything a tile can be is laid out as a choice you can see: the sixteen
- * palette colors, the owner's GitHub avatar (fetched up front, so the picture
- * itself is the button rather than something a "Fetch from GitHub" press might
- * produce), and art of your own. A repo still wears a colored letter by
- * default — GitHub has no per-repo art, so taking the owner's avatar for every
- * repo put one identical tile on all of them.
+ * One grid of tiles, because there is one question: what does this repo look
+ * like? A color and an icon used to be separate controls, which made picking a
+ * color while art was set do nothing you could see. Here every cell is the
+ * tile you'd get — the palette colors carrying the repo's letter, the owner's
+ * GitHub avatar (fetched up front, so the picture itself is the choice rather
+ * than something a "Fetch from GitHub" press might produce), and art of your
+ * own — and picking a color is also how you take art back off.
+ *
+ * A repo wears a colored letter by default: GitHub has no per-repo art, so
+ * taking the owner's avatar for every repo put one identical tile on all of
+ * them.
  */
 function RepoTileButton({
 	id,
@@ -188,51 +193,23 @@ function RepoTileButton({
 				<RepoTile name={id} size={28} />
 			</Popover.Trigger>
 			<Popover.Popup className="w-[248px] p-3" initialFocus>
-				<div className="mb-2 text-meta font-medium text-dim">Tile color</div>
-				<div className="grid grid-cols-8 gap-1.5">
-					{REPO_TILE_COLORS.map((color) => {
-						const active = repo?.color === color;
-						return (
-							<button
-								key={color}
-								type="button"
-								disabled={busy}
-								onClick={() => apply({ color })}
-								aria-label={color}
-								aria-pressed={active}
-								className={cn(
-									"h-6 w-6 rounded-control outline-none transition-transform",
-									"hover:scale-110 focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
-									active && "ring-2 ring-fg ring-offset-2 ring-offset-panel",
-								)}
-								style={{ background: color }}
-							/>
-						);
-					})}
-				</div>
-				{repo?.colorChosen && (
-					<Button
-						size="sm"
-						variant="ghost"
-						className="mt-2"
-						disabled={busy}
-						onClick={() => apply({ color: null })}
-					>
-						Use the assigned color
-					</Button>
-				)}
-				<div className="mt-3 mb-2 border-t border-line pt-3 text-meta font-medium text-dim">
-					Icon
-				</div>
-				<div className="flex flex-wrap items-center gap-2">
-					<IconChoice
-						label="The colored letter"
-						active={!repo?.hasIcon}
-						disabled={busy}
-						onClick={() => apply({ icon: null })}
-					>
-						<LetterTile id={id} />
-					</IconChoice>
+				<div className="mb-2 text-meta font-medium text-dim">Tile</div>
+				<div className="grid grid-cols-6 gap-2">
+					{REPO_TILE_COLORS.map((color) => (
+						<TileChoice
+							key={color}
+							// Named by what it does, not by its hex: "#b04e90"
+							// tells a screen reader nothing.
+							label={`Letter tile, color ${REPO_TILE_COLORS.indexOf(color) + 1} of ${REPO_TILE_COLORS.length}`}
+							// Picking a color takes art off too — otherwise the
+							// choice would be invisible on a repo wearing an icon.
+							active={!repo?.hasIcon && repo?.color === color}
+							disabled={busy}
+							onClick={() => apply({ color, icon: null })}
+						>
+							<LetterTile id={id} color={color} />
+						</TileChoice>
+					))}
 					{/* Fetched as soon as the popover opens, so the avatar is a
 					    picture you pick rather than one a button might produce.
 					    The route 404s when there's nothing to take, and the
@@ -245,7 +222,7 @@ function RepoTileButton({
 						onError={() => setAvatarOk(false)}
 					/>
 					{avatarOk && (
-						<IconChoice
+						<TileChoice
 							label={`${repo?.ghRepo?.split("/")[0]}’s GitHub avatar`}
 							active={repo?.iconSource === "github"}
 							disabled={busy}
@@ -256,9 +233,9 @@ function RepoTileButton({
 								alt=""
 								className="h-full w-full rounded-control object-cover"
 							/>
-						</IconChoice>
+						</TileChoice>
 					)}
-					<IconChoice
+					<TileChoice
 						label="Upload an image"
 						active={repo?.iconSource === "upload"}
 						disabled={busy}
@@ -267,7 +244,7 @@ function RepoTileButton({
 						<span className="flex h-full w-full items-center justify-center rounded-control border border-dashed border-line text-dim">
 							<IconArrowUpToLine size={14} />
 						</span>
-					</IconChoice>
+					</TileChoice>
 					<input
 						ref={fileInput}
 						type="file"
@@ -281,12 +258,23 @@ function RepoTileButton({
 						}}
 					/>
 				</div>
+				{repo?.colorChosen && !repo?.hasIcon && (
+					<Button
+						size="sm"
+						variant="ghost"
+						className="mt-2"
+						disabled={busy}
+						onClick={() => apply({ color: null })}
+					>
+						Use the assigned color
+					</Button>
+				)}
 				<div className="mt-2 text-meta leading-relaxed text-faint">
 					{busy
 						? "Working…"
 						: avatarOk
-							? `The GitHub avatar belongs to ${repo?.ghRepo?.split("/")[0]} — the same picture for every repo that owner has, so it suits the one that IS the product. Upload art to give this repo its own.`
-							: "No GitHub avatar to take, so it’s the letter or art you upload."}
+							? `Colors are assigned so no two repos match; pick one to override that. The avatar is ${repo?.ghRepo?.split("/")[0]}’s — the same picture for every repo that owner has.`
+							: "Colors are assigned so no two repos match; pick one to override that, or upload art of your own."}
 				</div>
 				{error && <InlineAlert className="mt-2">{error}</InlineAlert>}
 			</Popover.Popup>
@@ -294,8 +282,8 @@ function RepoTileButton({
 	);
 }
 
-/** One 28px tile in the icon row, sized and ringed like the color swatches. */
-function IconChoice({
+/** One cell of the tile grid: a preview of what picking it would give. */
+function TileChoice({
 	label,
 	active,
 	disabled,
@@ -327,13 +315,13 @@ function IconChoice({
 	);
 }
 
-/** The letter tile as it would look — RepoTile paints the art when there is
- *  any, and this choice is precisely "no art". */
-function LetterTile({ id }: { id: string }) {
+/** The letter tile as this color would look. Not RepoTile: that paints the
+ *  art when a repo has any, and these cells are previews of not having it. */
+function LetterTile({ id, color }: { id: string; color?: string }) {
 	return (
 		<span
 			className="flex h-full w-full items-center justify-center rounded-control text-[15px] font-bold text-white"
-			style={{ background: repoColor(id) }}
+			style={{ background: color ?? repoColor(id) }}
 		>
 			{repoLetter(id)}
 		</span>

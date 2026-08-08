@@ -4,6 +4,7 @@ import {
 	assignRepoTileColors,
 	currentTileColor,
 	repoTileColor,
+	tileHueDistance,
 } from "./repo-tile-colors";
 
 // The registered set this instance actually runs, plus the same-letter
@@ -30,23 +31,20 @@ describe("assignRepoTileColors", () => {
 	test("separates repos a plain hash would collide", () => {
 		// The pair that made the tile ambiguous: same letter, and the hash
 		// alone lands them on the same swatch.
-		const colors = assignRepoTileColors(["opensession", "os1-chrome"]);
-		expect(repoTileColor("opensession")).toBe(repoTileColor("os1-chrome"));
-		expect(colors["opensession"]).not.toBe(colors["os1-chrome"]);
+		const colors = assignRepoTileColors(["opensession", "os1-tui"]);
+		expect(repoTileColor("opensession")).toBe(repoTileColor("os1-tui"));
+		expect(colors["opensession"]).not.toBe(colors["os1-tui"]);
 	});
 
 	test("keeps same-letter repos on plainly different hues", () => {
 		// Two `T` tiles are told apart by color alone, so "not identical"
 		// isn't the bar — they have to not read as the same color either.
 		const colors = assignRepoTileColors(REPOS);
-		const wheel = (hex: string) => {
-			const slot = REPO_TILE_COLORS.indexOf(hex);
-			return (slot * 7) % REPO_TILE_COLORS.length;
-		};
-		const apart = (a: string, b: string) => {
-			const gap = Math.abs(wheel(colors[a]) - wheel(colors[b]));
-			return Math.min(gap, REPO_TILE_COLORS.length - gap);
-		};
+		const apart = (a: string, b: string) =>
+			tileHueDistance(
+				REPO_TILE_COLORS.indexOf(colors[a]),
+				REPO_TILE_COLORS.indexOf(colors[b]),
+			);
 		for (const [a, b] of [
 			["tella-fusion", "tella-mac"],
 			["tella-fusion", "tella-windows"],
@@ -69,8 +67,8 @@ describe("assignRepoTileColors", () => {
 		const many = Array.from({ length: 40 }, (_, i) => `repo-${i}`);
 		const colors = assignRepoTileColors(many);
 		expect(Object.keys(colors)).toHaveLength(40);
-		// Sixteen distinct colors, then the palette repeats rather than
-		// running out of tiles.
+		// Every color used, then the palette repeats rather than running out
+		// of tiles.
 		expect(new Set(Object.values(colors)).size).toBe(REPO_TILE_COLORS.length);
 	});
 
@@ -84,20 +82,21 @@ describe("assignRepoTileColors", () => {
 		expect(new Set(Object.values(colors)).size).toBe(REPOS.length);
 	});
 
-	test("reads a color picked from the old palette as its replacement", () => {
-		// "#5186af" was slot 6 (denim) before the palette was brightened; the
-		// repo that picked it should now wear slot 6 of the palette in use,
-		// and still count as having chosen it.
-		expect(currentTileColor("#5186af")).toBe(REPO_TILE_COLORS[6]);
-		expect(currentTileColor(REPO_TILE_COLORS[6])).toBe(REPO_TILE_COLORS[6]);
-		// A hex from neither palette (hand-edited config) is left alone.
+	test("reads a color picked from either old palette as its nearest hue", () => {
+		// "#5186af" (the original denim) and "#1394df" (its brightened
+		// replacement) are the same hue, so both land on the azure in use.
+		const azure = REPO_TILE_COLORS[2];
+		expect(currentTileColor("#5186af")).toBe(azure);
+		expect(currentTileColor("#1394df")).toBe(azure);
+		expect(currentTileColor(azure)).toBe(azure);
+		// A hex from no palette (hand-edited config) is left alone.
 		expect(currentTileColor("#123456")).toBe("#123456");
 
 		const colors = assignRepoTileColors(REPOS, { "tella-mac": "#5186af" });
-		expect(colors["tella-mac"]).toBe(REPO_TILE_COLORS[6]);
+		expect(colors["tella-mac"]).toBe(azure);
 		// And it still holds that slot against everyone else.
 		const others = REPOS.filter((id) => id !== "tella-mac").map((id) => colors[id]);
-		expect(others).not.toContain(REPO_TILE_COLORS[6]);
+		expect(others).not.toContain(azure);
 	});
 
 	test("ignores a chosen color for a repo that isn't registered", () => {
