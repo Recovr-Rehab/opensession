@@ -2988,27 +2988,6 @@ body.resizing-panel .panel-resize::after {
 	}
 }
 
-/* Full automated-review preview: a readable long-form scale, bounded by the
-   popover rather than the viewport, with the same theme tokens as markdown. */
-.review-preview-markdown.markdown {
-	font-size: 14px;
-	line-height: 1.5;
-	color: var(--text-dim);
-	overflow-wrap: anywhere;
-}
-.review-preview-markdown.markdown > h3:first-child {
-	margin: 0 0 12px;
-	font-size: 18px;
-	font-weight: 600;
-	line-height: 1.25;
-	letter-spacing: -0.015em;
-	color: var(--text);
-	text-wrap: balance;
-}
-.review-preview-markdown.markdown pre {
-	max-width: 100%;
-}
-
 /* ── Sub-agent pane (its own view tab) ───────────────────── */
 
 .subagent-head {
@@ -5823,53 +5802,6 @@ body.resizing-panel .panel-resize::after {
 	max-width: 100%;
 }
 
-/* markdown content */
-.markdown p {
-	/* 8px on a 14px/24px body ≈ the 0.47em block rhythm the native app uses
-	   (blockSpacing 8 against 17pt). 6px left paragraphs reading as one slab. */
-	margin: 0 0 8px;
-}
-
-.markdown a {
-	color: var(--link);
-	text-decoration: none;
-}
-.markdown a:hover {
-	text-decoration: underline;
-}
-
-.markdown strong {
-	font-weight: 600;
-	color: var(--text);
-}
-
-.markdown pre {
-	background: #0c0c10;
-	border: 1px solid var(--border);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	padding: 10px 12px;
-	margin: 2px 0 8px;
-	overflow-x: auto;
-	font-family: var(--mono);
-	font-size: 12px;
-	line-height: 1.55;
-}
-
-.markdown code {
-	font-family: var(--mono);
-	font-size: 0.9em;
-	background: rgba(255, 255, 255, 0.06);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 1.5px 5px;
-	color: #dde1f0;
-}
-.markdown pre code {
-	background: none;
-	padding: 0;
-	font-size: 12px;
-	color: inherit;
-}
-
 /* A session reference rendered by markdown.ts as a clickable link into that
    session (e.g. an orchestrator jumping into the worker it spawned). Labelled
    with the session's title where we know it, so it reads as prose: a quiet
@@ -5947,145 +5879,6 @@ a.pr-ref:hover {
 	/* the token lights up instead — an underline reads as a strike through
 	   its own fill (same call as the session chip) */
 	text-decoration: none;
-}
-
-.markdown ul,
-.markdown ol {
-	margin: 0 0 8px;
-	padding-left: 20px;
-}
-.markdown li {
-	margin: 3px 0;
-}
-.markdown li > ul,
-.markdown li > ol {
-	margin: 3px 0 0;
-}
-
-/* Agent answers carry their structure in h2/h3, so those have to read as
-   section breaks at a glance. Two things were missing: size (h3/h4 were
-   SMALLER than the 14px body, so a heading was distinguishable only by
-   weight) and space above (6px, which collapsed with the previous
-   paragraph's own margin — a heading sat as close to the block it ended as
-   to the one it introduces). The ramp mirrors the native app's, scaled from
-   its 17pt body to ours: +29% / +14% / +7% / body, semibold throughout, with
-   optical tracking tightening as the size grows. Space is asymmetric on
-   purpose — a heading belongs to what follows it. */
-.markdown h1,
-.markdown h2,
-.markdown h3,
-.markdown h4 {
-	margin: 16px 0 4px;
-	line-height: 1.3;
-	font-weight: 600;
-	letter-spacing: -0.012em;
-	color: var(--text);
-}
-.markdown h1 {
-	font-size: 18px;
-	letter-spacing: -0.018em;
-}
-.markdown h2 {
-	font-size: 16px;
-	letter-spacing: -0.016em;
-}
-.markdown h3 {
-	font-size: 15px;
-}
-.markdown h4 {
-	font-size: 14px;
-}
-
-.markdown > :first-child {
-	margin-top: 0;
-}
-.markdown > :last-child {
-	margin-bottom: 0;
-}
-/* A subhead directly under its parent heading is one unit, not a new section:
-   drop the full section gap so h2 + h3 don't drift apart. */
-.markdown :is(h1, h2, h3, h4) + :is(h1, h2, h3, h4) {
-	margin-top: 8px;
-}
-
-.markdown blockquote {
-	margin: 2px 0 8px;
-	padding: 3px 12px;
-	/* Not the accent: a red rule down the side of a quotation reads as a
-	   warning callout. Same call as the session chip and the PR token. */
-	border-left: 2px solid var(--border-strong);
-	color: var(--text-dim);
-}
-
-.markdown table {
-	border-collapse: collapse;
-	margin: 2px 0 10px;
-	font-size: 13px;
-	display: block;
-	overflow-x: auto;
-	max-width: 100%;
-}
-.markdown th {
-	text-align: left;
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	color: var(--text-faint);
-	border-bottom: 1px solid var(--border-strong);
-	padding: 4px 16px 5px 0;
-}
-.markdown td {
-	border-bottom: 1px solid var(--border);
-	padding: 6px 16px 6px 0;
-	vertical-align: top;
-}
-.markdown tr:last-child td {
-	border-bottom: none;
-}
-
-.markdown hr {
-	border: none;
-	border-top: 1px solid var(--border);
-	margin: 12px 0;
-}
-
-.markdown .md-details {
-	margin: 8px 0;
-	border: 1px solid var(--border);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-surface);
-	overflow: hidden;
-}
-.markdown .md-details > summary {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	padding: 9px 11px;
-	cursor: pointer;
-	font-weight: 600;
-	color: var(--text);
-	list-style: none;
-}
-.markdown .md-details > summary::-webkit-details-marker {
-	display: none;
-}
-.markdown .md-details > summary::before {
-	content: "›";
-	color: var(--text-faint);
-	font-size: 17px;
-	line-height: 1;
-	transition: transform var(--dur-micro) var(--ease);
-}
-.markdown .md-details[open] > summary::before {
-	transform: rotate(90deg);
-}
-.markdown .md-details-body {
-	padding: 10px 12px;
-	border-top: 1px solid var(--border);
-}
-.markdown sub {
-	font-size: 0.78em;
-	color: var(--text-faint);
 }
 
 /* ── Home dashboard ──────────────────────────────────────── */
@@ -9627,42 +9420,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	gap: 8px;
 	margin-top: 6px;
 }
-.md-image-link {
-	display: inline-block;
-	line-height: 0;
-}
-.md-image,
-.markdown img {
-	max-width: 100%;
-	max-height: 360px;
-	height: auto;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid rgba(127, 127, 127, 0.25);
-	margin: 6px 0;
-	display: block;
-}
-/* Chat images open the media lightbox (delegated handler in MediaLightbox.tsx) */
-.md-image {
-	cursor: zoom-in;
-}
-/* Rendered ```mermaid diagram (MarkdownBody swaps the fence for the SVG) */
-.md-mermaid {
-	margin: 2px 0 8px;
-	padding: 12px;
-	background: #0c0c10;
-	border: 1px solid var(--border);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	overflow-x: auto;
-}
-html[data-theme="light"] .md-mermaid {
-	background: #fbfbfc;
-}
-.md-mermaid svg {
-	display: block;
-	margin: 0 auto;
-	max-width: 100%;
-	height: auto;
-}
 .tool-result-videos,
 .msg-videos {
 	display: flex;
@@ -9689,41 +9446,6 @@ html[data-theme="light"] .md-mermaid {
 }
 .msg-file-card:hover {
 	border-color: var(--accent);
-}
-.md-video {
-	max-width: 100%;
-	max-height: 480px;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid rgba(127, 127, 127, 0.25);
-	margin: 6px 0;
-	display: block;
-	background: #000;
-}
-.md-video-wrap {
-	position: relative;
-	line-height: 0;
-}
-/* Always visible (not hover-gated) so it works on touch/iOS. top offsets the
-   video's own 6px top margin inside the wrapper. */
-.md-video-expand {
-	position: absolute;
-	top: 12px;
-	right: 6px;
-	display: grid;
-	place-items: center;
-	width: 28px;
-	height: 28px;
-	padding: 0;
-	border: 0;
-	border-radius: 999px;
-	background: rgba(0, 0, 0, 0.55);
-	color: #fff;
-	cursor: pointer;
-	opacity: 0.75;
-}
-.md-video-expand:hover {
-	opacity: 1;
-	background: rgba(0, 0, 0, 0.75);
 }
 
 /* Composer image attachments (pasted/dropped screenshots) */
