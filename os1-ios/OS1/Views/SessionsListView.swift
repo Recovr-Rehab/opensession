@@ -1391,10 +1391,8 @@ struct SessionsListView: View {
                             Text("\(visibleArchivedSessions.count)")
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(OS1VisualStyle.textFaint)
-                                #if os(iOS)
-                                // Same trailing column as a row's run clock.
-                                .padding(.trailing, 7)
-                                #endif
+                                // Same trailing column as a row's run clock:
+                                // the shared 16pt margin, no extra inset.
                         }
                         #if os(iOS)
                         // Same reason as SessionRow's 13: no 44pt floor now.
@@ -1511,6 +1509,15 @@ struct SessionsListView: View {
                         .foregroundStyle(OS1VisualStyle.textDim)
                 }
                 .buttonStyle(.borderless)
+                #if os(iOS)
+                // The 30pt tap target is ~7.5pt wider than the glyph on each
+                // side, so leaving it inside the row's 16pt margin parked the
+                // "+"'s ink at ~24pt while the repo tile opposite it sits
+                // flush at 16 — the whole line read as lopsided. Pull the
+                // frame out by that overhang so the INK lands on 16, the same
+                // column the row titles below truncate at.
+                .padding(.trailing, -7.5)
+                #endif
                 .accessibilityLabel("New session in \(RepoTile.label(for: repo))")
             }
         }
@@ -1805,14 +1812,9 @@ struct SessionRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if showsClock {
                 WorkspaceRunElapsedLabel(since: session.runStartedDate)
-                    #if os(iOS)
-                    // The repo header's "+" is an 18pt glyph centred in a 30pt
-                    // tap target, so its ink stops ~8pt inside the shared 16pt
-                    // row margin (minus the digits' own side bearing). Without
-                    // this pad the running clock juts past the plus above it
-                    // instead of sharing its column.
-                    .padding(.trailing, 7)
-                    #endif
+                    // No trailing pad: the repo header's "+" now hangs its tap
+                    // target past the row margin so its INK sits on 16pt, and
+                    // this clock's digits end on that same column on their own.
             }
         }
         #if os(iOS)
