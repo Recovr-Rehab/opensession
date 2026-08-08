@@ -2058,7 +2058,7 @@ export function PrPanel({
                       </Button>
                     ))}
                   </div>
-                  {reviewError && <div className="diff-comment-error">{reviewError}</div>}
+                  {reviewError && <div className="text-[12px] text-red">{reviewError}</div>}
                   <Button
                     variant="primary"
                     size="sm"

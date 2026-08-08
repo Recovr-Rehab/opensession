@@ -598,17 +598,6 @@ body.resizing-tab-split {
 	border-color: rgba(13, 148, 136, 0.5);
 }
 
-/* The staging globe rides in the header's icon cluster, 2px from the ⋯, so it
-   takes the same 32px square box as the share / ⋯ / panel buttons rather than
-   the padding-derived 35×31 it used to size itself to. Its glyph stays a touch
-   smaller than theirs, and its state colouring (dim → amber → green, accent on
-   hover) is its own — that's what the control communicates. */
-.staging-icon {
-	width: 32px;
-	height: 32px;
-	padding: 0;
-}
-
 /* The panel portals into this app-level slot. `display: contents` dissolves the
    slot so the panel (and its overlay) become direct flex children of `.app-body`
    — making the panel a full-height right column at the same level as the left
@@ -643,63 +632,6 @@ body.resizing-tab-split {
 }
 .pr-dot-conflict {
 	background: var(--yellow);
-}
-
-.workspace-info-panel {
-	display: flex;
-	flex-direction: column;
-	gap: 16px;
-	padding: 12px 12px 22px;
-}
-
-.workspace-info-title {
-	color: var(--text);
-	font-size: 17px;
-	font-weight: 600;
-	line-height: 1.2;
-	overflow-wrap: anywhere;
-}
-.workspace-info-comment-pop-body {
-	flex: 1;
-	overflow-y: auto;
-	min-height: 0;
-	margin-bottom: 5px;
-}
-.diff-file-header {
-	display: flex;
-	align-items: center;
-	position: relative;
-	gap: 8px;
-	width: 100%;
-	padding: 8px 10px;
-	background: transparent;
-	border: none;
-	cursor: pointer;
-	text-align: left;
-	color: var(--text);
-}
-.diff-file-header:hover {
-	background: var(--hover);
-}
-
-.diff-comment-error {
-	color: var(--red);
-	font-size: 12px;
-}
-
-.diff-file-header {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	background: none;
-	border: none;
-	padding: 8px 10px;
-	color: var(--text);
-	min-width: 0;
-}
-.diff-file-header:hover {
-	background: var(--hover);
 }
 
 /* ── Reviews view ────────────────────────────────────────── */

@@ -607,8 +607,9 @@ export function CommentableDiff({
     return (
       <div className={FILE_ROW} key={`${file.name}-${i}`} data-diff-file={file.name}>
         <div
-          // `diff-file-header` is a DOM hook, not styling: PrPanel's Files card
-          // finds this row by that class to scroll to and expand a file.
+          // `diff-file-header` is a DOM hook, not styling — no rule reaches it
+          // any more: PrPanel's Files card finds this row by that class to
+          // scroll to and expand a file (`el.querySelector(".diff-file-header")`).
           className={`diff-file-header ${FILE_HEADER}`}
           role="button"
           tabIndex={0}

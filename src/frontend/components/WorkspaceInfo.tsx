@@ -385,7 +385,7 @@ function CommentCard({
 								</span>
 							)}
 						</div>
-					<div className="workspace-info-comment-pop-body mb-[5px] min-h-0 flex-1 overflow-y-auto">
+					<div className="mb-[5px] min-h-0 flex-1 overflow-y-auto">
 							<MarkdownBody html={html} className="markdown" />
 						</div>
 					</div>
@@ -1602,10 +1602,14 @@ export function WorkspaceInfo({
 		assets.length > 0,
 	);
 
+	// `workspace-info-panel` / `workspace-info-title` are DOM hooks, not
+	// styling: the phone session-info page reaches both from an ancestor —
+	// `[&_.workspace-info-panel]:pt-0` / `[&_.workspace-info-title]:hidden` in
+	// INFO_OVERVIEW (lib/session-viewer-classes).
 	return (
 		<div className="workspace-info-panel flex flex-col gap-4 px-2 pb-[22px] pt-3">
 			<div className="grid gap-1 px-1">
-				<div className="workspace-info-title selectable text-item-title font-semibold leading-[1.2] text-fg">
+				<div className="workspace-info-title selectable text-item-title font-semibold leading-[1.2] text-fg [overflow-wrap:anywhere]">
 					{title}
 				</div>
 				{meta && <div className="text-label leading-[1.35] text-faint">{meta}</div>}
