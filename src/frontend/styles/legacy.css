@@ -2248,8 +2248,12 @@ a.pr-ref:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	margin: 0 18px -14px;
-	padding: 10px 16px 26px;
+	/* Inset just enough to read as a drawer behind the composer, and no more:
+	   at 18px + 16px the queued text sat 20px further in than the composer's
+	   own text, so the flap read as a differently-aligned panel rather than
+	   the same column. 6 + 1px border + 8 lands on --composer-inset-left. */
+	margin: 0 6px -14px;
+	padding: 10px 8px 26px;
 	/* Same edge as the composer it tucks under — the two hairlines meet. */
 	border: 1px solid var(--composer-border);
 	border-bottom: none;
@@ -2291,7 +2295,7 @@ a.pr-ref:hover {
    their width, so the group itself can stay transparent. */
 .composer-queue-actions {
 	position: absolute;
-	top: -8px;
+	top: -11px;
 	right: 0;
 	z-index: 1;
 	display: inline-flex;
@@ -2299,23 +2303,40 @@ a.pr-ref:hover {
 	gap: 2px;
 }
 .composer-queue-item + .composer-queue-item .composer-queue-actions {
-	top: 0;
+	top: -3px;
 }
+/* Same 40px box, 10px corner and inset hover wash as the composer's own
+   toolbar buttons right below them (.palette-icon-btn) — these are peers of
+   those, and at 34px they read as a smaller, weaker class of control. */
 .composer-queue-action {
-	width: 34px;
-	height: 34px;
+	position: relative;
+	width: 40px;
+	height: 40px;
 	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	border: 1px solid transparent;
-	background: transparent;
+	border: none;
+	background: none;
 	color: var(--text-dim);
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 }
+.composer-queue-action::before {
+	content: "";
+	position: absolute;
+	inset: 3px;
+	z-index: 0;
+	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
+	transition: background var(--dur-micro) var(--ease);
+}
+.composer-queue-action > * {
+	position: relative;
+	z-index: 1;
+}
 .composer-queue-action:not(:disabled):hover {
-	background: var(--hover);
-	border-color: var(--border);
 	color: var(--text);
+}
+.composer-queue-action:not(:disabled):hover::before {
+	background: var(--hover);
 }
 .composer-queue-action:disabled {
 	opacity: 0.35;
@@ -2326,12 +2347,11 @@ a.pr-ref:hover {
 }
 .composer-queue-steer:not(:disabled):hover {
 	color: var(--accent);
-	border-color: transparent;
-	background: var(--hover);
 }
 .composer-queue-action.danger:not(:disabled):hover {
 	color: var(--red);
-	border-color: var(--red);
+}
+.composer-queue-action.danger:not(:disabled):hover::before {
 	background: var(--red-soft);
 }
 .composer-queue-pill {
@@ -2367,7 +2387,8 @@ a.pr-ref:hover {
 	align-items: flex-start;
 	gap: 8px;
 	min-width: 0;
-	padding-right: 112px;
+	/* Reserves the trailing action cluster: 3 × 40px + two 2px gaps. */
+	padding-right: 128px;
 }
 .composer-queue-image {
 	position: relative;

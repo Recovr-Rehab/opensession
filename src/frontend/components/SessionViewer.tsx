@@ -3074,11 +3074,11 @@ export function SessionViewer({
 				)}
 				<div className="composer-queue-body">
 					{opts.human && (
-						<span className="composer-queue-from">💬 {opts.human.name}</span>
+						<span className="composer-queue-from">{opts.human.name}</span>
 					)}
 					{opts.github && <span className="composer-queue-from">GitHub</span>}
-					{worker && <span className="composer-queue-from">🤖 Worker report</span>}
-					{workflow && <span className="composer-queue-from">⚙️ Workflow</span>}
+					{worker && <span className="composer-queue-from">Worker report</span>}
+					{workflow && <span className="composer-queue-from">Workflow</span>}
 					{sessionNotice && (
 						<span className="composer-queue-from">System message</span>
 					)}
