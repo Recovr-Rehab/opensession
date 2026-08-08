@@ -30,7 +30,7 @@ export function TitleBar({
 		<div className={pane ? "wco-nav wco-nav-pane" : "wco-nav"}>
 			<Tooltip label="Back" side="bottom">
 				<button
-					className="wco-nav-btn"
+					className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
 					onClick={() => history.back()}
 					aria-label="Back"
 				>
@@ -39,7 +39,7 @@ export function TitleBar({
 			</Tooltip>
 			<Tooltip label="Forward" side="bottom">
 				<button
-					className="wco-nav-btn"
+					className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
 					onClick={() => history.forward()}
 					aria-label="Forward"
 				>
@@ -49,7 +49,7 @@ export function TitleBar({
 			{onSearch && (
 				<Tooltip label="Command menu" side="bottom" shortcut={["⌘", "K"]}>
 					<button
-						className="wco-nav-btn"
+						className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
 						onClick={onSearch}
 						aria-label="Open command menu"
 					>

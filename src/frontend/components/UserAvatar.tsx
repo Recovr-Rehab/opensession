@@ -46,7 +46,11 @@ export function UserAvatar({
 	useEffect(() => setFailed(false), [login]);
 	return (
 		<span
-			className={cn("user-avatar", className)}
+			className={cn(
+				"[--avatar-edge:inset_0_0_0_1px_color-mix(in_srgb,var(--text)_14%,transparent)] relative inline-flex shrink-0 items-center justify-center",
+				"rounded-[32%] bg-active font-bold text-dim shadow-[var(--avatar-edge)] select-none",
+				className,
+			)}
 			style={{
 				width: size,
 				height: size,
@@ -59,6 +63,7 @@ export function UserAvatar({
 				<img
 					src={`https://github.com/${login}.png?size=${size * 2}`}
 					alt={name}
+					className="absolute inset-0 size-full rounded-[inherit] object-cover shadow-[var(--avatar-edge)]"
 					loading="lazy"
 					draggable={false}
 					onError={() => setFailed(true)}

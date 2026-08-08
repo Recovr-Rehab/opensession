@@ -1,4 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
+import { cn } from "../ui/cn";
 import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
 import { sessionSourceLabel } from "../lib/brand";
 import React, { useState, useMemo, useEffect } from "react";
@@ -144,24 +145,24 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
       }
       filters={
         <>
-          <div className="seg-control" role="group" aria-label="Owner">
+          <div className="inline-flex gap-0.5 rounded-md bg-[var(--bg-hover)] p-0.5" role="group" aria-label="Owner">
             <button
-              className={`seg-control-btn${owner === "mine" ? " active" : ""}`}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", owner === "mine" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setOwner("mine")}
             >
               My archived
             </button>
             <button
-              className={`seg-control-btn${owner === "everyone" ? " active" : ""}`}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", owner === "everyone" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setOwner("everyone")}
             >
               Everyone
             </button>
           </div>
           {repos.length > 1 && (
-            <div className="seg-control" role="group" aria-label="Repo">
+            <div className="inline-flex gap-0.5 rounded-md bg-[var(--bg-hover)] p-0.5" role="group" aria-label="Repo">
               <button
-                className={`seg-control-btn${repo === "all" ? " active" : ""}`}
+                className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", repo === "all" ? "bg-active text-fg" : "text-faint")}
                 onClick={() => setRepo("all")}
               >
                 All repos
@@ -169,7 +170,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
               {repos.map((name) => (
                 <button
                   key={name}
-                  className={`seg-control-btn${repo === name ? " active" : ""}`}
+                  className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", repo === name ? "bg-active text-fg" : "text-faint")}
                   onClick={() => setRepo(name)}
                 >
                   {repoLabel(name)}
@@ -177,21 +178,21 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
               ))}
             </div>
           )}
-          <div className="seg-control" role="group" aria-label="Reason">
+          <div className="inline-flex gap-0.5 rounded-md bg-[var(--bg-hover)] p-0.5" role="group" aria-label="Reason">
             <button
-              className={`seg-control-btn${reason === "all" ? " active" : ""}`}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", reason === "all" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setReason("all")}
             >
               All
             </button>
             <button
-              className={`seg-control-btn${reason === "auto" ? " active" : ""}`}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", reason === "auto" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setReason("auto")}
             >
               Auto-archived
             </button>
             <button
-              className={`seg-control-btn${reason === "manual" ? " active" : ""}`}
+              className={cn("cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium whitespace-nowrap hover:text-dim max-[720px]:px-[13px] max-[720px]:py-[9px] max-[720px]:text-body", reason === "manual" ? "bg-active text-fg" : "text-faint")}
               onClick={() => setReason("manual")}
             >
               Manual

@@ -290,14 +290,24 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 {/* Inner controls are spans — the row itself is a button. */}
                 <span
                   role="button"
-                  className={`auto-toggle ${a.enabled ? "auto-toggle-on" : ""}`}
+                  className={cn(
+                    "relative h-[19px] w-[34px] shrink-0 rounded-full border p-0 transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] max-[720px]:h-[26px] max-[720px]:w-11",
+                    a.enabled ? "border-green bg-green-soft" : "border-line-strong bg-active",
+                  )}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleToggle(a);
                   }}
                   title={a.enabled ? "Disable" : "Enable"}
                 >
-                  <span className="auto-toggle-knob" />
+                  <span
+                    className={cn(
+                      "absolute top-0.5 left-0.5 size-[13px] rounded-full max-[720px]:size-5 transition-[translate,background] duration-[var(--dur-micro)] ease-[var(--ease)]",
+                      a.enabled
+                        ? "translate-x-[15px] bg-green max-[720px]:translate-x-[18px]"
+                        : "bg-faint",
+                    )}
+                  />
                 </span>
                 <span
                   className={cn(
@@ -415,11 +425,21 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               <>
                 <div className="flex items-center gap-2.5">
                   <button
-                    className={`auto-toggle ${sel.enabled ? "auto-toggle-on" : ""}`}
+                    className={cn(
+                    "relative h-[19px] w-[34px] shrink-0 rounded-full border p-0 transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] max-[720px]:h-[26px] max-[720px]:w-11",
+                    sel.enabled ? "border-green bg-green-soft" : "border-line-strong bg-active",
+                  )}
                     onClick={() => handleToggle(sel)}
                     title={sel.enabled ? "Disable" : "Enable"}
                   >
-                    <span className="auto-toggle-knob" />
+                    <span
+                      className={cn(
+                        "absolute top-0.5 left-0.5 size-[13px] rounded-full max-[720px]:size-5 transition-[translate,background] duration-[var(--dur-micro)] ease-[var(--ease)]",
+                        sel.enabled
+                          ? "translate-x-[15px] bg-green max-[720px]:translate-x-[18px]"
+                          : "bg-faint",
+                      )}
+                    />
                   </button>
                   <span className="text-dim text-[13px]">
                     {sel.enabled ? "Enabled" : "Disabled"}
