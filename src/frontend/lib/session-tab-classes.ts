@@ -330,9 +330,37 @@ export const TAB_HISTORY =
 	"data-[popup-open]:bg-hover data-[popup-open]:text-fg " +
 	CTRL_REVEAL;
 
-/** The + tab's right-click mode menu (share / stacked / ask). It sits inside
- *  `.tab-color-menu`, which supplies the popup surface. */
-export const NEW_MENU = "flex min-w-[250px] flex-col gap-px p-1";
+/** The + tab's right-click mode menu (share / stacked / ask): a fixed popup
+ *  anchored at the cursor, so it escapes the tab strip's overflow clipping.
+ *  This carries the surface too — it used to come from `.tab-color-menu`, a
+ *  rule named after the swatch row it no longer dresses (those chips live in the
+ *  tab context menu now). Above every other popup on the pane at z-1000. */
+export const NEW_MENU =
+	"fixed z-[1000] flex min-w-[250px] flex-col gap-px rounded-lg border border-line-strong bg-panel p-1 " +
+	"shadow-[0_10px_30px_rgba(0,0,0,0.32)]";
 export const NEW_MENU_ITEM =
 	"block w-full cursor-pointer whitespace-nowrap rounded-[calc(6px*var(--rf))] border-0 " +
 	"bg-transparent px-2 py-1.5 text-left text-label text-fg hover:bg-hover";
+
+/* ── Tab colour swatches ─────────────────────────────────────────────────────
+   The row of colour chips in a tab's context menu. Each chip carries its colour
+   as an inline style (the palette is data, see lib/tab-colors), so what's left
+   here is the ring, the box and the grow-on-hover.
+
+   `rounded-full` is right on these and only these: the rule spelled a bare
+   `border-radius: 50%` with no `corner-shape`, so a chip is a true circle
+   rather than one of the app's squircles. The hairline stays the untokenized
+   15% white it has always been — it reads as a highlight on a saturated chip,
+   not as a chrome border, so `border-line` would be a visual change rather
+   than a translation. */
+export const TAB_SWATCH =
+	"size-[22px] rounded-full border border-[rgba(255,255,255,0.15)] transition-transform hover:scale-[1.18]";
+
+/** The chip for the colour the tab currently wears: a ring in the page ink,
+ *  gapped off the chip by the panel it sits on. */
+export const TAB_SWATCH_ON = "shadow-[0_0_0_2px_var(--bg-panel),0_0_0_3px_var(--text)]";
+
+/** The "no colour" chip: an empty ring with a diagonal strike. */
+export const TAB_SWATCH_NONE =
+	"relative bg-active after:absolute after:inset-[3px] after:rotate-45 after:border-t " +
+	"after:border-t-faint after:content-['']";

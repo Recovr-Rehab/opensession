@@ -25,12 +25,16 @@ import {
 	TAB_RENAME,
 	TAB_SCROLL,
 	TAB_STRIP,
+	TAB_SWATCH,
+	TAB_SWATCH_NONE,
+	TAB_SWATCH_ON,
 	TAB_TITLE,
 	TAB_VICON,
 	tabClass,
 	tabCloseClass,
 	tabDotClass,
 } from "../lib/session-tab-classes";
+import { cn } from "../ui/cn";
 
 /**
  * The tab strip is scoped to ONE Workspace: it shows the sibling sessions of the
@@ -671,7 +675,7 @@ export function SessionTabs({
 												<button
 													key={c.key}
 													type="button"
-													className={`tab-color-swatch ${colors[key] === c.key ? "tab-color-swatch-on" : ""}`}
+													className={cn(TAB_SWATCH, colors[key] === c.key && TAB_SWATCH_ON)}
 													style={{ background: c.hex }}
 													aria-label={c.label}
 													title={c.label}
@@ -680,7 +684,7 @@ export function SessionTabs({
 											))}
 											<button
 												type="button"
-												className="tab-color-swatch tab-color-swatch-none"
+												className={cn(TAB_SWATCH, TAB_SWATCH_NONE)}
 												aria-label="No color"
 												title="No color"
 												onClick={() => onSetColor(key, null)}
@@ -709,7 +713,7 @@ export function SessionTabs({
 
 			{newMenu && (
 				<div
-					className={`tab-color-menu ${NEW_MENU}`}
+					className={NEW_MENU}
 					style={{ left: newMenu.x, top: newMenu.y }}
 					onClick={(e) => e.stopPropagation()}
 				>

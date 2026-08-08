@@ -369,50 +369,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	}
 }
 
-/* Right-click swatch menu — a floating row of color chips anchored at the
-   cursor. Fixed-position so it escapes the tab strip's overflow clipping. */
-.tab-color-menu {
-	position: fixed;
-	z-index: 1000;
-	display: flex;
-	gap: 8px;
-	padding: 9px 10px;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
-	corner-shape: squircle;
-}
-.tab-color-swatch {
-	width: 22px;
-	height: 22px;
-	border-radius: 50%;
-	border: 1px solid rgba(255, 255, 255, 0.15);
-	padding: 0;
-	cursor: pointer;
-	transition: transform var(--dur-micro) var(--ease);
-}
-.tab-color-swatch:hover {
-	transform: scale(1.18);
-}
-.tab-color-swatch-on {
-	box-shadow:
-		0 0 0 2px var(--bg-panel),
-		0 0 0 3px var(--text);
-}
-/* The "no color" chip: an empty ring with a diagonal strike. */
-.tab-color-swatch-none {
-	background: var(--bg-active);
-	position: relative;
-}
-.tab-color-swatch-none::after {
-	content: "";
-	position: absolute;
-	inset: 3px;
-	border-top: 1px solid var(--text-faint);
-	transform: rotate(45deg);
-	transform-origin: center;
-}
 body.resizing-tab-split {
 	cursor: col-resize;
 	user-select: none;
