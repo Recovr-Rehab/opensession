@@ -3139,7 +3139,13 @@ export function SessionViewer({
 				: `${queuedOnlyCount} queued · ${visibleSteered.length} steered`;
 	const attachedQueue =
 		queueCount > 0 ? (
-			<div className="composer-queue" aria-label="Queued and steered messages">
+			<div
+				// Stacked under the agents flap, this is a middle section of the
+				// same box, so it drops its own rounded top — only the topmost
+				// flap keeps one.
+				className="composer-queue [&:not(:first-child)]:rounded-t-none"
+				aria-label="Queued and steered messages"
+			>
 				<div className="composer-queue-title">{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
 					const c = classifyQueuedContent(s.content);

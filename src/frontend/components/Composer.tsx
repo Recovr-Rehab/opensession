@@ -708,8 +708,17 @@ export function Composer({
         // initial={false}: adopt the target radius instantly on mount —
         // otherwise Motion animates from the stylesheet value on load, a
         // visible radius morph.
+        //
+        // With a flap attached the two are ONE control rather than a pill
+        // parked on a panel: the flap keeps the rounded top, this keeps the
+        // rounded bottom, and the seam where they meet squares off.
         initial={false}
-        animate={{ borderRadius: minimized ? 999 : composerRadius() }}
+        animate={{
+          borderTopLeftRadius: minimized ? 999 : hasAttached ? 0 : composerRadius(),
+          borderTopRightRadius: minimized ? 999 : hasAttached ? 0 : composerRadius(),
+          borderBottomLeftRadius: minimized ? 999 : composerRadius(),
+          borderBottomRightRadius: minimized ? 999 : composerRadius(),
+        }}
         transition={composerMorph}
         // `composer` and `composer-min` stay on the markup as hooks, not as
         // styling: legacy.css still reaches through them into controls this file
