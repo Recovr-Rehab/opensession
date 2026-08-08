@@ -351,11 +351,11 @@ html[data-theme="light"] {
                         that actually translates.
      animate-[composer-agents-pulse_…]  (ComposerAgents) keeping the existing
                         explicit choice to stop it.
-     .pixel-spinner     the decorative pixel loader — snakes, ripples and
-                        bounces that travel across the block. However fun, it
-                        is the single most motion-heavy thing in the app and
-                        the clearest thing this preference is asking us to
-                        drop; the pixel grid still reads as a graphic at rest.
+     [animation-name:pixel-snake-trail]  (PixelSpinner) the decorative pixel
+                        loader — a wave that travels across the block. However
+                        fun, it is the single most motion-heavy thing in the
+                        app and the clearest thing this preference is asking
+                        us to drop; the grid still reads as a graphic at rest.
 
    PREFER PUTTING A NEW EXCEPTION ON THE ELEMENT, not in this list:
    `motion-reduce:[animation-duration:0.8s]! motion-reduce:[animation-iteration-count:infinite]!`
@@ -1333,6 +1333,37 @@ a.pr-ref:hover {
 @keyframes composer-agents-pulse {
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0.35; }
+}
+
+/* The pixel spinner's wave. Referenced from the longhand
+   `[animation-name:pixel-snake-trail]` in lib/pixel-spinner-classes. */
+@keyframes pixel-snake-trail {
+  0% {
+    background: var(--glow-color);
+    box-shadow: none;
+    opacity: 0.78;
+  }
+  15% {
+    background: var(--glow-color);
+    box-shadow: none;
+    opacity: 0.7;
+  }
+  30% {
+    background: color-mix(in srgb, var(--glow-color) 70%, transparent);
+    box-shadow: none;
+    opacity: 0.6;
+  }
+  45% {
+    background: color-mix(in srgb, var(--glow-color) 50%, transparent);
+    box-shadow: none;
+    opacity: 0.5;
+  }
+  60%,
+  100% {
+    background: color-mix(in srgb, var(--glow-color) 35%, transparent);
+    box-shadow: none;
+    opacity: 1;
+  }
 }
 
 @keyframes preview-spin {
