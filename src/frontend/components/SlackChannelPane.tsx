@@ -376,7 +376,7 @@ export function SlackChannelPane({
 				</div>
 			)}
 			{/* Same visual family as the sessions Composer (.composer classes from
-			    global.css) — rounded card, borderless textarea, circular accent
+			    legacy.css) — rounded card, borderless textarea, circular accent
 			    send — sized down for a chat channel. */}
 			<div className="composer-wrap shrink-0 px-5 pb-4 pt-1">
 				<div className={`composer ${!asUser ? "composer-disabled" : ""}`}>

@@ -4027,7 +4027,7 @@ if (!embeddedDemo) {
 	const previewWaitSessionId = matchPreviewWaitRoute(location.pathname);
 	// `reducedMotion="user"` makes every `motion.*` component honour the OS
 	// setting. Motion's default is "never", so without this the CSS blanket in
-	// global.css would quietly cover only half the app — Motion animates inline
+	// legacy.css would quietly cover only half the app — Motion animates inline
 	// styles off the main thread, where a `transition-duration` override can't
 	// reach it. "user" (rather than forcing it off) is also the right shape:
 	// Motion keeps opacity and drops transform/layout, which is the "gentler,

@@ -158,7 +158,7 @@ interface Props {
 
 /**
  * The expanded box's resting corner, resolved from `--composer-radius` in
- * global.css. Motion writes `borderRadius` inline to morph between the phone's
+ * legacy.css. Motion writes `borderRadius` inline to morph between the phone's
  * resting pill and the expanded box, so the number has to exist in JS — but it
  * shouldn't be a SECOND copy of the token (the old inline `32` had drifted
  * from the stylesheet's own value, and the phone breakpoint restated a third).
@@ -901,7 +901,7 @@ export function Composer({
                 layout="position"
                 {...composerChipMotion}
                 // Phones pull the model pill to the front of the toolbar
-                // (order:-1 in global.css), which would otherwise wedge it
+                // (order:-1 in legacy.css), which would otherwise wedge it
                 // between the "+" and this marker. Same order as the "+" wrap
                 // keeps the pair together — equal order falls back to DOM
                 // order, and the "+" is rendered first.
@@ -940,7 +940,7 @@ export function Composer({
           {/* Model + effort live together on the right edge (ChatGPT-style):
               one pill, effort levels up top, the model behind a submenu.
               Phones reorder it next to the + button via flex order (see the
-              "Lightweight phone inputs" block in global.css). */}
+              "Lightweight phone inputs" block in legacy.css). */}
           <AnimatePresence initial={false}>
             {!minimized && (
               <motion.div

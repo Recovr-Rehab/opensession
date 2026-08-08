@@ -186,11 +186,11 @@ export async function buildFrontend(): Promise<string> {
 
 	// Tailwind pass (see styles/tailwind.css). Bun can't compile Tailwind, so
 	// the real compiler runs as a subprocess (~50ms); its lightningcss minifier
-	// doesn't have the var() bug above. Linked after global.css so utilities win
+	// doesn't have the var() bug above. Linked after the stylesheets so utilities win
 	// source-order ties against legacy rules.
 	//
 	// Fail-soft, but NOT by dropping the sheet: as components migrate off
-	// global.css the utilities stop being a garnish and start carrying the
+	// legacy.css the utilities stop being a garnish and start carrying the
 	// layout, so "serve without utilities" degrades from a cosmetic loss to a
 	// destroyed page. Fall back to the last sheet that compiled instead — it is
 	// stale by exactly the edit that broke the build, which is survivable, and

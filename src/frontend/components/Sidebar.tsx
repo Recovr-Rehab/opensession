@@ -3709,13 +3709,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						const rowClass = cn(
 							// The desktop look lives in these utilities and MUST stay
 							// desktop-only: utilities win cascade ties against the phone
-							// card CSS (global.css @media), so an unconditional w-full/
+							// card CSS (legacy.css @media), so an unconditional w-full/
 							// py-* here is exactly the "full-width Home card on mobile"
 							// bug. Phones render the Slack-home style 132px card strip
 							// purely from .sidebar-nav-item's media rules.
 							"sidebar-nav-item group flex text-left transition-colors",
 							// `active` is what the phone card CSS keys its selected state
-							// off (.sidebar-nav-item.active in global.css's @media block);
+							// off (.sidebar-nav-item.active in legacy.css's @media block);
 							// the desktop selected look comes from the utilities below.
 							// Dropping it in the Tailwind migration left the phone cards
 							// with no "you are here".

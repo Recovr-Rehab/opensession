@@ -6,7 +6,7 @@ import type { UnifiedSession } from "./types";
 
 // Inline styles for the right-click menus. Kept inline (not in a CSS file)
 // because component-imported CSS isn't linked into the served bundle — only
-// global.css is — so a separate stylesheet silently doesn't apply.
+// legacy.css is — so a separate stylesheet silently doesn't apply.
 export const CTX_MENU_STYLE: React.CSSProperties = {
 	position: "fixed",
 	zIndex: 3000,

@@ -1207,8 +1207,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.sidebar-status-group > .sidebar-group-header,
 	.sidebar-group--pinned > .sidebar-group-header,
 	.sidebar-group--review > .sidebar-group-header,
-	.sidebar-repo-group > .sidebar-repo-head,
-	.sidebar-folder-section > .sidebar-folder-header {
+	.sidebar-repo-group > .sidebar-repo-head {
 		position: sticky;
 		top: 44px;
 		z-index: 15;
@@ -1229,8 +1228,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	.sidebar-status-group > .sidebar-group-header:hover,
 	.sidebar-group--pinned > .sidebar-group-header:hover,
 	.sidebar-group--review > .sidebar-group-header:hover,
-	.sidebar-repo-group > .sidebar-repo-head:hover,
-	.sidebar-folder-section > .sidebar-folder-header:hover {
+	.sidebar-repo-group > .sidebar-repo-head:hover {
 		background: var(--hover);
 	}
 }
@@ -1765,16 +1763,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 .hovercard-mono {
 	font-size: 0.95em;
-}
-
-.hovercard-pr {
-	margin-top: 9px;
-	padding-top: 9px;
-	border-top: 1px solid var(--border);
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 11px;
 }
 .hovercard-pr-state {
 	font-weight: 600;
@@ -5517,27 +5505,6 @@ body.resizing-panel .panel-resize::after {
 		display: none;
 	}
 
-	/* the list and detail are separate screens, not a split */
-	.reviews-has-detail .reviews-main {
-		display: none;
-	}
-	.reviews-has-detail .reviews-drawer {
-		position: absolute;
-		inset: 0;
-		z-index: 20;
-		border-left: none;
-	}
-	.reviews-drawer-close,
-	.reviews-has-detail .reviews-drawer-title {
-		display: none;
-	}
-	.reviews-drawer-back {
-		display: inline-flex;
-	}
-	.reviews-drawer-body {
-		overflow-y: auto;
-	}
-
 	/* the PrPanel split stacks: info, then the diff below */
 	.pr-panel-split {
 		height: auto;
@@ -8407,10 +8374,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		z-index: 25;
 	}
 
-	.panel-close {
-		display: block;
-	}
-
 	/* Chevron-back at the top of the workspace panel on phones — the panel is a
 	   deeper page reached from the ⋯ menu, so it carries its own way back to the
 	   session (matching the top-bar back chevron, no "Back" word). */
@@ -9658,9 +9621,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.composer-toolbar .palette-chevron {
 		display: none;
 	}
-	.composer-toolbar .palette-pill:has(.palette-effort-icon) .palette-pill-label {
-		display: none;
-	}
 }
 
 /* ── Phone touch targets: the last mile ──────────────────────────
@@ -9693,16 +9653,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.sidebar-filter-btn {
 		min-width: 38px;
 		min-height: 38px;
-	}
-
-	/* Inline icon buttons (copy, expand, …) inside diff / message headers. */
-	.btn-icon {
-		padding: 8px 10px;
-		font-size: 15px;
-	}
-	.pin-btn {
-		padding: 8px 10px;
-		font-size: 16px;
 	}
 
 	/* Segmented pickers (Ask/Code mode, sort, …). */
@@ -12361,12 +12311,6 @@ html.wco .settings-sidenav {
 	}
 	.composer-toolbar {
 		margin-top: 6px;
-	}
-	/* Hide the goal control's WRAPPER, not just the button: a display:none
-	   button left its Motion box in the row as a zero-width flex item that
-	   still cost a full gap — dead space the send button paid for. */
-	.composer-toolbar .composer-pop-wrap:has(.composer-goal-btn) {
-		display: none;
 	}
 	/* The model pill sits next to the + button on phones (DOM keeps it
 	   on the right edge for desktop; flex order moves it here). The

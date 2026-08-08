@@ -8,7 +8,7 @@ import { MotionGlobalConfig, type Transition } from "motion/react";
 
 /**
  * Duration tokens, in seconds. These mirror `--dur-micro` / `--dur` /
- * `--dur-lg` in styles/global.css one-for-one — the same three numbers picked
+ * `--dur-lg` in styles/base.css one-for-one — the same three numbers picked
  * by travel distance, so a Motion spring and a CSS transition on neighbouring
  * elements land together instead of one trailing the other. Change one, change
  * both.

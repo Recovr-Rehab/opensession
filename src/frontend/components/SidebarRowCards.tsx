@@ -111,7 +111,7 @@ function CardRows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
 /**
  * The "open this somewhere else" link every card ends on. The app ships no
  * Tailwind Preflight (see styles/tailwind.css), so a bare `<a>` keeps the UA's
- * underline and `global.css`'s accent link colour — which is why this has to
+ * underline and `legacy.css`'s accent link colour — which is why this has to
  * say `no-underline` out loud, and why every card must go through it rather
  * than hand-rolling an anchor and forgetting to.
  */

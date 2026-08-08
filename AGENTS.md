@@ -134,7 +134,7 @@ chaos:
   forward; don't roll back the shared tree.
 - **`git add <specific files>`, not `git add -A`** — multiple sessions may
   have uncommitted edits in this tree; only commit your own. High-traffic
-  files (`global.css`, `opensession.ts`, `App.tsx`) are sweep magnets: even a
+  files (`legacy.css`, `opensession.ts`, `App.tsx`) are sweep magnets: even a
   specific `git add` on one of them can pick up another session's uncommitted
   hunks. For those files use `git add -p` to stage only your hunks, and check
   `git diff --cached` before committing.
@@ -190,23 +190,50 @@ chaos:
 
 ## Frontend UI system (Base UI + Tailwind + Motion)
 
-New UI goes through this stack; legacy `global.css` classes are migrated
-opportunistically when touched (strangler pattern — never a big-bang rewrite):
+New UI goes through this stack. The stylesheet is split in two, and the split
+is the migration's scoreboard:
 
-- **Tokens**: `src/frontend/styles/tailwind.css` maps the existing `global.css`
+- `styles/base.css` — the foundation, and it stays. Tokens, the hand-rolled
+  preflight (Tailwind's own is deliberately not imported), the scroll model
+  and selection policy, Electron/WCO/PWA chrome, reduced-motion and `@supports`
+  fallbacks. "Move everything to Tailwind" never meant deleting these; Tailwind
+  v4 keeps tokens and base rules in CSS.
+- `styles/legacy.css` — component styling on its way out. **Target: zero.**
+  Nothing new goes here; migrating a component means moving its rules into
+  utilities on the markup (or a primitive in `ui/`) and deleting the legacy
+  class names from the JSX in the same commit.
+
+Migration is an active campaign, not opportunistic drift. Two rules keep it
+from breaking things:
+
+- Move a whole subtree at once. Descendant rules keyed off an ancestor class
+  (`.sidebar-item .foo`) break if the ancestor migrates while children still
+  depend on it.
+- Strip the legacy classes from the markup as you go. Utilities only win
+  source-order *ties*; a compound legacy selector (`.sidebar-item.is-selected
+  .count`) still outranks a single utility class, so a half-migrated element
+  loses specificity fights in ways that are hard to spot.
+
+Tooling: `bun scripts/css-audit.ts` reports which rules in legacy.css nothing
+can reach any more (`--prune` deletes them; it holds back classes built at
+runtime like `` `source-${x}` ``, which is the one mistake that silently
+un-styles things). `bun scripts/css-shots.ts <name>` captures the routes ×
+viewport × theme screenshot gate; `--diff` compares two runs.
+
+- **Tokens**: `src/frontend/styles/tailwind.css` maps the existing `base.css`
   variables (`--bg`, `--text-dim`, …) into Tailwind's namespace via
   `@theme inline` — use `bg-panel text-dim border-line text-fg bg-surface` etc.,
   never raw hex or stock Tailwind grays. Dark/light theming comes for free
   because the vars re-resolve under `html[data-theme]`. The spacing/radius/text
-  scales are px-anchored there (global.css sets `html { font-size: 14px }`,
+  scales are px-anchored there (base.css sets `html { font-size: 14px }`,
   which would otherwise shrink every rem-based utility to 87.5%) — so `p-3` is
   a true 12px and `text-xs` a true 12px. Bare `rounded` bypasses the radius
   scale; use `rounded-sm/md/lg` (4/6/8px).
 - **Compile**: Tailwind is compiled by an `@tailwindcss/cli` subprocess inside
   `buildFrontend()` (src/server/frontend-build.ts) and linked *after*
-  `global.css`; utilities are imported unlayered so they win source-order ties
-  against legacy rules. Preflight is intentionally NOT imported (global.css
-  assumes browser defaults). Don't import tailwind.css from App.tsx — Bun
+  base.css + legacy.css; utilities are imported unlayered so they win
+  source-order ties against legacy rules. Preflight is intentionally NOT
+  imported (base.css assumes browser defaults). Don't import tailwind.css from App.tsx — Bun
   can't compile it.
 - **Primitives**: wrap Base UI (`@base-ui/react`) per component in
   `src/frontend/ui/` (see `ui/tooltip.tsx` for the pattern). Rules: always

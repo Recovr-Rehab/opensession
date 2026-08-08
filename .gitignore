@@ -52,3 +52,4 @@ deploy/sandbox/microvm/.cache-busybox
 .agents/skills/
 .claude/skills
 skills-lock.json
+.css-shots/

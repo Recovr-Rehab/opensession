@@ -10,7 +10,7 @@ import React from "react";
  * color is controlled by the caller's text class (e.g. `text-fg` for a
  * neutral black/white loader).
  *
- * Styling + keyframes live in global.css under the "PIXEL SPINNER" section.
+ * Styling + keyframes live in legacy.css under the "PIXEL SPINNER" section.
  *
  * The pattern is intentionally fixed (not random per instance) so every
  * loader in the app looks identical — a row of session spinners reads as one

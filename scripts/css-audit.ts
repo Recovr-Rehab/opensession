@@ -1,0 +1,265 @@
+#!/usr/bin/env bun
+/**
+ * Reports (and optionally deletes) rules in styles/legacy.css that nothing can
+ * reach any more — the garbage-collection half of the Tailwind migration.
+ *
+ *   bun scripts/css-audit.ts            # report
+ *   bun scripts/css-audit.ts --prune    # rewrite legacy.css without them
+ *   bun scripts/css-audit.ts --list     # just the unreachable class names
+ *
+ * A selector can never match if any class in it appears nowhere in the source,
+ * so the rule is dead weight. The subtlety is deciding "appears nowhere":
+ * class names are not always written literally. Three sources of indirection
+ * are excluded from deletion, and getting any of them wrong silently un-styles
+ * something (a Linear-sourced chip losing its tint, say):
+ *
+ *   · template literals — `source-${session.source}`, `pr-bar-state-${tone}`;
+ *     any class matching a produced prefix is held back;
+ *   · plain string literals in .ts files, reached through a field such as
+ *     `meta.dotClass`;
+ *   · @keyframes names, which are referenced by `animation:`, not by class.
+ *
+ * Deletion is conservative in one more way: it only ever drops a selector that
+ * contains a dead class. Rules that merely lose one selector from a list keep
+ * the rest, and the file's one-selector-per-line formatting is preserved.
+ */
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const ROOT = join(import.meta.dir, "..");
+const SHEET = join(ROOT, "src/frontend/styles/legacy.css");
+const SCAN_DIRS = ["src", "os1-chrome", "os1-tui", "website"];
+const SCAN_EXT = /\.(tsx?|jsx?|html)$/;
+
+const argv = new Set(process.argv.slice(2));
+
+// ── gather every identifier the source could produce ────────────────────────
+function sourceFiles(dir: string, out: string[] = []): string[] {
+	let entries: string[];
+	try {
+		entries = readdirSync(dir);
+	} catch {
+		return out;
+	}
+	for (const name of entries) {
+		if (name === "node_modules" || name === ".git" || name.startsWith(".frontend-dist")) continue;
+		const p = join(dir, name);
+		let st: ReturnType<typeof statSync>;
+		try {
+			st = statSync(p);
+		} catch {
+			continue;
+		}
+		if (st.isDirectory()) sourceFiles(p, out);
+		else if (SCAN_EXT.test(name)) out.push(p);
+	}
+	return out;
+}
+
+const idents = new Set<string>();
+const prefixes = new Set<string>();
+const literals = new Set<string>();
+for (const dir of SCAN_DIRS) {
+	for (const f of sourceFiles(join(ROOT, dir))) {
+		let text: string;
+		try {
+			text = readFileSync(f, "utf8");
+		} catch {
+			continue;
+		}
+		for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
+		// `foo-bar-${x}` / `a b c-${x}` -> the "c-" prefix such a literal can build
+		for (const m of text.matchAll(/`([a-zA-Z0-9 _-]*)\$\{/g)) {
+			const tail = m[1].split(/\s+/).pop() ?? "";
+			if (/[a-z]-$/.test(tail)) prefixes.add(tail);
+		}
+		for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
+	}
+}
+
+// ── classify the classes defined in the sheet ───────────────────────────────
+const css = readFileSync(SHEET, "utf8");
+const defined = new Set([...css.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+const keyframes = new Set([...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]));
+
+const dead = new Set<string>();
+const held: [string, string][] = [];
+for (const c of defined) {
+	if (idents.has(c)) continue;
+	if (keyframes.has(c)) held.push([c, "@keyframes name"]);
+	else if (literals.has(c)) held.push([c, "string literal in source"]);
+	else {
+		const p = [...prefixes].find((x) => c.startsWith(x));
+		if (p) held.push([c, `built at runtime via \`${p}\${...}\``]);
+		else dead.add(c);
+	}
+}
+
+if (argv.has("--list")) {
+	for (const c of [...dead].sort()) console.log(c);
+	process.exit(0);
+}
+
+console.log(`sheet:            ${SHEET.replace(ROOT + "/", "")}`);
+console.log(`classes defined:  ${defined.size}`);
+console.log(`  reachable:      ${defined.size - dead.size - held.length}`);
+console.log(`  held back:      ${held.length}  (indirection — never delete these)`);
+console.log(`  unreachable:    ${dead.size}`);
+if (held.length && argv.has("--verbose")) {
+	console.log("\nheld back:");
+	for (const [c, why] of held.sort()) console.log(`  ${c.padEnd(36)} ${why}`);
+}
+
+// ── prune ───────────────────────────────────────────────────────────────────
+const COMMENT = /\/\*[\s\S]*?\*\//g;
+const OPAQUE = new Set(["@keyframes", "@-webkit-keyframes", "@property", "@font-face", "@counter-style"]);
+
+/** Split a selector list on top-level commas (not inside (), [] or strings). */
+function splitSelectors(sel: string): string[] {
+	const out: string[] = [];
+	let buf = "";
+	let depth = 0;
+	let quote: string | null = null;
+	for (const ch of sel) {
+		if (quote) {
+			buf += ch;
+			if (ch === quote) quote = null;
+			continue;
+		}
+		if (ch === '"' || ch === "'") (quote = ch), (buf += ch);
+		else if (ch === "(" || ch === "[") depth++, (buf += ch);
+		else if (ch === ")" || ch === "]") depth--, (buf += ch);
+		else if (ch === "," && depth === 0) out.push(buf), (buf = "");
+		else buf += ch;
+	}
+	out.push(buf);
+	return out;
+}
+
+const isDead = (sel: string) => {
+	const names = [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]);
+	return names.length > 0 && names.some((n) => dead.has(n));
+};
+
+/**
+ * Index just past the "}" matching the "{" at `i`. Comments are checked before
+ * quotes on purpose: an apostrophe inside a comment ("this asset isn't
+ * trimmed") would otherwise open a phantom string and swallow the rule's
+ * closing brace, silently merging it with everything after it.
+ */
+function blockEnd(s: string, i: number): number {
+	let depth = 0;
+	let quote: string | null = null;
+	for (let j = i; j < s.length; j++) {
+		const ch = s[j];
+		if (quote) {
+			if (ch === "\\") j++;
+			else if (ch === quote) quote = null;
+		} else if (s.startsWith("/*", j)) {
+			const k = s.indexOf("*/", j + 2);
+			j = k < 0 ? s.length : k + 1;
+		} else if (ch === '"' || ch === "'") quote = ch;
+		else if (ch === "{") depth++;
+		else if (ch === "}" && --depth === 0) return j + 1;
+	}
+	return s.length;
+}
+
+let removedRules = 0;
+let removedSelectors = 0;
+
+function prune(s: string): string {
+	let out = "";
+	let i = 0;
+	while (i < s.length) {
+		if (s.startsWith("/*", i)) {
+			const k = s.indexOf("*/", i + 2);
+			const end = k < 0 ? s.length : k + 2;
+			out += s.slice(i, end);
+			i = end;
+			continue;
+		}
+		// Scan the prelude up to "{" (a rule) or ";" (an at-statement).
+		let j = i;
+		let quote: string | null = null;
+		for (; j < s.length; j++) {
+			const ch = s[j];
+			if (quote) {
+				if (ch === "\\") j++;
+				else if (ch === quote) quote = null;
+			} else if (s.startsWith("/*", j)) {
+				const k = s.indexOf("*/", j + 2);
+				j = k < 0 ? s.length : k + 1;
+			} else if (ch === '"' || ch === "'") quote = ch;
+			else if (ch === "{" || ch === ";") break;
+		}
+		if (j >= s.length) {
+			out += s.slice(i);
+			break;
+		}
+		if (s[j] === ";") {
+			out += s.slice(i, j + 1);
+			i = j + 1;
+			continue;
+		}
+
+		const prelude = s.slice(i, j);
+		const end = blockEnd(s, j);
+		const body = s.slice(j + 1, end - 1);
+		// Strip comments before deciding at-rule vs style rule. A documented
+		// block ("/* Mobile: card rows */\n@media (max-width: 720px) {") starts
+		// its prelude with the comment, and testing that for "@" silently
+		// classifies the whole media query as one style rule — so nothing
+		// inside it is ever walked, and every dead rule in it survives.
+		const head = prelude.replace(COMMENT, "").trim();
+
+		if (head.startsWith("@")) {
+			if (OPAQUE.has(head.split(/\s/)[0].toLowerCase())) out += s.slice(i, end);
+			else {
+				const inner = prune(body);
+				if (inner.trim()) out += `${prelude}{${inner}}`;
+			}
+			i = end;
+			continue;
+		}
+
+		// Comments must leave the prelude BEFORE the selector list is split, or
+		// a comma inside one chops it into an unterminated fragment.
+		const comments = prelude.match(COMMENT) ?? [];
+		const selText = prelude.replace(COMMENT, "");
+		const parts = splitSelectors(selText).filter((p) => p.trim());
+		const keep = parts.filter((p) => !isDead(p));
+		const dropped = parts.length - keep.length;
+
+		if (!keep.length) {
+			removedRules++;
+			removedSelectors += dropped;
+		} else if (dropped) {
+			removedSelectors += dropped;
+			const lead = selText.slice(0, selText.length - selText.trimStart().length);
+			// Keep one-per-line formatting; collapsing 40 selectors onto one
+			// line makes the diff unreviewable.
+			const m = selText.match(/,[ \t]*\n([ \t]*)/);
+			const joiner = m ? `,\n${m[1]}` : ", ";
+			const doc = comments.map((c) => `${c}\n`).join("");
+			out += `${lead}${doc}${keep.map((p) => p.trim()).join(joiner)} {${body}}`;
+		} else {
+			out += s.slice(i, end);
+		}
+		i = end;
+	}
+	return out;
+}
+
+if (argv.has("--prune")) {
+	const next = prune(css).replace(/\n{4,}/g, "\n\n\n");
+	writeFileSync(SHEET, next);
+	const before = css.split("\n").length;
+	const after = next.split("\n").length;
+	console.log(`\npruned: ${removedRules} rules, ${removedSelectors} selectors`);
+	console.log(`lines:  ${before} -> ${after}  (-${before - after})`);
+	console.log("\nVerify before committing: the CSSOM diff and the screenshot");
+	console.log("gate are what caught real breakage here, not the text diff.");
+} else if (dead.size) {
+	console.log("\nRun with --prune to delete them, --verbose to see what was held back.");
+}
