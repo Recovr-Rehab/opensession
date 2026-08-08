@@ -391,18 +391,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 /* Needs-input count on a COLLAPSED repo band — urgent rows must not vanish
    inside a closed group. Wears the needs-input lane color. */
-.sidebar-repo-attn {
-	flex: 0 0 auto;
-	min-width: 16px;
-	padding: 0 4px;
-	border-radius: 999px;
-	background: var(--blue);
-	color: #fff;
-	font-size: 10px;
-	font-weight: 600;
-	line-height: 16px;
-	text-align: center;
-}
 .sidebar-repo-lanes {
 	margin-top: 2px;
 }

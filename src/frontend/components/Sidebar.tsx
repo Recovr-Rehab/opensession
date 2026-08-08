@@ -8,6 +8,7 @@ import type {
 	FeedItem,
 } from "../lib/types";
 import {
+	SIDEBAR_ATTN_COUNT,
 	SIDEBAR_FILTER_DOT,
 	SIDEBAR_HEADER_BTN,
 	SIDEBAR_HEADER_BTN_DESKTOP,
@@ -3384,7 +3385,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							    header wears the count of rows waiting for input. */}
 							{!open && urgent.length > 0 && (
 								<span
-									className="sidebar-repo-attn"
+									className={SIDEBAR_ATTN_COUNT}
 									aria-label={`${urgent.length} waiting for input`}
 								>
 									{urgent.length}
@@ -3650,7 +3651,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span className="sidebar-group-count">{count}</span>
 						{!open && attentionCount > 0 && (
 							<span
-								className="sidebar-repo-attn"
+								className={SIDEBAR_ATTN_COUNT}
 								aria-label={`${attentionCount} urgent`}
 							>
 								{attentionCount}
