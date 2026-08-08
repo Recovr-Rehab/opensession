@@ -23,6 +23,62 @@ export const SIDEBAR_RAIL =
 	"relative flex size-[22px] flex-[0_0_22px] items-center justify-center";
 
 /**
+ * ── Sticky machinery ────────────────────────────────────────────────────────
+ * The desktop sidebar is ONE scroll rail, and two tiers of heading pin inside
+ * it: a band heading (Tools / Workspaces / Automations / People) holds the top
+ * slot, and the lane, repo and status headers under it pin one row lower.
+ * Every pinning element also carries `data-sticky-head`, which is what
+ * Sidebar's scroll listener queries — CSS has no interoperable `:stuck`, so
+ * `is-stuck` is toggled from JS and only then does a header paint its backing.
+ *
+ * Everything here is gated on `min-[721px]`: on phones the whole sidebar is a
+ * page that scrolls as one, and nothing pins.
+ */
+
+/** Tier 1 — a band heading pinned at the top of the rail. */
+export const SIDEBAR_STICKY_BAND =
+	"min-[721px]:sticky min-[721px]:top-0 min-[721px]:z-20";
+
+/**
+ * One invariant row height for the tier-1 headings, which is what stops the
+ * outgoing and incoming labels peeking around each other while one section
+ * pushes the next away. It overrides whatever vertical padding/margin the
+ * heading wears in the phone layout, so it is written at the same `min-[721px]`
+ * breakpoint the pinning is.
+ */
+export const SIDEBAR_STICKY_BAND_ROW =
+	"min-[721px]:mt-0 min-[721px]:flex min-[721px]:h-[44px] min-[721px]:min-h-[44px] min-[721px]:items-center min-[721px]:py-[7px]";
+
+/** Tier 2 — a lane / repo / status header, pinned one band-row lower. */
+export const SIDEBAR_STICKY_LANE =
+	"min-[721px]:sticky min-[721px]:top-[44px] min-[721px]:z-[15] min-[721px]:h-[30px] min-[721px]:min-h-[30px]";
+
+/**
+ * A status lane nested inside a repo band sits one row lower again — its repo
+ * header already occupies the first sub-header slot — and must pass UNDER that
+ * header, hence the lower z-index. Pass it after {@link SIDEBAR_STICKY_LANE}
+ * through `cn()`, which resolves the pair to this one.
+ */
+export const SIDEBAR_STICKY_LANE_NESTED =
+	"min-[721px]:top-[74px] min-[721px]:z-[14]";
+
+/**
+ * The surface a header paints once it is actually pinned. A full-width backing
+ * pseudo-element in the sidebar's OWN material layered over the opaque sidebar
+ * base, so a stuck header matches the sidebar colour exactly instead of
+ * stacking a second darker layer, and spans edge to edge regardless of how deep
+ * the header is inset (the ±400px overhang is clipped by the sidebar's
+ * overflow-x). The bottom overhang covers the host's translucent bottom border,
+ * which text passing underneath would otherwise show through.
+ *
+ * Opaque on purpose — this used to backdrop-blur the rows sliding beneath, but
+ * toggling a blur from the scroll listener re-rasterized the whole sidebar
+ * mid-scroll (visible flashing on loaded machines).
+ */
+export const SIDEBAR_STUCK_BACKING =
+	"min-[721px]:[&.is-stuck::before]:absolute min-[721px]:[&.is-stuck::before]:top-0 min-[721px]:[&.is-stuck::before]:bottom-[-1px] min-[721px]:[&.is-stuck::before]:left-[-400px] min-[721px]:[&.is-stuck::before]:right-[-400px] min-[721px]:[&.is-stuck::before]:z-[-1] min-[721px]:[&.is-stuck::before]:content-[''] min-[721px]:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]";
+
+/**
  * The live-state dot a row, group header or hover card carries, minus the
  * `size-2 shrink-0 rounded-full` box the call sites already give it.
  *

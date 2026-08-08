@@ -15,6 +15,11 @@ import {
 	SIDEBAR_HEADER_BTN_PHONE,
 	SIDEBAR_RAIL,
 	SIDEBAR_STATUS_DOT,
+	SIDEBAR_STICKY_BAND,
+	SIDEBAR_STICKY_BAND_ROW,
+	SIDEBAR_STICKY_LANE,
+	SIDEBAR_STICKY_LANE_NESTED,
+	SIDEBAR_STUCK_BACKING,
 } from "../lib/sidebar-classes";
 import { isScratchWorkspace } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
@@ -439,13 +444,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const root = sidebarScrollRef.current;
 		if (!root) return;
 		let frame = 0;
-		const selector = [
-			".sidebar-sticky-head",
-			".sidebar-status-group > .sidebar-group-header",
-			".sidebar-group--pinned > .sidebar-group-header",
-			".sidebar-group--review > .sidebar-group-header",
-			".sidebar-repo-group > .sidebar-repo-head",
-		].join(",");
+		// Every heading that can pin marks itself with `data-sticky-head`, so
+		// this listener never has to know which family it belongs to (band,
+		// lane, repo, status) — or survive the class names being restyled.
+		const selector = "[data-sticky-head]";
 
 		const update = () => {
 			frame = 0;
@@ -2349,7 +2351,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					return (
 						<div className="sidebar-status-group">
 							<button
-								className="sidebar-group-header flex w-full items-center gap-[9px] rounded-md px-[10px] py-1 text-[14px] font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
+								className={cn(
+									"sidebar-group-header flex w-full items-center gap-[9px] rounded-md px-[10px] py-1 text-[14px] font-medium text-dim transition-colors hover:bg-hover hover:text-fg",
+									SIDEBAR_STICKY_LANE,
+									SIDEBAR_STUCK_BACKING,
+								)}
+								data-sticky-head
 								onClick={() => toggleGroup("archived")}
 							>
 								<span className="inline-flex shrink-0 items-center text-faint">
@@ -2992,7 +2999,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// Same bare .sidebar-group-header as the lanes: utilities here
 					// would out-specify its phone/nesting overrides and leave this
 					// one header out of line with the rest.
-					className="sidebar-group-header transition-colors"
+					className={cn(
+						"sidebar-group-header transition-colors",
+						SIDEBAR_STICKY_LANE,
+						ns && SIDEBAR_STICKY_LANE_NESTED,
+						SIDEBAR_STUCK_BACKING,
+					)}
+					data-sticky-head
 					onClick={() => toggleGroup(gkey)}
 				>
 					<span className="sidebar-group-name">Snoozed</span>
@@ -3053,7 +3066,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// Layout, padding and type all come from .sidebar-group-header —
 						// utilities here would out-specify its phone overrides and leave
 						// these two headers indented (and smaller) than the rest.
-						className="sidebar-group-header transition-colors"
+						className={cn(
+							"sidebar-group-header transition-colors",
+							SIDEBAR_STICKY_LANE,
+							ns && SIDEBAR_STICKY_LANE_NESTED,
+							SIDEBAR_STUCK_BACKING,
+						)}
+						data-sticky-head
 						onClick={() => toggleGroup(gkey)}
 					>
 						<span className="sidebar-group-name">{meta.label}</span>
@@ -3158,7 +3177,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<button
 							// Bare .sidebar-group-header like the status lanes — see
 							// renderStatusLanes for why utilities stay off it.
-							className="sidebar-group-header transition-colors"
+							className={cn(
+								"sidebar-group-header transition-colors",
+								SIDEBAR_STICKY_LANE,
+								ns && SIDEBAR_STICKY_LANE_NESTED,
+								SIDEBAR_STUCK_BACKING,
+							)}
+							data-sticky-head
 							onClick={() => toggleGroup(gkey)}
 						>
 							<span className="sidebar-group-name">{b.label}</span>
@@ -3356,7 +3381,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						}}
 					>
 						<button
-							className="sidebar-group-header sidebar-repo-head group transition-colors"
+							className={cn(
+								"sidebar-group-header sidebar-repo-head group transition-colors",
+								SIDEBAR_STICKY_LANE,
+								SIDEBAR_STUCK_BACKING,
+							)}
+							data-sticky-head
 							draggable={canReorder}
 							title={canReorder ? "Drag to reorder repositories" : undefined}
 							onDragStart={(event) => {
@@ -3472,7 +3502,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// The priority lanes, shared by the Plain project band (nested under it)
 	// and the flat "Group by: Status" view (appended after the status lanes).
-	function renderSupportLanes(threads: SupportThread[]) {
+	// `nested` = rendered inside the Plain project band rather than appended to
+	// the flat status list; a nested lane pins one row lower, under that band's
+	// own header.
+	function renderSupportLanes(threads: SupportThread[], nested = false) {
 		return SUPPORT_PRIORITY_GROUPS.map((group) => {
 			const items = threads.filter((t) => (t.priority ?? 2) === group.p);
 			if (items.length === 0) return null;
@@ -3484,7 +3517,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					key={`support-prio-${group.p}`}
 				>
 					<button
-						className="sidebar-group-header"
+						className={cn(
+							"sidebar-group-header",
+							SIDEBAR_STICKY_LANE,
+							nested && SIDEBAR_STICKY_LANE_NESTED,
+							SIDEBAR_STUCK_BACKING,
+						)}
+						data-sticky-head
 						onClick={() => toggleGroup(gkey)}
 					>
 						<span
@@ -3612,7 +3651,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{count === 0
 					? noMatches
 					: withLanes
-						? renderSupportLanes(plainThreads!)
+						? renderSupportLanes(plainThreads!, true)
 						: [...plainThreads!]
 								.sort((a, b) => (a.priority ?? 2) - (b.priority ?? 2))
 								.map(renderSupportRow)}
@@ -3639,7 +3678,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<ContextMenu.Trigger
 						render={
 							<button
-								className="sidebar-group-header sidebar-repo-head group transition-colors"
+								className={cn(
+									"sidebar-group-header sidebar-repo-head group transition-colors",
+									SIDEBAR_STICKY_LANE,
+									SIDEBAR_STUCK_BACKING,
+								)}
+								data-sticky-head
 								onClick={() => toggleGroup(gkey)}
 							/>
 						}
@@ -3716,11 +3760,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				</div>
 			)}
 			<div
-				className="sidebar-sticky-section"
+				className="block max-w-full min-w-0 flex-none"
 				style={{ order: 0 }}
 			>
+			{/* The "Tools" band header sits above the top-level nav as a collapse
+			    toggle. Its 6px inset plus the shared toggle's 14px padding matches
+			    the band headings inside the workspace list. */}
 			{!isPhone && visibleTools.length > 0 && (
-				<div className="sidebar-band-label sidebar-tools-head sidebar-sticky-head">
+				<div
+					className={cn(
+						"sidebar-band-label px-1.5 pt-3 pb-0.5",
+						SIDEBAR_STICKY_BAND,
+						SIDEBAR_STICKY_BAND_ROW,
+						SIDEBAR_STUCK_BACKING,
+					)}
+					data-sticky-head
+				>
 					<div className="group flex min-h-[30px] w-full items-center rounded-md hover:bg-hover hover:text-dim">
 						<button
 							className="sidebar-band-toggle w-auto flex-1 hover:bg-transparent"
@@ -3910,11 +3965,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			</div>
 
 			<div
-				className="sidebar-sticky-section"
+				className="block max-w-full min-w-0 flex-none"
 				style={{ order: sectionOrder("workspaces") }}
 			>
 			<div
-				className="sidebar-workspace sidebar-sticky-head mt-1 px-[16px] pb-0.5 pr-[7px] pt-3"
+				className={cn(
+					"mt-1 px-[16px] pb-0.5 pr-[7px] pt-3",
+					SIDEBAR_STICKY_BAND,
+					SIDEBAR_STICKY_BAND_ROW,
+					SIDEBAR_STUCK_BACKING,
+				)}
+				data-sticky-head
 			>
 				<div
 					className="group/wshead flex min-w-0 items-center gap-1.5 min-[721px]:w-full"
@@ -4299,7 +4360,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						return (
 							<div className="sidebar-group sidebar-group--review">
 								<button
-									className="sidebar-group-header"
+									className={cn(
+										"sidebar-group-header",
+										SIDEBAR_STICKY_LANE,
+										SIDEBAR_STUCK_BACKING,
+									)}
+									data-sticky-head
 									onClick={() => toggleGroup("needsreview")}
 								>
 									<IconBell
@@ -4337,7 +4403,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						return (
 							<div className="sidebar-group sidebar-group--review">
 								<button
-									className="sidebar-group-header"
+									className={cn(
+										"sidebar-group-header",
+										SIDEBAR_STICKY_LANE,
+										SIDEBAR_STUCK_BACKING,
+									)}
+									data-sticky-head
 									onClick={() => toggleGroup("awaitingreview")}
 								>
 									<IconEye
@@ -4647,7 +4718,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<div className="sidebar-group sidebar-group--pinned">
 							{/* Same header treatment as the status lanes below. */}
 							<button
-								className="sidebar-group-header"
+								className={cn(
+									"sidebar-group-header",
+									SIDEBAR_STICKY_LANE,
+									SIDEBAR_STUCK_BACKING,
+								)}
+								data-sticky-head
 								onClick={() => toggleGroup("pinned")}
 							>
 								<IconPin
@@ -4806,7 +4882,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						className="sidebar-independent-section sidebar-group--automations mt-2"
 						style={{ order: sectionOrder("automations") }}
 					>
-						<div className="sidebar-band-label sidebar-sticky-head">
+						<div
+							className={cn(
+								"sidebar-band-label",
+								SIDEBAR_STICKY_BAND,
+								SIDEBAR_STICKY_BAND_ROW,
+								SIDEBAR_STUCK_BACKING,
+							)}
+							data-sticky-head
+						>
 							<button
 								className="sidebar-band-toggle"
 								onClick={() => toggleBand("automations")}
@@ -4935,7 +5019,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						className="sidebar-independent-section mt-2"
 						style={{ order: sectionOrder("people") }}
 					>
-						<div className="sidebar-band-label sidebar-sticky-head">
+						<div
+							className={cn(
+								"sidebar-band-label",
+								SIDEBAR_STICKY_BAND,
+								SIDEBAR_STICKY_BAND_ROW,
+								SIDEBAR_STUCK_BACKING,
+							)}
+							data-sticky-head
+						>
 							<button
 								className="sidebar-band-toggle pl-[10px]"
 								onClick={() => toggleBand("people")}

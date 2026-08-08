@@ -95,71 +95,6 @@
 	height: 52px;
 }
 
-/* The "Tools" band header sits above the top-level nav as a collapse toggle.
-   Its 6px inset plus the shared toggle's 14px padding matches the band headings
-   inside `.sidebar-list`. */
-.sidebar-band-label.sidebar-tools-head {
-	padding: 12px 6px 2px;
-}
-/* The three primary sidebar bands replace one another at the top of the single
-   desktop scroll rail. While pinned they get a frosted surface (translucent +
-   backdrop blur) so rows sliding beneath read as intentional depth rather than
-   getting chopped by an opaque slab; at rest they stay fully transparent
-   (is-stuck is displacement-based, so the first section never paints a pill
-   while unscrolled). */
-.sidebar-sticky-section {
-	display: block;
-	flex: none;
-	min-width: 0;
-	max-width: 100%;
-}
-@media (min-width: 721px) {
-	.sidebar-sticky-head {
-		position: sticky;
-		top: 0;
-		z-index: 20;
-		background: transparent;
-	}
-	/* Pinned surface: a full-width backing pseudo-element in the sidebar's OWN
-	   material layered over the opaque sidebar base, so a stuck header matches
-	   the sidebar color exactly instead of stacking a second darker layer, and
-	   spans edge to edge regardless of how deep the header is inset (the
-	   ±400px overhang is clipped by the sidebar's overflow-x). Opaque on
-	   purpose — this used to backdrop-blur the rows sliding beneath, but
-	   toggling a blur from the scroll listener re-rasterized the whole sidebar
-	   mid-scroll (visible flashing on loaded machines). */
-	.sidebar-sticky-head.is-stuck::before,
-	.sidebar-status-group > .sidebar-group-header.is-stuck::before,
-	.sidebar-group--pinned > .sidebar-group-header.is-stuck::before,
-	.sidebar-group--review > .sidebar-group-header.is-stuck::before,
-	.sidebar-repo-group > .sidebar-repo-head.is-stuck::before {
-		content: "";
-		position: absolute;
-		top: 0;
-		/* Cover the host's translucent bottom border too; otherwise text passing
-		   underneath can show through its 1px border box. */
-		bottom: -1px;
-		left: -400px;
-		right: -400px;
-		z-index: -1;
-		background:
-			linear-gradient(var(--sidebar-material), var(--sidebar-material)),
-			var(--bg-raised);
-	}
-	/* One invariant row height prevents the outgoing and incoming sticky labels
-	   from peeking around each other while one section pushes the next away. */
-	.sidebar-band-label.sidebar-tools-head.sidebar-sticky-head,
-	.sidebar-workspace.sidebar-sticky-head,
-	.sidebar-independent-section > .sidebar-band-label.sidebar-sticky-head {
-		display: flex;
-		align-items: center;
-		height: 44px;
-		min-height: 44px;
-		margin-top: 0;
-		padding-top: 7px;
-		padding-bottom: 7px;
-	}
-}
 .app-body {
 	display: flex;
 	flex: 1;
@@ -649,40 +584,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	box-shadow: inset 0 0 0 1px var(--accent, #6b8afd);
 }
 
-/* Keep the active lane visible beneath its section title while the sidebar's
-   single scroll surface moves. Each sticky button remains inside its own
-   group, so the next lane naturally pushes it away instead of stacking over
-   it. Repo status lanes sit one row lower because their repo header occupies
-   the first sub-header slot. */
-@media (min-width: 721px) {
-	.sidebar-status-group > .sidebar-group-header,
-	.sidebar-group--pinned > .sidebar-group-header,
-	.sidebar-group--review > .sidebar-group-header,
-	.sidebar-repo-group > .sidebar-repo-head {
-		position: sticky;
-		top: 44px;
-		z-index: 15;
-		height: 30px;
-		min-height: 30px;
-		/* Draw no pill while the label is in its normal flow position. */
-		background: transparent;
-	}
-
-	/* Pinned backing for these nested headers is the shared full-width
-	   ::before rule beside .sidebar-sticky-head.is-stuck above. */
-
-	.sidebar-repo-lanes .sidebar-status-group > .sidebar-group-header {
-		top: 74px;
-		z-index: 14;
-	}
-
-	.sidebar-status-group > .sidebar-group-header:hover,
-	.sidebar-group--pinned > .sidebar-group-header:hover,
-	.sidebar-group--review > .sidebar-group-header:hover,
-	.sidebar-repo-group > .sidebar-repo-head:hover {
-		background: var(--hover);
-	}
-}
 /* Mobile swipe row shell. Swipe left reveals Archive; swipe right reveals Star.
    Long-press still opens the full action sheet. */
 .sidebar-swipe-row {
