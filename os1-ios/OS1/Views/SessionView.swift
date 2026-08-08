@@ -2495,6 +2495,7 @@ private struct QueuedMessageEditor: View {
     let onSave: (String) -> Void
     let onDelete: () -> Void
 
+    private let original: String
     @State private var text: String
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -2504,6 +2505,7 @@ private struct QueuedMessageEditor: View {
         onSave: @escaping (String) -> Void,
         onDelete: @escaping () -> Void
     ) {
+        original = initial.trimmingCharacters(in: .whitespacesAndNewlines)
         _text = State(initialValue: initial)
         self.onSave = onSave
         self.onDelete = onDelete
@@ -2513,38 +2515,65 @@ private struct QueuedMessageEditor: View {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// A sheet whose whole job is one piece of text: the text gets the whole
+    /// sheet, the way Mail and Notes give a compose field the screen. Cancel
+    /// and Save sit in the navigation bar where every other sheet in the app
+    /// puts them, which leaves the destructive action alone at the bottom
+    /// instead of crowded against the button you actually meant to hit.
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Edit queued message")
-                .font(.headline)
-            Text("It keeps its place in the queue.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        NavigationStack {
+            VStack(spacing: 0) {
+                TextEditor(text: $text)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .focused($focused)
 
-            TextField("Message", text: $text, axis: .vertical)
-                .lineLimit(3...10)
-                .textFieldStyle(.roundedBorder)
-                .focused($focused)
+                Divider()
 
-            HStack {
-                Button("Discard message", role: .destructive) {
-                    onDelete()
-                    dismiss()
+                HStack(alignment: .firstTextBaseline) {
+                    Button(role: .destructive) {
+                        onDelete()
+                        dismiss()
+                    } label: {
+                        Label("Discard", systemImage: "trash")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(OS1VisualStyle.red)
+
+                    Spacer(minLength: 12)
+
+                    Text("Keeps its place in the queue.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
-                Spacer()
-                Button("Cancel") { dismiss() }
-                Button("Save") {
-                    onSave(trimmed)
-                    dismiss()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .navigationTitle("Edit message")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(trimmed.isEmpty)
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(trimmed)
+                        dismiss()
+                    }
+                    .disabled(trimmed.isEmpty || trimmed == original)
+                }
             }
         }
-        .padding(20)
-        .frame(minWidth: 320)
         #if os(iOS)
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
+        #else
+        .frame(minWidth: 420, minHeight: 280)
         #endif
         .onAppear { focused = true }
     }
