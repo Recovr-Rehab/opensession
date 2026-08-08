@@ -8,6 +8,14 @@ import {
   useGitTaskRunner,
 } from "../../lib/pr-git-tasks";
 import { deriveStatus } from "../../lib/pr-status-derive";
+import {
+  GIT_ACTION,
+  GIT_DOT,
+  GIT_DOT_BG,
+  GIT_LABEL,
+  GIT_NOTE,
+  GIT_ROW,
+} from "../../lib/pr-tone-classes";
 import type { GitStatusInfo, PrDetails } from "../../lib/types";
 import { Button } from "../../ui/button";
 
@@ -62,7 +70,7 @@ export function GitDivergenceStrip({
     <section className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-4 max-[720px]:px-3">
       {verdict && (
         <span className="inline-flex items-center gap-2 text-xs text-dim">
-          <span className={`pr-git-dot pr-git-dot-${verdict.tone}`} aria-hidden />
+          <span className={`${GIT_DOT} ${GIT_DOT_BG[verdict.tone]}`} aria-hidden />
           {verdict.qualifier || verdict.label}
           <Button
             size="xs"
@@ -76,7 +84,7 @@ export function GitDivergenceStrip({
       )}
       {tasks.map((task) => (
         <span key={task.key} className="inline-flex items-center gap-2 text-xs text-dim">
-          <span className={`pr-git-dot pr-git-dot-${task.tone}`} aria-hidden />
+          <span className={`${GIT_DOT} ${GIT_DOT_BG[task.tone]}`} aria-hidden />
           {task.label}
           <Button
             size="xs"
@@ -141,7 +149,7 @@ export function GitStatusRows({
     const conflicts = task("conflicts");
     const resolveAction =
       conflicts && runner.runnable(conflicts) ? (
-        <button className="pr-git-action" onClick={() => runner.run(conflicts)}>
+        <button className={GIT_ACTION} onClick={() => runner.run(conflicts)}>
           {conflicts.action}
         </button>
       ) : undefined;
@@ -153,7 +161,7 @@ export function GitStatusRows({
         resolveAction ||
         (pr.state === "OPEN" && !pr.isDraft && onMerge ? (
           <button
-            className="pr-git-action"
+            className={GIT_ACTION}
             onClick={onMerge}
             disabled={merging}
             title="Squash and merge this pull request"
@@ -176,7 +184,7 @@ export function GitStatusRows({
       tone: behind ? behind.tone : "green",
       action:
         behind && runner.runnable(behind) ? (
-          <button className="pr-git-action" onClick={() => runner.run(behind)}>
+          <button className={GIT_ACTION} onClick={() => runner.run(behind)}>
             {behind.action}
           </button>
         ) : undefined,
@@ -190,7 +198,7 @@ export function GitStatusRows({
       tone: "muted",
       action: send && (
         <button
-          className="pr-git-action"
+          className={GIT_ACTION}
           onClick={() =>
             runner.promptSession(
               "create a PR",
@@ -212,7 +220,7 @@ export function GitStatusRows({
       tone: t.tone,
       action: (
         <button
-          className="pr-git-action"
+          className={GIT_ACTION}
           onClick={() => runner.run(t)}
           disabled={t.run === "push" && runner.pushing}
         >
@@ -228,15 +236,15 @@ export function GitStatusRows({
       {rows.map((row) => (
         <div
           key={row.key}
-          className="pr-git-row"
+          className={GIT_ROW}
         >
-          <span className={`pr-git-dot pr-git-dot-${row.tone}`} aria-hidden />
-          <span className="pr-git-label">{row.label}</span>
+          <span className={`${GIT_DOT} ${GIT_DOT_BG[row.tone]}`} aria-hidden />
+          <span className={GIT_LABEL}>{row.label}</span>
           {row.action}
         </div>
       ))}
-      {prompted && <div className="pr-git-note">Asked {AGENT_NAME} to {prompted} ✓</div>}
-      {error && <div className="pr-git-note pr-git-note-error">{error}</div>}
+      {prompted && <div className={`${GIT_NOTE} text-faint`}>Asked {AGENT_NAME} to {prompted} ✓</div>}
+      {error && <div className={`${GIT_NOTE} text-red`}>{error}</div>}
     </>
   );
 }

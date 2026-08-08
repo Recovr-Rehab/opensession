@@ -56,6 +56,7 @@ import {
 } from "./icons";
 
 import { checkClass, deriveStatus, isDeployment, summarize } from "../lib/pr-status-derive";
+import { GIT_NOTE } from "../lib/pr-tone-classes";
 import {
   formatPendingCommentsPrompt,
   formatPrCommentPrompt,
@@ -1697,7 +1698,7 @@ export function PrPanel({
               merging={merging}
               confirmMerge={confirmMerge}
             />
-            {mergeError && <div className="pr-git-note pr-git-note-error">{mergeError}</div>}
+            {mergeError && <div className={`${GIT_NOTE} text-red`}>{mergeError}</div>}
           </PrCard>
 
           {/* Sessions card — every session linked to this PR + start a new one. */}

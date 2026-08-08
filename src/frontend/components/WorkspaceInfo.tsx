@@ -52,6 +52,14 @@ import {
 	checkStatusMeta,
 	checkToneClass,
 } from "../lib/pr-checks";
+import {
+	GIT_ACTION,
+	GIT_DOT,
+	GIT_DOT_BG,
+	GIT_LABEL,
+	GIT_NOTE,
+	GIT_ROW,
+} from "../lib/pr-tone-classes";
 import { CheckStatusIcon } from "./CheckStatusIcon";
 import { openLightbox } from "./MediaLightbox";
 import { repoLabel } from "./RepoTile";
@@ -1289,17 +1297,17 @@ function GitStatusRows({
 			<div className={INFO_LABEL_CLASS}>Git status</div>
 			<div className={INFO_LIST_CLASS}>
 				{prStatus && (
-					<div className="pr-git-row py-2">
-						<span className={`pr-git-dot pr-git-dot-${prTone}`} aria-hidden />
-						<span className="pr-git-label">{prStatus}</span>
+					<div className={`${GIT_ROW} py-2`}>
+						<span className={`${GIT_DOT} ${GIT_DOT_BG[prTone]}`} aria-hidden />
+						<span className={GIT_LABEL}>{prStatus}</span>
 						{pr?.mergeable === "CONFLICTING" && send ? (
-							<button type="button" className="pr-git-action" onClick={resolveConflicts}>
+							<button type="button" className={GIT_ACTION} onClick={resolveConflicts}>
 								Resolve
 							</button>
 						) : pr?.state === "OPEN" && !pr.isDraft ? (
 							<button
 								type="button"
-								className="pr-git-action"
+								className={GIT_ACTION}
 								disabled={!!busy}
 								onClick={() => void merge()}
 								title="Squash and merge this pull request"
@@ -1314,14 +1322,14 @@ function GitStatusRows({
 					</div>
 				)}
 				{ahead > 0 && (
-					<div className="pr-git-row py-2">
-						<span className="pr-git-dot pr-git-dot-blue" aria-hidden />
-						<span className="pr-git-label">
+					<div className={`${GIT_ROW} py-2`}>
+						<span className={`${GIT_DOT} ${GIT_DOT_BG.blue}`} aria-hidden />
+						<span className={GIT_LABEL}>
 							{ahead} commit{ahead === 1 ? "" : "s"} ahead of remote
 						</span>
 						<button
 							type="button"
-							className="pr-git-action"
+							className={GIT_ACTION}
 							disabled={!!busy}
 							onClick={() => run("push", () => gitPushApi(sessionId, repo))}
 						>
@@ -1330,15 +1338,15 @@ function GitStatusRows({
 					</div>
 				)}
 				{behindCount > 0 && (
-					<div className="pr-git-row py-2">
-						<span className="pr-git-dot pr-git-dot-yellow" aria-hidden />
-						<span className="pr-git-label">
+					<div className={`${GIT_ROW} py-2`}>
+						<span className={`${GIT_DOT} ${GIT_DOT_BG.yellow}`} aria-hidden />
+						<span className={GIT_LABEL}>
 							{behindCount} commit{behindCount === 1 ? "" : "s"} behind{" "}
 							{behindWhat}
 						</span>
 						<button
 							type="button"
-							className="pr-git-action"
+							className={GIT_ACTION}
 							disabled={!!busy}
 							title={
 								behindWhat === "remote"
@@ -1354,15 +1362,15 @@ function GitStatusRows({
 					</div>
 				)}
 				{dirty > 0 && (
-					<div className="pr-git-row py-2">
-						<span className="pr-git-dot pr-git-dot-yellow" aria-hidden />
-						<span className="pr-git-label">
+					<div className={`${GIT_ROW} py-2`}>
+						<span className={`${GIT_DOT} ${GIT_DOT_BG.yellow}`} aria-hidden />
+						<span className={GIT_LABEL}>
 							{dirty} uncommitted file{dirty === 1 ? "" : "s"}
 						</span>
 						{send && (
 							<button
 								type="button"
-								className="pr-git-action"
+								className={GIT_ACTION}
 								onClick={commit}
 								title={`Ask ${AGENT_NAME} to commit the uncommitted changes and push`}
 							>
@@ -1372,8 +1380,8 @@ function GitStatusRows({
 					</div>
 				)}
 			</div>
-			{prompted && <div className="pr-git-note">Asked {AGENT_NAME} to {prompted} ✓</div>}
-			{error && <div className="pr-git-note pr-git-note-error">{error}</div>}
+			{prompted && <div className={`${GIT_NOTE} text-faint`}>Asked {AGENT_NAME} to {prompted} ✓</div>}
+			{error && <div className={`${GIT_NOTE} text-red`}>{error}</div>}
 		</div>
 	);
 }
