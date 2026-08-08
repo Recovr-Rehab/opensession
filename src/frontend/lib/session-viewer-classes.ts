@@ -5,8 +5,9 @@
  *
  * Everything that used to be keyed off an ancestor is an arbitrary variant on
  * the element itself, so the whole subtree moves in one step: a compound
- * legacy selector (`.app-header-actions .viewer-header`) outranks a single
- * utility, and a half-migrated element quietly keeps its old styling.
+ * legacy selector (`.viewer-header-actions .presence`, still in the sheet
+ * below) outranks a single utility, and a half-migrated element quietly keeps
+ * its old styling.
  *
  * Three class names stay on the markup as bare hooks with no styling of their
  * own, because things outside this family name them:

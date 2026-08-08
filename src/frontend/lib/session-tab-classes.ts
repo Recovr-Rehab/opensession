@@ -30,11 +30,11 @@
  * A few class names survive on the markup as bare hooks with no styling of
  * their own, because things OUTSIDE this file name them:
  *
- *   · `session-tabs`   — legacy.css keys structural rules off the strip's
- *     presence from ancestors this file can't reach
- *     (`.detail-topbar:has(+ .session-tabs) .viewer-header`,
- *     `.detail-pane:has(.session-tabs) .viewer-messages`), and SessionSplit
- *     sizes the bar with `[&>.session-tabs]:shrink-0`;
+ *   · `session-tabs`   — legacy.css keys a structural rule off the strip's
+ *     presence from an ancestor this file can't reach
+ *     (`.detail-topbar:has(+ .session-tabs) .detail-topbar-title` drops the
+ *     top bar's border, because the strip carries both dividers itself), and
+ *     SessionSplit sizes the bar with `[&>.session-tabs]:shrink-0`;
  *   · `session-tab-view` / `session-tab-reorder` — `.app:has(.session-tab-view)
  *     .app-header-overlay` and `.detail-pane:has(.session-tab-reorder ~
  *     .session-tab-reorder)` set the phone header's fill and

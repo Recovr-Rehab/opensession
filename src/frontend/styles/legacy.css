@@ -216,12 +216,9 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	   ride on the collapsed flag in App.tsx, as utilities on those two
 	   elements. */
 	/* Clear the floating re-open control AND the fallback nav/search cluster
-	   beside it, so neither sits on top of the topbar title or the session
-	   header's first row. */
+	   beside it, so neither sits on top of the topbar title. The session
+	   header's first row does the same from a utility (see VIEWER_HEADER). */
 	.app-body.sidebar-collapsed .detail-topbar-title {
-		padding-left: 148px;
-	}
-	.app-body.sidebar-collapsed .viewer-header {
 		padding-left: 148px;
 	}
 }
@@ -261,20 +258,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	border-bottom: none;
 }
 
-/* Pinned sessions as tabs, above the session title (mobile + desktop) */
-.session-tabs {
-	display: flex;
-	align-items: center;
-	gap: 3px;
-	padding: 6px 8px;
-	/* No hard divider under the strip. Instead the elevated topbar background
-	   fades down into the session body across the strip, so the whole top region
-	   reads as one block that dissolves into the conversation. The pills float
-	   over that fade. */
-	background: linear-gradient(to bottom, var(--topbar-bg), var(--bg));
-	flex-shrink: 0;
-	min-width: 0;
-}
 /* Edge fades so a tab clipped by the scroll boundary reads as "there's more this
    way" rather than as a broken, half-drawn tab — the strip hides its scrollbar,
    so without this an overflowing strip gives no hint that it scrolls at all.
@@ -298,63 +281,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	syntax: "<length>";
 	inherits: false;
 	initial-value: 0px;
-}
-/* Each session tab's Reorder.Item wrapper — the draggable flex child. It hugs the
-   pill inside it and never shrinks, so a full strip scrolls rather than squishes.
-   position:relative lets whileDrag's z-index lift the dragged tab over siblings. */
-.session-tab-reorder {
-	display: inline-flex;
-	align-items: center;
-	flex-shrink: 0;
-	position: relative;
-}
-
-/* Desktop: a flat tab bar in normal flow — plain text tabs sitting on the
-   transcript's OWN background (no separate-colored band), closed off by a single
-   bottom hairline that the active tab's underline rests flush on. The whole strip
-   stretches to the band height so that underline lands exactly on the hairline —
-   a real tab-with-underline, not a floating pill. (Phones keep their own floating
-   version in the max-width block below, where the top bar is an overlay.) */
-@media (min-width: 721px) {
-	.session-tabs {
-		height: 44px;
-		padding: 0 8px;
-		/* Same fill as the transcript body so the strip is NOT a differently-
-		   coloured bar — just tabs sitting on the conversation. The bottom hairline
-		   is the only divider; the tone step up to the header reads as the top one. */
-		background: var(--bg);
-		/* BOTH dividers are inset shadows on THIS element — the top (strip↔topbar) and
-		   the baseline (below the tabs). Two reasons they live here together:
-		   1. Inset (not border-bottom) so the border doesn't reserve a 1px row below the
-		      tabs — the tabs stretch the full height and the active accent lands flush on
-		      and covers the baseline (otherwise the underline floats a hair high).
-		   2. Same element ⇒ same sub-pixel rounding, so at fractional display scales
-		      (Safari zoom !=100%) the two hairlines stay identical. A border + an inset
-		      shadow rounded to different opacities → "one divider lighter" (Kent).
-		   The -1px margin-top laps the strip over the topbar's bottom edge so its opaque
-		   fill hides the topbar border (belt-and-suspenders with the :has drop above). */
-		box-shadow:
-			inset 0 1px 0 var(--border),
-			inset 0 -1px 0 var(--border);
-		margin-top: -1px;
-		/* Stretch so the tabs (and their bottom underline) reach the band's bottom
-		   hairline instead of floating centered above it. */
-		align-items: stretch;
-	}
-	
-	/* The reorder group + its item wrappers are extra flex layers between the
-	   scroll and each tab; stretch them full-height too so the flat tabs' active
-	   underline still lands flush on the baseline hairline. */
-.session-tab-reorder {
-		align-self: stretch;
-		align-items: stretch;
-	}
-	/* Strip is in flow now, so the transcript just starts below it — no overlay
-	   padding, no mask. (Higher specificity than the later unconditional
-	   `.viewer-messages { padding: … }` so the top inset isn't reset.) */
-	.detail-pane:has(.session-tabs) .viewer-messages {
-		padding-top: 18px;
-	}
 }
 
 body.resizing-tab-split {
@@ -383,35 +309,6 @@ body.resizing-tab-split {
 	right: 8px;
 }
 
-.viewer-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	/* Fixed height so the bar lines up with the sidebar brand row instead of
-	   growing with its tallest button. */
-	height: var(--desktop-header-h);
-	padding: 0 16px;
-	/* No hairline under the bar. The header already shares the session body's
-	   colour, so at the top of a transcript there is nothing to divide — and once
-	   there IS content above, the scroll-edge wash below (.viewer-messages-region
-	   ::before) does the separating, the way the native app's nav bar does. A rule
-	   that is drawn whether or not anything passes under it is the thing this
-	   replaces. Restored below for engines without scroll-driven animations,
-	   which never get the wash. */
-	/* Match the session body (white in light) rather than the lifted topbar tint, so
-	   the whole top region reads as one clean surface the transcript dissolves
-	   into under the floating pills. */
-	background: var(--bg);
-	flex-shrink: 0;
-	min-width: 0;
-}
-@supports not (animation-timeline: scroll()) {
-	.viewer-header {
-		border-bottom: 1px solid var(--top-divider);
-	}
-}
-
 /* Which automation produced a session, shown beside its title. Deliberately the
    quiet neutral the CLI chip uses — it names the session's origin, it shouldn't
    outshout the title. It's a link to the automation's settings, so it hints on
@@ -420,18 +317,6 @@ body.resizing-tab-split {
 /* Archived chip in the viewer header doubles as an unarchive button — give it a
    touch more room than the read-only source chips, and hint the click. */
 
-/* Icon buttons sit in a tight cluster (the same 2px this row already uses on
-   phones, and what the sidebar's back/forward/search cluster uses) so they
-   read as one control group rather than three separate buttons. The row also
-   carries labelled items — the Linear/Plain links, the presence facepile, the
-   PR chip — which need real breathing room, so they space themselves below
-   rather than the row spacing everything alike. */
-.viewer-header-actions {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	flex-shrink: 0;
-}
 .viewer-header-actions .session-link,
 .viewer-header-actions .presence {
 	margin-right: 6px;
@@ -469,73 +354,6 @@ body.resizing-tab-split {
 	position: relative;
 }
 
-.viewer-messages {
-	flex: 1;
-	overflow-y: auto;
-	/* Never a sideways-pannable session: anything internally wide (code, tables)
-	   scrolls inside its own pane; a stray wide element clips instead of
-	   dragging the whole transcript off-screen. */
-	overflow-x: hidden;
-	overscroll-behavior: contain;
-	/* Bottom inset lifts the newest row clear of the composer, which floats up
-	   over the transcript (see .viewer-input). The row stays full-strength; only
-	   rows scrolled down behind the composer fade — and they fade in the
-	   composer's own wash, not here.
-	   The inset is the WASH's depth, not the overlap's: with the old 8px the
-	   newest row sat 11px above the composer, so 45 of the wash's 56px lay over
-	   the line you are actually reading while a reply streams. Clearing the full
-	   ramp is what makes a soft edge affordable — it is also what the native
-	   app's bar does, insetting the scroll content by its own height so only
-	   what travels behind it is ever dimmed. */
-	padding: 18px 20px var(--wash-depth);
-	min-height: 0;
-	/* Keep the reader's place when content loads/expands above them (principle 12):
-     the browser anchors scroll to on-screen content instead of jumping. */
-	overflow-anchor: auto;
-	/* Flex column, not block flow: WebKit paints cross-block selection as
-	   full-width "gap" bands across a block container (Safari/iOS PWA — the
-	   edge-to-edge blue rows when selecting across messages). It skips flex
-	   containers, so selection hugs the text. Chrome is unaffected. */
-	display: flex;
-	flex-direction: column;
-}
-/* Column flex + overflow-y would otherwise shrink children to fit the
-   viewport instead of scrolling. */
-.viewer-messages > * {
-	flex-shrink: 0;
-	/* Messages/work blocks center with auto side margins, and in a flex
-	   container auto cross-axis margins DISABLE align-items:stretch — the
-	   children would size to their content (up to their --session-col max-width) and
-	   overflow sideways on phones. Explicit width restores the stretch; the
-	   max-width + auto margins still cap and center them. */
-	width: 100%;
-}
-
-/* ── Scroll-aware edge fades ─────────────────────────────── */
-/* Content scrolled past the TOP edge dissolves into the header, and the wash
-   appears only when there IS content up there — driven entirely by a CSS
-   scroll timeline, so there are no JS scroll listeners and no React
-   re-renders. This is what replaces the header's hairline: at the top of a
-   transcript nothing passes under the bar and there is nothing to divide.
-   Desktop only: on phones the transcript fades under the floating header pills
-   via its own mask-image instead.
-   The BOTTOM edge is not here — it belongs to the composer, which floats up
-   over the transcript on every viewport and paints one wash of its own
-   (.viewer-input::before). There used to be a second, scroll-driven ::after
-   fade stacked underneath it; two veils on one edge is one too many, and the
-   composer's is the one that also covers the resting state.
-   Browsers without scroll-driven animations keep opacity 0 and get the
-   hairline back (see .viewer-header); the wash tracks scroll position rather
-   than animating over time, so it stays active under prefers-reduced-motion —
-   nothing moves that wouldn't move anyway. */
-@media (min-width: 721px) {
-	@supports (animation-timeline: scroll()) {
-		.viewer-messages {
-			scroll-timeline: --viewer-session-scroll y;
-		}
-	}
-}
-
 /* Bottom spacer that lets the latest turn reach the top of the viewport. Height is
    set imperatively by the scroll hook; no transition so it tracks streaming exactly. */
 .turn-spacer {
@@ -544,7 +362,6 @@ body.resizing-tab-split {
 	pointer-events: none;
 	overflow-anchor: none;
 }
-
 
 /* Covers the session view while a delete (optionally + worktree) is in flight —
    worktree cleanup can take a few seconds, so show clear progress instead of a
@@ -556,10 +373,8 @@ body.resizing-tab-split {
    chip. Wider viewports keep nowrap — with room to spare, a label splitting
    across lines reads worse than moving the whole chip down a line. */
 
-
 /* Work blocks + tool calls are Tailwind-styled in WorkBlock.tsx /
    ToolCallBlock.tsx; only the shared pre/shiki plumbing below remains here. */
-
 
 /* ── Terminal panel ──────────────────────────────────────── */
 
@@ -964,67 +779,7 @@ body.resizing-tab-split {
 	.header-sessionbar .repo-tile {
 		flex-shrink: 0;
 	}
-	.session-info-topbar {
-		position: sticky;
-		top: 0;
-		z-index: 4;
-		display: flex;
-		align-items: center;
-		min-height: calc(env(safe-area-inset-top, 0px) + 52px);
-		padding: env(safe-area-inset-top, 0px) 8px 0;
-		border-bottom: 1px solid transparent;
-		background: transparent;
-		transition:
-			background-color var(--dur) var(--ease),
-			border-color var(--dur) var(--ease);
-	}
-	.session-info-status {
-		margin: 0 12px 12px;
-		padding: 8px;
-		border: 1px solid var(--border);
-		border-radius: calc(18px * var(--rf));
-		corner-shape: var(--cs);
-		background: var(--bg-panel);
-	}
 
-	/* Static, full-width settings list on the session info page. */
-	.session-info-list {
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
-		position: static;
-		inset: auto;
-		width: auto;
-		min-width: 0;
-		max-width: none;
-		margin: 0 12px;
-		padding: 6px;
-		background: var(--bg-panel);
-		border: 1px solid var(--border);
-		border-radius: calc(18px * var(--rf)); corner-shape: var(--cs);
-		box-shadow: none;
-		gap: 4px;
-		/* It's part of the page (which animates in) — no popover entrance. */
-		animation: none;
-		transform: none;
-	}
-	.session-info-list > button {
-		width: 100%;
-		justify-content: flex-start;
-		text-align: left;
-		gap: 8px;
-		border: 1px solid transparent;
-		border-radius: calc(6px * var(--rf)); corner-shape: var(--cs);
-		padding: 8px 10px;
-		font-size: 13px;
-		color: var(--text);
-		background: none;
-	}
-	.session-info-list > button:hover {
-		color: var(--text);
-		border-color: transparent;
-		background: var(--hover);
-	}
 	.header-sessionbar-sep {
 		flex-shrink: 0;
 		/* Bigger middot between repo · model · cost — but its line box is capped
@@ -1091,13 +846,6 @@ body.resizing-tab-split {
 		margin-left: 10px;
 		flex: none;
 	}
-	.app-header-actions .viewer-header {
-		height: auto;
-		padding: 0;
-		border: none;
-		background: none;
-		gap: 6px;
-	}
 
 	/* Search moves from the sidebar into the top bar on phones: an icon-only
 	   button on the right of the root page's nav bar that opens the ⌘K
@@ -1149,11 +897,6 @@ body.resizing-tab-split {
 		transition-duration: 0s;
 	}
 
-	.viewer-header-actions {
-		justify-content: flex-end;
-		align-items: center;
-		gap: 2px;
-	}
 	/* Comfortably-tappable controls that stay on one row — sized toward the iOS
 	   44pt minimum touch target, with legible labels. */
 	.viewer-header-actions button,
@@ -1165,65 +908,17 @@ body.resizing-tab-split {
 		align-items: center;
 	}
 
-	.viewer-messages {
-		/* Clear the floating pills at rest, then scroll under them: the top inset
-		   is the bar height (+ a little air) so the newest/first row sits just
-		   below the title pill rather than behind it. The bottom inset lifts the
-		   newest row clear of the composer that now floats up over the transcript
-		   (see .viewer-input) — the row stays full-strength; only rows scrolled
-		   down behind the composer fade, and they fade in the composer's backdrop,
-		   not here. */
-		/* --strip-clearance is 0 by default and the docked tab bar's height on a
-		   multi-session workspace (set on .detail-pane below), so the first row
-		   starts just below the bar rather than under it. */
-		padding: calc(var(--pane-header-h) + var(--strip-clearance, 0px) + 8px) 12px
-			var(--wash-depth);
-		/* Dissolve the transcript into the header as it scrolls up under the
-		   floating pills; below them the docked tab bar (when shown) is opaque
-		   and clips the rest under its soft shadow.
-		   Same non-linear distribution as --wash-down, mirrored into mask alpha
-		   (alpha = 1 − veil, measured from the bar downwards): hidden for the
-		   first fifth, 45% by three fifths, full at the bar height. The old
-		   straight ramp left a row perfectly legible a few px under the pills —
-		   it only got quiet on its final line — which is the same "reads as a
-		   cut" problem the hairlines had. */
-		-webkit-mask-image: linear-gradient(
-			to bottom,
-			transparent 0,
-			transparent calc(var(--pane-header-h) * 0.2),
-			rgba(0, 0, 0, 0.45) calc(var(--pane-header-h) * 0.6),
-			#000 var(--pane-header-h)
-		);
-		mask-image: linear-gradient(
-			to bottom,
-			transparent 0,
-			transparent calc(var(--pane-header-h) * 0.2),
-			rgba(0, 0, 0, 0.45) calc(var(--pane-header-h) * 0.6),
-			#000 var(--pane-header-h)
-		);
-	}
 	/* Immersive reading (Safari-style): SessionViewer toggles body.chrome-collapsed
 	   from the transcript's scroll direction — scrolling down slides the top bar
 	   and the docked tab bar off-screen to maximize the reading area; scrolling
 	   back up (or reaching the top / live edge) brings them back. The composer
 	   stays put (it's the primary action, always in reach). Pure transforms, so
 	   the layout never reflows and nothing jumps. */
-	.app-header-overlay,
-	.session-tabs {
+	.app-header-overlay {
 		transition: transform var(--dur-lg) var(--ease);
 	}
 	body.chrome-collapsed .app-header-overlay {
 		transform: translateY(-100%);
-	}
-	body.chrome-collapsed .session-tabs {
-		/* Its own height + its top offset, so it fully clears the top edge. */
-		transform: translateY(calc(-100% - var(--pane-header-h) - 8px));
-	}
-	/* With the header gone, drop the transcript's top fade so the revealed rows
-	   read at full strength instead of dissolving into an absent bar. */
-	body.chrome-collapsed .viewer-messages {
-		-webkit-mask-image: none;
-		mask-image: none;
 	}
 
 	.automations {
@@ -1237,45 +932,7 @@ body.resizing-tab-split {
 	   repeating the title in the top bar, plus a "+" that's hover-revealed and
 	   so mostly invisible on touch anyway. Hide the strip until the workspace
 	   actually has a second session to switch between. */
-	/* The strip is worth its phone chrome when it offers a real switch: any
-	   view tab (Conversation/Review), or 2+ sessions — which, since every tab is a
-	   .session-tab-reorder wrapper in the reorder group, reads as two adjacent
-	   wrappers. A lone session with no view tabs keeps the strip hidden as before. */
-	.session-tabs:not(:has(.session-tab-view)):not(
-			:has(.session-tab-reorder ~ .session-tab-reorder)
-		) {
-		display: none;
-	}
 
-	/* When the strip DOES show (a view tab or 2+ sessions), the phone top bar is a fixed
-	   transparent overlay (.app-header-overlay) whose Back/title/⋯ pills float
-	   over the pane — so the strip drops to a SOLID bar docked directly under
-	   those pills. Pulled out of flow and pinned flush to the header's bottom edge, it
-	   reads as fixed chrome; the transcript starts below it (its padding-top adds
-	   --strip-clearance) rather than scrolling under floating pills. A hairline +
-	   soft shadow lift the opaque bar over the transcript scrolling beneath. */
-	.session-tabs {
-		position: absolute;
-		/* Dock to the header. (--pane-header-h, not --header-h: on routes whose bar
-		   stays in flow the pane already
-		   starts below it — see .detail-pane.) */
-		top: var(--pane-header-h);
-		left: 0;
-		right: 0;
-		z-index: 6;
-		margin: 0;
-		padding: 5px 8px;
-		background: var(--bg);
-		border-bottom: 1px solid var(--border);
-		box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.22);
-	}
-	/* Mobile Safari can rasterize two composited layers that merely touch with a
-	   hairline seam. Overlap the session header by 2px and add those 2px back as top
-	   padding, keeping the tabs and the bar's bottom edge in their original place. */
-	.app:has(.app-header-overlay) .session-tabs {
-		top: calc(var(--pane-header-h) - 2px);
-		padding-top: 7px;
-	}
 	/* Tell the transcript how much extra top room the docked bar takes so the
 	   first row starts just below it (see .viewer-messages). Only set when a
 	   multi-session strip is actually shown. */
@@ -1333,13 +990,6 @@ body.resizing-tab-split {
    - The composer send button was large enough to overlap the composer's
      rounded corner; a slightly smaller circle + more right padding sits it
      fully inside. */
-@media (max-width: 720px) {
-	/* Phones show the SAME busy right-edge as desktop: Stop plus the steer/queue
-	   Send side by side once you start composing a follow-up (empty input still
-	   falls back to Stop alone, since the send-split only renders with content).
-	   No mobile-only hiding of either button — the two-button row matches desktop
-	   so the queue/steer affordance is never lost on a phone. */
-}
 
 /* ── Phone: Slack-style top cards + relocated filter ─────────────
    On phones the top nav (Catch up / Reviews / PR Tinder) reads as a row
