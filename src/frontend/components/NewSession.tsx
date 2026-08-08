@@ -1173,6 +1173,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               disabled={creating}
             />
             <VoiceInput
+              className={FOOTER_ICON_BTN}
               disabled={creating}
               onText={(t) => {
                 setPrompt((prev) => (prev.trim() ? `${prev.replace(/\s+$/, "")} ${t}` : t));

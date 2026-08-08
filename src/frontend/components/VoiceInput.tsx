@@ -55,9 +55,14 @@ const SPINNER =
 export function VoiceInput({
   onText,
   disabled,
+  className = "palette-icon-btn",
 }: {
   onText: (text: string) => void;
   disabled?: boolean;
+  /** Classes for the idle mic button. The new-session footer passes its own
+   *  so the mic keeps the sizing its neighbours get there — that used to come
+   *  from a `.palette-footer .palette-icon-btn` descendant rule. */
+  className?: string;
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -190,7 +195,7 @@ export function VoiceInput({
       <Tooltip label="Dictate">
         <button
           type="button"
-          className="palette-icon-btn"
+          className={className}
           onClick={start}
           disabled={disabled || phase !== "idle"}
           aria-label="Dictate"
