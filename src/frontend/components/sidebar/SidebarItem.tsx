@@ -1,6 +1,7 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { hasDraft } from "../../lib/drafts";
 import { markRead, markUnread } from "../../lib/reads";
+import { SIDEBAR_RAIL, SIDEBAR_STATUS_DOT } from "../../lib/sidebar-classes";
 import { isClaimed, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
 import { ARCHIVE_SHORTCUT_KEYS, LONG_PRESS_MS, LONG_PRESS_SLOP, PIN_SHORTCUT_KEYS, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
 import { MINE_STATUS_META, type LaneChoice } from "../../lib/sidebar-types";
@@ -252,7 +253,7 @@ export function SidebarItem({
 	// hovercard/details still carry last activity).
 	if (session.linearIssue) {
 		metaParts.push(
-			<span key="lin" className="sidebar-meta-linear">
+			<span key="lin" className="text-[#7b86e8]">
 				{session.linearIssue.identifier}
 			</span>,
 		);
@@ -381,17 +382,19 @@ export function SidebarItem({
 			}
 		>
 			{/* Same gap as .sidebar-group-header and .sidebar-ws-row: with the
-			    shared .sidebar-rail slot in front, that's what puts every title on
+			    shared SIDEBAR_RAIL slot in front, that's what puts every title on
 			    one rail. */}
 			<div className="flex min-w-0 items-center gap-[9px]">
 				{/* Match workspace rows: the rail holds the PR glyph alone — a blocked
 				    session reads from its accent wash and bold title, not from a second
 				    dot wedged in beside it — and merged PRs keep the glyph itself
 				    purple instead of adding metadata. */}
-				<span className="sidebar-rail">
+				<span className={SIDEBAR_RAIL}>
 					{waiting && <span className="sr-only">Needs your attention</span>}
 					{session.isRunning ? (
-						<span className="size-2 shrink-0 rounded-full sidebar-status-running" />
+						<span
+							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
+						/>
 					) : (
 						<WsPrStatusMark sessions={[session]} size={18} />
 					)}
@@ -442,7 +445,7 @@ export function SidebarItem({
 					>
 						{metaParts.map((part, i) => (
 							<React.Fragment key={i}>
-								{i > 0 && <span className="sidebar-meta-sep">·</span>}
+								{i > 0 && <span className="opacity-50">·</span>}
 								{part}
 							</React.Fragment>
 						))}
@@ -469,7 +472,7 @@ export function SidebarItem({
 				>
 					{metaParts.map((part, i) => (
 						<React.Fragment key={i}>
-							{i > 0 && <span className="sidebar-meta-sep">·</span>}
+							{i > 0 && <span className="opacity-50">·</span>}
 							{part}
 						</React.Fragment>
 					))}

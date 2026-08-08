@@ -1,6 +1,7 @@
 import React from "react";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { prStatusMark } from "../lib/pr-status";
+import { SIDEBAR_RAIL } from "../lib/sidebar-classes";
 import { providerFromUrl } from "../lib/provider";
 import { shortTime } from "../lib/time";
 import {
@@ -97,7 +98,7 @@ export function PrRow({
 					/>
 				}
 			>
-			<span className="sidebar-rail">
+			<span className={SIDEBAR_RAIL}>
 				<PrStateMark item={item} size={18} />
 			</span>
 			<span className={SIDEBAR_ROW_TITLE}>{item.pr.title}</span>

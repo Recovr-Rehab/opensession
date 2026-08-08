@@ -1,5 +1,6 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { fetchFeedFilterOptions, relativeTime } from "../../lib/api";
+import { SIDEBAR_RAIL } from "../../lib/sidebar-classes";
 import { laneCtxEntries, useRowCtxMenu } from "../../lib/sidebar-ctx";
 import { SUPPORT_PRIORITY_DOT, dget, type FeedFilterValues } from "../../lib/sidebar-filter";
 import { mineStatus } from "../../lib/sidebar-lanes";
@@ -78,7 +79,7 @@ export function SupportRow({
 					/>
 				}
 			>
-				<span className="sidebar-rail">
+				<span className={SIDEBAR_RAIL}>
 					<span
 						className="size-[7px] rounded-full"
 						style={{ backgroundColor: dot }}
@@ -228,7 +229,7 @@ export function FeedRow({
 					/>
 				}
 			>
-				<span className="sidebar-rail">
+				<span className={SIDEBAR_RAIL}>
 					<span
 						className="size-[7px] rounded-full"
 						style={{ backgroundColor: dot }}

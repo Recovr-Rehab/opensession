@@ -7,6 +7,7 @@ import type {
 	FeedDescriptor,
 	FeedItem,
 } from "../lib/types";
+import { SIDEBAR_RAIL, SIDEBAR_STATUS_DOT } from "../lib/sidebar-classes";
 import { isScratchWorkspace } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import {
@@ -2371,8 +2372,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										onClick={() => onSelect(r.sessions[0])}
 										aria-label={r.name}
 									>
-										<span className="sidebar-rail">
-											<span className="size-2 shrink-0 rounded-full sidebar-status-idle" />
+										<span className={SIDEBAR_RAIL}>
+											<span
+												className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.idle}`}
+											/>
 										</span>
 										<span
 											// On touch the unarchive/pin pair is always visible (it's
@@ -2460,7 +2463,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onClick={onOpenArchived}
 									title="View all archived sessions"
 								>
-									<span className="sidebar-rail" />
+									<span className={SIDEBAR_RAIL} />
 									<span
 										className={SIDEBAR_ROW_TITLE}
 										style={{ color: "var(--text-faint)" }}
@@ -2680,11 +2683,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    adds a second leading mark: the row's accent wash and bold title
 				    already say it, and a green dot hanging off the rail collides with
 				    the glyph it precedes (green means "PR healthy" everywhere else). */}
-				<span className="sidebar-rail">
+				<span className={SIDEBAR_RAIL}>
 					{flatRepoGrouping ? (
 						<WsStatusMark row={row} size={18} />
 					) : row.running ? (
-						<span className="size-2 shrink-0 rounded-full sidebar-status-running" />
+						<span
+							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
+						/>
 					) : (
 						<WsPrStatusMark sessions={row.sessions} size={18} workspace={row.workspace} />
 					)}
@@ -3354,7 +3359,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						>
 							{/* The tile is 18px; the rail holds it on the same column
 							    (and text rail) as every other header's mark. */}
-							<span className="sidebar-rail">
+							<span className={SIDEBAR_RAIL}>
 								<RepoTile name={repo} />
 							</span>
 							<span className="sidebar-group-name">{repoLabel(repo)}</span>
@@ -3625,7 +3630,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							/>
 						}
 					>
-						<span className="sidebar-rail">
+						<span className={SIDEBAR_RAIL}>
 							<RepoTile name={feed.id} />
 						</span>
 						<span className="sidebar-group-name">{feed.title}</span>
@@ -4429,7 +4434,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									title={n.title}
 								>
 									<span className="flex min-w-0 items-center gap-[9px]">
-										<span className="sidebar-rail" style={{ opacity: 0.9 }}>
+										<span className={SIDEBAR_RAIL} style={{ opacity: 0.9 }}>
 											📝
 										</span>
 										<span className={SIDEBAR_ROW_TITLE}>{n.title}</span>
@@ -4745,7 +4750,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										>
 											{/* The dot is 7px but the header's leading column is a
 											    rail, so its name lands where every other one does. */}
-											<span className="sidebar-rail">
+											<span className={SIDEBAR_RAIL}>
 												{group.dotColor && (
 													<span
 														className="sidebar-group-dot"

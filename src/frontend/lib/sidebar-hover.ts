@@ -1,4 +1,5 @@
 import type { WorkspaceOverview } from "./api";
+import { SIDEBAR_STATUS_DOT } from "./sidebar-classes";
 import { runNeedsAttention } from "./sidebar-lanes";
 import type { MineStatus } from "./sidebar-types";
 import type { UnifiedSession, Workspace } from "./types";
@@ -21,19 +22,19 @@ export function hoverState(s: UnifiedSession): {
 		return {
 			label: "Waiting for your input",
 			tone: "blue",
-			dotClass: "sidebar-status-waiting",
+			dotClass: SIDEBAR_STATUS_DOT.waiting,
 		};
 	if (runNeedsAttention(s))
 		return {
 			label: "Last run failed. Needs attention.",
 			tone: "accent",
-			dotClass: "sidebar-status-waiting",
+			dotClass: SIDEBAR_STATUS_DOT.waiting,
 		};
 	if (s.isRunning)
 		return {
 			label: "Running",
 			tone: "green",
-			dotClass: "sidebar-status-running",
+			dotClass: SIDEBAR_STATUS_DOT.running,
 		};
 	if (s.prState === "MERGED")
 		return { label: "Merged", tone: "purple", dotClass: "bg-purple" };

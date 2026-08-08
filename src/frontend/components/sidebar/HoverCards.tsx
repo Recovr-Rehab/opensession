@@ -3,6 +3,7 @@ import { DEFAULT_REPO_ID } from "../../lib/brand";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
 import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
+import { SIDEBAR_STATUS_DOT } from "../../lib/sidebar-classes";
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
 import { formatRemaining, snoozePresets } from "../../lib/snoozes";
@@ -263,8 +264,8 @@ export function WsStatusMark({
 	);
 	const dot = (cls: string) =>
 		slot(<span className={`size-2 shrink-0 rounded-full ${cls}`} />);
-	if (row.status === "needsinput") return dot("sidebar-status-waiting");
-	if (row.running) return dot("sidebar-status-running");
+	if (row.status === "needsinput") return dot(SIDEBAR_STATUS_DOT.waiting);
+	if (row.running) return dot(SIDEBAR_STATUS_DOT.running);
 	if (row.status === "review") {
 		const open = row.sessions.filter((c) => c.prState === "OPEN");
 		const allDraft = open.length > 0 && open.every((c) => c.prIsDraft);
@@ -284,7 +285,7 @@ export function WsStatusMark({
 	const prSession = frontingPrSession(row.sessions);
 	if (row.status === "pending" && prSession && sessionPrMerged(prSession))
 		return slot(<IconGitMerge size={size} className="text-purple" />);
-	return dot("sidebar-status-idle");
+	return dot(SIDEBAR_STATUS_DOT.idle);
 }
 
 // The info half of the workspace card: branch + diff + status mark, title,
