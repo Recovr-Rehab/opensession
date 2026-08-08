@@ -1,4 +1,5 @@
 import type { TranscriptEntry } from "./types";
+import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 
 function time(entry: TranscriptEntry): number {
 	const parsed = Date.parse(entry.timestamp);
@@ -105,5 +106,22 @@ export function normalizeLegacyVoiceToolEntries(
 			return normalized;
 		}
 		return entry;
+	});
+}
+
+/**
+ * Read an in-flight message (a queue receipt / steer, which has never been
+ * near the server) the way the transcript entry it is about to become will be
+ * read: sentinels and "[Name] " prefixes stripped, sender and notice resolved.
+ *
+ * Same classifier as the durable path, so a message in the queue and the same
+ * message a second later in the transcript can't disagree about what it is.
+ */
+export function classifyQueuedContent(content?: string): TranscriptEntry {
+	return classifyEntry({
+		id: "",
+		type: "user",
+		content: content ?? "",
+		timestamp: "",
 	});
 }

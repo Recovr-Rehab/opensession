@@ -22,13 +22,7 @@ import {
 } from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { plainThreadUrl } from "./PlainThreadPanel";
-import {
-	isGitHubAttribution,
-	parseHumanReply,
-	parseSessionNotice,
-	parseWorkerReport,
-	parseWorkflowNotice,
-} from "@tellahq/opensession-protocol/notices";
+import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
 import type {
 	UnifiedSession,
 	TranscriptEntry,
@@ -36,6 +30,7 @@ import type {
 	AskQuestion,
 } from "../lib/types";
 import {
+	classifyQueuedContent,
 	mergeTranscriptEntries,
 	orderTranscriptEntries,
 } from "../lib/transcript-state";
@@ -3048,20 +3043,19 @@ export function SessionViewer({
 
 	function renderQueueContent(
 		item: QueueReceipt,
-		opts: { human?: ReturnType<typeof parseHumanReply>; github?: boolean },
+		classified: TranscriptEntry,
+		opts: { github?: boolean } = {},
 	) {
 		const firstImage = item.images?.[0];
 		const extraImages = Math.max(0, (item.images?.length ?? 0) - 1);
-		// An agent-to-agent delivery (worker report, finished-workflow nudge)
-		// carries a sentinel the human should never see — strip it here too, so a
-		// message in flight reads the same as the card it becomes.
-		const worker = opts.human ? null : parseWorkerReport(item.content);
-		const workflow = opts.human || worker ? null : parseWorkflowNotice(item.content);
-		const sessionNotice =
-			opts.human || worker || workflow ? null : parseSessionNotice(item.content);
-		const body = opts.human
-			? opts.human.body
-			: (worker?.body ?? workflow?.body ?? sessionNotice?.body ?? item.content);
+		// Who or what this is from, when it isn't the driver typing: a teammate's
+		// name, or a notice's title — but only when that title is a LABEL. A
+		// title-only notice (a workflow nudge, a runner line) is its own body, and
+		// printing it twice is just noise.
+		const from =
+			classified.sender ??
+			(classified.notice?.body ? classified.notice.title : null);
+		const body = classified.content;
 		return (
 			<div className="composer-queue-content">
 				{firstImage && (
@@ -3073,15 +3067,8 @@ export function SessionViewer({
 					</div>
 				)}
 				<div className="composer-queue-body">
-					{opts.human && (
-						<span className="composer-queue-from">{opts.human.name}</span>
-					)}
+					{from && <span className="composer-queue-from">{from}</span>}
 					{opts.github && <span className="composer-queue-from">GitHub</span>}
-					{worker && <span className="composer-queue-from">Worker report</span>}
-					{workflow && <span className="composer-queue-from">Workflow</span>}
-					{sessionNotice && (
-						<span className="composer-queue-from">System message</span>
-					)}
 					{body}
 				</div>
 			</div>
@@ -3155,11 +3142,11 @@ export function SessionViewer({
 			<div className="composer-queue" aria-label="Queued and steered messages">
 				<div className="composer-queue-title">{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
-					const hr = parseHumanReply(s.content);
+					const c = classifyQueuedContent(s.content);
 					return (
 						<div
 							key={`steered-${i}`}
-							className={`composer-queue-item composer-queue-steered ${hr ? "is-human" : ""}`}
+							className={`composer-queue-item composer-queue-steered ${c.senderVia ? "is-human" : ""}`}
 						>
 							<div className="composer-queue-actions">
 								<Tooltip label="Already delivered into the running turn — shown here until the turn finishes">
@@ -3186,7 +3173,7 @@ export function SessionViewer({
 									</Tooltip>
 								)}
 							</div>
-							{renderQueueContent(s, { human: hr })}
+							{renderQueueContent(s, c)}
 						</div>
 					);
 				})}
@@ -3199,7 +3186,7 @@ export function SessionViewer({
 					className="composer-queue-list"
 				>
 				{queued.map((q, i) => {
-					const hr = parseHumanReply(q.content);
+					const c = classifyQueuedContent(q.content);
 					const isGitHub = isGitHubAttribution(q.user);
 					const id = q.id;
 					const key = id || `queued-${i}`;
@@ -3218,7 +3205,7 @@ export function SessionViewer({
 							}}
 							onDragEnd={commitQueueReorder}
 							whileDrag={{ scale: 1.01, zIndex: 2 }}
-							className={`composer-queue-item ${canReorder ? "is-draggable" : ""} ${hr ? "is-human" : ""} ${isGitHub ? "is-github" : ""}`}
+							className={`composer-queue-item ${canReorder ? "is-draggable" : ""} ${c.senderVia ? "is-human" : ""} ${isGitHub ? "is-github" : ""}`}
 						>
 							<div className="composer-queue-actions">
 								{isGitHub ? (
@@ -3282,7 +3269,7 @@ export function SessionViewer({
 									</Tooltip>
 								)}
 							</div>
-							{renderQueueContent(q, { human: hr, github: isGitHub })}
+							{renderQueueContent(q, c, { github: isGitHub })}
 						</Reorder.Item>
 					);
 				})}
@@ -3297,7 +3284,7 @@ export function SessionViewer({
 								{waitingForWorkspace ? "Queued" : "Queueing…"}
 							</span>
 						</div>
-						{renderQueueContent(p, {})}
+						{renderQueueContent(p, classifyQueuedContent(p.content))}
 					</div>
 				))}
 			</div>
