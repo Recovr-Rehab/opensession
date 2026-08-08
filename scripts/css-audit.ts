@@ -6,6 +6,7 @@
  *   bun scripts/css-audit.ts            # report
  *   bun scripts/css-audit.ts --prune    # rewrite legacy.css without them
  *   bun scripts/css-audit.ts --list     # just the unreachable class names
+ *   bun scripts/css-audit.ts --loose    # names that match only incidentally
  *
  * A selector can never match if any class in it appears nowhere in the source,
  * so the rule is dead weight. The subtlety is deciding "appears nowhere":
@@ -22,6 +23,15 @@
  * Deletion is conservative in one more way: it only ever drops a selector that
  * contains a dead class. Rules that merely lose one selector from a list keep
  * the rest, and the file's one-selector-per-line formatting is preserved.
+ *
+ * That conservatism cuts the other way too, and "unreachable: 0" was being
+ * read as "nothing left to prune" when it never meant that. A name counts as
+ * present if it turns up anywhere at all, including inside a longer string, so
+ * an API path ("/wiki/tree") or a module specifier ("../lib/pr-checks") keeps
+ * a rule alive on its own. Those show up separately as `--loose`: reachable by
+ * the wide match, but never written as an actual class token. It is a list of
+ * leads to verify against the running DOM, not a deletion set — pruning is
+ * unchanged by it.
  */
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -134,11 +144,46 @@ function dirtySourcesAtHead(): { path: string; text: string }[] {
  */
 const IDENTITY_INTERP = /^(\w+\.)?(id|_?id|uuid|key|index|i|n|idx)$/i;
 
+/**
+ * Class names written as a whole token, the way a class list is actually built
+ * — `"sidebar-item is-selected"`, a `querySelector(".composer-pop-wrap")`
+ * argument, a Tailwind arbitrary variant. Deliberately narrower than `idents`,
+ * which matches any identifier-shaped run of characters anywhere and so counts
+ * a name it finds mid-path: `.wiki` read as reachable for months on the
+ * strength of the API path "/wiki/tree", long after the last element carrying
+ * that class was gone.
+ *
+ * The one meaningful difference from `idents` is that `/` binds rather than
+ * splits, so a path stays whole instead of decomposing into class names.
+ * Everything else that cannot appear in a class name splits, which is what
+ * recovers the name from a selector string (`.foo`) or an arbitrary variant
+ * (`[.session-info-status_&]`).
+ *
+ * Scanning the whole file rather than just its string literals is deliberate.
+ * Tracking quotes across a .tsx file means an apostrophe in JSX text ("don't")
+ * opens a phantom string and swallows every className until the next one —
+ * which reported `.note-chip-note` as a lead while `Notes.tsx` was plainly
+ * emitting it. The cost is that a bare identifier can match a single-word
+ * class name, and that only ever *shortens* this list.
+ *
+ * This set never decides a deletion. It cannot see a class assembled at
+ * runtime, so a name missing here is a candidate to verify against the running
+ * DOM — not a rule to drop. Pruning still goes by `idents`.
+ */
+function harvestTokens(text: string, into: Set<string>) {
+	for (const raw of text.split(/[^\w/-]+/)) {
+		// A trailing "_" is Tailwind's escaped space, not part of the name.
+		const tok = raw.replace(/_+$/, "");
+		if (tok && !tok.includes("/")) into.add(tok);
+	}
+}
+
 const markup = new Set(MARKUP_DIRS.flatMap((d) => sourceFiles(join(ROOT, d))));
 
 const idents = new Set<string>();
 const prefixes = new Set<string>();
 const literals = new Set<string>();
+const tokens = new Set<string>();
 for (const dir of SCAN_DIRS) {
 	for (const f of sourceFiles(join(ROOT, dir))) {
 		let text: string;
@@ -149,6 +194,7 @@ for (const dir of SCAN_DIRS) {
 		}
 		for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
 		for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
+		harvestTokens(text, tokens);
 		if (!markup.has(f)) continue;
 		// `foo-bar-${x}` / `a b c-${x}` -> the "c-" prefix such a literal can build
 		for (const m of text.matchAll(/`([a-zA-Z0-9 _-]*)\$\{([^}]*)\}/g)) {
@@ -172,6 +218,7 @@ for (const f of dirtySourcesAtHead()) {
 	const text = stripComments(f.text);
 	for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) idents.add(m[0]);
 	for (const m of text.matchAll(/"([a-z][a-z0-9]*(?:-[a-z0-9]+){1,4})"/g)) literals.add(m[1]);
+	harvestTokens(text, tokens);
 }
 
 // ── classify the classes defined in the sheet ───────────────────────────────
@@ -185,9 +232,20 @@ const defined = new Set(
 const keyframes = new Set([...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]));
 
 const dead = new Set<string>();
+/**
+ * Reachable by `idents` alone — the name turns up in the source, but never as
+ * a class token. Either it is genuinely built at runtime in a shape the prefix
+ * harvest missed, or nothing emits it any more and the match is incidental. A
+ * separate bucket rather than a verdict: "unreachable: 0" was being read as
+ * "nothing left to prune", and it never meant that.
+ */
+const loose: string[] = [];
 const held: [string, string][] = [];
 for (const c of defined) {
-	if (idents.has(c)) continue;
+	if (idents.has(c)) {
+		if (!tokens.has(c) && !keyframes.has(c)) loose.push(c);
+		continue;
+	}
 	if (keyframes.has(c)) held.push([c, "@keyframes name"]);
 	else if (literals.has(c)) held.push([c, "string literal in source"]);
 	else {
@@ -201,15 +259,26 @@ if (argv.has("--list")) {
 	for (const c of [...dead].sort()) console.log(c);
 	process.exit(0);
 }
+if (argv.has("--loose")) {
+	for (const c of loose.sort()) console.log(c);
+	process.exit(0);
+}
 
+const reachable = defined.size - dead.size - held.length;
 console.log(`sheet:            ${SHEET.replace(ROOT + "/", "")}`);
 console.log(`classes defined:  ${defined.size}`);
-console.log(`  reachable:      ${defined.size - dead.size - held.length}`);
+console.log(`  reachable:      ${reachable}${loose.length ? `  (${loose.length} of them only loosely — see --loose)` : ""}`);
 console.log(`  held back:      ${held.length}  (indirection — never delete these)`);
 console.log(`  unreachable:    ${dead.size}`);
 if (held.length && argv.has("--verbose")) {
 	console.log("\nheld back:");
 	for (const [c, why] of held.sort()) console.log(`  ${c.padEnd(36)} ${why}`);
+}
+if (loose.length && argv.has("--verbose")) {
+	console.log("\nloose (name appears in source, but never as a class token):");
+	for (const c of loose.sort()) console.log(`  ${c}`);
+	console.log("Verify against the running DOM before deleting — getElementsByClassName");
+	console.log("on the route that would use it. This bucket is a lead, not a verdict.");
 }
 
 // ── prune ───────────────────────────────────────────────────────────────────

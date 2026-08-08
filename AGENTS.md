@@ -217,8 +217,14 @@ from breaking things:
 Tooling: `bun scripts/css-audit.ts` reports which rules in legacy.css nothing
 can reach any more (`--prune` deletes them; it holds back classes built at
 runtime like `` `source-${x}` ``, which is the one mistake that silently
-un-styles things). `bun scripts/css-shots.ts <name>` captures the routes ×
-viewport × theme screenshot gate; `--diff` compares two runs.
+un-styles things). Read `unreachable: 0` as "nothing safe to delete
+mechanically", not "nothing left": a name counts as reachable if it appears
+anywhere at all, so a module path (`../lib/pr-checks`) keeps a rule alive on
+its own — `--loose` lists those, to check against the running DOM. Rules whose
+class stays on the markup purely as a JS hook are invisible to it in the other
+direction, and have to be found by hand. `bun scripts/css-shots.ts <name>`
+captures the routes × viewport × theme screenshot gate; `--diff` compares two
+runs.
 
 - **Tokens**: `src/frontend/styles/tailwind.css` maps the existing `base.css`
   variables (`--bg`, `--text-dim`, …) into Tailwind's namespace via
