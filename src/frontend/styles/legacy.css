@@ -238,32 +238,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	   ~71% of the tile while a lettered tile fills 100% of its, so a repo
 	   with art read smaller than the repo beside it wearing a letter. */
 }
-.sidebar-list {
-	flex: none;
-	overflow-y: visible;
-	/* Tight horizontal padding so the active/hover pill sits close to the
-	   sidebar edges (it "overflows" past the content inset, Conductor-style),
-	   and so row content lands on the shared columns: leading icons under the
-	   group-header icons, trailing times/numbers flush-right under the header's
-	   filter/＋ buttons. */
-	padding: 1px 6px 0;
-}
-
-/* These bands are siblings of the workspace list, but participate in the
-   sidebar's single scroll flow rather than creating nested scroll panes. */
-.sidebar-independent-section {
-	display: block;
-	flex: none;
-	min-width: 0;
-	margin-right: 6px;
-	margin-left: 6px;
-}
-.sidebar-independent-scroll {
-	overflow-y: visible;
-	min-width: 0;
-	padding-bottom: 6px;
-}
-
 /* "Archived" — an icon-led row styled as a peer of the My-sessions status buckets
    (it reuses .sidebar-group-header). Unlike those it navigates to the archived
    page rather than expanding, and highlights (.active) while that page is open. */
@@ -276,14 +250,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--bg-active);
 }
 
-.sidebar-group {
-	margin-bottom: 14px;
-}
-
-.sidebar-status-group + .sidebar-status-group {
-	margin-top: 8px;
-}
-
 /* Rows nested under a repo band, a status lane or an inbox band take no inset
    of their own: every row in the list keeps the base 10px edge, so all their
    marks and titles share one rail top to bottom. The nesting is carried by the
@@ -291,17 +257,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
    left of that rail (see .sidebar-lane-group), which reads as a divider over
    its rows without pushing them right. Stepping the rows in as well cost real
    title width on every level and fanned the list out across three left edges. */
-/* People and Automations render one collapsed row per group, so the 14px
-   inter-group margin leaves them floating far apart. Drop it so consecutive
-   people/automation rows stack flush, like the session items above them. The
-   band-start divider still separates the sections. */
-.sidebar-group--automations {
-	margin-bottom: 0;
-}
-.sidebar-group--automations {
-	padding-bottom: 28px;
-}
-
 /* The count on a group heading or a workspace row. Still legacy because the
    row families position their trailing metadata against it as a sibling
    (`.sidebar-group-count + .sidebar-ws-time`); it migrates with them. */
@@ -319,38 +274,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
    would gap twice. */
 .sidebar-swipe-row {
 	margin-top: 2px;
-}
-
-/* Drag-to-reorder wrapper around each Pinned row (Motion Reorder.Item). While
-   a row is being dragged it floats over its neighbours, so it needs a solid
-   background (rows are transparent over the app bg) and to win the stacking
-   order; radius matches the row's own so the backdrop doesn't poke out. */
-.sidebar-pin-entry {
-	position: relative;
-}
-.sidebar-pin-entry.is-reordering {
-	z-index: 5;
-	background: var(--bg);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-}
-/* While a drag is in flight, rows sliding under the pointer would fire
-   mouseenter and pop their hover preview cards — mute the row content so only
-   the drag gesture sees the pointer. */
-.sidebar-pin-list.is-drag-active .sidebar-pin-entry > * {
-	pointer-events: none;
-}
-/* Drag-into-lane: while a Pinned row is mid-drag the status lanes below act
-   as drop targets — the one under the pointer wears a pill + accent ring, and
-   lanes that only materialized for the drag (they were empty) sit dimmed. */
-.sidebar-status-group.is-lane-empty {
-	opacity: 0.55;
-}
-.sidebar-status-group.is-lane-drop-hover {
-	opacity: 1;
-	background: var(--hover-strong);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
-	box-shadow: inset 0 0 0 1px var(--accent, #6b8afd);
 }
 
 /* Mobile swipe row shell. Swipe left reveals Archive; swipe right reveals Star.
@@ -654,12 +577,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
 	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
 	corner-shape: squircle;
-}
-.sidebar-ctx-menu {
-	corner-shape: squircle;
-}
-.sidebar-ctx-menu button:not(.tab-color-swatch):hover {
-	background: var(--hover) !important;
 }
 .tab-color-swatch {
 	width: 22px;
@@ -2378,27 +2295,6 @@ body.resizing-tab-split {
    is the last max-width:720px block so it wins source-order ties over the
    base mobile bumps above. */
 @media (max-width: 720px) {
-	.sidebar-list {
-		flex: none;
-		overflow-y: visible;
-		/* Let row surfaces breathe past their content rail while keeping the content
-		   aligned with the tool cards' 16px edge (12px outer + 4px inner below). */
-		padding-right: 12px;
-		padding-left: 12px;
-	}
-	.sidebar-independent-section {
-		margin-right: 12px;
-		margin-left: 12px;
-	}
-	
-	/* Once the outer surfaces share a gutter, use one symmetric inner inset for
-	   every row family too. This keeps People, workspace/status, pinned, repo,
-	   support, and automation marks and trailing metadata on common rails. */
-	.sidebar-independent-section .sidebar-people-row {
-		padding-right: 4px;
-		padding-left: 4px;
-	}
-
 	/* Filter, docked in the top bar beside Search (portaled from the sidebar).
 	   `order: -1` seats it left of Search. Same 40px circle as the search
 	   button (::after pads the hit area to 44pt); muted until a filter is set. */

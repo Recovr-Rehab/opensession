@@ -23,6 +23,80 @@ export const SIDEBAR_RAIL =
 	"relative flex size-[22px] flex-[0_0_22px] items-center justify-center";
 
 /**
+ * ── Containers ──────────────────────────────────────────────────────────────
+ * The boxes the row families sit in. Written phone-first with a `min-[721px]:`
+ * desktop override, which is the exact complement of the `max-width: 720px`
+ * these rules came from — `max-[720px]:` compiles to `< 720` and would leave a
+ * viewport exactly 720px wide wearing neither value.
+ */
+
+/**
+ * The workspace list. Horizontal padding is tight on desktop so the
+ * active/hover pill sits close to the sidebar edges (it "overflows" past the
+ * content inset, Conductor-style) and row content lands on the shared columns:
+ * leading icons under the group-header icons, trailing times/numbers
+ * flush-right under the header's filter/＋ buttons. On phones the surfaces
+ * breathe past their content rail instead, while the content stays aligned
+ * with the tool cards' 16px edge (12px outer + 4px inner below).
+ *
+ * `data-sidebar-list` rides alongside it: the ArrowUp/ArrowDown row navigation
+ * queries this box for its candidate rows, and an attribute says "hook" where a
+ * class name would read as styling.
+ */
+export const SIDEBAR_LIST =
+	"flex-none overflow-y-visible px-3 pt-px pb-0 min-[721px]:px-1.5";
+
+/**
+ * Bands that are siblings of the workspace list (Automations, People) but
+ * participate in the sidebar's single scroll flow rather than creating nested
+ * scroll panes.
+ */
+export const SIDEBAR_INDEPENDENT_SECTION =
+	"block min-w-0 flex-none mx-3 min-[721px]:mx-1.5";
+
+/** The scroll flow inside one of those bands — visible, not a nested pane. */
+export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
+
+/** A top-level group in the workspace list, and the gap after it. */
+export const SIDEBAR_GROUP = "mb-[14px]";
+
+/**
+ * A status lane. Consecutive lanes open with 8px of their own, which was an
+ * adjacent-sibling rule and stays one: `data-status-group` is what the variant
+ * matches, because the margin depends on what precedes the element and no
+ * amount of `:not(:first-child)` says the same thing when other kinds of
+ * sibling can sit between two lanes.
+ */
+export const SIDEBAR_STATUS_GROUP = "[[data-status-group]+&]:mt-2";
+
+/**
+ * A lane acting as a drop target while a Pinned row is mid-drag: the one under
+ * the pointer wears a pill + accent ring, and lanes that only materialized for
+ * the drag (they were empty) sit dimmed.
+ */
+export const SIDEBAR_LANE_EMPTY = "opacity-55";
+export const SIDEBAR_LANE_DROP_HOVER =
+	"rounded-row bg-pressed opacity-100 shadow-[inset_0_0_0_1px_var(--accent,#6b8afd)]";
+
+/** The drag-to-reorder wrapper around each Pinned row (Motion Reorder.Item). */
+export const SIDEBAR_PIN_ENTRY = "relative";
+
+/**
+ * While a row is being dragged it floats over its neighbours, so it needs a
+ * solid background (rows are transparent over the app bg) and to win the
+ * stacking order; the radius matches the row's own so the backdrop doesn't poke
+ * out. `[&>*]:pointer-events-none` is the other half of the same state and used
+ * to key off the LIST (`.sidebar-pin-list.is-drag-active`): rows sliding under
+ * the pointer would otherwise fire mouseenter and pop their hover preview
+ * cards, so the row content is muted and only the drag gesture sees the
+ * pointer. Every entry wears it while any drag is in flight, which is what the
+ * list-level selector did — so the list needs no class of its own.
+ */
+export const SIDEBAR_PIN_ENTRY_DRAGGING =
+	"z-[5] rounded-row bg-bg shadow-[0_4px_14px_rgba(0,0,0,0.25)]";
+export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
+
+/**
  * The RepoTile a repo/feed band header leads with. It fills the 22px leading
  * slot rather than riding centred inside it at its 18px default: centred, the
  * tile's ink started 2px right of every other mark in the sidebar (the nav

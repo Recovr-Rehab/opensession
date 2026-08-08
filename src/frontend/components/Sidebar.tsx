@@ -15,6 +15,7 @@ import {
 	SIDEBAR_BAND_TOGGLE_INSET,
 	SIDEBAR_AUTO_COG,
 	SIDEBAR_FILTER_DOT,
+	SIDEBAR_GROUP,
 	SIDEBAR_GROUP_CHEVRON,
 	SIDEBAR_GROUP_DOT,
 	SIDEBAR_GROUP_HEADER,
@@ -26,9 +27,18 @@ import {
 	SIDEBAR_HEADER_BTN,
 	SIDEBAR_HEADER_BTN_DESKTOP,
 	SIDEBAR_HEADER_BTN_PHONE,
+	SIDEBAR_INDEPENDENT_SCROLL,
+	SIDEBAR_INDEPENDENT_SECTION,
+	SIDEBAR_LANE_DROP_HOVER,
+	SIDEBAR_LANE_EMPTY,
+	SIDEBAR_LIST,
+	SIDEBAR_PIN_DRAG_ACTIVE,
+	SIDEBAR_PIN_ENTRY,
+	SIDEBAR_PIN_ENTRY_DRAGGING,
 	SIDEBAR_RAIL,
 	SIDEBAR_REPO_TILE,
 	SIDEBAR_STATUS_DOT,
+	SIDEBAR_STATUS_GROUP,
 	SIDEBAR_STICKY_BAND,
 	SIDEBAR_STICKY_BAND_ROW,
 	SIDEBAR_STICKY_LANE,
@@ -1820,7 +1830,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				return;
 			const candidates = Array.from(
 				document.querySelectorAll<HTMLButtonElement>(
-					".sidebar-list button[data-sidebar-row]",
+					"[data-sidebar-list] button[data-sidebar-row]",
 				),
 			);
 			if (candidates.length === 0) return;
@@ -2363,7 +2373,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			? (() => {
 					const open = isOpen("archived");
 					return (
-						<div className="sidebar-status-group">
+						<div className={SIDEBAR_STATUS_GROUP} data-status-group>
 							<button
 								className={cn(
 									SIDEBAR_GROUP_HEADER,
@@ -3009,7 +3019,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const gkey = `${ns}status:snoozed`;
 		const open = isOpen(gkey);
 		return (
-			<div className="sidebar-status-group" key={gkey}>
+			<div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
 				<button
 					className={cn(
 						SIDEBAR_GROUP_HEADER,
@@ -3067,11 +3077,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const dropHover = dropEligible && laneDropHover?.gkey === gkey;
 			return (
 				<div
-					className={`sidebar-status-group${
-						dropEligible && items.length === 0 && prs.length === 0
-							? " is-lane-empty"
-							: ""
-					}${dropHover ? " is-lane-drop-hover" : ""}`}
+					className={cn(
+						SIDEBAR_STATUS_GROUP,
+						dropEligible &&
+							items.length === 0 &&
+							prs.length === 0 &&
+							SIDEBAR_LANE_EMPTY,
+						dropHover && SIDEBAR_LANE_DROP_HOVER,
+					)}
+					data-status-group
 					key={gkey}
 					data-lane-drop={dropEligible ? gkey : undefined}
 					data-lane-status={dropEligible ? meta.key : undefined}
@@ -3188,7 +3202,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				const gkey = `${ns}inbox:${b.key}`;
 				const open = isOpen(gkey);
 				return (
-					<div className="sidebar-status-group" key={gkey}>
+					<div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
 						<button
 							className={cn(
 								SIDEBAR_GROUP_HEADER,
@@ -3539,7 +3553,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const groupIsOpen = isOpen(gkey);
 			return (
 				<div
-					className="sidebar-status-group"
+					className={SIDEBAR_STATUS_GROUP}
+					data-status-group
 					key={`support-prio-${group.p}`}
 				>
 					<button
@@ -4382,7 +4397,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					);
 				})()}
 			{workspacesOpen && (
-				<div className="sidebar-list">
+				<div className={SIDEBAR_LIST} data-sidebar-list>
 				{workspaceListEmpty && (
 					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
 						{hasWorkspaceFilter
@@ -4401,7 +4416,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					(() => {
 						const open = isOpen("needsreview");
 						return (
-							<div className="sidebar-group sidebar-group--review">
+							<div className={SIDEBAR_GROUP}>
 								<button
 									className={cn(
 										SIDEBAR_GROUP_HEADER,
@@ -4445,7 +4460,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					(() => {
 						const open = isOpen("awaitingreview");
 						return (
-							<div className="sidebar-group sidebar-group--review">
+							<div className={SIDEBAR_GROUP}>
 								<button
 									className={cn(
 										SIDEBAR_GROUP_HEADER,
@@ -4760,7 +4775,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					};
 					const pinnedCount = entries.length;
 					return (
-						<div className="sidebar-group sidebar-group--pinned">
+						<div className={SIDEBAR_GROUP}>
 							{/* Same header treatment as the status lanes below. */}
 							<button
 								className={cn(
@@ -4788,7 +4803,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								<Reorder.Group
 									as="div"
 									axis="y"
-									className={`sidebar-pin-list${pinDragKey ? " is-drag-active" : ""}`}
 									values={entries.map((e) => e.key)}
 									onReorder={(keys: string[]) => {
 										pinOrderPending.current = keys;
@@ -4820,7 +4834,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											}}
 											onDragEnd={commitPinReorder}
 											whileDrag={{ scale: 1.01 }}
-											className={`sidebar-pin-entry${pinDragKey === e.key ? " is-reordering" : ""}`}
+											className={cn(
+												SIDEBAR_PIN_ENTRY,
+												pinDragKey && SIDEBAR_PIN_DRAG_ACTIVE,
+												pinDragKey === e.key && SIDEBAR_PIN_ENTRY_DRAGGING,
+											)}
 											onClickCapture={(ev: React.MouseEvent) => {
 												// Swallow the click that lands on the row when a drag
 												// is dropped — it would open the session under the
@@ -4843,7 +4861,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{/* ── Workspaces: status lanes live directly under the Workspaces
 				    header above (which carries the filter, new-workspace and
 				    new-session actions) — no second in-list heading. ── */}
-				<div className="sidebar-group">
+				<div className={SIDEBAR_GROUP}>
 					{/* Status groups over the focus person's workspaces. The Person
 					    filter defaults to you; picking a teammate shows all their groups,
 					    "Unassigned" shows every Backlog, and "Everyone" shows all workspaces.
@@ -4916,7 +4934,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				</div>
 
 				{archivedBand && (
-					<div className="sidebar-group">{archivedBand}</div>
+					<div className={SIDEBAR_GROUP}>{archivedBand}</div>
 				)}
 				</div>
 			)}
@@ -4925,7 +4943,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{/* ── Automations (one collapsible band, one group per automation) ── */}
 				{groups.length > 0 && (
 					<div
-						className="sidebar-independent-section sidebar-group--automations mt-2"
+						className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2 pb-7")}
 						style={{ order: sectionOrder("automations") }}
 					>
 						<div
@@ -4968,7 +4986,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</button>
 						</div>
 						{visibleAutomationGroups.length > 0 && (
-							<div className="sidebar-independent-scroll">
+							<div className={SIDEBAR_INDEPENDENT_SCROLL}>
 								{visibleAutomationGroups.map((group) => {
 									const open = isOpen(group.key);
 									return (
@@ -5074,7 +5092,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				});
 				return (
 					<div
-						className="sidebar-independent-section mt-2"
+						className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2")}
 						style={{ order: sectionOrder("people") }}
 					>
 						<div
@@ -5111,7 +5129,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</button>
 						</div>
 						{open && (
-							<div className="sidebar-independent-scroll">
+							<div className={SIDEBAR_INDEPENDENT_SCROLL}>
 								{rows.map((p) => {
 									const key = p.name.toLowerCase();
 									const liveId = viewingBy.get(key);
@@ -5127,7 +5145,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									return (
 										<button
 											key={p.name}
-											className={`sidebar-people-row flex items-center gap-[9px] w-full min-w-0 text-left border-0 cursor-pointer rounded-row pl-[12px] pr-2 py-[5px] max-[720px]:py-2 ${
+											className={`flex items-center gap-[9px] w-full min-w-0 text-left border-0 cursor-pointer rounded-row px-1 py-2 min-[721px]:pl-3 min-[721px]:pr-2 min-[721px]:py-[5px] ${
 												selected
 													? "bg-active"
 													: "bg-transparent hover:bg-hover"
