@@ -1,6 +1,6 @@
 import React from "react";
 import { repoLetter } from "../lib/repo-label";
-import { REPO_TILE_INK, repoColor, repoIconRevision } from "../lib/repo-colors";
+import { REPO_TILE_INK, repoColor, repoIconFill, repoIconRevision } from "../lib/repo-colors";
 
 // The display-name map lives in lib/repo-label and the tile colors in
 // lib/repo-colors, so lib-level formatters can reach both without a component
@@ -65,7 +65,7 @@ export function RepoTile({
 			</span>
 		);
 	}
-	style.background = repoColor(name);
+	style.background = repoIconFill(repoColor(name));
 	// From the same module as the color, because the two are chosen together
 	// (see REPO_TILE_INK) — not left to legacy.css, which would drift.
 	style.color = REPO_TILE_INK;

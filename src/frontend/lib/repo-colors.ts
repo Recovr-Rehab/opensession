@@ -28,6 +28,20 @@ export const REPO_TILE_COLORS = [
 ];
 
 /**
+ * The icon's fill: the color with a very slight vertical gradient, the way a
+ * modern app icon is lit — 8% white at the top, 5% black at the bottom.
+ *
+ * Kept that small on purpose. The palette sits at a flat 3.6:1 against the
+ * white letter, and the top of the gradient is the lightest point a letter
+ * has to survive: at 8% it lands on 3.2:1, still above the 3:1 floor for
+ * large text. Deepen it and check that number first. Mixed in oklab so the
+ * hue doesn't drift on the way (a plain sRGB mix pulls the blues purple).
+ */
+export function repoIconFill(color: string): string {
+	return `linear-gradient(180deg, color-mix(in oklab, ${color} 92%, white) 0%, color-mix(in oklab, ${color} 95%, black) 100%)`;
+}
+
+/**
  * The letter every tile carries. It is the ceiling on the palette: these sit
  * at a flat 3.6:1 against it, which is as light as they can go — so the two
  * move together, here and in the server and native copies.

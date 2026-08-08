@@ -142,7 +142,7 @@ private struct RepoTileEditorView: View {
                             // choice would be invisible on a repo wearing an icon.
                             action: { await apply(color: .some(hex), icon: .some(nil)) }
                         ) {
-                            LetterTile(name: repo.id, color: Color(rgb: rgb))
+                            LetterTile(name: repo.id, rgb: rgb)
                         }
                         .accessibilityLabel(
                             "Letter icon, color \(index + 1) of \(RepoTilePalette.colors.count)"
@@ -183,7 +183,8 @@ private struct RepoTileEditorView: View {
                     HStack(spacing: 11) {
                         LetterTile(
                             name: repo.id,
-                            color: parsed(repo.autoColor) ?? parsed(color) ?? OS1VisualStyle.textDim
+                            rgb: RepoTilePalette.parse(repo.autoColor ?? color ?? "")
+                                ?? RepoTilePalette.shared.rgb(for: repo.id)
                         )
                         .frame(width: 24, height: 24)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -345,13 +346,6 @@ private struct RepoTileEditorView: View {
 
     // MARK: - Applying
 
-    private func parsed(_ hex: String?) -> Color? {
-        guard var text = hex else { return nil }
-        if text.hasPrefix("#") { text.removeFirst() }
-        guard text.count == 6, let rgb = UInt32(text, radix: 16) else { return nil }
-        return Color(rgb: rgb)
-    }
-
     /// On writes through to the server, so the switch reflects what is stored
     /// rather than a local guess.
     private var automaticBinding: Binding<Bool> {
@@ -425,11 +419,12 @@ private struct TileChoice<Content: View>: View {
     }
 }
 
-/// The letter tile in a given color. Not `RepoTile`: that paints the art when
-/// a repo has any, and these cells are previews of not having it.
+/// The letter icon in a given color, with the same slight gradient the real
+/// one wears. Not `RepoTile`: that paints the art when a repo has any, and
+/// these cells are previews of not having it.
 private struct LetterTile: View {
     let name: String
-    let color: Color
+    let rgb: UInt32
 
     private var letter: String {
         name == "backstage" ? "O" : String(name.prefix(1)).uppercased()
@@ -437,7 +432,7 @@ private struct LetterTile: View {
 
     var body: some View {
         Rectangle()
-            .fill(color)
+            .fill(RepoTilePalette.fill(rgb))
             .overlay {
                 Text(letter)
                     .font(.system(size: 17, weight: .bold, design: .rounded))

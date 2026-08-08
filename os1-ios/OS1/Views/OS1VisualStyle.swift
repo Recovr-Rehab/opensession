@@ -147,7 +147,7 @@ final class RepoTilePalette {
     /// together; see REPO_TILE_INK in src/server/repo-tile-colors.ts.
     static let ink = Color.white
 
-    private var assigned: [String: Color] = [:]
+    private var assigned: [String: UInt32] = [:]
     /// When each repo's icon last changed. Icons are cacheable and URLCache
     /// outlives a launch, so replacing one from Settings would otherwise keep
     /// painting the old picture until the stored copy went stale.
@@ -157,8 +157,8 @@ final class RepoTilePalette {
     /// server) keep the hashed fallback rather than losing their tile.
     func remember(_ repos: [OS1API.RepoInfo]) {
         for repo in repos {
-            if let hex = repo.color, let color = Self.parse(hex) {
-                assigned[repo.id] = color
+            if let hex = repo.color, let rgb = Self.parse(hex) {
+                assigned[repo.id] = rgb
             }
             if let rev = repo.iconRev {
                 iconRevisions[repo.id] = Int(rev)
@@ -168,9 +168,29 @@ final class RepoTilePalette {
         }
     }
 
-    func color(for name: String) -> Color {
-        assigned[name] ?? Color(rgb: Self.colors[Self.hashIndex(name)])
+    func rgb(for name: String) -> UInt32 {
+        assigned[name] ?? Self.colors[Self.hashIndex(name)]
     }
+
+    func color(for name: String) -> Color {
+        Color(rgb: rgb(for: name))
+    }
+
+    /// What an icon is actually painted with: the color under a very slight
+    /// vertical gradient, the way a modern app icon is lit. Mirrors
+    /// `repoIconFill` on the web — 8% white at the top, 5% black at the
+    /// bottom, which is as far as it can go before the white letter drops
+    /// under 3:1 at the top edge. Blended in sRGB rather than oklab like the
+    /// CSS: at this size the two are indistinguishable.
+    static func fill(_ rgb: UInt32) -> LinearGradient {
+        LinearGradient(
+            colors: [Color(rgb: rgb, mixWhite: 0.08), Color(rgb: rgb, mixBlack: 0.05)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    func fill(for name: String) -> LinearGradient { Self.fill(rgb(for: name)) }
 
     /// FNV-1a over the lowercased id, walked as UTF-16 so it matches the
     /// JavaScript original code unit for code unit.
@@ -183,25 +203,24 @@ final class RepoTilePalette {
         return Int(hash % UInt32(colors.count))
     }
 
-    private static func parse(_ hex: String) -> Color? {
+    static func parse(_ hex: String) -> UInt32? {
         var text = hex
         if text.hasPrefix("#") { text.removeFirst() }
         guard text.count == 6, let rgb = UInt32(text, radix: 16) else { return nil }
-        return Color(rgb: rgb)
+        return rgb
     }
 }
 
 extension Color {
-    /// A palette entry as a Color. Not private: the repo-tile editor paints
-    /// the same swatches this tile does.
-    init(rgb: UInt32) {
-        self.init(
-            .sRGB,
-            red: Double((rgb >> 16) & 0xff) / 255,
-            green: Double((rgb >> 8) & 0xff) / 255,
-            blue: Double(rgb & 0xff) / 255,
-            opacity: 1
-        )
+    /// A palette entry as a Color, optionally lifted toward white or dropped
+    /// toward black — which is how the icon's gradient is built. Not private:
+    /// the repo-icon editor paints the same swatches this tile does.
+    init(rgb: UInt32, mixWhite: Double = 0, mixBlack: Double = 0) {
+        let channel = { (shift: UInt32) -> Double in
+            let value = Double((rgb >> shift) & 0xff) / 255
+            return value * (1 - mixWhite - mixBlack) + mixWhite
+        }
+        self.init(.sRGB, red: channel(16), green: channel(8), blue: channel(0), opacity: 1)
     }
 }
 
@@ -229,7 +248,7 @@ struct RepoTile: View {
         return String(name.prefix(1)).uppercased()
     }
 
-    private var color: Color { RepoTilePalette.shared.color(for: name) }
+    private var fill: LinearGradient { RepoTilePalette.shared.fill(for: name) }
 
     @MainActor
     private var iconURL: URL? { Self.iconURL(for: name) }
@@ -299,7 +318,7 @@ struct RepoTile: View {
                     .font(.system(size: size * 0.6, weight: .bold, design: .rounded))
                     .foregroundStyle(RepoTilePalette.ink)
                     .frame(width: size, height: size)
-                    .background(color)
+                    .background(fill)
             }
         }
         .frame(width: size, height: size)
