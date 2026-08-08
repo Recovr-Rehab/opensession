@@ -20,6 +20,15 @@ interface Props {
 // archived page opens with the repo filter the sidebar is already showing.
 const SIDEBAR_FILTER_KEY = "opensession-sidebar-filter";
 
+/** An archived session row. `rounded-control` is the exact token the legacy
+ *  rule spelled (`calc(10px * var(--rf))`) and, unlike `rounded-full`, still
+ *  matches base.css's squircle rule — so the corner keeps its shape and not
+ *  just its radius. Taller and tighter on phones, where it is a tap target. */
+const ROW =
+  "flex w-full min-w-0 items-center gap-3 rounded-control border border-line bg-panel px-3.5 py-[11px] " +
+  "text-left text-fg hover:border-line-strong hover:bg-hover " +
+  "max-[720px]:gap-2 max-[720px]:px-[11px] max-[720px]:py-3";
+
 type OwnerFilter = "mine" | "everyone";
 type ReasonFilter = "all" | "manual" | "auto";
 
@@ -206,12 +215,14 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
           Nothing archived{search || owner === "mine" || repo !== "all" ? " matches" : " yet"}.
         </EmptyState>
       ) : (
-        <div className="home-rows">
+        <div className="flex flex-col gap-1.5">
           {archived.slice(0, 200).map((s) => (
-            <button key={s.id} className="home-row" onClick={() => onSelect(s)}>
-              <span className="home-row-main">
-                <span className="home-row-title">{s.title}</span>
-                <span className="home-row-meta">
+            <button key={s.id} className={ROW} onClick={() => onSelect(s)}>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="truncate text-label font-medium max-[720px]:text-[15px]">
+                  {s.title}
+                </span>
+                <span className="flex min-w-0 items-center gap-2.5 text-meta text-faint max-[720px]:text-[12px]">
                   <span className={`source-chip source-${s.mode === "ask" ? "ask" : s.source}`}>
                     {s.automation ||
                       (s.mode === "ask" ? "ask" : sessionSourceLabel(s.source))}
@@ -235,7 +246,9 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
             </button>
           ))}
           {archived.length > 200 && (
-            <div className="home-empty">Showing the first 200. Refine your search to find older ones.</div>
+            <div className="px-1 py-3.5 text-label text-faint">
+              Showing the first 200. Refine your search to find older ones.
+            </div>
           )}
         </div>
       )}

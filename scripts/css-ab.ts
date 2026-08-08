@@ -395,7 +395,11 @@ for (const theme of THEMES) {
 		// subtree to stop growing rather than guessing.
 		let prev = -1;
 		for (let i = 0; i < 40; i++) {
-			const n = await evaluate(`document.querySelectorAll(${JSON.stringify(rootSel)} + ' *').length`);
+			// :is() so a selector list or a combinator doesn't reassociate when a
+			// descendant ' *' is appended (`.a,.b *` is not "descendants of either").
+			const n = await evaluate(
+				`document.querySelectorAll(':is(' + ${JSON.stringify(rootSel)} + ') *').length`,
+			);
 			if (n > 0 && n === prev) break;
 			prev = n;
 			await sleep(500);

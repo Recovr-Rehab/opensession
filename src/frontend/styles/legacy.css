@@ -1418,70 +1418,6 @@ body.resizing-tab-split {
    chip. Wider viewports keep nowrap — with room to spare, a label splitting
    across lines reads worse than moving the whole chip down a line. */
 
-/* ── Home dashboard ──────────────────────────────────────── */
-
-.home {
-	flex: 1;
-	overflow-y: auto;
-	min-height: 0;
-	display: flex;
-	flex-direction: column;
-}
-
-.home-rows {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-}
-
-.home-row {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	width: 100%;
-	text-align: left;
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: calc(10px * var(--rf)); corner-shape: var(--cs);
-	padding: 11px 14px;
-	color: var(--text);
-	min-width: 0;
-}
-.home-row:hover {
-	border-color: var(--border-strong);
-	background: var(--hover);
-}
-
-.home-row-main {
-	flex: 1;
-	min-width: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-}
-
-.home-row-title {
-	font-size: 13px;
-	font-weight: 500;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.home-row-meta {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	font-size: 11px;
-	color: var(--text-faint);
-	min-width: 0;
-}
-
-.home-empty {
-	color: var(--text-faint);
-	font-size: 13px;
-	padding: 14px 4px;
-}
 
 /* Work blocks + tool calls are Tailwind-styled in WorkBlock.tsx /
    ToolCallBlock.tsx; only the shared pre/shiki plumbing below remains here. */
@@ -2421,23 +2357,6 @@ body.resizing-tab-split {
 	body.chrome-collapsed .viewer-messages {
 		-webkit-mask-image: none;
 		mask-image: none;
-	}
-
-	
-	
-/* 16px stops iOS Safari from zooming into focused inputs, and reads at a
-	   comfortable iOS body size. Includes the in-session composer textarea — the
-	   primary session input — which otherwise zoomed on focus at 13.5px, and the
-	   Plain reply box now that Conversation is a primary phone surface. */
-	.home-row {
-		padding: 12px 11px;
-		gap: 8px;
-	}
-	.home-row-title {
-		font-size: 15px;
-	}
-	.home-row-meta {
-		font-size: 12px;
 	}
 
 	.automations {

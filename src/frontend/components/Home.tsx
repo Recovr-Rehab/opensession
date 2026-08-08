@@ -502,7 +502,7 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
   );
 
   return (
-    <div className="home bg-surface">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface">
       <div className="mx-auto w-full max-w-[1040px] px-5 pb-16 pt-10 max-[720px]:px-4 max-[720px]:pt-5">
         <div className="flex items-center justify-between gap-4 px-2">
           <h1 className="m-0 text-page-title font-semibold tracking-[-0.025em] text-fg">Home</h1>
