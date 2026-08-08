@@ -31,10 +31,11 @@ struct SessionView: View {
     /// column (transcript AND composer) and center it, like other chat apps.
     private let contentMaxWidth = OS1VisualStyle.sessionMaxWidth
 
-    /// Mobile web uses a tighter 12pt content rail; regular-width iPad and Mac
-    /// keep more breathing room while sharing the same 780pt reading column.
+    /// Compact width sits on the standard 16pt phone margin; regular-width
+    /// iPad and Mac keep more breathing room while sharing the same 780pt
+    /// reading column.
     private var contentInset: CGFloat {
-        horizontalSizeClass == .compact ? 12 : 20
+        horizontalSizeClass == .compact ? 16 : 20
     }
 
     /// Anchor for restoring the scroll position after a requested history
