@@ -439,28 +439,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	}
 }
 
-/* Drag-to-reorder feedback. Desktop tabs are flat labels painted straight on
-   the strip's background, so a dragged one has no surface of its own and its
-   text smears over every tab it passes. Two halves fix that:
-   1. The dragged wrapper lifts into a chip — opaque fill + hairline + shadow —
-      so it reads as picked up and always stays legible over its neighbours.
-   2. A caret marks where it will drop. Reorder already opens that gap live,
-      but an empty hole between two bare labels reads as nothing. The element
-      spans the whole landing slot (so it slides with the live reorder) and
-      paints only a thin rule at its leading edge — an insertion mark, not a
-      second chip competing with the tab in hand. It sits ABOVE the dragged
-      chip: the chip follows the pointer while the slot snaps to whole
-      positions, so the two coincide exactly at every swap — a caret painted
-      underneath would vanish at precisely the moment the order changes. */
-.session-tab-reorder.is-dragging {
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-panel);
-	box-shadow:
-		0 0 0 1px var(--border),
-		0 8px 20px rgba(0, 0, 0, 0.22);
-	cursor: grabbing;
-}
-
 /* Right-click swatch menu — a floating row of color chips anchored at the
    cursor. Fixed-position so it escapes the tab strip's overflow clipping. */
 .tab-color-menu {
@@ -1795,17 +1773,6 @@ body.resizing-tab-split {
 	   falls back to Stop alone, since the send-split only renders with content).
 	   No mobile-only hiding of either button — the two-button row matches desktop
 	   so the queue/steer affordance is never lost on a phone. */
-}
-
-/* ── Phone touch targets: the last mile ──────────────────────────
-   The blocks above already bump the primary session surface (composer,
-   session list, header actions). This one sweeps up the smaller
-   secondary controls that were still sitting well under the iOS 44pt
-   guideline: the workspace panel/repo tabs, the sidebar header icons,
-   the settings sub-nav, and inline icon buttons. Scoped to phones so
-   desktop keeps its tighter density. */
-@media (max-width: 720px) {
-
 }
 
 /* ── Phone: Slack-style top cards + relocated filter ─────────────

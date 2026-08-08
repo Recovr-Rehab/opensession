@@ -205,7 +205,7 @@ export function SessionTabs({
 
 	// Where the dragged tab will land. Desktop tabs are flat text on the strip's
 	// own background, so a dragged one has no surface to separate it from the
-	// labels it passes — it lifts into a chip (`is-dragging`) and this ghost
+	// labels it passes — it lifts into a chip (`TAB_ITEM_DRAGGING`) and this ghost
 	// marks the gap it left behind. Reorder already opens that gap live; the
 	// ghost just makes an otherwise invisible hole readable.
 	const [dropSlot, setDropSlot] = useState<{
