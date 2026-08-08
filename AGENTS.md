@@ -222,9 +222,24 @@ mechanically", not "nothing left": a name counts as reachable if it appears
 anywhere at all, so a module path (`../lib/pr-checks`) keeps a rule alive on
 its own — `--loose` lists those, to check against the running DOM. Rules whose
 class stays on the markup purely as a JS hook are invisible to it in the other
-direction, and have to be found by hand. `bun scripts/css-shots.ts <name>`
-captures the routes × viewport × theme screenshot gate; `--diff` compares two
-runs.
+direction, and have to be found by hand — or with `css-rulekill` below.
+`bun scripts/css-shots.ts <name>` captures the routes × viewport × theme
+screenshot gate; `--diff` compares two runs.
+
+`bun scripts/css-rulekill.ts --targets <file> --route <path> --control
+'<selector>'` answers the question the audit can't: not "is this class name
+still written anywhere" but "does this rule still change anything". It deletes
+the rules from the LIVE stylesheet, re-renders, diffs every element's computed
+longhands, and puts them back at their original index. That is what finds the
+"live name, dead body" case — a rule whose class survives only as a hook while
+every declaration now loses to a utility on the same element. Deleting the
+whole candidate set at once answers forty rules in one measurement; `--each`
+bisects. Two of its guards are the point: `--control` must name a rule that IS
+live and must report a difference, or the run aborts (a broken probe and a dead
+rule both report "no change"); and it prints how many elements each target
+MATCHES, because a rule measured on a page it never matches scores 0 for the
+wrong reason — `--add` / `--click` / `--hover` / `--remove` put the page into
+the state the rule is about.
 
 `bun scripts/css-ab.ts <label> --root '<selector>'` is the measurement half of
 that gate: it records every computed longhand (plus `::before`/`::after`, and
