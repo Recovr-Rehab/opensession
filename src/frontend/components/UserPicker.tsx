@@ -140,15 +140,15 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   if (user !== "Anonymous") return <>{children}</>;
 
   return (
-    <div className="user-gate-overlay">
-      <div className="user-gate-card">
-        <h2>Who are you?</h2>
-        <div className="user-gate-grid">
+    <div className="flex h-screen items-center justify-center bg-surface">
+      <div className="w-[380px] max-w-[calc(100vw-32px)] rounded-lg border border-line bg-raised p-8 text-center max-[560px]:p-[22px]">
+        <h2 className="mt-0 mb-5 text-section-title">Who are you?</h2>
+        <div className="grid grid-cols-2 gap-2.5">
           {roster.length ? (
             roster.map(({ name }) => (
               <button
                 key={name}
-                className="user-gate-btn"
+                className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-body text-fg hover:border-accent hover:bg-hover"
                 onClick={() => setStoredUser(name)}
               >
                 <UserAvatar name={name} size={36} />
@@ -157,7 +157,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
             ))
           ) : (
             <button
-              className="user-gate-btn"
+              className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-body text-fg hover:border-accent hover:bg-hover"
               onClick={() => setStoredUser("Local User")}
             >
               <UserAvatar name="Local User" size={36} />
@@ -172,9 +172,9 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 
 function LocalSessionExpired() {
   return (
-    <div className="user-gate-overlay">
-      <div className="user-gate-card">
-        <h2>GitHub sign-in expired</h2>
+    <div className="flex h-screen items-center justify-center bg-surface">
+      <div className="w-[380px] max-w-[calc(100vw-32px)] rounded-lg border border-line bg-raised p-8 text-center max-[560px]:p-[22px]">
+        <h2 className="mt-0 mb-5 text-section-title">GitHub sign-in expired</h2>
         <p className="text-dim">
           Switch to cloud mode, sign in with GitHub, then restart local mode.
         </p>
@@ -260,9 +260,9 @@ function GithubSignIn({
   }
 
   return (
-    <div className="user-gate-overlay">
-      <div className="user-gate-card" style={{ maxWidth: 380 }}>
-        <h2>Sign in</h2>
+    <div className="flex h-screen items-center justify-center bg-surface">
+      <div className="w-[380px] max-w-[calc(100vw-32px)] rounded-lg border border-line bg-raised p-8 text-center max-[560px]:p-[22px]">
+        <h2 className="mt-0 mb-5 text-section-title">Sign in</h2>
         {!flow ? (
           <>
             <p style={{ margin: "10px 0 16px", fontSize: 13, opacity: 0.75 }}>
@@ -272,7 +272,7 @@ function GithubSignIn({
             {redirect ? (
               <>
                 <button
-                  className="user-gate-btn"
+                  className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-body text-fg hover:border-accent hover:bg-hover"
                   onClick={() => {
                     window.location.href = `${BASE_PATH}/api/auth/login`;
                   }}
@@ -298,7 +298,7 @@ function GithubSignIn({
                 </button>
               </>
             ) : (
-              <button className="user-gate-btn" onClick={start} disabled={starting} style={{ width: "100%" }}>
+              <button className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-body text-fg hover:border-accent hover:bg-hover" onClick={start} disabled={starting} style={{ width: "100%" }}>
                 {starting ? "Starting…" : "Sign in with GitHub"}
               </button>
             )}

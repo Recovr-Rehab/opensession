@@ -5716,32 +5716,6 @@ body.resizing-panel .panel-resize::after {
 		animation: none;
 	}
 }
-
-/* Restart overlay (covers the UI while the server redeploys) */
-
-.restart-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 10000;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 24px;
-	background: rgba(7, 5, 6, 0.82);
-	backdrop-filter: blur(4px);
-}
-.restart-card {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	text-align: center;
-	gap: 14px;
-	max-width: 340px;
-	padding: 28px 26px;
-	background: var(--bg-panel);
-	border: 1px solid var(--border);
-	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-}
 .restart-spinner {
 	width: 30px;
 	height: 30px;
@@ -5749,11 +5723,6 @@ body.resizing-panel .panel-resize::after {
 	border: 2px solid var(--border-strong);
 	border-top-color: var(--accent);
 	animation: spin 0.8s linear infinite;
-}
-.restart-spinner-done {
-	border-color: var(--green);
-	border-top-color: var(--green);
-	animation: none;
 }
 @keyframes spin {
 	to {
@@ -5777,29 +5746,6 @@ body.resizing-panel .panel-resize::after {
 .session-delete-label {
 	font-size: 13px;
 	color: var(--text-dim);
-}
-.restart-title {
-	font-size: 15px;
-	font-weight: 600;
-	color: var(--text);
-}
-.restart-sub {
-	font-size: 12px;
-	line-height: 1.5;
-	color: var(--text-dim);
-}
-/* Session attribution on the restart card ("Triggered by …"). */
-.restart-by {
-	margin-top: 6px;
-	font-size: 12px;
-	font-weight: 500;
-	line-height: 1.4;
-	color: var(--text-dim);
-	opacity: 0.8;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	max-width: 100%;
 }
 
 /* A session reference rendered by markdown.ts as a clickable link into that
@@ -7793,54 +7739,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text-faint);
 }
 
-/* ── User gate ───────────────────────────────────────────── */
-
-.user-gate-overlay {
-	height: 100vh;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--bg);
-}
-
-.user-gate-card {
-	background: var(--bg-raised);
-	border: 1px solid var(--border);
-	border-radius: calc(14px * var(--rf)); corner-shape: var(--cs);
-	padding: 32px;
-	text-align: center;
-	width: 380px;
-	max-width: calc(100vw - 32px);
-}
-
-.user-gate-card h2 {
-	margin: 0 0 20px;
-	font-size: 17px;
-}
-
-.user-gate-grid {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 10px;
-}
-
-.user-gate-btn {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 8px;
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text);
-	padding: 12px;
-	font-size: 14px;
-}
-.user-gate-btn:hover {
-	border-color: var(--accent);
-	background: var(--hover);
-}
-
 /* ── Responsive ──────────────────────────────────────────── */
 
 @media (max-width: 920px) {
@@ -8845,10 +8743,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.msg-body {
 		font-size: 14px;
 		line-height: 24px;
-	}
-
-	.user-gate-card {
-		padding: 22px;
 	}
 
 	/* ── iOS sizing: bigger text + touch targets on phones ──────
