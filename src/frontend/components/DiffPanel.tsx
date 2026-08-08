@@ -17,6 +17,11 @@ import { PixelSpinner } from "./PixelSpinner";
 import { AGENT_NAME } from "../lib/brand";
 import { InlineAlert, LoadingState } from "../ui/state";
 
+/* The +/− counts. Kept as constants because CommentableDiff carries the same
+   pair on its file rows and group headers, and the two must read alike. */
+const DIFF_ADD = "font-semibold text-green";
+const DIFF_DEL = "font-semibold text-red";
+
 interface Props {
   sessionId: string;
   isRunning: boolean;
@@ -206,33 +211,46 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
   const d = cur.diff;
 
   return (
-    <div className="diff-panel">
+    <div className="flex min-h-0 flex-col">
       {multi && (
-        <div className="diff-repo-tabs">
+        <div className="sticky top-0 z-2 flex gap-1 overflow-x-auto border-b border-line bg-raised px-2.5 py-1.5">
           {changed.map((r, i) => {
             const n = r.diff.totalAdditions + r.diff.totalDeletions;
             return (
               <button
                 key={r.repo}
-                className={`diff-repo-tab ${i === active ? "diff-repo-tab-active" : ""}`}
+                // The active pill supplies its own surface and border colour —
+                // the base has the geometry only, so nothing carries two
+                // competing colour utilities.
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-[9px] py-[3px] text-label whitespace-nowrap max-[720px]:px-3 max-[720px]:py-2 ${
+                  i === active
+                    ? "border-line bg-panel text-fg"
+                    : "border-transparent bg-transparent text-dim hover:text-fg"
+                }`}
                 onClick={() => setActive(i)}
                 title={r.primary ? "Primary repo" : "Attached repo"}
               >
                 {repoLabel(r.repo)}
-                <span className="diff-repo-tab-count">{r.diff.files.length}</span>
+                <span className="rounded-full bg-faint/20 px-[5px] text-meta text-faint">
+                  {r.diff.files.length}
+                </span>
               </button>
             );
           })}
         </div>
       )}
 
-      <div className="diff-summary">
-        <span className="diff-summary-files">
+      <div className="sticky top-0 z-1 flex items-center gap-2.5 border-b border-line bg-raised px-3.5 py-2.5 text-label">
+        <span className="text-dim">
           {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
         </span>
-        <span className="diff-add">+{d.totalAdditions}</span>
-        <span className="diff-del">−{d.totalDeletions}</span>
-        {d.truncated && <span className="diff-truncated">truncated</span>}
+        <span className={DIFF_ADD}>+{d.totalAdditions}</span>
+        <span className={DIFF_DEL}>−{d.totalDeletions}</span>
+        {d.truncated && (
+          <span className="rounded-sm bg-yellow/15 px-[7px] py-px text-meta font-bold text-yellow">
+            truncated
+          </span>
+        )}
         {handEdited.length > 0 && canSend && (
           <Button
             variant="default"
@@ -258,7 +276,9 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         </Tooltip>
       </div>
 
-      <div className="diff-render">
+      {/* @pierre/diffs sizes its own generated markup, which no utility on our
+          side can reach — hold it inside the panel from here. */}
+      <div className="px-2.5 pt-2.5 pb-7 [&_[class*=pierre]]:max-w-full">
         <CommentableDiff
           key={cur.repo}
           patch={d.rawPatch || ""}
