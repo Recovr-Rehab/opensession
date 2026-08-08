@@ -94,23 +94,28 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
   }, [send, sel, message, label, sessionId, dismiss]);
 
   return (
-    <div ref={hostRef} className="selection-host" onMouseUp={onMouseUp}>
+    // display:contents so wrapping a region doesn't disturb its layout.
+    <div ref={hostRef} className="contents" onMouseUp={onMouseUp}>
       {children}
       {sel && send && (
         <div
           ref={popRef}
-          className="selection-popover"
+          className="fixed z-1000 max-w-[min(340px,90vw)] -translate-x-1/2 rounded-md border border-accent bg-panel font-sans shadow-[0_6px_24px_rgba(0,0,0,0.4)]"
           style={{ left: sel.x, top: sel.y + 6 }}
           onMouseDown={(e) => e.stopPropagation()}
         >
           {sent ? (
-            <div className="selection-sent">Sent to session ✓</div>
+            <div className="px-3.5 py-2 text-label whitespace-nowrap text-accent">
+              Sent to session ✓
+            </div>
           ) : composing ? (
-            <div className="selection-compose">
-              <div className="selection-quote">{sel.text}</div>
+            <div className="flex flex-col gap-2 p-2.5">
+              <div className="max-h-16 overflow-y-auto border-l-2 border-line-strong pl-2 text-meta break-words whitespace-pre-wrap text-faint">
+                {sel.text}
+              </div>
               <textarea
                 autoFocus
-                className="selection-input"
+                className="resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-[1.45] text-fg outline-none focus:border-accent"
                 rows={2}
                 placeholder="Message to the session (optional)… ⌘↵ to send"
                 value={message}
@@ -122,7 +127,7 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
                   }
                 }}
               />
-              <div className="selection-actions">
+              <div className="flex justify-end gap-2">
                 <Button
                   variant="default"
                   size="sm"
@@ -142,7 +147,10 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
               </div>
             </div>
           ) : (
-            <button className="selection-trigger" onClick={() => setComposing(true)}>
+            <button
+              className="block cursor-pointer rounded-md border-none bg-transparent px-3 py-[7px] font-sans text-label whitespace-nowrap text-fg hover:bg-hover"
+              onClick={() => setComposing(true)}
+            >
               💬 Send to session
             </button>
           )}

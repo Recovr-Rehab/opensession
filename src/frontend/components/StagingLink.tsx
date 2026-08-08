@@ -18,6 +18,49 @@ import { isApple } from "../lib/platform";
 // register multiple times).
 const OPEN_CHORD = isApple ? "⌘O" : "Ctrl+O";
 
+/* The amber pill in the workspace panel. Sized to the Merge button it sits
+   beside (13px/600, 5px 11px, 7px corner) so the two read as one row. The base
+   carries geometry only — each state below brings its own border and ink, so
+   nothing has two competing colour utilities on it. */
+const LINK_BASE =
+	"inline-flex items-center gap-[5px] whitespace-nowrap rounded-md border px-[11px] py-[5px] text-label font-semibold no-underline";
+const LINK_READY = "border-yellow/45 text-yellow hover:bg-yellow/12";
+/* Deploy still building — not testable yet, so a plain click is swallowed (see
+   onClick) and the pill reads as not-ready with a spinning globe. */
+const LINK_BUILDING = `${LINK_READY} cursor-default opacity-55`;
+/* Nothing to link to yet: quiet, and no hover wash to imply it opens. */
+const LINK_PENDING = "border-line text-dim cursor-default";
+
+/* The header globe rides in the session header's icon cluster, so it takes the
+   same 32px square box as the share / ⋯ / panel buttons. Its state colouring
+   (dim → amber → green) is its own — that's what the control communicates. */
+const ICON_BASE =
+	"inline-flex size-8 items-center justify-center rounded-control border border-transparent bg-transparent no-underline";
+const ICON_READY = "cursor-pointer text-green hover:bg-green-soft";
+/* Amber while a deploy is in flight. Building swallows the click (see onClick),
+   so it gets no pointer; rebuilding still opens the previous deploy. */
+const ICON_BUILDING =
+	"cursor-default text-yellow opacity-72 hover:bg-yellow/13 hover:opacity-100";
+const ICON_REBUILDING =
+	"cursor-pointer text-yellow opacity-72 hover:bg-yellow/13 hover:opacity-100";
+const ICON_PENDING = "cursor-default text-dim";
+
+/* Spinning ring around the globe while the preview environment builds.
+   border-t-current picks up the amber/green icon tone; the ring sits just
+   outside the thin globe circle so it reads as a halo, not a second outline.
+   The bar variant's globe is only 15px, so its ring shrinks to hug it. */
+const RING_BASE =
+	"pointer-events-none absolute top-1/2 left-1/2 rounded-full border border-transparent border-t-current opacity-90 animate-[preview-spin_0.7s_linear_infinite]";
+/* base.css freezes every animation under prefers-reduced-motion and then hands
+   the progress spinners their duration back — this is one of them (a stopped
+   spinner makes a live deploy look hung), so it restates it for itself now that
+   it no longer carries the class base.css lists. */
+const RING_MOTION =
+	"motion-reduce:[animation-duration:0.7s]! motion-reduce:[animation-iteration-count:infinite]!";
+// The 22px ring haloes the 17/25px glyphs; the bar's 15px globe gets a 16px one.
+const RING_LG = "size-[22px] -mt-[11px] -ml-[11px]";
+const RING_SM = "size-4 -mt-2 -ml-2";
+
 /**
  * Header link to the PR's preview environment (the Vercel preview at
  * https://tella-git-<branch>.tella.dev) so a change can be tested on real
@@ -98,9 +141,12 @@ export function StagingLink({
 	// (backend-only PR, no deploy) render nothing.
 	if (!staging) {
 		if (!deployPending) return null;
-		const shimmerGlobe = (size: number, className?: string) => (
-			<span className="staging-globe-wrap staging-shimmer" aria-hidden="true">
-				<IconGlobe size={size} className={className} />
+		const shimmerGlobe = (size: number) => (
+			<span
+				className="relative inline-flex items-center justify-center animate-[staging-shimmer_1.4s_ease-in-out_infinite]"
+				aria-hidden="true"
+			>
+				<IconGlobe size={size} />
 			</span>
 		);
 		if (variant === "header") {
@@ -110,8 +156,10 @@ export function StagingLink({
 					side="bottom"
 					multiline
 				>
+					{/* `staging-icon` is a hook, not styling: PrStatusBar's strip nudges
+					    this globe flush-left through `.pr-bar > .staging-icon`. */}
 					<span
-						className="viewer-code-icon staging-icon is-pending"
+						className={`staging-icon ${ICON_BASE} ${ICON_PENDING}`}
 						aria-disabled="true"
 					>
 						{shimmerGlobe(25)}
@@ -134,10 +182,10 @@ export function StagingLink({
 		}
 		return (
 			<span
-				className="staging-link staging-link-pending"
+				className={`${LINK_BASE} ${LINK_PENDING}`}
 				title="Preview environment starting… the link appears once it's up"
 			>
-				{shimmerGlobe(15, "staging-globe")}
+				{shimmerGlobe(15)}
 				Preview environment
 			</span>
 		);
@@ -180,25 +228,26 @@ export function StagingLink({
 	// deploy) alike. While a ⌘-copy is fresh the globe morphs into a drawing
 	// checkmark; otherwise it's the (optionally spinning) globe.
 	const spinning = building || rebuilding;
-	const globe = (size: number, className?: string) =>
+	const globe = (size: number, ring: string) =>
 		copied ? (
-			<CopyCheck
-				copied
-				size={size}
-				idle={<IconGlobe size={size} className={className} />}
-			/>
+			<CopyCheck copied size={size} idle={<IconGlobe size={size} />} />
 		) : (
-			<span className="staging-globe-wrap">
-				{spinning && <span className="staging-spinner" aria-hidden="true" />}
-				<IconGlobe size={size} className={className} />
+			<span className="relative inline-flex items-center justify-center">
+				{spinning && (
+					<span
+						className={`${RING_BASE} ${RING_MOTION} ${ring}`}
+						aria-hidden="true"
+					/>
+				)}
+				<IconGlobe size={size} />
 			</span>
 		);
 
-	const stateClass = building
-		? "is-building"
+	const iconState = building
+		? ICON_BUILDING
 		: rebuilding
-			? "is-rebuilding"
-			: "is-ready";
+			? ICON_REBUILDING
+			: ICON_READY;
 	const tooltip = (copyHint: string) =>
 		copied
 			? "Link copied"
@@ -217,12 +266,14 @@ export function StagingLink({
 					rel="noopener"
 					onClick={onClick}
 					aria-disabled={building || undefined}
-					className={`viewer-code-icon staging-icon ${stateClass}`}
+					// `staging-icon` is a hook, not styling: PrStatusBar's strip nudges
+					// this globe flush-left through `.pr-bar > .staging-icon`.
+					className={`staging-icon ${ICON_BASE} ${iconState}`}
 				>
 					{/* The globe glyph only fills ~60% of its box (thin circle in a 24
 					    viewBox), so it still needs a hair more than the play/sidebar
 					    icons to read at the same weight in the top bar. */}
-					{globe(25)}
+					{globe(25, RING_LG)}
 				</a>
 			</Tooltip>
 		);
@@ -239,7 +290,7 @@ export function StagingLink({
 				title={`${tooltip("⌘-click to copy the link")} — ${href}`}
 			>
 				<span className="inline-flex size-5 shrink-0 items-center justify-center text-faint">
-					{globe(17)}
+					{globe(17, RING_LG)}
 				</span>
 				<span className="min-w-0 flex-1 truncate">Preview environment</span>
 			</a>
@@ -253,12 +304,12 @@ export function StagingLink({
 			rel="noopener"
 			onClick={onClick}
 			aria-disabled={building || undefined}
-			className={`staging-link ${building ? "staging-link-building" : ""}`}
+			className={`${LINK_BASE} ${building ? LINK_BUILDING : LINK_READY}`}
 			title={`${tooltip("⌘-click to copy the link")} — ${href}`}
 		>
-			{globe(15, "staging-globe")}
+			{globe(15, RING_SM)}
 			Preview environment
-			<IconArrowUpRight size={15} className="staging-ext" />
+			<IconArrowUpRight size={15} className="-ml-px opacity-80" />
 		</a>
 	);
 }
