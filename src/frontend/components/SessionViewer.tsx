@@ -148,6 +148,28 @@ import {
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import {
+	composerQueue,
+	composerQueueAction,
+	composerQueueActionDanger,
+	composerQueueActionSteer,
+	composerQueueActions,
+	composerQueueBody,
+	composerQueueBodyTone,
+	composerQueueContent,
+	composerQueueFrom,
+	composerQueueImage,
+	composerQueueImageCount,
+	composerQueueImageThumb,
+	composerQueueItem,
+	composerQueueItemDraggable,
+	composerQueueItemSeparated,
+	composerQueueList,
+	composerQueuePill,
+	composerQueuePillGithub,
+	composerQueuePillSending,
+	composerQueueTitle,
+} from "../lib/composer-classes";
+import {
 	msgBodyStreaming,
 	msgBubbleUser,
 	msgDotUser,
@@ -3050,7 +3072,7 @@ export function SessionViewer({
 	function renderQueueContent(
 		item: QueueReceipt,
 		classified: TranscriptEntry,
-		opts: { github?: boolean } = {},
+		opts: { github?: boolean; tone?: keyof typeof composerQueueBodyTone } = {},
 	) {
 		const firstImage = item.images?.[0];
 		const extraImages = Math.max(0, (item.images?.length ?? 0) - 1);
@@ -3063,18 +3085,23 @@ export function SessionViewer({
 			(classified.notice?.body ? classified.notice.title : null);
 		const body = classified.content;
 		return (
-			<div className="composer-queue-content">
+			<div className={composerQueueContent}>
 				{firstImage && (
-					<div className="composer-queue-image">
-						<img src={firstImage} alt="" />
+					<div className={composerQueueImage}>
+						<img className={composerQueueImageThumb} src={firstImage} alt="" />
 						{extraImages > 0 && (
-							<span className="composer-queue-image-count">+{extraImages}</span>
+							<span className={composerQueueImageCount}>+{extraImages}</span>
 						)}
 					</div>
 				)}
-				<div className="composer-queue-body">
-					{from && <span className="composer-queue-from">{from}</span>}
-					{opts.github && <span className="composer-queue-from">GitHub</span>}
+				<div
+					className={cn(
+						composerQueueBody,
+						composerQueueBodyTone[opts.tone ?? "default"],
+					)}
+				>
+					{from && <span className={composerQueueFrom}>{from}</span>}
+					{opts.github && <span className={composerQueueFrom}>GitHub</span>}
 					{body}
 				</div>
 			</div>
@@ -3149,20 +3176,27 @@ export function SessionViewer({
 				// Stacked under the agents flap, this is a middle section of the
 				// same box, so it drops its own rounded top — only the topmost
 				// flap keeps one.
-				className="composer-queue [&:not(:first-child)]:rounded-t-none"
+				className={cn(composerQueue, "[&:not(:first-child)]:rounded-t-none")}
 				aria-label="Queued and steered messages"
 			>
-				<div className="composer-queue-title">{queueTitle}</div>
+				<div className={composerQueueTitle}>{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
 					const c = classifyQueuedContent(s.content);
 					return (
 						<div
 							key={`steered-${i}`}
-							className={`composer-queue-item composer-queue-steered ${c.senderVia ? "is-human" : ""}`}
+							// The hairline between rows was a `+` sibling selector, which a
+							// utility cannot spell against its own class — each group draws
+							// it from its own index instead, which is what that selector
+							// matched (the three groups are separated by non-row elements).
+							className={cn(
+								composerQueueItem,
+								i > 0 && composerQueueItemSeparated,
+							)}
 						>
-							<div className="composer-queue-actions">
+							<div className={composerQueueActions}>
 								<Tooltip label="Already delivered into the running turn — shown here until the turn finishes">
-									<span className="composer-queue-pill">
+									<span className={composerQueuePill}>
 										<IconCrosshair size={20} />
 										Steered
 									</span>
@@ -3171,7 +3205,10 @@ export function SessionViewer({
 									<Tooltip label="Dismiss — the run keeps going; this message won't be re-sent">
 										<button
 											type="button"
-											className="composer-queue-action danger"
+											className={cn(
+												composerQueueAction,
+												composerQueueActionDanger,
+											)}
 											onClick={() =>
 												send({
 													type: "delete_queued_prompt",
@@ -3185,7 +3222,9 @@ export function SessionViewer({
 									</Tooltip>
 								)}
 							</div>
-							{renderQueueContent(s, c)}
+							{renderQueueContent(s, c, {
+								tone: c.senderVia ? "human" : "default",
+							})}
 						</div>
 					);
 				})}
@@ -3195,7 +3234,7 @@ export function SessionViewer({
 					axis="y"
 					values={queued}
 					onReorder={handleQueueReorder}
-					className="composer-queue-list"
+					className={composerQueueList}
 				>
 				{queued.map((q, i) => {
 					const c = classifyQueuedContent(q.content);
@@ -3217,11 +3256,15 @@ export function SessionViewer({
 							}}
 							onDragEnd={commitQueueReorder}
 							whileDrag={{ scale: 1.01, zIndex: 2 }}
-							className={`composer-queue-item ${canReorder ? "is-draggable" : ""} ${c.senderVia ? "is-human" : ""} ${isGitHub ? "is-github" : ""}`}
+							className={cn(
+								composerQueueItem,
+								i > 0 && composerQueueItemSeparated,
+								canReorder && composerQueueItemDraggable,
+							)}
 						>
-							<div className="composer-queue-actions">
+							<div className={composerQueueActions}>
 								{isGitHub ? (
-									<span className="composer-queue-pill composer-queue-pill-github">
+									<span className={cn(composerQueuePill, composerQueuePillGithub)}>
 										<IconPullRequest size={20} />
 										FYI
 									</span>
@@ -3230,7 +3273,7 @@ export function SessionViewer({
 										<Tooltip label="Edit — puts the message back into the composer">
 											<button
 												type="button"
-												className="composer-queue-action"
+												className={composerQueueAction}
 												onClick={() => editQueuedInComposer(q, i)}
 											>
 												<IconPencil size={24} />
@@ -3241,7 +3284,10 @@ export function SessionViewer({
 								<Tooltip label="Delete queued message">
 									<button
 										type="button"
-										className="composer-queue-action danger"
+										className={cn(
+											composerQueueAction,
+											composerQueueActionDanger,
+										)}
 										onClick={() =>
 											send({
 												type: "delete_queued_prompt",
@@ -3264,7 +3310,10 @@ export function SessionViewer({
 									>
 										<button
 											type="button"
-											className="composer-queue-action composer-queue-steer"
+											className={cn(
+												composerQueueAction,
+												composerQueueActionSteer,
+											)}
 											aria-label="Steer into the running turn"
 											disabled={!canSteer}
 											onClick={() =>
@@ -3281,7 +3330,12 @@ export function SessionViewer({
 									</Tooltip>
 								)}
 							</div>
-							{renderQueueContent(q, c, { github: isGitHub })}
+							{renderQueueContent(q, c, {
+								github: isGitHub,
+								// github outranks human: both were equally specific in the
+								// stylesheet and github came last.
+								tone: isGitHub ? "github" : c.senderVia ? "human" : "default",
+							})}
 						</Reorder.Item>
 					);
 				})}
@@ -3289,14 +3343,22 @@ export function SessionViewer({
 
 				{/* Just-sent while busy: already visually in the queue, awaiting the
 				    server's echo (which swaps in the real item with actions). */}
-				{pendingQueue.map((p) => (
-					<div key={p.id} className="composer-queue-item composer-queue-sending">
-						<div className="composer-queue-actions">
-							<span className="composer-queue-pill composer-queue-pill-sending">
+				{pendingQueue.map((p, i) => (
+					<div
+						key={p.id}
+						className={cn(
+							composerQueueItem,
+							i > 0 && composerQueueItemSeparated,
+						)}
+					>
+						<div className={composerQueueActions}>
+							<span className={cn(composerQueuePill, composerQueuePillSending)}>
 								{waitingForWorkspace ? "Queued" : "Queueing…"}
 							</span>
 						</div>
-						{renderQueueContent(p, classifyQueuedContent(p.content))}
+						{renderQueueContent(p, classifyQueuedContent(p.content), {
+							tone: "sending",
+						})}
 					</div>
 				))}
 			</div>

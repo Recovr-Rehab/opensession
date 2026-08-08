@@ -165,3 +165,89 @@ export const fileChipMeta = "flex min-w-0 flex-col gap-px";
  *  badge, so nothing reflows. */
 export const fileChipName = "truncate text-label text-fg";
 export const fileChipSub = "text-meta text-faint";
+
+/* ── The queue flap ───────────────────────────────────────────────
+   The flap that folds out from behind the composer: a dimmer panel flush with
+   the composer's edges, rounded only on top, its bottom tucked under the
+   composer box. The negative bottom margin is what does the tucking — the
+   composer is a later positioned sibling, so it paints over the seam.
+
+   `border-x border-t` rather than `border` + `border-b-0`: the bottom edge has
+   to be `border-bottom-style: none`, not a zero-width solid, because the
+   composer's own hairline continues it. `border-b-0` leaves the style behind. */
+export const composerQueue =
+	"relative -mb-3.5 flex flex-col gap-2 rounded-t-xl border-x border-t border-[color:var(--composer-border)] bg-[color-mix(in_srgb,var(--bg-panel)_70%,var(--control-surface))] px-3.5 pt-2.5 pb-[26px]";
+export const composerQueueTitle = "text-[12px] font-semibold text-faint";
+export const composerQueueList = "flex flex-col gap-2";
+/** One queued/steered row. The floor is one line of body text, so a row whose
+ *  point is a single message does not inherit the 40px action cluster's
+ *  height. */
+export const composerQueueItem =
+	"relative flex min-h-[calc(13px*1.45)] items-start gap-2";
+/** The hairline between rows. The stylesheet drew it with
+ *  `.composer-queue-item + .composer-queue-item`, which a utility cannot
+ *  spell against itself — so each list applies it from its own index. The
+ *  three groups (steered, queued, sending) are separated by non-row elements,
+ *  so "not first in ITS group" is exactly what the sibling selector matched. */
+export const composerQueueItemSeparated = "border-t border-line pt-2";
+/** Drag-to-reorder: the whole row is the grab surface. The action buttons
+ *  still take clicks — a drag only starts once the pointer actually moves. */
+export const composerQueueItemDraggable =
+	"cursor-grab touch-none active:cursor-grabbing";
+/** In flow at the row's trailing edge, so each row reserves exactly the width
+ *  its own actions need — it used to be absolutely positioned over a fixed
+ *  128px of padding, which clipped the rows carrying a pill into the text.
+ *  Written before the message in the markup (it owns the row's controls) and
+ *  painted after it, hence `order-1`. The negative block margins keep the 40px
+ *  cluster from setting the height of a one-line row. */
+export const composerQueueActions =
+	"order-1 z-[1] -mt-[11px] -mb-2.5 inline-flex shrink-0 items-center gap-0.5";
+/** Deliberately the same 40px box, `rounded-control` corner and inset hover
+ *  wash as the composer's own toolbar buttons right below them (see
+ *  `paletteIconBtn` in lib/palette-classes.ts) — these are peers of those, and
+ *  at 34px they read as a smaller, weaker class of control. They are not the
+ *  same constant because the details genuinely differ: the wash sits 3px in
+ *  rather than 4px, there is no transparent border holding layout, and a
+ *  disabled action fades further (it stays visible next to enabled siblings on
+ *  the same row, where a toolbar button is alone). */
+export const composerQueueAction =
+	"relative inline-flex size-10 items-center justify-center rounded-control text-dim disabled:cursor-default disabled:opacity-35 enabled:hover:text-fg " +
+	"before:absolute before:inset-[3px] before:z-0 before:rounded-[calc(9px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] enabled:hover:before:bg-hover " +
+	"[&>*]:relative [&>*]:z-[1]";
+/** Destructive action: the wash goes red rather than neutral. */
+export const composerQueueActionDanger =
+	"enabled:hover:text-red enabled:hover:before:bg-red-soft";
+/** Steer stays accent at rest AND under the cursor — it is the one action on
+ *  the row that is not a correction, and the shared hover would have dropped
+ *  it back to plain ink. */
+export const composerQueueActionSteer = "text-accent enabled:hover:text-accent";
+/** A status readout, not a control: "Steered", "FYI", "Queueing…". Genuinely
+ *  round (the stylesheet spelled a bare 999px with no `corner-shape`), so
+ *  `rounded-full` rather than `rounded-[999px]`. */
+export const composerQueuePill =
+	"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent";
+/** GitHub FYI: not something you did, so it drops the accent. */
+export const composerQueuePillGithub = "border-line bg-raised text-dim";
+/** Optimistic busy send: in the flap since the send, awaiting the server
+ *  echo. */
+export const composerQueuePillSending = "border-line bg-raised text-faint";
+export const composerQueueContent = "flex min-w-0 flex-1 items-start gap-2";
+export const composerQueueImage = "relative mt-px h-[34px] w-[46px] flex-none";
+export const composerQueueImageThumb =
+	"block size-full rounded-[calc(8px*var(--rf))] border border-line object-cover";
+export const composerQueueImageCount =
+	"absolute -right-1 -bottom-1 h-[18px] min-w-[18px] rounded-full border border-line bg-raised px-1 text-center text-[10px] font-bold leading-4 text-dim";
+/** The message itself, one line with an ellipsis. Size and leading stay in one
+ *  string with leading last: tailwind-merge files `leading` as a conflict of
+ *  `font-size`, so a later `text-*` would drop an earlier `leading-*`. */
+export const composerQueueBody = "min-w-0 flex-1 truncate text-label leading-[1.45]";
+/** Whose message it is. `github` outranks `human` — both were equally specific
+ *  in the stylesheet and github came last. */
+export const composerQueueBodyTone = {
+	default: "text-fg",
+	human: "text-[color-mix(in_srgb,var(--text)_88%,#1f9e8a)]",
+	github: "text-dim",
+	sending: "text-dim",
+} as const;
+/** The "from" label ahead of the body — a teammate's name, or "GitHub". */
+export const composerQueueFrom = "mr-1.5 font-semibold text-faint";
