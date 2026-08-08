@@ -710,19 +710,6 @@ body.resizing-tab-split {
 	display: flex;
 	position: relative;
 }
-.rv-check-dot-pending {
-	background: #d9a23a;
-	animation: rv-pulse 1.4s ease-in-out infinite;
-}
-@keyframes rv-pulse {
-	0%,
-	100% {
-		opacity: 1;
-	}
-	50% {
-		opacity: 0.35;
-	}
-}
 
 .viewer-messages {
 	flex: 1;
@@ -800,33 +787,10 @@ body.resizing-tab-split {
 	overflow-anchor: none;
 }
 
-.restart-spinner {
-	width: 30px;
-	height: 30px;
-	border-radius: 50%;
-	border: 2px solid var(--border-strong);
-	border-top-color: var(--accent);
-	animation: spin 0.8s linear infinite;
-}
-@keyframes spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
 
 /* Covers the session view while a delete (optionally + worktree) is in flight —
    worktree cleanup can take a few seconds, so show clear progress instead of a
    view that looks frozen. Stays up through the redirect to Home. */
-.session-delete-overlay {
-	position: absolute;
-	inset: 0;
-	z-index: 30;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: color-mix(in srgb, var(--bg) 72%, transparent);
-	backdrop-filter: blur(2px);
-}
 
 /* A chip can still outgrow a phone-width message bubble (a long title, or a
    `bks-<uuid>` fallback), where the nowrap above pushed it past the bubble's
@@ -838,11 +802,6 @@ body.resizing-tab-split {
 /* Work blocks + tool calls are Tailwind-styled in WorkBlock.tsx /
    ToolCallBlock.tsx; only the shared pre/shiki plumbing below remains here. */
 
-@keyframes spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
 
 /* ── Terminal panel ──────────────────────────────────────── */
 
@@ -1728,20 +1687,6 @@ body.resizing-tab-split {
 }
 
 /* Spinner used in the prompt bar */
-.note-spinner {
-	display: inline-block;
-	width: 11px;
-	height: 11px;
-	border: 2px solid var(--border-strong);
-	border-top-color: var(--accent);
-	border-radius: 50%;
-	animation: note-spin 0.6s linear infinite;
-}
-@keyframes note-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
 
 /* ── Settings page (full-window: sub-nav + scrolling body) ──────────────── */
 .settings-page {

@@ -32,14 +32,15 @@ const GLYPH_CANCEL =
 const GLYPH_ACCEPT =
 	"inline-flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-fg transition-colors hover:bg-hover hover:text-accent";
 
-/* `voice-spinner` stays on the markup as a HOOK, not for styling: base.css's
-   reduced-motion block names it with `!important` to pin the rotation to a
-   constant 0.8s, and a utility cannot outrank that. Its legacy.css rule is
-   still deletable. The border is written one side at a time on purpose — a
-   `border-color` shorthand next to a `border-top-color` is the same
-   two-utilities-one-property race as the waveform colours above. */
+/* The `voice-spinner` hook is gone: base.css's reduced-motion block used to
+   name it to pin the rotation to a constant 0.8s, but that block now matches
+   `[class*="animate-spin"]` — the utility itself — and pins the same 0.8s, so
+   the name earned nothing. Measured both ways, plain and under emulated
+   reduced motion, before removing it. The border is written one side at a time
+   on purpose — a `border-color` shorthand next to a `border-top-color` is the
+   same two-utilities-one-property race as the waveform colours above. */
 const SPINNER =
-	"voice-spinner h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-l-line-strong border-r-line-strong border-b-line-strong border-t-dim [animation-duration:0.8s]";
+	"h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-l-line-strong border-r-line-strong border-b-line-strong border-t-dim [animation-duration:0.8s]";
 
 /**
  * Wispr-Flow-style dictation control shared by the session Composer and the

@@ -3877,12 +3877,23 @@ export function SessionViewer({
 			)}
 			{deleting && (
 				<div
+					/* `session-delete-overlay` stays on the markup as a bare hook with
+					   no rule behind it: the Escape/outside-click handlers above ask
+					   `closest('.palette-backdrop, .composer-schedule-modal-backdrop,
+					   .session-delete-overlay')` whether a click landed on a blocking
+					   surface. Drop the name and a click through this overlay starts
+					   dismissing what's underneath it. */
 					className="session-delete-overlay absolute inset-0 z-30 flex items-center justify-center bg-[color-mix(in_srgb,var(--bg)_72%,transparent)] backdrop-blur-[2px]"
 					role="status"
 					aria-live="polite"
 				>
 					<div className="flex flex-col items-center gap-[14px] rounded-xl border border-line bg-panel px-8 py-[26px] shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
-						<div className="restart-spinner" />
+						{/* `rounded-full` rather than `rounded-[50%]`: base.css grants the
+						    squircle to every `rounded-*` class EXCEPT `rounded-full`, and
+						    this ring was a bare `border-radius: 50%` with no corner-shape.
+						    It serialises as a clamped huge px value instead of 50%, which
+						    on a square box is the same circle. */}
+					<div className="size-[30px] animate-[spin_0.8s_linear_infinite] rounded-full border-2 border-line-strong border-t-accent" />
 						<span className={SESSION_DELETE_LABEL}>{deleteLabel}</span>
 					</div>
 				</div>

@@ -416,13 +416,10 @@ html[data-theme="light"] {
 		animation-iteration-count: infinite !important;
 	}
 
-	/* The few spinners still styled by a legacy class keep their own rate;
-	   they sit after the rule above so their duration wins the tie. */
-	.restart-spinner,
-	.voice-spinner {
-		animation-duration: 0.8s !important;
-		animation-iteration-count: infinite !important;
-	}
+	/* A spinner that turns at a rate other than the 0.8s above keeps its own
+	   exception, and sits after that rule so its duration wins the tie. The
+	   0.8s spinners need no entry at all — the rule above already names them
+	   by their animation utility. */
 	.note-spinner {
 		animation-duration: 0.6s !important;
 		animation-iteration-count: infinite !important;
