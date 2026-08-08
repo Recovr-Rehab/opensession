@@ -1365,13 +1365,15 @@ struct SessionsListView: View {
                             #if os(iOS)
                             WebIcon(kind: .archive, size: 22, color: OS1VisualStyle.textDim)
                                 .frame(width: 22, height: 22)
-                                // The glyph is drawn inside its 24-unit box
-                                // with ~3pt of air on the left at this size,
-                                // so the box starting on the column left the
-                                // INK 3pt right of every repo tile above it.
-                                // An offset, not padding: the label keeps the
-                                // 47pt column the row titles use.
-                                .offset(x: -2.5)
+                                // Centred on the repo tiles above it, not
+                                // flush with their left edge: the glyph's ink
+                                // is ~16pt wide against a tile's 22, so
+                                // sharing a left edge would leave it looking
+                                // shifted. Its own box lands 1pt shy of their
+                                // centre line, hence the nudge. An offset,
+                                // not padding: the label keeps the 47pt
+                                // column the row titles use.
+                                .offset(x: 1)
                             #else
                             WebIcon(kind: .archive, size: 16, color: OS1VisualStyle.textDim)
                                 .frame(width: 16, height: 16)
