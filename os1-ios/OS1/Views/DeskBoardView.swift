@@ -62,9 +62,12 @@ struct DeskBoardView: View {
                     onOpen(row.id)
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        // Gray, not full-strength ink: this list is something
+                        // you scan on the way to the composer, not the
+                        // screen's headline.
                         Text(row.title)
                             .font(.subheadline)
-                            .foregroundStyle(OS1VisualStyle.text)
+                            .foregroundStyle(OS1VisualStyle.textDim)
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         if showsNotes {

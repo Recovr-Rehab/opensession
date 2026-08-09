@@ -96,7 +96,9 @@ export function DeskBoard({
 					onClick={() => onOpenSession(row.sessionId)}
 					className="flex w-full items-baseline gap-3 rounded-md px-2 py-2.5 text-left hover:bg-hover"
 				>
-					<span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">
+					{/* Gray, not full-strength ink: this list is something you scan
+					    on the way to the composer, not the page's headline. */}
+					<span className="min-w-0 flex-1 truncate text-[13px] font-medium text-dim">
 						{row.title}
 					</span>
 					{mixed && (
