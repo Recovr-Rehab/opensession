@@ -36,6 +36,18 @@ interface Props {
 }
 
 /**
+ * Top clearance for a view-tab pane on a phone. Unlike the transcript, these
+ * panes don't self-pad for the fixed header + docked tab bar, so their own top
+ * chrome (the PR header rows, the ticket title) hid underneath it. Their inner
+ * scrollers then clip cleanly at the opaque bar's bottom edge.
+ * `--strip-clearance` is only set when the docked bar is shown; the
+ * `--pane-header-h` term covers the floating pills when it isn't. Desktop has
+ * neither, which is why this is phone-only.
+ */
+const VIEW_MAIN =
+	"phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px))]";
+
+/**
  * The session-less workspace container: what a /workspace/<id> route renders when
  * no session is selected. The tab strip above it (SessionTabs) carries the
  * workspace's sessions + view tabs; this pane renders the foregrounded view tab's
@@ -254,7 +266,7 @@ export function WorkspacePane({
 
 	if (tab === "review" && reviewTarget) {
 		return withPanel(
-			<div className="workspace-view-main h-full min-h-0 bg-surface">
+			<div className={`${VIEW_MAIN} h-full min-h-0 bg-surface`}>
 				<PrPanel
 					onOpenPr={onOpenPr}
 					key={`${reviewTarget.repo}:${reviewTarget.branch}`}
@@ -276,7 +288,7 @@ export function WorkspacePane({
 
 	if (tab === "conversation" && workspace.plainThreadId) {
 		return withPanel(
-			<div className="workspace-view-main flex flex-col h-full min-h-0">
+			<div className={`${VIEW_MAIN} flex flex-col h-full min-h-0`}>
 				<ConversationPane
 					threadId={workspace.plainThreadId}
 					onOpenSession={onOpenSession}
@@ -292,7 +304,7 @@ export function WorkspacePane({
 	const webPanel = webRef ? refWebPanel(webRef) : null;
 	if (tab === "video" && webPanel) {
 		return withPanel(
-			<div className="workspace-view-main flex flex-col h-full min-h-0">
+			<div className={`${VIEW_MAIN} flex flex-col h-full min-h-0`}>
 				{webPanel.component === "slack-channel" ? (
 					<SlackChannelPane channelId={webPanel.refId} />
 				) : (
@@ -308,7 +320,7 @@ export function WorkspacePane({
 	// Workspace home: normally only reachable session-less (with sessions, App lands
 	// in the first session) — a composer that starts the workspace's first session.
 	return withPanel(
-		<div className="workspace-view-main flex flex-col h-full min-h-0">
+		<div className={`${VIEW_MAIN} flex flex-col h-full min-h-0`}>
 			<div className="flex-1 min-h-0 overflow-y-auto">
 				<div className="w-full max-w-[760px] mx-auto px-5 py-6">
 					<div className="text-section-title font-semibold text-fg">

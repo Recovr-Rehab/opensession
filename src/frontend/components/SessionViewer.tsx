@@ -5710,7 +5710,8 @@ function BusyElapsed({ since }: { since: number }) {
 	else if (s < 3600)
 		label = `${Math.floor(s / 60)}m, ${(s % 60).toFixed(1)}s`;
 	else label = `${Math.floor(s / 3600)}h, ${Math.floor((s % 3600) / 60)}m`;
-	return <span className="busy-elapsed">{label}</span>;
+	// Tabular figures so a 10Hz counter doesn't jitter its own width.
+	return <span className="text-[12px] text-faint tabular-nums">{label}</span>;
 }
 
 function BusyInline({

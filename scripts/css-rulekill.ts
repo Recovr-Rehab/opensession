@@ -221,16 +221,24 @@ await evaluate(`window.__rk = (() => {
   return { walk, index, killed: [] };
 })()`);
 
+/* Both canaries assert a VALUE, not truthiness. The previous global-sheet probe
+   read `.terminal`'s font-family and only checked it was non-empty — which an
+   unstyled div satisfies with the inherited body font, so it went on passing
+   after that class was migrated away and stopped testing anything. Any legacy
+   class is a wasting asset here by design; `.app` is base.css's, and base.css
+   is concatenated with legacy.css into the one global sheet, so it answers the
+   question that actually matters (is the hand-written sheet being served) and
+   does not expire when the last legacy rule goes. */
 const sanity = await evaluate(`(() => {
   const d = document.createElement('div'); d.className = 'p-3'; document.body.appendChild(d);
-  const tw = getComputedStyle(d).padding; d.className = 'terminal';
-  const leg = getComputedStyle(d).fontFamily; d.remove();
-  return { tw, leg: leg.slice(0, 24), theme: document.documentElement.dataset.theme,
+  const tw = getComputedStyle(d).padding; d.className = 'app';
+  const global = getComputedStyle(d).flexDirection; d.remove();
+  return { tw, global, theme: document.documentElement.dataset.theme,
            path: location.pathname, w: innerWidth, els: document.querySelectorAll('*').length };
 })()`);
 console.log(`route=${sanity.path} w=${sanity.w} theme=${sanity.theme} els=${sanity.els}`);
-console.log(`sanity: tailwind p-3=${sanity.tw} (want 12px); legacy .terminal font=${sanity.leg}`);
-if (sanity.tw !== "12px" || !sanity.leg) {
+console.log(`sanity: tailwind p-3=${sanity.tw} (want 12px); global .app flex-direction=${sanity.global} (want column)`);
+if (sanity.tw !== "12px" || sanity.global !== "column") {
 	console.error("STOP: both sheets must be live or every verdict is 'identical' for the wrong reason");
 	process.exit(1);
 }

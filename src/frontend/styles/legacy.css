@@ -168,70 +168,6 @@
 /* Work blocks + tool calls are Tailwind-styled in WorkBlock.tsx /
    ToolCallBlock.tsx; only the shared pre/shiki plumbing below remains here. */
 
-/* ── Terminal panel ──────────────────────────────────────── */
-
-.terminal {
-	height: 100%;
-	overflow-y: auto;
-	padding: 12px 14px 24px;
-	font-family: var(--mono);
-	font-size: 11px;
-	line-height: 1.55;
-	background: #08080a;
-}
-
-/* Custom-time dialog — centered modal with date + time fields, mirroring
-   Slack's "Schedule message" sheet. */
-
-.busy-elapsed {
-	color: var(--text-faint);
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
-}
-
-/* ── New session form ────────────────────────────────────── */
-
-.new-session {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
-	/* The form can outgrow the viewport (especially on phones, where the keyboard
-     shrinks it further) — let it scroll so the Start button is always reachable. */
-	min-height: 0;
-	overflow-y: auto;
-}
-
-/* ── Automations ─────────────────────────────────────────── */
-
-.automations {
-	flex: 1;
-	overflow-y: auto;
-	min-height: 0;
-	padding: 28px 24px 60px;
-	max-width: 860px;
-	width: 100%;
-	margin: 0 auto;
-}
-
-.page-title {
-	margin: 0;
-	font-size: 19px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-}
-
-/* ── Connections ─────────────────────────────────────────── */
-
-.connections {
-	flex: 1;
-	overflow-y: auto;
-	min-height: 0;
-	padding: 28px 24px 60px;
-	max-width: 920px;
-	width: 100%;
-	margin: 0 auto;
-}
-
 /* ── Responsive ──────────────────────────────────────────── */
 
 @media (max-width: 720px) {
@@ -615,12 +551,6 @@
 		transform: translateY(-100%);
 	}
 
-	.automations {
-		padding: 18px 14px 48px;
-	}
-	.connections {
-		padding: 18px 14px 48px;
-	}
 	/* When the docked tab bar is present, the floating header above it goes
 	   solid too so the whole top block reads as one opaque bar — otherwise the
 	   transcript ghosts through behind the pills above a solid tab bar, which
@@ -631,18 +561,6 @@
 	.app:has(.session-tab-reorder ~ .session-tab-reorder) .app-header-overlay {
 		background: var(--bg);
 		min-height: var(--header-h);
-	}
-	
-	/* View-tab panes (Review/Conversation/Staging/Assets — .viewer-review-main
-	   in a session, .workspace-view-main on the session-less workspace route) fill
-	   the pane from the very top. Unlike the transcript, they don't self-pad
-	   for the fixed header + docked tab bar, so their own top chrome (the PR
-	   header rows, the ticket title) hid underneath it. Push them below the
-	   bar instead; their inner scrollers then clip cleanly at the opaque bar's
-	   bottom edge. --strip-clearance is only set when the docked bar is shown;
-	   the header-h term covers the floating pills when it isn't. */
-.workspace-view-main {
-		padding-top: calc(var(--pane-header-h) + var(--strip-clearance, 0px));
 	}
 	.app-brand > button[aria-label="Account menu"],
 	.app-brand > button[aria-label="Settings"] {

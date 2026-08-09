@@ -500,12 +500,6 @@ html[data-theme="light"] .markdown pre {
 html[data-theme="light"] .markdown pre code {
 	color: inherit;
 }
-/* The command terminal pins a near-black background; in light mode that leaves
-   dark text on dark. The text colors already re-theme via vars, so flip the
-   surface to white and the terminal reads as a clean light well. */
-html[data-theme="light"] .terminal {
-	background: var(--bg);
-}
 
 * {
 	box-sizing: border-box;
