@@ -10,9 +10,16 @@ import {
 	SETTINGS_PANEL_FRAME,
 	SETTINGS_PANEL_FRAME_SHEET,
 } from "../lib/settings-classes";
+import { matchSections, type SectionHit } from "../lib/settings-search";
+import { Input } from "../ui/input";
 import { BottomSheet } from "../ui/sheet";
 import { Connections } from "./Connections";
-import { IconChevronLeft, IconChevronRight, IconX } from "./icons";
+import {
+	IconChevronLeft,
+	IconChevronRight,
+	IconSearch,
+	IconX,
+} from "./icons";
 import { MyAccountsPanel } from "./MyAccounts";
 import { AppearancePanel } from "./settings/AppearancePanel";
 import { AuditPanel } from "./settings/AuditPanel";
@@ -509,6 +516,79 @@ const SECTIONS: {
 	},
 ];
 
+type Section = (typeof SECTIONS)[number];
+type SectionGroup = { group: string; items: Section[] };
+type FilteredGroup = { group: string; hits: SectionHit<Section>[] };
+
+/** Groups with their non-matching rows dropped, and empty groups gone with
+ *  them. An empty query filters nothing, so both surfaces render one list. */
+function filterGroups(groups: SectionGroup[], query: string): FilteredGroup[] {
+	const out: FilteredGroup[] = [];
+	for (const g of groups) {
+		const hits = matchSections(g.items, query);
+		if (hits.length) out.push({ group: g.group, hits });
+	}
+	return out;
+}
+
+/**
+ * The nav's filter field. Settings is 22 sections across five groups, and the
+ * group a setting sits in is a judgement call the person searching hasn't made
+ * — so the query also matches per-section keywords ("vim", "cron", "dark
+ * mode"), and a row that matched on one says which under its label.
+ *
+ * Enter opens the first result and Escape clears, so a search can be run and
+ * undone without leaving the keyboard.
+ */
+function NavSearch({
+	value,
+	onChange,
+	onSubmit,
+	className,
+}: {
+	value: string;
+	onChange: (v: string) => void;
+	onSubmit: () => void;
+	className?: string;
+}) {
+	return (
+		<div className={cn("relative", className)}>
+			<IconSearch
+				size={18}
+				className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-faint"
+			/>
+			<Input
+				value={value}
+				placeholder="Search settings"
+				aria-label="Search settings"
+				spellCheck={false}
+				className={cn("pl-8", value && "pr-8")}
+				onChange={(e) => onChange(e.target.value)}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") onSubmit();
+					else if (e.key === "Escape" && value) {
+						// Escape belongs to the field while it has something to clear —
+						// unhandled, it would dismiss the whole phone sheet instead.
+						e.stopPropagation();
+						e.preventDefault();
+						onChange("");
+					}
+				}}
+			/>
+			{value && (
+				<button
+					type="button"
+					aria-label="Clear search"
+					className="absolute right-1 top-1/2 flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-faint hover:bg-hover hover:text-fg"
+					onClick={() => onChange("")}
+				>
+					<IconX size={16} />
+				</button>
+			)}
+		</div>
+	);
+}
+
 /** The active section's panel — shared by the desktop split and the phone
  * sheet's detail page. Tool panels come in via children (App owns them). */
 function SectionPanel({
@@ -570,8 +650,10 @@ export function Settings({
 	// an inline edit, closing a menu), not to the settings page itself — losing
 	// the whole page to a stray Esc is worse than having no keyboard exit.
 
+	const [query, setQuery] = useState("");
+
 	// Group the nav entries under their group label (order preserved).
-	const groups: { group: string; items: typeof SECTIONS }[] = [];
+	const groups: SectionGroup[] = [];
 	for (const s of SECTIONS) {
 		let g = groups.find((x) => x.group === s.group);
 		if (!g) groups.push((g = { group: s.group, items: [] }));
@@ -595,10 +677,14 @@ export function Settings({
 	// the default: their panel arrives as `children`, which App only passes on a
 	// tool route, so a bare /settings would render an empty pane.
 	const active = section ?? "myAccounts";
+	const shown = filterGroups(groups, query);
+	const firstHit = shown[0]?.hits[0]?.item;
 
 	return (
 		<div className={SETTINGS_PAGE}>
-			<aside className="flex w-58 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-raised px-3 py-4 [html.wco_&]:pt-(--desktop-header-h)">
+			{/* Back and search stay put; only the section list scrolls, so neither
+			    they nor the account footer are lost once the list outgrows the nav. */}
+			<aside className="flex w-58 shrink-0 flex-col border-r border-line bg-raised px-3 py-4 [html.wco_&]:pt-(--desktop-header-h)">
 				<button className={SETTINGS_BACK} onClick={onBack}>
 					<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
 						<path
@@ -611,22 +697,42 @@ export function Settings({
 					</svg>
 					Back to app
 				</button>
-				{groups.map((g) => (
-					<div className="mb-3 flex flex-col gap-px" key={g.group}>
-						<div className="px-2.5 pt-2 pb-1 text-meta font-bold tracking-[0.02em] text-faint">{g.group}</div>
-						{g.items.map((s) => (
-							<button
-								key={s.key}
-								className="group flex w-full cursor-pointer items-center gap-[11px] rounded-row border-none bg-transparent px-2.5 py-2 text-left text-body font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg"
-								data-active={active === s.key || undefined}
-								onClick={() => onSelect(s.key)}
-							>
-								<span className="inline-flex size-[18px] flex-none items-center justify-center text-faint group-hover:text-fg group-data-active:text-fg">{s.icon}</span>
-								{s.label}
-							</button>
-						))}
-					</div>
-				))}
+				<NavSearch
+					value={query}
+					onChange={setQuery}
+					onSubmit={() => firstHit && onSelect(firstHit.key)}
+					className="mb-1"
+				/>
+				<div className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pt-2">
+					{shown.map((g) => (
+						<div className="mb-3 flex flex-col gap-px" key={g.group}>
+							<div className="px-2.5 pt-2 pb-1 text-meta font-bold tracking-[0.02em] text-faint">{g.group}</div>
+							{g.hits.map(({ item: s, hint }) => (
+								<button
+									key={s.key}
+									className="group flex w-full cursor-pointer items-center gap-[11px] rounded-row border-none bg-transparent px-2.5 py-2 text-left text-body font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg"
+									data-active={active === s.key || undefined}
+									onClick={() => onSelect(s.key)}
+								>
+									<span className="inline-flex size-[18px] flex-none items-center justify-center text-faint group-hover:text-fg group-data-active:text-fg">{s.icon}</span>
+									<span className="min-w-0 flex-1">
+										{s.label}
+										{hint && (
+											<span className="block truncate text-meta font-normal text-faint">
+												{hint}
+											</span>
+										)}
+									</span>
+								</button>
+							))}
+						</div>
+					))}
+					{shown.length === 0 && (
+						<div className="px-2.5 py-3 text-meta text-faint">
+							Nothing matches “{query}”.
+						</div>
+					)}
+				</div>
 				<SettingsAccountFooter />
 			</aside>
 
@@ -668,13 +774,16 @@ function MobileSettings({
 	onBack,
 	children,
 }: {
-	groups: { group: string; items: typeof SECTIONS }[];
+	groups: SectionGroup[];
 	section?: SettingsSectionKey;
 	onSelect: (key: SettingsSectionKey) => void;
 	onShowRoot?: () => void;
 	onBack: () => void;
 	children?: React.ReactNode;
 }) {
+	const [query, setQuery] = useState("");
+	const shown = filterGroups(groups, query);
+	const firstHit = shown[0]?.hits[0]?.item;
 	// Keep the last opened section mounted while popping back to the root, so
 	// the detail page has content during its slide-out.
 	const [lastSection, setLastSection] = useState<SettingsSectionKey | null>(
@@ -726,13 +835,19 @@ function MobileSettings({
 							)}
 							aria-hidden={!!detail}
 						>
-							{groups.map((g) => (
+							<NavSearch
+								value={query}
+								onChange={setQuery}
+								onSubmit={() => firstHit && onSelect(firstHit.key)}
+								className="mt-3"
+							/>
+							{shown.map((g) => (
 								<div key={g.group}>
 									<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
 										{g.group}
 									</div>
 									<div className="overflow-hidden rounded-2xl bg-raised">
-										{g.items.map((s) => (
+										{g.hits.map(({ item: s, hint }) => (
 											<button
 												key={s.key}
 												className="flex w-full items-center gap-3 border-x-0 border-b border-t-0 border-solid border-line bg-transparent px-3.5 py-3 text-left last:border-b-0 active:bg-hover"
@@ -743,6 +858,11 @@ function MobileSettings({
 												</span>
 											<span className="min-w-0 flex-1 text-item-title font-medium text-fg">
 													{s.label}
+													{hint && (
+														<span className="block truncate text-meta font-normal text-faint">
+															{hint}
+														</span>
+													)}
 												</span>
 												<IconChevronRight size={20} className="shrink-0 text-faint" />
 											</button>
@@ -750,7 +870,12 @@ function MobileSettings({
 									</div>
 								</div>
 							))}
-							<SettingsAccountCard />
+							{shown.length === 0 && (
+								<div className="mt-6 px-1 text-supporting text-faint">
+									Nothing matches “{query}”.
+								</div>
+							)}
+							{!query && <SettingsAccountCard />}
 						</div>
 
 						{/* Detail page: the picked section's panel, slid in from the right. */}

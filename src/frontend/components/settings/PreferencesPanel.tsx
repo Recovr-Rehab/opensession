@@ -10,6 +10,8 @@ import {
 	getBusySendPrefs,
 	onBusySendChanged,
 	setBusySendPref,
+	type BusySendGesture,
+	type BusySendPref,
 	type BusySendPrefs,
 } from "../../lib/busy-send-pref";
 import {
@@ -288,6 +290,35 @@ function PersonalPromptPanel() {
 	);
 }
 
+/** One send gesture's busy behavior, labelled with the chord it belongs to.
+ *  The two gestures used to be two rows explaining each other; as a labelled
+ *  pair they read as the one choice they are. */
+function BusyGestureSelect({
+	gesture,
+	glyph,
+	value,
+}: {
+	gesture: BusySendGesture;
+	glyph: string;
+	value: BusySendPref;
+}) {
+	const label = `Follow-up behavior for ${glyph}`;
+	return (
+		<span className="flex flex-col items-start gap-1">
+			<span className="px-0.5 text-meta font-medium text-faint">{glyph}</span>
+			<Select
+				label={label}
+				value={value}
+				options={[
+					{ value: "queue" as const, label: "Queue" },
+					{ value: "steer" as const, label: "Steer" },
+				]}
+				onChange={(v) => setBusySendPref(gesture, v)}
+			/>
+		</span>
+	);
+}
+
 /**
  * How working with a session behaves for you: the composer keys, what a
  * follow-up does mid-run, and how much of a turn's work the transcript shows.
@@ -335,13 +366,13 @@ export function PreferencesPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Preferences"
-				description="How you work with a session — how the message box behaves, how much of a turn's work the transcript shows, voice, and the standing instructions every session you start begins with. All of it follows your account, so it's the same on every device you sign in from."
+				description="How you work with a session — the message box, the transcript, voice, and your standing instructions."
 			/>
 			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Default model"
-					desc="What new sessions you start are preselected to run on. No preference keeps the workspace default. Stored per user, follows you across devices."
+					desc="What new sessions you start are preselected to run on."
 					control={
 						<Select
 							label="Default model"
@@ -364,9 +395,7 @@ export function PreferencesPanel() {
 				/>
 				<SettingRow
 					title="Send messages with"
-					desc={`Choose which key combination sends messages. Use ${
-						sendKey === "mod-enter" ? "↵" : "⇧↵"
-					} for new lines.`}
+					desc={`${sendKey === "mod-enter" ? "↵" : "⇧↵"} makes a new line.`}
 					control={
 						<Select
 							label="Send messages with"
@@ -380,54 +409,30 @@ export function PreferencesPanel() {
 					}
 				/>
 				<SettingRow
-					title="Follow-up behavior"
-					desc={
-						<>
-							What {sendKey === "enter" ? "Enter" : "sending"} does while the
-							agent is busy. Queue waits until the run fully finishes
-							(including running worker sessions); Steer folds your message
-							into the running turn at its next step, without stopping the
-							work. Stored per user, follows you across devices.
-						</>
-					}
+					title="Follow-up while busy"
+					desc="Queue waits until the run fully finishes; steer folds your message into the running turn without stopping it."
 					control={
-						<Select
-							label="Follow-up behavior"
-							value={busySend.enter}
-							options={[
-								{ value: "queue", label: "Queue" },
-								{ value: "steer", label: "Steer" },
-							]}
-							onChange={(v) => setBusySendPref("enter", v)}
-						/>
+						<div className="flex flex-wrap items-end justify-end gap-x-3 gap-y-2">
+							<BusyGestureSelect
+								gesture="enter"
+								glyph={sendKey === "enter" ? "↩" : MOD_ENTER_GLYPH}
+								value={busySend.enter}
+							/>
+							{/* The modifier only has its own answer while plain Enter is
+							    the send key; otherwise ⌘↵ IS sending, set just above. */}
+							{sendKey === "enter" && (
+								<BusyGestureSelect
+									gesture="mod"
+									glyph={MOD_ENTER_GLYPH}
+									value={busySend.mod}
+								/>
+							)}
+						</div>
 					}
 				/>
-				{sendKey === "enter" && (
-					<SettingRow
-						title={`${MOD_ENTER_LABEL} while busy`}
-						desc={
-							<>
-								What {MOD_ENTER_GLYPH} does while the agent is busy — set both
-								to the same action if you never want the modifier to change
-								it. Also applies when ⌘/Ctrl-clicking the send button.
-							</>
-						}
-						control={
-							<Select
-								label={`${MOD_ENTER_LABEL} while busy`}
-								value={busySend.mod}
-								options={[
-									{ value: "queue", label: "Queue" },
-									{ value: "steer", label: "Steer" },
-								]}
-								onChange={(v) => setBusySendPref("mod", v)}
-							/>
-						}
-					/>
-				)}
 				<SettingRow
 					title="Vim mode"
-					desc="Modal editing in the message composer: Esc for normal mode, the usual motions and operators, i to type. Enter still sends."
+					desc="Modal editing in the composer — Esc for normal mode, i to type. Enter still sends."
 					control={
 						<Switch aria-label="Vim mode" checked={vimMode} onCheckedChange={setVimModePref} />
 					}
@@ -455,12 +460,18 @@ export function PreferencesPanel() {
 					}
 				/>
 			</SettingCard>
+			<SettingsHint>
+				All of it is stored per user, so it follows you across every device you
+				sign in from. Queue holds a follow-up until the run and its worker
+				sessions have finished; the modifier choice also applies when
+				⌘/Ctrl-clicking the send button.
+			</SettingsHint>
 
 			<SettingsGroupLabel>Transcript</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Tool calls & messages"
-					desc="How each turn's working folds in the session. By default the turn's in-between messages read as normal transcript and only its tool calls fold away. Expanding a turn does not open its individual tool inputs."
+					desc="How much of each turn's working the transcript shows."
 					control={
 						<Select
 							label="Tool calls & messages"
@@ -476,6 +487,11 @@ export function PreferencesPanel() {
 					}
 				/>
 			</SettingCard>
+			<SettingsHint>
+				By default a turn's in-between messages read as normal transcript and
+				only its tool calls fold away. Expanding a turn does not open its
+				individual tool inputs.
+			</SettingsHint>
 
 			<DeskVoicePanel />
 			<PersonalPromptPanel />

@@ -11,6 +11,7 @@ import {
 	SettingRowTitle,
 	SettingsGroupLabel,
 	SettingsHeader,
+	SettingsHint,
 	SettingsPanel,
 } from "../ui/settings";
 import { IconTile, displayName } from "./BrandTile";
@@ -151,14 +152,17 @@ export function MyAccountsPanel() {
 								<IconTile name={s.name} size={30} />
 								<SettingRowText>
 									<SettingRowTitle>{displayName(s.name)}</SettingRowTitle>
+									{/* Status only. The sentence explaining what connecting
+									    changes is the same on every unconnected row, so it lives
+									    once under the card instead of down the list. */}
 									<SettingRowDescription>
 										{mine
-											? "Connected as you — your sessions use your account"
+											? "Connected as you"
 											: st?.shared
-												? "Using the workspace account — connect yours so sessions act as you"
+												? "Using the workspace account"
 												: st?.capable
-													? "Using the workspace key — connect your own account to act as you"
-													: "Not connected — sign in to use these tools as yourself"}
+													? "Using the workspace key"
+													: "Not connected"}
 									</SettingRowDescription>
 								</SettingRowText>
 								<SettingRowControl>
@@ -179,6 +183,13 @@ export function MyAccountsPanel() {
 						);
 					})}
 				</SettingCard>
+			)}
+			{oauthServers.length > 0 && (
+				<SettingsHint>
+					Connect one and your sessions use your own account for that tool.
+					Anything you leave unconnected keeps running on the workspace
+					credential.
+				</SettingsHint>
 			)}
 			<GithubAccounts personal />
 		</SettingsPanel>
