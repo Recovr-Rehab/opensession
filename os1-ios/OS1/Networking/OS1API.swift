@@ -214,6 +214,22 @@ enum OS1API {
         return response.content
     }
 
+    /// Where a transcript image's bytes actually live.
+    ///
+    /// Most of them are SERVER-RELATIVE ("/media?path=…" for an uploaded or
+    /// read file, "/api/…"), because the transcript is written for a web
+    /// viewer that resolves those against its own origin for free. Here they
+    /// have to be joined to the configured server: `URL(string:)` happily
+    /// returns a scheme-less relative URL, `URLRequest` can't fetch one, and
+    /// every such picture came out as the grey retry tile.
+    nonisolated static func conversationImageURL(source: String, base: URL?) -> URL? {
+        if source.hasPrefix("/") {
+            guard let base else { return nil }
+            return URL(string: source, relativeTo: base)?.absoluteURL
+        }
+        return URL(string: source)
+    }
+
     /// Resolve an image from a bounded transcript entry. Large inline images
     /// arrive over the wire as `os-blob:<entry>/<index>` and are served as
     /// authenticated bytes by the transcript-image route.
@@ -227,9 +243,11 @@ enum OS1API {
             )
         }
 
-        guard let url = URL(string: source) else { throw APIError.badURL }
         let config = ServerConfig.shared
         let base = config.baseURL
+        guard let url = conversationImageURL(source: source, base: base) else {
+            throw APIError.badURL
+        }
         let sameOrigin = url.scheme == base?.scheme
             && url.host == base?.host
             && url.port == base?.port
