@@ -16,7 +16,15 @@ export function Switch({ className, ...props }: SwitchProps) {
 				// It is longer and flatter than the iOS switch (51×31), which
 				// is the shape difference you see against the native app.
 				"relative inline-flex h-6 w-[54px] shrink-0 cursor-pointer rounded-full bg-active outline-none",
-				"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent",
+				// Checked is --blue, not the ink accent. On the Mac the on-state
+				// is the system accent colour, and that hue is what makes it
+				// read as ON at a glance; ink can't, because in dark mode the
+				// accent is near-white and a white knob on a white track has no
+				// internal contrast — the switch went bright but stopped
+				// looking flipped. This is the one place hue earns its keep in
+				// the monochrome chrome: it carries state, exactly like
+				// --blue-soft already does for "needs you".
+				"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-blue",
 				"focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
 				"data-[disabled]:cursor-default data-[disabled]:opacity-40",
 				className,
