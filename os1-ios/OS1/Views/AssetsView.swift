@@ -206,10 +206,16 @@ private struct AssetRow: View {
     }
 }
 
+#endif
+
 /// How one asset is rendered. WebKit handles most of it — and MUST, for
 /// anything whose relative references have to resolve — but markdown would
 /// arrive as raw source and code as an unstyled wall, and the app already
 /// renders both properly.
+///
+/// Outside the iOS-only section: the transcript's asset chips draw its glyph
+/// and the transcript is shared with the Mac app, where the chip names the
+/// same file even though nothing there can push a viewer for it.
 enum AssetKind {
     case web
     case markdown
@@ -243,6 +249,7 @@ enum AssetKind {
     }
 }
 
+#if os(iOS)
 /// One asset, rendered.
 private struct AssetPreview: View {
     let sessionId: String

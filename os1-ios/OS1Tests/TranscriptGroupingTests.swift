@@ -142,6 +142,45 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertEqual(TranscriptFormat.modelLabel(footers[0].model ?? ""), "Sonnet 5")
     }
 
+    /// The fold is shut by default, so a scratch file written inside it is
+    /// invisible unless the footer names it — and a file rewritten twice is
+    /// still one thing to open.
+    func testFooterNamesTheScratchFilesTheTurnWroteOnce() {
+        append([
+            TranscriptEntry(
+                id: "u1",
+                type: "user",
+                content: "chart it",
+                timestamp: "2026-01-01T00:00:00Z"
+            ),
+            toolUse("t1", name: "opensession-assets_write_asset", input: [
+                "path": .string("chart.html"),
+            ]),
+            toolResult("t1", text: "ok"),
+            toolUse("t2", name: "opensession-assets_write_asset", input: [
+                "path": .string("chart.html"),
+            ]),
+            toolResult("t2", text: "ok"),
+            toolUse("t3", name: "opensession-assets_write_asset", input: [
+                "path": .string("data/points.json"),
+            ]),
+            toolResult("t3", text: "ok"),
+            TranscriptEntry(
+                id: "a1",
+                type: "assistant",
+                content: "Charted.",
+                timestamp: "2026-01-01T00:00:12Z"
+            ),
+        ])
+
+        let footers = viewModel.displayBlocks.compactMap { block -> TurnFooter? in
+            if case .footer(let footer) = block { return footer }
+            return nil
+        }
+        XCTAssertEqual(footers.count, 1)
+        XCTAssertEqual(footers[0].assets, ["chart.html", "data/points.json"])
+    }
+
     /// A Task row without a way into the worker is a dead end, so the id has
     /// to be found however the engine happened to report it.
     func testSubagentIdIsFoundFromTheResultField() {
@@ -394,6 +433,20 @@ final class ToolPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.name, "list_issues")
         XCTAssertEqual(presentation.family, .mcp)
         XCTAssertEqual(presentation.displayName, "linear · list_issues")
+    }
+
+    /// The generic MCP summary lists inputs alphabetically, which for an
+    /// assets write means a slice of the file's own text instead of its name.
+    func testAnAssetWriteSummarizesAsItsPath() {
+        let presentation = ToolPresentation.make(
+            toolName: "mcp__oc__opensession-assets_write_asset",
+            input: .object([
+                "content": .string("<html>a whole page of it</html>"),
+                "path": .string("data/points.json"),
+            ])
+        )
+        XCTAssertEqual(presentation.summary, "data/points.json")
+        XCTAssertTrue(presentation.summaryIsPath)
     }
 
     func testNativeToolsAreNotMistakenForMcpServers() {

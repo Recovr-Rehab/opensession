@@ -69,6 +69,11 @@ struct ToolCallRow: View {
                 }
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(OS1VisualStyle.textDim)
+                // The row's summary takes every point it can get, which on a
+                // phone leaves the chip narrow enough to break "Open" across
+                // two lines; the label is two syllables, so it holds its size
+                // and the summary truncates instead.
+                .fixedSize()
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .overlay {

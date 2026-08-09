@@ -176,9 +176,14 @@ struct TurnFooter: Identifiable, Equatable {
     var model: String?
     var duration: TimeInterval?
     var files: [TouchedFile]
+    /// Scratch files the turn wrote with `opensession-assets` — a report, a
+    /// chart, a page of sample data. Named here as well as inside the fold
+    /// because the fold is shut by default: an artifact nobody can see is one
+    /// nobody opens.
+    var assets: [String] = []
 
     var isEmpty: Bool {
-        duration == nil && model == nil && files.isEmpty
+        duration == nil && model == nil && files.isEmpty && assets.isEmpty
     }
 }
 
@@ -291,7 +296,8 @@ enum TranscriptGrouping {
                 timestamp: end,
                 model: final.model,
                 duration: duration(from: start, to: end),
-                files: mergeTouchedFiles(tools)
+                files: mergeTouchedFiles(tools),
+                assets: writtenAssets(tools)
             )
             if !footer.isEmpty { blocks.append(.footer(footer)) }
         }
@@ -457,6 +463,13 @@ enum TranscriptGrouping {
             }
         }
         return order.compactMap { merged[$0] }
+    }
+
+    /// Every scratch file the turn wrote, in write order and once each — a
+    /// file rewritten three times is still one file to open.
+    private static func writtenAssets(_ tools: [ToolCallItem]) -> [String] {
+        var seen: Set<String> = []
+        return tools.compactMap(\.assetPath).filter { seen.insert($0).inserted }
     }
 
     private static func startTimestamp(_ item: TurnItem) -> Date? {

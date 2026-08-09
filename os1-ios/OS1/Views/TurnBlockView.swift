@@ -203,6 +203,8 @@ struct LineStatsView: View {
 /// wrote it, and which files it touched.
 struct TurnFooterView: View {
     let footer: TurnFooter
+    /// Whose scratch folder the asset chips open into.
+    let sessionId: String
 
     var body: some View {
         HStack(spacing: 8) {
@@ -222,13 +224,18 @@ struct TurnFooterView: View {
                     .fixedSize()
             }
 
-            if !footer.files.isEmpty {
+            if !footer.files.isEmpty || !footer.assets.isEmpty {
                 // Horizontal scroll rather than a "+N" cut: on a phone the
                 // chips are the only place a turn's file changes are named.
+                // Assets follow the edits: both are things the turn produced,
+                // and both open what they name rather than just labelling it.
                 ScrollView(.horizontal) {
                     HStack(spacing: 6) {
                         ForEach(footer.files) { file in
                             FileChipView(file: file)
+                        }
+                        ForEach(footer.assets, id: \.self) { path in
+                            AssetChipView(sessionId: sessionId, path: path)
                         }
                     }
                     .padding(.trailing, 8)
@@ -317,6 +324,60 @@ struct FileChipView: View {
         case "SH", "BASH": Color(red: 0.24, green: 0.44, blue: 0.24)
         default: Color(red: 0.36, green: 0.38, blue: 0.42)
         }
+    }
+}
+
+/// One scratch file the turn wrote: the kind's glyph and the file's name.
+///
+/// Tapping opens the file over the conversation, the same push the tool row's
+/// chip makes — so an artifact can be checked where it was announced instead
+/// of hunted for in the Assets tab, and the chevron and the edge swipe bring
+/// the conversation back. Assets live outside every worktree, so unlike a
+/// touched file there is no diff to show and nothing else in the app knows
+/// what the path means.
+struct AssetChipView: View {
+    let sessionId: String
+    let path: String
+
+    @Environment(\.openPanel) private var openPanel
+
+    private var asset: OS1API.SessionAsset {
+        OS1API.SessionAsset(path: path, size: 0, mtime: "")
+    }
+
+    var body: some View {
+        Button {
+            openPanel(.asset(sessionId: sessionId, path: path))
+        } label: {
+            chip
+        }
+        .buttonStyle(.plain)
+        // The Mac app installs no handler; a chip that does nothing when
+        // tapped is worse than one that plainly can't be.
+        .disabled(!openPanel.isAvailable)
+        .accessibilityLabel(Text(verbatim: asset.name))
+        .accessibilityHint("Opens this file")
+    }
+
+    private var chip: some View {
+        HStack(spacing: 5) {
+            Image(systemName: AssetKind.of(asset).symbol)
+                .font(.system(size: 9))
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .frame(minWidth: 12)
+            Text(asset.name)
+                .font(.caption2)
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .lineLimit(1)
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 7)
+        .padding(.vertical, 3)
+        .background(
+            OS1VisualStyle.panel,
+            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 

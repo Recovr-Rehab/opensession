@@ -65,7 +65,7 @@ struct TranscriptRow: View {
                 detailState: { expansionState($0.id) }
             )
         case .footer(let footer):
-            TurnFooterView(footer: footer)
+            TurnFooterView(footer: footer, sessionId: sessionId)
         case .walkthrough(let walkthrough):
             WalkthroughCard(walkthrough: walkthrough)
         }

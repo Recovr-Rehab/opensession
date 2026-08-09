@@ -215,6 +215,13 @@ extension ToolPresentation {
         input: JSONValue?,
         worktreeDir: String?
     ) -> (String, Bool) {
+        // An assets write is the one MCP call whose generic summary actively
+        // misleads: `content` sorts before `path`, so the row shows a slice of
+        // the file's own text where the one fact worth reading — which file
+        // this wrote — belongs.
+        if isMcp, canonical.hasSuffix("write_asset"), let path = string(input, "path") {
+            return (path, true)
+        }
         guard !isMcp else { return (compactInput(input), false) }
         switch canonical {
         case "Read", "Edit", "Write":
