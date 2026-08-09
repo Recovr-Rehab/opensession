@@ -538,3 +538,341 @@ struct ShortcutsSettingsView: View {
         .padding(.vertical, 2)
     }
 }
+
+/// Settings → Personal → My accounts: every per-user sign-in in one place.
+///
+/// The web has had this page since per-user grants landed; the native app
+/// shipped without it, so a phone could see which tools the workspace was
+/// wired into but not connect its own account to any of them. Same two halves
+/// as the web (src/frontend/components/MyAccounts.tsx): OAuth-capable MCP
+/// servers, and the per-user GitHub auth that opens PRs under your own name.
+///
+/// A row states what the tool is authenticated as and nothing more — the
+/// sentence about what connecting changes is identical on every unconnected
+/// row, so it lives once in the section footer.
+struct MyAccountsSettingsView: View {
+    @State private var connections: ConnectionsResponse? = SettingsCache.value("connections")
+    @State private var oauth: [String: MCPOauthStatus] = [:]
+    @State private var github: GitHubConnectionStatus? = SettingsCache.value("github-connection")
+    @State private var loading = true
+    @State private var error: String?
+    @State private var busyServer: String?
+    @State private var disconnecting: String?
+    @State private var githubFlow: GitHubDeviceFlow?
+    @State private var githubTask: Task<Void, Never>?
+    @State private var pollTask: Task<Void, Never>?
+    #if os(iOS)
+    @State private var consent: SafariLink?
+    #endif
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        List {
+            if loading, connections == nil {
+                HStack { Spacer(); ProgressView("Loading…"); Spacer() }
+            }
+            if let error {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(error).foregroundStyle(.red)
+                    Button("Retry") { Task { await load() } }
+                }
+            }
+
+            Section {
+                if oauthServers.isEmpty, !loading {
+                    Text("No OAuth-capable MCP servers yet.").foregroundStyle(.secondary)
+                }
+                ForEach(oauthServers, id: \.id) { server in
+                    accountRow(server)
+                }
+            } header: {
+                Text("MCP accounts — tools as yourself")
+            } footer: {
+                Text("Connect one and your sessions use your own account for that tool. Anything you leave unconnected keeps running on the workspace credential.")
+            }
+
+            Section {
+                githubRows
+            } header: {
+                Text("GitHub — PRs as yourself")
+            } footer: {
+                Text("Interactive sessions of a connected teammate open PRs as their own GitHub account. Everyone else, and every automation, keeps the bot.")
+            }
+        }
+        .insetGroupedListCompat()
+        .navigationTitle("My accounts")
+        .task { await load() }
+        .refreshable { await load() }
+        .onDisappear { pollTask?.cancel(); githubTask?.cancel() }
+        #if os(iOS)
+        // The provider's consent page opens over the app: coming back is a
+        // swipe, and the poll below flips the row the moment the grant lands.
+        .sheet(item: $consent) { link in SafariSheet(url: link.url) }
+        #endif
+        .sheet(isPresented: Binding(
+            get: { githubFlow != nil },
+            set: { if !$0 { cancelGitHubConnect() } }
+        )) {
+            if let githubFlow {
+                GitHubConnectionFlowView(flow: githubFlow, onCancel: cancelGitHubConnect)
+            }
+        }
+    }
+
+    // MARK: - Rows
+
+    private func accountRow(_ server: MCPConnection) -> some View {
+        let name = server.name ?? ""
+        let status = oauth[name]
+        let mine = isMine(status)
+        return HStack(spacing: 12) {
+            BrandTile(name: name, size: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Brand.displayName(name))
+                Text(statusText(status, mine: mine))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if busyServer == name {
+                ProgressView()
+            } else if mine {
+                Button("Disconnect") { disconnecting = name }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .confirmationDialog(
+                        "Disconnect \(Brand.displayName(name))?",
+                        isPresented: Binding(
+                            get: { disconnecting == name },
+                            set: { if !$0, disconnecting == name { disconnecting = nil } }
+                        ),
+                        titleVisibility: .visible
+                    ) {
+                        Button("Disconnect", role: .destructive) { Task { await disconnect(name) } }
+                        Button("Cancel", role: .cancel) { disconnecting = nil }
+                    } message: {
+                        Text("Your sessions go back to the workspace credential for \(Brand.displayName(name)).")
+                    }
+            } else {
+                Button("Connect") { Task { await connect(name) } }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder private var githubRows: some View {
+        if github?.enabled == true {
+            if let account = myGitHubAccount {
+                HStack(spacing: 12) {
+                    BrandTile(name: "github", size: 30)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("@\(account.login ?? "")")
+                        Text("Connected as you").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Button("Disconnect") { Task { await disconnectGitHub(account) } }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+                .padding(.vertical, 2)
+            } else {
+                Button { Task { await connectGitHub() } } label: {
+                    Label("Connect GitHub account", systemImage: "person.badge.key")
+                }
+            }
+        } else {
+            Text("Per-user GitHub auth is off for this workspace — sessions open PRs as the bot.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Identity
+
+    /// Who "you" are to the server — BOTH names, because a grant is stored
+    /// under whichever one made it: the server keys MCP grants by display name
+    /// ("Michiel") while GitHub accounts are the login ("happylinks"). Matching
+    /// only the login left every one of this account's own grants reading as
+    /// "Using the workspace key". Prefix-matched like the web's `isMe`, since a
+    /// grant may carry a first name against a full one.
+    private var myNames: [String] {
+        [ServerConfig.shared.githubLogin, ServerConfig.shared.userName]
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty }
+    }
+
+    private func isMine(_ status: MCPOauthStatus?) -> Bool {
+        guard let users = status?.users else { return false }
+        let names = myNames
+        guard !names.isEmpty else { return false }
+        return users.contains { user in
+            let other = user.lowercased()
+            return names.contains { $0 == other || other.hasPrefix($0) || $0.hasPrefix(other) }
+        }
+    }
+
+    private var myGitHubAccount: GitHubConnectedAccount? {
+        // The login only: a GitHub account row IS a login, so a loose match
+        // here would claim a teammate's account.
+        let login = ServerConfig.shared.githubLogin.lowercased()
+        guard !login.isEmpty else { return nil }
+        return (github?.accounts ?? []).first { ($0.login ?? "").lowercased() == login }
+    }
+
+    private func statusText(_ status: MCPOauthStatus?, mine: Bool) -> String {
+        if mine { return "Connected as you" }
+        if status?.shared != nil { return "Using the workspace account" }
+        if status?.capable == true { return "Using the workspace key" }
+        return "Not connected"
+    }
+
+    /// The servers this page is about: anything that can hold a per-user grant,
+    /// or already holds one.
+    private var oauthServers: [MCPConnection] {
+        (connections?.mcpServers ?? []).filter { server in
+            guard let name = server.name, !name.isEmpty else { return false }
+            let status = oauth[name]
+            return server.status == "needs-auth"
+                || status?.capable == true
+                || status?.shared != nil
+                || !(status?.users ?? []).isEmpty
+        }
+    }
+
+    // MARK: - Loading and actions
+
+    private func load() async {
+        loading = true
+        error = nil
+        do {
+            async let connectionsCall = SettingsAPI.connections()
+            async let githubCall = SettingsAPI.githubConnection()
+            let (loaded, gh) = try await (connectionsCall, githubCall)
+            connections = loaded
+            github = gh
+            SettingsCache.save("connections", loaded)
+            SettingsCache.save("github-connection", gh)
+            await loadOauth()
+        } catch {
+            self.error = error.localizedDescription
+        }
+        loading = false
+    }
+
+    /// One status call per server. They are independent, and a server that
+    /// cannot answer should leave the others' rows alone rather than fail the
+    /// page — hence the per-name catch.
+    private func loadOauth() async {
+        let names = (connections?.mcpServers ?? []).compactMap { $0.name }.filter { !$0.isEmpty }
+        var next: [String: MCPOauthStatus] = [:]
+        for name in names {
+            if let status = try? await SettingsAPI.mcpOauth(name: name) { next[name] = status }
+        }
+        oauth = next
+    }
+
+    private func connect(_ name: String) async {
+        busyServer = name
+        defer { busyServer = nil }
+        do {
+            let started = try await SettingsAPI.startMcpOauth(name: name)
+            guard let raw = started.url, let url = URL(string: raw) else {
+                error = "The server did not return a consent URL."
+                return
+            }
+            #if os(iOS)
+            if SafariLink.isWeb(url) { consent = SafariLink(url: url) } else { openURL(url) }
+            #else
+            openURL(url)
+            #endif
+            pollForGrant(name)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// The grant lands on the SERVER when the provider redirects back, so the
+    /// app learns about it by asking — two minutes of polling covers a consent
+    /// screen with a login in it, and pulling to refresh covers the rest.
+    private func pollForGrant(_ name: String) {
+        pollTask?.cancel()
+        pollTask = Task {
+            for _ in 0..<24 {
+                try? await Task.sleep(for: .seconds(5))
+                if Task.isCancelled { return }
+                guard let status = try? await SettingsAPI.mcpOauth(name: name) else { continue }
+                oauth[name] = status
+                if isMine(status) {
+                    #if os(iOS)
+                    consent = nil
+                    #endif
+                    return
+                }
+            }
+        }
+    }
+
+    private func disconnect(_ name: String) async {
+        disconnecting = nil
+        busyServer = name
+        defer { busyServer = nil }
+        do {
+            _ = try await SettingsAPI.disconnectMcpOauth(name: name)
+            if let status = try? await SettingsAPI.mcpOauth(name: name) { oauth[name] = status }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func disconnectGitHub(_ account: GitHubConnectedAccount) async {
+        guard let login = account.login else { return }
+        do {
+            _ = try await SettingsAPI.disconnectGitHub(login: login)
+            github = try await SettingsAPI.githubConnection()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func connectGitHub() async {
+        do {
+            let started = try await SettingsAPI.startGitHubDeviceFlow()
+            githubFlow = started
+            githubTask?.cancel()
+            githubTask = Task {
+                var interval = max(started.interval ?? 5, 1)
+                while !Task.isCancelled, let code = started.deviceCode {
+                    try? await Task.sleep(for: .seconds(interval))
+                    if Task.isCancelled { return }
+                    do {
+                        let result = try await SettingsAPI.pollGitHubDeviceFlow(deviceCode: code)
+                        if result.status == "ok" {
+                            githubFlow = nil
+                            github = try? await SettingsAPI.githubConnection()
+                            return
+                        }
+                        if result.status == "slow_down" { interval += 5 }
+                        if result.status == "error" {
+                            error = result.error ?? "GitHub connection failed."
+                            githubFlow = nil
+                            return
+                        }
+                    } catch {
+                        self.error = error.localizedDescription
+                        githubFlow = nil
+                        return
+                    }
+                }
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func cancelGitHubConnect() {
+        githubTask?.cancel()
+        githubTask = nil
+        githubFlow = nil
+    }
+}

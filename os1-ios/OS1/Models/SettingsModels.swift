@@ -231,6 +231,25 @@ struct SettingsAgentHealth: Codable, Sendable {
     var detail: String?
 }
 
+/// Who an MCP server is authenticated as. `users` are the people who granted
+/// their own account (Settings → My accounts); `shared` is the workspace-wide
+/// grant everyone else falls back to; `capable` says the server can do OAuth at
+/// all, even when it runs on a workspace API key today.
+struct MCPOauthStatus: Codable, Sendable {
+    var users: [String]?
+    var shared: MCPOauthSharedGrant?
+    var capable: Bool?
+}
+
+struct MCPOauthSharedGrant: Codable, Sendable {
+    var connectedBy: String?
+}
+
+/// The provider consent page a per-user grant starts at.
+struct MCPOauthStart: Codable, Sendable {
+    var url: String?
+}
+
 struct GitHubConnectionStatus: Codable, Sendable {
     var enabled: Bool?
     var clientIdConfigured: Bool?

@@ -918,7 +918,9 @@ private struct PlainRouterEditor: View {
     var body: some View { NavigationStack { Form { TextField("Basic model", text: $model); TextEditor(text: $prompt).frame(minHeight: 180); Button("Reset to server defaults") { prompt = config?.defaultPrompt ?? ""; model = config?.defaultBasicModel ?? "" } } .navigationTitle("Plain Router").onAppear { prompt = config?.prompt ?? ""; model = config?.basicModel ?? "" }.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { await onSave(prompt, model) } } } } } }
 }
 
-private struct GitHubConnectionFlowView: View {
+/// Internal rather than file-private: My accounts (Settings → Personal) runs
+/// the same device flow, and two copies of a code-entry screen would drift.
+struct GitHubConnectionFlowView: View {
     let flow: GitHubDeviceFlow
     let onCancel: () -> Void
     @Environment(\.openURL) private var openURL

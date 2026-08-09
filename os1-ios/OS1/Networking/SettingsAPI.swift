@@ -289,6 +289,31 @@ enum SettingsAPI {
         try await request("/api/connections/mcp/\(segment(name))", method: "DELETE")
     }
 
+    // MARK: - Per-user MCP OAuth (Settings → My accounts)
+
+    static func mcpOauth(name: String) async throws -> MCPOauthStatus {
+        try await request("/api/connections/mcp/\(segment(name))/oauth")
+    }
+
+    /// Begin an OAuth grant for the SIGNED-IN user (`scope: "me"`), not the
+    /// workspace: the returned URL is the provider's consent page, and the
+    /// grant only lands once they approve it there.
+    static func startMcpOauth(name: String) async throws -> MCPOauthStart {
+        try await request(
+            "/api/connections/mcp/\(segment(name))/oauth/start",
+            method: "POST",
+            body: ["scope": "me"]
+        )
+    }
+
+    static func disconnectMcpOauth(name: String) async throws -> SettingsOK {
+        try await request(
+            "/api/connections/mcp/\(segment(name))/oauth",
+            method: "DELETE",
+            query: ["scope": "me"]
+        )
+    }
+
     static func githubConnection() async throws -> GitHubConnectionStatus {
         try await request("/api/connections/github")
     }
