@@ -1,11 +1,11 @@
-import type { PlanItem } from "../lib/todo-plan";
+import type { PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 import { cn } from "../ui/cn";
 import { IconCheck } from "./icons";
 
 /**
  * The model's plan rendered as a checklist — shared by the status flap above
  * the composer and the expanded TodoWrite row in the transcript, so the same
- * list reads the same way in both places. See lib/todo-plan.ts for why this is
+ * list reads the same way in both places. See packages/protocol/src/todo-plan.ts for why this is
  * "Plan" and not "todos".
  */
 interface Props {

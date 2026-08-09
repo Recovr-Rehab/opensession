@@ -41,7 +41,7 @@ import {
 	ToolPathRootsProvider,
 	type LiveSubagent,
 } from "./ToolCallBlock";
-import { parsePlanItems, type PlanItem } from "../lib/todo-plan";
+import { parsePlanItems, type PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";

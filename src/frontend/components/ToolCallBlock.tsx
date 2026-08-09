@@ -1,13 +1,25 @@
 import React, { Suspense, createContext, lazy, useContext, useEffect, useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { langForFile, langForGrep } from "../lib/lang";
-import { currentPlanItem, parsePlanItems, planDoneCount } from "../lib/todo-plan";
+import { currentPlanItem, parsePlanItems, planDoneCount } from "@tellahq/opensession-protocol/todo-plan";
 import { PlanChecklist } from "./PlanChecklist";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { BASE_PATH } from "../lib/base";
 import { cn } from "../ui/cn";
 import { TOOL_CODE_WELL, TOOL_PRE, TOOL_RESULT_MEDIA } from "../lib/tool-classes";
 import { tidyPath, type PathRoot } from "../lib/tidy-path";
+import {
+  canonicalToolName,
+  formatToolDetail,
+  isHiddenToolInputKey,
+  parseMcpTool,
+  toolCommand as commandOf,
+  toolDetail,
+  toolFamily,
+  toolFilePath as filePathOf,
+  toolInputString as pickStr,
+  toolLineStats,
+} from "@tellahq/opensession-protocol/tool-presentation";
 import { formatDuration } from "../lib/time";
 import { openGalleryFrom } from "./MediaLightbox";
 import {
@@ -123,6 +135,13 @@ function useHydratedTranscriptEntry(
  */
 const PathRootsContext = createContext<readonly PathRoot[]>([]);
 export type { PathRoot };
+export {
+  canonicalToolName,
+  parseMcpTool,
+  toolDisplayName,
+  toolFamily,
+  toolLineStats,
+} from "@tellahq/opensession-protocol/tool-presentation";
 export const ToolPathRootsProvider = PathRootsContext.Provider;
 export function useToolPathRoots(): readonly PathRoot[] {
   return useContext(PathRootsContext);
@@ -143,255 +162,23 @@ const LiveSubagentsContext = createContext<ReadonlyMap<string, LiveSubagent>>(
 export const LiveSubagentsProvider = LiveSubagentsContext.Provider;
 
 /**
- * Engine tool ids → the canonical names the renderers below key on. opencode
- * (the engine every current run uses) emits lowercase ids with camelCase input
- * keys; Claude-SDK transcripts from before the migration use "Read" and
- * "file_path"; codex has its own pair. Canonicalizing here means one set of
- * summaries, icons and detail renderers covers all three.
+ * One-line human summary of a tool call (also used for collapsed previews).
+ *
+ * Identity and content come from the protocol's shared derivation, which the
+ * server also runs — so a call reads the same here, on the phone and in the
+ * terminal. Only the path shortening is the viewer's own: it depends on the
+ * worktrees this client knows about.
  */
-const TOOL_ALIASES: Record<string, string> = {
-  read: "Read",
-  view_image: "Read",
-  write: "Write",
-  edit: "Edit",
-  multiedit: "Edit",
-  patch: "Edit",
-  apply_patch: "Edit",
-  bash: "Bash",
-  shell: "Bash",
-  exec_command: "Bash",
-  grep: "Grep",
-  glob: "Glob",
-  list: "Glob",
-  webfetch: "WebFetch",
-  websearch: "WebSearch",
-  task: "Task",
-  skill: "Skill",
-  todowrite: "TodoWrite",
-  todoread: "TodoWrite",
-  update_plan: "TodoWrite",
-};
-
-/** Engine-native tools that contain an underscore but are not MCP calls. */
-const NATIVE_TOOLS = new Set([
-  "invalid",
-  "oracle",
-  "exit_plan_mode",
-  "notebook_edit",
-  "web_search",
-  "web_fetch",
-  "str_replace_editor",
-]);
-
-/** The name the renderers key on. Display still uses the raw engine id. */
-export function canonicalToolName(name?: string): string {
-  if (!name) return "Tool";
-  return TOOL_ALIASES[name] ?? name;
-}
-
-/**
- * "mcp__linear__list_issues" (Claude SDK) or "linear_list_issues" (opencode's
- * flattened form) → { server: "linear", tool: "list_issues" }. Native tools are
- * excluded by name first, so "apply_patch" doesn't read as an "apply" server.
- */
-export function parseMcpTool(name: string): { server: string; tool: string } | null {
-  const parts = name.split("__");
-  if (parts[0] === "mcp" && parts.length >= 3) {
-    return { server: parts[1], tool: parts.slice(2).join("__") };
-  }
-  if (TOOL_ALIASES[name] || NATIVE_TOOLS.has(name)) return null;
-  const flat = name.match(/^([A-Za-z][A-Za-z0-9-]*)_(.+)$/);
-  return flat ? { server: flat[1], tool: flat[2] } : null;
-}
-
-/** "mcp__linear__list_issues" → "linear · list_issues", else the tool name. */
-export function toolDisplayName(name?: string): string {
-  if (!name) return "Tool";
-  const mcp = parseMcpTool(name);
-  return mcp ? `${mcp.server} · ${mcp.tool}` : name;
-}
-
-/** First non-empty string among `keys` — engines disagree on the spelling. */
-function pickStr(inp: Record<string, unknown>, ...keys: string[]): string {
-  for (const key of keys) {
-    const v = inp[key];
-    if (typeof v === "string" && v) return v;
-  }
-  return "";
-}
-
-const filePathOf = (inp: Record<string, unknown>) => pickStr(inp, "file_path", "filePath");
-const commandOf = (inp: Record<string, unknown>) => pickStr(inp, "command", "cmd");
-
-/** Internal plumbing that shouldn't show up in a summary or the input JSON. */
-const HIDDEN_INPUT_KEYS = new Set(["__bks_oc_session"]);
-
-/** One-line human summary of a tool call (also used for collapsed previews). */
 export function toolSummary(
   toolName: string,
   input: unknown,
   fallback: string,
   roots: readonly PathRoot[] = []
 ): string {
-  if (!input || typeof input !== "object") return fallback;
-  const inp = input as Record<string, unknown>;
-
-  switch (canonicalToolName(toolName)) {
-    case "Read":
-    case "Edit":
-    case "Write": {
-      const path = filePathOf(inp);
-      // codex's apply_patch names its files inside the patch body instead.
-      return path ? tidyPath(path, roots) : patchFilesSummary(inp, roots) || fallback;
-    }
-    case "FileChange":
-      return fileChangeSummary(inp, roots) || fallback;
-    case "Bash":
-      return truncate((commandOf(inp) || fallback).replace(/\s*\n\s*/g, " ⏎ "), 160);
-    case "Grep":
-      return `/${inp.pattern || ""}/ ${tidyPath(pickStr(inp, "path"), roots)}`.trim();
-    case "Glob":
-      return (
-        [inp.pattern, tidyPath(pickStr(inp, "path"), roots)].filter(Boolean).join(" ") || fallback
-      );
-    case "Task":
-    case "Agent":
-      return [inp.subagent_type, inp.description].filter(Boolean).join(": ") || fallback;
-    case "Workflow":
-      return (inp.name as string) || (inp.description as string) || "orchestration script";
-    case "Skill":
-      return pickStr(inp, "skill", "name") || fallback;
-    case "TodoWrite":
-      return todoSummary(inp) || fallback;
-    case "WebFetch":
-    case "WebSearch":
-      return (inp.url as string) || (inp.query as string) || fallback;
-    case "TaskCreate":
-      return (inp.subject as string) || (inp.title as string) || fallback;
-    default:
-      // MCP and other tools: a compact "key: value" render of the input reads
-      // better than the generic "Using <tool>" content fallback.
-      return compactInput(inp) || fallback;
-  }
-}
-
-export function toolLineStats(
-  toolName: string,
-  input: unknown
-): { additions: number; deletions: number } | null {
-  if (!input || typeof input !== "object") return null;
-  const canonical = canonicalToolName(toolName);
-  if (canonical !== "Edit" && canonical !== "Write") return null;
-  const inp = input as Record<string, unknown>;
-  const patch = pickStr(inp, "patchText", "patch");
-  if (patch) {
-    let additions = 0;
-    let deletions = 0;
-    for (const line of patch.split("\n")) {
-      if (line.startsWith("+") && !line.startsWith("+++")) additions++;
-      else if (line.startsWith("-") && !line.startsWith("---")) deletions++;
-    }
-    return additions || deletions ? { additions, deletions } : null;
-  }
-
-  const edits = Array.isArray(inp.edits) ? inp.edits : [inp];
-  let additions = 0;
-  let deletions = 0;
-  for (const value of edits) {
-    if (!value || typeof value !== "object") continue;
-    const edit = value as Record<string, unknown>;
-    const oldText = pickStr(edit, "old_string", "oldString");
-    const newText = pickStr(edit, "new_string", "newString", "content");
-    additions += lineCount(newText);
-    deletions += lineCount(oldText);
-  }
-  return additions || deletions ? { additions, deletions } : null;
-}
-
-function lineCount(value: string): number {
-  return value ? value.split("\n").length : 0;
-}
-
-/** "3/7 done" plus whatever the run is on right now. */
-function todoSummary(inp: Record<string, unknown>): string {
-  const items = parsePlanItems(inp);
-  if (items.length === 0) return "";
-  return [currentPlanItem(items), `${planDoneCount(items)}/${items.length} done`]
-    .filter(Boolean)
-    .join("  ·  ");
-}
-
-/** Files touched by a codex-style patch body ("*** Update File: src/x.ts"). */
-function patchFilesSummary(inp: Record<string, unknown>, roots: readonly PathRoot[]): string {
-  const text = pickStr(inp, "patchText", "patch");
-  if (!text) return "";
-  const files = [...text.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)].map((m) =>
-    tidyPath(m[1].trim(), roots)
+  return (
+    formatToolDetail(toolDetail(toolName, input), (p) => tidyPath(p, roots)) ||
+    fallback
   );
-  if (files.length === 0) return "";
-  const shown = files.slice(0, 3).join("  ·  ");
-  return files.length > 3 ? `${shown}  ·  +${files.length - 3}` : shown;
-}
-
-function compactInput(inp: Record<string, unknown>): string {
-  const parts = Object.entries(inp)
-    .filter(([k, v]) => !HIDDEN_INPUT_KEYS.has(k) && v !== undefined && v !== null && v !== "")
-    .slice(0, 4)
-    .map(([k, v]) => {
-      const s = typeof v === "string" ? v : JSON.stringify(v);
-      return `${k}: ${truncate(String(s).replace(/\s+/g, " "), 48)}`;
-    });
-  return parts.join("  ·  ");
-}
-
-function fileChangeSummary(inp: Record<string, unknown>, roots: readonly PathRoot[]): string {
-  if (!Array.isArray(inp.changes)) return "";
-  return inp.changes
-    .map((change) => {
-      if (typeof change === "string") return change;
-      if (!change || typeof change !== "object") return "";
-      const c = change as Record<string, unknown>;
-      const path = typeof c.path === "string" ? tidyPath(c.path, roots) : "";
-      return [c.kind, path].filter(Boolean).join(" ");
-    })
-    .filter(Boolean)
-    .slice(0, 4)
-    .join("  ·  ");
-}
-
-type FamilyKey =
-  | "run" | "file" | "edit" | "find" | "web" | "agent" | "mcp" | "skill" | "plain";
-
-export function toolFamily(toolName: string): FamilyKey {
-  if (parseMcpTool(toolName)) return "mcp";
-  switch (canonicalToolName(toolName)) {
-    case "Bash":
-    case "BashOutput":
-      return "run";
-    case "Read":
-    case "NotebookEdit":
-      return "file";
-    case "Edit":
-    case "Write":
-    case "FileChange":
-      return "edit";
-    case "Grep":
-    case "Glob":
-    case "LSP":
-    case "ToolSearch":
-      return "find";
-    case "WebFetch":
-    case "WebSearch":
-      return "web";
-    case "Task":
-    case "Agent":
-    case "Workflow":
-      return "agent";
-    case "Skill":
-      return "skill";
-    default:
-      return "plain";
-  }
 }
 
 export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: number }) {
@@ -794,7 +581,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
   // present — only show those).
   if (toolName === "Read") {
     const extras = Object.entries(inp).filter(
-      ([k]) => k !== "file_path" && k !== "filePath" && !HIDDEN_INPUT_KEYS.has(k)
+      ([k]) => k !== "file_path" && k !== "filePath" && !isHiddenToolInputKey(k)
     );
     if (extras.length === 0) return null;
     return (
@@ -935,7 +722,7 @@ function bashCommand(input: unknown): string | null {
   }
   for (const [key, value] of Object.entries(inp)) {
     if (key === "command" || key === "cmd" || key === "description") continue;
-    if (HIDDEN_INPUT_KEYS.has(key)) continue;
+    if (isHiddenToolInputKey(key)) continue;
     comments.push(`# ${key}: ${JSON.stringify(value)}`);
   }
   return [...comments, command].join("\n");
@@ -946,7 +733,7 @@ function formatInput(input: unknown): string {
   if (typeof input === "string") return input;
   if (typeof input === "object" && !Array.isArray(input)) {
     const visible = Object.fromEntries(
-      Object.entries(input as Record<string, unknown>).filter(([k]) => !HIDDEN_INPUT_KEYS.has(k))
+      Object.entries(input as Record<string, unknown>).filter(([k]) => !isHiddenToolInputKey(k))
     );
     return JSON.stringify(visible, null, 2);
   }

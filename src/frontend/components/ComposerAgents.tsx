@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import type { SessionSubagentSnapshot } from "../lib/api";
-import { currentPlanItem, planDoneCount, type PlanItem } from "../lib/todo-plan";
+import { currentPlanItem, planDoneCount, type PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 import { cn } from "../ui/cn";
 import { IconChevronDown, IconChevronRight } from "./icons";
 import { PlanChecklist } from "./PlanChecklist";
@@ -14,7 +14,7 @@ import { PlanChecklist } from "./PlanChecklist";
  *
  * It carries two things the transcript hides:
  *
- * - **Plan** — the model's own `todowrite` checklist (lib/todo-plan.ts).
+ * - **Plan** — the model's own `todowrite` checklist (packages/protocol/src/todo-plan.ts).
  *   Otherwise it exists only as one dim row inside a collapsed turn fold, so
  *   this is its only glance. Shown at every width, and only while the run is
  *   live (the caller gates that) — a finished turn's plan belongs to the
