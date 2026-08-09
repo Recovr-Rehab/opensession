@@ -425,7 +425,7 @@ enum OS1API {
 
     private struct ServerErrorBody: Decodable { let error: String? }
 
-    struct RepoInfo: Decodable, Identifiable, Hashable {
+    struct RepoInfo: Codable, Identifiable, Hashable {
         let id: String
         let ghRepo: String?
         let label: String?
@@ -529,8 +529,8 @@ enum OS1API {
     /// the web's `SetupStatus` (src/frontend/components/setup-shared.tsx) as
     /// a tolerant subset — every field optional, so a server that grows or
     /// drops one can't break an older build.
-    struct SetupStatus: Decodable, Sendable {
-        struct Engine: Decodable, Sendable {
+    struct SetupStatus: Codable, Sendable {
+        struct Engine: Codable, Sendable {
             let ready: Bool?
             /// What stops this instance running a turn, in one sentence.
             let blocker: String?
@@ -543,26 +543,26 @@ enum OS1API {
 
         /// Whether a repo commits the scripts that let a session provision and
         /// boot it unattended (docs/repo-lifecycle.md).
-        struct Lifecycle: Decodable, Sendable {
+        struct Lifecycle: Codable, Sendable {
             let dir: String?
             let setup: Bool?
             let start: Bool?
             let previewCommand: Bool?
         }
 
-        struct Repo: Decodable, Sendable {
+        struct Repo: Codable, Sendable {
             let id: String
             let label: String?
             let path: String?
             let lifecycle: Lifecycle?
         }
 
-        struct Team: Decodable, Sendable {
+        struct Team: Codable, Sendable {
             let count: Int?
             let names: [String]?
         }
 
-        struct Github: Decodable, Sendable {
+        struct Github: Codable, Sendable {
             let userPrAuth: Bool?
             let clientIdConfigured: Bool?
             let redirectFlowAvailable: Bool?
@@ -570,7 +570,7 @@ enum OS1API {
             let callbackUrl: String?
         }
 
-        struct Integration: Decodable, Sendable {
+        struct Integration: Codable, Sendable {
             let id: String
             let label: String?
             let enabled: Bool?

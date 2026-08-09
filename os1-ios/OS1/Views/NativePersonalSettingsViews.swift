@@ -61,103 +61,141 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "messages"
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
 
-    @State private var models: [SettingsModelOption] = []
-    @State private var defaultModel = ""
-    @State private var sendKey = "enter"
-    @State private var busySend = "queue"
-    @State private var busySendMod = "steer"
-    @State private var turnActivity = "messages"
+    @State private var models: [SettingsModelOption]
+    @State private var defaultModel: String
+    @State private var sendKey: String
+    @State private var busySend: String
+    @State private var busySendMod: String
+    @State private var turnActivity: String
     @State private var loading = true
     @State private var saving = false
     @State private var resaveNeeded = false
     @State private var error: String?
     @State private var savedPrefs: [String: String] = [:]
     @State private var prefsLoaded = false
+    /// What the controls were seeded with. A control still sitting on its seed
+    /// when the fetch lands adopts the server's value; one the reader has
+    /// already moved keeps their choice, and `commit()` pushes it.
+    @State private var seededPrefs: [String: String]
+
+    /// Opens on the values this device already holds — the same `os1.*`
+    /// mirrors the composer reads, kept current by `NativePreferences` — so
+    /// the screen is the settings rather than a spinner in front of them. The
+    /// fetch still runs; it corrects rather than reveals. Writing back is
+    /// unaffected: `commit()` waits for `prefsLoaded`, so nothing is saved
+    /// against a baseline the server has not confirmed.
+    init() {
+        let defaults = UserDefaults.standard
+        let seeded: [String: String] = [
+            "default-model": defaults.string(forKey: "os1.composer.defaultModel") ?? "",
+            "send-key": defaults.string(forKey: "os1.composer.sendKey") ?? "enter",
+            "busy-send": defaults.string(forKey: "os1.composer.busySend") ?? "queue",
+            "busy-send-mod": defaults.string(forKey: "os1.composer.busySendMod") ?? "steer",
+            "turn-activity": defaults.string(forKey: "os1.appearance.turnActivity") ?? "messages",
+        ]
+        _seededPrefs = State(initialValue: seeded)
+        _defaultModel = State(initialValue: seeded["default-model"] ?? "")
+        _sendKey = State(initialValue: seeded["send-key"] ?? "enter")
+        _busySend = State(initialValue: seeded["busy-send"] ?? "queue")
+        _busySendMod = State(initialValue: seeded["busy-send-mod"] ?? "steer")
+        _turnActivity = State(initialValue: seeded["turn-activity"] ?? "messages")
+        _models = State(initialValue: SettingsCache.value("model-catalog", as: ModelCatalogSettings.self)?.models ?? [])
+    }
+
+    private var selectableModels: [SettingsModelOption] {
+        models.filter { $0.id?.isEmpty == false }
+    }
 
     var body: some View {
         Form {
-            if loading {
-                Section { ProgressView("Loading composer preferences…") }
-            } else {
-                if let error {
-                    Section {
-                        Text(error)
-                            .foregroundStyle(.red)
-                        Button("Try again") { Task { await load() } }
-                    }
-                }
-
+            if let error {
                 Section {
+                    Text(error)
+                        .foregroundStyle(.red)
+                    Button("Try again") { Task { await load() } }
+                }
+            }
+
+            Section {
+                // The catalog is the one thing here with no local mirror to
+                // open on, so on a first visit this row waits and the rest of
+                // the screen does not.
+                if selectableModels.isEmpty, loading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Loading models…").foregroundStyle(.secondary)
+                    }
+                } else {
                     Picker("Default model", selection: $defaultModel) {
                         Text("No preference").tag("")
-                        ForEach(models.filter { $0.id?.isEmpty == false }, id: \.id) { model in
+                        ForEach(selectableModels, id: \.id) { model in
                             Text(model.label ?? model.id ?? "Model").tag(model.id ?? "")
                         }
                     }
-                } header: {
-                    Text("New sessions")
-                } footer: {
-                    Text("New sessions use this model when available. No preference uses the workspace default.")
                 }
+            } header: {
+                Text("New sessions")
+            } footer: {
+                Text("New sessions use this model when available. No preference uses the workspace default.")
+            }
 
-                Section {
-                    #if os(macOS)
-                    Picker("Send messages with", selection: $sendKey) {
-                        Text("Enter").tag("enter")
-                        Text("Command/Control-Enter").tag("mod-enter")
-                    }
-                    #else
-                    LabeledContent("Send messages with", value: "Return")
-                    #endif
-                    Picker("Send button while busy", selection: $busySend) {
+            Section {
+                #if os(macOS)
+                Picker("Send messages with", selection: $sendKey) {
+                    Text("Enter").tag("enter")
+                    Text("Command/Control-Enter").tag("mod-enter")
+                }
+                #else
+                LabeledContent("Send messages with", value: "Return")
+                #endif
+                Picker("Send button while busy", selection: $busySend) {
+                    Text("Queue for later").tag("queue")
+                    Text("Steer the current run").tag("steer")
+                }
+                #if os(macOS)
+                if sendKey == "enter" {
+                    Picker("Command/Control-Enter while busy", selection: $busySendMod) {
                         Text("Queue for later").tag("queue")
                         Text("Steer the current run").tag("steer")
                     }
-                    #if os(macOS)
-                    if sendKey == "enter" {
-                        Picker("Command/Control-Enter while busy", selection: $busySendMod) {
-                            Text("Queue for later").tag("queue")
-                            Text("Steer the current run").tag("steer")
-                        }
-                    }
-                    #endif
-                } header: {
-                    Text("Sending")
-                } footer: {
-                    // The setting is only the default: the other verb is
-                    // always one gesture away, and this is the only place
-                    // that says so.
-                    #if os(macOS)
-                    Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Hold the send button to use the other one for a single message.")
-                    #else
-                    Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Touch and hold the send button to use the other one for a single message.")
-                    #endif
                 }
+                #endif
+            } header: {
+                Text("Sending")
+            } footer: {
+                // The setting is only the default: the other verb is
+                // always one gesture away, and this is the only place
+                // that says so.
+                #if os(macOS)
+                Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Hold the send button to use the other one for a single message.")
+                #else
+                Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Touch and hold the send button to use the other one for a single message.")
+                #endif
+            }
 
-                Section {
-                    Picker("Tool calls and messages", selection: $turnActivity) {
-                        Text("Fold tool calls").tag("messages")
-                        Text("Fold everything").tag("collapsed")
-                        Text("Expand while running").tag("auto")
-                        Text("Always expanded").tag("expanded")
-                    }
-                } header: {
-                    Text("Transcript")
-                } footer: {
-                    Text("How each turn's working folds in a session. By default the turn's in-between messages read as normal transcript and only its tool calls fold away. Expanding a turn does not open its individual tool inputs.")
+            Section {
+                Picker("Tool calls and messages", selection: $turnActivity) {
+                    Text("Fold tool calls").tag("messages")
+                    Text("Fold everything").tag("collapsed")
+                    Text("Expand while running").tag("auto")
+                    Text("Always expanded").tag("expanded")
                 }
+            } header: {
+                Text("Transcript")
+            } footer: {
+                Text("How each turn's working folds in a session. By default the turn's in-between messages read as normal transcript and only its tool calls fold away. Expanding a turn does not open its individual tool inputs.")
+            }
 
-                Section {
-                    Toggle("Desk voice", isOn: Binding(
-                        get: { deskVoice == "on" },
-                        set: { enabled in
-                            deskVoice = enabled ? "on" : "off"
-                            pushDeskVoice(enabled)
-                        }
-                    ))
-                } footer: {
-                    Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
-                }
+            Section {
+                Toggle("Desk voice", isOn: Binding(
+                    get: { deskVoice == "on" },
+                    set: { enabled in
+                        deskVoice = enabled ? "on" : "off"
+                        pushDeskVoice(enabled)
+                    }
+                ))
+            } footer: {
+                Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
             }
             PersonalPromptSection()
         }
@@ -200,31 +238,46 @@ struct PreferencesSettingsView: View {
             let requestContext = NativePreferences.context()
             let prefs = try await SettingsAPI.uiPrefs(user: requestContext.user)
             guard NativePreferences.context() == requestContext else { loading = false; return }
-            defaultModel = prefs["default-model"] ?? nativeDefaultModel
-            sendKey = prefs["send-key"] == "mod-enter" ? "mod-enter" : "enter"
-            busySend = prefs["busy-send"] == "steer" ? "steer" : "queue"
-            busySendMod = prefs["busy-send-mod"] == "queue" ? "queue" : "steer"
-            // Unset (or an unknown value from a newer client) keeps whatever
-            // this device last saw rather than snapping the picker to a
-            // default the account never chose.
-            turnActivity = Self.validTurnActivity(prefs["turn-activity"]) ?? nativeTurnActivity
+            let server: [String: String] = [
+                "default-model": prefs["default-model"] ?? nativeDefaultModel,
+                "send-key": prefs["send-key"] == "mod-enter" ? "mod-enter" : "enter",
+                "busy-send": prefs["busy-send"] == "steer" ? "steer" : "queue",
+                "busy-send-mod": prefs["busy-send-mod"] == "queue" ? "queue" : "steer",
+                // Unset (or an unknown value from a newer client) keeps
+                // whatever this device last saw rather than snapping the
+                // picker to a default the account never chose.
+                "turn-activity": Self.validTurnActivity(prefs["turn-activity"]) ?? nativeTurnActivity,
+            ]
+            // The screen was already usable while this was in flight, so a
+            // control the reader moved in the meantime keeps their choice —
+            // only the ones still sitting on their seed adopt the server's.
+            // The `commit()` below then pushes whatever they changed.
+            if defaultModel == seededPrefs["default-model"] { defaultModel = server["default-model"] ?? defaultModel }
+            if sendKey == seededPrefs["send-key"] { sendKey = server["send-key"] ?? sendKey }
+            if busySend == seededPrefs["busy-send"] { busySend = server["busy-send"] ?? busySend }
+            if busySendMod == seededPrefs["busy-send-mod"] { busySendMod = server["busy-send-mod"] ?? busySendMod }
+            if turnActivity == seededPrefs["turn-activity"] { turnActivity = server["turn-activity"] ?? turnActivity }
+            seededPrefs = server
             #if os(macOS)
             nativeSendKey = sendKey
             #endif
             nativeBusySend = busySend
             nativeBusySendMod = busySendMod
             nativeTurnActivity = turnActivity
-            savedPrefs = currentPrefs
+            savedPrefs = server
             prefsLoaded = true
         } catch {
             self.error = error.localizedDescription
         }
         do {
-            models = try await SettingsAPI.modelCatalog().models ?? []
+            let catalog = try await SettingsAPI.modelCatalog()
+            models = catalog.models ?? []
+            SettingsCache.save("model-catalog", catalog)
         } catch {
             if self.error == nil { self.error = error.localizedDescription }
         }
         loading = false
+        commit()
     }
 
     private func save() async {
@@ -312,13 +365,23 @@ struct AppearanceSettingsView: View {
 /// commits when the box loses focus and again when the screen goes away, so
 /// leaving keeps your edit — same contract as the web.
 struct PersonalPromptSection: View {
-    @State private var prompt = ""
-    @State private var savedPrompt = ""
-    @State private var loading = true
+    @State private var prompt: String
+    @State private var savedPrompt: String
+    @State private var loading: Bool
     @State private var error: String?
     @FocusState private var editing: Bool
 
     private let user = ServerConfig.shared.userName
+
+    /// Opens on the last prompt this device fetched, so the box holds text
+    /// immediately instead of a spinner. `savedPrompt` starts at the same
+    /// value, so a screen that is only looked at never sends anything.
+    init() {
+        let cached: String? = SettingsCache.value("personal-prompt")
+        _prompt = State(initialValue: cached ?? "")
+        _savedPrompt = State(initialValue: cached ?? "")
+        _loading = State(initialValue: cached == nil)
+    }
 
     var body: some View {
         Section {
@@ -349,16 +412,20 @@ struct PersonalPromptSection: View {
         guard !loading, prompt != savedPrompt else { return }
         let pending = prompt
         savedPrompt = pending
+        SettingsCache.save("personal-prompt", pending)
         Task { _ = try? await SettingsAPI.setPersonalPrompt(user: user, prompt: pending) }
     }
 
     private func load() async {
-        loading = true
         error = nil
         do {
             let result = try await SettingsAPI.personalPrompt(user: user)
-            prompt = result
+            // An edit made while this was in flight wins — the cached text it
+            // was typed over is what `savedPrompt` still holds, so `commit()`
+            // sends it when the box loses focus.
+            if prompt == savedPrompt { prompt = result }
             savedPrompt = result
+            SettingsCache.save("personal-prompt", result)
         } catch {
             self.error = error.localizedDescription
         }

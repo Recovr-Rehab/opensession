@@ -47,6 +47,7 @@ struct SettingsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .settingsAuthenticationExpired)) { _ in
                 config.token = ""
                 token = ""
+                SettingsCache.clear()
                 checkResult = "Your session expired. Sign in again to continue."
                 showingConnection = true
             }
@@ -314,6 +315,8 @@ struct SettingsView: View {
             try? await OS1API.logout()
             config.token = ""
             token = ""
+            // Nothing cached outlives the account it was fetched for.
+            SettingsCache.clear()
             showingConnection = true
         }
     }

@@ -15,7 +15,7 @@ import SwiftUI
 /// can't see afterwards, and the one piece of it worth having on a phone —
 /// a repo's tile — already has its own screen (RepositoriesSettingsView).
 struct SetupSettingsView: View {
-    @State private var status: OS1API.SetupStatus?
+    @State private var status: OS1API.SetupStatus? = SettingsCache.value("setup-status")
     @State private var loading = false
     @State private var error: String?
 
@@ -193,7 +193,9 @@ struct SetupSettingsView: View {
         loading = true
         defer { loading = false }
         do {
-            status = try await OS1API.setupStatus()
+            let fetched = try await OS1API.setupStatus()
+            status = fetched
+            SettingsCache.save("setup-status", fetched)
             error = nil
         } catch {
             self.error = error.localizedDescription

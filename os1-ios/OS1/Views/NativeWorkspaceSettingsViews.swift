@@ -26,15 +26,29 @@ struct ModelAccountsSections: View {
     /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
     var reload: Int
     @State private var catalog: ModelCatalogSettings?
-    @State private var claude: [ProviderAccount] = []
-    @State private var codex: [ProviderAccount] = []
-    @State private var selectedModel = ""
-    @State private var autoFallback = false
+    @State private var claude: [ProviderAccount]
+    @State private var codex: [ProviderAccount]
+    @State private var selectedModel: String
+    @State private var autoFallback: Bool
     @State private var loading = true
     @State private var error: String?
     @State private var showingAdd: AccountKind?
     @State private var removal: AccountRemoval?
     @State private var codexLoginSheet = false
+
+    /// Seeded from the last answer this device saw, so re-entering Models shows
+    /// the pools straight away and the fetch behind it only corrects them. The
+    /// two controls are derived from the catalog rather than cached separately —
+    /// one payload, one source of truth.
+    init(reload: Int) {
+        self.reload = reload
+        let cached: ModelCatalogSettings? = SettingsCache.value("model-catalog")
+        _catalog = State(initialValue: cached)
+        _selectedModel = State(initialValue: cached?.default ?? "")
+        _autoFallback = State(initialValue: cached?.autoFallback ?? false)
+        _claude = State(initialValue: SettingsCache.value("claude-accounts") ?? [])
+        _codex = State(initialValue: SettingsCache.value("codex-accounts") ?? [])
+    }
 
     var body: some View {
         Group {
@@ -44,11 +58,15 @@ struct ModelAccountsSections: View {
             // moment that row swapped out — cancelling the fetch mid-flight and
             // leaving `loading` stuck true forever.
             Section("Workspace defaults") {
-                if loading {
+                // The spinner is only for having nothing to show at all: with a
+                // cached catalog the controls stay up and a failed refresh adds
+                // its row above them rather than replacing them.
+                if loading, catalog == nil {
                     settingsLoadingRow
-                } else if let error {
+                } else if let error, catalog == nil {
                     settingsErrorRow(error) { Task { await load() } }
                 } else {
+                    if let error { settingsErrorRow(error) { Task { await load() } } }
                     Picker("Default model", selection: $selectedModel) {
                         Text("None").tag("")
                         ForEach(validModels, id: \.id) { model in
@@ -60,7 +78,7 @@ struct ModelAccountsSections: View {
             }
             .task(id: reload) { await load() }
 
-            if !loading, error == nil {
+            if catalog != nil {
                 accountSection("Claude", accounts: validClaude, kind: .claude)
                 accountSection("Codex", accounts: validCodex, kind: .codex)
             }
@@ -139,6 +157,9 @@ struct ModelAccountsSections: View {
             catalog = result.0; claude = result.1; codex = result.2
             selectedModel = result.0.default ?? ""
             autoFallback = result.0.autoFallback ?? false
+            SettingsCache.save("model-catalog", result.0)
+            SettingsCache.save("claude-accounts", result.1)
+            SettingsCache.save("codex-accounts", result.2)
         } catch { self.error = error.localizedDescription }
         loading = false
     }
@@ -181,17 +202,25 @@ struct ModelAccountsSections: View {
 struct ModelProvidersSections: View {
     /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
     var reload: Int
-    @State private var providers: [ModelProvider] = []
+    /// `nil` until this device has an answer — from the cache on entry, or from
+    /// the fetch. An empty list is a real answer ("no providers"), so emptiness
+    /// can't stand in for it.
+    @State private var providers: [ModelProvider]?
     @State private var loading = true
     @State private var error: String?
     @State private var editor: ModelProvider?
     @State private var deleting: ModelProvider?
 
+    init(reload: Int) {
+        self.reload = reload
+        _providers = State(initialValue: SettingsCache.value("model-providers"))
+    }
+
     var body: some View {
         Section("Your own providers") {
-            if loading { settingsLoadingRow }
+            if loading, providers == nil { settingsLoadingRow }
             if let error { settingsErrorRow(error) { Task { await load() } } }
-            if !loading, error == nil {
+            if let providers {
                 if providers.isEmpty {
                     Text("No providers yet — add one to run sessions on models beyond the Anthropic and OpenAI subscriptions.")
                         .font(.caption)
@@ -216,17 +245,17 @@ struct ModelProvidersSections: View {
             Button("Delete", role: .destructive) { Task { await delete(provider) } }; Button("Cancel", role: .cancel) {}
         } message: { provider in Text("Remove \(provider.id ?? "this provider")?") }
     }
-    private func load() async { loading = true; error = nil; do { providers = try await SettingsAPI.modelProviders().providers ?? [] } catch { self.error = error.localizedDescription }; loading = false }
+    private func load() async { loading = true; error = nil; do { let fetched = try await SettingsAPI.modelProviders().providers ?? []; providers = fetched; SettingsCache.save("model-providers", fetched) } catch { self.error = error.localizedDescription }; loading = false }
     private func save(id: String, key: String, url: String, models: [String]) async {
         do { _ = try await SettingsAPI.upsertModelProvider(id: id, apiKey: key.isEmpty ? nil : key, baseURL: url.isEmpty ? nil : url, models: models); editor = nil; await load() } catch { self.error = error.localizedDescription }
     }
-    private func delete(_ provider: ModelProvider) async { guard let id = provider.id, !id.isEmpty else { return }; do { _ = try await SettingsAPI.deleteModelProvider(id: id); providers.removeAll { $0.id == id } } catch { self.error = error.localizedDescription }; deleting = nil }
+    private func delete(_ provider: ModelProvider) async { guard let id = provider.id, !id.isEmpty else { return }; do { _ = try await SettingsAPI.deleteModelProvider(id: id); providers?.removeAll { $0.id == id }; if let providers { SettingsCache.save("model-providers", providers) } } catch { self.error = error.localizedDescription }; deleting = nil }
 }
 
 struct ConnectionsSettingsView: View {
-    @State private var response: ConnectionsResponse?
-    @State private var github: GitHubConnectionStatus?
-    @State private var router: PlainRouterConfig?
+    @State private var response: ConnectionsResponse? = SettingsCache.value("connections")
+    @State private var github: GitHubConnectionStatus? = SettingsCache.value("github-connection")
+    @State private var router: PlainRouterConfig? = SettingsCache.value("plain-router")
     @State private var loading = true
     @State private var error: String?
     @State private var addSheet = false
@@ -239,9 +268,9 @@ struct ConnectionsSettingsView: View {
 
     var body: some View {
         List {
-            if loading { settingsLoadingRow }
+            if loading, response == nil { settingsLoadingRow }
             if let error { settingsErrorRow(error) { Task { await load() } } }
-            if !loading, error == nil {
+            if response != nil {
                 Section("Agents") {
                     let agents = response?.agents ?? [:]
                     if agents.isEmpty { Text("No agent health data.").foregroundStyle(.secondary) }
@@ -368,7 +397,14 @@ struct ConnectionsSettingsView: View {
     }
     private func load(refresh: Bool = false) async {
         loading = true; error = nil
-        do { async let c = SettingsAPI.connections(refresh: refresh); async let g = SettingsAPI.githubConnection(); async let r = SettingsAPI.plainRouter(); let result = try await (c, g, r); response = result.0; github = result.1; router = result.2 } catch { self.error = error.localizedDescription }
+        do {
+            async let c = SettingsAPI.connections(refresh: refresh); async let g = SettingsAPI.githubConnection(); async let r = SettingsAPI.plainRouter()
+            let result = try await (c, g, r)
+            response = result.0; github = result.1; router = result.2
+            SettingsCache.save("connections", result.0)
+            SettingsCache.save("github-connection", result.1)
+            SettingsCache.save("plain-router", result.2)
+        } catch { self.error = error.localizedDescription }
         loading = false
     }
     private func add(_ body: [String: Any]) async { do { _ = try await SettingsAPI.addConnection(body); addSheet = false; await load() } catch { self.error = error.localizedDescription } }
@@ -503,16 +539,16 @@ extension ConnectionRow where Trailing == EmptyView {
 }
 
 struct MemorySettingsView: View {
-    @State private var scopes: [MemoryScope] = []
+    @State private var scopes: [MemoryScope]? = SettingsCache.value("memory")
     @State private var loading = true
     @State private var error: String?
     @State private var editor: MemoryEditTarget?
 
     var body: some View {
         List {
-            if loading { settingsLoadingRow }
+            if loading, scopes == nil { settingsLoadingRow }
             if let error { settingsErrorRow(error) { Task { await load() } } }
-            if !loading, error == nil {
+            if let scopes {
                 if scopes.isEmpty { ContentUnavailableView("No memory entries", systemImage: "brain") }
                 ForEach(scopes.filter { $0.scope?.key?.isEmpty == false }, id: \.id) { scope in
                     Section(scope.scope?.label ?? scope.scope?.kind ?? "Memory") {
@@ -532,7 +568,7 @@ struct MemorySettingsView: View {
         .task { await load() }.refreshable { await load() }
         .sheet(item: $editor) { target in MemoryEditor(target: target, onSave: save, onDelete: delete) }
     }
-    private func load() async { loading = true; error = nil; do { scopes = try await SettingsAPI.memory().scopes ?? [] } catch { self.error = error.localizedDescription }; loading = false }
+    private func load() async { loading = true; error = nil; do { let fetched = try await SettingsAPI.memory().scopes ?? []; scopes = fetched; SettingsCache.save("memory", fetched) } catch { self.error = error.localizedDescription }; loading = false }
     private func save(_ target: MemoryEditTarget, text: String) async { guard let key = target.scope.key else { return }; do { if let id = target.entry?.id { _ = try await SettingsAPI.updateMemory(scopeKey: key, id: id, text: text) } else { _ = try await SettingsAPI.addMemory(scopeKey: key, text: text, by: ServerConfig.shared.userName) }; editor = nil; await load() } catch { self.error = error.localizedDescription } }
     private func delete(_ target: MemoryEditTarget) async { guard let key = target.scope.key, let id = target.entry?.id else { return }; do { _ = try await SettingsAPI.deleteMemory(scopeKey: key, id: id); editor = nil; await load() } catch { self.error = error.localizedDescription } }
 }
@@ -557,7 +593,7 @@ struct PrewarmingSettingsView: View {
 struct WarmDepsSections: View {
     /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
     var reload: Int
-    @State private var repos: [WarmTemplate] = []
+    @State private var repos: [WarmTemplate]? = SettingsCache.value("warm-templates")
     @State private var loading = true
     @State private var error: String?
     var body: some View {
@@ -568,14 +604,14 @@ struct WarmDepsSections: View {
                 Text("A template worktree per repo with dependencies installed, adopted into new session worktrees instead of installing cold.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if loading { settingsLoadingRow }
+                if loading, repos == nil { settingsLoadingRow }
                 if let error { settingsErrorRow(error) { Task { await load() } } }
-                if !loading, error == nil, repos.isEmpty {
+                if let repos, repos.isEmpty {
                     Text("No repositories configured.").foregroundStyle(.secondary)
                 }
             }
             .task(id: reload) { await load() }
-            if !loading, error == nil {
+            if let repos {
                 ForEach(repos.filter { $0.repoId?.isEmpty == false }, id: \.id) { repo in
                     Section(repo.repoId ?? "Repository") {
                         Toggle("Enabled", isOn: binding(repo, keyPath: \.enabled, default: false) { enabled in await update(repo, ["enabled": enabled]) })
@@ -588,15 +624,16 @@ struct WarmDepsSections: View {
         }
     }
     private func binding<T>(_ repo: WarmTemplate, keyPath: KeyPath<WarmTemplate, T?>, default defaultValue: T, save: @escaping (T) async -> Void) -> Binding<T> where T: Equatable { Binding(get: { repo[keyPath: keyPath] ?? defaultValue }, set: { value in Task { await save(value) } }) }
-    private func load() async { loading = true; error = nil; do { repos = try await SettingsAPI.warmTemplates().repos ?? [] } catch { self.error = error.localizedDescription }; loading = false }
-    private func update(_ repo: WarmTemplate, _ patch: [String: Any]) async { guard let id = repo.repoId else { return }; do { repos = try await SettingsAPI.updateWarmTemplate(repoId: id, patch: patch).repos ?? [] } catch { self.error = error.localizedDescription } }
-    private func refresh(_ repo: WarmTemplate) async { guard let id = repo.repoId else { return }; do { repos = try await SettingsAPI.refreshWarmTemplate(repoId: id).repos ?? [] } catch { self.error = error.localizedDescription } }
+    private func load() async { loading = true; error = nil; do { apply(try await SettingsAPI.warmTemplates().repos ?? []) } catch { self.error = error.localizedDescription }; loading = false }
+    private func update(_ repo: WarmTemplate, _ patch: [String: Any]) async { guard let id = repo.repoId else { return }; do { apply(try await SettingsAPI.updateWarmTemplate(repoId: id, patch: patch).repos ?? []) } catch { self.error = error.localizedDescription } }
+    private func refresh(_ repo: WarmTemplate) async { guard let id = repo.repoId else { return }; do { apply(try await SettingsAPI.refreshWarmTemplate(repoId: id).repos ?? []) } catch { self.error = error.localizedDescription } }
+    private func apply(_ fetched: [WarmTemplate]) { repos = fetched; SettingsCache.save("warm-templates", fetched) }
 }
 
 struct PreviewPoolSections: View {
     /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
     var reload: Int
-    @State private var repos: [PreviewPool] = []
+    @State private var repos: [PreviewPool]? = SettingsCache.value("preview-pool")
     @State private var loading = true
     @State private var error: String?
     var body: some View {
@@ -607,14 +644,14 @@ struct PreviewPoolSections: View {
                 Text("Dev-server containers kept pre-booted so the Preview button claims one in seconds instead of paying a cold boot.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if loading { settingsLoadingRow }
+                if loading, repos == nil { settingsLoadingRow }
                 if let error { settingsErrorRow(error) { Task { await load() } } }
-                if !loading, error == nil, repos.isEmpty {
+                if let repos, repos.isEmpty {
                     Text("No repositories configured.").foregroundStyle(.secondary)
                 }
             }
             .task(id: reload) { await load() }
-            if !loading, error == nil {
+            if let repos {
                 ForEach(repos.filter { $0.repoId?.isEmpty == false }, id: \.id) { pool in
                     Section(pool.repoId ?? "Repository") {
                         Toggle("Enabled", isOn: Binding(get: { pool.config?.enabled ?? false }, set: { value in Task { await update(pool, ["enabled": value]) } }))
@@ -628,19 +665,20 @@ struct PreviewPoolSections: View {
             }
         }
     }
-    private func load() async { loading = true; error = nil; do { repos = try await SettingsAPI.previewPool().repos ?? [] } catch { self.error = error.localizedDescription }; loading = false }
-    private func update(_ pool: PreviewPool, _ patch: [String: Any]) async { guard let id = pool.repoId else { return }; do { repos = try await SettingsAPI.updatePreviewPool(repoId: id, patch: patch).repos ?? [] } catch { self.error = error.localizedDescription } }
-    private func refresh(_ pool: PreviewPool) async { guard let id = pool.repoId else { return }; do { repos = try await SettingsAPI.refreshPreviewPool(repoId: id).repos ?? [] } catch { self.error = error.localizedDescription } }
+    private func load() async { loading = true; error = nil; do { apply(try await SettingsAPI.previewPool().repos ?? []) } catch { self.error = error.localizedDescription }; loading = false }
+    private func update(_ pool: PreviewPool, _ patch: [String: Any]) async { guard let id = pool.repoId else { return }; do { apply(try await SettingsAPI.updatePreviewPool(repoId: id, patch: patch).repos ?? []) } catch { self.error = error.localizedDescription } }
+    private func refresh(_ pool: PreviewPool) async { guard let id = pool.repoId else { return }; do { apply(try await SettingsAPI.refreshPreviewPool(repoId: id).repos ?? []) } catch { self.error = error.localizedDescription } }
+    private func apply(_ fetched: [PreviewPool]) { repos = fetched; SettingsCache.save("preview-pool", fetched) }
 }
 
 struct PapercutsSettingsView: View {
-    @State private var response: PapercutsResponse?
+    @State private var response: PapercutsResponse? = SettingsCache.value("papercuts")
     @State private var loading = true
     @State private var error: String?
     var body: some View {
         List {
-            if loading { settingsLoadingRow }; if let error { settingsErrorRow(error) { Task { await load() } } }
-            if !loading, error == nil {
+            if loading, response == nil { settingsLoadingRow }; if let error { settingsErrorRow(error) { Task { await load() } } }
+            if response != nil {
                 Section("Repositories") {
                     let repos = (response?.repos ?? []).filter { $0.repoId?.isEmpty == false }
                     if repos.isEmpty { Text("No repository configuration.").foregroundStyle(.secondary) }
@@ -654,7 +692,7 @@ struct PapercutsSettingsView: View {
             }
         }.navigationTitle("Papercuts").task { await load() }.refreshable { await load() }
     }
-    private func load() async { loading = true; error = nil; do { response = try await SettingsAPI.papercuts(days: 14, limit: 100) } catch { self.error = error.localizedDescription }; loading = false }
+    private func load() async { loading = true; error = nil; do { let fetched = try await SettingsAPI.papercuts(days: 14, limit: 100); response = fetched; SettingsCache.save("papercuts", fetched) } catch { self.error = error.localizedDescription }; loading = false }
     private func set(_ repo: PapercutsRepoConfig, enabled: Bool) async { guard let id = repo.repoId else { return }; do { response = try await SettingsAPI.setPapercuts(repo: id, enabled: enabled) } catch { self.error = error.localizedDescription } }
 }
 

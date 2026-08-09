@@ -15,7 +15,7 @@ import UIKit
 /// drive the same endpoints, so a tile changed on the phone is the tile the
 /// sidebar paints.
 struct RepositoriesSettingsView: View {
-    @State private var repos: [OS1API.RepoInfo] = []
+    @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
     @State private var loading = false
     @State private var error: String?
 
@@ -70,6 +70,7 @@ struct RepositoriesSettingsView: View {
         defer { loading = false }
         do {
             repos = try await OS1API.repos()
+            SettingsCache.save("repos", repos)
             error = nil
         } catch {
             self.error = error.localizedDescription

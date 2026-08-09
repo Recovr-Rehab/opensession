@@ -4,7 +4,7 @@ import SwiftUI
 // SettingsAPI so they can be embedded in the existing Settings navigation.
 
 struct AutomationSettingsView: View {
-    @State private var automations: [Automation] = []
+    @State private var automations: [Automation] = SettingsCache.value("automations") ?? []
     @State private var loading = false
     @State private var error: String?
     @State private var showingEditor = false
@@ -55,7 +55,7 @@ struct AutomationSettingsView: View {
     private func load() async {
         loading = true
         defer { loading = false }
-        do { automations = try await SettingsAPI.automations(); error = nil }
+        do { automations = try await SettingsAPI.automations(); error = nil; SettingsCache.save("automations", automations) }
         catch { self.error = error.localizedDescription }
     }
 
@@ -206,7 +206,7 @@ private struct AutomationEditorView: View {
 }
 
 struct GoalSettingsView: View {
-    @State private var goals: [Goal] = []
+    @State private var goals: [Goal] = SettingsCache.value("goals") ?? []
     @State private var loading = false
     @State private var error: String?
     @State private var showingEditor = false
@@ -232,7 +232,7 @@ struct GoalSettingsView: View {
         .task { await load() }.refreshable { await load() }
         .sheet(isPresented: $showingEditor) { NavigationStack { GoalEditorView { body in await create(body) } } }
     }
-    private func load() async { loading = true; defer { loading = false }; do { goals = try await SettingsAPI.goals(); error = nil } catch { self.error = error.localizedDescription } }
+    private func load() async { loading = true; defer { loading = false }; do { goals = try await SettingsAPI.goals(); error = nil; SettingsCache.save("goals", goals) } catch { self.error = error.localizedDescription } }
     private func create(_ body: [String: Any]) async -> String? { do { _ = try await SettingsAPI.createGoal(body); await load(); return nil } catch { return error.localizedDescription } }
 }
 
@@ -308,7 +308,7 @@ private struct GoalEditorView: View {
 }
 
 struct ActionSettingsView: View {
-    @State private var actions: [Action] = []; @State private var loading = false; @State private var error: String?; @State private var showingEditor = false
+    @State private var actions: [Action] = SettingsCache.value("actions") ?? []; @State private var loading = false; @State private var error: String?; @State private var showingEditor = false
     private var records: [Action] { actions.filter { $0.id != nil } }
     var body: some View {
         List {
@@ -325,7 +325,7 @@ struct ActionSettingsView: View {
         .task { await load() }.refreshable { await load() }
         .sheet(isPresented: $showingEditor) { NavigationStack { ActionEditorView { body in await create(body) } } }
     }
-    private func load() async { loading = true; defer { loading = false }; do { actions = try await SettingsAPI.actions(); error = nil } catch { self.error = error.localizedDescription } }
+    private func load() async { loading = true; defer { loading = false }; do { actions = try await SettingsAPI.actions(); error = nil; SettingsCache.save("actions", actions) } catch { self.error = error.localizedDescription } }
     private func create(_ body: [String: Any]) async -> String? { do { _ = try await SettingsAPI.createAction(body); await load(); return nil } catch { return error.localizedDescription } }
 }
 
@@ -414,7 +414,7 @@ private struct ActionInputDraft: Identifiable {
 }
 
 struct SecuritySettingsView: View {
-    @State private var state = SecurityState(); @State private var loading = false; @State private var error: String?; @State private var notice: String?; @State private var showingScanEditor = false; @State private var showingProfileEditor = false
+    @State private var state: SecurityState = SettingsCache.value("security") ?? SecurityState(); @State private var loading = false; @State private var error: String?; @State private var notice: String?; @State private var showingScanEditor = false; @State private var showingProfileEditor = false
     private var scans: [SecurityScan] { (state.scans ?? []).filter { $0.id != nil } }; private var profiles: [SecurityProfile] { (state.profiles ?? []).filter { $0.id != nil } }
     var body: some View {
         List {
@@ -436,7 +436,7 @@ struct SecuritySettingsView: View {
         .sheet(isPresented: $showingScanEditor) { NavigationStack { SecurityScanEditorView(state: state) { body in try await createScan(body) } } }
         .sheet(isPresented: $showingProfileEditor) { NavigationStack { SecurityProfileEditorView { body in await createProfile(body) } } }
     }
-    private func load() async { loading = true; defer { loading = false }; do { state = try await SettingsAPI.security(); error = nil } catch { self.error = error.localizedDescription } }
+    private func load() async { loading = true; defer { loading = false }; do { state = try await SettingsAPI.security(); error = nil; SettingsCache.save("security", state) } catch { self.error = error.localizedDescription } }
     private func createScan(_ body: [String: Any]) async throws -> SecurityScanResult { let result = try await SettingsAPI.createSecurityScan(body); if let sessionId = result.sessionId { notice = "Started interactive session \(sessionId)." } else if let automation = result.automation { notice = "Created recurring automation \(automation.name ?? automation.id ?? "")." } else { notice = "Security scan started." }; await load(); return result }
     private func createProfile(_ body: [String: Any]) async -> String? { do { _ = try await SettingsAPI.createSecurityProfile(body); await load(); return nil } catch { return error.localizedDescription } }
     private func updateProfile(_ profile: SecurityProfile, _ body: [String: Any]) async -> String? { guard let id = profile.id else { return "Security profile ID is missing." }; do { _ = try await SettingsAPI.updateSecurityProfile(id: id, patch: body); await load(); return nil } catch { return error.localizedDescription } }
