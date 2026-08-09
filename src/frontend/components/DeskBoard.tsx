@@ -22,6 +22,14 @@ const POLL_MS = 10000;
 /** A glance, not an inventory. */
 const MAX_ROWS = 6;
 
+/** One of each thing the Desk does — delegate, ask, capture — so the blank
+ *  state teaches the range rather than advertising three features. */
+const EXAMPLES = [
+	"“Look into why the build got slow”",
+	"“What’s on my plate?”",
+	"“Remind me to review that PR tomorrow”",
+];
+
 interface Row {
 	sessionId: string;
 	title: string;
@@ -83,7 +91,24 @@ export function DeskBoard({
 	}, [user]);
 
 	const list = state ? rows(state) : [];
-	if (!list.length) return null;
+	// Nothing needs you: the one moment the Desk has nothing to say, and the
+	// only place there's room to say what it's for. Plain lines rather than
+	// chips — they teach the range (delegate / ask / capture) and then get
+	// out of the way; a row of buttons would be permanent chrome for a daily
+	// user who stopped needing the hint after the first week.
+	if (!list.length) {
+		if (!state) return null;
+		return (
+			<div className="px-3 pt-6 text-left">
+				<div className="text-[12px] font-medium text-faint">Try</div>
+				<div className="mt-1.5 space-y-1 text-[13px] font-medium text-dim">
+					{EXAMPLES.map((e) => (
+						<div key={e}>{e}</div>
+					))}
+				</div>
+			</div>
+		);
+	}
 	// The note tells you how these rows differ, so it earns its place only
 	// when they do — six lines all reading "needs an answer" is decoration.
 	const mixed = new Set(list.map((r) => r.note)).size > 1;
