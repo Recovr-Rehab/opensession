@@ -391,7 +391,7 @@ struct SessionView: View {
                 statusBanner
             }
         }
-        .background(OS1VisualStyle.background.ignoresSafeArea())
+        .background(OS1VisualStyle.chatCanvas.ignoresSafeArea())
         // Bottom inset, not an overlay: the scroll viewport still extends
         // beneath the composer (content scrolls under the floating glass),
         // while the content inset tracks the composer's real height and the

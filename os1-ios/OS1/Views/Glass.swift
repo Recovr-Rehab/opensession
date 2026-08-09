@@ -71,16 +71,16 @@ extension View {
                 // row, which left rows readable right down to the strip.
                 LinearGradient(
                     stops: [
-                        .init(color: OS1VisualStyle.background.opacity(0), location: 0),
-                        .init(color: OS1VisualStyle.background.opacity(veil * 0.55), location: 0.4),
-                        .init(color: OS1VisualStyle.background.opacity(veil), location: 0.8),
-                        .init(color: OS1VisualStyle.background.opacity(veil), location: 1),
+                        .init(color: OS1VisualStyle.chatCanvas.opacity(0), location: 0),
+                        .init(color: OS1VisualStyle.chatCanvas.opacity(veil * 0.55), location: 0.4),
+                        .init(color: OS1VisualStyle.chatCanvas.opacity(veil), location: 0.8),
+                        .init(color: OS1VisualStyle.chatCanvas.opacity(veil), location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .frame(height: ramp)
-                OS1VisualStyle.background.opacity(veil)
+                OS1VisualStyle.chatCanvas.opacity(veil)
                     .frame(height: tail)
             }
             .padding(.bottom, -tail)
@@ -119,17 +119,17 @@ extension View {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
                     // The bars' own band, held at full veil.
-                    OS1VisualStyle.background.opacity(veil)
+                    OS1VisualStyle.chatCanvas.opacity(veil)
                         .frame(height: geometry.safeAreaInsets.top)
                     // Weighted stops for the same reason as the composer's: a
                     // straight ramp only reaches full veil on its very last
                     // row, which left rows legible right up against the glass.
                     LinearGradient(
                         stops: [
-                            .init(color: OS1VisualStyle.background.opacity(veil), location: 0),
-                            .init(color: OS1VisualStyle.background.opacity(veil * 0.88), location: 0.22),
-                            .init(color: OS1VisualStyle.background.opacity(veil * 0.5), location: 0.55),
-                            .init(color: OS1VisualStyle.background.opacity(0), location: 1),
+                            .init(color: OS1VisualStyle.chatCanvas.opacity(veil), location: 0),
+                            .init(color: OS1VisualStyle.chatCanvas.opacity(veil * 0.88), location: 0.22),
+                            .init(color: OS1VisualStyle.chatCanvas.opacity(veil * 0.5), location: 0.55),
+                            .init(color: OS1VisualStyle.chatCanvas.opacity(0), location: 1),
                         ],
                         startPoint: .top,
                         endPoint: .bottom

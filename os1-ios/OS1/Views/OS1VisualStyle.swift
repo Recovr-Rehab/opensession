@@ -18,10 +18,31 @@ enum OS1VisualStyle {
     static let text = Color(uiColor: .label)
     static let textDim = Color(uiColor: .secondaryLabel)
     static let textFaint = Color(uiColor: .tertiaryLabel)
+    /// The transcript's canvas — the session screen behind the messages, and
+    /// the washes that ramp into it. Its own colour rather than `background`
+    /// because everything that floats on it in light mode is white: the
+    /// composer, the nav-bar glass, the scroll-to-bottom pill. On
+    /// `.systemBackground` (pure white) those can only show a shadow; a hair
+    /// of grey under them is what makes them read as floating. Dark keeps
+    /// `background` — there the composer is already lighter than the page, so
+    /// there is nothing to fix and nothing moves.
+    ///
+    /// Deliberately neutral rather than `.secondarySystemBackground`: that one
+    /// is #F2F2F7, whose blue cast reads cold beside the composer's near-white
+    /// glass — the same reason `flapSurface` below is hand-rolled.
+    static let chatCanvas = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? .systemBackground
+            : UIColor(white: 0.980, alpha: 1)
+    })
+    /// The user's own bubble, on `chatCanvas`. The light value steps down with
+    /// the canvas so the bubble keeps the separation it had on white; left at
+    /// 0.949 it would sit ~8/255 off its background instead of ~13, which is
+    /// close to invisible on a phone in daylight.
     static let userMessage = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(white: 0.192, alpha: 1)
-            : UIColor(white: 0.949, alpha: 1)
+            : UIColor(white: 0.925, alpha: 1)
     })
     /// The queue flap tucked behind the composer. Deliberately not `raised`:
     /// on iOS that resolves to `.secondarySystemBackground`, whose blue-grey
@@ -44,8 +65,13 @@ enum OS1VisualStyle {
     static let text = Color(nsColor: .labelColor)
     static let textDim = Color(nsColor: .secondaryLabelColor)
     static let textFaint = Color(nsColor: .tertiaryLabelColor)
-    /// Same neutral gray as the iOS user bubble, resolved per appearance,
-    /// so the two apps read as one product.
+    /// The Mac window background is already a grey the composer floats on, so
+    /// the transcript needs no canvas of its own here — see the iOS note.
+    static let chatCanvas = Color(nsColor: .windowBackgroundColor)
+    /// Neutral gray, resolved per appearance. It does NOT follow iOS's light
+    /// value down: `windowBackgroundColor` is itself around #ECECEC in light,
+    /// so the bubble is the LIFTED surface on the Mac and has to stay above
+    /// its background rather than step below it.
     static let userMessage = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             ? NSColor(white: 0.192, alpha: 1)
