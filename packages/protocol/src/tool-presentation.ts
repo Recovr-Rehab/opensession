@@ -428,3 +428,20 @@ export function toolPresentation(entry: TranscriptEntry): ToolPresentation {
     ...(stats ? { lineStats: stats } : {}),
   };
 }
+
+/**
+ * Tag every tool call in a batch with its presentation, on the way to a
+ * client. Same contract as the notice classifier: idempotent, and the same
+ * array back when there was nothing to tag.
+ */
+export function withToolPresentations(
+  entries: TranscriptEntry[],
+): TranscriptEntry[] {
+  let changed = false;
+  const out = entries.map((e) => {
+    if (e.type !== "tool_use" || e.presentation) return e;
+    changed = true;
+    return { ...e, presentation: toolPresentation(e) };
+  });
+  return changed ? out : entries;
+}

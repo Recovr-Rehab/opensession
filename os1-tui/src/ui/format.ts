@@ -23,28 +23,39 @@ export function relativeTime(stamp?: string | null, now = Date.now()): string {
 }
 
 /** First meaningful path/command-ish value in a tool's input, for the one-liner. */
-function toolArgument(input: unknown): string {
-	if (!input || typeof input !== "object") {
-		return typeof input === "string" ? input : "";
+/**
+ * The server's structured `detail` as one line. Kept here rather than shared
+ * for the same reason the types above are hand-mirrored: this package
+ * compiles standalone. What it must NOT do is decide what the call is — that
+ * arrives already decided.
+ */
+function renderToolDetail(
+	detail: NonNullable<TranscriptEntry["presentation"]>["detail"],
+): string {
+	switch (detail.kind) {
+		case "path":
+			return shortenPath(detail.path);
+		case "paths": {
+			const shown = detail.paths
+				.map((path, i) =>
+					[detail.labels?.[i], shortenPath(path)].filter(Boolean).join(" "),
+				)
+				.join("  ·  ");
+			return detail.more ? `${shown}  ·  +${detail.more}` : shown;
+		}
+		case "command":
+			return detail.command.split("\n")[0] ?? "";
+		case "text":
+			return [detail.text, detail.path ? shortenPath(detail.path) : ""]
+				.filter(Boolean)
+				.join(" ");
+		case "todo":
+			return [detail.current, `${detail.done}/${detail.total} done`]
+				.filter(Boolean)
+				.join("  ·  ");
+		default:
+			return "";
 	}
-	const record = input as Record<string, unknown>;
-	for (const key of [
-		"file_path",
-		"path",
-		"command",
-		"pattern",
-		"query",
-		"prompt",
-		"description",
-		"url",
-		"notebook_path",
-	]) {
-		const value = record[key];
-		if (typeof value === "string" && value.trim()) return value.trim();
-	}
-	// Nothing recognisable — show the keys so the line still says something.
-	const keys = Object.keys(record);
-	return keys.length ? `{${keys.slice(0, 3).join(", ")}}` : "";
 }
 
 /** Collapse a home-anchored path so the interesting tail survives narrow panes. */
@@ -95,12 +106,16 @@ export function formatEntry(entry: TranscriptEntry): DisplayEntry | null {
 			};
 
 		case "tool_use": {
-			const argument = toolArgument(entry.toolInput);
+			// What the call IS comes off the entry: the server derives it once
+			// (packages/protocol/src/tool-presentation.ts) so this pane, the web
+			// viewer and the phone name the same call the same way. Only the
+			// rendering is ours. Older servers send none, hence the fallback.
+			const shown = entry.presentation;
 			return {
 				id: entry.id,
 				kind: "tool",
-				prefix: `▸ ${entry.toolName ?? "tool"}`,
-				body: argument ? shortenPath(argument.split("\n")[0] ?? "") : "",
+				prefix: `▸ ${shown ? shown.name : (entry.toolName ?? "tool")}`,
+				body: shown ? renderToolDetail(shown.detail) : "",
 			};
 		}
 

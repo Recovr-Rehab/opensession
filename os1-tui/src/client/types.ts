@@ -54,6 +54,25 @@ export type TranscriptEntry = {
 	contentClamped?: boolean;
 	contentLength?: number;
 	images?: string[] | null;
+	/** What this tool call is, derived server-side (the repo's
+	 *  packages/protocol/src/tool-presentation.ts) — this pane names calls
+	 *  from it rather than guessing at the raw tool input. Mirrored by hand
+	 *  like everything else here; `detail` is a tagged union, and an unknown
+	 *  `kind` from a newer server simply renders as nothing. */
+	presentation?: {
+		canonical: string;
+		mcpServer?: string;
+		name: string;
+		family: string;
+		detail:
+			| { kind: "path"; path: string }
+			| { kind: "paths"; paths: string[]; labels?: string[]; more?: number }
+			| { kind: "command"; command: string }
+			| { kind: "text"; text: string; path?: string }
+			| { kind: "todo"; total: number; done: number; current?: string }
+			| { kind: "none" };
+		lineStats?: { additions: number; deletions: number };
+	};
 };
 
 export type QueueItem = { id: string; content: string; user?: string | null };

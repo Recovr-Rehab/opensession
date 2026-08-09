@@ -22,6 +22,7 @@
  */
 
 import type { EntryNotice, NoticeKind } from "./notices";
+import type { ToolPresentation } from "./tool-presentation";
 
 /** One rendered line of a session's durable transcript (the jsonl record). */
 export interface TranscriptEntry {
@@ -66,6 +67,9 @@ export interface TranscriptEntry {
    *  the marker is gone by the time an entry reaches the classifier; adding a
    *  kind must not add another boolean here. */
   noticeKind?: NoticeKind;
+  /** What this tool call is and what it did (tool_use entries only), derived
+   *  server-side so no client re-parses tool input — see tool-presentation.ts. */
+  presentation?: ToolPresentation;
   /** How this entry reads: an operational notice rather than a message. Set by
    *  classifyEntry (notices.ts) on the way to a client, which also strips the
    *  delivery plumbing out of `content` — so a client renders `notice.title`,

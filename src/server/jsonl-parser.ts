@@ -3,6 +3,7 @@ import { openSync, readSync, closeSync, fstatSync } from "fs";
 import { existsSync } from "fs";
 import type { TranscriptEntry } from "./types";
 import { classifyEntries } from "@tellahq/opensession-protocol/notices";
+import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
 import { configuredIntegration } from "./config";
@@ -1161,7 +1162,8 @@ export function clampEntriesForWire(
 
 /**
  * Everything a batch of entries needs before it leaves the server: classify
- * how each one reads (notices.ts), then clamp what's left.
+ * how each one reads (notices.ts), say what each tool call is
+ * (tool-presentation.ts), then clamp what's left.
  *
  * That order is load-bearing. The classifier strips delivery plumbing —
  * sentinels, "[Name] " prefixes, the "💬 X answered" header — out of
@@ -1176,7 +1178,10 @@ export function entriesForWire(
   entries: TranscriptEntry[],
   maxBytes: number = WIRE_CLAMP_BYTES
 ): TranscriptEntry[] {
-  return clampEntriesForWire(classifyEntries(entries), maxBytes);
+  return clampEntriesForWire(
+    withToolPresentations(classifyEntries(entries)),
+    maxBytes
+  );
 }
 
 function safeStringify(v: unknown): string {

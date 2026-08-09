@@ -13,6 +13,7 @@ import { audit } from "../audit";
 import { pendingAsks } from "../asks";
 import { transcriptMatchSnippet } from "../jsonl-parser";
 import { classifyEntries, classifyEntry } from "@tellahq/opensession-protocol/notices";
+import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { transcriptDbPath, transcriptStore } from "../transcript-store";
 import { clearSessionFileArchive } from "../plain-archive";
 import { editPrReviewers, isNoPrError, prMetaForBranch } from "../pr-info";
@@ -379,7 +380,9 @@ export async function handleSessionsRoutes(
 		// sessions whose history spans engines). Classified on the way out,
 		// like every other send site — this is what the native clients read.
 		return Response.json(
-			classifyEntries(await mergedSessionTranscriptAsync(session)),
+			withToolPresentations(
+				classifyEntries(await mergedSessionTranscriptAsync(session)),
+			),
 		);
 	}
 
