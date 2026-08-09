@@ -52,7 +52,7 @@
  */
 export const VIEWER_HEADER =
 	"viewer-header flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 " +
-	"bg-surface px-4 " +
+	"bg-chat px-4 " +
 	"[@supports_not_(animation-timeline:scroll())]:border-b " +
 	"[@supports_not_(animation-timeline:scroll())]:border-b-[var(--top-divider)] " +
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
@@ -217,7 +217,7 @@ export const VIEWER_MESSAGES_REGION =
  * native app's bar does too.
  */
 export const VIEWER_MESSAGES =
-	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
+	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain bg-chat " +
 	// Keep the reader's place when content loads or expands above them.
 	"[overflow-anchor:auto] px-5 pt-[18px] pb-[var(--wash-depth)] " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
@@ -251,7 +251,7 @@ export const VIEWER_MESSAGES =
  * the thing content actually disappears behind.
  */
 export const VIEWER_INPUT =
-	"relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 bg-surface px-5 pt-1 pb-3.5 " +
+	"relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 bg-chat px-5 pt-1 pb-3.5 " +
 	"before:absolute before:inset-x-0 before:bottom-full before:h-[var(--wash-depth)] " +
 	"before:pointer-events-none before:[background:var(--wash-down)] before:content-[''] " +
 	// Phone: clear the home indicator rather than jamming the composer against
