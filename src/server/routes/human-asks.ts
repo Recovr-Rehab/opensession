@@ -7,6 +7,8 @@
  */
 
 import type { RouteContext } from "./context";
+import { requestUser } from "./context";
+import { userMatchesAny } from "../shared/user-mappings";
 import { sendSlackMessage } from "../../agents/slack/slack-api";
 import { cancelAsk } from "../human-asks";
 import { personaName } from "../config";
@@ -24,6 +26,37 @@ export async function handleHumanAsksRoutes(
 				includeAnswered: url.searchParams.get("all") === "1",
 			}),
 		});
+	}
+
+	// Answer an ask from the UI (the Desk board) rather than over Slack. Only
+	// the teammate it was addressed to may answer: an ask is a named request,
+	// and letting anyone resolve it would put words in their mouth and unblock
+	// a run on someone else's authority.
+	const askAnswerMatch = path.match(/^\/api\/human-asks\/([^/]+)\/answer$/);
+	if (askAnswerMatch && req.method === "POST") {
+		const body = await req.json().catch(() => null);
+		const answer = typeof body?.answer === "string" ? body.answer.trim() : "";
+		if (!answer)
+			return Response.json(
+				{ error: "expected { answer: string }" },
+				{ status: 400 },
+			);
+		const user = requestUser(ctx, body?.user);
+		if (!user) return Response.json({ error: "missing user" }, { status: 400 });
+		const { getAsk, resolveAskFromUI } = await import("../human-asks");
+		const ask = getAsk(askAnswerMatch[1]);
+		if (!ask) return Response.json({ error: "Not found" }, { status: 404 });
+		if (!userMatchesAny(user, [ask.person?.name].filter(Boolean) as string[]))
+			return Response.json(
+				{ error: "This question was asked of someone else" },
+				{ status: 403 },
+			);
+		return resolveAskFromUI(ask.id, answer, user)
+			? Response.json({ ok: true })
+			: Response.json(
+					{ error: "That question is no longer awaiting an answer" },
+					{ status: 409 },
+				);
 	}
 
 	const askNudgeMatch = path.match(

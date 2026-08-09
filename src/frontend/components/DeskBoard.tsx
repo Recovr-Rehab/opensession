@@ -163,14 +163,28 @@ export function DeskBoard({
 		!waiting.length && !state.running.length && !state.review.length;
 
 	function answer(item: DeskWorkItem, option: string) {
-		if (!item.question) return;
+		const q = item.question;
+		if (!q) return;
 		setAnswered((prev) => ({ ...prev, [item.sessionId]: true }));
+		if (q.kind === "human") {
+			// An ask_human addressed to this user — resolved over REST, which
+			// also carries it back to whichever Slack thread posed it.
+			void fetch(
+				`${BASE_PATH}/api/human-asks/${encodeURIComponent(q.questionId)}/answer`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ answer: option, user }),
+				},
+			);
+			return;
+		}
 		send({
 			type: "answer_question",
 			sessionId: item.sessionId,
-			questionId: item.question.questionId,
+			questionId: q.questionId,
 			// Keyed by the question text, matching AskCard's answer map.
-			answers: { [item.question.text]: option },
+			answers: { [q.text]: option },
 		});
 	}
 
@@ -187,22 +201,6 @@ export function DeskBoard({
 				</div>
 			) : (
 				<>
-					{!!state.review.length && (
-						<Section label="Needs your eyes" tone="review">
-							{state.review.map((item) => (
-								<Card
-									key={item.sessionId}
-									item={item}
-									// Only say something worth saying: "finished, unread" is
-									// what the section header already means, and repeating it
-									// under every card is filler.
-									sub={prLabel(item)}
-									onOpen={() => onOpenSession(item.sessionId)}
-								/>
-							))}
-						</Section>
-					)}
-
 					{!!waiting.length && (
 						<Section label="Waiting on you" tone="waiting">
 							{waiting.map((item) => (
@@ -232,6 +230,22 @@ export function DeskBoard({
 										</Button>
 									</div>
 								</Card>
+							))}
+						</Section>
+					)}
+
+					{!!state.review.length && (
+						<Section label="Needs your eyes" tone="review">
+							{state.review.map((item) => (
+								<Card
+									key={item.sessionId}
+									item={item}
+									// Only say something worth saying: "finished, unread" is
+									// what the section header already means, and repeating it
+									// under every card is filler.
+									sub={prLabel(item)}
+									onOpen={() => onOpenSession(item.sessionId)}
+								/>
 							))}
 						</Section>
 					)}

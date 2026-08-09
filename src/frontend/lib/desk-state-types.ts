@@ -16,7 +16,12 @@ export interface DeskWorkItem {
 	title: string;
 	repo?: string;
 	lastActivity: string;
-	question?: { questionId: string; text: string; options: string[] };
+	question?: {
+		kind: "session" | "human";
+		questionId: string;
+		text: string;
+		options: string[];
+	};
 	pr?: DeskPr;
 }
 

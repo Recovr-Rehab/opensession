@@ -8,19 +8,27 @@
  * is rebuilt PER TURN (buildSessionNote runs per prompt), never cached onto
  * the session.
  *
- * Three buckets, and they only ever contain the user's OWN sessions:
- *   waiting — blocked on an AskUserQuestion; the user is the only unblocker.
+ * Three buckets:
+ *   waiting — a question the user is the only one who can answer. This is the
+ *             one bucket that reaches beyond their own sessions: an ask
+ *             ADDRESSED to them (opensession-humans, human-asks.ts) blocks
+ *             them whoever started the session it came from, and answering it
+ *             is the highest-value thing they can do from a phone.
  *   running — in flight right now.
  *   review  — finished recently and not yet read: the result of work they
  *             handed off. This is the Desk's pull, and it drains by itself as
  *             sessions are read, which is the thing a todo list can't do.
+ *
+ * The UI orders them waiting → review → running: a blocked question is work
+ * that has STOPPED for want of them, which outranks output merely unread.
  *
  * Deliberately NOT a feed (see desk.ts's module doc and the deleted HQ
  * feature): everything here is work the user themselves started, surfaced only
  * when they summon the Desk.
  */
 import { pendingAsks } from "./asks";
-import { getCachedSessions } from "./session-cache";
+import { listAsks as listHumanAsks } from "./human-asks";
+import { findSession, getCachedSessions } from "./session-cache";
 import { getReads, isUnread } from "./reads";
 import { listTodos } from "./todos";
 import { gitIdentityFor } from "./shared/user-mappings";
@@ -45,9 +53,17 @@ export interface DeskWorkItem {
 	repo?: string;
 	lastActivity: string;
 	/** Only on `waiting` items — what it's asking, and the offered options.
-	 *  `questionId` + the verbatim `text` are what an inline answer needs:
-	 *  the answer map is keyed by question text (see AskCard). */
-	question?: { questionId: string; text: string; options: string[] };
+	 *  The two kinds answer through different transports, so the client has to
+	 *  know which: `session` is the run's own AskUserQuestion card (answered
+	 *  over the socket, keyed by the verbatim question text — see AskCard),
+	 *  `human` is an ask_human addressed to this user (answered over
+	 *  `POST /api/human-asks/:id/answer`). */
+	question?: {
+		kind: "session" | "human";
+		questionId: string;
+		text: string;
+		options: string[];
+	};
 	/** Only when the session's branch has a PR. */
 	pr?: DeskPr;
 }
@@ -77,6 +93,17 @@ function samePerson(a: string | null | undefined, b: string | undefined): boolea
 	const ia = gitIdentityFor(a);
 	const ib = gitIdentityFor(b);
 	return !!(ia && ib && ia.email === ib.email);
+}
+
+/** ask_human questions are composed for Slack, so they arrive carrying its
+ *  bold markers. Both surfaces here render one plain line — strip the markup
+ *  rather than showing the asterisks. */
+function plainText(s: string): string {
+	return s
+		.replace(/\*\*(.+?)\*\*/g, "$1")
+		.replace(/\*(.+?)\*/g, "$1")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 const RUNNING_STATES = new Set([
@@ -113,7 +140,7 @@ function askSummary(sessionId: string): DeskWorkItem["question"] | undefined {
 					.filter(Boolean)
 					.slice(0, 4)
 			: [];
-	return { questionId: pending.questionId, text, options };
+	return { kind: "session" as const, questionId: pending.questionId, text, options };
 }
 
 function prFor(s: UnifiedSession): DeskPr | undefined {
@@ -179,6 +206,33 @@ export function buildDeskState(user: string): DeskState {
 		const mark = reads[s.id];
 		if (mark && !isUnread(s.lastActivity, mark)) continue;
 		review.push(toItem(s));
+	}
+
+	// Asks addressed to this user (ask_human), whoever started the session they
+	// came from — being the named answerer is what makes it theirs. Sessions
+	// already in `waiting` via their own pending card aren't listed twice.
+	const seen = new Set(waiting.map((w) => w.sessionId));
+	for (const ask of listHumanAsks()) {
+		// "delivered" only: a scheduled ask hasn't been put to them yet, and
+		// showing a question nobody has asked is worse than showing nothing.
+		if (ask.state !== "delivered") continue;
+		if (seen.has(ask.sessionId)) continue;
+		if (!samePerson(ask.person?.name, user)) continue;
+		const session = findSession(ask.sessionId);
+		seen.add(ask.sessionId);
+		waiting.push({
+			sessionId: ask.sessionId,
+			title: session?.title || "Untitled session",
+			repo: session?.repo,
+			lastActivity: session?.lastActivity || ask.createdAt,
+			question: {
+				kind: "human" as const,
+				questionId: ask.id,
+				text: plainText(ask.question),
+				options: (ask.options || []).slice(0, 4),
+			},
+			...(session && prFor(session) ? { pr: prFor(session) } : {}),
+		});
 	}
 
 	waiting.sort(newestFirst);
