@@ -324,6 +324,11 @@ struct SessionView: View {
                     // opening hold ends the moment they touch the transcript.
                     .onScrollPhaseChange { _, phase in
                         if phase == .interacting { endHold() }
+                        // Reading counts as being here: a hand on the transcript
+                        // is what keeps our face on this session (the view model
+                        // throttles it). Output scrolling past on its own does
+                        // not — `.idle` is exactly that case.
+                        if phase != .idle { viewModel.userDidInteract() }
                     }
                     // Both entry points into a conversation arm the hold: a
                     // cached one is already loaded when the view appears, so
@@ -2036,6 +2041,8 @@ private struct SessionInputBar: View {
                 }
                 .onChange(of: viewModel.draft) { previous, draft in
                     if draft.isEmpty { draftWrapped = false }
+                    // Typing is the loudest possible "I'm here".
+                    viewModel.userDidInteract()
                     // Starting to write is a statement about where you want to
                     // be: at the end of the conversation you're replying to.
                     if previous.isEmpty, !draft.isEmpty { viewModel.draftStarted() }

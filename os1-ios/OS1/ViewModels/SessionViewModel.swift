@@ -482,13 +482,42 @@ final class SessionViewModel {
             .lowercased() ?? ""
     }
 
+    /// When we last told the server its owner is really here. Throttles
+    /// `userDidInteract()`, which fires on every scroll tick and keystroke.
+    private var lastPresenceRefresh = Date.distantPast
+    /// Comfortably inside the server's presence window, rare enough to cost
+    /// nothing on a session someone reads for an hour.
+    private static let presenceRefreshInterval: TimeInterval = 45
+
     /// The app went to the background. The watch stays — the transcript has to
     /// keep streaming for unread counts and notifications — but our face comes
     /// off the session, so a phone asleep in a pocket stops claiming its owner
     /// is reading along.
     func appDidEnterBackground() {
         guard !stopped else { return }
+        // Coming back has to re-claim the face immediately, not wait out the
+        // refresh interval below.
+        lastPresenceRefresh = .distantPast
         socket?.setAway(true)
+    }
+
+    /// The person did something with this session — scrolled the transcript,
+    /// typed, sent. Presence is EARNED, not held: the server ages a face off a
+    /// session unless the client keeps saying its owner is really there
+    /// (`PRESENCE_TTL_MS` in ws-hub.ts), so this is what keeps ours alive.
+    ///
+    /// The point is what happens when it is NOT called. A Mac left open on a
+    /// session overnight, or a phone face-up on a desk, pays nothing and drops
+    /// off within a couple of minutes — the app being open stops being a claim
+    /// that anyone is reading. Backgrounding still drops presence at once
+    /// (`appDidEnterBackground`); this covers the foreground half.
+    func userDidInteract() {
+        guard !stopped, let socket, connectionState == .connected else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastPresenceRefresh) >= Self.presenceRefreshInterval
+        else { return }
+        lastPresenceRefresh = now
+        socket.setAway(false)
     }
 
     func appDidBecomeActive() {
@@ -510,6 +539,7 @@ final class SessionViewModel {
         socket.watch(sessionId: session.id)
         // Back on screen: show our face again. (A reconnect starts present, so
         // only a socket that survived the background needs telling.)
+        lastPresenceRefresh = Date()
         socket.setAway(false)
         resyncProbeTask?.cancel()
         resyncProbeTask = Task { [weak self] in

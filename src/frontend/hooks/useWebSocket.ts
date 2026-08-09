@@ -14,8 +14,15 @@ const HEARTBEAT_MS = 20_000;
 const RESUME_PROBE_MS = 4_000;
 // How long a visible-but-untouched tab still counts as "here". Long enough to
 // read a transcript without your face blinking off, short enough that a session
-// left open behind another window stops claiming you.
-const IDLE_MS = 5 * 60_000;
+// left open behind another window stops claiming you. The server expires a
+// quiet socket on its own timer (PRESENCE_TTL_MS in ws-hub.ts); this is the
+// same promise made early and explicitly, so the face comes off at a
+// predictable moment instead of on the next sweep.
+const IDLE_MS = 90_000;
+// While someone IS here, presence has to be re-earned: the server times a
+// socket out, so a person reading and scrolling re-sends "still here" at this
+// cadence — comfortably inside the server's window, rare enough to be free.
+const ACTIVE_REFRESH_MS = 45_000;
 // What proves a person is at the keyboard. Passive and cheap: the handler
 // throttles itself to one call a second.
 const ACTIVITY_EVENTS = [
@@ -223,13 +230,15 @@ export function useWebSocket() {
     // recently. The watch deliberately outlives both — a backgrounded tab still
     // streams — so presence needs its own signal, or a session left open on a
     // second monitor keeps claiming someone is reading it.
-    const sendAway = (away: boolean) => {
-      if (awayRef.current === away) return;
+    let lastSentAway = 0;
+    const sendAway = (away: boolean, force = false) => {
+      if (awayRef.current === away && !force) return;
       awayRef.current = away;
       const ws = wsRef.current;
       // Never queued: a stale "I'm back" replayed after an outage would lie.
       // A reconnect starts present, and onopen re-sends away if we still are.
       if (ws?.readyState !== WebSocket.OPEN) return;
+      lastSentAway = Date.now();
       try {
         ws.send(JSON.stringify({ type: "away", away }));
       } catch {}
@@ -242,7 +251,11 @@ export function useWebSocket() {
       // While away the point is to come back at once, so it skips the throttle.
       if (!awayRef.current && now - lastActivity < 1000) return;
       lastActivity = now;
-      sendAway(false);
+      // Re-send even when we were already here: the server ages presence out,
+      // so staying visible to teammates means saying so every so often. A
+      // reader who has stopped moving simply stops paying it, and their face
+      // comes off — which is the point.
+      sendAway(false, now - lastSentAway >= ACTIVE_REFRESH_MS);
       clearTimeout(idleTimer.current);
       idleTimer.current = setTimeout(() => sendAway(true), IDLE_MS);
     };

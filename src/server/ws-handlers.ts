@@ -35,7 +35,7 @@ import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
 import { startTranscriptWatch } from "./transcript-watch";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls } from "./uploads";
-import { BOOT_ID, allClients, b64decode, b64encode, broadcastToNote, broadcastToSession, globalPresenceFrame, joinNote, joinSession, leaveNote, leaveSession, revalidateLocalClients, setClientAway } from "./ws-hub";
+import { BOOT_ID, allClients, b64decode, b64encode, broadcastToNote, broadcastToSession, globalPresenceFrame, joinNote, joinSession, leaveNote, leaveSession, markClientActive, revalidateLocalClients, setClientAway } from "./ws-hub";
 import { existsSync, readFileSync, statSync, watch } from "fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -459,6 +459,13 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			return;
 		}
 		if (routeCloudWebSocketMessage(ws, msg)) return;
+
+		// Anything that isn't a heartbeat is a person doing something, so it
+		// refreshes this socket's presence (ws-hub's TTL — a face means "here
+		// now"). `away` carries its own stamp; Yjs awareness is excluded because
+		// it ticks on its own timer whether or not anyone is typing.
+		if (msg.type !== "ping" && msg.type !== "away" && msg.type !== "note_awareness")
+			markClientActive(ws);
 
 		switch (msg.type) {
 			case "ping": {

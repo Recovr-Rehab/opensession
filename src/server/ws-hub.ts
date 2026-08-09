@@ -70,10 +70,15 @@ export interface WSClientData {
 	 * unread/notifications work) but nobody is LOOKING at it — the tab is
 	 * hidden, or there's been no input for a while. Presence hides these: a
 	 * face on a row must mean "here now", not "left a tab open on it".
-	 * Undefined for clients that never send the frame (older builds, native) —
-	 * they read as present, exactly as before.
 	 */
 	away?: boolean;
+	/**
+	 * When this socket's owner last did something (see PRESENCE_TTL_MS). Every
+	 * frame that isn't a heartbeat refreshes it, and clients re-send `away:
+	 * false` while the person keeps using the app — so presence expires on its
+	 * own for a client that has gone quiet, whatever it forgot to tell us.
+	 */
+	activeAt?: number;
 	/** This viewer understands ordered session_feed envelopes. */
 	supportsFeed?: boolean;
 	sinceFeedSeq?: number;
@@ -102,6 +107,9 @@ export function joinSession(ws: any, sessionId: string) {
 	// Global presence shows each person once, at their most recent join — this
 	// stamp is how a two-tab user resolves to a single row.
 	ws.data.watchJoinedAt = Date.now();
+	// Opening a session is itself proof you're here; the TTL runs from now.
+	ws.data.activeAt = Date.now();
+	ensurePresenceSweep();
 	broadcastPresence(sessionId);
 }
 
@@ -113,6 +121,7 @@ export function leaveSession(ws: any) {
 		set.delete(ws);
 		if (set.size === 0) {
 			sessionWatchers.delete(sessionId);
+			lastPresence.delete(sessionId);
 			broadcastGlobalPresence();
 		} else broadcastPresence(sessionId);
 	}
@@ -141,32 +150,104 @@ export function broadcastToSession(
 	}
 }
 
-/** Watching AND looking: an away socket keeps its stream but shows no face. */
-function isPresent(ws: any): boolean {
-	return ws?.data?.away !== true;
+/**
+ * How long a face outlives the last thing its owner actually did.
+ *
+ * Presence is EARNED, never held. Clients refresh it while a person is really
+ * using the app, so a window merely left open on a session — a second monitor,
+ * a desktop app parked on it overnight, a phone in a pocket — drops off within
+ * a couple of minutes. That's the whole contract of a face here: "with you
+ * right now", which is exactly what makes it safe. It can never accumulate
+ * into "has been watching you all afternoon", and a teammate cannot leave
+ * their face sitting on your session by accident or on purpose.
+ *
+ * The cost of expiring is small and self-correcting: a reader who has gone
+ * still for two minutes drops off and reappears on their next scroll.
+ */
+const PRESENCE_TTL_MS = 2 * 60_000;
+
+/** How often expired faces are noticed. Presence broadcasts on CHANGE only, so
+ *  without a sweep a face that simply stopped refreshing would never come off
+ *  the other viewers' screens. */
+const PRESENCE_SWEEP_MS = 15_000;
+
+/** Watching AND looking: an away socket keeps its stream but shows no face,
+ *  and so does one whose owner hasn't done anything in PRESENCE_TTL_MS. */
+function isPresent(ws: any, now = Date.now()): boolean {
+	const data = ws?.data;
+	if (!data || data.away === true) return false;
+	return now - (data.activeAt || 0) < PRESENCE_TTL_MS;
 }
 
 /**
- * A viewer went hidden/idle (or came back). The socket keeps watching — only
- * its visibility to other people changes, so both presence frames go out again.
+ * Somebody did something on this socket — the TTL restarts. Deliberately does
+ * NOT clear `away`: a hidden tab still sends frames (a reconnect re-watches,
+ * a queued prompt flushes), and none of that means its owner is back looking.
  */
-export function setClientAway(ws: any, away: boolean) {
-	if (!ws?.data || ws.data.away === away) return;
-	ws.data.away = away;
+export function markClientActive(ws: any) {
+	if (!ws?.data) return;
+	const was = isPresent(ws);
+	ws.data.activeAt = Date.now();
+	if (was) return; // already showing a face — nothing to tell anyone
 	const sessionId = ws.data.watchingSessionId;
 	if (sessionId) broadcastPresence(sessionId);
 	else broadcastGlobalPresence();
 }
 
+/**
+ * A viewer went hidden/idle (or came back). The socket keeps watching — only
+ * its visibility to other people changes, so both presence frames go out again.
+ * `away: false` doubles as the activity refresh: clients re-send it while the
+ * person is still at the keyboard, which is what keeps a face alive.
+ */
+export function setClientAway(ws: any, away: boolean) {
+	if (!ws?.data) return;
+	const was = isPresent(ws);
+	ws.data.away = away;
+	if (!away) ws.data.activeAt = Date.now();
+	if (isPresent(ws) === was) return;
+	const sessionId = ws.data.watchingSessionId;
+	if (sessionId) broadcastPresence(sessionId);
+	else broadcastGlobalPresence();
+}
+
+/** Last frame sent per session / app-wide, so a sweep that changes nothing
+ *  stays silent instead of waking every client every 15s. */
+const lastPresence: Map<string, string> = (g.__lastPresence ??= new Map());
+
 function broadcastPresence(sessionId: string) {
 	const set = sessionWatchers.get(sessionId);
+	const now = Date.now();
 	const viewers = set
 		? Array.from(set)
-				.filter(isPresent)
+				.filter((ws) => isPresent(ws, now))
 				.map((ws: any) => ws.data?.user || "Anonymous")
 		: [];
-	broadcastToSession(sessionId, { type: "presence", sessionId, viewers });
+	const key = viewers.join("\u0000");
+	if (lastPresence.get(sessionId) !== key) {
+		lastPresence.set(sessionId, key);
+		broadcastToSession(sessionId, { type: "presence", sessionId, viewers });
+	}
+	if (!set) lastPresence.delete(sessionId);
 	broadcastGlobalPresence();
+}
+
+/**
+ * Expired faces come off on their own. Runs only while somebody is watching
+ * something, and each broadcast is change-gated, so a quiet server is quiet.
+ */
+function ensurePresenceSweep() {
+	if (g.__presenceSweep) return;
+	g.__presenceSweep = setInterval(() => {
+		if (sessionWatchers.size === 0) {
+			clearInterval(g.__presenceSweep);
+			g.__presenceSweep = null;
+			return;
+		}
+		for (const sessionId of [...sessionWatchers.keys()])
+			broadcastPresence(sessionId);
+	}, PRESENCE_SWEEP_MS);
+	g.__presenceSweep?.unref?.();
 }
 
 /**
@@ -212,7 +293,14 @@ export function globalPresenceFrame() {
 }
 
 function broadcastGlobalPresence() {
-	broadcastToAll(globalPresenceFrame());
+	const frame = JSON.stringify(globalPresenceFrame());
+	if (g.__lastGlobalPresence === frame) return;
+	g.__lastGlobalPresence = frame;
+	for (const ws of allClients) {
+		try {
+			ws.send(frame);
+		} catch {}
+	}
 }
 
 // ── Collaborative notes fan-out ───────────────────────────────────────────

@@ -50,8 +50,15 @@ describe("revalidateLocalClients", () => {
 });
 
 describe("computeGlobalPresence", () => {
-	const viewer = (user: string | null, at: number, away?: boolean) => ({
-		data: { user, watchJoinedAt: at, away },
+	// `activeAt` defaults to now: presence is earned by recent activity, so a
+	// fixture that never refreshed reads as gone (the last test below).
+	const viewer = (
+		user: string | null,
+		at: number,
+		away?: boolean,
+		activeAt = Date.now(),
+	) => ({
+		data: { user, watchJoinedAt: at, away, activeAt },
 	});
 	const watchers = (entries: Record<string, any[]>) =>
 		new Map(Object.entries(entries).map(([id, set]) => [id, new Set(set)]));
@@ -80,6 +87,18 @@ describe("computeGlobalPresence", () => {
 				}),
 			),
 		).toEqual([{ user: "Ada", sessionId: "looking" }]);
+	});
+
+	test("a window left open stops claiming its owner once it goes quiet", () => {
+		expect(
+			computeGlobalPresence(
+				watchers({
+					// Parked on the session since this morning, nothing touched it
+					// since: the watch survives, the face does not.
+					parked: [viewer("Ada", 1, false, Date.now() - 10 * 60_000)],
+				}),
+			),
+		).toEqual([]);
 	});
 
 	test("anonymous viewers stay out — there's nobody to follow", () => {
