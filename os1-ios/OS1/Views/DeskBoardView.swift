@@ -22,14 +22,6 @@ struct DeskBoardView: View {
 
     private let poll = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
 
-    /// One of each thing the Desk does — delegate, ask, capture — so the blank
-    /// state teaches the range rather than advertising three features.
-    private static let examples = [
-        "\u{201C}Look into why the build got slow\u{201D}",
-        "\u{201C}What\u{2019}s on my plate?\u{201D}",
-        "\u{201C}Remind me to review that PR tomorrow\u{201D}",
-    ]
-
     /// Blocked on you first — work stopped for want of an answer — then
     /// results you haven't read, then what's still going.
     private struct Row: Identifiable {
@@ -64,24 +56,6 @@ struct DeskBoardView: View {
                     .foregroundStyle(OS1VisualStyle.textDim)
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, 6)
-            }
-            // Nothing needs you: the one moment the Desk has nothing to say,
-            // and the only place there's room to say what it's for. Plain
-            // lines rather than chips — a row of buttons would be permanent
-            // chrome for a daily user who stopped needing the hint long ago.
-            if state != nil && rows.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Try")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                        .padding(.bottom, 2)
-                    ForEach(Self.examples, id: \.self) { example in
-                        Text(example)
-                            .font(.subheadline)
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                    }
-                }
-                .padding(.top, 12)
             }
             ForEach(rows) { row in
                 Button {

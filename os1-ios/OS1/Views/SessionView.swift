@@ -118,6 +118,18 @@ struct SessionView: View {
         return copy
     }
 
+    /// Content pinned just above the composer while `emptyContent` is showing
+    /// (the Desk's starter pills). Same modifier-not-init reasoning as above.
+    private var composerAccessory: (() -> AnyView)?
+
+    /// Add a row above this session's composer, shown only while
+    /// `emptyContent` is.
+    func composerAccessory<V: View>(@ViewBuilder _ build: @escaping () -> V) -> SessionView {
+        var copy = self
+        copy.composerAccessory = { AnyView(build()) }
+        return copy
+    }
+
     /// The caller's stand-in currently owns the transcript area.
     private var showingEmptyContent: Bool {
         emptyContent != nil
@@ -581,12 +593,22 @@ struct SessionView: View {
     /// SessionView.body would re-evaluate this whole body — transcript
     /// included — per key. Keep per-keystroke reads out of SessionView.body.
     private var inputBar: some View {
-        SessionInputBar(
-            viewModel: viewModel,
-            contentMaxWidth: contentMaxWidth,
-            horizontalInset: contentInset,
-            autoFocusWhenNeverRan: emptyContent == nil
-        )
+        VStack(spacing: 0) {
+            // Starter pills sit directly above the composer — the place you're
+            // already looking when you don't know what to type — and only
+            // while the caller's stand-in owns the transcript. Inside the
+            // bar's subtree so they ride the same safe-area inset and the
+            // keyboard pushes them up with it.
+            if showingEmptyContent, let composerAccessory {
+                composerAccessory()
+            }
+            SessionInputBar(
+                viewModel: viewModel,
+                contentMaxWidth: contentMaxWidth,
+                horizontalInset: contentInset,
+                autoFocusWhenNeverRan: emptyContent == nil
+            )
+        }
         // The system treats a bottom `safeAreaBar` as adaptive chrome: when
         // dark content scrolls under it, it hands the bar's subtree a DARK
         // colour scheme, and every dynamic colour inside follows — so a black

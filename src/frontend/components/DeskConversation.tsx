@@ -34,6 +34,11 @@ interface DeskConversationProps {
 	 *  its board rather than on a days-old chat. Display only — one click
 	 *  brings it back, and the full transcript is always in the session view. */
 	staleAfterMs?: number;
+	/** Starter prompts, shown as a scrolling pill row above the composer while
+	 *  there's no conversation. Picking one fills the composer rather than
+	 *  sending: some of them name actions with side effects, and all of them
+	 *  are openings you'd want to finish in your own words. */
+	suggestions?: string[];
 }
 
 /**
@@ -49,6 +54,7 @@ export function DeskConversation({
 	voiceSend,
 	onOpenSubagent,
 	staleAfterMs,
+	suggestions,
 }: DeskConversationProps) {
 	const { connected, send, addHandler } = useWebSocket();
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
@@ -324,6 +330,27 @@ export function DeskConversation({
 					</>
 				)}
 			</div>
+
+			{/* Starter pills, one scrolling row directly above the composer —
+			    the place you're already looking when you don't know what to
+			    type. They go the moment there's a conversation. */}
+			{!hasContent && !!suggestions?.length && (
+				<div className="flex gap-1.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					{suggestions.map((s) => (
+						<button
+							type="button"
+							key={s}
+							className="shrink-0 whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-dim hover:bg-hover hover:text-fg"
+							onClick={() => {
+								setDraft(s);
+								textareaRef.current?.focus();
+							}}
+						>
+							{s}
+						</button>
+					))}
+				</div>
+			)}
 
 			<div
 				className="flex items-end gap-2 border-t border-line px-3 py-2"

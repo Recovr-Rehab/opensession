@@ -103,7 +103,50 @@ struct DeskSheet: View {
                         onShowEarlier: { model.hideBefore = nil }
                     )
                 }
+                .composerAccessory { suggestionPills(model: model) }
         }
+    }
+
+    /// Starter prompts for the composer, named after what the Desk can
+    /// actually do — session status, archiving, delegation, capture — rather
+    /// than generic assistant filler. The trailing-ellipsis ones are
+    /// deliberately unfinished: a pill FILLS the composer instead of sending,
+    /// so an opening you complete yourself is the point, and the ones naming
+    /// an action with side effects must never fire on a single tap.
+    /// The web copy lives in lib/desk-suggestions.ts.
+    private static let suggestions = [
+        "What\u{2019}s running?",
+        "What needs me?",
+        "Archive what\u{2019}s done",
+        "What shipped today?",
+        "Look into\u{2026}",
+        "Remind me to\u{2026}",
+    ]
+
+    private func suggestionPills(model: SessionViewModel) -> some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(Self.suggestions, id: \.self) { suggestion in
+                    Button {
+                        model.draft = suggestion
+                    } label: {
+                        Text(suggestion)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule().fill(OS1VisualStyle.raised)
+                            )
+                            .overlay(Capsule().strokeBorder(OS1VisualStyle.border))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+        }
+        .scrollIndicators(.hidden)
     }
 
     private var header: some View {
