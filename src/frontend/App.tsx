@@ -19,6 +19,7 @@ import {
 	tabSplitDropPreviewClass,
 	WORKSPACE_SHELL,
 } from "./lib/app-shell-classes";
+import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { ToastHost, toast } from "./ui/toast";
 import { Modal } from "./ui/modal";
@@ -4008,7 +4009,7 @@ export function App(
 				    own + covers that layout). */}
 				{!mobileDetail && (
 					<button
-						className="mobile-fab"
+						className={MOBILE_FAB}
 						onClick={() => openPalette()}
 						aria-label="New session"
 					>
@@ -4036,7 +4037,7 @@ export function App(
 				{(!isPhone || !mobileDetail) && (
 					<Tooltip label="Desk" side="left" shortcut={["⌘", "J"]}>
 						<button
-							className="desk-fab"
+							className={DESK_FAB}
 							onClick={() => setDeskOpen(true)}
 							aria-label="Open the Desk"
 						>
