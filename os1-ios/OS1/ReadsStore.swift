@@ -39,6 +39,12 @@ final class ReadsStore {
     /// which are the ones worth missing, rather than whatever order JSON took.
     private static let cap = 500
 
+    /// Where a deliberate "mark as unread" parks a session's mark: older than
+    /// any real `lastActivity`, so `isUnread` says yes. The same value the web
+    /// sidebar writes (src/frontend/lib/reads.ts), since the two clients share
+    /// one map and have to agree about what an unread mark looks like.
+    private static let epoch = "1970-01-01T00:00:00.000Z"
+
     private init() {}
 
     /// Load this user's marks from the server. Guarded like
@@ -99,6 +105,17 @@ final class ReadsStore {
         save()
     }
 
+    /// Put a session back in the unread pile — the inverse of `markRead`, and
+    /// what the row's long-press menu calls. A session on screen right now is
+    /// held read by `openSessionId` and re-marked by the next `open`, so this
+    /// is only meaningful from the list.
+    func markUnread(_ session: Session) {
+        guard reads[session.id] != Self.epoch else { return }
+        reads[session.id] = Self.epoch
+        enforceCap()
+        save()
+    }
+
     /// True when the session has activity past your read mark.
     func isUnread(_ session: Session) -> Bool {
         guard session.id != openSessionId, let mark = reads[session.id] else { return false }
@@ -118,6 +135,10 @@ final class ReadsStore {
     private func enforceCap() {
         guard reads.count > Self.cap else { return }
         let doomed = reads
+            // An unread mark is parked at the epoch, so ordering by date alone
+            // would evict exactly the marks someone asked for. Spend the cap on
+            // the oldest real reads instead.
+            .filter { $0.value != Self.epoch }
             .map { (id: $0.key, date: Session.parseISO($0.value) ?? .distantPast) }
             .sorted { $0.date < $1.date }
             .prefix(reads.count - Self.cap)

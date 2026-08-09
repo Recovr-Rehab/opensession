@@ -1179,8 +1179,33 @@ struct SessionsListView: View {
         }
     }
 
+    /// Flip the whole workspace read or unread, like the web sidebar row's
+    /// right-click action — one unread session bolds the row, so the toggle
+    /// has to cover every session behind it. Only the move you can actually
+    /// make is offered, the way the web menu does it.
+    @ViewBuilder
+    private func readButton(_ workspace: SidebarWorkspace) -> some View {
+        let unread = ReadsStore.shared.isUnread(workspace.sessions)
+        Button {
+            for session in workspace.sessions {
+                if unread {
+                    ReadsStore.shared.markRead(session)
+                } else {
+                    ReadsStore.shared.markUnread(session)
+                }
+            }
+        } label: {
+            Label(
+                unread ? "Mark as read" : "Mark as unread",
+                systemImage: unread ? "envelope.open" : "envelope.badge"
+            )
+        }
+    }
+
     @ViewBuilder
     private func workspaceMenu(_ workspace: SidebarWorkspace) -> some View {
+        readButton(workspace)
+
         // Same action as the leading swipe, for anyone who reaches for the
         // long press instead.
         pinButton(workspace)
