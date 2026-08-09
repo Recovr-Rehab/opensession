@@ -855,6 +855,95 @@ enum OS1API {
         let _: OkResponse = try await post("/api/desk/voice/diag", body: body)
     }
 
+    // MARK: - Notes
+
+    /// Every shared note, newest first (the server already sorts).
+    static func notes() async throws -> [NoteSummary] {
+        struct NotesResponse: Decodable, Sendable { let notes: [NoteSummary]? }
+        let response: NotesResponse = try await get("/api/notes")
+        return response.notes ?? []
+    }
+
+    static func note(id: String) async throws -> NoteDocument {
+        try await get("/api/notes/\(encodedNoteId(id))")
+    }
+
+    static func createNote(title: String) async throws -> NoteSummary {
+        struct CreateResponse: Decodable, Sendable { let note: NoteSummary }
+        let response: CreateResponse = try await post(
+            "/api/notes",
+            body: ["title": title]
+        )
+        return response.note
+    }
+
+    static func deleteNote(id: String) async throws {
+        struct OkResponse: Decodable, Sendable { let ok: Bool? }
+        let _: OkResponse = try await mutate(
+            "/api/notes/\(encodedNoteId(id))",
+            method: "DELETE",
+            body: [:]
+        )
+    }
+
+    /// Write a note's whole text. The server applies it as a minimal diff to
+    /// the shared Yjs doc, so a web editor sees it arrive as an ordinary
+    /// update rather than a reload.
+    ///
+    /// `ifMatch` is the hash the text was read at. Passing it turns "my stale
+    /// buffer silently reverted your paragraph" into a `NoteConflict` the UI
+    /// can put in front of the person typing. Returns the new hash.
+    @discardableResult
+    static func saveNote(
+        id: String,
+        text: String,
+        ifMatch: String?
+    ) async throws -> String? {
+        let config = ServerConfig.shared
+        guard let base = config.baseURL, config.isConfigured else {
+            throw APIError.notConfigured
+        }
+        guard let url = URL(
+            string: base.absoluteString + "/api/notes/\(encodedNoteId(id))"
+        ) else { throw APIError.badURL }
+
+        var body: [String: Any] = ["text": text]
+        if let ifMatch { body["ifMatch"] = ifMatch }
+        var request = config.authorizedRequest(url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 200
+        if status == 409 {
+            struct ConflictBody: Decodable, Sendable {
+                let text: String?
+                let hash: String?
+            }
+            let conflict = try? await decodeDetached(ConflictBody.self, from: data)
+            throw NoteConflict(
+                serverText: conflict?.text ?? "",
+                hash: conflict?.hash
+            )
+        }
+        if !(200..<300).contains(status) {
+            if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
+               let message = serverError.error {
+                throw APIError.server(message)
+            }
+            throw APIError.http(status)
+        }
+        struct SaveResponse: Decodable, Sendable { let hash: String? }
+        return try await decodeDetached(SaveResponse.self, from: data).hash
+    }
+
+    /// Note ids are slugs (`[A-Za-z0-9_-]`), but encode anyway so a bad id
+    /// fails on the server's validation rather than on URL construction.
+    private static func encodedNoteId(_ id: String) -> String {
+        id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+    }
+
     private static func post<T: Decodable & Sendable>(
         _ path: String,
         body: [String: Any]

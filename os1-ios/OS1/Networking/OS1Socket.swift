@@ -167,6 +167,21 @@ final class OS1Socket: SessionSocket {
         send(["type": "cancel"])
     }
 
+    /// Join a note's editor room: the server answers with `note_state` and
+    /// then relays every `note_update`, and our name joins the note's
+    /// presence list for the web editors. This client treats those frames as
+    /// change bells (it reads and writes the text over REST), but the
+    /// subscription is what makes a note open on the phone feel live.
+    func watchNote(noteId: String, user: String) {
+        var frame: [String: Any] = ["type": "watch_note", "noteId": noteId]
+        if !user.isEmpty { frame["user"] = user }
+        send(frame)
+    }
+
+    func leaveNote() {
+        send(["type": "leave_note"])
+    }
+
     func answer(sessionId: String, questionId: String, answers: [String: String]?) {
         var frame: [String: Any] = ["type": "answer_question", "sessionId": sessionId, "questionId": questionId]
         frame["answers"] = answers ?? NSNull()

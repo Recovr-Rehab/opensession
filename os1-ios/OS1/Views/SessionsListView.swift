@@ -54,6 +54,9 @@ struct SessionsListView: View {
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
     @State private var showDesk = false
+    /// The shared notes. A place you go, like the Desk — not part of the
+    /// session stack, which is typed `[Session]`.
+    @State private var showNotes = false
     /// The push stack, typed rather than a `NavigationPath`, so a create that
     /// resolves after the person has navigated elsewhere can find its own
     /// pending entry instead of assuming it is still on top.
@@ -308,6 +311,10 @@ struct SessionsListView: View {
             DeskSheet()
                 .frame(minWidth: 520, minHeight: 600)
         }
+        .sheet(isPresented: $showNotes) {
+            NotesSheet()
+                .frame(minWidth: 520, minHeight: 600)
+        }
         .safeAreaInset(edge: .bottom) {
             errorBanner
         }
@@ -330,6 +337,13 @@ struct SessionsListView: View {
                     .menuIndicator(.hidden)
                     .controlSize(.small)
                     .help("Filter, group, and sort sessions")
+                Button {
+                    showNotes = true
+                } label: {
+                    Image(systemName: "note.text")
+                }
+                .controlSize(.small)
+                .help("Open notes")
                 Button {
                     showDesk = true
                 } label: {
@@ -458,6 +472,17 @@ struct SessionsListView: View {
                     // the Desk in the bottom-right corner beside it.
                     DefaultToolbarItem(kind: .search, placement: .bottomBar)
                     ToolbarSpacer(.fixed, placement: .bottomBar)
+                    // Notes ride beside the Desk: both are places rather than
+                    // controls for this list, and both are read on the move.
+                    ToolbarItem(placement: .bottomBar) {
+                        Button {
+                            showNotes = true
+                        } label: {
+                            Image(systemName: "note.text")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel("Open notes")
+                    }
                     ToolbarItem(placement: .bottomBar) {
                         Button {
                             showDesk = true
@@ -476,6 +501,11 @@ struct SessionsListView: View {
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
                 }
+                .sheet(isPresented: $showNotes) {
+                    NotesSheet()
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                }
                 .onAppear {
                     #if DEBUG
                     // Dev loop: open the Desk on launch so simulator voice
@@ -486,6 +516,12 @@ struct SessionsListView: View {
                     let env = ProcessInfo.processInfo.environment
                     if env["OS1_VOICE_AUTOSTART"] != nil || env["OS1_OPEN_DESK"] != nil {
                         showDesk = true
+                    }
+                    // Same reason as the Desk: Notes sits behind a toolbar tap
+                    // no simulator run can make. `OS1_OPEN_NOTE=<id>` goes one
+                    // further and lands on that note.
+                    if env["OS1_OPEN_NOTES"] != nil || env["OS1_OPEN_NOTE"] != nil {
+                        showNotes = true
                     }
                     #endif
                 }

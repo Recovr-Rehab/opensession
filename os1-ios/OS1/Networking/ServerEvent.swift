@@ -27,6 +27,12 @@ enum ServerEvent: Sendable {
     case askResolved(sessionId: String, questionId: String)
     case notice(String)
     case serverError(String)
+    /// A watched note changed. The Yjs payload is deliberately dropped — this
+    /// client has no CRDT, so the update is a bell to refetch the text over
+    /// REST, not something to apply.
+    case noteChanged(noteId: String)
+    /// Everyone with this note open, by display name.
+    case notePresence(noteId: String, viewers: [String])
     case ignored
 
     static func parse(_ data: Data) -> ServerEvent {
@@ -95,6 +101,12 @@ enum ServerEvent: Sendable {
                 return .ignored
             }
             return .askResolved(sessionId: id, questionId: questionId)
+        case "note_state", "note_update":
+            guard let noteId = frame.noteId else { return .ignored }
+            return .noteChanged(noteId: noteId)
+        case "note_presence":
+            guard let noteId = frame.noteId else { return .ignored }
+            return .notePresence(noteId: noteId, viewers: frame.viewers ?? [])
         case "notice":
             return .notice(frame.message ?? "")
         case "error":
@@ -197,6 +209,7 @@ private struct RawFrame: Decodable {
 
     let type: String
     let sessionId: String?
+    let noteId: String?
     let bootId: String?
     let entries: [TranscriptEntry]?
     let entry: TranscriptEntry?
