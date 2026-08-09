@@ -55,10 +55,6 @@
 	--color-surface: var(--bg);
 	--color-raised: var(--bg-raised);
 	--color-panel: var(--bg-panel);
-	/* The transcript canvas and the user's bubble on it. Both collapse onto the
-	   page/panel in dark; light steps them together (see base.css). */
-	--color-chat: var(--bg-chat);
-	--color-bubble: var(--bg-bubble);
 	/* bg-hover is the interaction *wash* (translucent ink, so it reads the same
 	   strength over any surface) — that's what `hover:bg-hover` wants at all of
 	   its call sites. bg-active stays an opaque surface: it's used as one (switch
