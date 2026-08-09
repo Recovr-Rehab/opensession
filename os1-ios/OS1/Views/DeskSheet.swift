@@ -109,11 +109,12 @@ struct DeskSheet: View {
     private var header: some View {
         HStack(spacing: 10) {
             Image(systemName: "lamp.desk")
+                .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(OS1VisualStyle.text)
             Text("Desk")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(OS1VisualStyle.text)
-            Spacer()
+            Spacer(minLength: 8)
             voiceStatusLabel
             if deskVoice == "on" {
                 micButton
@@ -121,13 +122,37 @@ struct DeskSheet: View {
             Button {
                 dismiss()
             } label: {
-                Image(systemName: "xmark")
-                    .foregroundStyle(OS1VisualStyle.textDim)
+                headerGlyph("xmark", color: OS1VisualStyle.textDim)
             }
             .accessibilityLabel("Close")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        // The sheet's drag indicator sits directly above this row, so the
+        // title needs real clearance or the two read as one crowded band.
+        // The trailing edge is tighter than the leading one on purpose: the
+        // icon buttons carry their own inset inside a 34pt tap target, so
+        // their GLYPHS line up with the title's 18pt margin.
+        .padding(.leading, 18)
+        .padding(.trailing, 9)
+        .padding(.top, Self.headerTopPadding)
+        .padding(.bottom, 14)
+    }
+
+    /// Clearance under the drag indicator. macOS has no grabber, so it keeps
+    /// the tighter value.
+    #if os(iOS)
+    private static let headerTopPadding: CGFloat = 18
+    #else
+    private static let headerTopPadding: CGFloat = 12
+    #endif
+
+    /// A header icon with a real touch target. Bare glyphs here were both
+    /// too small to hit reliably and visually crowded against each other.
+    private func headerGlyph(_ name: String, color: Color) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(color)
+            .frame(width: 34, height: 34)
+            .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -154,8 +179,10 @@ struct DeskSheet: View {
         Button {
             engine.open()
         } label: {
-            Image(systemName: engine.active ? "mic.fill" : "mic")
-                .foregroundStyle(engine.active ? OS1VisualStyle.accent : OS1VisualStyle.textDim)
+            headerGlyph(
+                engine.active ? "mic.fill" : "mic",
+                color: engine.active ? OS1VisualStyle.accent : OS1VisualStyle.textDim
+            )
         }
         .accessibilityLabel(engine.active ? "Return to the voice call" : "Start a voice call")
     }
