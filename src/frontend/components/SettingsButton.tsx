@@ -1,4 +1,9 @@
 import React from "react";
+import {
+	APP_LOGO_BUTTON,
+	APP_LOGO_IMAGE,
+	APP_LOGO_STATUS,
+} from "../lib/app-header-classes";
 import { Tooltip } from "../ui/tooltip";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
@@ -29,10 +34,10 @@ export function SettingsButton({
 		return (
 			<button
 				aria-label="Open settings"
-				className="app-logo-button"
+				className={APP_LOGO_BUTTON}
 				onClick={() => onOpenSettings?.()}
 			>
-				<img className="app-logo-image" src="/mac-app-icon.png" alt="" />
+				<img className={APP_LOGO_IMAGE} src="/mac-app-icon.png" alt="" />
 			</button>
 		);
 
@@ -47,7 +52,7 @@ export function SettingsButton({
 					<UserAvatar name={currentUser} size={24} />
 					{/* The only place this variant reports the live connection. */}
 					<span
-						className="app-logo-status"
+						className={APP_LOGO_STATUS}
 						style={{ background: connected ? "var(--green)" : "var(--red)" }}
 						title={status}
 					/>

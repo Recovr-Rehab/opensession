@@ -20,8 +20,11 @@ import {
 	WORKSPACE_SHELL,
 } from "./lib/app-shell-classes";
 import {
+	appHeader,
+	APP_BRAND,
 	APP_HEADER_ACTIONS,
 	APP_HEADER_ACTIONS_DETAIL,
+	APP_HEADER_LEFT,
 	HEADER_TITLE_COL,
 	HEADER_TITLE_MODEL,
 	HEADER_TITLE_PILL,
@@ -29,6 +32,7 @@ import {
 	HEADER_TITLE_REPO,
 	HEADER_TITLE_ROW,
 	HEADER_TITLE_TEXT,
+	MOBILE_BACK,
 	MOBILE_SEARCH_BTN,
 } from "./lib/app-header-classes";
 import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
@@ -2756,7 +2760,7 @@ export function App(
 	// avatar in the chrome row plays that part instead, so the top stays just
 	// the title + the collapse toggle.
 	const brand = (
-		<div className="app-brand">
+		<div className={APP_BRAND}>
 			<SettingsButton
 				variant="brand"
 				onOpenSettings={() => navigate({ view: "settings" })}
@@ -3256,16 +3260,15 @@ export function App(
 				    suppress this one there to avoid a duplicate back bar. */}
 				{route.view !== "catchup" && (
 				<header
-					className={`app-header${mobileDetail ? " app-header-detail" : ""}${
-						route.view === "home" || route.view === "session"
-							? " app-header-overlay"
-							: ""
-					}`}
+					className={appHeader({
+						detail: mobileDetail,
+						floating: route.view === "home" || route.view === "session",
+					})}
 				>
-					<div className="app-header-left">
+					<div className={APP_HEADER_LEFT}>
 						{mobileDetail ? (
 							<button
-								className="mobile-back"
+								className={MOBILE_BACK}
 								onClick={goBack}
 								aria-label="Back to sidebar"
 							>

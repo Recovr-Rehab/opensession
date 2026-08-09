@@ -45,11 +45,10 @@
  * keeps a small gap on a flat-top device while a notched one still gets its
  * full safe-area inset.
  */
-export const APP_HEADER =
+const APP_HEADER_BASE =
 	"hidden h-[var(--header-h)] shrink-0 items-center justify-between bg-raised " +
 	"px-4 pt-[env(safe-area-inset-top,0px)] pb-0 " +
-	"phone:relative phone:flex phone:px-3 " +
-	"phone:pt-[max(env(safe-area-inset-top,0px),8px)]";
+	"phone:flex phone:px-3 phone:pt-[max(env(safe-area-inset-top,0px),8px)]";
 
 /**
  * Pushed pages (a session, a PR…): the band itself goes invisible so its
@@ -60,7 +59,7 @@ export const APP_HEADER =
  * draws a border on this element (no rule in base.css or here targets it), so
  * that declaration only ever moved a computed value; it is not carried over.
  */
-export const APP_HEADER_DETAIL = `${APP_HEADER} phone:bg-transparent`;
+const APP_HEADER_DETAIL = "phone:bg-transparent";
 
 /**
  * Home and a session: the bar floats over the content instead of reserving a
@@ -85,13 +84,16 @@ export const APP_HEADER_DETAIL = `${APP_HEADER} phone:bg-transparent`;
  * transcript's scroll direction and the bar slides off-screen. A transform, so
  * the layout never reflows.
  */
-export const APP_HEADER_OVERLAY =
+const APP_HEADER_OVERLAY =
 	"app-header-overlay " +
 	"phone:fixed phone:inset-x-0 phone:top-0 phone:z-40 phone:bg-transparent " +
 	"phone:pointer-events-none phone:*:pointer-events-auto " +
 	"phone:[transition-property:transform] phone:duration-[var(--dur-lg)] " +
 	"phone:ease-[var(--ease)] " +
-	"phone:[body.chrome-collapsed_&]:-translate-y-full " +
+	// Spelled as `transform` rather than `-translate-y-full`: that utility moves
+	// the bar with the `translate` property, which the transition above does not
+	// name — the bar would jump off-screen instead of sliding.
+	"phone:[body.chrome-collapsed_&]:[transform:translateY(-100%)] " +
 	"phone:[.app:has(.session-tab-view)_&]:bg-surface " +
 	"phone:[.app:has(.session-tab-view)_&]:min-h-[var(--header-h)] " +
 	"phone:[.app:has(.session-tab-reorder~.session-tab-reorder)_&]:bg-surface " +
@@ -103,6 +105,35 @@ export const APP_HEADER_OVERLAY =
 	"phone:before:backdrop-blur-[16px] " +
 	"phone:before:[-webkit-mask-image:linear-gradient(to_bottom,#000_0%,#000_62%,transparent_100%)] " +
 	"phone:before:[mask-image:linear-gradient(to_bottom,#000_0%,#000_62%,transparent_100%)]";
+
+/**
+ * The bar's three faces, assembled so that only one of them is ever on the
+ * markup. That is not tidiness: `position` is a single Tailwind utility group,
+ * so a `phone:relative` and a `phone:fixed` on one element are resolved by the
+ * order Tailwind EMITS them (static, fixed, absolute, relative, sticky) rather
+ * than the order they were written — `relative` wins, and the floating bar
+ * silently drops back into flow. The stylesheet this replaces got the opposite
+ * answer for free, by source order. So the in-flow face and the floating face
+ * each spell their own position, and the caller picks one.
+ *
+ * `detail` — a pushed page: no chrome band. `floating` — home or a session:
+ * out of flow, over the scrolling content.
+ */
+export function appHeader({
+	detail,
+	floating,
+}: {
+	detail: boolean;
+	floating: boolean;
+}): string {
+	return [
+		APP_HEADER_BASE,
+		floating ? APP_HEADER_OVERLAY : "phone:relative",
+		detail ? APP_HEADER_DETAIL : "",
+	]
+		.filter(Boolean)
+		.join(" ");
+}
 
 /** Leading slot: the brand on the root page, the Back bubble on a pushed one. */
 export const APP_HEADER_LEFT = "flex items-center gap-2";
