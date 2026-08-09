@@ -534,7 +534,17 @@ struct SessionsListView: View {
     /// nothing — so the diagnosis joins it as soon as there is one.
     private var loadingState: some View {
         VStack(spacing: 14) {
+            #if os(iOS)
+            // The spinner is for the failure case only: once there is a
+            // diagnosis to read, rows that will never arrive would be a lie.
+            if viewModel.loadFailure == nil {
+                SessionsSkeleton()
+            } else {
+                ProgressView()
+            }
+            #else
             ProgressView()
+            #endif
             if let failure = viewModel.loadFailure {
                 VStack(spacing: 3) {
                     Text(failure.title)
@@ -1768,6 +1778,56 @@ extension Session.Lane {
         }
     }
 }
+
+#if os(iOS)
+/// The first load, shaped like what it is loading: a band heading and a run of
+/// rows at the list's own metrics, so the screen the data lands in is already
+/// standing when it arrives. A centred spinner says only "wait"; this says
+/// where.
+private struct SessionsSkeleton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dim = false
+
+    /// Ragged on purpose — a column of equal bars reads as a component, not as
+    /// titles about to arrive.
+    private let widths: [CGFloat] = [188, 132, 214, 160, 108, 196, 144, 176]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Capsule()
+                .fill(OS1VisualStyle.hover)
+                .frame(width: 84, height: 11)
+                .padding(.vertical, 9)
+            ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
+                HStack(spacing: 9) {
+                    Circle()
+                        .fill(OS1VisualStyle.hover)
+                        .frame(width: 7, height: 7)
+                        .frame(width: 22, height: 22)
+                    Capsule()
+                        .fill(OS1VisualStyle.hover)
+                        .frame(width: width, height: 13)
+                }
+                .padding(.vertical, 13)
+            }
+        }
+        .padding(.horizontal, sidebarMargin)
+        .padding(.top, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // One breath across the whole block, not a travelling sheen: the rows
+        // are the message, and a shimmer would draw the eye along them.
+        .opacity(dim ? 0.5 : 1)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                dim = true
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Loading sessions")
+    }
+}
+#endif
 
 struct SessionRow: View {
     let session: Session
