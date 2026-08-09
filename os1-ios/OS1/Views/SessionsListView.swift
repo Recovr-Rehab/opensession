@@ -58,6 +58,11 @@ struct SessionsListView: View {
     /// resolves after the person has navigated elsewhere can find its own
     /// pending entry instead of assuming it is still on top.
     @State private var path: [Session] = []
+    /// The row you came back FROM. iOS pops the session off the stack, so
+    /// without this the list gives no clue where you just were — on a long
+    /// list, finding your place again is a scroll and a squint. Mac needs no
+    /// equivalent: the open session stays selected in the sidebar.
+    @State private var lastOpenedSessionID: String?
     @State private var searchText = ""
     /// Non-nil opens the new-session sheet; carries the per-repo "+" preset.
     @State private var newSessionRequest: NewSessionRequest?
@@ -500,6 +505,12 @@ struct SessionsListView: View {
                 .safeAreaInset(edge: .bottom) {
                     errorBanner
                 }
+        }
+        // Recorded on the way IN, from the stack itself rather than at each
+        // of the four push sites (row tap, session link, optimistic create,
+        // dev auto-open), so a session opened by any route marks its row.
+        .onChange(of: path) {
+            if let open = path.last { lastOpenedSessionID = open.id }
         }
     }
     #endif
@@ -1087,6 +1098,16 @@ struct SessionsListView: View {
         return workspace.effectiveRepo
     }
 
+    #if os(iOS)
+    /// Matched across the whole workspace, not just its main session: the
+    /// strip's sibling tabs all live behind one row, so returning from a tab
+    /// highlights the row that pushed it.
+    private func isLastOpened(_ workspace: SidebarWorkspace) -> Bool {
+        guard let lastOpenedSessionID else { return false }
+        return workspace.sessions.contains { $0.id == lastOpenedSessionID }
+    }
+    #endif
+
     @ViewBuilder
     private func sessionRow(_ workspace: SidebarWorkspace) -> some View {
         let session = workspace.mainSession
@@ -1115,7 +1136,8 @@ struct SessionsListView: View {
                 session: workspace.statusSession,
                 title: workspace.title,
                 sessions: workspace.sessions,
-                repo: repo
+                repo: repo,
+                highlighted: isLastOpened(workspace)
             )
         }
         .buttonStyle(.plain)
@@ -1842,6 +1864,11 @@ struct SessionRow: View {
     /// rather than its org's mark — spelling the name out instead cost either
     /// the title's width or a second line, and both read worse than a swatch.
     var repo: String? = nil
+    /// iOS: the session you last had open. Nothing else on the list is
+    /// coloured, so a wash of blue is enough to find your place again after a
+    /// back swipe without competing with the status marks — which are small,
+    /// and whose blue means "needs input" on the mark itself, not on the row.
+    var highlighted: Bool = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mac: hover-revealed archive button (nil hides it).
     var onArchive: (() -> Void)? = nil
@@ -1908,6 +1935,15 @@ struct SessionRow: View {
         // 13, not 11: the list no longer imposes a 44pt minimum row height,
         // so the row's own padding is what keeps its touch target.
         .padding(.vertical, 13)
+        // Bleeds into the list's own 16pt margin so the plate reads as the
+        // row rather than as a box drawn around its contents.
+        .padding(.horizontal, 10)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(OS1VisualStyle.blue.opacity(highlighted ? 0.18 : 0))
+        }
+        .padding(.horizontal, -10)
+        .animation(.easeOut(duration: 0.2), value: highlighted)
         #else
         .padding(.vertical, 3)
         #endif
@@ -1994,6 +2030,8 @@ struct SessionRow: View {
         var parts = [session.lane.label, RepoTile.label(for: session.effectiveRepo)]
         // The bold title is the only sighted cue for unread; say it out loud.
         if unread { parts.insert("unread", at: 0) }
+        // Same for the plate: colour alone never carries meaning.
+        if highlighted { parts.insert("last opened", at: 0) }
         if let prState = session.prState?.lowercased() {
             parts.append("pull request \(prState)")
         }
