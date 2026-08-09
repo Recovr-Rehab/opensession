@@ -2136,24 +2136,38 @@ private struct SessionInputBar: View {
                 .padding(.bottom, controlRowInset.bottom)
             }
         }
-        #if os(iOS)
-        // Near-solid surface, not a see-through pane: the transcript passes
-        // BEHIND the composer, and a washed-out bar over live text made the
-        // draft hard to read. The page color on top of a thick material lands
-        // on white in light mode and stays dark in dark mode — the session still
-        // shows around and below the pill, just not through it.
-        .background(
-            OS1VisualStyle.background.opacity(0.7),
-            in: composerShape
-        )
-        .background(
-            .thickMaterial,
-            in: composerShape
-        )
-        #endif
-        .glassSurface(
-            in: composerShape
-        )
+        // The surface is a background SIBLING rather than three modifiers on
+        // the row, and that placement is the point. A `Menu` whose label sits
+        // inside a glass subtree makes the system treat the enclosing glass —
+        // here the whole pill — as the menu's morph source: opening the "+"
+        // took the entire composer off screen for as long as the menu was up,
+        // and closing it flashed the pill back as a flat, square-cornered
+        // white block. Behind the row instead, the glass is no longer an
+        // ancestor of the "+" or the send menu, and the composer stays put.
+        // Same layers in the same order (glass, thick material, page colour,
+        // then the controls).
+        .background {
+            Color.clear
+                #if os(iOS)
+                // Near-solid surface, not a see-through pane: the transcript
+                // passes BEHIND the composer, and a washed-out bar over live
+                // text made the draft hard to read. The page color on top of a
+                // thick material lands on white in light mode and stays dark in
+                // dark mode — the session still shows around and below the
+                // pill, just not through it.
+                .background(
+                    OS1VisualStyle.background.opacity(0.7),
+                    in: composerShape
+                )
+                .background(
+                    .thickMaterial,
+                    in: composerShape
+                )
+                #endif
+                .glassSurface(
+                    in: composerShape
+                )
+        }
         #if os(iOS)
         // No focus ring: an accent-coloured border around the input read as a
         // validation/error outline rather than "you can type here". The glass
