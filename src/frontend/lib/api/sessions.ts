@@ -58,6 +58,27 @@ export function sessionAssetRawUrl(sessionId: string, path: string): string {
 	return `${BASE}/sessions/${encodeURIComponent(sessionId)}/assets/raw/${rel}`;
 }
 
+/** The URL a preview loads: the raw route, with the file's mtime along for the
+ *  ride so an iframe or an <img> re-fetches when an agent rewrites the same
+ *  path (iterating on one artifact is the normal flow). A file the listing
+ *  hasn't caught up with yet carries no mtime and simply isn't busted. */
+export function sessionAssetPreviewUrl(
+	sessionId: string,
+	file: SessionAssetFile,
+): string {
+	const raw = sessionAssetRawUrl(sessionId, file.path);
+	return file.mtime ? `${raw}?v=${encodeURIComponent(file.mtime)}` : raw;
+}
+
+/** The same file, as an attachment rather than something the browser renders. */
+export function sessionAssetDownloadUrl(
+	sessionId: string,
+	file: SessionAssetFile,
+): string {
+	const url = sessionAssetPreviewUrl(sessionId, file);
+	return `${url}${url.includes("?") ? "&" : "?"}download=1`;
+}
+
 export async function deleteSessionAssetApi(
 	sessionId: string,
 	path: string,

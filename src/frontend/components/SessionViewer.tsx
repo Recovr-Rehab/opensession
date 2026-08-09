@@ -38,6 +38,7 @@ import { TranscriptBlocks } from "./TranscriptBlocks";
 import {
 	canonicalToolName,
 	LiveSubagentsProvider,
+	OpenAssetProvider,
 	ToolPathRootsProvider,
 	type LiveSubagent,
 } from "./ToolCallBlock";
@@ -101,6 +102,7 @@ import { SlackChannelPane } from "./SlackChannelPane";
 import { feedForRefKind } from "../lib/feeds-meta";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { AssetsPanel, useSessionAssets } from "./AssetsPanel";
+import { AssetOverlay } from "./AssetOverlay";
 import {
 	SessionReportsPanel,
 	useSessionReports,
@@ -1236,6 +1238,17 @@ export function SessionViewer({
 	// list is the navigator).
 	const [selectedAssetPath, setSelectedAssetPath] = useState<string | null>(
 		null,
+	);
+	// What the transcript's own asset rows open: the file itself, on top of the
+	// conversation rather than in a tab that replaces it — an artifact is
+	// something you glance at and dismiss, and the row that named it is where
+	// you were reading. `useCallback` with no deps because it reaches the
+	// memoized transcript through context: a fresh closure per render would
+	// re-render the whole thing on every sessions poll.
+	const [overlayAssetPath, setOverlayAssetPath] = useState<string | null>(null);
+	const openAssetFromTranscript = useCallback(
+		(path: string) => setOverlayAssetPath(path),
+		[],
 	);
 	const sessionReports = useSessionReports(session.id, addHandler);
 	const panelResizeHandle = (
@@ -3890,6 +3903,15 @@ export function SessionViewer({
 					onOpenChange={setMoveToCloudOpen}
 				/>
 			)}
+			{overlayAssetPath && (
+				<AssetOverlay
+					sessionId={session.id}
+					files={assetFiles}
+					path={overlayAssetPath}
+					onClose={() => setOverlayAssetPath(null)}
+					onOpenNewSession={onOpenNewSession}
+				/>
+			)}
 			{deleting && (
 				<div
 					/* `session-delete-overlay` stays on the markup as a bare hook with
@@ -5177,6 +5199,7 @@ export function SessionViewer({
 									>
 									<ToolPathRootsProvider value={toolPathRoots}>
 									<LiveSubagentsProvider value={liveSubagents}>
+									<OpenAssetProvider value={openAssetFromTranscript}>
 										<TranscriptBlocks
 											entries={entries}
 											live={isBusy}
@@ -5195,6 +5218,7 @@ export function SessionViewer({
 													: session.startedBy || undefined
 											}
 										/>
+									</OpenAssetProvider>
 									</LiveSubagentsProvider>
 									</ToolPathRootsProvider>
 									</React.Profiler>

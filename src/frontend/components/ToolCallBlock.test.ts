@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  assetToolPath,
   canonicalToolName,
   parseMcpTool,
   toolDurationMs,
@@ -120,6 +121,23 @@ test("MCP tools parse in both the mcp__ and flattened forms", () => {
   expect(parseMcpTool("apply_patch")).toBeNull();
   expect(parseMcpTool("exec_command")).toBeNull();
   expect(parseMcpTool("read")).toBeNull();
+});
+
+test("an assets call reads as the file it names, not its contents", () => {
+  const write = {
+    path: "viz/index.html",
+    content: "<!doctype html>\n<html><body>a whole artifact…</body></html>",
+  };
+  expect(toolSummary("opensession-assets_write_asset", write, "", roots)).toBe(
+    "viz/index.html"
+  );
+  expect(assetToolPath("opensession-assets_write_asset", write)).toBe(
+    "viz/index.html"
+  );
+  // Only this server's path-taking calls; a listing names nothing, and
+  // another server's `path` is not an asset.
+  expect(assetToolPath("opensession-assets_list_assets", {})).toBe("");
+  expect(assetToolPath("opensession-notes_read_note", { path: "a.md" })).toBe("");
 });
 
 test("the run-rpc session key stays out of MCP summaries", () => {

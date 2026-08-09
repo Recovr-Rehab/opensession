@@ -199,6 +199,23 @@ export const toolFilePath = (inp: Record<string, unknown>) =>
 export const toolCommand = (inp: Record<string, unknown>) =>
   toolInputString(inp, "command", "cmd");
 
+/**
+ * The scratch file an `opensession-assets` call names, if it names one.
+ *
+ * Its own accessor rather than a branch inside `toolDetail`, because clients
+ * need the path itself and not only a summary line: a session's assets live
+ * outside every worktree, so nothing else in a transcript knows what the path
+ * means, and the row that names an artifact is the only place a reader can be
+ * offered a way into it.
+ */
+export function assetToolPath(toolName: string, input: unknown): string {
+  if (!input || typeof input !== "object") return "";
+  const mcp = parseMcpTool(toolName);
+  if (mcp?.server !== "opensession-assets") return "";
+  if (!/^(write|read|delete)_asset$/.test(mcp.tool)) return "";
+  return toolInputString(input as Record<string, unknown>, "path");
+}
+
 /** Internal plumbing that shouldn't show up in a summary or the input JSON. */
 const HIDDEN_INPUT_KEYS = new Set(["__bks_oc_session"]);
 
@@ -339,6 +356,11 @@ export function toolDetail(toolName: string, input: unknown): ToolDetail {
       return text ? { kind: "text", text } : { kind: "none" };
     }
     default: {
+      // An assets write carries the whole artifact in `content`, so the
+      // generic render below spends the row on a truncated file body. The
+      // path is the part worth reading, and the part a client can open.
+      const asset = assetToolPath(toolName, inp);
+      if (asset) return { kind: "text", text: asset };
       // MCP and other tools: a compact "key: value" render of the input reads
       // better than the generic "Using <tool>" content fallback.
       const text = compactInput(inp);

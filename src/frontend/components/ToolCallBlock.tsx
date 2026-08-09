@@ -9,6 +9,7 @@ import { cn } from "../ui/cn";
 import { TOOL_CODE_WELL, TOOL_PRE, TOOL_RESULT_MEDIA } from "../lib/tool-classes";
 import { tidyPath, type PathRoot } from "../lib/tidy-path";
 import {
+  assetToolPath,
   canonicalToolName,
   formatToolDetail,
   isHiddenToolInputKey,
@@ -136,6 +137,7 @@ function useHydratedTranscriptEntry(
 const PathRootsContext = createContext<readonly PathRoot[]>([]);
 export type { PathRoot };
 export {
+  assetToolPath,
   canonicalToolName,
   parseMcpTool,
   toolDisplayName,
@@ -160,6 +162,21 @@ const LiveSubagentsContext = createContext<ReadonlyMap<string, LiveSubagent>>(
   new Map()
 );
 export const LiveSubagentsProvider = LiveSubagentsContext.Provider;
+
+/**
+ * Opens one of the session's scratch assets on top of the conversation — the
+ * transcript's own way into an artifact, so a report or a visualization can be
+ * looked at where it was announced instead of hunted for in a tab you have to
+ * know exists.
+ *
+ * Context rather than a prop for the same reason the sub-agent map is one: the
+ * caller is a tool row several memoized layers below the session view. Null
+ * where nothing can host the overlay (the Desk overlay, a sub-agent pane) —
+ * and a row then draws no affordance at all, because a button that does
+ * nothing is worse than no button.
+ */
+const OpenAssetContext = createContext<((path: string) => void) | null>(null);
+export const OpenAssetProvider = OpenAssetContext.Provider;
 
 /**
  * One-line human summary of a tool call (also used for collapsed previews).
@@ -308,6 +325,13 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   const resultContent = visibleResultContent(shownResult?.content, hasMedia, failed);
   const mediaOnly = hasMedia && !resultContent && !inputNode;
 
+  // A scratch file this call named: openable straight from the row, because
+  // assets live outside every worktree and nothing else in the transcript can
+  // say what the path means. A delete names one too, with nothing left to open.
+  const assetPath = assetToolPath(toolName, shownInput);
+  const openAsset = useContext(OpenAssetContext);
+  const canOpenAsset = Boolean(assetPath && openAsset) && mcp?.tool !== "delete_asset";
+
   // A Task/Agent call whose sub-agent transcript we can open in the sidebar.
   // Claude-SDK results carry a structured agentId; opencode's task tool only
   // embeds the child session id in the result text (<task id="ses_…">) — the
@@ -395,6 +419,29 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
             </span>
           )}
         </span>
+
+        {canOpenAsset && (
+          // Never hover-gated: the artifact is the point of the call, and a
+          // hover-only way to it doesn't exist on a phone at all.
+          <span
+            role="button"
+            tabIndex={0}
+            className="flex-shrink-0 rounded border border-line px-1.5 py-px text-meta text-dim transition-colors hover:border-line-strong hover:text-fg"
+            onClick={(e) => {
+              e.stopPropagation();
+              openAsset?.(assetPath);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" && e.key !== " ") return;
+              e.preventDefault();
+              e.stopPropagation();
+              openAsset?.(assetPath);
+            }}
+            title="Open this file"
+          >
+            Open ↗
+          </span>
+        )}
 
         {canOpenSubagent && (
           <span
