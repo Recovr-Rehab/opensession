@@ -202,8 +202,46 @@ final class TranscriptGroupingTests: XCTestCase {
 
     // MARK: - Walkthroughs
 
-    private func walkthrough(at iso: String) -> SessionWalkthrough {
-        SessionWalkthrough(summary: "what changed", publishedAt: iso)
+    private func walkthrough(
+        at iso: String, entryId: String? = nil
+    ) -> SessionWalkthrough {
+        SessionWalkthrough(
+            summary: "what changed", publishedAt: iso, publishedEntryId: entryId
+        )
+    }
+
+    func testAWalkthroughAnchorsOnTheEntryTheServerRecorded() {
+        let items = TranscriptGrouping.displayItems(from: [
+            TranscriptEntry(
+                id: "a1", type: "assistant", content: "Working.",
+                timestamp: "2026-01-01T00:00:00Z"
+            ),
+            // Deliberately NOT named publish_walkthrough: the anchor is what
+            // places the card, so the name scan must not be what finds it.
+            toolUse("t1", name: "bash"),
+            toolResult("t1", text: "ok"),
+            TranscriptEntry(
+                id: "a2", type: "assistant", content: "Shipped.",
+                timestamp: "2026-01-01T00:01:00Z"
+            ),
+            TranscriptEntry(
+                id: "a3", type: "user", content: "Thanks",
+                timestamp: "2026-01-01T00:02:00Z"
+            ),
+        ])
+        let blocks = TranscriptGrouping.blocks(
+            from: items,
+            live: false,
+            worktreeDir: nil,
+            walkthrough: walkthrough(at: "2026-01-01T09:00:00Z", entryId: "t1")
+        )
+        XCTAssertEqual(
+            blocks.map(\.id),
+            [
+                "a1", "a2", "a2:footer",
+                "walkthrough:2026-01-01T09:00:00Z", "a3",
+            ]
+        )
     }
 
     func testAWalkthroughLandsRightAfterTheTurnThatPublishedIt() {

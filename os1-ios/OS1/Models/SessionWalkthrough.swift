@@ -16,6 +16,11 @@ struct SessionWalkthrough: Decodable, Equatable, Hashable {
     var shots: [WalkthroughShot]?
     var publishedAt: String = ""
     var publishedBy: String?
+    /// Transcript entry of the `publish_walkthrough` call that produced this.
+    /// The server records it at publish time — the one moment anything knows
+    /// where the card belongs — so placement is a lookup rather than a scan.
+    /// Absent on walkthroughs published before that field existed.
+    var publishedEntryId: String?
 
     var publishedDate: Date? { Session.parseISO(publishedAt) }
 

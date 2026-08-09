@@ -346,7 +346,14 @@ enum TranscriptGrouping {
     ) -> [TranscriptBlock] {
         guard let walkthrough else { return blocks }
         var out = blocks
-        if let publishing = blocks.lastIndex(where: publishesWalkthrough) {
+        // The server records the publishing entry (publishedEntryId), so the
+        // normal path is a lookup. The scan below is for walkthroughs
+        // published before that field, and for a publishing call that has
+        // scrolled out of the loaded window.
+        let anchored = walkthrough.publishedEntryId.flatMap { id in
+            blocks.firstIndex { $0.entryIds.contains(id) }
+        }
+        if let publishing = anchored ?? blocks.lastIndex(where: publishesWalkthrough) {
             // Past the turn's answer and footer, not straight after the fold:
             // the card summarizes the work, so splitting the turn from the
             // reply it ended with would read as an interruption.
