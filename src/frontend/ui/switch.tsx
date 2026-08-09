@@ -10,10 +10,13 @@ export function Switch({ className, ...props }: SwitchProps) {
 	return (
 		<BaseSwitch.Root
 			className={cn(
-				// UISwitch's proportions, scaled to web type: iOS is a 51×31pt
-				// track with a 2pt inset, so the knob is 27pt and travels 20pt.
-				// The same three ratios at 40px wide give 24 / 20 / 16.
-				"relative inline-flex h-6 w-10 shrink-0 cursor-pointer rounded-full bg-active outline-none",
+				// UISwitch's actual size, not a scaled-down version of it: a
+				// 51×31pt track with a 2pt inset, so the knob is 27pt and
+				// travels 20pt. A pt is a CSS px here, so these are the same
+				// numbers the app uses. The web type around it is smaller than
+				// iOS body copy, which is why the earlier proportional
+				// shrink looked right in ratio and still read short.
+				"relative inline-flex h-[31px] w-[51px] shrink-0 cursor-pointer rounded-full bg-active outline-none",
 				"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent",
 				"focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
 				"data-[disabled]:cursor-default data-[disabled]:opacity-40",
@@ -30,7 +33,7 @@ export function Switch({ className, ...props }: SwitchProps) {
 			    Hence bg-white for the resting knob rather than bg-fg, which
 			    made the OFF state read as a bold black dot — the one place the
 			    web switch didn't look like the app's. */}
-			<BaseSwitch.Thumb className="absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow-[0_2px_5px_rgba(0,0,0,0.16),0_2px_1px_rgba(0,0,0,0.06)] transition-transform duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:translate-x-4 data-[checked]:bg-on-accent" />
+			<BaseSwitch.Thumb className="absolute left-0.5 top-0.5 size-[27px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_3px_1px_rgba(0,0,0,0.06)] transition-transform duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:translate-x-5 data-[checked]:bg-on-accent" />
 		</BaseSwitch.Root>
 	);
 }
