@@ -188,7 +188,11 @@ export const TurnBlock = React.memo(function TurnBlock({
       </button>
 
       {(expanded || messagesInline) && (
-        <div className="mt-0.5">
+        // The rail is what says "these are the turn's insides" — the notes
+        // read as ordinary transcript, so without it a folded turn's
+        // narration is only distinguishable from the answer by being dimmer,
+        // which is the wrong thing to lean on for the prose worth reading.
+        <div className="mt-0.5 ml-1 border-l border-line pl-3">
           {sections.map((sec) =>
             sec.kind === "msg" ? (
               <TurnMessage

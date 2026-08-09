@@ -18,6 +18,18 @@ enum OS1VisualStyle {
     static let text = Color(uiColor: .label)
     static let textDim = Color(uiColor: .secondaryLabel)
     static let textFaint = Color(uiColor: .tertiaryLabel)
+    /// Body prose that is subordinate but still meant to be READ — the
+    /// narration inside a work fold. Not `textDim`: `.secondaryLabel` is built
+    /// for short labels, and at 17pt over the canvas it measures 3.4:1, under
+    /// WCAG AA's 4.5:1 for body text, which is the wrong place to save
+    /// contrast when that prose is the part of a turn worth reading. These
+    /// neutrals measure ~6.4:1 and stay plainly below the answer's ~20:1, so
+    /// the text still reads as context rather than conclusion.
+    static let textNarration = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.720, alpha: 1)
+            : UIColor(white: 0.360, alpha: 1)
+    })
     /// The transcript's canvas — the session screen behind the messages, and
     /// the washes that ramp into it. Its own colour rather than `background`
     /// because everything that floats on it in light mode is white: the
@@ -65,6 +77,13 @@ enum OS1VisualStyle {
     static let text = Color(nsColor: .labelColor)
     static let textDim = Color(nsColor: .secondaryLabelColor)
     static let textFaint = Color(nsColor: .tertiaryLabelColor)
+    /// Subordinate body prose — see the iOS note for why this is its own
+    /// neutral rather than `textDim`.
+    static let textNarration = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(white: 0.720, alpha: 1)
+            : NSColor(white: 0.360, alpha: 1)
+    })
     /// The Mac window background is already a grey the composer floats on, so
     /// the transcript needs no canvas of its own here — see the iOS note.
     static let chatCanvas = Color(nsColor: .windowBackgroundColor)

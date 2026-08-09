@@ -173,13 +173,20 @@ private extension TextFonts {
 private extension MarkdownRenderConfig {
     /// `text` is the body colour: full strength for an answer, dimmed for the
     /// narration inside a work fold, which is context rather than conclusion.
-    static func os1Config(text: Color) -> MarkdownRenderConfig {
+    /// Bold runs and inline code follow it rather than being pinned to the
+    /// full-strength label, so a dimmed paragraph can never come out grey
+    /// with black words punched through it. The renderer resolves both from
+    /// the paragraph colour today, so this changes no pixels — it is here so
+    /// the config stops asserting something it does not mean. `quote` is the
+    /// one colour already subordinate at full strength, so it cannot simply
+    /// follow `text`.
+    static func os1Config(text: Color, quote: Color) -> MarkdownRenderConfig {
         #if os(iOS)
         let base = MarkdownRenderConfig.default
         return MarkdownRenderConfig(
             blockQuoteStyle: .init(
                 textFonts: base.blockQuoteStyle.textFonts,
-                textColor: OS1VisualStyle.textDim
+                textColor: quote
             ),
             // Stepped 22/20/18/17 against the 17pt body, semibold and lightly
             // tracked-in, so a heading reads as a heading without shouting.
@@ -211,11 +218,11 @@ private extension MarkdownRenderConfig {
                 actionButtonColor: OS1VisualStyle.accent
             ),
             inlineStyle: .init(
-                boldTextColor: OS1VisualStyle.text,
+                boldTextColor: text,
                 linkTextFont: base.inlineStyle.linkTextFont,
                 linkTextColor: OS1VisualStyle.link,
                 codeTextFont: base.inlineStyle.codeTextFont,
-                codeTextColor: OS1VisualStyle.text,
+                codeTextColor: text,
                 codeBackgroundColor: OS1VisualStyle.panel,
                 codeUnderlineColor: OS1VisualStyle.border
             ),
@@ -228,7 +235,7 @@ private extension MarkdownRenderConfig {
         // code, and a 12pt block gap for readable paragraph rhythm.
         let body = TextFonts.mac(size: 13, lineHeight: 19)
         return MarkdownRenderConfig(
-            blockQuoteStyle: .init(textFonts: body, textColor: OS1VisualStyle.textDim),
+            blockQuoteStyle: .init(textFonts: body, textColor: quote),
             headingStyle: .init(
                 h1Font: .mac(size: 20, weight: .bold),
                 h2Font: .mac(size: 17, weight: .semibold),
@@ -249,11 +256,11 @@ private extension MarkdownRenderConfig {
                 actionButtonColor: OS1VisualStyle.accent
             ),
             inlineStyle: .init(
-                boldTextColor: OS1VisualStyle.text,
+                boldTextColor: text,
                 linkTextFont: .systemFont(ofSize: 13),
                 linkTextColor: OS1VisualStyle.link,
                 codeTextFont: .monospacedSystemFont(ofSize: 12, weight: .regular),
-                codeTextColor: OS1VisualStyle.text,
+                codeTextColor: text,
                 codeBackgroundColor: OS1VisualStyle.panel,
                 codeUnderlineColor: OS1VisualStyle.border
             ),
@@ -263,13 +270,19 @@ private extension MarkdownRenderConfig {
         #endif
     }
 
-    static let os1Base = os1Config(text: OS1VisualStyle.text)
+    static let os1Base = os1Config(
+        text: OS1VisualStyle.text,
+        quote: OS1VisualStyle.textDim
+    )
 
     static let os1Static = os1Base
         .withShouldAnimateText(value: false)
 
-    static let os1Dim = os1Config(text: OS1VisualStyle.textDim)
-        .withShouldAnimateText(value: false)
+    static let os1Dim = os1Config(
+        text: OS1VisualStyle.textNarration,
+        quote: OS1VisualStyle.textNarration
+    )
+    .withShouldAnimateText(value: false)
 
     static let os1Streaming = os1Base
         .withShouldAnimateText(value: true)

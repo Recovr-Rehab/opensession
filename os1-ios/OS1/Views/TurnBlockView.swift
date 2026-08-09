@@ -54,8 +54,11 @@ struct TurnBlockView: View {
                     ForEach(turn.items) { item in
                         switch item {
                         case .message(let entry):
-                            // Narration between tool calls reads dimmer than
-                            // a final answer — it is context, not conclusion.
+                            // Narration between tool calls reads a step below
+                            // a final answer — context, not conclusion — but
+                            // it is still prose to read, so the step is small
+                            // (see `textNarration`) and the rail carries the
+                            // rest of the distinction.
                             MarkdownBody(entry.text, dimmed: true)
                                 .padding(.trailing, 16)
                         case .tool(let call):
@@ -70,8 +73,18 @@ struct TurnBlockView: View {
                         }
                     }
                 }
-                .padding(.leading, 8)
+                .padding(.leading, 12)
                 .padding(.top, 2)
+                // What marks this content as the turn's insides is the rail,
+                // not the text colour. An 8pt inset on its own was too small
+                // to read as structure, which left the dimming to say
+                // "inside the fold" by itself — and that costs legibility on
+                // the one part of a turn worth reading.
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(OS1VisualStyle.border)
+                        .frame(width: 1)
+                }
                 .transition(.opacity)
             }
         }
