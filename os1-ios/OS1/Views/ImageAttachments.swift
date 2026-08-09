@@ -355,6 +355,79 @@ struct ConversationImage: View {
     }
 }
 
+/// Every image of one message or tool result, as many per row as fit and the
+/// rest wrapped underneath.
+///
+/// Thumbnails are a fixed size, so four of them are wider than a phone — and a
+/// bare `HStack` of them doesn't merely spill: it makes the whole transcript
+/// that wide, and every neighbouring line is then laid out on a column bigger
+/// than the screen and clipped on BOTH edges, while the pictures past the
+/// third sit off-screen with no way to reach them. An adaptive grid can't
+/// overflow at any count, and it shows every picture, which a sideways-
+/// scrolling row does not: measured on device, a scroll view around this
+/// content reports a content size equal to its own width, so the extra
+/// thumbnails stay clipped and every drag springs back.
+///
+/// `alignment` is the end the pictures hug — a user's own message aligns with
+/// the trailing edge of their bubble.
+struct ConversationImageStrip: View {
+    let sources: [String]
+    let sessionId: String
+    var size: CGFloat = 96
+    var cornerRadius: CGFloat = 12
+    var alignment: HorizontalAlignment = .leading
+
+    /// The row is the group: opening one of several images pages through the
+    /// rest rather than making you close and tap the next thumbnail.
+    private var gallery: [PreviewImage] {
+        sources.enumerated().map { index, source in
+            PreviewImage(
+                id: "\(index)",
+                source: .conversation(source: source, sessionId: sessionId)
+            )
+        }
+    }
+
+    /// What a single row of every picture would take. The grid is capped at
+    /// it so that a few pictures stay their own size and can hug the trailing
+    /// edge in a user's bubble, instead of a full-width grid stretching them
+    /// across the transcript; past the cap the grid takes what's available and
+    /// wraps.
+    private var naturalWidth: CGFloat {
+        CGFloat(sources.count) * size + CGFloat(max(0, sources.count - 1)) * 6
+    }
+
+    var body: some View {
+        if !sources.isEmpty {
+            grid
+                .frame(maxWidth: naturalWidth)
+                .frame(
+                    maxWidth: .infinity,
+                    alignment: Alignment(horizontal: alignment, vertical: .center)
+                )
+        }
+    }
+
+    private var grid: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: size * 0.75, maximum: size), spacing: 6)],
+            alignment: alignment,
+            spacing: 6
+        ) {
+            ForEach(Array(sources.enumerated()), id: \.offset) { index, source in
+                ConversationImage(
+                    source: source,
+                    sessionId: sessionId,
+                    gallery: gallery,
+                    galleryIndex: index
+                )
+                .frame(height: size)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            }
+        }
+    }
+}
+
 #if os(iOS)
 /// The full-screen viewer: one picture at a time, swiping sideways to the rest
 /// of its group and down to dismiss. Paging is a `TabView` rather than a

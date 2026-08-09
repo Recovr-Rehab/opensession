@@ -207,28 +207,12 @@ struct ToolCallRow: View {
                         EmptyView()
                     }
                 }
-                if !item.mediaSources.isEmpty {
-                    let gallery = item.mediaSources.enumerated().map { index, source in
-                        PreviewImage(
-                            id: "\(index)",
-                            source: .conversation(source: source, sessionId: sessionId)
-                        )
-                    }
-                    HStack(spacing: 6) {
-                        ForEach(Array(item.mediaSources.enumerated()), id: \.offset) { index, source in
-                            ConversationImage(
-                                source: source,
-                                sessionId: sessionId,
-                                gallery: gallery,
-                                galleryIndex: index
-                            )
-                                .frame(width: 120, height: 120)
-                                .clipShape(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                )
-                        }
-                    }
-                }
+                ConversationImageStrip(
+                    sources: item.mediaSources,
+                    sessionId: sessionId,
+                    size: 120,
+                    cornerRadius: 10
+                )
                 if let result = detail.resultText {
                     ToolCodeBox(label: detail.resultLabel, isError: item.isError) {
                         if detail.resultIsDiff {
