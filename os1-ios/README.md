@@ -299,6 +299,12 @@ OS1/
   on `.background` (never `.inactive` — that's a notification banner) so a
   suspended phone stops showing its owner's face, while the watch stays put and
   the transcript keeps streaming for unread counts and notifications.
+- Presence is EARNED, not held: the server expires a viewer roughly two minutes
+  after their last real action (`PRESENCE_TTL_MS`, ws-hub.ts), so an app merely
+  parked on a session — a Mac left open overnight — drops off instead of
+  claiming its owner is reading all day. `SessionViewModel.userDidInteract()`
+  re-sends `away: false` (throttled) on scrolling and typing; say nothing and
+  the face comes off, which is the safe direction to fail.
 
 ## Next milestones
 

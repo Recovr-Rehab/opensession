@@ -499,6 +499,10 @@ export function App({
 
 	/** Single entry point for every key, whichever component received it. */
 	function dispatch(key: KeyEvent): boolean {
+		// Presence is earned: the server drops a viewer who has gone quiet, so a
+		// terminal left open on a session stops claiming its owner is reading.
+		// A keypress is the cheapest honest proof that they are.
+		watchedRef.current?.markActive();
 		const { mode, pane, prefixArmed } = uiStore.getState();
 		const resolution = resolveKey(key, { mode, pane, prefixArmed }, prefix);
 		if (resolution.prefixArmed !== prefixArmed) {

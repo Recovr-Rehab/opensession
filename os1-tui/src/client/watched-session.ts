@@ -105,6 +105,12 @@ export class WatchedSession {
 		this.socket.cancel(this.sessionId);
 	}
 
+	/** A key was pressed with this session open: we're really here, so our face
+	 *  stays on it (the socket throttles; see `WsSessionSocket.markActive`). */
+	markActive(): void {
+		this.socket.markActive();
+	}
+
 	steerQueued(queueId: string): void {
 		this.socket.steerQueued(this.sessionId, queueId);
 	}

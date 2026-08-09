@@ -34,6 +34,8 @@ export interface SessionSocket {
 	connect(): void;
 	close(): void;
 	watch(sessionId: string, resume?: { offset: number; rev: string }): void;
+	/** A key was pressed: keep this viewer's face on the session (throttled). */
+	markActive(): void;
 	prompt(
 		sessionId: string,
 		content: string,
@@ -50,6 +52,8 @@ export interface SessionSocket {
 export type WsFactory = (url: string, protocols?: { headers: Record<string, string> }) => WebSocket;
 
 const PING_MS = 15_000;
+/** Comfortably inside the server's presence window (see `markActive`). */
+const ACTIVE_REFRESH_MS = 45_000;
 const PONG_DEADLINE_MS = 45_000;
 const MAX_BACKOFF_MS = 30_000;
 
@@ -57,6 +61,8 @@ export class WsSessionSocket implements SessionSocket {
 	private ws: WebSocket | null = null;
 	private pinger: ReturnType<typeof setInterval> | null = null;
 	private lastPong = Date.now();
+	/** Throttles `markActive` — one frame per interval, not one per keypress. */
+	private lastActiveSent = 0;
 	private attempt = 0;
 	private closedByUs = false;
 	private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -174,6 +180,20 @@ export class WsSessionSocket implements SessionSocket {
 		// handshake finishes.
 		this.pending.push(raw);
 		if (this.pending.length > 32) this.pending.shift();
+	}
+
+	/**
+	 * Presence is earned, not held: the server ages a viewer off a session a
+	 * couple of minutes after their last real action (PRESENCE_TTL_MS in
+	 * ws-hub.ts), so a terminal left open on a session stops claiming its owner
+	 * is reading. Every keypress pays the toll again — cheaply, since only the
+	 * first one per interval sends anything. Pings deliberately do not count.
+	 */
+	markActive(): void {
+		const now = Date.now();
+		if (now - this.lastActiveSent < ACTIVE_REFRESH_MS) return;
+		this.lastActiveSent = now;
+		this.send({ type: "away", away: false });
 	}
 
 	watch(sessionId: string, resume?: { offset: number; rev: string }): void {
