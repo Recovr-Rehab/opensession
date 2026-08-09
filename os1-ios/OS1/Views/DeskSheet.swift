@@ -98,30 +98,11 @@ struct DeskSheet: View {
             SessionView(viewModel: model, tabs: [model.session])
                 .emptyContent {
                     DeskBoardView(
-                        onAnswer: { item, option in answer(model: model, item: item, option: option) },
                         onOpen: { openSession = OpenedSession(id: $0) },
                         earlierCount: model.hiddenEarlierCount,
                         onShowEarlier: { model.hideBefore = nil }
                     )
                 }
-        }
-    }
-
-    /// Inline answers take the transport the question came in on: an
-    /// ask_human addressed to this user resolves over REST (and lands back in
-    /// whichever Slack thread posed it), a session's own AskUserQuestion goes
-    /// back over the Desk's socket.
-    private func answer(model: SessionViewModel, item: DeskState.WorkItem, option: String) {
-        guard let question = item.question else { return }
-        if question.kind == "human" {
-            Task { try? await OS1API.answerHumanAsk(id: question.questionId, answer: option) }
-        } else {
-            model.answerOtherSession(
-                sessionId: item.sessionId,
-                questionId: question.questionId,
-                questionText: question.text,
-                option: option
-            )
         }
     }
 

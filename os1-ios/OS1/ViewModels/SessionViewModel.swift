@@ -644,18 +644,6 @@ final class SessionViewModel {
         pendingQuestion = nil
     }
 
-    /// Answer ANOTHER session's pending question over this socket — the Desk
-    /// board unblocking work without opening it. The server resolves by the
-    /// frame's sessionId rather than by what this socket watches, so no second
-    /// connection is needed.
-    func answerOtherSession(sessionId: String, questionId: String, questionText: String, option: String) {
-        socket?.answer(
-            sessionId: sessionId,
-            questionId: questionId,
-            answers: [questionText: option]
-        )
-    }
-
     func cancelRun() {
         socket?.cancelWatchedRun()
     }
