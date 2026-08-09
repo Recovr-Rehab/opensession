@@ -1929,6 +1929,11 @@ struct SessionRow: View {
                 #endif
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // Teammates on any of this row's sessions, ahead of the clock —
+            // the web sidebar's arrangement.
+            if !rowViewers.isEmpty {
+                PresenceFacepile(viewers: rowViewers, size: faceSize, stacked: false)
+            }
             if showsClock {
                 WorkspaceRunElapsedLabel(since: session.runStartedDate)
                     // No trailing pad: the repo header's "+" now hangs its tap
@@ -1968,11 +1973,28 @@ struct SessionRow: View {
         ReadsStore.shared.isUnread(sessions.isEmpty ? [session] : sessions)
     }
 
+    /// Read here rather than at the call site for the same reason `unread` is:
+    /// `PresenceStore` is `@Observable`, so someone opening a session
+    /// invalidates the rows that show them, not the whole list.
+    private var rowViewers: [String] {
+        PresenceStore.shared.viewers(of: sessions.isEmpty ? [session] : sessions)
+    }
+
     private var markSize: CGFloat {
         #if os(iOS)
         22
         #else
         14
+        #endif
+    }
+
+    /// A step under the repo tile: a face on a row is "who else is here", not
+    /// something to read the row by.
+    private var faceSize: CGFloat {
+        #if os(iOS)
+        20
+        #else
+        15
         #endif
     }
 
@@ -2039,6 +2061,12 @@ struct SessionRow: View {
         if highlighted { parts.insert("last opened", at: 0) }
         if let prState = session.prState?.lowercased() {
             parts.append("pull request \(prState)")
+        }
+        // The faces are the only cue that someone else is in here.
+        if !rowViewers.isEmpty {
+            parts.append(
+                "\(ListFormatter.localizedString(byJoining: rowViewers)) viewing"
+            )
         }
         return parts.joined(separator: ", ")
     }

@@ -18,6 +18,10 @@ enum ServerEvent: Sendable {
     /// Everyone with this session open right now, by display name. One entry
     /// per socket, so the same person can appear twice (two devices).
     case presence(sessionId: String, viewers: [String])
+    /// Who is looking at what, app-wide — one entry per PERSON (the server
+    /// resolves a two-device teammate to their most recent session). Broadcast
+    /// to every client on change, and once at the handshake.
+    case globalPresence(viewing: [PresenceEntry])
     case queueUpdate(sessionId: String, queued: [QueueItem], steered: [QueueItem])
     case askQuestion(sessionId: String, question: AskQuestion)
     case askResolved(sessionId: String, questionId: String)
@@ -65,6 +69,11 @@ enum ServerEvent: Sendable {
         case "presence":
             guard let id = frame.sessionId else { return .ignored }
             return .presence(sessionId: id, viewers: frame.viewers ?? [])
+        case "global_presence":
+            return .globalPresence(viewing: (frame.viewing ?? []).compactMap {
+                guard let user = $0.user, let sessionId = $0.sessionId else { return nil }
+                return PresenceEntry(user: user, sessionId: sessionId)
+            })
         case "queue_update":
             guard let id = frame.sessionId else { return .ignored }
             return .queueUpdate(
@@ -94,6 +103,12 @@ enum ServerEvent: Sendable {
             return .ignored
         }
     }
+}
+
+/// One person and the session they are looking at, from `global_presence`.
+struct PresenceEntry: Equatable, Hashable, Sendable {
+    let user: String
+    let sessionId: String
 }
 
 /// Pagination cursor carried by transcript_init / transcript_history frames.
@@ -186,8 +201,14 @@ private struct RawFrame: Decodable {
     let entries: [TranscriptEntry]?
     let entry: TranscriptEntry?
     let text: String?
+    struct WireViewing: Decodable {
+        let user: String?
+        let sessionId: String?
+    }
+
     let isRunning: Bool?
     let viewers: [String]?
+    let viewing: [WireViewing]?
     let queued: [WireQueueItem]?
     let steered: [WireQueueItem]?
     let questionId: String?

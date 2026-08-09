@@ -98,7 +98,14 @@ struct RootView: View {
                 }
             }
             .task(id: preferenceHydrationID) {
-                guard scenePhase == .active else { return }
+                // Sidebar presence rides this same id: it covers both things
+                // that decide whether the listener socket should be up — the
+                // scene phase, and who we're signed in as.
+                guard scenePhase == .active else {
+                    PresenceStore.shared.stop()
+                    return
+                }
+                PresenceStore.shared.start()
                 while !Task.isCancelled {
                     await NativePreferences.hydrate()
                     await HideStore.shared.hydrate()

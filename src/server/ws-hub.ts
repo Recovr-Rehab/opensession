@@ -198,11 +198,21 @@ export function computeGlobalPresence(
 	}));
 }
 
-function broadcastGlobalPresence() {
-	broadcastToAll({
+/**
+ * The app-wide presence frame as it stands right now. Broadcasts only fire on
+ * CHANGE, so a client that just connected would otherwise see an empty team
+ * until someone happened to open or leave a session — send this once at the
+ * handshake (ws-handlers.ts) to start it off with the truth.
+ */
+export function globalPresenceFrame() {
+	return {
 		type: "global_presence",
 		viewing: computeGlobalPresence(sessionWatchers),
-	});
+	};
+}
+
+function broadcastGlobalPresence() {
+	broadcastToAll(globalPresenceFrame());
 }
 
 // ── Collaborative notes fan-out ───────────────────────────────────────────

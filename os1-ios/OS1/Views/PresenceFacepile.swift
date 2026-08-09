@@ -10,6 +10,13 @@ import SwiftUI
 struct PresenceFacepile: View {
     let viewers: [String]
     var size: CGFloat = 26
+    /// Overlapped pile (a toolbar, on known chrome) vs faces side by side.
+    ///
+    /// A stack needs an opaque ring in the colour of whatever is behind it,
+    /// and a sidebar row's backdrop moves under it — plate, swipe, selection —
+    /// so any fixed ring would read as a hard frame on most of them. Same call
+    /// the web sidebar makes.
+    var stacked: Bool = true
 
     /// Beyond three the pile stops being readable in a navigation bar and the
     /// rest collapse into a count.
@@ -19,13 +26,19 @@ struct PresenceFacepile: View {
         if viewers.isEmpty {
             EmptyView()
         } else {
-            HStack(spacing: -size / 3) {
+            HStack(spacing: stacked ? -size / 3 : 2) {
                 ForEach(shown, id: \.self) { viewer in
                     UserAvatar(person: viewer, size: size)
                         // The ring is what makes overlapping faces read as a
                         // stack rather than one smeared shape; it takes the
                         // bar's own colour so the pile sits on the chrome.
-                        .overlay(Circle().strokeBorder(OS1VisualStyle.background, lineWidth: 1.5))
+                        .overlay {
+                            if stacked {
+                                Circle().strokeBorder(
+                                    OS1VisualStyle.background, lineWidth: 1.5
+                                )
+                            }
+                        }
                 }
                 if overflow > 0 {
                     Text(verbatim: "+\(overflow)")
@@ -33,7 +46,13 @@ struct PresenceFacepile: View {
                         .foregroundStyle(OS1VisualStyle.textDim)
                         .frame(width: size, height: size)
                         .background(Circle().fill(OS1VisualStyle.hover))
-                        .overlay(Circle().strokeBorder(OS1VisualStyle.background, lineWidth: 1.5))
+                        .overlay {
+                            if stacked {
+                                Circle().strokeBorder(
+                                    OS1VisualStyle.background, lineWidth: 1.5
+                                )
+                            }
+                        }
                 }
             }
             // One label for the pile: VoiceOver reading three unlabelled
