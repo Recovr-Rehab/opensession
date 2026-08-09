@@ -121,16 +121,28 @@ extension View {
                     // The bars' own band, held at full veil.
                     OS1VisualStyle.chatCanvas.opacity(veil)
                         .frame(height: geometry.safeAreaInsets.top)
-                    // Weighted stops for the same reason as the composer's: a
-                    // straight ramp only reaches full veil on its very last
-                    // row, which left rows legible right up against the glass.
+                    // Smoothstep, not weighted linear stops. The ramp is
+                    // bounded by two FLAT regions — full veil above, bare
+                    // transcript below — so a stop list that arrives at zero
+                    // still moving leaves a first-derivative break at the
+                    // ramp's bottom edge, and a slope break in a wash reads as
+                    // a drawn line across the full width (Mach band). The old
+                    // front-loaded stops did exactly that: they spent their
+                    // last 45% falling from half veil to nothing, and the line
+                    // landed a ramp's height under the top chrome — right below
+                    // the tab strip. Smoothstep leaves AND arrives with zero
+                    // slope, so it meets both flats invisibly while still
+                    // holding near full veil where rows are up against the
+                    // glass, which is what the weighted stops were for.
                     LinearGradient(
-                        stops: [
-                            .init(color: OS1VisualStyle.chatCanvas.opacity(veil), location: 0),
-                            .init(color: OS1VisualStyle.chatCanvas.opacity(veil * 0.88), location: 0.22),
-                            .init(color: OS1VisualStyle.chatCanvas.opacity(veil * 0.5), location: 0.55),
-                            .init(color: OS1VisualStyle.chatCanvas.opacity(0), location: 1),
-                        ],
+                        stops: (0...16).map { step in
+                            let t = Double(step) / 16
+                            let eased = 1 - t * t * (3 - 2 * t)
+                            return Gradient.Stop(
+                                color: OS1VisualStyle.chatCanvas.opacity(veil * eased),
+                                location: CGFloat(t)
+                            )
+                        },
                         startPoint: .top,
                         endPoint: .bottom
                     )
