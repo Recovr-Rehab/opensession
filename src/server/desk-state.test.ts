@@ -84,6 +84,20 @@ describe("Desk live-state briefing", () => {
 		expect(pending).toContain("checks pending");
 	});
 
+	test("a PR with no checks is not reported as green", () => {
+		const note = renderDeskBriefing(
+			state({
+				review: [
+					item("os-c", "X", {
+						pr: { number: 7, checks: { passed: 0, failed: 0, pending: 0 } },
+					}),
+				],
+			}),
+		);
+		expect(note).toContain("PR #7 open");
+		expect(note).not.toContain("green");
+	});
+
 	test("counts include what the caps left out", () => {
 		const note = renderDeskBriefing(
 			state({

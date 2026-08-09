@@ -30,6 +30,10 @@ interface DeskConversationProps {
 	/** Drill into a session a tool call spawned (the Desk delegates constantly).
 	 *  The overlay has no side pane, so this opens it in the full viewer. */
 	onOpenSubagent?: (sessionId: string) => void;
+	/** Treat a conversation older than this as finished, so the Desk opens on
+	 *  its board rather than on a days-old chat. Display only — one click
+	 *  brings it back, and the full transcript is always in the session view. */
+	staleAfterMs?: number;
 }
 
 /**
@@ -44,6 +48,7 @@ export function DeskConversation({
 	hideBefore,
 	voiceSend,
 	onOpenSubagent,
+	staleAfterMs,
 }: DeskConversationProps) {
 	const { connected, send, addHandler } = useWebSocket();
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
@@ -57,6 +62,26 @@ export function DeskConversation({
 	// streaming reply doesn't yank them up from scrollback.
 	const followRef = useRef(true);
 	const streamSeqRef = useRef(0);
+	const [showEarlier, setShowEarlier] = useState(false);
+
+	// The Desk's "Clear" marker: everything at/before it stays out of this view
+	// (locally-minted system lines have fresh timestamps and survive).
+	const cleared = hideBefore
+		? entries.filter((e) => !e.timestamp || e.timestamp > hideBefore)
+		: entries;
+
+	// A conversation you left days ago isn't one you're in: past staleAfterMs
+	// the Desk opens on its board instead. The cutoff is frozen at mount, so
+	// anything said in this sitting stays put no matter how long it stays open.
+	const staleCutoff = useRef(
+		staleAfterMs ? new Date(Date.now() - staleAfterMs).toISOString() : null,
+	).current;
+	const visibleEntries =
+		staleCutoff && !showEarlier
+			? cleared.filter((e) => !e.timestamp || e.timestamp > staleCutoff)
+			: cleared;
+	const earlierCount = cleared.length - visibleEntries.length;
+	const hasContent = visibleEntries.length > 0 || !!streamText || !!pending;
 
 	// "@"-mentions: files (this session's repo), other sessions, teammates —
 	// same suggestions endpoint as the main composer.
@@ -180,11 +205,14 @@ export function DeskConversation({
 		};
 	}, [connected, sessionId, send, addHandler]);
 
-	// Keep a following reader pinned to the live edge as content lands.
+	// Keep a following reader pinned to the live edge as content lands. With no
+	// conversation the pane holds the board instead, which is read top-down —
+	// pinning it to the bottom would open the Desk halfway down your own work.
 	useEffect(() => {
+		if (!hasContent) return;
 		const el = bodyRef.current;
 		if (el && followRef.current) el.scrollTop = el.scrollHeight;
-	}, [entries, streamText, pending]);
+	}, [entries, streamText, pending, hasContent]);
 
 	function onScroll() {
 		const el = bodyRef.current;
@@ -234,12 +262,6 @@ export function DeskConversation({
 		followRef.current = true;
 	}
 
-	// The Desk's "Clear" marker: everything at/before it stays out of this view
-	// (locally-minted system lines have fresh timestamps and survive).
-	const visibleEntries = hideBefore
-		? entries.filter((e) => !e.timestamp || e.timestamp > hideBefore)
-		: entries;
-	const hasContent = visibleEntries.length > 0 || !!streamText || !!pending;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -249,13 +271,24 @@ export function DeskConversation({
 				onScroll={onScroll}
 			>
 				{!hasContent ? (
-					// A supplied empty state owns its own layout (the Desk hands us a
-					// full-width board); only the bare fallback string gets centered.
-					(emptyState ?? (
-						<div className="mx-auto mt-6 max-w-[320px] text-center text-[13px] font-medium leading-relaxed text-dim">
-							Ask your Desk anything.
-						</div>
-					))
+					<>
+						{earlierCount > 0 && (
+							<button
+								type="button"
+								className="mx-auto mb-1 block rounded-control px-2 py-1 text-[12px] font-medium text-faint hover:bg-hover hover:text-dim"
+								onClick={() => setShowEarlier(true)}
+							>
+								Show earlier conversation
+							</button>
+						)}
+						{/* A supplied empty state owns its own layout (the Desk hands us
+						    a full-width board); only the fallback string gets centered. */}
+						{emptyState ?? (
+							<div className="mx-auto mt-6 max-w-[320px] text-center text-[13px] font-medium leading-relaxed text-dim">
+								Ask your Desk anything.
+							</div>
+						)}
+					</>
 				) : (
 					<>
 						{/* sessionId is load-bearing, not decoration: the server

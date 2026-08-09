@@ -61,13 +61,16 @@ function prLabel(item: DeskWorkItem): string | undefined {
 	const pr = item.pr;
 	if (!pr) return undefined;
 	const c = pr.checks;
-	const health = !c
-		? ""
-		: c.failed > 0
-			? " · checks failing"
-			: c.pending > 0
-				? " · checks pending"
-				: " · checks green";
+	// No checks at all is not "green" — say nothing rather than imply a pass.
+	const total = c ? c.passed + c.failed + c.pending : 0;
+	const health =
+		!c || !total
+			? ""
+			: c.failed > 0
+				? " · checks failing"
+				: c.pending > 0
+					? " · checks pending"
+					: " · checks green";
 	return `PR #${pr.number}${health}`;
 }
 
@@ -190,7 +193,10 @@ export function DeskBoard({
 								<Card
 									key={item.sessionId}
 									item={item}
-									sub={prLabel(item) ?? "Finished — you haven't read it yet"}
+									// Only say something worth saying: "finished, unread" is
+									// what the section header already means, and repeating it
+									// under every card is filler.
+									sub={prLabel(item)}
 									onOpen={() => onOpenSession(item.sessionId)}
 								/>
 							))}

@@ -217,7 +217,11 @@ function line(item: DeskWorkItem, extra?: string): string {
 function prBit(pr: DeskPr | undefined): string | undefined {
 	if (!pr) return undefined;
 	const checks = pr.checks;
-	const health = !checks
+	// No checks at all is not "green" — say nothing rather than imply a pass.
+	const total = checks
+		? checks.passed + checks.failed + checks.pending
+		: 0;
+	const health = !checks || !total
 		? ""
 		: checks.failed > 0
 			? ", checks failing"

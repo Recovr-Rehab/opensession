@@ -230,6 +230,10 @@ function DeskBody({
 							onOpenSession(id);
 						}}
 						placeholder="Hand me something…"
+						// Two hours: long enough that stepping away mid-thought keeps
+						// the thread, short enough that yesterday's chat never owns the
+						// surface you summoned for today's work.
+						staleAfterMs={2 * 60 * 60 * 1000}
 						// With no conversation on screen, the Desk shows the work you
 						// handed off — what needs your eyes, what's blocked on you,
 						// what's running. Talking takes the surface back.
