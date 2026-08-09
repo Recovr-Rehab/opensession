@@ -190,29 +190,31 @@ chaos:
 
 ## Frontend UI system (Base UI + Tailwind + Motion)
 
-New UI goes through this stack. The stylesheet is split in two, and the split
-is the migration's scoreboard:
+New UI goes through this stack. There are two hand-written stylesheets, and
+only one of them has anything in it:
 
 - `styles/base.css` — the foundation, and it stays. Tokens, the hand-rolled
   preflight (Tailwind's own is deliberately not imported), the scroll model
   and selection policy, Electron/WCO/PWA chrome, reduced-motion and `@supports`
-  fallbacks. "Move everything to Tailwind" never meant deleting these; Tailwind
-  v4 keeps tokens and base rules in CSS.
-- `styles/legacy.css` — component styling on its way out. **Target: zero.**
-  Nothing new goes here; migrating a component means moving its rules into
-  utilities on the markup (or a primitive in `ui/`) and deleting the legacy
-  class names from the JSX in the same commit.
+  fallbacks, plus the keyframes and `@property` registrations that have no
+  element to hang a utility on. "Move everything to Tailwind" never meant
+  deleting these; Tailwind v4 keeps tokens and base rules in CSS.
+- `styles/legacy.css` — **empty.** It held the app's component styling before
+  the Tailwind system landed; the migration finished, and the file is kept at
+  zero rules, still imported, so the contract has a home and `css-audit` has a
+  target. Nothing goes back in. Component styling is utilities on the markup or
+  a primitive in `ui/`; a genuinely global rule goes to base.css.
 
-Migration is an active campaign, not opportunistic drift. Two rules keep it
-from breaking things:
+Two things the migration learned, which still decide where a rule can live:
 
-- Move a whole subtree at once. Descendant rules keyed off an ancestor class
-  (`.sidebar-item .foo`) break if the ancestor migrates while children still
-  depend on it.
-- Strip the legacy classes from the markup as you go. Utilities only win
-  source-order *ties*; a compound legacy selector (`.sidebar-item.is-selected
-  .count`) still outranks a single utility class, so a half-migrated element
-  loses specificity fights in ways that are hard to spot.
+- Utilities only win source-order *ties*. The compiled sheet is linked after
+  both hand-written ones, so a single class in base.css loses to a utility on
+  the same element — but a compound selector (`.sidebar-item.is-selected
+  .count`) still outranks one. If you put a rule in base.css, expect any
+  utility on that element to beat it, and check rather than assume.
+- A class name on the markup is not evidence that its rule does anything, and
+  a rule that matches nothing on the page you are looking at is not evidence
+  that it is dead. Both directions have to be measured — see the tooling below.
 
 Tooling: `bun scripts/css-audit.ts` reports which rules in legacy.css nothing
 can reach any more (`--prune` deletes them; it holds back classes built at

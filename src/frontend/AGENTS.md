@@ -37,11 +37,11 @@ language instead of introducing a new local style for each feature.
 
 ## Styling
 
-- Use Tailwind utilities for new and touched UI, and migrate the legacy
-  `styles/legacy.css` classes you touch — that file's target is zero. Move a
-  whole subtree at once and delete its legacy class names from the markup in
-  the same commit; a half-migrated element loses specificity fights, because
-  utilities only win source-order ties.
+- Use Tailwind utilities for new and touched UI. `styles/legacy.css` is empty
+  and stays that way; component styling lives in a `lib/*-classes.ts` string
+  beside its component, or in a primitive in `ui/`. A class name left on the
+  markup is a hook for something else (base.css, a `closest()` call, another
+  module's `[.that-class_&]`) — say which, in a comment, or drop the name.
 - Use the semantic tokens from `styles/tailwind.css`, such as `bg-panel`,
   `text-fg`, `text-dim`, and `border-line`. Never add raw color values or stock
   Tailwind palette colors to product UI.
@@ -69,9 +69,10 @@ language instead of introducing a new local style for each feature.
   raised surfaces, shadows, and animation should communicate meaning, not make
   a new feature louder than its neighbors.
 - Add rules to `styles/base.css` only when they are truly global or
-  theme-level — tokens, resets, platform chrome. Never add to
-  `styles/legacy.css`: it is being emptied, not extended. Component styling
-  belongs with the component, as utilities or a primitive in `ui/`.
+  theme-level — tokens, resets, platform chrome, and the keyframes and
+  `@property` registrations that have no element to hang a utility on. Never
+  add to `styles/legacy.css`: it is empty on purpose. Component styling belongs
+  with the component, as utilities or a primitive in `ui/`.
 
 ## Interaction and accessibility
 
