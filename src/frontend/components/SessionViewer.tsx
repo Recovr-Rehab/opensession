@@ -102,7 +102,6 @@ import { SlackChannelPane } from "./SlackChannelPane";
 import { feedForRefKind } from "../lib/feeds-meta";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { AssetsPanel, useSessionAssets } from "./AssetsPanel";
-import { AssetOverlay } from "./AssetOverlay";
 import {
 	SessionReportsPanel,
 	useSessionReports,
@@ -1237,17 +1236,17 @@ export function SessionViewer({
 	const [selectedAssetPath, setSelectedAssetPath] = useState<string | null>(
 		null,
 	);
-	// What the transcript's own asset rows open: the file itself, on top of the
-	// conversation rather than in a tab that replaces it — an artifact is
-	// something you glance at and dismiss, and the row that named it is where
-	// you were reading. `useCallback` with no deps because it reaches the
-	// memoized transcript through context: a fresh closure per render would
-	// re-render the whole thing on every sessions poll.
-	const [overlayAssetPath, setOverlayAssetPath] = useState<string | null>(null);
-	const openAssetFromTranscript = useCallback(
-		(path: string) => setOverlayAssetPath(path),
-		[],
-	);
+	// …and what the transcript's own asset rows open. The same destination as
+	// the Info-panel list, so the two ways into one file don't disagree.
+	// Through a ref because `onOpenAssets` is a fresh closure on every App
+	// render, and this reaches the memoized transcript as a context value —
+	// an unstable one would re-render the whole thing on every sessions poll.
+	const openAssetsRef = useRef(onOpenAssets);
+	openAssetsRef.current = onOpenAssets;
+	const openAssetFromTranscript = useCallback((path: string) => {
+		setSelectedAssetPath(path);
+		openAssetsRef.current?.();
+	}, []);
 	const sessionReports = useSessionReports(session.id, addHandler);
 	const panelResizeHandle = (
 		<div
@@ -3899,15 +3898,6 @@ export function SessionViewer({
 					open={moveToCloudOpen}
 					sessionId={session.id}
 					onOpenChange={setMoveToCloudOpen}
-				/>
-			)}
-			{overlayAssetPath && (
-				<AssetOverlay
-					sessionId={session.id}
-					files={assetFiles}
-					path={overlayAssetPath}
-					onClose={() => setOverlayAssetPath(null)}
-					onOpenNewSession={onOpenNewSession}
 				/>
 			)}
 			{deleting && (

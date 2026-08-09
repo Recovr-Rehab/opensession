@@ -128,120 +128,6 @@ function AssetsTree({
 
 const TEXT_CAP = 256 * 1024;
 
-/**
- * One asset, rendered by kind. Shared with the transcript's asset overlay
- * (AssetOverlay) so a file opens as the same thing wherever it was clicked —
- * which matters most for HTML, whose relative references (./style.css,
- * ./data.json) only resolve when it is framed from the raw route itself.
- *
- * It owns the scroll: every kind fills the box it is given and scrolls inside
- * it, so the surface around it only has to decide how tall the box is.
- */
-export function AssetPreview({
-	sessionId,
-	file,
-	onOpenNewSession,
-}: {
-	sessionId: string;
-	file: SessionAssetFile;
-	onOpenNewSession: (prefill: NewSessionPrefill) => void;
-}) {
-	const kind = previewKind(file.path);
-	const rawUrl = sessionAssetPreviewUrl(sessionId, file);
-
-	// Text-ish previews fetch the body themselves.
-	const [text, setText] = useState<string | null>(null);
-	useEffect(() => {
-		setText(null);
-		if (kind !== "text" && kind !== "markdown") return;
-		let alive = true;
-		fetch(rawUrl)
-			.then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
-			.then((t) => {
-				if (alive) setText(t.length > TEXT_CAP ? t.slice(0, TEXT_CAP) : t);
-			})
-			.catch(() => {
-				if (alive) setText(null);
-			});
-		return () => {
-			alive = false;
-		};
-	}, [rawUrl, kind]);
-
-	return (
-		<div className="min-h-0 flex-1 overflow-auto">
-			{kind === "html" ? (
-				// allow-same-origin so the page can fetch() sibling assets
-				// (./data.json); the sandbox still blocks top navigation. The
-				// content is our own agents' output on a tailnet-only UI.
-				<iframe
-					key={rawUrl}
-					title={file.path}
-					src={rawUrl}
-					sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-downloads"
-					onLoad={(event) => {
-						const document = event.currentTarget.contentDocument;
-						if (!document) return;
-						document.addEventListener("click", (clickEvent) => {
-							const link = (clickEvent.target as Element | null)?.closest?.("a");
-							const prefill = link ? parseNewSessionLink(link.href) : null;
-							if (!prefill) return;
-							clickEvent.preventDefault();
-							onOpenNewSession(prefill);
-						});
-					}}
-					className="h-full w-full border-0 bg-white"
-				/>
-			) : kind === "pdf" ? (
-				// No sandbox: Chrome's built-in PDF viewer won't render in a
-				// sandboxed iframe.
-				<iframe
-					key={rawUrl}
-					title={file.path}
-					src={rawUrl}
-					className="h-full w-full border-0"
-				/>
-			) : kind === "image" ? (
-				<div className="flex h-full items-center justify-center overflow-auto p-3">
-					<img
-						src={rawUrl}
-						alt={file.path}
-						className="max-h-full max-w-full object-contain"
-					/>
-				</div>
-			) : kind === "video" ? (
-				<video src={rawUrl} controls className="h-full w-full" />
-			) : kind === "audio" ? (
-				<div className="p-4">
-					<audio src={rawUrl} controls className="w-full" />
-				</div>
-			) : kind === "markdown" ? (
-				text === null ? (
-					<div className="p-4 text-label text-faint">Loading…</div>
-				) : (
-					<MarkdownBody
-						className="markdown px-4 py-3 text-[13px]"
-						html={marked.parse(text, { async: false }) as string}
-					/>
-				)
-			) : kind === "text" ? (
-				text === null ? (
-					<div className="p-4 text-label text-faint">Loading…</div>
-				) : (
-					<pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-label leading-[1.5] text-fg">
-						{text}
-						{file.size > TEXT_CAP ? "\n… (truncated preview)" : ""}
-					</pre>
-				)
-			) : (
-				<div className="flex h-full items-center justify-center text-label text-faint">
-					No inline preview for this file type — use Download.
-				</div>
-			)}
-		</div>
-	);
-}
-
 export function AssetsPanel({
 	sessionId,
 	files,
@@ -280,7 +166,27 @@ export function AssetsPanel({
 	}, [paths, selected]);
 
 	const file = files.find((f) => f.path === selected) || null;
+	const kind = selected ? previewKind(selected) : null;
 	const rawUrl = file ? sessionAssetPreviewUrl(sessionId, file) : null;
+
+	// Text-ish previews fetch the body themselves.
+	const [text, setText] = useState<string | null>(null);
+	useEffect(() => {
+		setText(null);
+		if (!rawUrl || (kind !== "text" && kind !== "markdown")) return;
+		let alive = true;
+		fetch(rawUrl)
+			.then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
+			.then((t) => {
+				if (alive) setText(t.length > TEXT_CAP ? t.slice(0, TEXT_CAP) : t);
+			})
+			.catch(() => {
+				if (alive) setText(null);
+			});
+		return () => {
+			alive = false;
+		};
+	}, [rawUrl, kind]);
 
 	async function onDelete() {
 		if (!selected) return;
@@ -369,11 +275,76 @@ export function AssetsPanel({
 							Delete
 						</Button>
 					</div>
-					<AssetPreview
-						sessionId={sessionId}
-						file={file}
-						onOpenNewSession={onOpenNewSession}
-					/>
+					<div className="min-h-0 flex-1 overflow-auto">
+						{kind === "html" ? (
+							// allow-same-origin so the page can fetch() sibling assets
+							// (./data.json); the sandbox still blocks top navigation. The
+							// content is our own agents' output on a tailnet-only UI.
+							<iframe
+								key={rawUrl}
+								title={file.path}
+								src={rawUrl}
+								sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-downloads"
+								onLoad={(event) => {
+									const document = event.currentTarget.contentDocument;
+									if (!document) return;
+									document.addEventListener("click", (clickEvent) => {
+										const link = (clickEvent.target as Element | null)?.closest?.("a");
+										const prefill = link ? parseNewSessionLink(link.href) : null;
+										if (!prefill) return;
+										clickEvent.preventDefault();
+										onOpenNewSession(prefill);
+									});
+								}}
+								className="h-full w-full border-0 bg-white"
+							/>
+						) : kind === "pdf" ? (
+							// No sandbox: Chrome's built-in PDF viewer won't render in a
+							// sandboxed iframe.
+							<iframe
+								key={rawUrl}
+								title={file.path}
+								src={rawUrl}
+								className="h-full w-full border-0"
+							/>
+						) : kind === "image" ? (
+							<div className="flex h-full items-center justify-center overflow-auto p-3">
+								<img
+									src={rawUrl}
+									alt={file.path}
+									className="max-h-full max-w-full object-contain"
+								/>
+							</div>
+						) : kind === "video" ? (
+							<video src={rawUrl} controls className="h-full w-full" />
+						) : kind === "audio" ? (
+							<div className="p-4">
+								<audio src={rawUrl} controls className="w-full" />
+							</div>
+						) : kind === "markdown" ? (
+							text === null ? (
+								<div className="p-4 text-label text-faint">Loading…</div>
+							) : (
+								<MarkdownBody
+									className="markdown px-4 py-3 text-[13px]"
+									html={marked.parse(text, { async: false }) as string}
+								/>
+							)
+						) : kind === "text" ? (
+							text === null ? (
+								<div className="p-4 text-label text-faint">Loading…</div>
+							) : (
+								<pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-label leading-[1.5] text-fg">
+									{text}
+									{file.size > TEXT_CAP ? "\n… (truncated preview)" : ""}
+								</pre>
+							)
+						) : (
+							<div className="flex h-full items-center justify-center text-label text-faint">
+								No inline preview for this file type — use Download.
+							</div>
+						)}
+					</div>
 				</>
 			) : null}
 		</div>
