@@ -105,6 +105,26 @@ struct SessionView: View {
     @Environment(\.openPanel) private var openPanel
     #endif
 
+    /// Content to stand in for an empty transcript, supplied by the caller
+    /// (see `emptyContent(_:)`). Set through a modifier rather than an init
+    /// parameter so neither initializer grows a rarely-used argument.
+    private var emptyContent: (() -> AnyView)?
+
+    /// Fill this session's empty transcript with your own view — the Desk's
+    /// board. Ignored the moment there is anything to show.
+    func emptyContent<V: View>(@ViewBuilder _ build: @escaping () -> V) -> SessionView {
+        var copy = self
+        copy.emptyContent = { AnyView(build()) }
+        return copy
+    }
+
+    /// The caller's stand-in currently owns the transcript area.
+    private var showingEmptyContent: Bool {
+        emptyContent != nil
+            && viewModel.displayBlocks.isEmpty
+            && viewModel.liveText.isEmpty
+    }
+
     init(
         session: Session,
         seed: SessionViewModel.OptimisticSeed? = nil,
@@ -160,6 +180,17 @@ struct SessionView: View {
                         LazyVStack(spacing: 10) {
                             if viewModel.canLoadEarlier || viewModel.loadingEarlier {
                                 historyLoader
+                            }
+                            // Nothing on screen: the caller may own this space
+                            // (the Desk puts its board here). Rendered inside
+                            // the transcript rather than in place of it, so the
+                            // composer, streaming and scroll behaviour are the
+                            // session's own.
+                            if let emptyContent,
+                               viewModel.displayBlocks.isEmpty,
+                               viewModel.liveText.isEmpty {
+                                emptyContent()
+                                    .id("empty-content")
                             }
                             ForEach(viewModel.displayBlocks) { block in
                                 TranscriptRow(
@@ -226,8 +257,15 @@ struct SessionView: View {
                     #if os(iOS)
                     .transcriptTopWash()
                     #endif
-                    .defaultScrollAnchor(.bottom)
-                    .defaultScrollAnchor(.bottom, for: .sizeChanges)
+                    // A transcript is read from the bottom; the Desk's board,
+                    // which stands in for an empty one, is read from the top —
+                    // anchoring it to the bottom opens the Desk halfway down
+                    // your own work.
+                    .defaultScrollAnchor(showingEmptyContent ? .top : .bottom)
+                    .defaultScrollAnchor(
+                        showingEmptyContent ? .top : .bottom,
+                        for: .sizeChanges
+                    )
                     .scrollDismissesKeyboardCompat()
                     // Pin state from real scroll geometry: pinned while the
                     // visible bottom edge is within pinTolerance of the
@@ -531,7 +569,8 @@ struct SessionView: View {
         SessionInputBar(
             viewModel: viewModel,
             contentMaxWidth: contentMaxWidth,
-            horizontalInset: contentInset
+            horizontalInset: contentInset,
+            autoFocusWhenNeverRan: emptyContent == nil
         )
         // The system treats a bottom `safeAreaBar` as adaptive chrome: when
         // dark content scrolls under it, it hands the bar's subtree a DARK
@@ -1493,6 +1532,10 @@ private struct SessionInputBar: View {
     /// Matches the transcript column cap so the bar centers with it.
     let contentMaxWidth: CGFloat
     let horizontalInset: CGFloat
+    /// Open with the keyboard up when this session has nothing to read.
+    /// False when the caller has put something in the transcript's place (the
+    /// Desk's board), which a keyboard would cover.
+    var autoFocusWhenNeverRan = true
     @FocusState private var inputFocused: Bool
     /// What the "+" menu opened, if anything. One `@State` and one `.sheet`
     /// on purpose: stacking sheet modifiers on a single view leaves only the
@@ -1612,8 +1655,11 @@ private struct SessionInputBar: View {
         // to do in it is write — open with the keyboard up. This is the tab
         // strip's "+" landing: the tab appears already waiting for the prompt
         // that the sheet used to ask for.
+        // …unless the caller put something there to read. A stub `Session`
+        // built from an id alone reads as never-run, so without this the
+        // Desk opens with a keyboard covering its own board.
         .onAppear {
-            if viewModel.session.neverRan { inputFocused = true }
+            if viewModel.session.neverRan && autoFocusWhenNeverRan { inputFocused = true }
         }
         // Leaving the session must not leave the mic open.
         .onDisappear { dictation.stop() }

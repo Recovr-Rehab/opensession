@@ -644,6 +644,18 @@ final class SessionViewModel {
         pendingQuestion = nil
     }
 
+    /// Answer ANOTHER session's pending question over this socket — the Desk
+    /// board unblocking work without opening it. The server resolves by the
+    /// frame's sessionId rather than by what this socket watches, so no second
+    /// connection is needed.
+    func answerOtherSession(sessionId: String, questionId: String, questionText: String, option: String) {
+        socket?.answer(
+            sessionId: sessionId,
+            questionId: questionId,
+            answers: [questionText: option]
+        )
+    }
+
     func cancelRun() {
         socket?.cancelWatchedRun()
     }
@@ -1074,6 +1086,14 @@ final class SessionViewModel {
     /// scroll pin follows its count — grouping alone would hold that count
     /// steady while a live turn grows, and new output would stop following.
     private(set) var displayBlocks: [TranscriptBlock] = []
+    /// Hide entries at or before this instant from the transcript (the Desk's
+    /// stale-conversation cutoff). Setting it re-groups immediately.
+    var hideBefore: Date? {
+        didSet { if hideBefore != oldValue { rebuildDisplayItems() } }
+    }
+    /// How many entries `hideBefore` is currently holding back, for the
+    /// "Show earlier conversation" affordance.
+    private(set) var hiddenEarlierCount = 0
 
     /// Fold state, kept off the observation graph — see `FoldStateStore`.
     /// It outlives the view tree because `@State` inside a `LazyVStack` row is
@@ -1102,6 +1122,17 @@ final class SessionViewModel {
 
     private func rebuildDisplayItems() {
         // Durable file-ordered entries first, then the ephemeral live tail.
+        // A conversation left days ago isn't one you're in: the Desk sets a
+        // cutoff so it opens on its board instead of yesterday's chat. Display
+        // only — nothing is dropped, and clearing the cutoff brings it back.
+        var entries = self.entries
+        if let hideBefore {
+            let kept = entries.filter { ($0.timestampDate ?? .distantFuture) > hideBefore }
+            hiddenEarlierCount = entries.count - kept.count
+            entries = kept
+        } else {
+            hiddenEarlierCount = 0
+        }
         var all = entries
         let knownIds = Set(entries.map(\.id))
         all.append(contentsOf: liveEntries.filter { !knownIds.contains($0.id) })

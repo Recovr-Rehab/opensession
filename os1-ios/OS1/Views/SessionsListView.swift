@@ -479,8 +479,12 @@ struct SessionsListView: View {
                 .onAppear {
                     #if DEBUG
                     // Dev loop: open the Desk on launch so simulator voice
-                    // runs need no UI driving (`OS1_VOICE_AUTOSTART=1`).
-                    if ProcessInfo.processInfo.environment["OS1_VOICE_AUTOSTART"] != nil {
+                    // runs need no UI driving (`OS1_VOICE_AUTOSTART=1`), or
+                    // just the sheet — the board, no call — with
+                    // `OS1_OPEN_DESK=1`. Both exist because the Desk sits
+                    // behind a toolbar tap that a simulator run can't make.
+                    let env = ProcessInfo.processInfo.environment
+                    if env["OS1_VOICE_AUTOSTART"] != nil || env["OS1_OPEN_DESK"] != nil {
                         showDesk = true
                     }
                     #endif
