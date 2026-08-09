@@ -41,8 +41,12 @@ extension View {
 
     /// The person's own messages get the same neutral gray bubble on both
     /// platforms (`OS1VisualStyle.userMessage` resolves per appearance).
-    func userMessagePanelCompat<S: Shape>(in shape: S) -> some View {
-        background(OS1VisualStyle.userMessage, in: shape)
+    /// `tint` overrides it for a message that is somebody else's words.
+    func userMessagePanelCompat<S: Shape>(
+        in shape: S,
+        tint: Color? = nil
+    ) -> some View {
+        background(tint ?? OS1VisualStyle.userMessage, in: shape)
     }
 
     /// Inline nav-bar title on iOS; titles are inline by nature on macOS.

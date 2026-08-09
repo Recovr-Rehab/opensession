@@ -133,6 +133,10 @@ enum OS1VisualStyle {
     static let blue = Color(red: 0.345, green: 0.651, blue: 1.0)
     static let red = Color(red: 0.973, green: 0.318, blue: 0.286)
     static let purple = Color(red: 0.639, green: 0.443, blue: 0.969)
+    /// A teammate's reply routed back into a session — the web's `#1f9e8a`.
+    /// Not a status colour: it marks whose words these are, so it is warm
+    /// rather than green-for-good.
+    static let humanReply = Color(red: 0.122, green: 0.620, blue: 0.541)
     #if os(iOS)
     static let sessionMaxWidth: CGFloat = 780
     #else

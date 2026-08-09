@@ -14,6 +14,9 @@ struct TranscriptRow: View {
     let expansionState: (String) -> TurnFoldState
     /// "Fold tool calls": a folded work turn still shows its notes.
     var showsMessagesWhenFolded = false
+    /// Who started this session, for crediting turns that carry no explicit
+    /// sender (see `UserBubble`). Nil for automations and sub-agents.
+    var owner: String?
 
     var body: some View {
         switch block {
@@ -27,7 +30,7 @@ struct TranscriptRow: View {
                     state: expansionState("notice-\(entry.id)")
                 )
             } else if entry.isUser {
-                UserBubble(entry: entry, sessionId: sessionId)
+                UserBubble(entry: entry, sessionId: sessionId, owner: owner)
             } else if entry.isAssistant {
                 AssistantMessage(
                     entry: entry,
@@ -74,26 +77,59 @@ struct TranscriptRow: View {
 
 // MARK: - Messages
 
-/// The person's own message. No name label — the right alignment already
-/// says who wrote it — unless someone ELSE sent this turn (a teammate who
-/// steered in, or one whose answer was routed back from Slack), in which case
-/// the label is the only thing that says so: the server strips the "[Name] "
-/// prefix and the "💬 X answered" header out of the text.
+/// A person's message. No name label — the right alignment already says who
+/// wrote it — unless someone ELSE wrote this turn, in which case the label is
+/// the only thing that says so: the server strips the "[Name] " prefix and the
+/// "💬 X answered" header out of the text.
+///
+/// "Someone else" has two sources, and the second one is easy to miss. A
+/// teammate who steered or answered into the session arrives with an explicit
+/// `sender`. But the session OWNER's own prompts carry no sender at all — so
+/// reading a teammate's session, every one of their messages used to render
+/// exactly like your own, and a chat you were only visiting looked like a chat
+/// you had written. `owner` is the fallback the web has always applied
+/// (`e.sender ?? owner`), and the label is suppressed when that resolves to
+/// you.
 struct UserBubble: View {
     let entry: TranscriptEntry
     let sessionId: String
+    /// Who started this session — the author of any turn without an explicit
+    /// sender. Nil for automations (whose turns aren't a person's words) and
+    /// for sub-agent transcripts.
+    var owner: String?
+
+    /// The name to credit, and whether it came back through Slack. Nil when
+    /// this turn is the viewer's own. The rule itself lives in
+    /// `MessageAttribution` so it can be tested without a view.
+    private var attribution: MessageAttribution.Credit? {
+        MessageAttribution.credit(
+            sender: entry.sender,
+            senderVia: entry.senderVia,
+            owner: owner,
+            viewerName: ServerConfig.shared.userName,
+            viewerLogin: ServerConfig.shared.githubLogin
+        )
+    }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             Spacer(minLength: 40)
             VStack(alignment: .trailing, spacing: 6) {
-                if let sender = entry.sender {
+                if let attribution {
                     Text(
-                        entry.senderVia == "slack"
-                            ? "💬 \(sender) · via Slack" : sender
+                        attribution.viaSlack
+                            ? "💬 \(attribution.name) · via Slack"
+                            : attribution.name
                     )
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    // A reply routed back from Slack is warmer than a plain
+                    // steer — the web tints it the same teal, so the two
+                    // clients read alike at a glance.
+                    .foregroundStyle(
+                        attribution.viaSlack
+                            ? OS1VisualStyle.humanReply
+                            : OS1VisualStyle.textFaint
+                    )
                 }
                 ConversationImageStrip(
                     sources: entry.images ?? [],
@@ -101,17 +137,23 @@ struct UserBubble: View {
                     alignment: .trailing
                 )
                 if !entry.text.isEmpty {
+                    let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
                     Text(entry.text)
                         .font(.body)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .foregroundStyle(OS1VisualStyle.text)
                         .userMessagePanelCompat(
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            in: shape,
+                            // A teammate's routed-back reply gets its own
+                            // surface, like the web's: a neutral grey bubble
+                            // would read as the driver's own words.
+                            tint: attribution?.viaSlack == true
+                                ? OS1VisualStyle.humanReply.opacity(0.12)
+                                : nil
                         )
                         .overlay {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(OS1VisualStyle.border, lineWidth: 0.5)
+                            shape.stroke(OS1VisualStyle.border, lineWidth: 0.5)
                         }
                         .textSelection(.enabled)
                         .contextMenu {
@@ -301,14 +343,12 @@ struct NoticeRow: View {
     }
 
     /// An info notice carrying a body — a recap, an expanded worker report —
-    /// is prose you read, not a status you glance at, so it drops the card and
+    /// is prose you read, not a status pill, so it drops the card entirely and
     /// sits on the transcript's own rail: its text lines up with the message
-    /// above it instead of being indented inside a container. The card was
-    /// only half a container anyway — `panel` is pure white on a white page in
-    /// light mode, so the fill existed in dark and the indent existed in both.
-    /// What marks these as "not someone talking" is the label and the dim
-    /// colour, and both survive without a box. Warn and error keep their card
-    /// in every form: there the tint IS the signal.
+    /// above it instead of being indented inside a container. The card's fill
+    /// was invisible here anyway (`panel` is pure white on a white page in
+    /// light mode), so the indent was the only thing left of it. Warn and
+    /// error keep their card in every form — there the tint IS the signal.
     private var isProse: Bool {
         tone == .info && showsBody && !entry.text.isEmpty
     }

@@ -216,7 +216,12 @@ struct SessionView: View {
                                         )
                                     },
                                     expansionState: { viewModel.expansionState(id: $0) },
-                                    showsMessagesWhenFolded: turnActivity == "messages"
+                                    showsMessagesWhenFolded: turnActivity == "messages",
+                                    // An automation's turns are not a person's
+                                    // words, so they get no author fallback —
+                                    // the web makes the same exception.
+                                    owner: viewModel.session.isAutomation
+                                        ? nil : viewModel.session.startedBy
                                 )
                                 .id(block.id)
                             }
