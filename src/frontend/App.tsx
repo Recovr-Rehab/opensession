@@ -188,9 +188,9 @@ import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
 import { isApple } from "./lib/platform";
 import type { UnifiedSession } from "./lib/types";
-// Order matters: base.css (tokens, reset, platform chrome) then legacy.css
-// (component styling being migrated to Tailwind). Utilities are linked after
-// both, so they win source-order ties. See styles/legacy.css for the contract.
+// Order matters: base.css (tokens, reset, platform chrome) then legacy.css,
+// which is now empty and stays imported so the "never add here" contract keeps
+// a home. Utilities are linked after both, so they win source-order ties.
 import "./styles/base.css";
 import "./styles/legacy.css";
 import { EmptyState, LoadingState } from "./ui/state";

@@ -2,9 +2,10 @@
    base.css — the foundation. This file is NOT going away.
 
    Tailwind v4 keeps tokens, base rules and keyframes in CSS; only
-   component styling becomes utilities. So the migration's target is
-   "legacy.css reaches zero lines", not "no CSS at all". What lives here
-   stays here:
+   component styling becomes utilities. So the migration's target was
+   "legacy.css reaches zero lines", not "no CSS at all" — legacy.css is
+   there now, and this file is the CSS that was never going anywhere.
+   What lives here stays here:
 
      · the token substrate (:root + html[data-theme="light"]) that
        styles/tailwind.css aliases into Tailwind's namespace via
@@ -688,8 +689,7 @@ button {
 	   spelling that opts OUT, so migrating one of these to it flattens the
 	   corner at the same radius. Use `rounded-[999px]` for a squircled pill. */
 	.session-link,
-	.sidebar-reopen,
-	.sidebar-group-header {
+	.sidebar-reopen {
 		corner-shape: squircle;
 	}
 }
@@ -1486,6 +1486,38 @@ a.pr-ref:hover {
 	}
 }
 
+/* Edge fades so a tab clipped by the scroll boundary reads as "there's more this
+   way" rather than as a broken, half-drawn tab — the strip hides its scrollbar,
+   so without this an overflowing strip gives no hint that it scrolls at all.
+   Same technique as the transcript's fades: a CSS scroll timeline drives the two
+   widths, so there are no JS scroll listeners and no React re-renders, and each
+   fade appears only when content really is past that edge. The mask sits on the
+   scroller's own box, which is what puts the fade at the tabs' edge instead of
+   under the pinned "+". The mask hangs off [data-overflow] (set by SessionTabs)
+   rather than on the timeline alone, because a scroll timeline that goes
+   inactive HOLDS its last value instead of reverting: without that gate, a strip
+   that stopped overflowing would keep a stale fade dimming its first tab.
+   Browsers without scroll-driven animations never get a mask at all. The fades
+   track scroll position rather than elapsed time, so they're left active under
+   prefers-reduced-motion.
+
+   The two widths must be REGISTERED to animate: an unregistered custom property
+   has no type, so a keyframe can only flip it at 50% instead of interpolating
+   it, and the mask would jump rather than fade. Registration is also what gives
+   an element that never sets one the 0px resting value. They live here beside
+   the keyframes that drive them — @property is a global declaration, not
+   component styling, and it has no class to hang on. */
+@property --tabs-fade-start {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+@property --tabs-fade-end {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+
 @keyframes session-tabs-fade-start {
 	from {
 		--tabs-fade-start: 0px;
@@ -1501,6 +1533,19 @@ a.pr-ref:hover {
 	}
 	to {
 		--tabs-fade-end: 0px;
+	}
+}
+
+/* Entrance for the sidebar's filter popover and the mini-menus it opens (see
+   components/sidebar/Filters.tsx, which spells it as `animate-[hovercard-in_…]`).
+   A keyframe set has no class to hang on, so it can't be a utility; it sits here
+   with the rest of them rather than in the component. Only the `from` step is
+   written — the resting state is the element's own, so the animation can't
+   overwrite whatever the popover settles at. */
+@keyframes hovercard-in {
+	from {
+		opacity: 0;
+		transform: translateY(2px);
 	}
 }
 

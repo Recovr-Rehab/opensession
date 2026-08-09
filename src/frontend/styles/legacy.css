@@ -1,110 +1,20 @@
 /* ─────────────────────────────────────────────────────────────
-   legacy.css — component styling on its way out. Target: zero lines.
+   legacy.css — empty, and staying that way.
 
-   Every rule in this file is scheduled to become Tailwind utilities in
-   the component that uses it, or a primitive in src/frontend/ui/.
-   Nothing new should be added here — new UI goes straight to the
-   Tailwind stack (see AGENTS.md, "Frontend UI system").
+   This file held the app's component styling before the Tailwind
+   system landed. It is now at zero rules: every class that lived
+   here is either a utility string beside its component (src/frontend/
+   lib/*-classes.ts), a primitive in src/frontend/ui/, or a genuinely
+   global rule in base.css.
 
-   How to migrate a component without breaking the cascade:
+   Nothing goes back in. New UI is written as utilities on the markup;
+   the only rules that belong in a stylesheet at all are the global and
+   theme-level ones base.css owns — tokens, resets, platform chrome,
+   keyframes and @property registrations, which have no element to hang
+   on. See AGENTS.md, "Frontend UI system".
 
-     · Move a whole subtree at once. Descendant rules keyed off an
-       ancestor class (".sidebar-item .foo") break if the ancestor
-       migrates while its children still depend on it.
-     · Strip the legacy class names from the markup in the same commit.
-       Utilities only win source-order TIES; a compound legacy selector
-       (".sidebar-item.is-selected .count") still outranks a single
-       utility class, so half-migrated elements lose specificity fights.
-     · Use the semantic tokens (bg-panel, text-dim, border-line,
-       rounded-row, text-meta), never raw hex or arbitrary values like
-       text-[11px] — see styles/tailwind.css.
-     · State lives in data-* attributes + group-* variants, not in
-       ".is-on" modifier classes.
-
-   Deleting a rule here is safe once no source file mentions its class:
-   scripts/css-audit.ts reports which rules are unreachable.
-
-   Concatenated after base.css by src/server/frontend-build.ts, so these
-   rules keep their current position in the cascade.
+   The file itself stays for now, still concatenated after base.css by
+   src/server/frontend-build.ts, so scripts/css-audit.ts keeps a target
+   and the "never add here" contract keeps a home. An empty file costs
+   nothing at runtime: the two sheets are concatenated into one.
    ───────────────────────────────────────────────────────────── */
-
-/* ── Sidebar ─────────────────────────────────────────────── */
-
-/* Shared desktop chrome material for the app body and the exposed workspace
-   gutter — .sidebar-container wears the identical value as a utility. Keep the
-   two in step so opaque sticky headers scroll over the exact same surface
-   instead of revealing a gradient seam. No backdrop-filter — the vibrancy-era
-   blur sampled nothing but our own flat background since the shell went opaque,
-   while forcing the compositor to re-rasterize the whole sidebar whenever
-   anything behind it repainted (scroll-flash amplifier). Keep the phone root
-   page opaque below. */
-
-/* ── Sidebar row hover card ──────────────────────────────────
-   The card's chrome (panel, portal, position, arrow, animation) is
-   RowCardPopup's — see components/SidebarRowCards.tsx. What's left here is the
-   typography every row's card body is written in. */
-@keyframes hovercard-in {
-	from {
-		opacity: 0;
-		transform: translateY(2px);
-	}
-}
-
-/* ── Detail pane / empty state ───────────────────────────── */
-
-/* ── Collapsed desktop sidebar ──────────────────────────────
-   Hide the static left column entirely and reveal the floating re-open control.
-   Scoped to desktop; on mobile the page-stack (mobile-root/mobile-detail) owns
-   the sidebar and this class is inert. */
-
-/* Edge fades so a tab clipped by the scroll boundary reads as "there's more this
-   way" rather than as a broken, half-drawn tab — the strip hides its scrollbar,
-   so without this an overflowing strip gives no hint that it scrolls at all.
-   Same technique as the transcript's fades (see "Scroll-aware edge fades"): a
-   CSS scroll timeline drives the two widths, so there are no JS scroll listeners
-   and no React re-renders, and each fade appears only when content really is
-   past that edge. The mask sits on the scroller's own box, which is what puts
-   the fade at the tabs' edge instead of under the pinned "+". The mask hangs off
-   [data-overflow] (set by SessionTabs) rather than on the timeline alone,
-   because a scroll timeline that goes inactive HOLDS its last value instead of
-   reverting: without that gate, a strip that stopped overflowing would keep a
-   stale fade dimming its first tab. Browsers without scroll-driven animations
-   never get a mask at all. The fades track scroll position rather than elapsed
-   time, so they're left active under prefers-reduced-motion. */
-@property --tabs-fade-start {
-	syntax: "<length>";
-	inherits: false;
-	initial-value: 0px;
-}
-@property --tabs-fade-end {
-	syntax: "<length>";
-	inherits: false;
-	initial-value: 0px;
-}
-/* ── Reviews view ────────────────────────────────────────── */
-
-/* Covers the session view while a delete (optionally + worktree) is in flight —
-   worktree cleanup can take a few seconds, so show clear progress instead of a
-   view that looks frozen. Stays up through the redirect to Home. */
-
-/* A chip can still outgrow a phone-width message bubble (a long title, or a
-   `bks-<uuid>` fallback), where the nowrap above pushed it past the bubble's
-   edge. Let it fold there; box-decoration-break keeps each fragment a proper
-   chip. Wider viewports keep nowrap — with room to spare, a label splitting
-   across lines reads worse than moving the whole chip down a line. */
-
-/* Work blocks + tool calls are Tailwind-styled in WorkBlock.tsx /
-   ToolCallBlock.tsx; only the shared pre/shiki plumbing below remains here. */
-
-/* ── Phone page-stack polish ─────────────────────────────────────
-   Refinements on top of the mobile-sizing rules above. Kept as its own
-   media block (after them in source order, so equal-specificity selectors
-   win) rather than interleaved, so it stays a self-contained change.
-   - The sidebar is a full-screen page on phones, so its nav / group / title
-     text reads a touch larger than the base bump.
-   - The composer send button was large enough to overlap the composer's
-     rounded corner; a slightly smaller circle + more right padding sits it
-     fully inside. */
-
-
-
