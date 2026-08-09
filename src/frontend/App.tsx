@@ -19,6 +19,15 @@ import {
 	tabSplitDropPreviewClass,
 	WORKSPACE_SHELL,
 } from "./lib/app-shell-classes";
+import {
+	HEADER_TITLE_COL,
+	HEADER_TITLE_MODEL,
+	HEADER_TITLE_PILL,
+	HEADER_TITLE_PILL_TAPPABLE,
+	HEADER_TITLE_REPO,
+	HEADER_TITLE_ROW,
+	HEADER_TITLE_TEXT,
+} from "./lib/app-header-classes";
 import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { ToastHost, toast } from "./ui/toast";
@@ -3282,11 +3291,11 @@ export function App(
 					    title. Desktop hides the whole bar. */}
 					{mobileDetail && (
 						<span
-							className={`app-header-title ${
+							className={
 								route.view === "session" && currentSession
-									? "session-settings-trigger app-header-title-tappable"
-									: ""
-								}`}
+									? `${HEADER_TITLE_PILL_TAPPABLE} session-settings-trigger`
+									: HEADER_TITLE_PILL
+								}
 								{...(route.view === "session" && currentSession
 									? {
 										role: "button",
@@ -3303,11 +3312,11 @@ export function App(
 							    metadata below it in a stacked column. The whole pill is one
 							    tap target that opens the session's deeper info page. */}
 							{route.view === "session" && currentSession && (
-								<span className="app-header-repo" ref={setHeaderRepoEl} />
+								<span className={HEADER_TITLE_REPO} ref={setHeaderRepoEl} />
 							)}
-							<span className="app-header-title-col">
-								<span className="app-header-title-row">
-									<span className="app-header-title-text">
+							<span className={HEADER_TITLE_COL}>
+								<span className={HEADER_TITLE_ROW}>
+									<span className={HEADER_TITLE_TEXT}>
 										{route.view === "session"
 											? (activeWorkspaceId
 												? workspaces.find((p) => p.id === activeWorkspaceId)?.name
@@ -3319,7 +3328,7 @@ export function App(
 								</span>
 								{route.view === "session" && currentSession && (
 									// Filled by SessionViewer's portal (compact model selector).
-									<span className="app-header-model" ref={setHeaderModelEl} />
+									<span className={HEADER_TITLE_MODEL} ref={setHeaderModelEl} />
 								)}
 							</span>
 						</span>
