@@ -206,48 +206,112 @@ struct TurnFooterView: View {
     /// Whose scratch folder the asset chips open into.
     let sessionId: String
 
-    var body: some View {
-        HStack(spacing: 8) {
-            if let duration = footer.duration,
-               let label = TranscriptFormat.duration(duration) {
-                Text(label)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-                    .fixedSize()
-            }
+    /// How many chips a footer draws before it points at the whole list
+    /// instead. A refactor can touch thirty files, and thirty wrapped chips
+    /// would bury the answer they belong to.
+    private static let chipLimit = 8
 
-            if let model = footer.model, !model.isEmpty {
-                Text(TranscriptFormat.modelLabel(model))
-                    .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-                    .lineLimit(1)
-                    .fixedSize()
+    /// Assets come first and are never cut. A touched file is named in the
+    /// Changes list too, so the chip is a shortcut; a scratch file the turn
+    /// wrote is named nowhere else in the transcript, so the chip is the
+    /// only way to it.
+    private var shownFiles: [TouchedFile] {
+        Array(footer.files.prefix(max(0, Self.chipLimit - footer.assets.count)))
+    }
+
+    private var hiddenFileCount: Int {
+        footer.files.count - shownFiles.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if hasMeta {
+                HStack(spacing: 8) {
+                    if let duration = footer.duration,
+                       let label = TranscriptFormat.duration(duration) {
+                        Text(label)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.textFaint)
+                            .fixedSize()
+                    }
+
+                    if let model = footer.model, !model.isEmpty {
+                        Text(TranscriptFormat.modelLabel(model))
+                            .font(.caption2)
+                            .foregroundStyle(OS1VisualStyle.textFaint)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+
+                    Spacer(minLength: 0)
+                }
             }
 
             if !footer.files.isEmpty || !footer.assets.isEmpty {
-                // Horizontal scroll rather than a "+N" cut: on a phone the
-                // chips are the only place a turn's file changes are named.
-                // Assets follow the edits: both are things the turn produced,
-                // and both open what they name rather than just labelling it.
-                ScrollView(.horizontal) {
-                    HStack(spacing: 6) {
-                        ForEach(footer.files) { file in
-                            FileChipView(file: file)
-                        }
-                        ForEach(footer.assets, id: \.self) { path in
-                            AssetChipView(sessionId: sessionId, path: path)
-                        }
+                // Wrapped, not scrolled: a strip inside the transcript fights
+                // the vertical drag for the same gesture and hides its
+                // overflow behind an edge with nothing to say it's there, so
+                // the third chip onward simply wasn't reachable. Assets and
+                // edits sit together because both are things the turn
+                // produced, and both open what they name rather than just
+                // labelling it.
+                FlowLayout(spacing: 6) {
+                    ForEach(footer.assets, id: \.self) { path in
+                        AssetChipView(sessionId: sessionId, path: path)
                     }
-                    .padding(.trailing, 8)
+                    ForEach(shownFiles) { file in
+                        FileChipView(file: file)
+                    }
+                    if hiddenFileCount > 0 {
+                        MoreFilesChipView(
+                            sessionId: sessionId,
+                            count: hiddenFileCount
+                        )
+                    }
                 }
-                .scrollIndicators(.hidden)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Spacer(minLength: 0)
         }
         .padding(.top, 1)
         .padding(.bottom, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var hasMeta: Bool {
+        if footer.duration != nil { return true }
+        if let model = footer.model, !model.isEmpty { return true }
+        return false
+    }
+}
+
+/// The files the footer didn't have room to name, as one chip that opens all
+/// of them. A cut that admits how much it cut and where the rest went.
+struct MoreFilesChipView: View {
+    let sessionId: String
+    let count: Int
+
+    @Environment(\.openPanel) private var openPanel
+
+    var body: some View {
+        Button {
+            openPanel(.changes(sessionId: sessionId))
+        } label: {
+            Text("+\(count) more")
+                .font(.caption2)
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    OS1VisualStyle.panel,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        // The Mac app installs no handler; a chip that does nothing when
+        // tapped is worse than one that plainly can't be.
+        .disabled(!openPanel.isAvailable)
+        .accessibilityLabel("\(count) more files")
+        .accessibilityHint("Opens everything this session changed")
     }
 }
 
