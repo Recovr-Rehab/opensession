@@ -1189,7 +1189,11 @@ struct SessionsListView: View {
         .swipeActions(edge: .trailing) { archiveButton(workspace, viaSwipe: true) }
         // Swipe right to pin, left to archive: the pin is the reversible one,
         // so it takes the leading edge (and its full swipe just toggles).
-        .swipeActions(edge: .leading) { pinButton(workspace) }
+        // The tint rides on the swipe, not on the button: it paints the swipe
+        // action's own background here, but in the context menu the same tint
+        // would land on the glyph and make Pin the one coloured item in a
+        // column of grey ones.
+        .swipeActions(edge: .leading) { pinButton(workspace).tint(OS1VisualStyle.yellow) }
         .contextMenu {
             if canArchive { workspaceMenu(workspace) }
         }
@@ -1211,7 +1215,6 @@ struct SessionsListView: View {
             } label: {
                 Label(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash.fill" : "pin.fill")
             }
-            .tint(OS1VisualStyle.yellow)
         }
     }
 
