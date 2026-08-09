@@ -1149,6 +1149,12 @@ struct SessionTabsView: View {
     @State private var panel: SessionPanel?
     /// A "+" that hasn't answered yet, so a second tap can't mint a second tab.
     @State private var openingTab = false
+    /// The link handler INSTALLED ABOVE this view (the sessions list's, which
+    /// follows session-id links). Reading it here is safe and is the point:
+    /// `.environment` applies to descendants, so this property still holds the
+    /// inherited action, and the one this view installs can hand everything it
+    /// doesn't own back to it instead of dead-ending at `.systemAction`.
+    @Environment(\.openURL) private var enclosingOpenURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     /// The appearance outside the bar, to pin the floating tab strip to.
@@ -1221,6 +1227,20 @@ struct SessionTabsView: View {
                     // deepest caller is a tool-call row several layers in.
                     .environment(\.openPanel, .pushing(sessionId: session.id) { pushed in
                         panel = pushed
+                    })
+                    // A file path in the transcript (FileLinks) is a markdown
+                    // link on a private scheme; catching it here is what turns
+                    // it into that file's diff. Everything else is handed to
+                    // the handler above — the sessions list's, which owns
+                    // session-id links — because an OpenURLAction that
+                    // answers `.systemAction` skips it.
+                    .environment(\.openURL, OpenURLAction { url in
+                        if let path = FileLinks.path(from: url) {
+                            panel = .changes(sessionId: session.id, path: path)
+                            return .handled
+                        }
+                        enclosingOpenURL(url)
+                        return .handled
                     })
                     .transition(conversationTransition)
             }

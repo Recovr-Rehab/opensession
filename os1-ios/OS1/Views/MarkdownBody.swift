@@ -15,6 +15,12 @@ struct MarkdownBody: View {
     /// library owns its own colours, so a `.foregroundStyle` on the outside
     /// would be ignored.
     var dimmed = false
+    /// Which session's transcript this is, for the file paths only that
+    /// session can resolve. Read from `openPanel` rather than passed down:
+    /// it already carries the session id, it is Equatable and stable, and a
+    /// surface with nowhere to push (the Mac app) has no id and gets no file
+    /// links — which is right, since the push is the whole point of one.
+    @Environment(\.openPanel) private var openPanel
 
     init(_ text: String, dimmed: Bool = false) {
         self.text = text
@@ -23,12 +29,16 @@ struct MarkdownBody: View {
 
     var body: some View {
         SwiftStreamingMarkdown.MarkdownView(
-            // Session ids and bare URLs become links here rather than in the
-            // display pass: the entry's own text stays the raw markdown, so
-            // copying a message still yields what the agent actually wrote.
-            // Autolinking runs first so a session URL is already a link
-            // target by the time `SessionLinks` looks for loose ids.
-            text: SessionLinks.linkify(MarkdownAutolink.linkify(text)),
+            // Session ids, file paths and bare URLs become links here rather
+            // than in the display pass: the entry's own text stays the raw
+            // markdown, so copying a message still yields what the agent
+            // actually wrote. Autolinking runs first so a session URL is
+            // already a link target by the time `SessionLinks` looks for
+            // loose ids, and `FileLinks` runs last for the same reason.
+            text: FileLinks.linkify(
+                SessionLinks.linkify(MarkdownAutolink.linkify(text)),
+                sessionId: openPanel.sessionId
+            ),
             config: dimmed ? .os1Dim : .os1Static
         )
         .frame(maxWidth: .infinity, alignment: .leading)

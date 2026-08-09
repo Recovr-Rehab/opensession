@@ -1211,6 +1211,31 @@ final class SessionViewModel {
             worktreeDir: session.worktreeDir,
             walkthrough: session.walkthrough
         )
+        // What the transcript may link: the files this session's own tools
+        // touched. Registering the set here — rather than fetching the diff —
+        // costs nothing and keeps a link and its target in step, since a
+        // touched file is a file the diff has.
+        FileLinks.register(paths: linkableFilePaths(), for: session.id)
+    }
+
+    /// Repo-relative paths from every turn's touched files. A path outside the
+    /// worktree stays absolute or `~/`-shortened (ToolPresentation.tidyPath),
+    /// and the Changes panel has no diff for it, so it is not linkable.
+    private func linkableFilePaths() -> Set<String> {
+        var paths: Set<String> = []
+        for block in displayBlocks {
+            let touched: [TouchedFile] = switch block {
+            case .work(let turn): turn.touchedFiles
+            case .footer(let footer): footer.files
+            case .tool(let item): item.presentation.touchedFiles
+            default: []
+            }
+            for file in touched
+            where !file.path.hasPrefix("/") && !file.path.hasPrefix("~") {
+                paths.insert(file.path)
+            }
+        }
+        return paths
     }
 
     private func upsert(_ incoming: [TranscriptEntry]) {

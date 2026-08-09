@@ -87,6 +87,19 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   row — the split runs once per load, off the main actor, into a path-keyed
   index. A session spanning several repos gets a repo switcher; binary files
   and a truncated patch say so rather than pushing an empty page.
+- **File paths in the transcript are links** (`FileLinks`) — a path an agent
+  names in its own prose opens that file's diff, so the file you are reading
+  about is one tap away instead of a trip through the overflow menu. Only
+  paths the session's own tools touched are linked, registered per session
+  from the transcript, which keeps a link and its target in step: the link
+  always lands on a diff that exists, and prose that merely looks like a path
+  is never touched. Any trailing part of a path is a way to say it
+  (`pr.ts` → `src/server/pr.ts`) unless it names two touched files, in which
+  case it names neither. Rewritten to markdown just before rendering, so
+  copying a message still yields what the agent actually wrote — and a path in
+  backticks loses them, because the renderer keeps a code span's own styling
+  over the link's and a tappable thing has to look tappable. This reaches the
+  rows that render markdown; a user bubble and a recap are plain `Text`.
 - **Assets** — the session's scratch artifacts (`GET /api/sessions/:id/assets`)
   reached three ways: the "Open" chip on a `write_asset` tool row (straight to
   that file), the workspace sheet's assets section, and the overflow menu.
