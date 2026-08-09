@@ -1193,7 +1193,9 @@ struct SessionsListView: View {
         // action's own background here, but in the context menu the same tint
         // would land on the glyph and make Pin the one coloured item in a
         // column of grey ones.
-        .swipeActions(edge: .leading) { pinButton(workspace).tint(OS1VisualStyle.yellow) }
+        .swipeActions(edge: .leading) {
+            pinButton(workspace, filled: true).tint(OS1VisualStyle.yellow)
+        }
         .contextMenu {
             if canArchive { workspaceMenu(workspace) }
         }
@@ -1204,16 +1206,28 @@ struct SessionsListView: View {
     /// Leading swipe (and context menu) action. Non-destructive: the row stays
     /// where it is and gains a copy in the Pinned band, so the cell just closes
     /// — no `.destructive` role, and the toggle animates the band's insert.
+    ///
+    /// `filled` for the same reason the tint is set by the caller: a swipe
+    /// action is a glyph knocked out of a colour capsule, where the solid
+    /// symbol is the system's own shape, while every other glyph in the
+    /// context menu is an outline one.
     @ViewBuilder
-    private func pinButton(_ workspace: SidebarWorkspace) -> some View {
+    private func pinButton(
+        _ workspace: SidebarWorkspace,
+        filled: Bool = false
+    ) -> some View {
         if !workspace.isOptimistic {
             let pinned = PinStore.shared.isPinned(workspace)
+            let symbol = pinned ? "pin.slash" : "pin"
             Button {
                 withAnimation(.snappy(duration: 0.28)) {
                     PinStore.shared.toggle(workspace)
                 }
             } label: {
-                Label(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash.fill" : "pin.fill")
+                Label(
+                    pinned ? "Unpin" : "Pin",
+                    systemImage: filled ? "\(symbol).fill" : symbol
+                )
             }
         }
     }
