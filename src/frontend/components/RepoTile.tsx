@@ -35,9 +35,11 @@ const ICON_VERSION = 4;
 // caller wants scaled proportionally (radius and letter together) belongs in
 // `size`; a caller that needs only some of it passes utilities here.
 //
-// `repo-tile` itself is now a bare hook, not styling: two ancestors still reach
+// `repo-tile` itself is now a bare hook, not styling: one ancestor still reaches
 // the tile through it — INFO_HERO's `[&_.repo-tile]:shadow-[…]` (the phone
-// session-info hero) and legacy.css's `.header-sessionbar .repo-tile`.
+// session-info hero). The phone header used to be a second, but its tile moved
+// out of the metadata line and into the title pill's own leading slot, and the
+// rule that held it there had been matching nothing since.
 const TILE =
 	"repo-tile inline-flex size-[18px] shrink-0 items-center justify-center rounded-sm text-meta font-bold";
 

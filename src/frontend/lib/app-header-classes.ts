@@ -264,8 +264,8 @@ export const HEADER_SESSIONBAR_SEP =
 	"phone:shrink-0 phone:text-[16px] phone:leading-4 phone:text-dim";
 
 export const HEADER_SESSIONBAR_MODEL =
-	"phone:min-w-0 phone:max-w-[45vw] phone:text-[12px] phone:font-medium " +
-	"phone:text-dim";
+	"truncate phone:min-w-0 phone:max-w-[45vw] phone:text-[12px] " +
+	"phone:font-medium phone:text-dim";
 
 /**
  * The cost meter, restyled for the subtitle line: the model's size and colour,

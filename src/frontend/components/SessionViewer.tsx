@@ -244,6 +244,12 @@ import {
 	infoTopbarClass,
 	infoTopbarTitleClass,
 } from "../lib/session-viewer-classes";
+import {
+	HEADER_SESSIONBAR,
+	HEADER_SESSIONBAR_MODEL,
+	HEADER_SESSIONBAR_SEP,
+	HEADER_SESSIONBAR_USAGE,
+} from "../lib/app-header-classes";
 
 type QueueReceipt = {
 	id?: string;
@@ -4718,7 +4724,7 @@ export function SessionViewer({
 				(hasWorkspace || models.length > 0) &&
 				createPortal(
 					<span
-						className="header-sessionbar session-settings-trigger"
+						className={`${HEADER_SESSIONBAR} session-settings-trigger`}
 						role="button"
 						tabIndex={0}
 						title="Workspace & session settings"
@@ -4738,7 +4744,7 @@ export function SessionViewer({
 						{/* Repo now leads the pill (portaled into headerRepoEl in front of
 						    the title), so the metadata line is just model · cost. */}
 						{models.length > 0 && (
-							<span className="header-sessionbar-model truncate">
+							<span className={HEADER_SESSIONBAR_MODEL}>
 								{/* Drop the "Claude " prefix — "Opus 4.8" reads fine in the
 								    thin subtitle and leaves room for the cost meter. */}
 								{metadataModelLabel(effectiveModel, models).replace(
@@ -4748,19 +4754,20 @@ export function SessionViewer({
 							</span>
 						)}
 						{/* The composer's cost/context meter can't fit in the toolbar on
-						    phones, so it rides here after the model. min-h-0 drops the
-						    meter's toolbar-sized 32px touch box: as a subtitle it only
-						    needs its own line, and the extra height was padding the gap
-						    between the title and this line open. */}
+						    phones, so it rides here after the model, restyled to the
+						    subtitle's size and colour. The cache rate stays off: the line
+						    is a pill capped by the screen, and "92% cached" was winning
+						    that fight against the model name — the thing you actually
+						    read to know what you are talking to. The full breakdown is
+						    one tap away in the meter's own popup. */}
 						{usage && usage.turns > 0 && (
 							<>
-								<span className="header-sessionbar-sep" aria-hidden="true">
+								<span className={HEADER_SESSIONBAR_SEP} aria-hidden="true">
 									·
 								</span>
 								<UsageMeter
 									usage={usage}
-									className="sessionbar-usage min-h-0"
-									showCacheRate
+									className={HEADER_SESSIONBAR_USAGE}
 								/>
 							</>
 						)}
