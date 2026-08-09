@@ -1875,6 +1875,9 @@ struct SessionRow: View {
     /// scrolling past, which the faintest step is not.
     var highlighted: Bool = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Settings → Appearance → Show last used time. Off by default, like the
+    /// web's resting sidebar, and per device like the web's own copy of it.
+    @AppStorage("os1.list.lastUsed") private var lastUsedPref = "off"
     /// Mac: hover-revealed archive button (nil hides it).
     var onArchive: (() -> Void)? = nil
 
@@ -1939,6 +1942,17 @@ struct SessionRow: View {
                     // No trailing pad: the repo header's "+" now hangs its tap
                     // target past the row margin so its INK sits on 16pt, and
                     // this clock's digits end on that same column on their own.
+            } else if let idleAgo {
+                // The same trailing slot the clock owns, so a row never shifts
+                // when a run starts — it swaps grey for the running yellow.
+                Text(idleAgo)
+                    #if os(iOS)
+                    .font(.caption.weight(.medium).monospacedDigit())
+                    #else
+                    .font(.caption.monospacedDigit())
+                    #endif
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
         #if os(iOS)
@@ -2012,6 +2026,29 @@ struct SessionRow: View {
         session.lane == .inProgress && showsElapsedTime
     }
 
+    /// How long ago this row last did anything, when the setting asks for it.
+    ///
+    /// Deliberately no `TimelineView`: the run clock ticks because seconds are
+    /// what it counts, but "3h" changes hourly — the list's own 5s poll
+    /// re-renders often enough, and a ticker on every idle row would be pure
+    /// waste. Integer math on a date the row has already parsed, so no
+    /// formatter is allocated here either.
+    private var idleAgo: String? {
+        guard lastUsedPref == "always", showsElapsedTime else { return nil }
+        let rows = sessions.isEmpty ? [session] : sessions
+        guard let latest = rows.compactMap(\.lastActivityDate).max() else { return nil }
+        return Self.compactAgo(Date().timeIntervalSince(latest))
+    }
+
+    static func compactAgo(_ elapsed: TimeInterval) -> String {
+        let total = max(0, Int(elapsed))
+        if total < 60 { return "now" }
+        if total < 3_600 { return "\(total / 60)m" }
+        if total < 86_400 { return "\(total / 3_600)h" }
+        if total < 604_800 { return "\(total / 86_400)d" }
+        return "\(total / 604_800)w"
+    }
+
     private var rowTitle: String {
         (title ?? session.displayTitle).replacingOccurrences(
             of: #"^PR\s*#\d+(:|\s*[—–-])\s*"#,
@@ -2068,12 +2105,14 @@ struct SessionRow: View {
                 "\(ListFormatter.localizedString(byJoining: rowViewers)) viewing"
             )
         }
+        if let idleAgo { parts.append("last used \(idleAgo)") }
         return parts.joined(separator: ", ")
     }
 }
 
-/// Web workspace rows reserve their trailing slot for a live run clock; idle
-/// rows intentionally show no last-used timestamp.
+/// Web workspace rows reserve their trailing slot for a live run clock. An
+/// idle row leaves that slot empty unless Appearance → Show last used time
+/// asks for it, which is the web's default too.
 private struct WorkspaceRunElapsedLabel: View {
     let since: Date?
 

@@ -338,26 +338,367 @@ struct PreferencesSettingsView: View {
     }
 }
 
-/// Only what this device looks like. How much of a session you see, and every
-/// other per-account choice, lives in Preferences — same split as the web.
+/// How the app looks, and how the session list is arranged — the native half
+/// of the web's Appearance panel.
+///
+/// Two kinds of setting share the screen, as they do on the web: the theme is
+/// this device's (a display habit, not cloud state), and repo order is the
+/// account's — the very same `repo-order` ui-pref the web sidebar writes when
+/// its repo bands are dragged, which this app has always READ
+/// (`NativePreferences`) and until now could not set. How much of a session
+/// you see, and every other choice about how you WORK, still lives in
+/// Preferences. The footer under each group says which is which.
 struct AppearanceSettingsView: View {
     @AppStorage("os1.appearance") private var appearance = "system"
+    @AppStorage("os1.list.lastUsed") private var lastUsed = "off"
+    @AppStorage("os1.sidebar.repoOrder") private var repoOrderJSON = "[]"
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
+
+    private static let themes: [(value: String, label: String)] = [
+        ("system", "System"),
+        ("light", "Light"),
+        ("dark", "Dark"),
+    ]
 
     var body: some View {
         Form {
             Section {
-                Picker("Appearance", selection: $appearance) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
+                // Three swatches across is the pattern both platforms' own
+                // settings use for this exact choice. At accessibility text
+                // sizes the labels under them stop fitting, so that size class
+                // falls back to the plain picker rather than shrinking type.
+                if dynamicTypeSize.isAccessibilitySize {
+                    Picker("Theme", selection: $appearance) {
+                        ForEach(Self.themes, id: \.value) { theme in
+                            Text(theme.label).tag(theme.value)
+                        }
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(Self.themes, id: \.value) { theme in
+                            ThemeOptionCard(
+                                option: theme.value,
+                                label: theme.label,
+                                selected: appearance == theme.value
+                            ) {
+                                appearance = theme.value
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    // A phone row is narrower than this, so the cap only bites
+                    // in the Mac settings window, where an uncapped swatch
+                    // grows to a third of a 900pt pane and stops reading as a
+                    // control.
+                    .frame(maxWidth: 430)
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Theme")
                 }
             } header: {
                 Text("Theme")
             } footer: {
-                Text("The selected native appearance is stored on this device.")
+                // Kept from the old screen on purpose: the swatch ring is the
+                // only other cue, and it is not one VoiceOver reads aloud.
+                Text(themeFooter)
+            }
+
+            Section {
+                NavigationLink {
+                    RepoOrderSettingsView()
+                } label: {
+                    LabeledContent {
+                        RepoOrderPreview(order: previewOrder)
+                    } label: {
+                        Text("Repo order")
+                    }
+                }
+                Picker("Show last used time", selection: $lastUsed) {
+                    Text("Off").tag("off")
+                    Text("Always").tag("always")
+                }
+            } header: {
+                Text("Session list")
+            } footer: {
+                Text(
+                    "Repo order is your account's — the web sidebar follows it too. The last-used time is this device's, and a running session always shows its own clock."
+                )
             }
         }
         .navigationTitle("Appearance")
+        .task { await loadRepos() }
+    }
+
+    private var themeFooter: String {
+        switch appearance {
+        case "light": "Always light, on this device."
+        case "dark": "Always dark, on this device."
+        default: "Matches your system setting, on this device."
+        }
+    }
+
+    private var previewOrder: [String] {
+        RepoOrderSettingsView.ordered(ids: repos.map(\.id), preferredJSON: repoOrderJSON)
+    }
+
+    /// Only to fill the row's preview tiles — the editor behind it fetches for
+    /// itself, and a cached list is enough to open on.
+    private func loadRepos() async {
+        guard let fetched = try? await OS1API.repos() else { return }
+        repos = fetched
+        SettingsCache.save("repos", fetched)
+    }
+}
+
+/// The first few repo tiles, in order, on the row that opens the editor — the
+/// setting's value said in the same language the list itself speaks.
+private struct RepoOrderPreview: View {
+    let order: [String]
+
+    var body: some View {
+        if order.isEmpty {
+            Text("None")
+        } else {
+            HStack(spacing: 4) {
+                ForEach(order.prefix(4), id: \.self) { repo in
+                    RepoTile(name: repo, size: 18)
+                }
+                if order.count > 4 {
+                    Text("+\(order.count - 4)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                order.map(RepoTile.label(for:)).joined(separator: ", ")
+            )
+        }
+    }
+}
+
+/// One theme swatch: a miniature of the app in that tone, its name under it,
+/// and a ring when it is the one in use.
+private struct ThemeOptionCard: View {
+    let option: String
+    let label: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                ZStack {
+                    ThemeMock(dark: option == "dark")
+                    // System is the light mock with the dark one clipped over
+                    // its right half — the web swatch's own trick.
+                    if option == "system" {
+                        ThemeMock(dark: true)
+                            .mask {
+                                HStack(spacing: 0) {
+                                    Color.clear
+                                    Color.black
+                                }
+                            }
+                    }
+                }
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(
+                            selected ? OS1VisualStyle.accent : OS1VisualStyle.border,
+                            lineWidth: selected ? 2 : 1
+                        )
+                }
+                Text(label)
+                    .font(.footnote.weight(selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? OS1VisualStyle.text : OS1VisualStyle.textDim)
+            }
+            .animation(.easeOut(duration: 0.15), value: selected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/// The miniature app inside a theme swatch.
+///
+/// Fixed greys rather than the app's tokens, deliberately: each card has to go
+/// on showing ITS tone whichever theme is currently in use. The proportions are
+/// fractions of the card, matching the web's `ThemeMock`
+/// (src/frontend/components/settings/AppearancePanel.tsx), so the two products
+/// draw the same illustration.
+private struct ThemeMock: View {
+    let dark: Bool
+
+    private var page: Color { dark ? Color(white: 0.337) : Color(white: 0.914) }
+    private var panel: Color { dark ? Color(white: 0.243) : .white }
+    private var line: Color { dark ? Color(white: 0.769) : Color(white: 0.835) }
+    private var pill: Color { dark ? Color(white: 0.541) : Color(white: 0.796) }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let w = proxy.size.width
+            let h = proxy.size.height
+            let leadingInset = w * 0.14
+            let trailingInset = w * 0.09
+            let panelPad = w * 0.068
+            let inner = w - leadingInset - trailingInset - panelPad * 2
+            VStack(spacing: 0) {
+                VStack(spacing: h * 0.05) {
+                    bar(w * 0.56, h * 0.06, pill)
+                    bar(w * 0.42, h * 0.06, pill.opacity(0.65))
+                }
+                .padding(.top, h * 0.15)
+                .padding(.bottom, h * 0.09)
+
+                VStack(alignment: .leading, spacing: h * 0.08) {
+                    bar(inner * 0.68, h * 0.06, line)
+                    bar(inner * 0.84, h * 0.06, line)
+                    bar(inner * 0.56, h * 0.06, line)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, panelPad)
+                .padding(.top, h * 0.11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: h * 0.56)
+                .background {
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: h * 0.07,
+                        topTrailingRadius: h * 0.07,
+                        style: .continuous
+                    )
+                    .fill(panel)
+                }
+                .padding(.leading, leadingInset)
+                .padding(.trailing, trailingInset)
+            }
+            .frame(width: w, height: h, alignment: .top)
+            .background(page)
+        }
+    }
+
+    private func bar(_ width: CGFloat, _ height: CGFloat, _ color: Color) -> some View {
+        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+            .fill(color)
+            .frame(width: width, height: height)
+    }
+}
+
+/// The order the session list's repo bands sit in.
+///
+/// This is the account's `repo-order` ui-pref, the one the web sidebar writes
+/// when its bands are dragged; the app has always honored it on the way in
+/// (`NativePreferences.apply`) and had nowhere to set it. A drop saves
+/// straight away — there is no Save button, like every other settings screen
+/// here — and the reply is applied through `NativePreferences` so the local
+/// `os1.sidebar.repoOrder` mirror gets the server's normalized value rather
+/// than a second guess at it.
+struct RepoOrderSettingsView: View {
+    @AppStorage("os1.sidebar.repoOrder") private var repoOrderJSON = "[]"
+
+    @State private var order: [String] = []
+    @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
+    @State private var error: String?
+
+    /// The stored order first — dropping repos this server no longer has — and
+    /// then everything it has not heard of, alphabetically. Same rule as the
+    /// list's own `SessionsListViewModel.repositoryOrder`, over the registered
+    /// set rather than whichever repos happen to have sessions.
+    static func ordered(ids: [String], preferredJSON: String) -> [String] {
+        let preferred = (try? JSONDecoder().decode(
+            [String].self,
+            from: Data(preferredJSON.utf8)
+        )) ?? []
+        let known = Set(ids)
+        var seen = Set<String>()
+        let head = preferred.filter { known.contains($0) && seen.insert($0).inserted }
+        let tail = ids
+            .filter { seen.insert($0).inserted }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        return head + tail
+    }
+
+    var body: some View {
+        List {
+            if let error {
+                Section { Text(error).foregroundStyle(.red) }
+            }
+            Section {
+                if order.isEmpty {
+                    Text("No repositories registered.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(order, id: \.self) { repo in
+                        HStack(spacing: 11) {
+                            RepoTile(name: repo, size: 24)
+                            Text(RepoTile.label(for: repo))
+                        }
+                    }
+                    .onMove(perform: move)
+                }
+            } footer: {
+                Text(
+                    "Drag to set the order repo bands appear in. Saved to your account, so every device — and the web sidebar — follows it."
+                )
+            }
+        }
+        .insetGroupedListCompat()
+        #if os(iOS)
+        // Always in edit mode: the screen exists to be reordered, so its rows
+        // wear their grip from the start instead of hiding it behind Edit.
+        // Nothing here deletes, so the grip is all edit mode adds.
+        .environment(\.editMode, .constant(.active))
+        #endif
+        .navigationTitle("Repo order")
+        .task { await load() }
+    }
+
+    private func move(from source: IndexSet, to destination: Int) {
+        order.move(fromOffsets: source, toOffset: destination)
+        save()
+    }
+
+    private func load() async {
+        order = Self.ordered(ids: repos.map(\.id), preferredJSON: repoOrderJSON)
+        do {
+            let fetched = try await OS1API.repos()
+            repos = fetched
+            SettingsCache.save("repos", fetched)
+            order = Self.ordered(ids: fetched.map(\.id), preferredJSON: repoOrderJSON)
+            error = nil
+        } catch {
+            if repos.isEmpty { self.error = error.localizedDescription }
+        }
+    }
+
+    private func save() {
+        guard let data = try? JSONEncoder().encode(order),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        // The list reads the mirror, not this screen, so move it now — the
+        // request only confirms it.
+        repoOrderJSON = json
+        let requestContext = NativePreferences.context()
+        Task {
+            do {
+                let response = try await SettingsAPI.updateUiPrefs(
+                    user: requestContext.user,
+                    prefs: ["repo-order": json]
+                )
+                var confirmed = response
+                if confirmed["repo-order"] == nil { confirmed["repo-order"] = json }
+                _ = NativePreferences.apply(confirmed, for: requestContext)
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
     }
 }
 
