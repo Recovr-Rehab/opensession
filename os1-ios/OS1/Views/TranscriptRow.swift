@@ -300,13 +300,26 @@ struct NoticeRow: View {
         notice.showsBodyInline || (notice.isCollapsible && state.expanded)
     }
 
+    /// An info notice carrying a body — a recap, an expanded worker report —
+    /// is prose you read, not a status you glance at, so it drops the card and
+    /// sits on the transcript's own rail: its text lines up with the message
+    /// above it instead of being indented inside a container. The card was
+    /// only half a container anyway — `panel` is pure white on a white page in
+    /// light mode, so the fill existed in dark and the indent existed in both.
+    /// What marks these as "not someone talking" is the label and the dim
+    /// colour, and both survive without a box. Warn and error keep their card
+    /// in every form: there the tint IS the signal.
+    private var isProse: Bool {
+        tone == .info && showsBody && !entry.text.isEmpty
+    }
+
     var body: some View {
         content
-            .padding(.horizontal, 12)
+            .padding(.horizontal, isProse ? 0 : 12)
         .padding(.vertical, 7)
         .frame(maxWidth: 520)
         .background(
-            tone.background,
+            isProse ? Color.clear : tone.background,
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
         .frame(maxWidth: .infinity)
