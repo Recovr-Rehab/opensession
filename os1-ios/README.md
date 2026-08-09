@@ -78,6 +78,15 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   `openPanel` environment action from the transcript and the overflow menu,
   and directly by the workspace sheet's own rows — which push within the
   sheet, so that page stays where it was.
+- **Changes** — every file the worktree has touched, and the diff of any one of
+  them, reached from the overflow menu or the workspace sheet (whose file rows
+  open that file directly, and whose "Show all N files" replaces what used to
+  be a note pointing at the browser). One `GET /api/sessions/:id/diff` answers
+  the file list and the whole worktree's patch together, so a file's diff is a
+  split of what is already in hand (`PatchSplitter`) rather than a request per
+  row — the split runs once per load, off the main actor, into a path-keyed
+  index. A session spanning several repos gets a repo switcher; binary files
+  and a truncated patch say so rather than pushing an empty page.
 - **Assets** — the session's scratch artifacts (`GET /api/sessions/:id/assets`)
   reached three ways: the "Open" chip on a `write_asset` tool row (straight to
   that file), the workspace sheet's assets section, and the overflow menu.

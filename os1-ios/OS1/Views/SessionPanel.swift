@@ -19,12 +19,17 @@ enum SessionPanel: Hashable, Identifiable {
     case asset(sessionId: String, path: String)
     /// The session's pull request, read-only.
     case review(sessionId: String)
+    /// Everything the worktree has changed. `path` opens one file's diff
+    /// straight away — the workspace sheet already lists the files, so a tap
+    /// there should land on the diff rather than on the list again.
+    case changes(sessionId: String, path: String? = nil)
 
     var id: String {
         switch self {
         case .assets(let sessionId): "assets-\(sessionId)"
         case .asset(let sessionId, let path): "asset-\(sessionId)-\(path)"
         case .review(let sessionId): "review-\(sessionId)"
+        case .changes(let sessionId, let path): "changes-\(sessionId)-\(path ?? "")"
         }
     }
 
@@ -32,6 +37,7 @@ enum SessionPanel: Hashable, Identifiable {
         switch self {
         case .assets(let sessionId), .review(let sessionId): sessionId
         case .asset(let sessionId, _): sessionId
+        case .changes(let sessionId, _): sessionId
         }
     }
 }
@@ -96,6 +102,8 @@ struct SessionPanelView: View {
             // Pushed, so the navigation bar is already there: no stack of its
             // own, and the chevron replaces the Done button.
             PrPanelView(viewModel: viewModel, chrome: .pushed)
+        case .changes(let sessionId, let path):
+            ChangesView(sessionId: sessionId, focus: path)
         }
     }
 }

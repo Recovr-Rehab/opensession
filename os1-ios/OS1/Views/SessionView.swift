@@ -562,6 +562,10 @@ struct SessionView: View {
                openPanel.isAvailable {
                 openPanel(.review(sessionId: viewModel.session.id))
             }
+            if ProcessInfo.processInfo.environment["OS1_OPEN_CHANGES"] == "1",
+               openPanel.isAvailable {
+                openPanel(.changes(sessionId: viewModel.session.id))
+            }
             #endif
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3_600))
@@ -923,6 +927,16 @@ private struct SessionActionsMenu: View {
                 showWorktreeInfo = true
             } label: {
                 Label("Worktree details", systemImage: "info.circle")
+            }
+            // Everything the worktree has changed, for the edits no visible
+            // tool row names — the ones made before the transcript you're
+            // reading, and the ones the agent made without saying so.
+            if openPanel.isAvailable {
+                Button {
+                    openPanel(.changes(sessionId: viewModel.session.id))
+                } label: {
+                    Label("Changes", systemImage: "plusminus")
+                }
             }
             // The whole scratch folder, for the files no visible tool row
             // names — the ones written before the transcript you're reading.

@@ -296,9 +296,10 @@ struct PlainCodeText: View {
 /// character, which is what actually survives at this size anyway.
 struct DiffText: View {
     let patch: String
-
-    /// Long diffs are for reading the shape of a change, not auditing it.
-    private static let maxLines = 300
+    /// Inside a transcript row a long diff is for reading the shape of a
+    /// change, not auditing it — but the Changes view IS the audit, so it
+    /// raises the cap rather than sending people to the browser.
+    var maxLines = 300
 
     var body: some View {
         Text(attributed)
@@ -309,14 +310,14 @@ struct DiffText: View {
     private var attributed: AttributedString {
         var output = AttributedString()
         let lines = patch.components(separatedBy: .newlines)
-        for line in lines.prefix(Self.maxLines) {
+        for line in lines.prefix(maxLines) {
             var piece = AttributedString(line.isEmpty ? " " : line)
             piece.foregroundColor = Self.color(for: line)
             output.append(piece)
             output.append(AttributedString("\n"))
         }
-        if lines.count > Self.maxLines {
-            var more = AttributedString("… \(lines.count - Self.maxLines) more lines")
+        if lines.count > maxLines {
+            var more = AttributedString("… \(lines.count - maxLines) more lines")
             more.foregroundColor = Color.white.opacity(0.4)
             output.append(more)
         }

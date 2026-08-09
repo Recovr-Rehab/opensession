@@ -181,36 +181,64 @@ struct WorktreeInfoView: View {
                 trailing: AnyView(diffTotals(diff))
             ) {
                 ForEach(diff.files.prefix(8)) { file in
-                    HStack(spacing: 10) {
-                        Image(systemName: fileIcon(file.status))
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(fileColor(file.status))
-                            .frame(width: 20)
-                        Text(file.path)
-                            .font(.footnote.monospaced())
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 8)
-                        if file.additions > 0 {
-                            Text("+\(file.additions)")
-                                .foregroundStyle(OS1VisualStyle.green)
+                    Button {
+                        panel = .changes(
+                            sessionId: currentSession.id,
+                            path: file.path
+                        )
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: DiffFileStyle.icon(file.status))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(DiffFileStyle.color(file.status))
+                                .frame(width: 20)
+                            Text(file.path)
+                                .font(.footnote.monospaced())
+                                .foregroundStyle(OS1VisualStyle.text)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 8)
+                            if file.additions > 0 {
+                                Text("+\(file.additions)")
+                                    .foregroundStyle(OS1VisualStyle.green)
+                            }
+                            if file.deletions > 0 {
+                                Text("−\(file.deletions)")
+                                    .foregroundStyle(OS1VisualStyle.red)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(OS1VisualStyle.textDim)
                         }
-                        if file.deletions > 0 {
-                            Text("−\(file.deletions)")
-                                .foregroundStyle(OS1VisualStyle.red)
-                        }
+                        .font(.caption.monospacedDigit())
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                     }
-                    .font(.caption.monospacedDigit())
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 44)
+                    .buttonStyle(.plain)
                     if file.id != diff.files.prefix(8).last?.id { Divider() }
                 }
-                if diff.files.count > 8 {
-                    Text("\(diff.files.count - 8) more files are available in the web Changes view.")
-                        .font(.caption)
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .padding(12)
+                Divider()
+                Button {
+                    panel = .changes(sessionId: currentSession.id)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(
+                            diff.files.count > 8
+                                ? "Show all \(diff.files.count) files"
+                                : "Open changes"
+                        )
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(OS1VisualStyle.accent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -538,23 +566,6 @@ struct WorktreeInfoView: View {
         .font(.caption.weight(.semibold).monospacedDigit())
     }
 
-    private func fileIcon(_ status: String) -> String {
-        switch status {
-        case "added", "untracked": "plus"
-        case "deleted": "minus"
-        case "renamed": "arrow.right"
-        default: "pencil"
-        }
-    }
-
-    private func fileColor(_ status: String) -> Color {
-        switch status {
-        case "added", "untracked": OS1VisualStyle.green
-        case "deleted": OS1VisualStyle.red
-        case "renamed": OS1VisualStyle.blue
-        default: OS1VisualStyle.yellow
-        }
-    }
 }
 
 /// Opens workspace details directly from a list-row context menu while still

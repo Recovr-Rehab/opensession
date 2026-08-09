@@ -343,6 +343,11 @@ enum OS1API {
         let totalAdditions: Int
         let totalDeletions: Int
         let truncated: Bool?
+        /// The whole worktree's unified patch, in one string — the route
+        /// sends it alongside the file list, and the Changes view splits it
+        /// per file (PatchSplitter) rather than asking per file. Optional
+        /// because a server old enough to omit it must still decode.
+        let rawPatch: String?
     }
 
     struct RepoDiff: Decodable, Sendable, Equatable {
