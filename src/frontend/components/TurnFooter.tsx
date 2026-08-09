@@ -13,7 +13,7 @@ import {
   IconDotsHorizontal,
   IconSparkle,
 } from "./icons";
-import { fullTime } from "../lib/time";
+import { formatDuration, fullTime } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { canonicalToolName } from "./ToolCallBlock";
 import { tidyPath } from "../lib/tidy-path";
@@ -534,16 +534,6 @@ function fileChangePath(change: unknown): string | null {
   if (!change || typeof change !== "object") return null;
   const path = (change as Record<string, unknown>).path;
   return typeof path === "string" && path.trim() ? path : null;
-}
-
-/** "10m, 57s" / "1h, 4m" / "42s"; null under a second (nothing worth showing). */
-function formatDuration(ms: number): string | null {
-  const secs = Math.round(ms / 1000);
-  if (!isFinite(secs) || secs < 1) return null;
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m, ${secs % 60}s`;
-  return `${Math.floor(mins / 60)}h, ${mins % 60}m`;
 }
 
 // navigator.clipboard needs a secure context — opensession is served over plain

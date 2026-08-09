@@ -26,6 +26,7 @@ import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
+import { formatDuration } from "../lib/time";
 
 /* The old .automation-form family, as utilities. Two of its rules reached in
    from the form to the fields inside it and have to stay descendant selectors:
@@ -711,14 +712,6 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
       )}
     </div>
   );
-}
-
-function formatDuration(ms: number): string {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${s % 60}s`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
 /** Expandable run-history ledger for one automation (newest first). */

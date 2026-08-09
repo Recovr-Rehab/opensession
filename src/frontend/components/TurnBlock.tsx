@@ -11,6 +11,7 @@ import { resolveEntryImageSrc } from "../lib/osBlob";
 import { IconChevronDown } from "./icons";
 import { cn } from "../ui/cn";
 import { msgBody, msgMedia } from "../lib/msg-classes";
+import { formatDuration } from "../lib/time";
 import {
   getTurnActivityPref,
   onTurnActivityChanged,
@@ -291,9 +292,5 @@ function blockDuration(
     ? toolResults.get(lastItem.toolUseId)
     : undefined;
   const last = new Date((lastResult || lastItem).timestamp).getTime();
-  const secs = Math.round((last - first) / 1000);
-  if (!isFinite(secs) || secs < 1) return null;
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  return `${mins}m ${secs % 60}s`;
+  return formatDuration(last - first);
 }

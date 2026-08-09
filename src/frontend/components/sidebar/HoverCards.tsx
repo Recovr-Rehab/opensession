@@ -7,7 +7,7 @@ import { SIDEBAR_STATUS_DOT, SIDEBAR_WS_SNOOZE, SIDEBAR_WS_TICKER } from "../../
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
 import { formatRemaining, snoozePresets } from "../../lib/snoozes";
-import { elapsedClock } from "../../lib/time";
+import { elapsedSince } from "../../lib/time";
 import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
@@ -142,13 +142,16 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 // running session's start (see runStartMs) — the workspace's been busy for that long.
 export function RunTicker({ startMs }: { startMs: number }) {
 	const [now, setNow] = useState(() => Date.now());
+	// Seconds only show in the first minute, so that is the only minute worth
+	// ticking at 1Hz — after it, the label can only change once a minute.
+	const fine = now - startMs < 60_000;
 	useEffect(() => {
-		const t = setInterval(() => setNow(Date.now()), 1000);
+		const t = setInterval(() => setNow(Date.now()), fine ? 1000 : 15_000);
 		return () => clearInterval(t);
-	}, []);
+	}, [fine]);
 	return (
 		<span className={SIDEBAR_WS_TICKER} title="How long this run has been working">
-			{elapsedClock(startMs, now)}
+			{elapsedSince(startMs, now)}
 		</span>
 	);
 }

@@ -8,6 +8,7 @@ import { BASE_PATH } from "../lib/base";
 import { cn } from "../ui/cn";
 import { TOOL_CODE_WELL, TOOL_PRE, TOOL_RESULT_MEDIA } from "../lib/tool-classes";
 import { tidyPath, type PathRoot } from "../lib/tidy-path";
+import { formatDuration } from "../lib/time";
 import { openGalleryFrom } from "./MediaLightbox";
 import {
   IconTerminal,
@@ -455,9 +456,7 @@ export function toolDurationMs(
 }
 
 function formatToolDuration(durationMs: number): string {
-  const secs = Math.round(durationMs / 1000);
-  if (secs < 60) return `${secs}s`;
-  return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+  return formatDuration(durationMs) ?? "0s";
 }
 
 function stepDuration(entry: TranscriptEntry, result?: TranscriptEntry): string | null {

@@ -22,7 +22,7 @@ import { getReads, isUnread, markRead } from "../lib/reads";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import { Composer } from "./Composer";
 import { useCurrentUser } from "./UserPicker";
-import { shortTime, elapsedClock } from "../lib/time";
+import { shortTime, elapsedSince } from "../lib/time";
 import { SwipeCard } from "../ui/swipe-deck";
 import { PulseDot } from "../ui/status";
 
@@ -641,7 +641,7 @@ function CatchupWorking({ target }: { target: UnifiedSession }) {
 		<div className="mt-2 flex items-center gap-2 px-1 text-xs text-faint">
 			<PulseDot />
 			<span>Working</span>
-			<span className="tabular-nums">{elapsedClock(since, now)}</span>
+			<span className="tabular-nums">{elapsedSince(since, now)}</span>
 		</div>
 	);
 }

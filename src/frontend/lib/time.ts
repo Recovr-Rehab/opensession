@@ -38,16 +38,32 @@ export function fullTime(ts: string, now: Date = new Date()): string {
 	return `${date} at ${time}`;
 }
 
-/** Elapsed duration as a stopwatch: "0:07", "3:42", then "1:04:22" past an hour.
- * Used by the sidebar's live "in progress" ticker (how long a run's been going).
- */
-export function elapsedClock(fromMs: number, nowMs: number = Date.now()): string {
-	const total = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
-	const h = Math.floor(total / 3600);
-	const m = Math.floor((total % 3600) / 60);
-	const s = total % 60;
-	const pad = (n: number) => String(n).padStart(2, "0");
-	return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+/** A duration, one unit at a time: "7s", "42s", "1m", "12m", "1h 4m", "2h".
+ * Null under a second — there is nothing worth showing.
+ *
+ * Seconds are dropped the moment a minute is on the clock: past that they are
+ * noise nobody reads, and on a live ticker they also make the string change
+ * width every second. Hours keep their minutes, because rounding a 1h59m run
+ * down to "1h" throws away an hour of it — the ratio seconds have to a minute
+ * is the same, but a minute is not worth the same as an hour.
+ *
+ * Used by every duration in the UI: the sidebar's live run ticker, turn and
+ * tool footers, automation and workflow run ledgers. Pair a live one with
+ * `tabular-nums` so the digits don't jitter as they tick. */
+export function formatDuration(ms: number): string | null {
+	const secs = Math.round(ms / 1000);
+	if (!Number.isFinite(secs) || secs < 1) return null;
+	if (secs < 60) return `${secs}s`;
+	const mins = Math.floor(secs / 60);
+	if (mins < 60) return `${mins}m`;
+	const hours = Math.floor(mins / 60);
+	return mins % 60 ? `${hours}h ${mins % 60}m` : `${hours}h`;
+}
+
+/** Live elapsed time since `fromMs`, for tickers that count a run up. Reads
+ * "0s" rather than nothing at the very start, so the slot doesn't pop in. */
+export function elapsedSince(fromMs: number, nowMs: number = Date.now()): string {
+	return formatDuration(Math.max(0, nowMs - fromMs)) ?? "0s";
 }
 
 /** Coarse relative age for prewarming/papercuts status lines ("just now",

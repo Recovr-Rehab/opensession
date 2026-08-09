@@ -467,9 +467,11 @@ export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex group-hover:mr-20"
  * they tick, and yields the slot to the hover actions.
  *
  * The phone size is its own: the run clock is text, not a glyph, so a hard
- * 28px box with centred digits overflowed on both sides as a run crossed the
- * hour. It sizes to its digits and pins them to the gutter's inner edge, 6px
- * short of the column like every glyph above it.
+ * 28px box with centred digits overflowed on both sides. It sizes to its
+ * digits and pins them to the gutter's inner edge, 6px short of the column
+ * like every glyph above it. It reads in one unit ("42s", "12m", "1h 4m" —
+ * see formatDuration), so it stays about as wide as the idle time badge it
+ * stands in for instead of growing a clock's worth of digits.
  */
 export const SIDEBAR_WS_TICKER =
 	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-0";

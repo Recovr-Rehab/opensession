@@ -8,6 +8,7 @@ import type {
 import type { SessionSubagentSnapshot } from "../lib/api";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
+import { formatDuration } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
 
@@ -88,11 +89,7 @@ function StatusMark({ status }: { status: WorkflowAgentSnapshot["status"] }) {
 
 function fmtDuration(ms: number): string {
 	if (!Number.isFinite(ms) || ms < 0) return "";
-	const s = Math.floor(ms / 1000);
-	if (s < 60) return `${s}s`;
-	const m = Math.floor(s / 60);
-	if (m < 60) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
-	return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+	return formatDuration(ms) ?? "0s";
 }
 
 function fmtTokens(n: number): string {
