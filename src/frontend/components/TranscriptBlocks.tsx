@@ -115,7 +115,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	flushTurn(true);
 
 	if (walkthrough)
-		blocks.splice(walkthroughInsertIndex(blocks, walkthrough.publishedAt), 0, {
+		blocks.splice(walkthroughInsertIndex(blocks, walkthrough), 0, {
 			kind: "walkthrough",
 			walkthrough,
 		});

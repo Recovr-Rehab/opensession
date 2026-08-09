@@ -27,6 +27,7 @@ import type {
 } from "./types";
 import { UPLOADS_DIR } from "./uploads";
 import { findSession, touchNativeSession } from "./session-cache";
+import { transcriptStore } from "./transcript-store";
 import { resolvePrTarget } from "./session-repos";
 import { prHostFor } from "./pr-host";
 import { getRepo } from "./worktree";
@@ -96,6 +97,36 @@ function stageMedia(
  * Returns what happened on the PR side so the tool can tell the agent to
  * re-publish (or that it's done).
  */
+/**
+ * The `publish_walkthrough` tool call currently running — the entry the card
+ * should hang off.
+ *
+ * We look it up here, once, because this is the only moment anything KNOWS
+ * where the walkthrough belongs: the viewer used to re-derive it by scanning
+ * the loaded transcript backwards for the same tool call, with a timestamp
+ * fallback for when that call had been trimmed out of the window.
+ *
+ * A miss is fine — an engine whose transcript the v2 store never saw, or a
+ * call the store hasn't flushed yet — and leaves the viewer's fallback in
+ * charge, exactly as before.
+ */
+function publishingEntryId(sessionId: string): string | undefined {
+  try {
+    const { entries } = transcriptStore().readTail(sessionId, 60);
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const e = entries[i];
+      if (
+        e.type === "tool_use" &&
+        /(^|_)publish_walkthrough$/.test(e.toolName || "")
+      )
+        return e.id;
+    }
+  } catch {
+    // Store read failed — the viewer still places the card by timestamp.
+  }
+  return undefined;
+}
+
 export async function publishWalkthrough(
   sessionId: string,
   input: WalkthroughInput,
@@ -106,10 +137,12 @@ export async function publishWalkthrough(
 }> {
   const summary = (input.summary || "").trim();
   if (!summary) throw new Error("summary is required");
+  const publishedEntryId = publishingEntryId(sessionId);
   const walkthrough: SessionWalkthrough = {
     summary,
     publishedAt: new Date().toISOString(),
     ...(by ? { publishedBy: by } : {}),
+    ...(publishedEntryId ? { publishedEntryId } : {}),
   };
   if (input.video) {
     walkthrough.video = stageMedia(sessionId, input.video, "video");

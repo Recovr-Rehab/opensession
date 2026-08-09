@@ -268,6 +268,8 @@ export interface SessionWalkthrough {
 	shots?: WalkthroughShot[];
 	publishedAt: string;
 	publishedBy?: string;
+	/** Entry id of the publishing tool call — see the server type. */
+	publishedEntryId?: string;
 }
 
 export interface UnifiedSession {

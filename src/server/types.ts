@@ -386,6 +386,12 @@ export interface SessionWalkthrough {
   shots?: WalkthroughShot[];
   publishedAt: string;
   publishedBy?: string;
+  /** Transcript entry of the `publish_walkthrough` call that produced this —
+   *  the card renders directly after that turn. Absent on walkthroughs
+   *  published before this was recorded (and on engines whose transcript the
+   *  v2 store never saw), which is what the viewer's timestamp fallback is
+   *  for. */
+  publishedEntryId?: string;
 }
 
 export interface NativeSessionFile {
