@@ -15,6 +15,7 @@ import {
   verifyGitHubSignature,
 } from "../../server/shared/signature";
 import { handleMessageEvent, handleMentionEvent } from "./handlers";
+import { shouldHandleAppMention } from "./event-routing";
 import { handleLinkShared } from "./unfurl";
 import {
   handlePullRequestReview,
@@ -412,7 +413,7 @@ export class SlackAgent implements AgentModule {
         }
 
         // Handle app_mention events
-        if (event.type === "app_mention") {
+        if (shouldHandleAppMention(event)) {
           const eventId = `${event.channel}-${event.ts}`;
           if (isEventProcessed(eventId)) {
             console.log(`[slack] Duplicate mention event: ${eventId}`);
