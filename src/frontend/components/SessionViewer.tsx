@@ -129,7 +129,6 @@ import {
 	IconDotsHorizontal,
 	IconEye,
 	IconInbox,
-	IconMail,
 	IconPin,
 	IconPullRequest,
 	IconLink,
@@ -191,7 +190,6 @@ import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { MoveToCloudDialog } from "./MoveToCloudDialog";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
-import { markUnread } from "../lib/reads";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import { sessionHasWorkspace } from "../lib/session-workspace";
@@ -4013,23 +4011,6 @@ export function SessionViewer({
 				// session-level actions, keeping the visible header focused on status.
 				const overflowActions = (
 					<>
-						{/* The sidebar row's "Mark as unread", for when you're already
-						    reading the session and want it back in the unread pile.
-						    It leaves the session the way Archive does: an open session
-						    is re-marked read on its next activity tick (App.tsx), so
-						    staying here would quietly undo the mark. Only this
-						    direction is offered — what's open is read by definition. */}
-						<Menu.Item
-							onClick={() => {
-								setOverflowOpen(false);
-								markUnread(session.id);
-								onBack();
-							}}
-							title="Mark this session unread and leave it"
-						>
-							<IconMail size={20} />
-							<span className="grow">Mark as unread</span>
-						</Menu.Item>
 						<Menu.Item
 							className={pinned ? "text-yellow" : undefined}
 							onClick={() => {

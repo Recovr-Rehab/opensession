@@ -1241,17 +1241,22 @@ struct SessionsListView: View {
             // Hiding is the personal counterpart to archiving: the row leaves
             // YOUR sidebar (here and in the web one) while the session keeps
             // running for everyone else — so it isn't destructive-styled.
+            //
+            // "…my sidebar", the web menu's wording, is one word too wide for
+            // a context menu and wrapped onto a second line — the only item in
+            // the menu that did. The shorter phrasing is the web's own, from
+            // its narrower menus (FeedRows, the band header).
             if HideStore.shared.isHidden(workspace) {
                 Button {
                     HideStore.shared.clear([SidebarRowKeys.rowKey(for: workspace)])
                 } label: {
-                    Label("Restore to my sidebar", systemImage: "eye")
+                    Label("Restore to sidebar", systemImage: "eye")
                 }
             } else {
                 Button {
                     hide(workspace)
                 } label: {
-                    Label("Hide from my sidebar", systemImage: "eye.slash")
+                    Label("Hide from sidebar", systemImage: "eye.slash")
                 }
             }
             Button(role: .destructive) {

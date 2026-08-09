@@ -1002,13 +1002,15 @@ private struct SessionActionsMenu: View {
                             // row-key helper.
                             HideStore.shared.unhide(for: viewModel.session)
                         } label: {
-                            Label("Restore to my sidebar", systemImage: "eye")
+                            Label("Restore to sidebar", systemImage: "eye")
                         }
                     } else {
                         Button {
                             HideStore.shared.hide(workspace)
                         } label: {
-                            Label("Hide from my sidebar", systemImage: "eye.slash")
+                            // Shortened for the same reason as the list's copy:
+                            // "…my sidebar" wraps onto a second line here.
+                            Label("Hide from sidebar", systemImage: "eye.slash")
                         }
                     }
                     if let onArchiveWorkspace {
