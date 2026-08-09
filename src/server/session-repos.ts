@@ -29,6 +29,7 @@ import {
 	sessionMemoryScopes,
 } from "./session-memory";
 import { DESK_NOTE } from "./desk";
+import { deskBriefingFor } from "./desk-state";
 import { personalPromptNoteFor } from "./personal-prompts";
 import {
 	findSession,
@@ -266,8 +267,12 @@ export async function buildSessionNote(
 	return (
 		[
 			// The standing Desk session gets its concierge charter first — role
-			// discipline for the summonable overlay (see desk.ts).
+			// discipline for the summonable overlay (see desk.ts) — then the
+			// user's live state, rebuilt per turn (desk-state.ts) so it can
+			// answer "what's happening" without a tool round-trip and won't
+			// spawn a worker onto work that's already running.
 			session.desk ? DESK_NOTE : "",
+			session.desk ? deskBriefingFor(user) : "",
 			buildPlanFirstNote(session),
 			buildReposNote(session),
 			await memoryNoteFor(user, sessionRepoIds(session)),

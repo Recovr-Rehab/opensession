@@ -249,9 +249,13 @@ export function DeskConversation({
 				onScroll={onScroll}
 			>
 				{!hasContent ? (
-					<div className="mx-auto mt-6 max-w-[320px] text-center text-[13px] font-medium leading-relaxed text-dim">
-						{emptyState ?? "Ask your Desk anything."}
-					</div>
+					// A supplied empty state owns its own layout (the Desk hands us a
+					// full-width board); only the bare fallback string gets centered.
+					(emptyState ?? (
+						<div className="mx-auto mt-6 max-w-[320px] text-center text-[13px] font-medium leading-relaxed text-dim">
+							Ask your Desk anything.
+						</div>
+					))
 				) : (
 					<>
 						{/* sessionId is load-bearing, not decoration: the server

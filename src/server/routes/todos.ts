@@ -7,6 +7,7 @@
 import type { RouteContext } from "./context";
 import { requestUser } from "./context";
 import { clearDesk, ensureDeskSession } from "../desk";
+import { buildDeskState } from "../desk-state";
 import { findSession } from "../session-cache";
 import { addTodo, listTodos, updateTodo, type TodoStatus } from "../todos";
 
@@ -94,6 +95,14 @@ export async function handleTodosRoutes(
 			clearedAt: clearedAt ?? null,
 			session: findSession(sessionId) ?? null,
 		});
+	}
+
+	// The Desk's default screen: the user's own work, bucketed into what's
+	// waiting on them, what's running, and what finished unread (desk-state.ts).
+	if (path === "/api/desk/state" && req.method === "GET") {
+		const user = requestUser(ctx, url.searchParams.get("user"));
+		if (!user) return Response.json({ error: "missing user" }, { status: 400 });
+		return Response.json(buildDeskState(user));
 	}
 
 	// Hide the transcript before now in the overlay (display marker only — the full

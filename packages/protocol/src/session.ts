@@ -147,6 +147,15 @@ export type ProtocolClientMessage =
       feedEpoch?: string;
     }
   | { type: "unwatch"; sessionId: string }
+  /** The client half of `ask_question`: answers keyed by question TEXT, or
+   *  null to dismiss. Only applied while `questionId` is still the session's
+   *  pending ask, so a stale card can't answer a newer question. */
+  | {
+      type: "answer_question";
+      sessionId: string;
+      questionId: string;
+      answers: Record<string, string> | null;
+    }
   | {
       type: "load_history";
       sessionId: string;
