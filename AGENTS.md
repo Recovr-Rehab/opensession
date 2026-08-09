@@ -216,15 +216,9 @@ Two things the migration learned, which still decide where a rule can live:
   a rule that matches nothing on the page you are looking at is not evidence
   that it is dead. Both directions have to be measured — see the tooling below.
 
-Tooling: `bun scripts/css-audit.ts` reports which rules in legacy.css nothing
-can reach any more (`--prune` deletes them; it holds back classes built at
-runtime like `` `source-${x}` ``, which is the one mistake that silently
-un-styles things). Read `unreachable: 0` as "nothing safe to delete
-mechanically", not "nothing left": a name counts as reachable if it appears
-anywhere at all, so a module path (`../lib/pr-checks`) keeps a rule alive on
-its own — `--loose` lists those, to check against the running DOM. Rules whose
-class stays on the markup purely as a JS hook are invisible to it in the other
-direction, and have to be found by hand — or with `css-rulekill` below.
+Tooling: `bun scripts/css-audit.ts` is now a guard rather than a worklist — it
+reports `classes defined: 0` against legacy.css, so treat a non-zero count as
+someone having put component styling back in a stylesheet, not as a backlog.
 `bun scripts/css-shots.ts <name>` captures the routes × viewport × theme
 screenshot gate; `--diff` compares two runs.
 

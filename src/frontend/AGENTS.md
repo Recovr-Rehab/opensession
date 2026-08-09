@@ -64,7 +64,7 @@ language instead of introducing a new local style for each feature.
 - Reach for the breakpoint by name: `phone:` and `desktop:`, defined in
   `styles/tailwind.css`. Do not spell it `max-[720px]:` — that compiles to
   `< 720`, not `<= 720`, so at exactly 720px wide the element drops its phone
-  value while every unmigrated rule around it keeps one.
+  value while `base.css`'s own `@media (max-width: 720px)` block keeps one.
 - Match the surrounding surface before adding visual emphasis. Accent colors,
   raised surfaces, shadows, and animation should communicate meaning, not make
   a new feature louder than its neighbors.
