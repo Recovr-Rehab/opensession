@@ -20,7 +20,6 @@ import {
 
 interface DeskConversationProps {
 	sessionId: string;
-	emptyState?: React.ReactNode;
 	placeholder?: string;
 	effort?: string;
 	hideBefore?: string;
@@ -47,7 +46,6 @@ interface DeskConversationProps {
  */
 export function DeskConversation({
 	sessionId,
-	emptyState,
 	placeholder,
 	effort,
 	hideBefore,
@@ -287,13 +285,10 @@ export function DeskConversation({
 								Show earlier conversation
 							</button>
 						)}
-						{/* A supplied empty state owns its own layout (the Desk hands us
-						    a full-width board); only the fallback string gets centered. */}
-						{emptyState ?? (
-							<div className="mx-auto mt-6 max-w-[320px] text-center text-[13px] font-medium leading-relaxed text-dim">
-								Ask your Desk anything.
-							</div>
-						)}
+						{/* Nothing else. A Desk with no conversation is its composer
+						    and the starter pills above it — a list of your open work
+						    here was a second inbox to read past on the way to typing,
+						    and the sessions list already owns that job. */}
 					</>
 				) : (
 					<>

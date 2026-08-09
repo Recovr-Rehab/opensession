@@ -791,15 +791,6 @@ enum OS1API {
         try await post("/api/desk/ensure", body: ["user": ServerConfig.shared.userName])
     }
 
-    /// The Desk board's live state: what's blocked on this user, what's
-    /// running, what finished unread (server: desk-state.ts).
-    static func deskState() async throws -> DeskState {
-        let user = ServerConfig.shared.userName.addingPercentEncoding(
-            withAllowedCharacters: .urlQueryAllowed
-        ) ?? ""
-        return try await get("/api/desk/state?user=\(user)")
-    }
-
     struct DeskVoiceSecret: Decodable, Sendable {
         let clientSecret: String
         let expiresAt: Double?

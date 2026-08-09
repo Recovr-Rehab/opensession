@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
 import { DeskConversation } from "./DeskConversation";
-import { DeskBoard } from "./DeskBoard";
 import { DESK_SUGGESTIONS } from "../lib/desk-suggestions";
 import { ResponsiveDialog } from "../ui/sheet";
 import { IconDesk, IconExpand, IconMic, IconX } from "./icons";
@@ -236,17 +235,6 @@ function DeskBody({
 						// surface you summoned for today's work.
 						staleAfterMs={2 * 60 * 60 * 1000}
 						suggestions={DESK_SUGGESTIONS}
-						// With no conversation on screen, the Desk shows the work you
-						// handed off — what needs your eyes, what's blocked on you,
-						// what's running. Talking takes the surface back.
-						emptyState={
-							<DeskBoard
-								onOpenSession={(id) => {
-									onClose();
-									onOpenSession(id);
-								}}
-							/>
-						}
 					/>
 				) : (
 					<div className="px-4 py-6 text-center text-[13px] font-medium text-dim">

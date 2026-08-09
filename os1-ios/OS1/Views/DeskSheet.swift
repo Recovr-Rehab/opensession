@@ -22,14 +22,6 @@ struct DeskSheet: View {
 
     @State private var loadState: LoadState = .loading
     @State private var engine = DeskVoiceEngine()
-    /// A session opened from the board, presented on top of the Desk rather
-    /// than replacing it — you're triaging, and closing it should put you back
-    /// on the board with the rest of the list intact.
-    @State private var openSession: OpenedSession?
-
-    private struct OpenedSession: Identifiable {
-        let id: String
-    }
 
     var body: some View {
         @Bindable var engine = engine
@@ -64,16 +56,6 @@ struct DeskSheet: View {
         .fullScreenCoverCompat(isPresented: $engine.callPresented) {
             DeskVoiceCallView(engine: engine)
         }
-        .sheet(item: $openSession) { opened in
-            NavigationStack {
-                SessionView(session: Session(id: opened.id))
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") { openSession = nil }
-                        }
-                    }
-            }
-        }
     }
 
     @ViewBuilder
@@ -96,14 +78,26 @@ struct DeskSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready(let model):
             SessionView(viewModel: model, tabs: [model.session])
-                .emptyContent {
-                    DeskBoardView(
-                        onOpen: { openSession = OpenedSession(id: $0) },
-                        earlierCount: model.hiddenEarlierCount,
-                        onShowEarlier: { model.hideBefore = nil }
-                    )
-                }
+                .emptyContent { earlierLink(model: model) }
                 .composerAccessory { suggestionPills(model: model) }
+        }
+    }
+
+    /// All that stands in for an empty Desk transcript: the way back to a
+    /// conversation the staleness cutoff is holding.
+    ///
+    /// It used to be a list of your open work — blocked, unread, running —
+    /// and that was a second inbox to read past on the way to the composer.
+    /// The sessions list behind this sheet already answers "what's going on";
+    /// the Desk is for handing over the next thing.
+    @ViewBuilder
+    private func earlierLink(model: SessionViewModel) -> some View {
+        if model.hiddenEarlierCount > 0 {
+            Button("Show earlier conversation") { model.hideBefore = nil }
+                .font(.footnote)
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 4)
         }
     }
 
@@ -171,11 +165,16 @@ struct DeskSheet: View {
         }
         // The sheet's drag indicator sits directly above this row, so the
         // title needs real clearance or the two read as one crowded band.
-        // The trailing edge is tighter than the leading one on purpose: the
-        // icon buttons carry their own inset inside a 34pt tap target, so
-        // their GLYPHS line up with the title's 18pt margin.
+        //
+        // The trailing number is smaller than the leading one because the
+        // icon buttons carry 9pt of their own inset inside a 34pt tap
+        // target — but matching the two so the GLYPHS both land at 18pt was
+        // a measurement, not a look: an ✕ is drawn edge to edge in its box
+        // while the lamp and the title start well inside theirs, so equal
+        // numbers read as a right side jammed against the edge. The glyph
+        // gets 24pt instead, which is what makes the two sides look equal.
         .padding(.leading, 18)
-        .padding(.trailing, 9)
+        .padding(.trailing, 15)
         .padding(.top, Self.headerTopPadding)
         .padding(.bottom, 14)
     }
