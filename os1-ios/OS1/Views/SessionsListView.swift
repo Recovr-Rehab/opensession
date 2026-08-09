@@ -1864,10 +1864,11 @@ struct SessionRow: View {
     /// rather than its org's mark — spelling the name out instead cost either
     /// the title's width or a second line, and both read worse than a swatch.
     var repo: String? = nil
-    /// iOS: the session you last had open. Nothing else on the list is
-    /// coloured, so a wash of blue is enough to find your place again after a
-    /// back swipe without competing with the status marks — which are small,
-    /// and whose blue means "needs input" on the mark itself, not on the row.
+    /// iOS: the session you last had open. A neutral plate rather than a hue —
+    /// every colour on this list already means something (the status marks and
+    /// repo tiles), and "where you were" is chrome, not status. `tertiary`
+    /// rather than the `hover` fill: it has to be legible at a glance while
+    /// scrolling past, which the faintest step is not.
     var highlighted: Bool = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mac: hover-revealed archive button (nil hides it).
@@ -1940,7 +1941,7 @@ struct SessionRow: View {
         .padding(.horizontal, 10)
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(OS1VisualStyle.blue.opacity(highlighted ? 0.18 : 0))
+                .fill(Color(uiColor: .tertiarySystemFill).opacity(highlighted ? 1 : 0))
         }
         .padding(.horizontal, -10)
         .animation(.easeOut(duration: 0.2), value: highlighted)
