@@ -182,7 +182,7 @@ describe("parseTranscript", () => {
     expect(entries[2].content).toBe("Transient engine error — retrying once.");
   });
 
-  it("maps compaction-summary lines to system entries with the compaction flag", () => {
+  it("maps compaction-summary lines to system entries tagged for the classifier", () => {
     const path = writeFixture([
       userLine(
         "prt_sum1",
@@ -194,7 +194,7 @@ describe("parseTranscript", () => {
     expect(entries[0]).toMatchObject({
       id: "sys-prt_sum1",
       type: "system",
-      compaction: true,
+      noticeKind: "compaction",
       content: "## Objective\nShip the sidebar refactor.",
     });
   });
@@ -211,7 +211,7 @@ describe("parseTranscript", () => {
     expect(entries[0]).toMatchObject({
       id: "sys-rc1",
       type: "system",
-      recap: true,
+      noticeKind: "recap",
       content:
         "We shipped the recap feature and pushed to main. Next: open a session to see it.",
     });

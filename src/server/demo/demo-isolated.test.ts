@@ -159,7 +159,7 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
       for (const e of entries) {
         kinds.add(e.type);
         if (e.isError) sawError = true;
-        if (e.compaction) sawCompaction = true;
+        if (e.noticeKind === "compaction") sawCompaction = true;
         if (e.type === "tool_result" && e.content.length > 32 * 1024)
           sawBigOutput = true;
       }

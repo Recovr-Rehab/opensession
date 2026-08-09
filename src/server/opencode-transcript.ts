@@ -622,7 +622,7 @@ export function transcriptLineRunnerNotice(
  *  message with a `compaction` part, answered by an assistant message with
  *  `summary: true` whose text is the handoff summary). Same user-role +
  *  harness-marker pattern as runner notices; the jsonl parser maps it to a
- *  system entry with `compaction: true` so the UI renders a collapsed
+ *  system entry tagged `noticeKind: "compaction"` so the UI renders a collapsed
  *  "context compacted" chip instead of an assistant bubble. */
 export function transcriptLineCompactionSummary(
   text: string,
@@ -635,7 +635,7 @@ export function transcriptLineCompactionSummary(
 /** Session recap (away-summary): the one-liner recap.ts generates when a
  *  viewer returns to a session whose turn finished with nobody watching. Same
  *  user-role + harness-marker pattern as runner notices; the jsonl parser maps
- *  it to a system entry with `recap: true` so the UI renders a "recap:" line
+ *  it to a system entry tagged `noticeKind: "recap"` so the UI renders a recap line
  *  instead of a user bubble. */
 export function transcriptLineRecap(
   text: string,
@@ -755,7 +755,7 @@ export function transcriptLineForEntry(e: TranscriptEntry): JsonlLine | null {
       // the reattach gap-backfill must not drop them). The parser derives the
       // entry id as `sys-<line uuid>`, so strip the prefix to keep the upsert
       // key stable. Other system entries stay derived-only.
-      return e.compaction
+      return e.noticeKind === "compaction"
         ? transcriptLineCompactionSummary(
             e.content,
             e.id.startsWith("sys-") ? e.id.slice(4) : e.id,
@@ -1357,7 +1357,7 @@ export function readOpencodeTranscript(
               type: "system",
               content: text,
               timestamp: ts,
-              compaction: true,
+              noticeKind: "compaction",
             });
             continue;
           }

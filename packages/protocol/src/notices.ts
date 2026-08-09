@@ -309,6 +309,20 @@ export function parseSessionNotice(content?: string): { body: string } | null {
 // ---------------------------------------------------------------------------
 
 /**
+ * Notices the transcript's raw form already identified (`entry.noticeKind`),
+ * so all this end has to do is say how they read. A new one is a row here,
+ * not a branch — and not a new field on the wire.
+ */
+const PARSED_NOTICES: Record<string, Omit<EntryNotice, "tone">> = {
+  compaction: {
+    kind: "compaction",
+    title: "Context compacted — earlier conversation summarized to keep going",
+    body: "collapsed",
+  },
+  recap: { kind: "recap", title: "Recap", body: "inline" },
+};
+
+/**
  * Tag one entry with how it should read, stripping delivery plumbing out of
  * `content` as it goes. Returns the entry unchanged (same reference) when it
  * is an ordinary message — the common case, and what keeps this cheap enough
@@ -322,21 +336,8 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
   if (entry.notice || entry.sender) return entry;
 
   if (entry.type === "system") {
-    if (entry.compaction)
-      return {
-        ...entry,
-        notice: {
-          kind: "compaction",
-          title: "Context compacted — earlier conversation summarized to keep going",
-          tone: "info",
-          body: "collapsed",
-        },
-      };
-    if (entry.recap)
-      return {
-        ...entry,
-        notice: { kind: "recap", title: "Recap", tone: "info", body: "inline" },
-      };
+    const parsed = entry.noticeKind && PARSED_NOTICES[entry.noticeKind];
+    if (parsed) return { ...entry, notice: { tone: "info", ...parsed } };
     const content = stripNoticeGlyph(entry.content);
     return {
       ...entry,

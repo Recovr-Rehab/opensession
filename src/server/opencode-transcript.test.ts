@@ -507,7 +507,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
     expect(entries[0]).toMatchObject({
       id: "sys-prt_sum",
       type: "system",
-      compaction: true,
+      noticeKind: "compaction",
       content: "## Objective\nKeep going.",
     });
   });
@@ -517,7 +517,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
       type: "system",
       content: "## Objective\nKeep going.",
       timestamp: "2026-07-24T00:00:00.000Z",
-      compaction: true,
+      noticeKind: "compaction",
     };
     const line = transcriptLineForEntry(entry);
     expect(line).not.toBeNull();
@@ -528,7 +528,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
     expect(parsed).toMatchObject({
       id: "sys-prt_sum",
       type: "system",
-      compaction: true,
+      noticeKind: "compaction",
       content: "## Objective\nKeep going.",
     });
     // Other system entries stay derived-only, as before.

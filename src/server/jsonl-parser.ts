@@ -323,7 +323,7 @@ function harnessEntryFor(
   if (t.startsWith("<compaction-summary>")) {
     const body = t.match(/<compaction-summary>([\s\S]*?)<\/compaction-summary>/)?.[1]?.trim();
     return body
-      ? [{ id, type: "system", content: body, timestamp: ts, compaction: true }]
+      ? [{ id, type: "system", content: body, timestamp: ts, noticeKind: "compaction" }]
       : [];
   }
   // Session recap (transcriptLineRecap in opencode-transcript.ts): the
@@ -333,7 +333,7 @@ function harnessEntryFor(
   if (t.startsWith("<recap>")) {
     const body = t.match(/<recap>([\s\S]*?)<\/recap>/)?.[1]?.trim();
     return body
-      ? [{ id, type: "system", content: body, timestamp: ts, recap: true }]
+      ? [{ id, type: "system", content: body, timestamp: ts, noticeKind: "recap" }]
       : [];
   }
   // The SDK writes this marker into the jsonl whenever a turn is interrupted

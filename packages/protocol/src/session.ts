@@ -21,7 +21,7 @@
  * breaks one. Unknown frame types must be ignored by clients.
  */
 
-import type { EntryNotice } from "./notices";
+import type { EntryNotice, NoticeKind } from "./notices";
 
 /** One rendered line of a session's durable transcript (the jsonl record). */
 export interface TranscriptEntry {
@@ -60,13 +60,12 @@ export interface TranscriptEntry {
    *  Present only on v2 frames; changeSeq advances on inserts and rewrites. */
   seq?: number;
   changeSeq?: number;
-  // Set on a system entry holding an engine context-compaction summary — the
-  // UI renders a collapsed "context compacted" chip, not an assistant bubble.
-  // Classification input: clients read `notice`, not this.
-  compaction?: boolean;
-  // Set on a system entry holding a session recap (the away-summary written
-  // when a turn finished with nobody watching). Classification input; see above.
-  recap?: boolean;
+  /** What the transcript's raw form said this system entry is — set by
+   *  whoever parsed the line (a `<compaction-summary>`, a `<recap>`), read
+   *  only by classifyEntry, which turns it into `notice`. It exists because
+   *  the marker is gone by the time an entry reaches the classifier; adding a
+   *  kind must not add another boolean here. */
+  noticeKind?: NoticeKind;
   /** How this entry reads: an operational notice rather than a message. Set by
    *  classifyEntry (notices.ts) on the way to a client, which also strips the
    *  delivery plumbing out of `content` — so a client renders `notice.title`,

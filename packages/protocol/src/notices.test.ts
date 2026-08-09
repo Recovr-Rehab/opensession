@@ -208,12 +208,12 @@ describe("classifyEntry", () => {
 
 	it("reads a recap inline and a compaction folded", () => {
 		expect(
-			classifyEntry(entry({ type: "system", content: "Fixed the build.", recap: true }))
+			classifyEntry(entry({ type: "system", content: "Fixed the build.", noticeKind: "recap" }))
 				.notice,
 		).toMatchObject({ kind: "recap", body: "inline" });
 		expect(
 			classifyEntry(
-				entry({ type: "system", content: "Earlier…", compaction: true }),
+				entry({ type: "system", content: "Earlier…", noticeKind: "compaction" }),
 			).notice,
 		).toMatchObject({ kind: "compaction", body: "collapsed" });
 	});
