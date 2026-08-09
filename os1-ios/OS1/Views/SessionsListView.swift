@@ -373,6 +373,14 @@ struct SessionsListView: View {
         NavigationStack(path: $path) {
             loadingOrList
                 .inlineTitleBarCompat()
+                // The system search field: iOS 26 places it at the bottom edge
+                // on iPhone (the Liquid Glass search treatment), replacing the
+                // old toolbar toggle + inline field. It sits on the CONTAINER
+                // rather than on the list, so the bottom bar is whole from the
+                // first frame — hung off the list, it appeared only once the
+                // first poll landed, and the Desk button spent the load
+                // centred on its own before the field shoved it right.
+                .searchable(text: $searchText, prompt: "Search sessions")
                 .toolbar {
                     ToolbarItem(placement: .topLeadingCompat) {
                         Button {
@@ -1000,10 +1008,6 @@ struct SessionsListView: View {
         .background(OS1VisualStyle.background)
         .listSectionSpacing(10)
         .contentMargins(.top, 4, for: .scrollContent)
-        // The system search field: iOS 26 places it at the bottom edge on
-        // iPhone (the Liquid Glass search treatment), replacing the old
-        // toolbar toggle + inline field.
-        .searchable(text: $searchText, prompt: "Search sessions")
         .overlay { emptyFilterOverlay }
         .refreshable {
             await viewModel.refresh()
