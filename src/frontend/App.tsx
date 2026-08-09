@@ -20,6 +20,8 @@ import {
 	WORKSPACE_SHELL,
 } from "./lib/app-shell-classes";
 import {
+	APP_HEADER_ACTIONS,
+	APP_HEADER_ACTIONS_DETAIL,
 	HEADER_TITLE_COL,
 	HEADER_TITLE_MODEL,
 	HEADER_TITLE_PILL,
@@ -27,6 +29,7 @@ import {
 	HEADER_TITLE_REPO,
 	HEADER_TITLE_ROW,
 	HEADER_TITLE_TEXT,
+	MOBILE_SEARCH_BTN,
 } from "./lib/app-header-classes";
 import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
 import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
@@ -3333,14 +3336,19 @@ export function App(
 							</span>
 						</span>
 					)}
-					<div className="app-header-actions" ref={setHeaderActionsEl}>
+					<div
+						className={
+							mobileDetail ? APP_HEADER_ACTIONS_DETAIL : APP_HEADER_ACTIONS
+						}
+						ref={setHeaderActionsEl}
+					>
 						{/* On the root page the actions slot is otherwise empty (session
 						    actions only portal in on pushed pages) — it carries Search,
 						    which lives in the top bar on phones instead of the sidebar.
 						    The Desk rides the bottom-right FAB cluster instead. */}
 						{!mobileDetail && (
 							<button
-								className="mobile-search-btn"
+								className={MOBILE_SEARCH_BTN}
 								onClick={() => setSearchOpen(true)}
 								aria-label="Open command menu"
 							>

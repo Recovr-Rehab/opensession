@@ -62,6 +62,7 @@ import {
 	SIDEBAR_WS_TIME,
 	SIDEBAR_WS_TIME_HOVER,
 } from "../lib/sidebar-classes";
+import { mobileFilterBtn } from "../lib/app-header-classes";
 import { isScratchWorkspace } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import {
@@ -4243,9 +4244,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<>
 						<button
 							ref={mobileFilterBtnRef}
-							className={`mobile-filter-btn${filterOpen ? " active" : ""}${
-								hasFilter ? " has-filter" : ""
-							}`}
+							className={mobileFilterBtn(filterOpen || hasFilter)}
 							onClick={() => setFilterOpen((o) => !o)}
 							aria-label="Group, filter & sort"
 						>
