@@ -270,6 +270,13 @@ OS1/
   is dropped.
 - Entries can arrive clamped (`contentClamped`); full content is at
   `GET /api/sessions/:id/entry/:entryId` (not wired into the UI yet).
+- `presence` lists everyone watching the session, one name per socket. The
+  header facepile drops our own name and dedupes devices; names resolve to
+  GitHub pictures through `GET /api/people` (`TeamDirectory`).
+- `{"type":"away","away":true}` is presence, not subscription: the app sends it
+  on `.background` (never `.inactive` — that's a notification banner) so a
+  suspended phone stops showing its owner's face, while the watch stays put and
+  the transcript keeps streaming for unread counts and notifications.
 
 ## Next milestones
 

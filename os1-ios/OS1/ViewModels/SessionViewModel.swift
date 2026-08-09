@@ -50,6 +50,12 @@ final class SessionViewModel {
     /// user entry retires them; `pruneExpiredDelivering` drops ghosts whose
     /// echo never comes (e.g. deleted from another device).
     private(set) var deliveringItems: [QueueItem] = []
+    /// Everyone ELSE with this session open right now, from the server's
+    /// `presence` frames — the header facepile. Ours is filtered out (the web
+    /// pile shows you rightmost; a navigation bar has no room for a face you
+    /// already know is there), and a person watching from two devices appears
+    /// once, since presence carries one name per socket.
+    private(set) var otherViewers: [String] = []
     private(set) var pendingQuestion: AskQuestion?
     private(set) var connectionState: ConnectionState = .connecting
     private(set) var isLoadingConversation = true
@@ -455,6 +461,36 @@ final class SessionViewModel {
     /// with a full resync — transcript_init plus status/queue extras) and
     /// verify a frame actually comes back; if the socket is dead, tear it
     /// down and reconnect immediately.
+    /// Everyone but us, in wire order and deduplicated. The server sends one
+    /// name per socket, so a teammate reading from a laptop and a phone would
+    /// otherwise show up twice; names are matched on the first token, which is
+    /// what the server stamps sockets with, case-insensitively.
+    static func otherViewers(_ viewers: [String], me: String) -> [String] {
+        let mine = firstName(me)
+        var seen = Set<String>()
+        return viewers.filter { viewer in
+            let key = firstName(viewer)
+            guard !key.isEmpty, key != mine else { return false }
+            return seen.insert(key).inserted
+        }
+    }
+
+    private static func firstName(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ")
+            .first?
+            .lowercased() ?? ""
+    }
+
+    /// The app went to the background. The watch stays — the transcript has to
+    /// keep streaming for unread counts and notifications — but our face comes
+    /// off the session, so a phone asleep in a pocket stops claiming its owner
+    /// is reading along.
+    func appDidEnterBackground() {
+        guard !stopped else { return }
+        socket?.setAway(true)
+    }
+
     func appDidBecomeActive() {
         guard !stopped else { return }
         // Coming back is the most likely moment for "we have signal again".
@@ -472,6 +508,9 @@ final class SessionViewModel {
         }
         let probeStarted = Date()
         socket.watch(sessionId: session.id)
+        // Back on screen: show our face again. (A reconnect starts present, so
+        // only a socket that survived the background needs telling.)
+        socket.setAway(false)
         resyncProbeTask?.cancel()
         resyncProbeTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(4))
@@ -768,6 +807,9 @@ final class SessionViewModel {
     private func scheduleReconnect(_ reason: String?) {
         guard !stopped else { return }
         connectionState = .reconnecting(reason)
+        // Presence is only true while the socket that reported it is up; the
+        // rejoin brings a fresh frame.
+        otherViewers = []
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
@@ -928,6 +970,9 @@ final class SessionViewModel {
         case .streamDone(let id) where id == session.id:
             streamEnded = true
             flushLiveTextNow()
+
+        case .presence(let id, let viewers) where id == session.id:
+            otherViewers = Self.otherViewers(viewers, me: ServerConfig.shared.userName)
 
         case .sessionStatus(let id, let running) where id == session.id:
             let completed = isRunning && !running

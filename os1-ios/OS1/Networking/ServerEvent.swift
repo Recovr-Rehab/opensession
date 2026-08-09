@@ -15,6 +15,9 @@ enum ServerEvent: Sendable {
     case streamEntry(sessionId: String, entry: TranscriptEntry)
     case streamDone(sessionId: String)
     case sessionStatus(sessionId: String, isRunning: Bool)
+    /// Everyone with this session open right now, by display name. One entry
+    /// per socket, so the same person can appear twice (two devices).
+    case presence(sessionId: String, viewers: [String])
     case queueUpdate(sessionId: String, queued: [QueueItem], steered: [QueueItem])
     case askQuestion(sessionId: String, question: AskQuestion)
     case askResolved(sessionId: String, questionId: String)
@@ -59,6 +62,9 @@ enum ServerEvent: Sendable {
         case "session_status":
             guard let id = frame.sessionId else { return .ignored }
             return .sessionStatus(sessionId: id, isRunning: frame.isRunning ?? false)
+        case "presence":
+            guard let id = frame.sessionId else { return .ignored }
+            return .presence(sessionId: id, viewers: frame.viewers ?? [])
         case "queue_update":
             guard let id = frame.sessionId else { return .ignored }
             return .queueUpdate(
@@ -181,6 +187,7 @@ private struct RawFrame: Decodable {
     let entry: TranscriptEntry?
     let text: String?
     let isRunning: Bool?
+    let viewers: [String]?
     let queued: [WireQueueItem]?
     let steered: [WireQueueItem]?
     let questionId: String?

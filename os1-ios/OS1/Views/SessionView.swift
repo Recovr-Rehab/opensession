@@ -461,6 +461,13 @@ struct SessionView: View {
                 sessionIdentityButton
             }
             #endif
+            // Whoever else has this session open, right before the actions
+            // menu — the same slot the web viewer's facepile sits in.
+            if !viewModel.otherViewers.isEmpty {
+                ToolbarItem(placement: .topTrailingCompat) {
+                    PresenceFacepile(viewers: viewModel.otherViewers, size: 24)
+                }
+            }
             #if os(iOS)
             ToolbarItem(placement: .topTrailingCompat) {
                 SessionActionsMenu(
@@ -557,7 +564,15 @@ struct SessionView: View {
         .onChange(of: scenePhase) { _, phase in
             // Backgrounding leaves the socket half-open more often than not;
             // resync (and reconnect if dead) the moment we're visible again.
-            if phase == .active { viewModel.appDidBecomeActive() }
+            switch phase {
+            case .active: viewModel.appDidBecomeActive()
+            // Only `.background` drops our presence: `.inactive` is a
+            // notification banner or Control Centre pulled down, and a face
+            // flickering off the session for that would be a lie in the
+            // other direction.
+            case .background: viewModel.appDidEnterBackground()
+            default: break
+            }
         }
     }
 

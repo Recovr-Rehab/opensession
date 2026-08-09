@@ -23,6 +23,25 @@ final class ServerEventTests: XCTestCase {
         }
     }
 
+    func testPresenceDecodesViewers() {
+        let json = #"{"type":"presence","sessionId":"bks-1","viewers":["Kent","Michiel"]}"#
+        guard case .presence(let id, let viewers) = parse(json) else {
+            return XCTFail("expected .presence")
+        }
+        XCTAssertEqual(id, "bks-1")
+        XCTAssertEqual(viewers, ["Kent", "Michiel"])
+    }
+
+    /// Everyone left: the frame still arrives, with an empty list.
+    func testPresenceWithNoViewers() {
+        guard case .presence(_, let viewers) =
+            parse(#"{"type":"presence","sessionId":"bks-1","viewers":[]}"#)
+        else {
+            return XCTFail("expected .presence")
+        }
+        XCTAssertTrue(viewers.isEmpty)
+    }
+
     func testTranscriptInitDecodesEntries() {
         let json = #"""
         {"type":"transcript_init","sessionId":"bks-1","entries":[

@@ -542,6 +542,23 @@ enum OS1API {
         return response.repos
     }
 
+    /// One teammate from the server's identity roster (src/server/people.ts).
+    /// `name` is the first name every people surface keys on — presence
+    /// viewers, `startedBy`, @-mentions — and `github` is where the face
+    /// comes from.
+    struct Person: Decodable, Sendable {
+        let name: String
+        let fullName: String?
+        let github: String?
+    }
+
+    /// The team directory: who exists, and which GitHub account each is.
+    static func people() async throws -> [Person] {
+        struct PeopleResponse: Decodable, Sendable { let people: [Person]? }
+        let response: PeopleResponse = try await get("/api/people")
+        return response.people ?? []
+    }
+
     /// What's wired up on this instance, for Settings → Setup. Read-only
     /// snapshot; presence booleans only, never a credential value. Mirrors
     /// the web's `SetupStatus` (src/frontend/components/setup-shared.tsx) as

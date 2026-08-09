@@ -5,16 +5,25 @@ import AppKit
 import UIKit
 #endif
 
-/// Small circular avatar shown next to user bubbles, group-chat style.
-/// Signed-in via GitHub → the account's GitHub avatar; otherwise a tinted
-/// initial derived from the display name. Transcript entries carry no
-/// per-message identity, so this is the device's signed-in person — the same
-/// approximation the composer uses when attributing prompts.
+/// Small circular avatar: a person's GitHub picture, falling back to a tinted
+/// initial for anyone the roster doesn't know (the agent persona, "Anonymous",
+/// a teammate missing from the identity config) or when the image fails.
+///
+/// With no `person`, this is the device's signed-in user — the approximation
+/// the composer uses when attributing prompts, since transcript entries carry
+/// no per-message identity. Named viewers (the presence facepile) pass their
+/// display name and resolve through `TeamDirectory`.
 struct UserAvatar: View {
+    /// Display name, as the server sends it. nil = whoever is signed in here.
+    var person: String?
     var size: CGFloat = 26
 
-    private var login: String { ServerConfig.shared.githubLogin }
-    private var name: String { ServerConfig.shared.userName }
+    private var login: String {
+        guard let person else { return ServerConfig.shared.githubLogin }
+        return TeamDirectory.shared.githubLogin(for: person) ?? ""
+    }
+
+    private var name: String { person ?? ServerConfig.shared.userName }
 
     var body: some View {
         Group {

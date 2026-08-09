@@ -9,6 +9,7 @@ protocol SessionSocket: AnyObject {
     func connect()
     func disconnect()
     func watch(sessionId: String)
+    func setAway(_ away: Bool)
     func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?)
     func loadHistory(sessionId: String, beforeSeq: Int)
     func prompt(
@@ -85,6 +86,15 @@ final class OS1Socket: SessionSocket {
 
     func watch(sessionId: String) {
         send(["type": "watch", "sessionId": sessionId])
+    }
+
+    /// Presence, not subscription: backgrounding the app keeps the watch (the
+    /// transcript must keep streaming so unread counts and notifications still
+    /// land) but takes our face off the session for everyone else. A client
+    /// that never sends this reads as present forever — which is what a
+    /// suspended phone in someone's pocket used to look like to the team.
+    func setAway(_ away: Bool) {
+        send(["type": "away", "away": away])
     }
 
     /// Page one window of earlier history (arrives as transcript_history).

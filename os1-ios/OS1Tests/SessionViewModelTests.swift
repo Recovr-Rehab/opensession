@@ -148,6 +148,60 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(socket.disconnectCount, 1)
     }
 
+    // MARK: - Presence
+
+    /// The pile is other people: our own face carries no information in a
+    /// navigation bar, and one person on two devices is still one person.
+    func testPresenceDropsUsAndDeduplicatesDevices() {
+        let viewModel = makeViewModel()
+        // Built around whoever this test host is signed in as, so the
+        // "not us" half holds on any machine.
+        let me = ServerConfig.shared.userName
+        viewModel.handle(.presence(
+            sessionId: "bks-1", viewers: ["Zzz Tester", me, "Zzz Tester"]
+        ))
+        XCTAssertEqual(viewModel.otherViewers, ["Zzz Tester"])
+
+        XCTAssertEqual(
+            SessionViewModel.otherViewers(["Michiel", "Kent", "Michiel", "Grant"], me: "michiel"),
+            ["Kent", "Grant"]
+        )
+        // Chat integrations send full names; the first token is the key the
+        // server stamps sockets with.
+        XCTAssertEqual(
+            SessionViewModel.otherViewers(["Kent de Bruin", "kent"], me: "Michiel"),
+            ["Kent de Bruin"]
+        )
+        XCTAssertTrue(SessionViewModel.otherViewers(["Michiel"], me: "Michiel").isEmpty)
+    }
+
+    /// Presence for another session must not repaint this one's pile.
+    func testPresenceForAnotherSessionIsIgnored() {
+        let viewModel = makeViewModel()
+        viewModel.handle(.presence(sessionId: "bks-2", viewers: ["Kent"]))
+        XCTAssertTrue(viewModel.otherViewers.isEmpty)
+    }
+
+    /// Backgrounding keeps the watch (unread + notifications depend on it) and
+    /// only takes our face off the session; coming back puts it on again.
+    func testBackgroundingSendsAwayAndReturningClearsIt() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"),
+            socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+
+        viewModel.appDidEnterBackground()
+        XCTAssertEqual(socket.awayFrames, [true])
+
+        viewModel.appDidBecomeActive()
+        XCTAssertEqual(socket.awayFrames, [true, false])
+        XCTAssertEqual(socket.disconnectCount, 0, "away must not drop the watch")
+        viewModel.stop()
+    }
+
     func testTranscriptInitPopulatesEntries() {
         let viewModel = makeViewModel()
         XCTAssertTrue(viewModel.isLoadingConversation)
@@ -1166,10 +1220,12 @@ private final class MockSocket: SessionSocket {
     private(set) var deletedQueueIds: [String] = []
     private(set) var updatedQueued: [(id: String, content: String)] = []
     private(set) var reorders: [[String]] = []
+    private(set) var awayFrames: [Bool] = []
 
     func connect() { connectCount += 1 }
     func disconnect() { disconnectCount += 1 }
     func watch(sessionId: String) { watched.append(sessionId) }
+    func setAway(_ away: Bool) { awayFrames.append(away) }
     func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?) {}
     func loadHistory(sessionId: String, beforeSeq: Int) {}
     func prompt(
