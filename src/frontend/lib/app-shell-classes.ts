@@ -133,17 +133,17 @@ export const DETAIL_TOPBAR = "detail-topbar flex min-w-0 shrink-0 flex-col empty
 
 /**
  * The plain title. Matches `.viewer-header` and the sidebar brand row's height
- * so the three line up across the top of the app.
+ * so the three line up across the top of the app. When tabs follow, the title
+ * row trims one spacing step to pull the two labels closer together.
  *
- * The bottom hairline drops when the tab strip follows, because the strip
- * carries BOTH dividers as inset shadows on one element — same element, same
- * sub-pixel rounding, so they stay identical at fractional display scales
- * where a border and an inset shadow round to different opacities.
+ * The bottom hairline drops when the tab strip follows, leaving the strip's
+ * own bottom inset as the single divider above the content.
  */
 export const DETAIL_TOPBAR_TITLE =
 	"detail-topbar-title flex h-[var(--desktop-header-h)] items-center px-4 " +
 	"border-b border-b-[var(--top-divider)] bg-[var(--topbar-bg)] " +
 	"text-body font-semibold text-fg " +
+	"desktop:[.detail-topbar:has(+_.session-tabs)_&]:h-11 " +
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
 	// Collapsed desktop sidebar: clear the floating re-open control and the
 	// fallback nav/search cluster beside it.
