@@ -12,6 +12,7 @@
  * - mcp-proxy.js — the MCP stdio proxy, prebundled; the shell points
  *   OPENSESSION_MCP_PROXY_ENTRY at it (its source-relative default resolves
  *   into a src/ tree the sidecar does not have).
+ * - code-flow-worker.js — bounded structural analysis worker loaded lazily.
  * - opencode-plugin-session-tag.js / opencode-plugin-arg-coerce.js — loaded
  *   by opencode as real files, copied verbatim.
  * - node_modules — only the Meridian bridge packages, installed from a
@@ -85,6 +86,7 @@ async function bundle(entry: string, outName: string): Promise<void> {
 }
 
 await bundle("opensession.ts", "opensession.js");
+await bundle("src/server/code-flow-worker.ts", "code-flow-worker.js");
 await bundle("src/runner-host/mcp-proxy.ts", "mcp-proxy.js");
 
 for (const plugin of ["opencode-plugin-session-tag.js", "opencode-plugin-arg-coerce.js"]) {
@@ -180,7 +182,7 @@ for (const name of bridgePackages) {
     );
   }
 }
-for (const file of ["opensession.js", "mcp-proxy.js", "opencode-plugin-session-tag.js"]) {
+for (const file of ["opensession.js", "code-flow-worker.js", "mcp-proxy.js", "opencode-plugin-session-tag.js"]) {
   if (!existsSync(join(OUT, file))) throw new Error(`sidecar is missing ${file}`);
 }
 

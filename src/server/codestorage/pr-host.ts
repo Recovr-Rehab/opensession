@@ -20,6 +20,7 @@
  * error and the capability flags (CODESTORAGE_CAPABILITIES) hide the surfaces.
  */
 import { audited } from "../audit";
+import { createHash } from "node:crypto";
 import { codeStorageConfig, personaName } from "../config";
 import type { GithubCredential } from "../github-auth";
 import type {
@@ -120,8 +121,8 @@ function branchesFor(repoId: string, maxAgeMs = BRANCHES_TTL): Promise<CsBranch[
 	return p;
 }
 
-async function findBranch(repoId: string, branch: string): Promise<CsBranch | null> {
-	const branches = await branchesFor(repoId);
+async function findBranch(repoId: string, branch: string, fresh = false): Promise<CsBranch | null> {
+	const branches = await branchesFor(repoId, fresh ? 0 : BRANCHES_TTL);
 	return branches.find((b) => b.name === branch) ?? null;
 }
 
@@ -502,19 +503,48 @@ async function fetchDetails(branch: string, repoId: string): Promise<PrDetails |
 	};
 }
 
-async function fetchDiff(branch: string, repoId: string): Promise<PrDiffData | null> {
+async function fetchDiff(branch: string, repoId: string, maxPatchBytes?: number): Promise<PrDiffData | null> {
 	const base = await defaultBranchOf(repoId);
 	if (branch === base) return null;
-	const head = await findBranch(repoId, branch);
-	if (!head) return null;
-	const diff = await getBranchDiff(repoId, base, branch);
-	// Each file's `raw` is a complete `diff --git …` block; joined they form the
-	// same unified patch `gh pr diff` returns. Size-filtered files have no
-	// inline content and are simply absent from the patch.
-	const patch = diff.files
-		.map((f) => (f.raw.endsWith("\n") ? f.raw : `${f.raw}\n`))
-		.join("");
-	return { number: csPrNumber(branch), headRefOid: head.head_sha || "", patch };
+	for (let attempt = 0; attempt < 2; attempt++) {
+		const [head, baseHead] = await Promise.all([
+			findBranch(repoId, branch, true),
+			findBranch(repoId, base, true),
+		]);
+		if (!head) return null;
+		const diff = await getBranchDiff(repoId, base, branch);
+		const [verifiedHead, verifiedBase] = await Promise.all([
+			findBranch(repoId, branch, true),
+			findBranch(repoId, base, true),
+		]);
+		if (verifiedHead?.head_sha !== head.head_sha || verifiedBase?.head_sha !== baseHead?.head_sha) continue;
+		// Size-filtered files have no inline content and are absent from the patch.
+		let patch = diff.files
+			.map((f) => (f.raw.endsWith("\n") ? f.raw : `${f.raw}\n`))
+			.join("");
+		const omitted = diff.filtered_files || [];
+		let boundedFiles = 0;
+		if (maxPatchBytes && Buffer.byteLength(patch) > maxPatchBytes) {
+			const prefix = Buffer.from(patch).subarray(0, maxPatchBytes).toString("utf8");
+			const boundary = prefix.lastIndexOf("\ndiff --git ");
+			patch = boundary > 0 ? prefix.slice(0, boundary + 1) : "";
+			boundedFiles = 1;
+		}
+		const baseRefOid = diff.merge_base_sha || baseHead?.head_sha;
+		const version = createHash("sha256")
+			.update(baseRefOid ?? base)
+			.update("\0")
+			.update(head.head_sha || "");
+		return {
+			number: csPrNumber(branch),
+			baseRefOid,
+			headRefOid: head.head_sha || "",
+			patch,
+			diffVersion: version.digest("base64url"),
+			...(omitted.length + boundedFiles ? { skippedFiles: omitted.length + boundedFiles } : {}),
+		};
+	}
+	throw new Error("Change request changed while loading its diff");
 }
 
 function cachedFetch<T>(
@@ -583,8 +613,9 @@ export const csPrHost: PrHost = {
 		cachedFetch(detailsCache, detailsInflight, cacheKey(repo, branch), true, () =>
 			fetchDetails(branch, repo),
 		),
-	getPrDiff: (branch, repo) =>
-		cachedFetch(diffCache, diffInflight, cacheKey(repo, branch), false, () =>
+	getPrDiff: (branch, repo, maxPatchBytes) => maxPatchBytes
+		? fetchDiff(branch, repo, maxPatchBytes)
+		: cachedFetch(diffCache, diffInflight, cacheKey(repo, branch), false, () =>
 			fetchDiff(branch, repo),
 		),
 

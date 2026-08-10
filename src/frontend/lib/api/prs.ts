@@ -129,6 +129,16 @@ export async function fetchDiff(
 	);
 }
 
+export async function fetchCodeFlow(
+	sessionId: string,
+	repo: string,
+): Promise<import("../types").CodeFlowResult | null> {
+	return request(
+		`/sessions/${encodeURIComponent(sessionId)}/code-flow?repo=${encodeURIComponent(repo)}`,
+		{ label: "Failed to analyze code flow" },
+	);
+}
+
 export async function fetchDiffGroups(
 	sessionId: string,
 	repo: string,
@@ -292,6 +302,18 @@ export async function fetchPrDiff(sessionId: string, repo?: string, branch?: str
 	);
 }
 
+export async function fetchPrCodeFlow(
+	sessionId: string,
+	repo?: string,
+	branch?: string,
+): Promise<import("../types").CodeFlowResult | null> {
+	const qs = prTargetQs(repo, branch);
+	return request(
+		`/sessions/${encodeURIComponent(sessionId)}/pr-code-flow${qs}`,
+		{ label: "Failed to analyze code flow" },
+	);
+}
+
 /** AI review guide for the PR's Guide view — slow on first call per head commit. */
 export async function fetchReviewGuide(sessionId: string, repo?: string, branch?: string) {
 	const qs = prTargetQs(repo, branch);
@@ -335,6 +357,16 @@ export async function fetchPrPreviewDiff(repo: string, branch: string) {
 	return request<any>(
 		`/pr-preview-diff?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`,
 		{ label: "Failed to fetch PR diff" },
+	);
+}
+
+export async function fetchPrPreviewCodeFlow(
+	repo: string,
+	branch: string,
+): Promise<import("../types").CodeFlowResult | null> {
+	return request(
+		`/pr-preview-code-flow?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`,
+		{ label: "Failed to analyze code flow" },
 	);
 }
 

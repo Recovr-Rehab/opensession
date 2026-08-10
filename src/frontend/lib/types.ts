@@ -508,6 +508,7 @@ export interface SessionDiff {
 	totalAdditions: number;
 	totalDeletions: number;
 	rawPatch: string;
+	diffVersion: string;
 	truncated?: boolean;
 }
 
@@ -527,6 +528,28 @@ export interface SessionDiffResponse {
 export interface DiffFileGroup {
 	title: string;
 	files: string[];
+}
+
+export interface CodeFlowNode {
+	key: string;
+	label: string;
+	kind: "call" | "branch";
+	status: "same" | "added" | "removed" | "modified";
+	file?: string;
+	line?: number;
+	endLine?: number;
+	children: CodeFlowNode[];
+}
+
+export interface CodeFlowResult {
+	repo: string;
+	base: string;
+	head: string;
+	diffVersion: string;
+	trees: Array<{ entry: string; tree: CodeFlowNode }>;
+	languages: string[];
+	skippedFiles: number;
+	truncated?: boolean;
 }
 
 export interface PrCheck {

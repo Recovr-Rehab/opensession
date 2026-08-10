@@ -1,10 +1,11 @@
 import { repoLabel } from "../lib/repo-label";
-import React, { useEffect, useState, useCallback, startTransition } from "react";
-import type { DiffFileGroup, RepoDiff } from "../lib/types";
+import React, { useEffect, useState, useCallback, startTransition, useRef } from "react";
+import type { CodeFlowResult, DiffFileGroup, RepoDiff } from "../lib/types";
 import {
   API_BASE,
   fetchDiff,
   fetchDiffGroups,
+  fetchCodeFlow,
   discardDiffFile,
   fetchWorktreeFile,
   saveWorktreeFile,
@@ -16,6 +17,8 @@ import { Button } from "../ui/button";
 import { PixelSpinner } from "./PixelSpinner";
 import { AGENT_NAME } from "../lib/brand";
 import { InlineAlert, LoadingState } from "../ui/state";
+import { CodeFlow } from "./CodeFlow";
+import { revealDiffFile } from "../lib/diff-navigation";
 
 /* The +/− counts. Kept as constants because CommentableDiff carries the same
    pair on its file rows and group headers, and the two must read alike. */
@@ -36,7 +39,7 @@ export interface SessionDiffState {
   repos: RepoDiff[] | null;
   loading: boolean;
   error: string | null;
-  reload: () => Promise<void>;
+	reload: () => Promise<void>;
 }
 
 /**
@@ -54,7 +57,7 @@ export function useSessionDiff(
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
+	const load = useCallback(async (urgent = false) => {
     try {
       const data = await fetchDiff(sessionId);
       if (data.error) throw new Error(data.error);
@@ -64,11 +67,13 @@ export function useSessionDiff(
       // e.g. clicking the panel toggle to close — preempts it instead of waiting
       // for the whole diff to parse and paint. If the user closes the panel before
       // this render commits, React discards it and the panel closes instantly.
-      startTransition(() => {
-        setRepos(data.repos || []);
-        setError(null);
-        setLoading(false);
-      });
+		const commit = () => {
+			setRepos(data.repos || []);
+			setError(null);
+			setLoading(false);
+		};
+		if (urgent) commit();
+		else startTransition(commit);
     } catch (e: any) {
       setError(e.message);
       setLoading(false);
@@ -91,11 +96,16 @@ export function useSessionDiff(
     return () => clearInterval(interval);
   }, [load, isRunning, enabled]);
 
-  return { repos, loading, error, reload: load };
+	const reload = useCallback(async () => {
+		await load(true);
+	}, [load]);
+
+	return { repos, loading, error, reload };
 }
 
 export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) {
   const [active, setActive] = useState(0);
+  const [view, setView] = useState<"files" | "flow">("files");
   const [groups, setGroups] = useState<{
     repo: string;
     patch: string;
@@ -113,6 +123,68 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
   const cur = changed[Math.min(active, changed.length - 1)] || changed[0] || null;
   const groupPatch = cur?.diff.rawPatch || "";
   const groupFileCount = cur?.diff.files.length || 0;
+  const patchVersion = cur?.diff.diffVersion || "";
+  const flowKey = cur ? `${sessionId}\0${cur.repo}\0${patchVersion}` : "";
+  const [flow, setFlow] = useState<{ key: string; data: CodeFlowResult } | null>(null);
+  const [flowLoading, setFlowLoading] = useState(false);
+  const [flowError, setFlowError] = useState<string | null>(null);
+  const flowGeneration = useRef(0);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+	const loadFlow = useCallback(async () => {
+    if (!cur || !flowKey) return;
+    const generation = ++flowGeneration.current;
+    setFlowLoading(true);
+    setFlowError(null);
+    try {
+      const data = await fetchCodeFlow(sessionId, cur.repo);
+      if (!data) throw new Error("Code flow isn't available for these changes.");
+      if (data.diffVersion !== patchVersion) {
+        if (generation === flowGeneration.current) {
+          setFlowError("Changes updated while code flow was loading. Try again.");
+        }
+        return;
+      }
+      if (generation === flowGeneration.current) setFlow({ key: flowKey, data });
+    } catch (error: any) {
+      if (generation === flowGeneration.current)
+        setFlowError(error?.message || "Couldn't load code flow.");
+    } finally {
+      if (generation === flowGeneration.current) setFlowLoading(false);
+    }
+	}, [sessionId, cur?.repo, flowKey, patchVersion]);
+
+	const refreshFlow = useCallback(async () => {
+		flowGeneration.current += 1;
+		setFlow(null);
+		setFlowError(null);
+		setFlowLoading(true);
+		await reload();
+		setFlowLoading(false);
+	}, [reload]);
+
+  useEffect(() => {
+    if (view !== "flow" || flowLoading || flowError) return;
+    if (flow && flow.key !== flowKey) {
+      setFlowError("Changes updated. Refresh code flow to analyze the latest diff.");
+      return;
+    }
+    if (!flow) void loadFlow();
+  }, [view, flowKey, flow, flowLoading, flowError, loadFlow]);
+
+  useEffect(() => {
+    setFlow(null);
+    setFlowLoading(false);
+    setFlowError(null);
+    flowGeneration.current += 1;
+  }, [sessionId, cur?.repo]);
+
+  useEffect(() => setView("files"), [sessionId]);
+
+  function openFlowLocation(path: string) {
+    setView("files");
+    requestAnimationFrame(() => requestAnimationFrame(() => revealDiffFile(panelRef.current, path)));
+  }
 
   useEffect(() => {
     if (!cur || !groupPatch || groupFileCount < 3) {
@@ -211,7 +283,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
   const d = cur.diff;
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex min-h-0 flex-col" ref={panelRef}>
       {multi && (
         <div className="sticky top-0 z-2 flex gap-1 overflow-x-auto border-b border-line bg-raised px-2.5 py-1.5">
           {changed.map((r, i) => {
@@ -240,7 +312,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         </div>
       )}
 
-      <div className="sticky top-0 z-1 flex items-center gap-2.5 border-b border-line bg-raised px-3.5 py-2.5 text-label">
+      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-line bg-raised px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <span className="text-dim">
           {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
         </span>
@@ -263,12 +335,45 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
             {handEdited.length === 1 ? "" : "s"}
           </Button>
         )}
+        <div className="ml-auto inline-flex rounded-md border border-line bg-panel p-0.5">
+          <Button
+            variant="ghost"
+            size="xs"
+            className={`min-h-0 rounded-sm border-0 px-2 py-0.5 text-meta ${view === "files" ? "bg-active text-fg" : "hover:bg-transparent"}`}
+            onClick={() => setView("files")}
+            aria-pressed={view === "files"}
+          >
+            Files
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            className={`min-h-0 rounded-sm border-0 px-2 py-0.5 text-meta ${view === "flow" ? "bg-active text-fg" : "hover:bg-transparent"}`}
+            onClick={() => {
+              if (view !== "flow" && flowError) {
+                setFlow(null);
+                setFlowError(null);
+              }
+              setView("flow");
+            }}
+            aria-pressed={view === "flow"}
+            disabled={!patchVersion}
+          >
+            Code flow
+          </Button>
+        </div>
         <Tooltip label="Refresh diff">
           <Button
             variant="ghost"
             size="xs"
-            className="ml-auto min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
-            onClick={reload}
+            className="min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
+				onClick={() => {
+					if (view === "flow") {
+						void refreshFlow();
+                return;
+              }
+              void reload();
+            }}
             aria-label="Refresh diff"
           >
             ↻
@@ -276,8 +381,17 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         </Tooltip>
       </div>
 
-      {/* @pierre/diffs sizes its own generated markup, which no utility on our
-          side can reach — hold it inside the panel from here. */}
+      {view === "flow" ? (
+        <CodeFlow
+          data={flow?.key === flowKey ? flow.data : null}
+          loading={flowLoading || (flow?.key !== flowKey && !flowError)}
+          error={flowError}
+			onRetry={() => void refreshFlow()}
+          onOpenLocation={openFlowLocation}
+        />
+      ) : (
+      /* @pierre/diffs sizes its own generated markup, which no utility on our
+         side can reach — hold it inside the panel from here. */
       <div className="px-2.5 pt-2.5 pb-7 [&_[class*=pierre]]:max-w-full">
         <CommentableDiff
           key={cur.repo}
@@ -330,6 +444,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
           }}
         />
       </div>
+      )}
     </div>
   );
 }

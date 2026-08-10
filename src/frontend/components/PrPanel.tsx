@@ -6,6 +6,7 @@ import type {
   DiffFileGroup,
   PrCheck,
   PrDetails,
+  CodeFlowResult,
   SessionWalkthrough,
   UnifiedSession,
   WSServerMessage,
@@ -16,6 +17,7 @@ import {
   API_BASE,
   fetchPr,
   fetchPrDiff,
+  fetchPrCodeFlow,
   fetchPrDiffGroups,
   fetchPrViewedFiles,
   setPrFileViewed,
@@ -31,6 +33,7 @@ import {
 import {
   fetchPrPreview,
   fetchPrPreviewDiff,
+  fetchPrPreviewCodeFlow,
   fetchPrPreviewGuide,
   submitPrPreviewReviewApi,
   mergePrPreviewApi,
@@ -93,6 +96,8 @@ import { StackCard, StackSection } from "./pr/Stack";
 import { FileRow, ReviewerRow } from "./pr/PrRows";
 import { GitDivergenceStrip, GitStatusRows } from "./pr/GitStatus";
 import { InlineAlert, LoadingState } from "../ui/state";
+import { CodeFlow } from "./CodeFlow";
+import { revealDiffFile } from "../lib/diff-navigation";
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export { checkClass, isDeployment, formatPrCommentPrompt, CheckRow, PrStateIcon };
@@ -172,6 +177,8 @@ interface PrDiffData {
   number: number;
   headRefOid: string;
   patch: string;
+  diffVersion?: string;
+  skippedFiles?: number;
 }
 
 /** A PR manually linked to the session (mirrors session.linkedPrs entries). */
@@ -401,7 +408,7 @@ export function PrPanel({
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [allFilesOpen, setAllFilesOpen] = useState(false);
   const [diffView, setDiffView] = useState<
-    "guide" | "diff" | "checks" | "conversation" | "commits"
+    "guide" | "diff" | "flow" | "checks" | "conversation" | "commits"
   >(() => "diff");
   const [diffStyle, setDiffStyle] = useState<"unified" | "split">(() => {
     const stored = localStorage.getItem("opensession-pr-diff-style");
@@ -418,6 +425,10 @@ export function PrPanel({
   const [guide, setGuide] = useState<ReviewGuideData | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
   const [guideFailed, setGuideFailed] = useState(false);
+  const [codeFlow, setCodeFlow] = useState<{ key: string; data: CodeFlowResult } | null>(null);
+  const [codeFlowLoading, setCodeFlowLoading] = useState(false);
+  const [codeFlowError, setCodeFlowError] = useState<string | null>(null);
+  const codeFlowGenerationRef = useRef(0);
   // GitHub's per-viewer "Viewed" file state for the shown PR (review canvas
   // checkboxes). Keyed so a stale PR's set never leaks onto the next one.
   const [prViewed, setPrViewed] = useState<{
@@ -535,6 +546,10 @@ export function PrPanel({
     setGit(null);
     setPending([]);
     setPrViewed(null);
+    setCodeFlow(null);
+    setCodeFlowLoading(false);
+    setCodeFlowError(null);
+    codeFlowGenerationRef.current += 1;
     load();
     const stopPolling = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
     return () => {
@@ -642,6 +657,52 @@ export function PrPanel({
     previewTarget?.branch,
   ]);
 
+  const prPatchVersion = diff?.diffVersion || "";
+  const codeFlowKey = diff && prPatchVersion ? `${loadTargetKey}\0${diff.headRefOid}\0${prPatchVersion}` : "";
+  const loadCodeFlow = useCallback(async () => {
+    if ((!diff?.patch && !diff?.skippedFiles) || !codeFlowKey) return;
+    const generation = ++codeFlowGenerationRef.current;
+    setCodeFlowLoading(true);
+    setCodeFlowError(null);
+    try {
+      const data = previewTarget
+        ? await fetchPrPreviewCodeFlow(previewTarget.repo, previewTarget.branch)
+        : await fetchPrCodeFlow(sessionId, active?.repo, active?.branch);
+      if (!data) throw new Error("Code flow isn't available for this pull request.");
+      if (data.diffVersion !== prPatchVersion) {
+        if (generation === codeFlowGenerationRef.current) {
+          setCodeFlowError("The pull request updated while code flow was loading. Try again.");
+        }
+        return;
+      }
+      if (generation === codeFlowGenerationRef.current)
+        setCodeFlow({ key: codeFlowKey, data });
+    } catch (error: any) {
+      if (generation === codeFlowGenerationRef.current)
+        setCodeFlowError(error?.message || "Couldn't load code flow.");
+    } finally {
+      if (generation === codeFlowGenerationRef.current) setCodeFlowLoading(false);
+    }
+  }, [
+    sessionId,
+    active?.repo,
+    active?.branch,
+    previewTarget?.repo,
+    previewTarget?.branch,
+    diff?.patch,
+    prPatchVersion,
+    codeFlowKey,
+  ]);
+
+  const refreshCodeFlow = useCallback(async () => {
+    codeFlowGenerationRef.current += 1;
+    setCodeFlow(null);
+    setCodeFlowError(null);
+    setCodeFlowLoading(true);
+    await load(true);
+    setCodeFlowLoading(false);
+  }, [load]);
+
   // The guide is generated on demand (the first request per head commit takes
   // the model a while) — only fetch once the reviewer opens the Guide tab, and
   // refetch when a new push moves the head commit.
@@ -651,6 +712,20 @@ export function PrPanel({
     if (guide && guide.headRefOid === diff.headRefOid) return;
     void loadGuide();
   }, [diffView, diff?.patch, diff?.headRefOid, guide, guideLoading, guideFailed, loadGuide]);
+
+  useEffect(() => {
+    if (diffView !== "flow" || codeFlowLoading || codeFlowError) return;
+    if (!diff?.patch && !diff?.skippedFiles) {
+      if (diffLoading || diffOutOfDate) return;
+      setDiffView("diff");
+      return;
+    }
+    if (codeFlow && codeFlow.key !== codeFlowKey) {
+      setCodeFlowError("The pull request updated. Refresh code flow to analyze the latest diff.");
+      return;
+    }
+    if (!codeFlow) void loadCodeFlow();
+  }, [diffView, diff?.patch, diffLoading, diffOutOfDate, codeFlow, codeFlowKey, codeFlowLoading, codeFlowError, loadCodeFlow]);
 
   // Conversation stays first in the DOM, but narrow screens should still reveal
   // the selected tab (Files changed is the default review surface).
@@ -855,29 +930,13 @@ export function PrPanel({
 
   // Files card → diff: scroll the matching file section into view (and open it).
   const scrollToFile = useCallback((path: string) => {
-    const root = rootRef.current;
-    if (!root) return;
-    const el = root.querySelector<HTMLElement>(`[data-diff-file="${CSS.escape(path)}"]`);
-    if (!el) {
-      const group = [...root.querySelectorAll<HTMLElement>("[data-diff-group-files]")].find(
-        (header) => {
-          try {
-            return JSON.parse(header.dataset.diffGroupFiles || "[]").includes(path);
-          } catch {
-            return false;
-          }
-        },
-      );
-      if (group?.getAttribute("aria-expanded") === "false") {
-        group.click();
-        requestAnimationFrame(() => scrollToFile(path));
-      }
+    if (diffView === "flow") {
+      setDiffView("diff");
+      requestAnimationFrame(() => requestAnimationFrame(() => revealDiffFile(rootRef.current, path)));
       return;
     }
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-    const header = el.querySelector<HTMLElement>(".diff-file-header");
-    if (header && header.getAttribute("aria-expanded") === "false") header.click();
-  }, []);
+    revealDiffFile(rootRef.current, path);
+  }, [diffView]);
 
   // Changed images render as pictures, served from the repo at the PR's head
   // (new side) / base (old side) refs through the pr-image endpoint.
@@ -1240,7 +1299,7 @@ export function PrPanel({
             ] as const)
               .filter(([key]) => key !== "checks" || caps.checks)
               .map(([key, label, count, icon]) => {
-              const activeTab = key === "diff" ? diffView === "diff" || diffView === "guide" : diffView === key;
+              const activeTab = key === "diff" ? diffView === "diff" || diffView === "guide" || diffView === "flow" : diffView === key;
               return (
                 <button
                   key={key}
@@ -1261,14 +1320,15 @@ export function PrPanel({
             </span>
           </div>
 
-          {(diffView === "diff" || diffView === "guide") && (
-            <div className="sticky top-[52px] z-[7] flex h-[54px] items-center border-b border-line bg-surface/95 px-6 backdrop-blur phone:px-2">
+          {(diffView === "diff" || diffView === "guide" || diffView === "flow") && (
+            <div className="sticky top-[52px] z-[7] flex h-[54px] items-center gap-2 overflow-x-auto border-b border-line bg-surface/95 px-6 backdrop-blur [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
               <div className="inline-flex rounded-md border border-line bg-panel p-0.5">
                 <Button
                   variant="ghost"
                   size="sm"
                   className={`rounded-sm border-0 px-3 py-1.5 text-xs font-medium ${diffView === "diff" ? "bg-active text-fg" : "hover:bg-transparent"}`}
                   onClick={() => setDiffView("diff")}
+                  aria-pressed={diffView === "diff"}
                 >
                   All changes
                 </Button>
@@ -1277,11 +1337,28 @@ export function PrPanel({
                   size="sm"
                   className={`rounded-sm border-0 px-3 py-1.5 text-xs font-medium ${diffView === "guide" ? "bg-active text-fg" : "hover:bg-transparent"}`}
                   onClick={() => setDiffView("guide")}
+                  aria-pressed={diffView === "guide"}
                 >
                   Review guide
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-sm border-0 px-3 py-1.5 text-xs font-medium ${diffView === "flow" ? "bg-active text-fg" : "hover:bg-transparent"}`}
+                  onClick={() => {
+                    if (diffView !== "flow" && codeFlowError) {
+                      setCodeFlow(null);
+                      setCodeFlowError(null);
+                    }
+                    setDiffView("flow");
+                  }}
+                  aria-pressed={diffView === "flow"}
+                  disabled={(!diff?.patch && !diff?.skippedFiles) || !prPatchVersion}
+                >
+                  Code flow
+                </Button>
               </div>
-              <div className="ml-auto flex items-center gap-3">
+              <div className="ml-auto flex shrink-0 items-center gap-3">
                 {handEdited.length > 0 && send && (
                   <Button
                     variant="default"
@@ -1299,7 +1376,7 @@ export function PrPanel({
                     {pending.length} pending comment{pending.length === 1 ? "" : "s"}
                   </span>
                 )}
-                <div className="inline-flex rounded-md border border-line bg-panel p-0.5">
+                {diffView !== "flow" && <div className="inline-flex rounded-md border border-line bg-panel p-0.5">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1316,12 +1393,12 @@ export function PrPanel({
                   >
                     Split
                   </Button>
-                </div>
+                </div>}
               </div>
             </div>
           )}
 
-          <div className={`${diffView === "diff" || diffView === "guide" ? "mx-auto max-w-[1500px] px-5 py-5 phone:px-2" : "mx-auto max-w-[900px] px-5 py-7 phone:px-3"}`}>
+          <div className={`${diffView === "diff" || diffView === "guide" || diffView === "flow" ? "mx-auto max-w-[1500px] px-5 py-5 phone:px-2" : "mx-auto max-w-[900px] px-5 py-7 phone:px-3"}`}>
               {diffView === "checks" ? (
                 <ChecksView
                   checks={checkSummary.checks}
@@ -1335,6 +1412,14 @@ export function PrPanel({
                   descriptionHtml={bodyHtml}
                   comments={comments}
                   repo={markdownRepo}
+                />
+              ) : diffView === "flow" ? (
+                <CodeFlow
+                  data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
+                  loading={codeFlowLoading || (codeFlow?.key !== codeFlowKey && !codeFlowError)}
+                  error={codeFlowError}
+                  onRetry={() => void refreshCodeFlow()}
+                  onOpenLocation={scrollToFile}
                 />
               ) : !diff?.patch ? (
                 <div className="py-12 text-center text-sm text-faint">

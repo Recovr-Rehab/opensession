@@ -66,6 +66,31 @@ async function prApiResponse(
 	}
 }
 
+async function loadPrCodeFlow(
+	repo: ReturnType<typeof getRepo>,
+	branch: string,
+	repoId: string,
+) {
+	const host = prHostFor(repo);
+	const [details, diff] = await Promise.all([
+		host.getPrDetails(branch, repoId),
+		host.getPrDiff(branch, repoId, 1024 * 1024),
+	]);
+	if (!details || !diff || (!diff.patch && !diff.skippedFiles)) return null;
+	const { prCodeFlow } = await import("../code-flow");
+	return prCodeFlow(repo, details, diff);
+}
+
+async function codeFlowApiResponse(load: () => Promise<unknown>): Promise<Response> {
+	try {
+		return Response.json(await load());
+	} catch (error) {
+		const { codeFlowHttpError } = await import("../code-flow");
+		const response = codeFlowHttpError(error);
+		return Response.json({ error: response.message }, { status: response.status });
+	}
+}
+
 export async function handlePrRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
@@ -318,6 +343,28 @@ export async function handlePrRoutes(
 		);
 	}
 
+	// Structural code-flow view for every session-backed PR target (primary,
+	// attached, linked, or discovered). Source bytes come from immutable refs.
+	if (
+		path.match(/^\/api\/sessions\/(.+)\/pr-code-flow$/) &&
+		req.method === "GET"
+	) {
+		const sessionId = decodeURIComponent(
+			path.match(/^\/api\/sessions\/(.+)\/pr-code-flow$/)![1],
+		);
+		const session = findSession(sessionId);
+		if (!session)
+			return Response.json({ error: "Session not found" }, { status: 404 });
+		const target = resolvePrTarget(
+			session,
+			url.searchParams.get("repo"),
+			url.searchParams.get("branch"),
+		);
+		if (!target) return Response.json(null);
+		const repo = getRepo(target.repoId);
+		return codeFlowApiResponse(() => loadPrCodeFlow(repo, target.branch, target.ghRepo));
+	}
+
 	// AI-powered file categories for the PR Changes view. Kept separate from
 	// the diff endpoint so loading a review never blocks on model generation.
 	if (
@@ -475,6 +522,13 @@ export async function handlePrRoutes(
 			return Response.json({ error: "branch required" }, { status: 400 });
 		const repo = getRepo(url.searchParams.get("repo") || undefined);
 		return prApiResponse(() => prHostFor(repo).getPrDiff(branch, hostRepoId(repo)));
+	}
+	if (path === "/api/pr-preview-code-flow" && req.method === "GET") {
+		const branch = url.searchParams.get("branch") || "";
+		if (!branch)
+			return Response.json({ error: "branch required" }, { status: 400 });
+		const repo = getRepo(url.searchParams.get("repo") || undefined);
+		return codeFlowApiResponse(() => loadPrCodeFlow(repo, branch, hostRepoId(repo)));
 	}
 	if (path === "/api/pr-preview-diff-groups" && req.method === "POST") {
 		const repo = getRepo(url.searchParams.get("repo") || undefined);

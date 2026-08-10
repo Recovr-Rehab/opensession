@@ -9,6 +9,7 @@ import { homeDir } from "./paths";
 import { statePath } from "./paths";
 import { configuredIntegration, configuredRepos, configuredServer, defaultRepo } from "./config";
 import { $ } from "bun";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "fs";
 import { audited } from "./audit";
 import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg } from "./github-limit";
@@ -375,8 +376,13 @@ const cacheKey = (repo: string, branch: string) => `${repo}\u0000${branch}`;
 
 export interface PrDiffData {
   number: number;
+  /** Base-branch tip used to produce this patch. Older demo fixtures omit it. */
+  baseRefOid?: string;
   headRefOid: string;
   patch: string;
+  diffVersion?: string;
+  /** Changed files omitted by the provider or an acquisition bound. */
+  skippedFiles?: number;
 }
 
 const diffCache = new Map<string, { data: PrDiffData | null; ts: number }>();
@@ -390,7 +396,14 @@ const diffCache = new Map<string, { data: PrDiffData | null; ts: number }>();
  */
 export function seedPrDiff(repo: string, branch: string, data: PrDiffData): void {
   diffCache.set(cacheKey(repo, branch), {
-    data,
+    data: {
+      ...data,
+      diffVersion: data.diffVersion ?? createHash("sha256")
+        .update(data.baseRefOid ?? "")
+        .update("\0")
+        .update(data.headRefOid)
+        .digest("base64url"),
+    },
     ts: Number.MAX_SAFE_INTEGER,
   });
 }
@@ -404,6 +417,51 @@ function spawnGh(args: string[], credential: GithubCredential, stdin?: "pipe") {
     stderr: "pipe",
     env: { ...process.env, ...credential.env },
   });
+}
+
+async function processPrefix(
+  stream: ReadableStream<Uint8Array>,
+  limit: number,
+  abort: () => void,
+): Promise<{ text: string; truncated: boolean }> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const remaining = limit + 1 - size;
+    if (remaining > 0) chunks.push(value.subarray(0, remaining));
+    size += value.byteLength;
+    if (size > limit) {
+      abort();
+      return {
+        text: Buffer.concat(chunks).subarray(0, limit).toString("utf8"),
+        truncated: true,
+      };
+    }
+  }
+  return { text: Buffer.concat(chunks).toString("utf8"), truncated: false };
+}
+
+function completePatchPrefix(text: string, truncated: boolean): { patch: string; skippedFiles: number } {
+  if (!truncated) return { patch: text, skippedFiles: 0 };
+  const boundary = text.lastIndexOf("\ndiff --git ");
+  return {
+    patch: boundary > 0 ? text.slice(0, boundary + 1) : "",
+    skippedFiles: 1,
+  };
+}
+
+async function boundedCommandPatch(argv: string[], limit: number): Promise<{ patch: string; skippedFiles: number }> {
+  const child = Bun.spawn(argv, { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: process.env });
+  const [output, error] = await Promise.all([
+    processPrefix(child.stdout, limit, () => child.kill()),
+    processPrefix(child.stderr, 64 * 1024, () => child.kill()),
+  ]);
+  const code = await child.exited;
+  if (code !== 0 && !output.truncated) throw new Error(error.text.trim() || `${argv[0]} failed`);
+  return completePatchPrefix(output.text, output.truncated);
 }
 
 /** Exported for pr-webhook.ts: a GitHub webhook delivery for this branch
@@ -459,12 +517,14 @@ async function getMutationPrMeta(
 
 export async function getPrDiff(
   branch: string,
-  repo: string = DEFAULT_REPO()
+  repo: string = DEFAULT_REPO(),
+  maxPatchBytes?: number,
 ): Promise<PrDiffData | null> {
   const key = cacheKey(repo, branch);
-  const hit = diffCache.get(key);
+  const hit = maxPatchBytes ? undefined : diffCache.get(key);
   if (hit && Date.now() - hit.ts < TTL) return hit.data;
-  const running = diffInflight.get(key);
+  const inflightKey = maxPatchBytes ? `${key}\0bounded:${maxPatchBytes}` : key;
+  const running = diffInflight.get(inflightKey);
   if (running) return running;
   // Known backoff window: stale answer if we have one, fast friendly failure
   // if we don't — never a doomed gh spawn.
@@ -475,32 +535,59 @@ export async function getPrDiff(
 
   const refresh = (async () => {
     try {
-      const metaRaw = await $`gh pr view ${branch} --repo ${repo} --json number,headRefOid,baseRefName`
-        .quiet()
-        .text();
-      const meta = JSON.parse(metaRaw);
-      let patch: string;
-      try {
-        patch = await $`gh pr diff ${meta.number} --repo ${repo}`.quiet().text();
-      } catch (diffErr: any) {
-        // GitHub's API refuses diffs for PRs touching >300 files (HTTP 406,
-        // "diff exceeded the maximum number of files"). Reconstruct the same
-        // merge-base patch from the configured local checkout instead of
-        // leaving big PRs permanently un-diffable (review/autofix depend on
-        // this).
-        const dmsg = String(diffErr?.stderr || diffErr?.message || diffErr);
-        if (!/maximum number of files/i.test(dmsg)) throw diffErr;
-        console.warn(`[pr-info] PR #${meta.number} diff >300 files; using local merge-base diff`);
+      const readMeta = async () => JSON.parse(
+        await $`gh pr view ${branch} --repo ${repo} --json number,headRefOid,baseRefName,baseRefOid`
+          .quiet()
+          .text(),
+      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const meta = await readMeta();
+        let patch: string;
+        let skippedFiles = 0;
         try {
-          patch = await localPrDiffPatch(repo, meta);
-        } catch (localErr: any) {
-          console.warn(`[pr-info] local diff fallback failed: ${String(localErr?.stderr || localErr?.message || localErr).slice(0, 300)}`);
-          throw localErr;
+          if (maxPatchBytes) {
+            const bounded = await boundedCommandPatch(
+              ["gh", "pr", "diff", String(meta.number), "--repo", repo],
+              maxPatchBytes,
+            );
+            patch = bounded.patch;
+            skippedFiles = bounded.skippedFiles;
+          } else {
+            patch = await $`gh pr diff ${meta.number} --repo ${repo}`.quiet().text();
+          }
+        } catch (diffErr: any) {
+          // GitHub refuses API diffs over 300 files; reconstruct from the same
+          // snapshotted refs in the configured local checkout.
+          const dmsg = String(diffErr?.stderr || diffErr?.message || diffErr);
+          if (!/maximum number of files/i.test(dmsg)) throw diffErr;
+          console.warn(`[pr-info] PR #${meta.number} diff >300 files; using local merge-base diff`);
+          try {
+            const local = await localPrDiffPatch(repo, meta, maxPatchBytes);
+            patch = local.patch;
+            skippedFiles = local.skippedFiles;
+          } catch (localErr: any) {
+            console.warn(`[pr-info] local diff fallback failed: ${String(localErr?.stderr || localErr?.message || localErr).slice(0, 300)}`);
+            throw localErr;
+          }
         }
+        const verified = await readMeta();
+        if (verified.headRefOid !== meta.headRefOid || verified.baseRefOid !== meta.baseRefOid) continue;
+        const data = {
+          number: meta.number,
+          baseRefOid: meta.baseRefOid,
+          headRefOid: meta.headRefOid,
+          patch,
+          diffVersion: createHash("sha256")
+            .update(meta.baseRefOid ?? meta.baseRefName)
+            .update("\0")
+            .update(meta.headRefOid)
+            .digest("base64url"),
+          ...(skippedFiles ? { skippedFiles } : {}),
+        };
+        if (!maxPatchBytes) diffCache.set(key, { data, ts: Date.now() });
+        return data;
       }
-      const data = { number: meta.number, headRefOid: meta.headRefOid, patch };
-      diffCache.set(key, { data, ts: Date.now() });
-      return data;
+	  throw new Error("Pull request changed while loading its diff");
     } catch (e: any) {
       const msg = String(e?.stderr || e?.message || e).slice(0, 300);
       if (!isNoPrError(msg)) {
@@ -512,8 +599,8 @@ export async function getPrDiff(
       diffCache.set(key, { data: null, ts: Date.now() });
       return null;
     }
-  })().finally(() => diffInflight.delete(key));
-  diffInflight.set(key, refresh);
+  })().finally(() => diffInflight.delete(inflightKey));
+  diffInflight.set(inflightKey, refresh);
   return refresh;
 }
 
@@ -524,7 +611,8 @@ export async function getPrDiff(
 async function localPrDiffPatch(
   ghRepo: string,
   meta: { number: number; headRefOid: string; baseRefName: string },
-): Promise<string> {
+  maxPatchBytes?: number,
+): Promise<{ patch: string; skippedFiles: number }> {
   const local = Object.values(configuredRepos()).find(
     (r) => r.ghRepo?.toLowerCase() === ghRepo.toLowerCase(),
   )?.repo;
@@ -532,9 +620,15 @@ async function localPrDiffPatch(
   const headRef = `pull/${meta.number}/head`;
   await $`git -C ${local} fetch -q origin ${meta.baseRefName} ${headRef}`.quiet();
   const base = `origin/${meta.baseRefName}`;
-  return await $`git -C ${local} diff ${base}...${meta.headRefOid}`
-    .quiet()
-    .text();
+  if (maxPatchBytes)
+    return boundedCommandPatch(
+      ["git", "-C", local, "diff", `${base}...${meta.headRefOid}`],
+      maxPatchBytes,
+    );
+  return {
+    patch: await $`git -C ${local} diff ${base}...${meta.headRefOid}`.quiet().text(),
+    skippedFiles: 0,
+  };
 }
 
 export interface PrCommentInput {

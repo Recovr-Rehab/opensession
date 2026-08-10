@@ -100,7 +100,7 @@ export interface PrHost {
 	getPrDetails(branch: string, repo: string): Promise<PrDetails | null>;
 	/** Bypasses any stale-while-revalidate cache — action completion gates. */
 	getPrDetailsFresh(branch: string, repo: string): Promise<PrDetails | null>;
-	getPrDiff(branch: string, repo: string): Promise<PrDiffData | null>;
+	getPrDiff(branch: string, repo: string, maxPatchBytes?: number): Promise<PrDiffData | null>;
 	/** Cheap "does this branch have a PR, and which one" lookup. */
 	prMetaForBranch(
 		branch: string,
@@ -197,7 +197,7 @@ export const githubPrHost: PrHost = {
 
 	getPrDetails: (branch, repo) => getPrDetails(branch, repo),
 	getPrDetailsFresh: (branch, repo) => getPrDetailsFresh(branch, repo),
-	getPrDiff: (branch, repo) => getPrDiff(branch, repo),
+	getPrDiff: (branch, repo, maxPatchBytes) => getPrDiff(branch, repo, maxPatchBytes),
 	prMetaForBranch: (branch, repo, credential) =>
 		prMetaForBranch(branch, repo, credential),
 	postPrComment: (branch, input, repo, credential) =>
@@ -328,7 +328,8 @@ const codestoragePrHost: PrHost = {
 		(await csHost()).getPrDetails(branch, repo),
 	getPrDetailsFresh: async (branch, repo) =>
 		(await csHost()).getPrDetailsFresh(branch, repo),
-	getPrDiff: async (branch, repo) => (await csHost()).getPrDiff(branch, repo),
+	getPrDiff: async (branch, repo, maxPatchBytes) =>
+		(await csHost()).getPrDiff(branch, repo, maxPatchBytes),
 	prMetaForBranch: async (branch, repo, credential) =>
 		(await csHost()).prMetaForBranch(branch, repo, credential),
 	postPrComment: async (branch, input, repo, credential) =>

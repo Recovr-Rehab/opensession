@@ -81,6 +81,7 @@ export async function handleSessionGitRoutes(
 					totalAdditions: 0,
 					totalDeletions: 0,
 					rawPatch: "",
+					diffVersion: "",
 				};
 				// Volume-mode sandbox workspaces have no host dir — the primary
 				// repo's diff runs through the session's sandbox exec instead
@@ -101,6 +102,33 @@ export async function handleSessionGitRoutes(
 		);
 
 		return Response.json({ repos });
+	}
+
+	// Structural code-flow diff for the selected worktree. Kept separate from
+	// the polled line diff: parsing is lazy and only runs when Code flow opens.
+	if (
+		path.match(/^\/api\/sessions\/(.+)\/code-flow$/) &&
+		req.method === "GET"
+	) {
+		const sessionId = decodeURIComponent(
+			path.match(/^\/api\/sessions\/(.+)\/code-flow$/)![1],
+		);
+		const session = findSession(sessionId);
+		if (!session)
+			return Response.json({ error: "Session not found" }, { status: 404 });
+		try {
+			const { sessionCodeFlow } = await import("../code-flow");
+			return Response.json(
+				await sessionCodeFlow(session, url.searchParams.get("repo") || undefined),
+			);
+		} catch (error) {
+			const { codeFlowHttpError } = await import("../code-flow");
+			const response = codeFlowHttpError(error);
+			return Response.json(
+				{ error: response.message },
+				{ status: response.status },
+			);
+		}
 	}
 
 	// AI file categories for the live worktree diff. This mirrors PR grouping,
