@@ -270,7 +270,7 @@ function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
 /** The shared chip shell: the footer's file and asset chips are the same
  * object with different tails (± counts, or a way in). */
 const CHIP =
-  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-panel p-0 text-left";
+  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-transparent p-0 text-left";
 
 function FileChip({ file }: { file: TouchedFile }) {
   const name = file.path.split("/").pop() || file.path;
@@ -280,7 +280,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         openOnHover
         delay={250}
         closeDelay={100}
-        className={cn(CHIP, "cursor-pointer pr-1.5")}
+        className={cn(CHIP, "cursor-pointer pr-1.5 hover:bg-hover")}
       >
         <ExtBadge name={name} flush />
         <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
@@ -362,7 +362,7 @@ function MoreChip({ files }: { files: TouchedFile[] }) {
         .map((f) => f.path.split("/").pop())
         .join(", ") + (files.length > 12 ? ", …" : "")}
     >
-      <span className="ml-1 flex h-6 items-center gap-1.5 rounded-md bg-panel px-1.5">
+      <span className="ml-1 flex h-6 items-center gap-1.5 rounded-md px-1.5">
         <span className={cn("text-faint", FOOTER_TEXT)}>
           +{files.length} more
         </span>
