@@ -532,17 +532,40 @@ export function App(
 		initialTeamViewing?: Array<{ user: string; sessionId: string }>;
 	} = {},
 ) {
+	// iOS evicts standalone PWAs from memory and relaunches them at the manifest
+	// start_url — losing the session you had open. On a cold load
+	// that lands on home, restore the last session so it isn't dropped. This only
+	// runs on a fresh document load (never on in-app navigation, which uses
+	// pushState), so tapping the logo to go home still works.
+	const [route, setRoute] = useState<Route>(() => {
+		const parsed = parseRoute(location.pathname);
+		if (parsed.view === "home") {
+			// Landing on the root: stamp it as the base of the page stack so panels
+			// pushed over it can count their way back down.
+			history.replaceState(navState(0), "", location.pathname);
+			const lastId = localStorage.getItem("opensession-last-session");
+			if (lastId) {
+				const restored: Route = { view: "session", id: lastId };
+				// Push rather than replace: the home entry we actually landed on stays
+				// beneath as the root, so Back returns to it instead of out of the app.
+				history.pushState(navState(1), "", routePath(restored));
+				return restored;
+			}
+		}
+		return parsed;
+	});
 	const {
 		sessions,
 		loading,
 		archivedLoaded,
+		refreshArchived,
 		cloudUnreachable,
 		refresh,
 		inject,
 		unstick,
 		patch,
 		remove,
-	} = useSessions();
+	} = useSessions({ loadArchived: route.view === "archived" });
 	const auth = useAuthStatus();
 	const localMode = auth?.local === true;
 	const { connected, send, addHandler } = useWebSocket();
@@ -573,28 +596,6 @@ export function App(
 	const showToast = useCallback((message: string) => {
 		toast(message);
 	}, []);
-	// iOS evicts standalone PWAs from memory and relaunches them at the manifest
-	// start_url — losing the session you had open. On a cold load
-	// that lands on home, restore the last session so it isn't dropped. This only
-	// runs on a fresh document load (never on in-app navigation, which uses
-	// pushState), so tapping the logo to go home still works.
-	const [route, setRoute] = useState<Route>(() => {
-		const parsed = parseRoute(location.pathname);
-		if (parsed.view === "home") {
-			// Landing on the root: stamp it as the base of the page stack so panels
-			// pushed over it can count their way back down.
-			history.replaceState(navState(0), "", location.pathname);
-			const lastId = localStorage.getItem("opensession-last-session");
-			if (lastId) {
-				const restored: Route = { view: "session", id: lastId };
-				// Push rather than replace: the home entry we actually landed on stays
-				// beneath as the root, so Back returns to it instead of out of the app.
-				history.pushState(navState(1), "", routePath(restored));
-				return restored;
-			}
-		}
-		return parsed;
-	});
 	// Session-reference chips in transcripts (`bks-…`) label themselves with the
 	// referenced session's title. markdown.ts renders to an HTML string rather
 	// than React nodes, so it can't read this from context — hand it the titles
@@ -3710,31 +3711,6 @@ export function App(
 								};
 								confirmRunningCloses(sessions, () => void archive());
 							}}
-							onUnarchiveWorkspace={async (sessions) => {
-								// The inverse of onArchiveWorkspace: the archive registry is
-								// per-session, so a row comes back by unarchiving every member.
-								const reasons = new Map(
-									sessions.map((c) => [c.id, c.archivedReason]),
-								);
-								for (const session of sessions) {
-									patch(session.id, { archived: false, archivedReason: undefined });
-								}
-								try {
-									await Promise.all(
-										sessions.map((c) => archiveSessionApi(c.id, false)),
-									);
-								} catch (e) {
-									console.error("Unarchive workspace failed:", e);
-									for (const session of sessions) {
-										patch(session.id, {
-											archived: true,
-											archivedReason: reasons.get(session.id),
-										});
-									}
-									return;
-								}
-								refresh();
-							}}
 							onRename={async (s, title) => {
 								try {
 									await renameSessionApi(s.id, title);
@@ -4050,6 +4026,7 @@ export function App(
 								teamViewing={teamViewing}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onNewSession={() => openPalette()}
+								onShowArchived={refreshArchived}
 								onOpenAnalytics={() => navigate({ view: "analytics" })}
 							/>
 						)}

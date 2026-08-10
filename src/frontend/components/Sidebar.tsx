@@ -108,7 +108,6 @@ import { shortTime } from "../lib/time";
 import {
 	IconChevronDown,
 	IconArchive,
-	IconUnarchive,
 	IconBell,
 	IconFilter,
 	IconX,
@@ -276,7 +275,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	catchUpActive,
 	onArchive,
 	onArchiveWorkspace,
-	onUnarchiveWorkspace,
 	onRename,
 	onSetStatus,
 	teamViewing = [],
@@ -622,20 +620,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			window.removeEventListener("scroll", close, true);
 		};
 	}, [workspaceMenu]);
-
-	// The Archived row counts *my* archived sessions (the current user's), and honors
-	// the active repo filter — same lens as the archived page it opens.
-	const archivedCount = useMemo(() => {
-		const user = currentUser.toLowerCase();
-		return sessions.filter(
-			(s) =>
-				s.archived &&
-				!s.automation &&
-				s.startedBy &&
-				s.startedBy.toLowerCase() === user &&
-				(filter.repo === "all" || sessionRepo(s) === filter.repo),
-		).length;
-	}, [sessions, currentUser, filter.repo]);
 
 	// Catch-up badge: how many of *my* unread workspaces the deck would walk
 	// through (distinct workspace groups, same grouping the deck uses) — so the
@@ -2285,244 +2269,27 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	const setToolVisible = setSidebarToolVisible;
 
-	// "Archived" reads as a peer of the My-sessions status buckets (Needs input /
-	// Done …): an icon-led row that sits flush under them. Unlike those, it doesn't
-	// expand inline — it navigates to the archived page, and highlights while that
-	// page is open.
-	// The inline Archived band rows: my archived sessions (same lens as
-	// archivedCount) grouped by workspace, newest activity first. Capped in the
-	// JSX — the "More…" row opens the full archived page for the rest.
-	const archivedRows = useMemo(() => {
-		const user = currentUser.toLowerCase();
-		const mine = sessions.filter(
-			(s) =>
-				s.archived &&
-				!s.automation &&
-				s.startedBy &&
-				s.startedBy.toLowerCase() === user &&
-				(filter.repo === "all" || sessionRepo(s) === filter.repo),
-		);
-		const byWs = new Map<string, UnifiedSession[]>();
-		const rows: Array<{
-			key: string;
-			name: string;
-			sessions: UnifiedSession[];
-			lastActivity: string;
-		}> = [];
-		for (const s of mine) {
-			if (s.workspaceId) {
-				const list = byWs.get(s.workspaceId) || [];
-				list.push(s);
-				byWs.set(s.workspaceId, list);
-			} else {
-				rows.push({
-					key: s.id,
-					name: s.title || "Untitled",
-					sessions: [s],
-					lastActivity: s.lastActivity || "",
-				});
-			}
-		}
-		for (const [wsId, sessions] of byWs) {
-			const ws = workspaces.find((p) => p.id === wsId) || null;
-			sessions.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
-			rows.push({
-				key: `workspace:${wsId}`,
-				name: ws?.name || sessions[0].title || "Untitled",
-				sessions,
-				lastActivity: sessions.reduce(
-					(m, c) => (c.lastActivity > m ? c.lastActivity : m),
-					"",
-				),
-			});
-		}
-		rows.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
-		return rows;
-	}, [sessions, workspaces, currentUser, filter.repo]);
-
-	// Bring an archived row back. `pin` is the one-gesture escalation: unarchive
-	// AND drop it in Pinned, so a row you're resurrecting to work on lands at the
-	// top of the sidebar instead of wherever its derived lane puts it. The pin key
-	// matches workspacePinState's (workspace key, or the solo session's id), which is
-	// exactly what `archivedRows` keys rows by.
-	function unarchiveRow(row: { key: string; sessions: UnifiedSession[] }, pin: boolean) {
-		onUnarchiveWorkspace(row.sessions);
-		if (pin && !pins.includes(row.key)) setPins(togglePin(row.key));
-	}
-
-	// Archived: a collapsible group like the status lanes (T3's "Settled" —
-	// visible at the bottom of the same list so archiving feels cheap, not like
-	// a one-way door). Shows the most recent rows inline; "More…" opens the
-	// full archived page, which keeps unarchive/bulk actions.
-	const ARCHIVED_INLINE_MAX = 20;
-	const archivedBand =
-		archivedCount > 0
-			? (() => {
-					const open = isOpen("archived");
-					return (
-						<div className={SIDEBAR_STATUS_GROUP} data-status-group>
-							<button
-								className={cn(
-									SIDEBAR_GROUP_HEADER,
-									"rounded-md px-1 py-1 text-[14px] transition-colors desktop:px-[10px]",
-									SIDEBAR_STICKY_LANE,
-									SIDEBAR_STUCK_BACKING,
-								)}
-								data-sticky-head
-								onClick={() => toggleGroup("archived")}
-							>
-								<span className="inline-flex shrink-0 items-center text-faint">
-									<svg
-										width="18"
-										height="18"
-										viewBox="0 0 16 16"
-										fill="none"
-										stroke="currentColor"
-										strokeWidth="1.4"
-									>
-										<rect x="2.25" y="2.75" width="11.5" height="3" rx="0.6" />
-										<path d="M3.25 5.75v6.5a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6.5" />
-										<path d="M6.5 8.5h3" strokeLinecap="round" />
-									</svg>
-								</span>
-								<span className={SIDEBAR_GROUP_NAME}>Archived</span>
-								<span className={SIDEBAR_GROUP_COUNT}>{archivedCount}</span>
-								<IconChevronDown
-									className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
-									size={22}
-									style={{ transform: open ? "none" : "rotate(-90deg)" }}
-								/>
-							</button>
-							{open &&
-								archivedRows.slice(0, ARCHIVED_INLINE_MAX).map((r) => (
-									<button
-										key={r.key}
-										className={cn(
-											SIDEBAR_ROW,
-											SIDEBAR_WS_ROW,
-											// It navigates to the archived page rather than
-											// expanding, so it reads as a link, not a heading.
-											"cursor-pointer hover:bg-hover",
-										)}
-										data-sidebar-row=""
-										data-ws-row=""
-										data-archived-row=""
-										onClick={() => onSelect(r.sessions[0])}
-										aria-label={r.name}
-									>
-										<span className={SIDEBAR_RAIL}>
-											<span
-												className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.idle}`}
-											/>
-										</span>
-										<span
-											// On touch the unarchive/pin pair is always visible (it's
-											// the only way back from the band), so the title stops
-											// short of it instead of running underneath.
-											className={cn(
-												SIDEBAR_ROW_TITLE,
-												"[@media(hover:none)]:pr-18",
-											)}
-											style={{ color: "var(--text-dim)" }}
-										>
-											{stripPrTitlePrefix(r.name)}
-										</span>
-										{!isPhone && r.lastActivity && (
-											<span className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}>
-												{shortTime(r.lastActivity)}
-											</span>
-										)}
-										{/* Hover actions, mirroring a live row's pin + archive pair:
-										    here they bring the row back, with pin as the one-gesture
-										    "unarchive AND put it where I'll see it". */}
-										<span
-											className={cn(
-												SIDEBAR_WS_ACTIONS,
-												SIDEBAR_WS_ACTIONS_HOVER,
-												SIDEBAR_WS_ACTIONS_TOUCH,
-											)}
-										>
-											<Tooltip label="Unarchive and pin">
-												<span
-													role="button"
-													tabIndex={0}
-													className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
-													aria-label={
-														r.sessions.length > 1
-															? `Unarchive workspace (${r.sessions.length} sessions) and pin`
-															: "Unarchive and pin"
-													}
-													onClick={(e) => {
-														e.stopPropagation();
-														unarchiveRow(r, true);
-													}}
-													onKeyDown={(e) => {
-														if (e.key === "Enter" || e.key === " ") {
-															e.stopPropagation();
-															unarchiveRow(r, true);
-														}
-													}}
-												>
-													<IconPin size={21} />
-												</span>
-											</Tooltip>
-											<Tooltip
-												label={
-													r.sessions.length > 1
-														? `Unarchive workspace (${r.sessions.length} sessions)`
-														: "Unarchive"
-												}
-											>
-												<span
-													role="button"
-													tabIndex={0}
-													className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
-													aria-label="Unarchive"
-													onClick={(e) => {
-														e.stopPropagation();
-														unarchiveRow(r, false);
-													}}
-													onKeyDown={(e) => {
-														if (e.key === "Enter" || e.key === " ") {
-															e.stopPropagation();
-															unarchiveRow(r, false);
-														}
-													}}
-												>
-													<IconUnarchive size={21} />
-												</span>
-											</Tooltip>
-										</span>
-									</button>
-								))}
-							{open && (
-								<button
-									className={cn(
-										SIDEBAR_ROW,
-										SIDEBAR_WS_ROW,
-										archivedActive ? "bg-pressed" : "hover:bg-hover",
-									)}
-									data-sidebar-row=""
-									data-ws-row=""
-									data-selected={archivedActive || undefined}
-									onClick={onOpenArchived}
-									title="View all archived sessions"
-								>
-									<span className={SIDEBAR_RAIL} />
-									<span
-										className={SIDEBAR_ROW_TITLE}
-										style={{ color: "var(--text-faint)" }}
-									>
-										{archivedCount > ARCHIVED_INLINE_MAX
-											? `More… (${archivedCount - ARCHIVED_INLINE_MAX} older)`
-											: "Open archive page"}
-									</span>
-								</button>
-							)}
-						</div>
-					);
-				})()
-			: null;
+	// Archived is a destination, not another live workspace group. Keeping it to
+	// one row means the sidebar never needs the archive index or its inline rows.
+	// The shared rail centres its 20px glyph on the same line as the 18px repo tiles.
+	const archivedLink = (
+		<button
+			className={cn(
+				SIDEBAR_GROUP_HEADER,
+				SIDEBAR_GROUP_HEADER_INSET,
+				"transition-colors",
+				archivedActive && "bg-pressed text-fg",
+			)}
+			data-selected={archivedActive || undefined}
+			onClick={onOpenArchived}
+			title="View archived sessions"
+		>
+			<span className={SIDEBAR_RAIL}>
+				<IconArchive size={20} />
+			</span>
+			<span className={cn(SIDEBAR_GROUP_NAME, "font-semibold")}>Archived</span>
+		</button>
+	);
 
 	// One sidebar row per workspace: status dot (most urgent session), name, session
 	// count, unread dot. Click opens the first session (or the workspace itself for
@@ -5055,9 +4822,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							]}
 				</div>
 
-				{archivedBand && (
-					<div className={SIDEBAR_GROUP}>{archivedBand}</div>
-				)}
+				<div className={SIDEBAR_GROUP}>{archivedLink}</div>
 				</div>
 			)}
 			</div>

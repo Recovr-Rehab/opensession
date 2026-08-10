@@ -34,6 +34,7 @@ interface Props {
   workspaces: Workspace[];
   onSelect: (session: UnifiedSession) => void;
   onNewSession: () => void;
+  onShowArchived: () => void;
   onOpenAnalytics?: () => void;
   /** Who's viewing what right now (global presence), for the team face pile. */
   teamViewing?: Array<{ user: string; sessionId: string }>;
@@ -393,7 +394,15 @@ export function buildWorktreeRows(recentPrs: RecentPr[], sessions: UnifiedSessio
   );
 }
 
-export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnalytics, teamViewing }: Props) {
+export function Home({
+  sessions,
+  workspaces,
+  onSelect,
+  onNewSession,
+  onShowArchived,
+  onOpenAnalytics,
+  teamViewing,
+}: Props) {
   const currentUser = useCurrentUser();
   const isPhone = useIsPhone();
   const team = useTeamPresence({ sessions, teamViewing, currentUser });
@@ -634,7 +643,10 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
             <Menu.Popup align="end">
               <Menu.CheckboxItem
                 checked={showArchived}
-                onCheckedChange={setShowArchived}
+                onCheckedChange={(next) => {
+                  setShowArchived(next);
+                  if (next) onShowArchived();
+                }}
                 closeOnClick
               >
                 <IconArchive size={18} />

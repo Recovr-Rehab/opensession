@@ -108,12 +108,6 @@ export interface Props {
 		sessions: UnifiedSession[],
 		next: UnifiedSession | null,
 	) => void;
-	/**
-	 * Bring every session of an archived row back (the Archived band's unarchive
-	 * icon) — the exact inverse of `onArchiveWorkspace`, minus the "what opens
-	 * next" dance: nothing is closing, so nothing needs replacing.
-	 */
-	onUnarchiveWorkspace: (sessions: UnifiedSession[]) => void;
 	/** Rename a session (double-click its title); empty title resets it. */
 	onRename: (session: UnifiedSession, title: string) => void;
 	/**

@@ -8,7 +8,7 @@ import {
 } from "../lib/session-slices";
 
 /** The live list. Archived sessions are ~46% of the unsliced payload and none
- *  of the cold start; they arrive separately, after first paint. */
+ *  of the cold start; the Archived screen requests them separately. */
 const LIVE_QUERY = "?archived=exclude";
 /** The archived index: the narrow row the Archived surfaces render. */
 const ARCHIVED_QUERY = "?archived=only&slim=1";
@@ -72,7 +72,13 @@ export function reconcileCloudOutageSessions(
   );
 }
 
-export function useSessions(pollInterval = 5000) {
+export function useSessions({
+  loadArchived = false,
+  pollInterval = 5000,
+}: {
+  loadArchived?: boolean;
+  pollInterval?: number;
+} = {}) {
   const [live, setLive] = useState<UnifiedSession[]>([]);
   // When the live list last came back. Settles a local unarchive: a poll that
   // STARTED after the change and still doesn't list the session means the
@@ -243,10 +249,11 @@ export function useSessions(pollInterval = 5000) {
     return promise;
   }, []);
 
-  // Deliberately behind the live list: archived sessions are what we took OFF
-  // the critical path, so fetching them must not compete with first paint.
+  // The sidebar only links to Archived now; it does not render archived rows or
+  // their count. Keep this larger index out of the app entirely until that
+  // screen is open, then poll it while the person is looking at it.
   useEffect(() => {
-    if (loading) return;
+    if (!loadArchived || loading) return;
     let active = true;
     let timer: number | undefined;
     const run = () => {
@@ -269,7 +276,7 @@ export function useSessions(pollInterval = 5000) {
       if (timer !== undefined) window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [loading, pollArchived]);
+  }, [loadArchived, loading, pollArchived]);
 
   // One list out of the slices, so every consumer keeps reading `archived`
   // off a single array (see lib/session-slices for why that's the shape).
@@ -320,8 +327,8 @@ export function useSessions(pollInterval = 5000) {
   // Expose manual refresh for after deletes
   const refresh = useCallback(() => {
     poll();
-    pollArchived();
-  }, [poll, pollArchived]);
+    if (loadArchived || archivedIndex !== null) pollArchived();
+  }, [archivedIndex, loadArchived, poll, pollArchived]);
 
   // Drop a just-created session straight into the list so the UI can render it
   // immediately (e.g. the tab-strip + creating a new session) instead of showing a
@@ -394,13 +401,13 @@ export function useSessions(pollInterval = 5000) {
               prev.some((s) => s.id === id) ? prev : [...prev, { ...known, ...patch }],
             );
         }
-        // Settle the override as soon as the server can confirm it, rather
-        // than at the next 30s tick.
-        void pollArchived();
+        // Settle the override immediately when the index is already in use.
+        // Otherwise the local copy is enough for undo until Archived opens.
+        if (loadArchived || archivedIndex !== null) void pollArchived();
       }
       setLive((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
     },
-    [pollArchived],
+    [archivedIndex, loadArchived, pollArchived],
   );
 
   const remove = useCallback((id: string) => {
@@ -431,6 +438,7 @@ export function useSessions(pollInterval = 5000) {
      *  loading state, which it never needed while the list carried
      *  everything. */
     archivedLoaded: archivedIndex !== null,
+    refreshArchived: pollArchived,
     refresh,
     inject,
     unstick,
