@@ -284,14 +284,14 @@ export function RepoBar({
           current changes behind), so an explicit, non-dismissible dialog rather
           than a native confirm(). */}
       <Modal.Root open={confirmOpen} onOpenChange={setConfirmOpen} disablePointerDismissal>
-        <Modal.Content widthClassName="max-w-[26rem]">
+        <Modal.Content widthClassName="max-w-[22rem]" className="gap-3 p-5">
           <Modal.Header
             title="Switch repository?"
             description={
               <>
-                Your current changes stay in the {repoLabel(primary)} worktree
+                Your changes stay in the {repoLabel(primary)} worktree
                 {branch ? ` (branch ${branch})` : ""}. They won't move to{" "}
-                {confirmTarget ? repoLabel(confirmTarget) : ""}, but you can reopen them from that branch.
+                {confirmTarget ? repoLabel(confirmTarget) : ""}.
               </>
             }
           />
@@ -306,10 +306,9 @@ export function RepoBar({
             />
             <Button
               variant="primary"
-              className="px-5"
               onClick={() => confirmTarget && doSwitch(confirmTarget)}
             >
-              Switch to {confirmTarget ? repoLabel(confirmTarget) : ""}
+              Switch
             </Button>
           </Modal.Footer>
         </Modal.Content>
