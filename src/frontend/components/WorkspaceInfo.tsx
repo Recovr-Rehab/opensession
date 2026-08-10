@@ -1137,6 +1137,14 @@ function ReviewerChip({
 							</Menu.Item>
 						))}
 					{req && <Menu.Separator />}
+					{TEAM.map((name) => (
+						<Menu.Item key={name} onClick={() => pick(name)}>
+							<UserAvatar name={name} size={22} />
+							<span className="min-w-0 flex-1 truncate">{name}</span>
+							{req?.to === name && <IconCheck size={20} className="text-dim" />}
+						</Menu.Item>
+					))}
+					{reviewTeams.length > 0 && <Menu.Separator />}
 					{reviewTeams.map((team) => (
 						<Menu.Item
 							key={team.github}
@@ -1149,14 +1157,6 @@ function ReviewerChip({
 							{req?.to === team.github && (
 								<IconCheck size={20} className="text-dim" />
 							)}
-						</Menu.Item>
-					))}
-					{reviewTeams.length > 0 && <Menu.Separator />}
-					{TEAM.map((name) => (
-						<Menu.Item key={name} onClick={() => pick(name)}>
-							<UserAvatar name={name} size={22} />
-							<span className="min-w-0 flex-1 truncate">{name}</span>
-							{req?.to === name && <IconCheck size={20} className="text-dim" />}
 						</Menu.Item>
 					))}
 					{req && (
