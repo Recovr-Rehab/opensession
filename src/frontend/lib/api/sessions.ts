@@ -71,6 +71,7 @@ export interface SessionAssetFile {
 	path: string;
 	size: number;
 	mtime: string;
+	description?: string;
 }
 
 export async function fetchSessionAssets(

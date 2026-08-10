@@ -15,7 +15,9 @@
 import {
 	existsSync,
 	mkdirSync,
+	readFileSync,
 	readdirSync,
+	renameSync,
 	rmSync,
 	statSync,
 	writeFileSync,
@@ -25,6 +27,9 @@ import { join, normalize, resolve } from "path";
 import { broadcastToSession } from "./ws-hub";
 
 export const ASSETS_ROOT = join(homedir(), ".opensession-assets");
+
+const ASSET_METADATA_FILE = ".opensession-assets.json";
+const ASSET_METADATA_TEMP = `${ASSET_METADATA_FILE}.tmp`;
 
 /** Keep listings and recursion bounded — this is a scratch space, not storage. */
 const MAX_FILES = 2000;
@@ -38,6 +43,39 @@ export interface SessionAssetFile {
 	path: string;
 	size: number;
 	mtime: string;
+	/** Human-facing context supplied when the asset was written. */
+	description?: string;
+}
+
+type AssetMetadata = Record<string, { description?: string }>;
+
+function emptyAssetMetadata(): AssetMetadata {
+	return Object.create(null) as AssetMetadata;
+}
+
+function readAssetMetadata(sessionId: string): AssetMetadata {
+	try {
+		const metadata = JSON.parse(
+			readFileSync(join(assetsDirFor(sessionId), ASSET_METADATA_FILE), "utf8"),
+		) as unknown;
+		if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
+			throw new Error("metadata is not an object");
+		return Object.assign(emptyAssetMetadata(), metadata) as AssetMetadata;
+	} catch (error: any) {
+		if (error?.code === "ENOENT") return emptyAssetMetadata();
+		throw new Error(`Could not read asset descriptions: ${error?.message || error}`);
+	}
+}
+
+function writeAssetMetadata(sessionId: string, metadata: AssetMetadata): void {
+	const path = join(assetsDirFor(sessionId), ASSET_METADATA_FILE);
+	if (!Object.keys(metadata).length) {
+		rmSync(path, { force: true });
+		return;
+	}
+	const tempPath = join(assetsDirFor(sessionId), ASSET_METADATA_TEMP);
+	writeFileSync(tempPath, JSON.stringify(metadata, null, 2));
+	renameSync(tempPath, path);
 }
 
 function safeSessionId(sessionId: string): string {
@@ -70,6 +108,8 @@ export function resolveAssetPath(
 	const rel = normalize(raw).replace(/\\/g, "/");
 	if (rel === "." || rel.startsWith("../"))
 		throw new Error(`path escapes the assets folder: ${relPath}`);
+	if (rel === ASSET_METADATA_FILE || rel === ASSET_METADATA_TEMP)
+		throw new Error(`path is reserved for asset metadata: ${relPath}`);
 	const abs = resolve(dir, rel);
 	if (abs !== dir && !abs.startsWith(dir + "/"))
 		throw new Error(`path escapes the assets folder: ${relPath}`);
@@ -81,23 +121,37 @@ export function writeAsset(
 	sessionId: string,
 	relPath: string,
 	data: Buffer,
+	description?: string,
 ): SessionAssetFile {
 	if (data.byteLength > MAX_WRITE_BYTES)
 		throw new Error(
 			`asset too large (${data.byteLength} bytes > ${MAX_WRITE_BYTES}); write big files directly into the assets dir instead`,
 		);
 	const { abs, rel } = resolveAssetPath(sessionId, relPath);
+	const metadata = readAssetMetadata(sessionId);
 	mkdirSync(join(abs, ".."), { recursive: true });
 	writeFileSync(abs, data);
+	if (description !== undefined) {
+		const clean = description.trim().slice(0, 500);
+		if (clean) metadata[rel] = { description: clean };
+		else delete metadata[rel];
+		writeAssetMetadata(sessionId, metadata);
+	}
 	broadcastToSession(sessionId, { type: "assets_changed", sessionId });
 	const st = statSync(abs);
-	return { path: rel, size: st.size, mtime: st.mtime.toISOString() };
+	return {
+		path: rel,
+		size: st.size,
+		mtime: st.mtime.toISOString(),
+		description: metadata[rel]?.description,
+	};
 }
 
 /** Flat recursive listing (the UI builds the tree client-side), sorted by path. */
 export function listAssets(sessionId: string): SessionAssetFile[] {
 	const dir = assetsDirFor(sessionId);
 	if (!existsSync(dir)) return [];
+	const metadata = readAssetMetadata(sessionId);
 	const out: SessionAssetFile[] = [];
 	const walk = (d: string, prefix: string, depth: number) => {
 		if (depth > MAX_DEPTH || out.length >= MAX_FILES) return;
@@ -109,6 +163,11 @@ export function listAssets(sessionId: string): SessionAssetFile[] {
 		}
 		for (const e of entries) {
 			if (out.length >= MAX_FILES) return;
+			if (
+				!prefix &&
+				(e.name === ASSET_METADATA_FILE || e.name === ASSET_METADATA_TEMP)
+			)
+				continue;
 			const rel = prefix ? `${prefix}/${e.name}` : e.name;
 			if (e.isDirectory()) walk(join(d, e.name), rel, depth + 1);
 			else if (e.isFile()) {
@@ -118,6 +177,7 @@ export function listAssets(sessionId: string): SessionAssetFile[] {
 						path: rel,
 						size: st.size,
 						mtime: st.mtime.toISOString(),
+						description: metadata[rel]?.description,
 					});
 				} catch {}
 			}
@@ -164,9 +224,14 @@ export function deleteAssetAcross(sessionIds: string[], relPath: string): void {
 	const ids = [...new Set(sessionIds)];
 	let deleted = false;
 	for (const sessionId of ids) {
-		const { abs } = resolveAssetPath(sessionId, relPath);
+		const { abs, rel } = resolveAssetPath(sessionId, relPath);
 		if (!existsSync(abs)) continue;
 		rmSync(abs, { recursive: true, force: true });
+		const metadata = readAssetMetadata(sessionId);
+		for (const path of Object.keys(metadata)) {
+			if (path === rel || path.startsWith(`${rel}/`)) delete metadata[path];
+		}
+		writeAssetMetadata(sessionId, metadata);
 		deleted = true;
 	}
 	if (!deleted) throw new Error(`no such asset: ${relPath}`);

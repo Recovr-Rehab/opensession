@@ -1782,10 +1782,17 @@ export function WorkspaceInfo({
 										type="button"
 										onClick={() => onOpenAsset?.(a.path)}
 										title={`Open ${a.path}`}
-										className="flex w-full min-w-0 items-center gap-2 rounded-control px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover"
+										className="flex w-full min-w-0 items-start gap-2 rounded-control px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover"
 									>
-										<IconFile size={14} className="shrink-0 text-faint" />
-										<span className="min-w-0 flex-1 truncate">{a.path}</span>
+										<IconFile size={14} className="mt-0.5 shrink-0 text-faint" />
+										<span className="min-w-0 flex-1">
+											<span className="block truncate">{a.path}</span>
+											{a.description && (
+												<span className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-dim">
+													{a.description}
+												</span>
+											)}
+										</span>
 										<span className="shrink-0 text-[11px] text-faint">
 											{fmtBytes(a.size)}
 										</span>

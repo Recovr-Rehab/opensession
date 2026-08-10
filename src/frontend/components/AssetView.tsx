@@ -43,6 +43,7 @@ import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { MarkdownBody } from "./MarkdownBody";
 import {
+	IconArrowUpRight,
 	IconChevronLeft,
 	IconChevronRight,
 	IconDotsHorizontal,
@@ -165,6 +166,103 @@ function AssetSideButton({
 	);
 }
 
+function AssetMenu({
+	sessionId,
+	file,
+	refresh,
+	onClose,
+}: {
+	sessionId: string;
+	file: SessionAssetFile;
+	refresh?: () => void;
+	onClose?: () => void;
+}) {
+	const rawUrl = sessionAssetPreviewUrl(sessionId, file);
+	const stableUrl = sessionAssetRawUrl(sessionId, file.path);
+
+	async function onDelete() {
+		if (!confirm(`Delete ${file.path}?`)) return;
+		try {
+			await deleteSessionAssetApi(sessionId, file.path);
+			refresh?.();
+			onClose?.();
+		} catch {
+			toast("Could not delete that file");
+		}
+	}
+
+	return (
+		<Menu.Root>
+			<Menu.Trigger
+				aria-label="Asset actions"
+				className="flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+			>
+				<IconDotsHorizontal size={16} />
+			</Menu.Trigger>
+			<Menu.Popup align="end">
+				<Menu.Item
+					render={<a href={sessionAssetDownloadUrl(sessionId, file)} download />}
+				>
+					Download
+				</Menu.Item>
+				<Menu.Item
+					render={<a href={rawUrl} target="_blank" rel="noreferrer" />}
+				>
+					Open in a browser tab
+				</Menu.Item>
+				<Menu.Item
+					onClick={() =>
+						copyToClipboard(absoluteLink(stableUrl), () => toast("Link copied"))
+					}
+				>
+					Copy link
+				</Menu.Item>
+				<Menu.Separator />
+				<Menu.Item onClick={onDelete} className="text-red">
+					Delete
+				</Menu.Item>
+			</Menu.Popup>
+		</Menu.Root>
+	);
+}
+
+function AssetOverlayActions({
+	sessionId,
+	file,
+	refresh,
+	onOpenAsTab,
+	onClose,
+}: {
+	sessionId: string;
+	file: SessionAssetFile;
+	refresh: () => void;
+	onOpenAsTab?: () => void;
+	onClose: () => void;
+}) {
+	return (
+		<div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-control border border-line-strong bg-raised/95 p-1 shadow-control backdrop-blur-sm [@media(hover:hover)]:opacity-60 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-focus-within/asset:opacity-100 [@media(hover:hover)]:group-hover/asset:opacity-100">
+			{onOpenAsTab && (
+				<Tooltip label="Open in Assets">
+					<Button
+						variant="ghost"
+						size="xs"
+						icon={<IconArrowUpRight size={15} />}
+						onClick={onOpenAsTab}
+					>
+						Open
+					</Button>
+				</Tooltip>
+			)}
+			<AssetMenu
+				sessionId={sessionId}
+				file={file}
+				refresh={refresh}
+				onClose={onClose}
+			/>
+		</div>
+	);
+}
+
 /**
  * The asset's name and everything you can do to it, in one row.
  *
@@ -179,6 +277,7 @@ export function AssetActions({
 	refresh,
 	onOpenAsTab,
 	onClose,
+	showMenu = true,
 	showSize = false,
 	className,
 }: {
@@ -191,27 +290,16 @@ export function AssetActions({
 	/** Dismiss the surface — the overlay's ✕. Also called after a delete, since
 	 *  there is nothing left to show. */
 	onClose?: () => void;
+	/** The overlay moves file actions onto the preview itself. */
+	showMenu?: boolean;
 	/** False for a chip path whose folder listing has not caught up yet. */
 	showSize?: boolean;
 	className?: string;
 }) {
-	const rawUrl = sessionAssetPreviewUrl(sessionId, file);
-	const stableUrl = sessionAssetRawUrl(sessionId, file.path);
 	const name = file.path.split("/").pop() || file.path;
 	const folder = file.path.includes("/")
 		? file.path.slice(0, file.path.lastIndexOf("/"))
 		: null;
-
-	async function onDelete() {
-		if (!confirm(`Delete ${file.path}?`)) return;
-		try {
-			await deleteSessionAssetApi(sessionId, file.path);
-			refresh?.();
-			onClose?.();
-		} catch {
-			toast("Could not delete that file");
-		}
-	}
 
 	return (
 		<div
@@ -222,6 +310,11 @@ export function AssetActions({
 		>
 			<div className="min-w-0 flex-1" title={file.path}>
 				<div className="truncate text-label font-medium text-fg">{name}</div>
+				{file.description && (
+					<div className="line-clamp-2 text-supporting leading-snug text-dim">
+						{file.description}
+					</div>
+				)}
 				{folder && (
 					<div className="truncate text-[11px] text-faint">{folder}</div>
 				)}
@@ -243,41 +336,14 @@ export function AssetActions({
 					</Button>
 				</Tooltip>
 			)}
-			<Menu.Root>
-				<Menu.Trigger
-					aria-label="Asset actions"
-					className="flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
-				>
-					<IconDotsHorizontal size={16} />
-				</Menu.Trigger>
-				<Menu.Popup align="end">
-					<Menu.Item
-						render={
-							<a href={sessionAssetDownloadUrl(sessionId, file)} download />
-						}
-					>
-						Download
-					</Menu.Item>
-					<Menu.Item
-						render={<a href={rawUrl} target="_blank" rel="noreferrer" />}
-					>
-						Open in a browser tab
-					</Menu.Item>
-					<Menu.Item
-						onClick={() =>
-							copyToClipboard(absoluteLink(stableUrl), () =>
-								toast("Link copied"),
-							)
-						}
-					>
-						Copy link
-					</Menu.Item>
-					<Menu.Separator />
-					<Menu.Item onClick={onDelete} className="text-red">
-						Delete
-					</Menu.Item>
-				</Menu.Popup>
-			</Menu.Root>
+			{showMenu && (
+				<AssetMenu
+					sessionId={sessionId}
+					file={file}
+					refresh={refresh}
+					onClose={onClose}
+				/>
+			)}
 			{onClose && (
 				<Button
 					variant="ghost"
@@ -556,25 +622,36 @@ export function AssetOverlay({
 					sessionId={sessionId}
 					file={file}
 					refresh={refresh}
-					onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
 					onClose={isPhone ? onClose : undefined}
+					showMenu={false}
 					showSize={listed}
 					className={!isPhone ? "pr-12" : undefined}
 				/>
-				{missingPath === file.path ? (
-					<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
-						This file is no longer available.
-					</div>
-				) : (
-					<AssetPreview
+				<div className="group/asset relative flex min-h-0 flex-1">
+					{missingPath === file.path ? (
+						<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
+							This file is no longer available.
+						</div>
+					) : (
+						<AssetPreview
+							sessionId={sessionId}
+							file={file}
+							onOpenNewSession={(prefill) => {
+								onClose();
+								onOpenNewSession(prefill);
+							}}
+						/>
+					)}
+					<AssetOverlayActions
 						sessionId={sessionId}
 						file={file}
-						onOpenNewSession={(prefill) => {
-							onClose();
-							onOpenNewSession(prefill);
-						}}
+						refresh={refresh}
+						onOpenAsTab={
+							onOpenAsTab ? () => onOpenAsTab(file.path) : undefined
+						}
+						onClose={onClose}
 					/>
-				)}
+				</div>
 				{isPhone && navigation && (
 					<AssetPager navigation={navigation} arrows />
 				)}

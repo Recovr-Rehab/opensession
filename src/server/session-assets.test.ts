@@ -36,13 +36,22 @@ describe("session asset aliases", () => {
 	});
 
 	test("lists, reads, and deletes files stored under an alias", () => {
-		writeAsset(aliasId, "legacy.csv", Buffer.from("name\nAda\n"));
+		writeAsset(
+			aliasId,
+			"legacy.csv",
+			Buffer.from("name\nAda\n"),
+			"Legacy customer export",
+		);
 		writeAsset(canonicalId, "duplicate.txt", Buffer.from("canonical"));
 		writeAsset(aliasId, "duplicate.txt", Buffer.from("legacy"));
 
 		expect(listAssetsAcross([canonicalId, aliasId])).toMatchObject([
 			{ path: "duplicate.txt", size: 9 },
-			{ path: "legacy.csv", size: 9 },
+			{
+				path: "legacy.csv",
+				size: 9,
+				description: "Legacy customer export",
+			},
 		]);
 		expect(findAssetPath([canonicalId, aliasId], "legacy.csv")?.sessionId).toBe(
 			aliasId,
@@ -51,6 +60,32 @@ describe("session asset aliases", () => {
 		deleteAssetAcross([canonicalId, aliasId], "duplicate.txt");
 		expect(listAssetsAcross([canonicalId, aliasId])).toMatchObject([
 			{ path: "legacy.csv" },
+		]);
+	});
+
+	test("preserves descriptions across rewrites and removes them with files", () => {
+		writeAsset(canonicalId, "report.html", Buffer.from("first"), "Q3 report");
+		writeAsset(canonicalId, "report.html", Buffer.from("second"));
+
+		expect(listAssetsAcross([canonicalId])).toMatchObject([
+			{ path: "report.html", description: "Q3 report" },
+		]);
+
+		deleteAssetAcross([canonicalId], "./report.html");
+		writeAsset(canonicalId, "report.html", Buffer.from("third"));
+		expect(listAssetsAcross([canonicalId])[0]?.description).toBeUndefined();
+	});
+
+	test("reserves the description metadata filename", () => {
+		expect(() =>
+			writeAsset(canonicalId, ".opensession-assets.json", Buffer.from("{}")),
+		).toThrow("reserved for asset metadata");
+	});
+
+	test("stores descriptions for filenames that overlap object properties", () => {
+		writeAsset(canonicalId, "__proto__", Buffer.from("data"), "Prototype report");
+		expect(listAssetsAcross([canonicalId])).toMatchObject([
+			{ path: "__proto__", description: "Prototype report" },
 		]);
 	});
 });
