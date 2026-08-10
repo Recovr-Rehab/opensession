@@ -92,10 +92,9 @@ export function WalkthroughCard({
 	return (
 		<div
 			className={cn(
-				// Keep the walkthrough in the transcript's own surface. The media has
-				// an edge already; another card around the header, summary, and media
-				// turned the open state into boxes nested inside boxes.
-				"bg-transparent p-4",
+				// One outline keeps the walkthrough together in both states. The
+				// interior stays flat; only the actual media has another edge.
+				"rounded-xl border border-line/60 bg-transparent p-4",
 				// In the session the card is a transcript block like any other, so it
 				// takes the same centered reading column the turns and footers use
 				// (mx-auto + --session-col) instead of spanning the whole pane. It
