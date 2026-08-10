@@ -33,6 +33,24 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   strength instead of the usual dimmed medium, and reading a session here clears
   it in the browser too. Only sessions you have opened can be unread — the mark
   means "new since you read it", not "never seen".
+- **Catch up** (`CatchUpView`, `CatchUpDeckView`, `CatchUpCardView`,
+  `CatchUpQueue`, `CatchUpViewModel`) — a card deck over everything unread,
+  offered by a band at the top of the list whenever there is something to catch
+  up on. One card per unread *workspace* (the same grouping the list shows,
+  built by `CatchUpQueue` from the shared `/api/reads` marks with the web
+  deck's rules: yours, not archived, not an automation, not the Desk). The card
+  is a glance — what you asked, where things stand — with `Open` for the real
+  conversation and `Reply` (a detent sheet, delivered through the `Outbox`).
+  Three decisions leave the deck: swipe left to archive, right to mark read, up
+  to keep unread, each also a button that plays the *same* fling, so the
+  gesture and the control are never two different animations. The whole stack
+  is a function of one drag value — tilt, stamp, tint, how far forward the card
+  behind has come — so a half-swipe reverses continuously; release uses Apple's
+  momentum projection to decide, then hands the finger's velocity to the
+  spring. Every decision is undoable for six seconds (the pill's row is always
+  reserved, so the buttons never move under your thumb). The queue is frozen
+  once built, and `settle` waits for both the sessions list and the read marks
+  before it is willing to say "All caught up".
 - **Session view** — live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind

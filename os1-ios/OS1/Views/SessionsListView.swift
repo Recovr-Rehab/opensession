@@ -95,6 +95,11 @@ struct SessionsListView: View {
     /// An archived row opens only after its sheet has dismissed; pushing while
     /// the sheet is still closing can drop the navigation transition on iOS.
     @State private var pendingArchivedOpen: Session?
+    /// The catch-up deck — a full-screen pass over everything unread.
+    @State private var showCatchUp = false
+    /// The session the deck asked to open. Pushed only once the cover is gone:
+    /// appending to `path` while it is still dismissing loses the push.
+    @State private var pendingCatchUpOpen: Session?
     /// A tapped "Try again" on the unreachable screen, until it lands.
     @State private var isRetrying = false
     #if os(iOS)
@@ -580,6 +585,12 @@ struct SessionsListView: View {
                     if env["OS1_OPEN_SETTINGS"] != nil {
                         showSettings = true
                     }
+                    // Same reason again: the catch-up deck is behind a band row
+                    // that only exists when you have unread work, which a
+                    // scripted run can't rely on being there.
+                    if env["OS1_OPEN_CATCHUP"] != nil {
+                        showCatchUp = true
+                    }
                     #endif
                 }
                 .sheet(item: $newSessionRequest) { request in
@@ -609,6 +620,17 @@ struct SessionsListView: View {
                     guard !shown, let session = pendingArchivedOpen else { return }
                     pendingArchivedOpen = nil
                     Task { path.append(await viewModel.hydrated(session)) }
+                }
+                .fullScreenCoverCompat(isPresented: $showCatchUp) {
+                    CatchUpView(list: viewModel) { session in
+                        pendingCatchUpOpen = session
+                        showCatchUp = false
+                    }
+                }
+                .onChange(of: showCatchUp) { _, shown in
+                    guard !shown, let session = pendingCatchUpOpen else { return }
+                    pendingCatchUpOpen = nil
+                    path.append(session)
                 }
                 .safeAreaInset(edge: .bottom) {
                     errorBanner
@@ -1530,6 +1552,7 @@ struct SessionsListView: View {
             }
             #endif
 
+            catchUpBand
             supportBand
 
             if groupBy == .repoStatus || groupBy == .repoInbox {
@@ -1681,6 +1704,66 @@ struct SessionsListView: View {
     /// outranks your own sessions, and it folds shut like any other band for
     /// anyone who doesn't work the queue.
     ///
+    /// The offer to catch up, at the top of the list and only when there is
+    /// something to catch up ON. A permanent entry would be a tool you have to
+    /// remember; a row that appears when unread work does is a prompt.
+    @ViewBuilder
+    private var catchUpBand: some View {
+        #if os(iOS)
+        let count = catchUpCount
+        if count > 0 {
+            Section {
+                Button {
+                    showCatchUp = true
+                } label: {
+                    HStack(spacing: 11) {
+                        Image(systemName: "rectangle.stack")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(OS1VisualStyle.onAccent)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(OS1VisualStyle.accent)
+                            )
+                        Text("Catch up")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.text)
+                        Spacer(minLength: 6)
+                        Text("\(count) unread")
+                            .font(.footnote)
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .contentTransition(.numericText())
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.textFaint)
+                    }
+                    .padding(.vertical, 3)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Catch up on \(count) unread workspaces")
+            }
+            .animation(.snappy(duration: 0.3), value: count)
+        }
+        #endif
+    }
+
+    /// Counted off the memoized grouping, one predicate per row — see
+    /// `CatchUpQueue.unreadRowCount` for why it must not group again here.
+    /// Reading `ReadsStore` inside this view is deliberate too: it is
+    /// `@Observable`, so a mark landing invalidates the band rather than
+    /// everything that could have read it.
+    private var catchUpCount: Int {
+        let reads = ReadsStore.shared
+        let config = ServerConfig.shared
+        return CatchUpQueue.unreadRowCount(
+            in: viewModel.sidebarWorkspaces,
+            viewerName: config.userName,
+            viewerLogin: config.githubLogin,
+            isUnread: { reads.isUnread($0) }
+        )
+    }
+
     /// Only the top of the queue is inline. The band is a prompt, not the
     /// queue itself: 50 tickets above your sessions would bury them, so the
     /// urgent end shows and the rest stays one tap away in the sheet.

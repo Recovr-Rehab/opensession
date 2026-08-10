@@ -32,7 +32,12 @@ final class ReadsStore {
     /// whole map, so saving a map that is empty-but-for-this-launch's reads
     /// would wipe every mark you made in the browser. Marks taken meanwhile
     /// stay local and ride out with the first hydrate that carries them.
-    private var hydrated = false
+    ///
+    /// Readable because "unread" is meaningless before it: an empty map says
+    /// nothing is unread, which is indistinguishable from a caught-up inbox.
+    /// Anything that shows a person a claim about their unread work has to
+    /// wait for this (see `CatchUpViewModel.settle`).
+    private(set) var hasHydrated = false
 
     /// The server caps a user's map (src/server/reads.ts) and silently drops
     /// whatever spills, so bound it here first — and drop the OLDEST marks,
@@ -67,7 +72,7 @@ final class ReadsStore {
             merged[id] = mark
             carried = true
         }
-        hydrated = true
+        hasHydrated = true
         if merged != reads { reads = merged }
         if carried { save() }
     }
@@ -146,7 +151,7 @@ final class ReadsStore {
     }
 
     private func save() {
-        guard hydrated else { return }
+        guard hasHydrated else { return }
         generation += 1
         let user = ServerConfig.shared.userName
         let snapshot = reads
