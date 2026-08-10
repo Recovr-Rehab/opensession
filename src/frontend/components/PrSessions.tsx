@@ -170,7 +170,7 @@ export function PrSessionsList({
 				>
 					<span
 						className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-							s.isRunning ? "bg-orange animate-pulse" : "bg-line"
+							s.isRunning ? "bg-yellow animate-pulse" : "bg-line"
 						}`}
 					/>
 					<span className="truncate">{s.title}</span>

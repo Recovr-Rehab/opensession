@@ -491,7 +491,7 @@ export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex group-hover:mr-20"
  * stands in for instead of growing a clock's worth of digits.
  */
 export const SIDEBAR_WS_TICKER =
-	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta tabular-nums text-orange group-hover:hidden desktop:min-w-[34px] desktop:pr-0";
+	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-0";
 
 /**
  * Slack-style unsent-draft pencil. Its left margin is the call site's: on a
@@ -561,9 +561,9 @@ export const SIDEBAR_SWIPE_ACTION_STAR = "left-0 bg-yellow text-[#17130a]";
 export const SIDEBAR_SWIPE_ACTION_STAR_ON = "left-0 bg-accent text-on-accent";
 
 export const SIDEBAR_STATUS_DOT = {
-	/** Orange to match the "In progress" lane — green means "In review". */
+	/** Yellow to match the "In progress" lane — green means "In review". */
 	running:
-		"bg-orange animate-[pulse_1.4s_ease-in-out_infinite] motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!",
+		"bg-yellow animate-[pulse_1.4s_ease-in-out_infinite] motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!",
 	waiting:
 		"bg-blue shadow-[0_0_6px_var(--blue)] animate-[pulse_1.2s_ease-in-out_infinite] motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!",
 	idle: "bg-faint",

@@ -173,12 +173,10 @@
 	--green: #3fb950;
 	--green-soft: rgba(63, 185, 80, 0.14);
 	--yellow: #d29922;
-	/* In-progress work: the pulsing run indicators and the "In progress" lane.
-	   Green is a finished, reviewable result here ("Ready to merge", an open PR,
-	   a passing check), and --yellow reads olive rather than orange in light
-	   mode, so running work gets its own hue. */
-	--orange: #f0883e;
-	--orange-soft: rgba(240, 136, 62, 0.15);
+	/* The wash behind a --yellow label: the "Running" pill. In-progress work is
+	   yellow throughout — the pulsing run indicators and the "In progress"
+	   lane — because green here means a finished, reviewable result. */
+	--yellow-soft: rgba(210, 153, 34, 0.14);
 	--blue: #58a6ff;
 	--blue-soft: rgba(88, 166, 255, 0.13);
 	--red: #f85149;
@@ -326,10 +324,7 @@ html[data-theme="light"] {
 	--green: #1a7f37;
 	--green-soft: rgba(26, 127, 55, 0.12);
 	--yellow: #9a6700;
-	/* Dark enough to carry the "Running" pill's own label at 4.5:1 on the light
-	   surfaces it sits on, while still reading orange rather than rust. */
-	--orange: #c2560a;
-	--orange-soft: rgba(194, 86, 10, 0.12);
+	--yellow-soft: rgba(154, 103, 0, 0.12);
 	--blue: #0969da;
 	--blue-soft: rgba(9, 105, 218, 0.1);
 	--red: #cf222e;

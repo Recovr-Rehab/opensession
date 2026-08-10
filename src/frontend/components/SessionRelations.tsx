@@ -78,7 +78,7 @@ export function SessionRelations({
 									<span
 										className={cn(
 											"h-1.5 w-1.5 shrink-0 rounded-full",
-											w.isRunning ? "bg-orange" : "bg-line-strong",
+											w.isRunning ? "bg-yellow" : "bg-line-strong",
 										)}
 									/>
 									<span className="truncate">{w.title}</span>

@@ -111,7 +111,7 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
 						{agent.label}
 					</span>
 					{agent.status === "running" && (
-						<span className="size-1.5 shrink-0 animate-pulse rounded-full bg-orange" />
+						<span className="size-1.5 shrink-0 animate-pulse rounded-full bg-yellow" />
 					)}
 				</button>
 				<div className="mt-0.5 pl-[18px] text-[11px] text-faint tabular-nums">

@@ -486,7 +486,7 @@ export function Reviews({
                         </span>
                       )}
                       {s.isRunning && (
-                        <span className="shrink-0 text-meta text-orange">● running</span>
+                        <span className="shrink-0 text-meta text-yellow">● running</span>
                       )}
                     </span>
                   </span>

@@ -178,7 +178,7 @@ export const MINE_STATUS_META: Array<{
 	dotColor: string;
 }> = [
 	{ key: "needsinput", label: "Needs input", dotColor: "var(--blue)" },
-	{ key: "inprogress", label: "In progress", dotColor: "var(--orange)" },
+	{ key: "inprogress", label: "In progress", dotColor: "var(--yellow)" },
 	{ key: "review", label: "Ready to merge", dotColor: "var(--green)" },
 	{ key: "pending", label: "Backlog", dotColor: "var(--text-faint)" },
 	{ key: "merged", label: "Done", dotColor: "var(--purple)" },
