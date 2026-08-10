@@ -13,7 +13,7 @@
  * claudeSessionId slot like every other engine).
  */
 
-import { journalClear, takeInterruptedRuns } from "./run-journal";
+import { journalClear, journalClearMany, takeInterruptedRuns, type ActiveRunRecord } from "./run-journal";
 import { transitionRunState } from "./run-state";
 import type { StreamEvent, ImageInput } from "./run-events";
 import {
@@ -722,8 +722,11 @@ export function resumeInterruptedRuns(
   reposNoteFor?: (osSessionId: string) => string | undefined,
   onEvent?: (osSessionId: string, event: StreamEvent) => void,
 ): string[] {
-  const interrupted = takeInterruptedRuns();
+  const taken = takeInterruptedRuns();
+  const { interrupted, dropped } = sanitizeInterruptedRuns(taken);
+  journalClearMany(dropped.map((run) => run.runKey));
   const resumed: string[] = [];
+  const recoveryTasks: Array<() => Promise<void>> = [];
 
   for (const run of interrupted) {
     // The github agent owns its own recovery (review/simplify re-trigger on the
@@ -765,7 +768,7 @@ export function resumeInterruptedRuns(
     ) {
       const isDocker = run.sandboxProvider === "docker";
       if (run.osSessionId) resumed.push(run.osSessionId);
-      void (async () => {
+      recoveryTasks.push(async () => {
         try {
           const resume = isDocker
             ? (await import("./sandbox/docker")).resumeDockerSandboxRun
@@ -790,7 +793,7 @@ export function resumeInterruptedRuns(
         } catch (e) {
           console.error(`[runner] Sandbox resume failed for ${run.runKey}:`, e);
         }
-      })();
+      });
       continue;
     }
     if (!run.claudeSessionId) {
@@ -812,7 +815,7 @@ export function resumeInterruptedRuns(
       console.log(
         `[runner] Re-running interrupted ${run.kind || "run"} ${run.osSessionId || run.runKey} from scratch (never got an engine session)`
       );
-      void (async () => {
+      recoveryTasks.push(async () => {
         try {
           // The re-run journals under its own runKey — drop the claimed
           // record now (runAgent's intake journalSet is the very next step,
@@ -845,7 +848,7 @@ export function resumeInterruptedRuns(
             accountStrict: run.accountStrict,
             usageCredits: run.usageCredits,
             prReviewer: run.prReviewer,
-            journal: { osSessionId: run.osSessionId, kind: `${run.kind || "run"}-rerun` },
+            journal: { osSessionId: run.osSessionId, kind: recoveryKind(run.kind, "rerun") },
             onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           })) {
             if (run.osSessionId) onEvent?.(run.osSessionId, event);
@@ -856,11 +859,11 @@ export function resumeInterruptedRuns(
         } catch (e) {
           console.error(`[runner] Re-run failed for ${run.runKey}:`, e);
         }
-      })();
+      });
       continue;
     }
     if (run.osSessionId) resumed.push(run.osSessionId);
-    void (async () => {
+    recoveryTasks.push(async () => {
       try {
         let repairingRecoveredResult = false;
         // First choice: REATTACH — the run's detached `opencode serve`
@@ -949,7 +952,7 @@ export function resumeInterruptedRuns(
           accountStrict: run.accountStrict,
           usageCredits: run.usageCredits,
           prReviewer: run.prReviewer,
-          journal: { osSessionId: run.osSessionId, kind: `${run.kind || "run"}-resume` },
+          journal: { osSessionId: run.osSessionId, kind: recoveryKind(run.kind, "resume") },
           onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
         })) {
           if (run.osSessionId) onEvent?.(run.osSessionId, event);
@@ -960,10 +963,78 @@ export function resumeInterruptedRuns(
       } catch (e) {
         console.error(`[runner] Resume failed for ${run.runKey}:`, e);
       }
-    })();
+    });
   }
 
+  void runRecoveryQueue(recoveryTasks);
+
   return resumed;
+}
+
+export const MAX_BOOT_RECOVERIES = 32;
+export const BOOT_RECOVERY_CONCURRENCY = 4;
+
+/** Collapse recovery suffixes so a crash during recovery never grows
+ * `prompt-resume-resume` (or recursively wraps the same continuation forever). */
+export function recoveryKind(kind: string | undefined, suffix: "resume" | "rerun"): string {
+  const base = (kind || "run").replace(/(?:(?:-resume|-rerun))+$/g, "");
+  return `${base}-${suffix}`;
+}
+
+/** One boot recovery per owning session, newest journal record wins. Records
+ * without a session id remain independently recoverable by run key. A hard
+ * fuse prevents a malformed journal from monopolizing boot and starving HTTP. */
+export function sanitizeInterruptedRuns(runs: ActiveRunRecord[]): {
+  interrupted: ActiveRunRecord[];
+  dropped: ActiveRunRecord[];
+} {
+  const newest = new Map<string, ActiveRunRecord>();
+  const dropped: ActiveRunRecord[] = [];
+  for (const run of runs) {
+    const recoverySuffixes = run.kind?.match(/-(?:resume|rerun)/g)?.length ?? 0;
+    if (recoverySuffixes > 1) {
+      dropped.push(run);
+      continue;
+    }
+    const key = run.osSessionId ? `session:${run.osSessionId}` : `run:${run.runKey}`;
+    const prior = newest.get(key);
+    if (!prior) {
+      newest.set(key, run);
+      continue;
+    }
+    const priorAt = Date.parse(prior.startedAt || "") || 0;
+    const runAt = Date.parse(run.startedAt || "") || 0;
+    if (runAt >= priorAt) {
+      dropped.push(prior);
+      newest.set(key, run);
+    } else {
+      dropped.push(run);
+    }
+  }
+  const ordered = [...newest.values()].sort(
+    (a, b) => (Date.parse(b.startedAt || "") || 0) - (Date.parse(a.startedAt || "") || 0),
+  );
+  const interrupted = ordered.slice(0, MAX_BOOT_RECOVERIES);
+  dropped.push(...ordered.slice(MAX_BOOT_RECOVERIES));
+  if (dropped.length) {
+    console.warn(
+      `[runner] Restart recovery kept ${interrupted.length} unique run(s), dropped ${dropped.length} duplicate/excess journal record(s)`,
+    );
+  }
+  return { interrupted, dropped };
+}
+
+export async function runRecoveryQueue(tasks: Array<() => Promise<void>>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < tasks.length) {
+      const task = tasks[next++];
+      await task();
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(BOOT_RECOVERY_CONCURRENCY, tasks.length) }, worker),
+  );
 }
 
 /** Same continuation prompt resumeInterruptedRuns uses — exported so the
@@ -1001,6 +1072,9 @@ export function recoveredResultNeedsContinuation(event: StreamEvent): boolean {
 export function resumeContinuationPrompt(originalPrompt?: string | null): string {
   const p = (originalPrompt || "").trim();
   if (!p) return RESUME_CONTINUATION_PROMPT;
+  // A crash during a recovery journals the continuation prompt. Reusing it
+  // verbatim prevents restart text nesting inside itself on every boot.
+  if (p.startsWith(RESUME_CONTINUATION_PROMPT)) return p;
   const clamped = p.length > 2000 ? `${p.slice(0, 2000)}…` : p;
   return (
     `${RESUME_CONTINUATION_PROMPT}\n\n` +

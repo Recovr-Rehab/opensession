@@ -33,6 +33,49 @@ afterEach(() => {
 });
 
 describe("run journal", () => {
+	it("deduplicates and bounds restart recovery while rejecting recursive records", () => {
+		const records: mod.ActiveRunRecord[] = Array.from({ length: 40 }, (_, i) => ({
+			runKey: `run-${i}`,
+			osSessionId: `session-${i}`,
+			prompt: `prompt ${i}`,
+			cwd: "/tmp",
+			mcpServers: [],
+			kind: "prompt",
+			startedAt: new Date(1_000 + i).toISOString(),
+		}));
+		records.push({ ...records[0], runKey: "run-0-new", startedAt: new Date(9_000).toISOString() });
+		records.push({ ...records[1], runKey: "recursive", kind: "prompt-resume-resume" });
+
+		const result = agent.sanitizeInterruptedRuns(records);
+		expect(result.interrupted).toHaveLength(agent.MAX_BOOT_RECOVERIES);
+		expect(result.interrupted.find((r) => r.osSessionId === "session-0")?.runKey).toBe("run-0-new");
+		expect(result.interrupted.some((r) => r.runKey === "recursive")).toBe(false);
+		expect(result.dropped.some((r) => r.runKey === "run-0")).toBe(true);
+		expect(result.dropped.some((r) => r.runKey === "recursive")).toBe(true);
+	});
+
+	it("keeps recovery kinds and prompts bounded across repeated restarts", () => {
+		expect(agent.recoveryKind("prompt", "resume")).toBe("prompt-resume");
+		expect(agent.recoveryKind("prompt-resume", "resume")).toBe("prompt-resume");
+		expect(agent.recoveryKind("prompt-resume-rerun", "rerun")).toBe("prompt-rerun");
+		const once = agent.resumeContinuationPrompt("original task");
+		expect(agent.resumeContinuationPrompt(once)).toBe(once);
+	});
+
+	it("runs boot recovery with bounded concurrency", async () => {
+		let active = 0;
+		let peak = 0;
+		const tasks = Array.from({ length: 20 }, () => async () => {
+			active++;
+			peak = Math.max(peak, active);
+			await Bun.sleep(5);
+			active--;
+		});
+		await agent.runRecoveryQueue(tasks);
+		expect(peak).toBe(agent.BOOT_RECOVERY_CONCURRENCY);
+		expect(active).toBe(0);
+	});
+
 	it("preserves human-confirmed tool policy across restart drains", async () => {
 		mod.journalSet({
 			runKey: "run-1",
@@ -68,6 +111,16 @@ describe("run journal", () => {
 		expect(claimed.claimedAt).toBeTruthy();
 		// The same process never takes an already-claimed run twice.
 		expect(mod.takeInterruptedRuns()).toEqual([]);
+	});
+
+	it("clears rejected recovery records in one batch", () => {
+		for (let i = 0; i < 5; i++) {
+			mod.journalSet({ runKey: `batch-${i}`, cwd: "/tmp", mcpServers: [], startedAt: new Date().toISOString() });
+		}
+		mod.journalClearMany(["batch-1", "batch-3", "missing"]);
+		expect(mod.activeRunRecords().map((run) => run.runKey).sort()).toEqual([
+			"batch-0", "batch-2", "batch-4",
+		]);
 	});
 
 	it("emits recovered run stream events during restart resume", async () => {

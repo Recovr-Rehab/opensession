@@ -166,6 +166,22 @@ export function journalClear(runKey: string): void {
   }
 }
 
+/** Remove many recovery records with one read/atomic write. Boot sanitization
+ * can reject hundreds of corrupt duplicates; clearing one-by-one would rewrite
+ * a multi-megabyte journal hundreds of times and recreate the startup stall. */
+export function journalClearMany(runKeys: Iterable<string>): void {
+  const keys = new Set(runKeys);
+  if (keys.size === 0) return;
+  const journal = readRunJournal();
+  let changed = false;
+  for (const key of keys) {
+    if (!(key in journal)) continue;
+    delete journal[key];
+    changed = true;
+  }
+  if (changed) writeRunJournal(journal);
+}
+
 /** Snapshot of the runs currently journaled as in-flight (does not clear). */
 export function activeRunRecords(): ActiveRunRecord[] {
   return Object.values(readRunJournal());
