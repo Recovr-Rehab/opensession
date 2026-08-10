@@ -136,9 +136,10 @@
 	/* Achromatic wash for a SELECTED or ACTIVE surface, pitched above
 	   --hover-strong (0.11). Once the accent went ink this and the hover wash
 	   became the same ink, so the two were told apart only by opacity. The split
-	   is by meaning instead: a hover paints --hover (0.07), selected paints this,
-	   and "needs you" leaves the greyscale entirely for --red-soft. Don't spell
-	   a hover with this token — that is what the collision was. */
+	   is by meaning instead: a hover paints --hover (0.07) and selected paints
+	   this. "Needs you" is deliberately not in that list — it takes no fill at
+	   all, so it can sit on a selected row without either state losing. Don't
+	   spell a hover with this token — that is what the collision was. */
 	--accent-soft: rgba(255, 255, 255, 0.16);
 	/* Inline affordances: a link in an agent answer, a PR title that opens. The
 	   accent cannot do this job once it is ink, and red never should have. */

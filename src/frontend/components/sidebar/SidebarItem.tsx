@@ -375,7 +375,10 @@ export function SidebarItem({
 						// Other people's sessions stack a meta line under the title, so
 						// the row is already two lines tall — trim its padding.
 						!mine && "py-[7px]",
-						waiting ? "bg-blue-soft" : selected && "bg-pressed",
+						// No fill for "needs you" — the blue mark in the rail and the
+						// bold title carry it, and the row's one background slot stays
+						// with selection (see the workspace row, which matches).
+						selected && "bg-pressed",
 						dragging
 							? "transition-none"
 							: swipeOpen
@@ -433,13 +436,16 @@ export function SidebarItem({
 			    shared SIDEBAR_RAIL slot in front, that's what puts every title on
 			    one rail. */}
 			<div className="flex min-w-0 items-center gap-[9px]">
-				{/* Match workspace rows: the rail holds the PR glyph alone — a blocked
-				    session reads from its accent wash and bold title, not from a second
-				    dot wedged in beside it — and merged PRs keep the glyph itself
-				    purple instead of adding metadata. */}
+				{/* Match workspace rows: blocked-on-you takes the rail first and in
+				    blue, then the live run, then the PR glyph — where merged PRs keep
+				    the glyph itself purple instead of adding metadata. */}
 				<span className={SIDEBAR_RAIL}>
 					{waiting && <span className="sr-only">Needs your attention</span>}
-					{session.isRunning ? (
+					{waiting ? (
+						<span
+							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
+						/>
+					) : session.isRunning ? (
 						<span
 							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
 						/>

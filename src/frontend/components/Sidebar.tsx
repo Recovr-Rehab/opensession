@@ -2310,7 +2310,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// The "Needs review" band's rows: identical in every way except that a click
 	// opens the workspace's Review tab (see openWsRow).
 	function renderReviewWsRow(row: WsRow) {
-		return renderWsRowImpl(row, false, false, true);
+		return renderWsRowImpl(row, false, true);
 	}
 
 	// `inbox` renders the Inbox-mode variant of the same row — a repo tile in
@@ -2319,19 +2319,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Separate impl rather than an optional param because `.map(renderWsRow)`
 	// callers would pass the array index into it.
 	//
-	// `banded` says the row already sits under a header that means "blocked on
-	// you" — the Needs input lane, the Inbox's Needs action band. There the
-	// attention dot is the third copy of the same fact (header, count, and the
-	// row's own accent wash), so it's dropped.
-	//
 	// `review` marks a row under the "Needs review" band, whose click opens the
 	// Review tab instead of the session.
-	function renderWsRowImpl(
-		row: WsRow,
-		inbox: boolean,
-		banded = false,
-		review = false,
-	) {
+	function renderWsRowImpl(row: WsRow, inbox: boolean, review = false) {
 		const active = row.sessions.some((s) => s.id === selectedId);
 		const editing = rowRenameEditing(row);
 		const waiting = row.status === "needsinput";
@@ -2446,10 +2436,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						SIDEBAR_WS_ROW,
 						"z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))]",
 						SIDEBAR_HOVER_LAYER,
-						// "Needs you" is the one row state that is urgent rather than
-						// merely informational, so its wash matches the Needs action
-						// caption above it (--red) instead of reading as a selection.
-						waiting ? "bg-red-soft" : active && "bg-pressed",
+						// "Needs you" paints no fill of its own: it is a question
+						// waiting, not a failure, and the row's one background slot
+						// belongs to selection. The blue mark in the rail and the bold
+						// title carry it — same as the native app.
+						active && "bg-pressed",
 						draggingRow
 							? "transition-none"
 							: swipeSide
@@ -2513,14 +2504,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// rides here rather than on a marker element.
 					aria-label={waiting ? `${row.name}, needs your attention` : row.name}
 				>
-				{/* Flat repo grouping has no lane heading, so its leading mark must carry
-				    the workspace status. Grouped lanes already provide that context and
-				    keep the richer PR lifecycle mark here instead. Blocked-on-you never
-				    adds a second leading mark: the row's accent wash and bold title
-				    already say it, and a green dot hanging off the rail collides with
-				    the glyph it precedes (green means "PR healthy" everywhere else). */}
+				{/* Blocked-on-you outranks every other mark, in every grouping: a
+				    row waiting on you looks the same wherever the list puts it, and
+				    the blue is the one the lane dot, the collapsed-band count and the
+				    native app already spend on it. Below that, flat repo grouping has
+				    no lane heading so its mark carries the workspace status, while
+				    grouped lanes provide that context and keep the richer PR
+				    lifecycle mark here instead. */}
 				<span className={SIDEBAR_RAIL}>
-					{flatRepoGrouping ? (
+					{waiting ? (
+						<span
+							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
+						/>
+					) : flatRepoGrouping ? (
 						<WsStatusMark row={row} size={18} />
 					) : row.running ? (
 						<span
@@ -2677,14 +2673,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						aria-label="Unsent draft. Return to finish it."
 					>
 						<IconPencil size={20} />
-					</span>
-				)}
-				{isPhone && !banded && waiting && (
-					<span
-						className="ml-auto flex h-[22px] w-7 shrink-0 items-center justify-center"
-						aria-label="Needs your attention"
-					>
-						<span className="block size-[7px] rounded-full bg-green" />
 					</span>
 				)}
 				{/* Hover actions: pin + archive, side by side. */}
@@ -2940,7 +2928,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</button>
 					{items
 						.filter((r) => open || r.sessions.some((c) => c.id === selectedId))
-						.map((r) => renderWsRowImpl(r, false, meta.key === "needsinput"))}
+						.map((r) => renderWsRowImpl(r, false))}
 					{prs
 						.filter((i) => open || prRowSelected(i))
 						.map(renderPrRow)}
@@ -3024,11 +3012,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			.map((b) => {
 				const gkey = `${ns}inbox:${b.key}`;
 				const open = isOpen(gkey);
-				// Needs action is the one band that is *blocked on you*, so its
-				// caption wears the urgent hue the Plain queue already spells
-				// "Urgent" with (lib/sidebar-filter.ts). The date bands stay
-				// neutral — colouring them all would say nothing.
-				const urgent = b.key === "needsaction" && "text-red";
+				// Needs action is the one band that is *blocked on you*, and it
+				// says so by sorting first and by the blue mark on each of its
+				// rows. Its caption stays neutral like every other band's: red is
+				// what a failed run and a closed PR wear, and a question waiting
+				// on you is neither.
 				return (
 					<div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
 						<button
@@ -3044,10 +3032,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							data-sticky-head
 							onClick={() => toggleGroup(gkey)}
 						>
-							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME, urgent)}>
+							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
 								{b.label}
 							</span>
-							<span className={cn(SIDEBAR_LANE_COUNT, urgent)}>
+							<span className={SIDEBAR_LANE_COUNT}>
 								{b.rows.length + b.prs.length}
 							</span>
 							<IconChevronDown
@@ -3061,9 +3049,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							// Nested, the two-line variant's meta line would repeat the
 							// repo tile + name the band header already carries, so the
 							// rows stay compact like every other repo-nested mode's.
-							.map((r) =>
-								renderWsRowImpl(r, !ns, b.key === "needsaction"),
-							)}
+							.map((r) => renderWsRowImpl(r, !ns))}
 						{b.prs.filter((i) => open || prRowSelected(i)).map(renderPrRow)}
 					</div>
 				);

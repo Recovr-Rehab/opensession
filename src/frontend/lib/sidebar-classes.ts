@@ -61,8 +61,9 @@ export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
  * A hover painted as a background LAYER rather than a background colour — the
  * sidebar's hover, for anything that also carries a state fill of its own.
  *
- * Every state in here is translucent ink: selected is `bg-pressed`, "needs
- * you" is `bg-blue-soft`/`bg-red-soft`, a pinned action is `bg-pressed`. That
+ * Every state in here is translucent ink: selected is `bg-pressed`, a pinned
+ * action is `bg-pressed` ("needs you" carries no fill at all — it is a mark in
+ * the rail and a bold title, so it composites with any of these). That
  * is what lets each of them pick up the sidebar material (and, on the desktop
  * shell, the wallpaper) underneath instead of cutting an opaque patch out of
  * it — but it also means a colour-based hover REPLACES that fill instead of
