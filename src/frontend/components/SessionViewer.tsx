@@ -182,8 +182,6 @@ import {
 import {
 	msgBodyStreaming,
 	msgBubbleUser,
-	msgDotUser,
-	msgLabel,
 	msgMedia,
 	msgOwnTurn,
 	msgRow,
@@ -5277,26 +5275,13 @@ export function SessionViewer({
 								/>
 							)}
 
-								{pendingBubbles.map((p) => (
-									<div
-										key={p.id}
-										/* .msg-sending + .msg-label-user stay as hooks: base.css's
-										   reduced-motion exception names the pair to keep the
-										   optimistic pulse breathing. */
-										className={cn(
-											msgRow,
-											msgOwnTurn,
-											"msg-user msg-sending opacity-60",
-										)}
-									>
-										{/* No name: the bubble is right-aligned, so authorship is
-										    already clear — just the transient status. Busy sends
-										    render in the queue flap, never as a bubble. */}
-										<div className={cn(msgLabel, "msg-label-user")}>
-											<span className={msgDotUser} aria-hidden />
-											{/* A quiet aside, not a shouted label. */}
-											<span className="tracking-normal">Sending…</span>
-										</div>
+							{pendingBubbles.map((p) => (
+								<div
+									key={p.id}
+									className={cn(msgRow, msgOwnTurn, "msg-user")}
+								>
+									{/* Optimistic sends look delivered immediately. The real
+									    entry replaces this bubble as soon as it arrives. */}
 									{p.content && (
 										<div className={msgBubbleUser}>{p.content}</div>
 									)}

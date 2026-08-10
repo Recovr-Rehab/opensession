@@ -11,6 +11,7 @@ import { resolveEntryImageSrc } from "../lib/osBlob";
 import { extBadge } from "../lib/images";
 import { useOpenAssetPaths } from "../lib/open-asset";
 import { fullTime, shortTime } from "../lib/time";
+import { UserAvatar } from "./UserAvatar";
 
 import {
 	fileChipCard,
@@ -24,8 +25,6 @@ import {
 	msgBody,
 	msgBubbleHuman,
 	msgBubbleUser,
-	msgDotHuman,
-	msgDotUser,
 	msgLabel,
 	msgLabelHuman,
 	msgMedia,
@@ -284,6 +283,15 @@ function MsgTime({ ts }: { ts?: string }) {
 	);
 }
 
+/** A label already says the teammate's name, so the picture is decorative. */
+function TeammateAvatar({ name }: { name: string }) {
+	return (
+		<span className="inline-flex" aria-hidden="true">
+			<UserAvatar name={name} size={16} />
+		</span>
+	);
+}
+
 /** The real time below your own bubble, faded in while the row is hovered —
  * those turns carry no label row to hang a MsgTime off, and a timestamp on
  * every one of them would just be noise while reading.
@@ -440,8 +448,8 @@ export const MessageBubble = React.memo(function MessageBubble({
 		return (
 			<div className={cn(msgRow, msgOwnTurn)} data-eid={e.id}>
 				<div className={cn(msgLabel, msgLabelHuman)}>
-					<span className={msgDotHuman} aria-hidden />
-					💬 {e.sender} · via Slack
+					<TeammateAvatar name={e.sender} />
+					{e.sender} · via Slack
 					<MsgTime ts={e.timestamp} />
 				</div>
 				<ClampedBody
@@ -496,7 +504,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 			>
 				{fromOther && (
 					<div className={msgLabel}>
-						<span className={msgDotUser} aria-hidden />
+						<TeammateAvatar name={fromOther} />
 						{fromOther}
 						<MsgTime ts={e.timestamp} />
 					</div>

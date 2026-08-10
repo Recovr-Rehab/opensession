@@ -12,14 +12,12 @@
  *
  *   · base.css's selection policy (`chrome isn't selectable, content is`)
  *     names .msg, .msg-label, .msg-body and .msg-system-text;
- *   · base.css owns the two transcript animations that hang off an ancestor —
- *     `.msg-sending .msg-label-user` (the sending pulse) and
- *     `.msg-streaming .msg-body-assistant::after` (the streaming caret) — and
- *     names the same two selectors again in its reduced-motion exceptions;
+ *   · base.css owns the streaming caret animation that hangs off the
+ *     `.msg-streaming` ancestor and names it again in reduced-motion rules;
  *   · useSessionScroll queries `.msg` and `.msg-user` to find turn boundaries.
  *
- * Drop one of those class names and copy/paste, the sending pulse or the
- * scroll-to-turn behaviour breaks silently, so they stay.
+ * Dropping one of those class names breaks copy/paste or scroll-to-turn
+ * behaviour silently, so they stay.
  */
 
 /**
@@ -50,20 +48,11 @@ export const msgOwnTurn = "mt-1";
  * only: it paints a highlight over unselectable label text caught inside a
  * selection range, and a fully transparent background is ignored — 1% sticks.
  *
- * The dot is a real span (msgDotUser / msgDotHuman), not a pseudo-element. It
- * used to be `.msg-label::before`, which is why this carried
- * `before:content-none` to stop the kept hook painting a second one; that rule
- * is gone from legacy.css, so the suppression went with it.
+ * Teammate labels put a UserAvatar on the outer edge. The identity mark used
+ * to be `.msg-label::before`; that rule is gone from legacy.css.
  */
 export const msgLabel =
 	"msg-label mb-1.25 flex flex-row-reverse items-center gap-1.75 text-meta font-semibold tracking-[-0.01em] text-faint selection:bg-[rgba(0,0,0,0.01)] [&_*::selection]:bg-[rgba(0,0,0,0.01)]";
-
-/** Identity dot in front of a label. No token: these two are identity marks
- *  (a person's own turns, a teammate stepping in), not palette colours. */
-export const msgDotUser =
-	"size-1.75 shrink-0 rounded-xs bg-[#5b7cfa] opacity-90";
-export const msgDotHuman =
-	"size-1.75 shrink-0 rounded-full bg-[linear-gradient(135deg,#28d3b4,#0f8f7a)]";
 
 /** A teammate's reply routed back into the session — a warm teal, so it reads
  *  as someone else stepping in rather than the driver's own words. */
