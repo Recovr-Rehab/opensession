@@ -673,27 +673,29 @@ export async function handleWebhook(payload: PlainWebhookPayload): Promise<Respo
     if (n > 0) console.log(`[plain] Archived ${n} session(s) for done thread ${thread.id}`);
   }
 
-  // Internal notes: a thread with a live linked session gets the note
-  // delivered INTO that session (steered into a busy run, queued behind it,
-  // or starting a fresh turn — persisted, so a restart can't drop it). The
-  // legacy one-shot @mention flow only handles threads with no session.
+  // Internal notes that explicitly mention the persona: a thread with a live
+  // linked session gets the note delivered INTO that session (steered into a
+  // busy run, queued behind it, or starting a fresh turn — persisted, so a
+  // restart can't drop it). The legacy one-shot @mention flow only handles
+  // threads with no session. Notes without the mention are teammate-to-
+  // teammate and are left alone.
   if (eventType === "thread.note_created" && payload.payload.note) {
     const note = payload.payload.note;
     const noteText = note.text || note.markdown || "";
+    const mentioned = PLAIN_MENTION_RE.test(noteText);
+    PLAIN_MENTION_RE.lastIndex = 0;
+    if (!mentioned) return Response.json({ ok: true });
+
     // SECURITY: Only act on notes from support agents (user) — never the
     // machine user's own notes (feedback loops) or customer/system actors.
     const actorType = note.createdBy?.actorType;
     if (actorType !== "user") {
-      if (PLAIN_MENTION_RE.test(noteText)) {
-        PLAIN_MENTION_RE.lastIndex = 0;
-        console.log(`[plain] Ignoring ${PLAIN_MENTION} mention from non-user actor: ${actorType}`);
-      }
+      console.log(`[plain] Ignoring ${PLAIN_MENTION} mention from non-user actor: ${actorType}`);
       return Response.json({ ok: true });
     }
 
     const delivered = await deliverNoteToLinkedSession(thread.id, note.id, noteText);
-    if (!delivered && PLAIN_MENTION_RE.test(noteText)) {
-      PLAIN_MENTION_RE.lastIndex = 0;
+    if (!delivered) {
       processAgentMention(thread.id, note.id, noteText).catch((e) =>
         console.error(`[plain] Error processing ${PLAIN_MENTION} mention:`, e)
       );
