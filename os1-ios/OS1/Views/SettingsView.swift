@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var token = ServerConfig.shared.token
     @State private var checkResult: String?
     @State private var copiedCode = false
+    @State private var confirmingSignOut = false
 
     private var signIn: GitHubSignIn { .shared }
 
@@ -123,8 +124,51 @@ struct SettingsView: View {
                     AuditLogSettingsView()
                 }
             }
+
+            // Last card, as in the web settings sheet: who your sessions act
+            // as, and the way out.
+            Section("Account") {
+                HStack(spacing: 12) {
+                    UserAvatar(size: 34)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(config.userName)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.text)
+                        Text(accountSubtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 2)
+                .accessibilityElement(children: .combine)
+
+                Button(role: .destructive) {
+                    confirmingSignOut = true
+                } label: {
+                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            }
         }
         .insetGroupedListCompat()
+        .confirmationDialog(
+            "Sign out?",
+            isPresented: $confirmingSignOut,
+            titleVisibility: .visible
+        ) {
+            Button("Sign out", role: .destructive) { signOut() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This device forgets its token. Your sessions keep running on the server.")
+        }
+    }
+
+    /// How the current identity was decided — the same two modes the web
+    /// account card distinguishes.
+    private var accountSubtitle: String {
+        if let signedInLogin {
+            return "Signed in with GitHub · @\(signedInLogin)"
+        }
+        return "Signed in with a session token"
     }
 
     private func settingsLink<Destination: View>(
