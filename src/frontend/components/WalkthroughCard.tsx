@@ -110,14 +110,10 @@ export function WalkthroughCard({
 					// behaviour but not its typography reads as a different control.
 					className="-m-1 mb-1 flex w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
 				>
-					<span
-						className={cn(
-							"grid size-5 flex-shrink-0 place-items-center self-center leading-none text-faint transition-transform duration-150",
-							!expanded && "-rotate-90",
-						)}
-					>
-						<IconChevronDown size={20} className="block" />
-					</span>
+					{/* The walkthrough's own icon leads the line, so the row is
+					    named before it is operated; the chevron trails at the far
+					    edge, where it reads as this card's disclosure rather than
+					    as another indent level in the transcript. */}
 					<IconPlayOutline
 						size={14}
 						className="flex-shrink-0 self-center text-faint"
@@ -135,6 +131,14 @@ export function WalkthroughCard({
 								: ""
 							: contentsLabel}
 					</span>
+					<span
+						className={cn(
+							"grid size-5 flex-shrink-0 place-items-center self-center leading-none text-faint transition-transform duration-150",
+							!expanded && "-rotate-90",
+						)}
+					>
+						<IconChevronDown size={20} className="block" />
+					</span>
 				</button>
 			) : (
 				<div className="mb-2 flex items-center gap-1.5">
@@ -144,14 +148,20 @@ export function WalkthroughCard({
 			)}
 
 			{!expanded && (walkthrough.video || gallery.items.length > 0) && (
-				// The folded card's pictures: every still, small, in reading order.
-				// Tight within a pair and loose between them, so the gaps say which
-				// before belongs to which after now that the labels are gone. The
-				// strip runs to the card's edges rather than stopping at its padding
-				// — a tile cut off by the padding looks like a rendering bug, one
-				// that runs under the edge reads as "there is more this way".
+				// The folded card's pictures: every still, in reading order, sharing
+				// out the card's width instead of sitting at thumbnail size against
+				// a gulf of empty card. Tight within a pair and loose between them,
+				// so the gaps say which before belongs to which after now that the
+				// labels are gone — the pairing is the point of the folded strip,
+				// since a before and its after side by side is checkable at a
+				// glance. Each pair keeps a floor width, so a walkthrough with many
+				// pairs overflows into the same scroll as before rather than
+				// shrinking every still into illegibility. The strip runs to the
+				// card's edges rather than stopping at its padding — a tile cut off
+				// by the padding looks like a rendering bug, one that runs under the
+				// edge reads as "there is more this way".
 				<div className="-mx-4 mt-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-					<div className="flex w-max items-center gap-4">
+					<div className="flex w-full items-start gap-6">
 						{walkthrough.video && (
 							// The demo leads the strip as its own tile: folded, the
 							// headline artifact was represented only by the word "Demo",
@@ -160,12 +170,12 @@ export function WalkthroughCard({
 							// a 104px-wide video is a thumbnail, not a player.
 							<button
 								type="button"
-								className="relative block flex-shrink-0 cursor-pointer overflow-hidden rounded-md border border-line bg-black p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+								className="relative block aspect-[16/10] max-h-[132px] min-w-[104px] max-w-[200px] flex-1 cursor-pointer overflow-hidden rounded-md border border-line bg-black p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 								aria-label="Open the walkthrough to play the demo"
 								onClick={() => setExpanded(true)}
 							>
 								<video
-									className="h-16 w-[104px] object-cover"
+									className="h-full w-full object-cover"
 									src={`${mediaUrl(walkthrough.video)}#t=0.1`}
 									preload="metadata"
 									muted
@@ -177,14 +187,17 @@ export function WalkthroughCard({
 							</button>
 						)}
 						{(walkthrough.shots || []).map((shot, i) => (
-							<div className="flex flex-shrink-0 gap-1" key={i}>
+							<div
+								className="flex min-w-[216px] max-w-[420px] flex-1 gap-1"
+								key={i}
+							>
 								{(["before", "after"] as const).map(
 									(side) =>
 										shot[side] && (
 											<button
 												type="button"
 												key={side}
-												className="block cursor-zoom-in rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+												className="block aspect-[16/10] max-h-[132px] min-w-0 flex-1 cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 												onClick={(e) =>
 													open(`${i}:${side}`, e.currentTarget)
 												}
@@ -193,7 +206,7 @@ export function WalkthroughCard({
 												    would replace the caption with six identical
 												    "Open before image preview"s. */}
 												<img
-													className="h-16 w-[104px] rounded-md object-cover object-top"
+													className="h-full w-full object-cover object-top"
 													src={mediaUrl(shot[side]!)}
 													alt={`${shot.caption || "Change"} — ${side}`}
 													loading="lazy"
