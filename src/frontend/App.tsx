@@ -101,6 +101,7 @@ import {
 } from "./components/icons";
 import { DeskOverlay } from "./components/DeskOverlay";
 import { useSessions } from "./hooks/useSessions";
+import { useHydratedSession } from "./hooks/useHydratedSession";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useBackSwipe } from "./hooks/useBackSwipe";
 import { useIsPhone } from "./hooks/useIsPhone";
@@ -510,8 +511,17 @@ export function App(
 		initialTeamViewing?: Array<{ user: string; sessionId: string }>;
 	} = {},
 ) {
-	const { sessions, loading, cloudUnreachable, refresh, inject, unstick, patch, remove } =
-		useSessions();
+	const {
+		sessions,
+		loading,
+		archivedLoaded,
+		cloudUnreachable,
+		refresh,
+		inject,
+		unstick,
+		patch,
+		remove,
+	} = useSessions();
 	const auth = useAuthStatus();
 	const localMode = auth?.local === true;
 	const { connected, send, addHandler } = useWebSocket();
@@ -1343,12 +1353,18 @@ export function App(
 		}
 	}, [route, pendingSessionId, unstick]);
 
-	const currentSession: UnifiedSession | null =
+	// The list is the live slice, and archived sessions arrive as summaries, so
+	// the row it finds may be missing or partial — see useHydratedSession.
+	const listedSession: UnifiedSession | null =
 		route.view === "session"
 			? sessions.find(
 					(s) => s.id === route.id || s.aliasIds?.includes(route.id),
 				) || null
 			: null;
+	const currentSession = useHydratedSession(
+		route.view === "session" ? route.id : null,
+		listedSession,
+	);
 
 	// The open session, read by the mount-once tab-shortcut handler (⌘⌥C / ⌘W —
 	// see the effect next to closeSession below).
@@ -3903,6 +3919,7 @@ export function App(
 						) : route.view === "archived" ? (
 							<Archived
 								sessions={sessions}
+								loaded={archivedLoaded}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onChanged={refresh}
 							/>

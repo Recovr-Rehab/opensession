@@ -99,10 +99,15 @@ export function sessionsVariant(params: URLSearchParams): SessionsVariant {
 	return params.get("slim") === "1" ? "only-slim" : "only";
 }
 
-const sessionsResponseSnapshots = new Map<
+// Parked on globalThis so invalidateSessionsCache() can clear it without this
+// module and session-cache importing each other (the same cycle-breaker
+// session-cache uses to reach promptQueues). Without that, archiving a session
+// stayed visible for up to SESSIONS_RESPONSE_TTL_MS after the underlying cache
+// had already been invalidated — the response snapshot outlived its source.
+const sessionsResponseSnapshots: Map<
 	SessionsVariant,
 	SessionsResponseSnapshot
->();
+> = ((globalThis as any).__osSessionsResponseSnapshots ??= new Map());
 
 function sessionsListResponse(
 	req: Request,
@@ -164,31 +169,52 @@ function enrichSession(s: UnifiedSession) {
  * real session (GET /api/sessions/:id), so nothing downstream has to make do
  * with the subset.
  */
-export function archivedIndexRow(s: UnifiedSession) {
+export function archivedIndexRow(s: UnifiedSession): UnifiedSession {
 	return {
+		// Every field the session shape REQUIRES, carried verbatim. An index
+		// row is a real session, just a poorer one — a client can merge it into
+		// its list and read it like any other row instead of threading a second
+		// type through every consumer. What it drops is only ever optional.
 		id: s.id,
-		...(s.aliasIds?.length ? { aliasIds: s.aliasIds } : {}),
-		title: s.title,
+		claudeSessionId: s.claudeSessionId,
 		source: s.source,
+		branch: s.branch,
+		worktreeDir: s.worktreeDir,
+		startedBy: s.startedBy,
+		title: s.title,
 		lastActivity: s.lastActivity,
-		archived: true as const,
+		createdAt: s.createdAt,
+		isRunning: s.isRunning,
+		transcriptPath: s.transcriptPath,
+		archived: true,
+		// Says out loud that this is a summary, so a client that merges it into
+		// its list knows to hydrate before reading anything the index doesn't
+		// carry. Without it, opening an archived session renders a session
+		// that is quietly missing its PRs and its walkthrough.
+		slim: true,
+		// The optionals the Archived surfaces actually read: the row's own
+		// text, the lens the sidebar badge filters by, and enough identity to
+		// group it (the tab strip's history menu keys on workspace, falling
+		// back to a shared worktree for sessions predating workspaces).
+		...(s.aliasIds?.length ? { aliasIds: s.aliasIds } : {}),
 		...(s.archivedReason ? { archivedReason: s.archivedReason } : {}),
-		...(s.startedBy ? { startedBy: s.startedBy } : {}),
 		...(s.mode ? { mode: s.mode } : {}),
 		...(s.automation ? { automation: s.automation } : {}),
 		...(s.repo ? { repo: s.repo } : {}),
 		...(s.workspaceId ? { workspaceId: s.workspaceId } : {}),
-		// The tab strip's history menu groups by workspace, falling back to a
-		// shared isolated worktree for sessions that predate workspaces.
-		...(s.worktreeDir ? { worktreeDir: s.worktreeDir } : {}),
 		// sessionRepo() falls back to the first external ref's kind, so a
 		// repo-less feed session files under its feed rather than the default
-		// repo — keep the shape, drop the ids nothing here reads.
+		// repo. Identity is cheap; the ref's `url` and `title` are not, and
+		// nothing on these surfaces reads them.
 		...(s.externalRefs?.length
-			? { externalRefs: [{ kind: s.externalRefs[0].kind }] }
+			? {
+					externalRefs: [
+						{ kind: s.externalRefs[0].kind, id: s.externalRefs[0].id },
+					],
+				}
 			: {}),
 		// Desk sessions are hidden from every list; clients filter on it.
-		...(s.desk ? { desk: true as const } : {}),
+		...(s.desk ? { desk: true } : {}),
 	};
 }
 

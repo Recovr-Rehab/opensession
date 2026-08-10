@@ -9,10 +9,17 @@ import { relativeTime, archiveSessionApi } from "../lib/api";
 import { useCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { PageLayout } from "../ui/page";
-import { EmptyState } from "../ui/state";
+import { EmptyState, ListSkeleton } from "../ui/state";
 
 interface Props {
   sessions: UnifiedSession[];
+  /**
+   * Whether the archived index has landed. Archived sessions are no longer in
+   * the polled list — they're fetched separately, after first paint — so an
+   * empty `sessions` here means "not yet" as often as it means "none", and
+   * this page is the one place that difference is the whole screen.
+   */
+  loaded: boolean;
   onSelect: (session: UnifiedSession) => void;
   onChanged: () => void;
 }
@@ -56,7 +63,7 @@ function sidebarRepo(): string {
   }
 }
 
-export function Archived({ sessions, onSelect, onChanged }: Props) {
+export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
   const currentUser = useCurrentUser();
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -140,8 +147,13 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
       title="Archived"
       description={
         <>
-          {archived.length} archived session{archived.length === 1 ? "" : "s"}. Done Plain
-          tickets and anything idle for over a week land here automatically.
+          {/* A count is a claim. Until the index lands there is nothing to
+              count, and "0 archived sessions" above a loading list is the
+              same false statement the empty state used to make. */}
+          {loaded &&
+            `${archived.length} archived session${archived.length === 1 ? "" : "s"}. `}
+          Done Plain tickets and anything idle for over a week land here
+          automatically.
         </>
       }
       actions={
@@ -211,7 +223,15 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
         </>
       }
     >
-      {archived.length === 0 ? (
+      {archived.length === 0 && !loaded ? (
+        // Not "nothing archived" — nothing YET. Claiming the list is empty
+        // while it is still in flight is what makes a slow load read as data
+        // loss. Matches ROW's geometry so the rows land where these sat.
+        <ListSkeleton
+          label="Loading archived sessions"
+          rowClassName="phone:px-[11px] phone:py-3"
+        />
+      ) : archived.length === 0 ? (
         <EmptyState>
           Nothing archived{search || owner === "mine" || repo !== "all" ? " matches" : " yet"}.
         </EmptyState>

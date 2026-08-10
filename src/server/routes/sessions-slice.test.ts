@@ -97,41 +97,69 @@ describe("archivedIndexRow", () => {
 			expect(row).not.toHaveProperty(fat);
 	});
 
-	test("omits absent fields rather than spending bytes on nulls", () => {
+	test("omits absent optionals rather than spending bytes on nulls", () => {
 		const row = archivedIndexRow(
 			archivedSession({
-				startedBy: null,
 				mode: undefined,
 				repo: undefined,
 				workspaceId: null,
-				worktreeDir: null,
 				archivedReason: undefined,
+				automation: undefined,
 			}),
 		);
 		for (const absent of [
-			"startedBy",
 			"mode",
 			"repo",
 			"workspaceId",
-			"worktreeDir",
 			"archivedReason",
+			"automation",
+			"aliasIds",
+			"desk",
 		])
 			expect(row).not.toHaveProperty(absent);
 	});
 
-	test("keeps the first external ref's kind, which is the repo fallback", () => {
+	test("keeps the first external ref's identity, which is the repo fallback", () => {
 		// sessionRepo() files a repo-less feed session under its feed rather
-		// than the default repo — the kind is the whole reason it can.
+		// than the default repo — the kind is the whole reason it can. The
+		// ref's url/title are the expensive part and nothing here reads them.
 		const row = archivedIndexRow(
 			archivedSession({
 				repo: undefined,
 				externalRefs: [
-					{ kind: "tella-video", id: "vid_1" },
+					{
+						kind: "tella-video",
+						id: "vid_1",
+						url: "https://tella.tv/video/x",
+						title: "A video with a long title",
+					},
 					{ kind: "plain", id: "th_1" },
-				] as never,
+				],
 			}),
 		);
-		expect(row.externalRefs).toEqual([{ kind: "tella-video" }]);
+		expect(row.externalRefs).toEqual([{ kind: "tella-video", id: "vid_1" }]);
+	});
+
+	test("is a whole session, so a client can merge it into its list", () => {
+		// The point of carrying every REQUIRED field: consumers read an index
+		// row like any other session instead of threading a second type
+		// through the sidebar, the tab strip and the palette.
+		const full = archivedSession();
+		const row = archivedIndexRow(full);
+		for (const required of [
+			"id",
+			"claudeSessionId",
+			"source",
+			"branch",
+			"worktreeDir",
+			"startedBy",
+			"title",
+			"lastActivity",
+			"createdAt",
+			"isRunning",
+			"transcriptPath",
+		] as const)
+			expect(row[required]).toEqual(full[required]);
 	});
 
 	test("carries alias ids so a link naming an old id still resolves", () => {

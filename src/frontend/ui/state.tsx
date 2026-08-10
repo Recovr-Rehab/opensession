@@ -103,6 +103,76 @@ export function LoadingState({
 	);
 }
 
+/**
+ * Ragged on purpose — a column of equal bars reads as a component, and a
+ * component that never resolves reads as a bug. Uneven ones read as titles
+ * about to arrive. Literal utilities rather than a built string or an inline
+ * width: Tailwind only compiles class names it can find in the source.
+ */
+const SKELETON_WIDTHS = [
+	"w-[62%]",
+	"w-[41%]",
+	"w-[73%]",
+	"w-[52%]",
+	"w-[35%]",
+	"w-[66%]",
+	"w-[47%]",
+	"w-[58%]",
+];
+
+/**
+ * A list that hasn't arrived, standing in for the rows it will become.
+ *
+ * The alternative — showing the empty state until data lands — is what makes a
+ * slow load read as data loss rather than as waiting: "Nothing archived yet"
+ * is a confident, false statement about a list that is merely in flight.
+ *
+ * One slow breath across the whole block, not a travelling sheen: the rows are
+ * the message, and a shimmer would drag the eye along them. Under
+ * prefers-reduced-motion base.css stops it after a cycle, which is the right
+ * amount of "gentler, not zero" for a placeholder.
+ */
+export function ListSkeleton({
+	rows = 6,
+	rowClassName,
+	label = "Loading",
+	className,
+	...props
+}: React.ComponentPropsWithoutRef<"div"> & {
+	rows?: number;
+	/** Match the geometry of the row this stands in for. */
+	rowClassName?: string;
+	label?: string;
+}) {
+	return (
+		<div
+			role="status"
+			aria-live="polite"
+			aria-label={label}
+			className={cn("flex animate-pulse flex-col gap-1.5", className)}
+			{...props}
+		>
+			{Array.from({ length: rows }, (_, i) => (
+				<div
+					key={i}
+					className={cn(
+						"rounded-control border border-line bg-panel px-3.5 py-[11px]",
+						rowClassName,
+					)}
+				>
+					<div
+						className={cn(
+							"h-3 rounded-sm bg-hover",
+							SKELETON_WIDTHS[i % SKELETON_WIDTHS.length],
+						)}
+					/>
+					<div className="mt-2 h-2.5 w-[26%] rounded-sm bg-hover" />
+				</div>
+			))}
+		</div>
+	);
+}
+
 type AlertVariant = "error" | "warn" | "info";
 
 // Border at 40% of the hue over its soft fill — the `.form-error` recipe,

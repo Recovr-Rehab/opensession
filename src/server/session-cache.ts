@@ -29,6 +29,12 @@ const CACHE_TTL = 10_000;
 /** Drop the cached list so the next getCachedSessions() re-reads from disk. */
 export function invalidateSessionsCache(): void {
 	sessionsCache = null;
+	// The list ROUTE caches its serialized response on top of this cache, and
+	// that copy outliving its source is what made an archive take up to five
+	// seconds to disappear from every client. Cleared through globalThis
+	// because routes/sessions.ts imports this module — same cycle-breaker as
+	// promptQueues below.
+	(g.__osSessionsResponseSnapshots as Map<string, unknown> | undefined)?.clear();
 }
 
 export function getCachedSessions(): UnifiedSession[] {

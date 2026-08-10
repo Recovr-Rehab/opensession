@@ -377,6 +377,15 @@ export interface UnifiedSession {
 	archived?: boolean;
 	/** Why this session is archived — powers the "Auto-archived" filter. */
 	archivedReason?: "manual" | "idle" | "auto" | "plain";
+	/**
+	 * This row is a SUMMARY, not the whole session — it came from the archived
+	 * index (`GET /api/sessions?archived=only&slim=1`), which carries what the
+	 * Archived surfaces render and drops the rest. Anything that reads beyond
+	 * those fields must hydrate first (`GET /api/sessions/:id`), which is what
+	 * `useHydratedSession` does for the session you open. Absent on every row
+	 * from the live list.
+	 */
+	slim?: boolean;
 	plainThreadId?: string;
 	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];

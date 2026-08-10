@@ -147,6 +147,14 @@ export interface UnifiedSession {
   archived?: boolean;
   /** Why this session is archived — powers the "Auto-archived" filter. */
   archivedReason?: "manual" | "idle" | "auto" | "plain";
+  /**
+   * This row is a SUMMARY, not the whole session — it came from the archived
+   * index (`GET /api/sessions?archived=only&slim=1`), which carries what the
+   * Archived surfaces render and drops the rest. Anything that reads beyond
+   * those fields must hydrate first (`GET /api/sessions/:id`). Absent on every
+   * row from the full list.
+   */
+  slim?: boolean;
   plainThreadId?: string;
   /** Generic external-object linkage (feed items: Tella videos, …) — the
    *  successor to per-source foreign keys like plainThreadId (see

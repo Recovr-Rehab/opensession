@@ -3,15 +3,24 @@ import type {
 	UnifiedSession,
 } from "../types";
 
+/**
+ * One slice of the session list.
+ *
+ * `query` scopes it server-side: the app polls `?archived=exclude` for the
+ * live list and fetches `?archived=only&slim=1` separately for the archived
+ * index, because archived sessions are ~46% of the payload and none of the
+ * cold start needs them. Each slice carries its own ETag, so the archived one
+ * settles into a 304 while the live one keeps changing.
+ */
 export async function fetchSessionsSnapshot(
-	opts: { etag?: string | null; signal?: AbortSignal } = {},
+	opts: { etag?: string | null; signal?: AbortSignal; query?: string } = {},
 ): Promise<{
 	text: string | null;
 	etag: string | null;
 	notModified: boolean;
 	cloudUnreachable: boolean;
 }> {
-	const res = await fetch(`${BASE}/sessions`, {
+	const res = await fetch(`${BASE}/sessions${opts.query || ""}`, {
 		signal: opts.signal,
 		headers: opts.etag ? { "If-None-Match": opts.etag } : undefined,
 	});
@@ -33,6 +42,27 @@ export async function fetchSessionsSnapshot(
 		notModified: false,
 		cloudUnreachable,
 	};
+}
+
+/**
+ * One session, in the shape the list would have given it.
+ *
+ * The list no longer carries archived sessions, and a session someone else
+ * archives leaves it mid-visit — so opening one needs a source of its own.
+ * Returns null when the server doesn't know the id (a deleted session, a stale
+ * link), which the caller shows as "not found" rather than an error.
+ */
+export async function fetchSession(
+	sessionId: string,
+	opts: { signal?: AbortSignal } = {},
+): Promise<UnifiedSession | null> {
+	const res = await fetch(`${BASE}/sessions/${encodeURIComponent(sessionId)}`, {
+		signal: opts.signal,
+	});
+	if (res.status === 404) return null;
+	if (!res.ok)
+		throw new ApiError(`Failed to load session: ${res.status}`, res.status);
+	return (await res.json()) as UnifiedSession;
 }
 
 // ── Session assets (scratch folder previewed in the Assets tab) ─────────────

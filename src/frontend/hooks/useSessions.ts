@@ -1,11 +1,40 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { fetchSessionsSnapshot } from "../lib/api";
+import {
+	mergeSessionSlices,
+	settledOverrides,
+	type LocalArchiveOverride,
+} from "../lib/session-slices";
+
+/** The live list. Archived sessions are ~46% of the unsliced payload and none
+ *  of the cold start; they arrive separately, after first paint. */
+const LIVE_QUERY = "?archived=exclude";
+/** The archived index: the narrow row the Archived surfaces render. */
+const ARCHIVED_QUERY = "?archived=only&slim=1";
+/**
+ * How often to re-check the archived index. Far slower than the live poll
+ * because archiving is rare and its slice barely changes — and because the
+ * response is ETagged, so the steady state is a 304 with no body at all. Its
+ * one job is picking up sessions archived on another device; a local archive
+ * refreshes it immediately.
+ */
+const ARCHIVED_POLL_MS = 30_000;
 
 export function reconcilePendingSessionPatches(
   sessions: UnifiedSession[],
   pendingPatches: Map<string, Partial<UnifiedSession>>,
 ): UnifiedSession[] {
+  // An archive is acknowledged by the row's ABSENCE. The live slice doesn't
+  // carry archived sessions any more, so there are no field values left to
+  // compare against and the patch below would be held forever — re-applying
+  // `archived: true` to nothing, while a stale in-flight poll's copy of the
+  // row is exactly what it exists to correct.
+  if (pendingPatches.size) {
+    const present = new Set(sessions.map((s) => s.id));
+    for (const [id, pending] of pendingPatches)
+      if (pending.archived === true && !present.has(id)) pendingPatches.delete(id);
+  }
   return sessions.map((session) => {
     const pending = pendingPatches.get(session.id);
     if (!pending) return session;
@@ -44,11 +73,34 @@ export function reconcileCloudOutageSessions(
 }
 
 export function useSessions(pollInterval = 5000) {
-  const [sessions, setSessions] = useState<UnifiedSession[]>([]);
+  const [live, setLive] = useState<UnifiedSession[]>([]);
+  // When the live list last came back. Settles a local unarchive: a poll that
+  // STARTED after the change and still doesn't list the session means the
+  // change didn't take, and the override should stop hiding the archived row.
+  const [liveAt, setLiveAt] = useState(0);
+  const [archivedIndex, setArchivedIndex] = useState<UnifiedSession[] | null>(
+    null,
+  );
+  const [archivedIndexAt, setArchivedIndexAt] = useState(0);
+  const [locallyArchived, setLocallyArchived] = useState<
+    Map<string, LocalArchiveOverride>
+  >(() => new Map());
+  const [locallyUnarchived, setLocallyUnarchived] = useState<
+    Map<string, number>
+  >(() => new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cloudUnreachable, setCloudUnreachable] = useState(false);
   const mountedRef = useRef(true);
+  // Read by `patch` to capture the row it is archiving, which the very next
+  // live poll will drop. Assigned during render, like App.tsx's own *Ref
+  // mirrors — a callback can't close over state without re-creating itself.
+  const liveRef = useRef<UnifiedSession[]>(live);
+  liveRef.current = live;
+  // The merged list, for the reverse move: unarchiving a session that is only
+  // in the archived index has nothing in `live` to flip, so `patch` puts it
+  // there. Assigned below, once the merge has run.
+  const mergedRef = useRef<UnifiedSession[]>(live);
   // Raw JSON text of the last applied poll. When a poll returns byte-identical
   // data (the common case every 5s), skip setSessions entirely — a fresh array
   // identity would otherwise re-render the whole app (Sidebar memos, the open
@@ -72,7 +124,7 @@ export function useSessions(pollInterval = 5000) {
       parsed,
       pendingPatchRef.current,
     );
-    setSessions((previous) => {
+    setLive((previous) => {
       const next = preserveCloud
         ? reconcileCloudOutageSessions(previous, reconciled)
         : reconciled;
@@ -91,11 +143,13 @@ export function useSessions(pollInterval = 5000) {
     if (pollPromiseRef.current) return pollPromiseRef.current;
     const controller = new AbortController();
     pollAbortRef.current = controller;
+    const startedAt = Date.now();
     const promise = (async () => {
       try {
         const snapshot = await fetchSessionsSnapshot({
           etag: etagRef.current,
           signal: controller.signal,
+          query: LIVE_QUERY,
         });
         if (!mountedRef.current) return;
         setCloudUnreachable(snapshot.cloudUnreachable);
@@ -106,6 +160,7 @@ export function useSessions(pollInterval = 5000) {
             applyServer(JSON.parse(snapshot.text), snapshot.cloudUnreachable);
           }
         }
+        setLiveAt(startedAt);
         setLoading(false);
         setError(null);
       } catch (e: any) {
@@ -154,8 +209,119 @@ export function useSessions(pollInterval = 5000) {
     };
   }, [poll, pollInterval]);
 
+  // ── The archived index ─────────────────────────────────────────────────
+  const archivedTextRef = useRef<string | null>(null);
+  const archivedEtagRef = useRef<string | null>(null);
+  const archivedPromiseRef = useRef<Promise<void> | null>(null);
+
+  const pollArchived = useCallback((): Promise<void> => {
+    if (archivedPromiseRef.current) return archivedPromiseRef.current;
+    const startedAt = Date.now();
+    const promise = (async () => {
+      try {
+        const snapshot = await fetchSessionsSnapshot({
+          etag: archivedEtagRef.current,
+          query: ARCHIVED_QUERY,
+        });
+        if (!mountedRef.current) return;
+        if (!snapshot.notModified && snapshot.text !== null) {
+          archivedEtagRef.current = snapshot.etag;
+          if (snapshot.text !== archivedTextRef.current) {
+            archivedTextRef.current = snapshot.text;
+            setArchivedIndex(JSON.parse(snapshot.text));
+          }
+        }
+        setArchivedIndexAt(startedAt);
+      } catch {
+        // Never surfaced as the app's error: the live list is what the app is
+        // for, and a failed index just leaves Archived showing what it had.
+      }
+    })().finally(() => {
+      if (archivedPromiseRef.current === promise) archivedPromiseRef.current = null;
+    });
+    archivedPromiseRef.current = promise;
+    return promise;
+  }, []);
+
+  // Deliberately behind the live list: archived sessions are what we took OFF
+  // the critical path, so fetching them must not compete with first paint.
+  useEffect(() => {
+    if (loading) return;
+    let active = true;
+    let timer: number | undefined;
+    const run = () => {
+      if (!active) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+      void pollArchived().finally(() => {
+        if (!active || document.visibilityState === "hidden") return;
+        timer = window.setTimeout(run, ARCHIVED_POLL_MS);
+      });
+    };
+    run();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") run();
+      else if (timer !== undefined) window.clearTimeout(timer);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [loading, pollArchived]);
+
+  // One list out of the slices, so every consumer keeps reading `archived`
+  // off a single array (see lib/session-slices for why that's the shape).
+  const sessions = useMemo(
+    () =>
+      mergeSessionSlices({
+        live,
+        archivedIndex,
+        locallyArchived,
+        locallyUnarchived,
+      }),
+    [live, archivedIndex, locallyArchived, locallyUnarchived],
+  );
+  mergedRef.current = sessions;
+
+  // Forget the local overrides the server has caught up with.
+  useEffect(() => {
+    if (locallyArchived.size === 0 && locallyUnarchived.size === 0) return;
+    const settled = settledOverrides({
+      live,
+      liveAt,
+      archivedIndex,
+      archivedIndexAt,
+      locallyArchived,
+      locallyUnarchived,
+    });
+    if (settled.archived.length)
+      setLocallyArchived((prev) => {
+        const next = new Map(prev);
+        for (const id of settled.archived) next.delete(id);
+        return next;
+      });
+    if (settled.unarchived.length)
+      setLocallyUnarchived((prev) => {
+        const next = new Map(prev);
+        for (const id of settled.unarchived) next.delete(id);
+        return next;
+      });
+  }, [
+    live,
+    liveAt,
+    archivedIndex,
+    archivedIndexAt,
+    locallyArchived,
+    locallyUnarchived,
+  ]);
+
   // Expose manual refresh for after deletes
-  const refresh = useCallback(() => { poll(); }, [poll]);
+  const refresh = useCallback(() => {
+    poll();
+    pollArchived();
+  }, [poll, pollArchived]);
 
   // Drop a just-created session straight into the list so the UI can render it
   // immediately (e.g. the tab-strip + creating a new session) instead of showing a
@@ -171,7 +337,7 @@ export function useSessions(pollInterval = 5000) {
       lastTextRef.current = null;
       etagRef.current = null;
       if (opts?.sticky) stickyRef.current.set(session.id, session);
-      setSessions((prev) =>
+      setLive((prev) =>
         prev.some((s) => s.id === session.id)
           ? prev.map((s) => (s.id === session.id ? session : s))
           : [...prev, session],
@@ -189,27 +355,86 @@ export function useSessions(pollInterval = 5000) {
     }
   }, []);
 
-  const patch = useCallback((id: string, patch: Partial<UnifiedSession>) => {
-    lastTextRef.current = null;
-    etagRef.current = null;
-    if ("archived" in patch) {
-      pendingPatchRef.current.set(id, {
-        ...pendingPatchRef.current.get(id),
-        ...patch,
-      });
-    }
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
-    );
-  }, []);
+  const patch = useCallback(
+    (id: string, patch: Partial<UnifiedSession>) => {
+      lastTextRef.current = null;
+      etagRef.current = null;
+      if ("archived" in patch) {
+        pendingPatchRef.current.set(id, {
+          ...pendingPatchRef.current.get(id),
+          ...patch,
+        });
+        const at = Date.now();
+        const drop = <V,>(prev: Map<string, V>) => {
+          if (!prev.has(id)) return prev;
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        };
+        if (patch.archived) {
+          // The next live poll drops this row and the index doesn't have it
+          // yet: hold the copy we already have so the session doesn't blink
+          // out of the sidebar and out of ⌘Z's reach in between.
+          const current = liveRef.current.find((s) => s.id === id);
+          if (current)
+            setLocallyArchived((prev) =>
+              new Map(prev).set(id, { session: { ...current, ...patch }, at }),
+            );
+          setLocallyUnarchived(drop);
+        } else {
+          setLocallyUnarchived((prev) => new Map(prev).set(id, at));
+          setLocallyArchived(drop);
+          // Mirror image of the above: the row lives in the archived index,
+          // so there is nothing in the live slice for the patch below to flip
+          // and it would vanish until the next poll. Move it across now. It
+          // may be an index summary; one poll replaces it with the full row.
+          const known = mergedRef.current.find((s) => s.id === id);
+          if (known)
+            setLive((prev) =>
+              prev.some((s) => s.id === id) ? prev : [...prev, { ...known, ...patch }],
+            );
+        }
+        // Settle the override as soon as the server can confirm it, rather
+        // than at the next 30s tick.
+        void pollArchived();
+      }
+      setLive((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    },
+    [pollArchived],
+  );
 
   const remove = useCallback((id: string) => {
     lastTextRef.current = null;
     etagRef.current = null;
+    archivedTextRef.current = null;
+    archivedEtagRef.current = null;
     stickyRef.current.delete(id);
     pendingPatchRef.current.delete(id);
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+    const drop = <V,>(prev: Map<string, V>) => {
+      if (!prev.has(id)) return prev;
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    };
+    setLive((prev) => prev.filter((s) => s.id !== id));
+    setArchivedIndex((prev) => prev && prev.filter((s) => s.id !== id));
+    setLocallyArchived(drop);
+    setLocallyUnarchived(drop);
   }, []);
 
-  return { sessions, loading, error, cloudUnreachable, refresh, inject, unstick, patch, remove };
+  return {
+    sessions,
+    loading,
+    error,
+    cloudUnreachable,
+    /** False until the archived index lands — the Archived page's own
+     *  loading state, which it never needed while the list carried
+     *  everything. */
+    archivedLoaded: archivedIndex !== null,
+    refresh,
+    inject,
+    unstick,
+    patch,
+    remove,
+  };
 }
