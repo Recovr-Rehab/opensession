@@ -844,29 +844,20 @@ struct SessionView: View {
                     }
                 }
             }
-            // Same pill the bar's own back and "+" controls wear, so the
-            // identity reads as the third control up there rather than loose
-            // text — and carries the tappability the dropped chevron used to
-            // hint at.
+            // Match the bar's system navigation and actions controls so the
+            // identity reads as another tappable piece of its chrome.
             //
-            // Material rather than `.glassEffect`: a toolbar item already
-            // lives inside the bar's own Liquid Glass grouping, and a second
-            // glass surface nested in it joins that group's morphs. Opening
-            // the trailing actions menu deformed this pill into a flat,
-            // square-cornered block, and backgrounding the app with the menu
-            // open left it stuck that way — the same failure that flattened
-            // the composer (39fd9ddf), here reported against the system back
-            // button, which is the other element in that group. The material
-            // capsule is inert: it renders identically and cannot be morphed.
+            // The semantic glass BUTTON style belongs to the control; never
+            // put `.glassEffect` on this label. That nested a second surface in
+            // the bar's glass group and let menu morphs flatten its controls.
             .padding(.leading, 8)
             .padding(.trailing, 14)
             .padding(.vertical, 6)
             .frame(maxWidth: 220, alignment: .leading)
             .contentShape(Capsule())
-            .background(OS1VisualStyle.background.opacity(0.7), in: Capsule())
-            .background(.thickMaterial, in: Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
         .tint(.primary)
         .accessibilityLabel("Workspace details")
     }
