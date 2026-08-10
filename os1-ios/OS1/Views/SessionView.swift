@@ -866,28 +866,25 @@ struct SessionView: View {
         Button {
             showWorktreeInfo = true
         } label: {
-            HStack(spacing: 7) {
-                RepoTile(name: viewModel.session.effectiveRepo, size: 16)
-                VStack(alignment: .leading, spacing: 1) {
-                    // No run dot up here: the bar is identity and navigation,
-                    // and the running state now reads where the work is — the
-                    // clock at the end of the transcript.
-                    Text(identityTitle)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(OS1VisualStyle.text)
+            VStack(alignment: .leading, spacing: 1) {
+                // No run dot up here: the bar is identity and navigation,
+                // and the running state now reads where the work is — the
+                // clock at the end of the transcript.
+                Text(identityTitle)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: 176, alignment: .leading)
+                    .clipped()
+                    .mask(titleTrailingFade)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text(headerSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.textDim)
                         .fixedSize(horizontal: true, vertical: false)
-                        .frame(width: 167, alignment: .leading)
+                        .frame(width: 176, alignment: .leading)
                         .clipped()
                         .mask(titleTrailingFade)
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        Text(headerSubtitle)
-                            .font(.footnote)
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .frame(width: 167, alignment: .leading)
-                            .clipped()
-                            .mask(titleTrailingFade)
-                    }
                 }
             }
             // Match the bar's system navigation and actions controls so the
