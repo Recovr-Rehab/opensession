@@ -19,7 +19,10 @@ enum AssetLinks {
     /// Private scheme, so a link can never escape to a browser by accident.
     static let scheme = "os1asset"
 
-    private static let links = PathLinks(scheme: scheme)
+    private static let links = PathLinks(
+        scheme: scheme,
+        acceptsMentionPrefix: false
+    )
 
     static func register(paths next: Set<String>, for sessionId: String) {
         links.register(paths: next, for: sessionId)

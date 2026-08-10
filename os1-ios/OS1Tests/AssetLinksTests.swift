@@ -49,6 +49,23 @@ final class AssetLinksTests: XCTestCase {
         XCTAssertEqual(linkify("check summary.html"), "check summary.html")
     }
 
+    /// Scratch assets do not use the composer's repo-file `@path` syntax.
+    func testAtPrefixedNameIsLeftAlone() {
+        XCTAssertEqual(linkify("check @report.html"), "check @report.html")
+        XCTAssertEqual(linkify("check `@report.html`"), "check `@report.html`")
+    }
+
+    /// The cap protects suffix aliases, never a real file path. Sessions may
+    /// contain up to 2,000 assets, and every exact name must keep opening.
+    func testEveryExactPathLinksBeyondTheAliasCap() {
+        let paths = Set((0...600).map { String(format: "asset-%04d.txt", $0) })
+        AssetLinks.register(paths: paths, for: session)
+        XCTAssertEqual(
+            linkify("open asset-0600.txt"),
+            "open [asset-0600.txt](os1asset:asset-0600.txt)"
+        )
+    }
+
     /// Another session's transcript must not link this session's scratch.
     func testUnknownSessionLinksNothing() {
         let text = "Saved it as report.html"

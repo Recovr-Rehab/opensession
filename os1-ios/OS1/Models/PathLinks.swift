@@ -17,14 +17,22 @@ final class PathLinks {
     /// Private scheme, so a link can never escape to a browser by accident.
     let scheme: String
 
-    /// A regex alternation of a thousand alternatives helps nobody; a session
-    /// that large is one whose prose is not where you go looking for a file.
-    /// Counted in ways-to-write-a-path, so roughly a hundred files.
-    private let maxPaths: Int
+    /// Every exact path remains linkable. Only shorthand suffixes are bounded:
+    /// one deeply nested 2,000-file session can otherwise create tens of
+    /// thousands of regex alternatives for every markdown render.
+    private let maxShortAliases: Int
+    /// Repo paths may come from the composer's `@path` mention syntax. Scratch
+    /// asset names have no such syntax, so `@report.html` must stay unknown.
+    private let acceptsMentionPrefix: Bool
 
-    init(scheme: String, maxPaths: Int = 600) {
+    init(
+        scheme: String,
+        maxShortAliases: Int = 600,
+        acceptsMentionPrefix: Bool = true
+    ) {
         self.scheme = scheme
-        self.maxPaths = maxPaths
+        self.maxShortAliases = maxShortAliases
+        self.acceptsMentionPrefix = acceptsMentionPrefix
     }
 
     /// session id → the paths that session may link, and the pattern matching
@@ -46,7 +54,14 @@ final class PathLinks {
 
     func register(paths next: Set<String>, for sessionId: String) {
         guard registries[sessionId]?.paths != next else { return }
-        let targets = Self.buildTargets(next)
+        let allTargets = Self.buildTargets(next)
+        let exactPaths = next.filter { allTargets[$0] != nil }
+        let shortAliases = allTargets.keys
+            .filter { !next.contains($0) }
+            .sorted { $0.count == $1.count ? $0 < $1 : $0.count > $1.count }
+            .prefix(maxShortAliases)
+        let selected = Set(exactPaths).union(shortAliases)
+        let targets = allTargets.filter { selected.contains($0.key) }
         registries[sessionId] = Registry(
             paths: next,
             targets: targets,
@@ -115,20 +130,20 @@ final class PathLinks {
         let alternatives = paths
             .filter { !$0.isEmpty }
             .sorted { $0.count == $1.count ? $0 < $1 : $0.count > $1.count }
-            .prefix(maxPaths)
             .map { NSRegularExpression.escapedPattern(for: $0) }
         guard !alternatives.isEmpty else { return nil }
         let group = "(?:" + alternatives.joined(separator: "|") + ")"
+        let mention = acceptsMentionPrefix ? "@?" : ""
         return try? NSRegularExpression(
             pattern:
                 "(!?\\[[^\\]]*\\]\\([^)]*\\)"      // [label](destination)
                 + "|<[^>\\s]+>)"                   // <https://…>
-                + "|`(@?\(group))`"                // `path`, `@path`
+                + "|`(\(mention)\(group))`"        // `path`, optionally `@path`
                 // A trailing "/" means the text continues into a LONGER path
                 // than the one that matched — a registered directory must not
                 // link the first half of the file under it. A trailing "." is
                 // allowed: that is a sentence ending, not a deeper path.
-                + "|(?<![\\w./~-])(@?\(group))(?![\\w/-])",
+                + "|(?<![\\w./~@-])(\(mention)\(group))(?![\\w/-])",
             options: []
         )
     }
@@ -160,7 +175,9 @@ final class PathLinks {
                 length: whole.location - cursor
             ))
             let text = ns.substring(with: target)
-            let written = text.hasPrefix("@") ? String(text.dropFirst()) : text
+            let written = acceptsMentionPrefix && text.hasPrefix("@")
+                ? String(text.dropFirst())
+                : text
             // The link goes to the full path, whatever shorthand named it.
             guard let path = targets[written],
                   let destination = destination(for: path) else {
