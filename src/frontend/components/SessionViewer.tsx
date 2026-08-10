@@ -14,7 +14,6 @@ import { suppressLayoutAnimations } from "../ui/motion";
 import { renderMarkdown } from "../lib/markdown";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
-import { noticeTone } from "@tellahq/opensession-protocol/notices";
 import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
 	measureSessionPerf,
@@ -218,7 +217,6 @@ import {
 } from "../lib/session-panel-classes";
 import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
-	SESSION_BANNER,
 	SESSION_BANNERS,
 	SESSION_DELETE_LABEL,
 	SESSION_LINK,
@@ -667,24 +665,6 @@ function pickScrollAnchor(el: HTMLElement): HTMLElement | null {
 		else break;
 	}
 	return anchor;
-}
-
-/** Did the run that died already say so in the transcript?
- *
- * Every terminal failure is persisted as a red system chip at the point it
- * happens (run-session.ts / opencode-runner.ts), so the header banner would
- * just repeat, out of place and in different words, what the last line of the
- * conversation already says. It earns its place only when nothing inline
- * recorded the failure — a run that died before its engine session existed
- * (sandbox launch, first-turn auth) writes no transcript line at all.
- *
- * Scans the tail: the failure is always the last thing a dead run wrote. */
-function runErrorIsInTranscript(entries: TranscriptEntry[]): boolean {
-	for (let i = entries.length - 1; i >= 0 && i >= entries.length - 12; i--) {
-		const e = entries[i];
-		if (e.type === "system" && noticeTone(e.content) === "error") return true;
-	}
-	return false;
 }
 
 export function SessionViewer({
@@ -1700,15 +1680,6 @@ export function SessionViewer({
 			setPanelTab("info");
 	}, [panelTab, sessionReports.length]);
 	const isBusy = isRunningLive || isStreaming;
-	// The header banner is the fallback voice for a dead run, not its main one:
-	// it speaks only when the transcript didn't already report the failure in
-	// place (see runErrorIsInTranscript). Hidden while a retry runs, and while
-	// the transcript is still loading — with no entries to check yet it would
-	// otherwise flash on open and then retract.
-	const runErrorBanner =
-		session.lastRunError && !isBusy && !loading && !runErrorIsInTranscript(entries)
-			? session.lastRunError
-			: null;
 	// Sub-agent list: fetch on open, then re-poll while the session runs so
 	// live task-tool spawns appear/settle. Keyed on isBusy too: a run starting
 	// after mount restarts the poll loop, and the flip back to idle lands one
@@ -4838,23 +4809,8 @@ export function SessionViewer({
 					headerModelEl,
 				)}
 
-			{(session.goal || session.loop || runErrorBanner) && (
+			{(session.goal || session.loop) && (
 				<div className={SESSION_BANNERS}>
-					{/* The last run died on a terminal failure (usage limits/credits
-					    exhausted, API errors) — say why the session stopped; the error
-					    itself was only ever a transient toast. Hidden while a retry
-					    runs, and when the transcript already carries the failure as a
-					    red chip in its own place; cleared server-side by the next
-					    clean run. */}
-					{runErrorBanner && (
-						<span
-							className={`${SESSION_BANNER} text-red`}
-							title={runErrorBanner.message}
-						>
-							⚠ Last run failed: {runErrorBanner.message.slice(0, 160)}
-							{runErrorBanner.message.length > 160 ? "…" : ""}
-						</span>
-					)}
 					{session.goal && (
 						<span
 							className="inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-line bg-panel px-3 py-[3px] text-label text-dim"
