@@ -3,7 +3,13 @@ import { flushSync } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type WorkspaceMediaItem } from "../lib/api";
 import { cn } from "../ui/cn";
-import { IconChevronLeft, IconChevronRight, IconX } from "./icons";
+import {
+	IconArrowDown,
+	IconArrowUpRight,
+	IconChevronLeft,
+	IconChevronRight,
+	IconX,
+} from "./icons";
 
 /**
  * Full-screen lightbox for all in-app media: workspace-media thumbnails (the
@@ -745,6 +751,11 @@ function ZoomableImage({
 // smear of identical targets — the plain counter reads better.
 const MAX_DOTS = 10;
 
+// Download / Open: a pill that lights up under the pointer, sized to sit on
+// the same line as the dots without crowding them.
+const lightboxAction =
+	"inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border-0 bg-transparent px-2 py-1 text-xs text-white/60 no-underline transition-colors hover:bg-white/15 hover:text-white";
+
 function MediaLightbox({
 	items,
 	index,
@@ -1004,23 +1015,31 @@ function MediaLightbox({
 								{index + 1} / {items.length}
 							</span>
 						))}
-					<button
-						type="button"
-						onClick={() => void downloadItem(item)}
-						className="shrink-0 cursor-pointer border-0 bg-transparent p-0 text-xs text-white/60 hover:text-white hover:underline"
-					>
-						Download
-					</button>
-					{!item.src.startsWith("data:") && (
-						<a
-							href={item.src}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="shrink-0 text-white/60 hover:text-white hover:underline"
+					{/* Actions read as the buttons they are — a pill that lights up,
+					    the same translucent-white ink as the close and page arrows.
+					    An underline said "link", and the raw "↗" glyph never matched
+					    the icon set's weight. */}
+					<div className="flex items-center gap-1">
+						<button
+							type="button"
+							onClick={() => void downloadItem(item)}
+							className={lightboxAction}
 						>
-							Open ↗
-						</a>
-					)}
+							<IconArrowDown size={14} />
+							Download
+						</button>
+						{!item.src.startsWith("data:") && (
+							<a
+								href={item.src}
+								target="_blank"
+								rel="noopener noreferrer"
+								className={lightboxAction}
+							>
+								<IconArrowUpRight size={14} />
+								Open
+							</a>
+						)}
+					</div>
 				</div>
 			</div>
 		</motion.div>
