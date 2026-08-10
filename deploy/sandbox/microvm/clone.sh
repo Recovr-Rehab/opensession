@@ -20,12 +20,23 @@
 set -euo pipefail
 CMD="$1"; IDX="$2"; POOL="${3:-/opt/firecracker/store}"
 TEMPLATE_KEY="${4:-}"
+[[ "$IDX" =~ ^[0-9]+$ ]] && [ "$IDX" -ge 1 ] && [ "$IDX" -le 254 ] || {
+  echo "clone index must be an integer in 1..254" >&2; exit 2;
+}
+[[ "$POOL" = /* ]] && [ "$POOL" != "/" ] && [ -d "$POOL" ] || {
+  echo "pool must be an existing absolute directory other than /" >&2; exit 2;
+}
 NS="bksns$IDX"
 VETH_H="bksveth${IDX}h"; VETH_N="bksveth${IDX}n"
 HOST_IP="10.200.$IDX.1"; NS_IP="10.200.$IDX.2"
 GUEST_IP="172.16.100.2"; TAP_HOST_IP="172.16.100.1"
-API="$POOL/fc-clone$IDX.sock"; DISK="$POOL/clone$IDX.ext4"; LOG="$POOL/fc-clone$IDX.log"
+JAIL="$POOL/jail$IDX"
+API="$POOL/fc-clone$IDX.sock"; JAIL_API="$JAIL/run/firecracker.sock"
+DISK="$POOL/clone$IDX.ext4"; LOG="$POOL/fc-clone$IDX.log"
 FC=/opt/firecracker/firecracker
+VMM_UID="${SUDO_UID:-$(id -u ubuntu)}"
+[ "$VMM_UID" -gt 0 ] || VMM_UID="$(id -u ubuntu)"
+VMM_GID="$(stat -c %g /dev/kvm)"
 
 stop_runtime() {
   # The scope is the process handle — no pkill patterns (a -f pattern once
@@ -34,12 +45,16 @@ stop_runtime() {
   sleep 0.3
   ip netns del "$NS" 2>/dev/null || true
   ip link del "$VETH_H" 2>/dev/null || true
-  rm -f "$API"
+  rm -f "$API" "$JAIL_API"
 }
 
 destroy() {
   stop_runtime
   rm -f "$DISK" "$LOG" "$POOL/clone$IDX.paused"
+  # JAIL is a validated child of a validated pool and every private mount
+  # vanished with the stopped unshare process. Remove only this clone's empty
+  # jail tree; never recurse through a live mount namespace.
+  rm -rf --one-file-system "$JAIL"
 }
 
 if [ "$CMD" = "destroy" ]; then destroy; echo "destroyed clone $IDX"; exit 0; fi
@@ -112,6 +127,22 @@ else
   stop_runtime 2>/dev/null || true
 fi
 
+# The VMM must never run as host root or see the host filesystem. Build an
+# empty per-clone chroot and bind in exactly the files/devices Firecracker
+# needs. Mounts are created inside the private mount namespace below and
+# disappear with the unit. The writable clone disk is owned by the guest VMM
+# uid; golden/template sources remain root-owned and outside the jail.
+install -d -m 0755 \
+  "$JAIL/opt/firecracker" "$JAIL$POOL" "$JAIL/dev/net" "$JAIL/run" "$JAIL/proc"
+touch "$JAIL$FC" "$JAIL/opt/firecracker/vmlinux" \
+  "$JAIL$POOL/golden.ext4" "$JAIL$POOL/golden.mem" "$JAIL$POOL/golden.vmstate" \
+  "$JAIL/dev/kvm" "$JAIL/dev/net/tun" "$JAIL/dev/null" "$JAIL/dev/zero" \
+  "$JAIL/dev/random" "$JAIL/dev/urandom"
+chown "$VMM_UID:$VMM_GID" "$DISK" "$JAIL/run"
+chmod 0660 "$DISK"
+rm -f "$API"
+ln -s "$JAIL_API" "$API"
+
 # netns + veth + in-ns tap with the exact name/subnet the snapshot expects.
 ip netns add "$NS"
 ip link add "$VETH_H" type veth peer name "$VETH_N"
@@ -152,7 +183,37 @@ cat "$POOL/golden.mem" > /dev/null 2>&1 || true
 # while FCs were children of the service cgroup; same fix as the detached
 # opencode servers).
 systemd-run --collect --unit "os-fc-clone$IDX" \
-  bash -c "exec ip netns exec '$NS' unshare -m bash -c \"mount --bind '$DISK' '$POOL/golden.ext4' && exec '$FC' --api-sock '$API'\" > '$LOG' 2>&1"
+  --property=NoNewPrivileges=yes \
+  --property=PrivateTmp=yes \
+  --property=ProtectControlGroups=yes \
+  --property=ProtectKernelModules=yes \
+  --property=ProtectKernelTunables=yes \
+  --property=RestrictSUIDSGID=yes \
+  --property=LockPersonality=yes \
+  --property=SystemCallArchitectures=native \
+  --property=DevicePolicy=closed \
+  --property='DeviceAllow=/dev/kvm rw' \
+  --property='DeviceAllow=/dev/net/tun rw' \
+  --property='DeviceAllow=/dev/null rw' \
+  --property='DeviceAllow=/dev/zero rw' \
+  --property='DeviceAllow=/dev/random rw' \
+  --property='DeviceAllow=/dev/urandom rw' \
+  bash -c "exec ip netns exec '$NS' unshare -m bash -c \"
+    mount --make-rprivate / &&
+    mount --bind '$FC' '$JAIL$FC' &&
+    mount --bind '/opt/firecracker/vmlinux' '$JAIL/opt/firecracker/vmlinux' &&
+    mount --bind '$DISK' '$JAIL$POOL/golden.ext4' &&
+    mount --bind '$POOL/golden.mem' '$JAIL$POOL/golden.mem' &&
+    mount --bind '$POOL/golden.vmstate' '$JAIL$POOL/golden.vmstate' &&
+    mount --bind /dev/kvm '$JAIL/dev/kvm' &&
+    mount --bind /dev/net/tun '$JAIL/dev/net/tun' &&
+    mount --bind /dev/null '$JAIL/dev/null' &&
+    mount --bind /dev/zero '$JAIL/dev/zero' &&
+    mount --bind /dev/random '$JAIL/dev/random' &&
+    mount --bind /dev/urandom '$JAIL/dev/urandom' &&
+    mount -t proc -o nosuid,nodev,noexec proc '$JAIL/proc' &&
+    exec chroot --userspec='$VMM_UID:$VMM_GID' '$JAIL' '$FC' --api-sock /run/firecracker.sock
+  \" > '$LOG' 2>&1"
 for i in $(seq 1 80); do [ -S "$API" ] && break; sleep 0.1; done
 [ -S "$API" ] || { echo "firecracker api socket never appeared" >&2; destroy; exit 1; }
 
@@ -182,7 +243,7 @@ else
   START=$(fc PUT /actions '{"action_type":"InstanceStart"}')
   if echo "$START" | grep -q fault_message; then
     echo "COLD BOOT FAILED: $START" >&2
-    stop_runtime
+    if [ "$CMD" = "create" ]; then destroy; else stop_runtime; fi
     exit 1
   fi
 fi
