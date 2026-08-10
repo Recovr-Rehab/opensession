@@ -215,14 +215,14 @@ export const VIEWER_MESSAGES_REGION =
  * and in a flex container auto cross-axis margins disable `align-items:
  * stretch`, so they would size to their content and overflow sideways.
  *
- * A small bottom inset leaves the latest row clear at rest. It is smaller
- * than the composer's overlap, so older rows can scroll directly underneath
- * the input instead of stopping above it.
+ * Bottom padding pays for the composer's overlap plus 16px of clear resting
+ * space. Older rows can still scroll directly underneath the input instead of
+ * stopping above it.
  */
 export const VIEWER_MESSAGES =
 	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
 	// Keep the reader's place when content loads or expands above them.
-	"[overflow-anchor:auto] px-5 pt-[18px] pb-2 " +
+	"[overflow-anchor:auto] px-5 pt-[18px] pb-[calc(var(--session-under)_+_16px)] " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
 	"desktop:supports-[animation-timeline:scroll()]:[scroll-timeline:--viewer-session-scroll_y] " +
 	// Phone: clear the floating pills at rest, then scroll under them.
