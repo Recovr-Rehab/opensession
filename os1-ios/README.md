@@ -35,9 +35,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   means "new since you read it", not "never seen".
 - **Catch up** (`CatchUpView`, `CatchUpDeckView`, `CatchUpCardView`,
   `CatchUpQueue`, `CatchUpViewModel`) — a card deck over everything unread,
-  opened from the first card in the sessions list's Catch Up, Support, and
-  Desk tools strip; Filter and New Session remain top-right controls. Its
-  unread count is pinned to the card's corner. One card per unread
+  opened from the bottom toolbar beside the Desk; an unread queue uses the
+  filled accent icon. Filter and New Session remain top-right controls. One
+  card per unread
   *workspace* (the same grouping the list shows,
   built by `CatchUpQueue` from the shared `/api/reads` marks with the web
   deck's rules: yours, not archived, not an automation, not the Desk). The card
@@ -210,7 +210,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
 - **Support** (`SupportView.swift`, `SupportViewModel.swift`) — the Plain
-  queue, as a sheet beside the Desk (iOS: `lifepreserver` in the bottom bar;
+  queue (iOS: a compact, priority-ordered band inside the sessions sidebar;
   macOS: the sidebar header). Two screens: the Todo queue in Plain's four
   priority lanes (`GET /api/plain/threads`), and one ticket's timeline
   (`GET /api/plain/threads/:id`) with the customer on the left, us on the

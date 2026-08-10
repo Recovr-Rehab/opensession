@@ -54,8 +54,8 @@ struct SessionsListView: View {
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
     @State private var showDesk = false
-    /// The Plain support queue. A place you reach from the lifebuoy control,
-    /// like the Desk, rather than another band inside the sessions list.
+    /// The Plain support queue. Tickets are work waiting on a person, so iOS
+    /// keeps a compact band of them inside the sessions sidebar.
     @State private var showSupport = false
     @State private var supportQueue = SupportQueueModel()
     /// The ticket opened from the support queue. It has its own destination
@@ -207,6 +207,14 @@ struct SessionsListView: View {
                 // hash, which is exactly where two repos can collide.
                 _ = try? await OS1API.repos()
             }
+            #if os(iOS)
+            .task {
+                while !Task.isCancelled {
+                    await supportQueue.load()
+                    try? await Task.sleep(for: .seconds(60))
+                }
+            }
+            #endif
             .onDisappear {
                 viewModel.stopPolling()
             }
@@ -496,9 +504,34 @@ struct SessionsListView: View {
                         }
                         .accessibilityLabel("New session")
                     }
-                    // Destinations now live in the horizontal tool cards;
-                    // search remains the bottom bar's one list control.
                     DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                    ToolbarSpacer(.fixed, placement: .bottomBar)
+                    ToolbarItem(placement: .bottomBar) {
+                        Button {
+                            showCatchUp = true
+                        } label: {
+                            Image(systemName: catchUpCount > 0
+                                ? "rectangle.stack.fill"
+                                : "rectangle.stack")
+                                .foregroundStyle(catchUpCount > 0
+                                    ? OS1VisualStyle.accent
+                                    : OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel(
+                            catchUpCount > 0
+                                ? "Catch up on \(catchUpCount) unread workspaces"
+                                : "Open Catch Up"
+                        )
+                    }
+                    ToolbarItem(placement: .bottomBar) {
+                        Button {
+                            showDesk = true
+                        } label: {
+                            Image(systemName: "lamp.desk")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel("Open the Desk")
+                    }
                 }
                 .sheet(isPresented: $showSettings) {
                     SettingsView()
@@ -1502,7 +1535,7 @@ struct SessionsListView: View {
     private var listSections: some View {
         Group {
             #if os(iOS)
-            mobileToolsStrip
+            supportBand
 
             if !pinnedWorkspaces.isEmpty {
                 Section {
@@ -1657,105 +1690,43 @@ struct SessionsListView: View {
         }
     }
 
-    /// The PWA's phone tools are one horizontally scrollable line of 132×84
-    /// cards. The native list uses the same geometry and order rather than
-    /// shrinking these destinations into an anonymous toolbar capsule.
     #if os(iOS)
-    private var mobileToolsStrip: some View {
-        Section {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    Button {
-                        showCatchUp = true
-                    } label: {
-                        mobileToolCardLabel(
-                            title: "Catch up",
-                            count: catchUpCount
-                        ) {
-                            Image(systemName: "rectangle.stack")
-                                .font(.system(size: 20, weight: .medium))
+    /// The top of the support queue lives among the sessions it competes with
+    /// for attention. Keep it short so customer work does not bury the list.
+    @ViewBuilder
+    private var supportBand: some View {
+        if !supportQueue.threads.isEmpty {
+            let prioritised = supportQueue.lanes.flatMap(\.threads)
+            let inline = Array(prioritised.prefix(5))
+            Section {
+                if !isCollapsed("support") {
+                    ForEach(inline) { row in
+                        Button {
+                            openTicket = row
+                        } label: {
+                            SupportBandRow(row: row)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if supportQueue.threads.count > inline.count {
+                        Button {
+                            showSupport = true
+                        } label: {
+                            Text("All \(supportQueue.threads.count) tickets")
+                                .font(.footnote.weight(.medium))
                                 .foregroundStyle(OS1VisualStyle.textDim)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(
-                        catchUpCount > 0
-                            ? "Catch up on \(catchUpCount) unread workspaces"
-                            : "Open Catch Up"
-                    )
-
-                    Button {
-                        showSupport = true
-                    } label: {
-                        mobileToolCardLabel(title: "Support") {
-                            Image(systemName: "lifepreserver")
-                                .font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(OS1VisualStyle.textDim)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open the support queue")
-
-                    Button {
-                        showDesk = true
-                    } label: {
-                        mobileToolCardLabel(title: "Desk") {
-                            Image(systemName: "lamp.desk")
-                                .font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(OS1VisualStyle.textDim)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open the Desk")
                 }
-                .padding(.horizontal, 16)
-            }
-            .contentMargins(.vertical, 0, for: .scrollContent)
-        }
-        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 6, trailing: 0))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
-        .animation(.snappy(duration: 0.3), value: catchUpCount)
-    }
-
-    private func mobileToolCardLabel<Icon: View>(
-        title: String,
-        count: Int? = nil,
-        @ViewBuilder icon: () -> Icon
-    ) -> some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: 0) {
-                icon()
-                    .frame(width: 22, height: 22)
-                Spacer(minLength: 8)
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-
-            if let count, count > 0 {
-                Text("\(count)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(OS1VisualStyle.onAccent)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(OS1VisualStyle.accent))
-                    .contentTransition(.numericText())
+            } header: {
+                groupHeader(
+                    title: "Support",
+                    count: supportQueue.threads.count,
+                    collapseKey: "support"
+                )
             }
         }
-        .frame(width: 108, height: 60)
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(OS1VisualStyle.raised)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(OS1VisualStyle.border.opacity(0.65), lineWidth: 0.5)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
     #endif
 
@@ -2017,6 +1988,36 @@ struct SessionsListView: View {
         Task {
             await viewModel.refresh()
             isRetrying = false
+        }
+    }
+}
+
+/// A Plain ticket shaped like every other sidebar row: one priority dot and
+/// one title. Customer and message detail belong on the ticket screen.
+private struct SupportBandRow: View {
+    let row: SupportThreadSummary
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Circle()
+                .fill(dot)
+                .frame(width: 7, height: 7)
+            Text(row.rowLabel)
+                .font(.body)
+                .foregroundStyle(OS1VisualStyle.text)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+    }
+
+    private var dot: Color {
+        switch row.lane {
+        case .urgent: OS1VisualStyle.red
+        case .high: OS1VisualStyle.yellow
+        case .normal: OS1VisualStyle.blue
+        case .low: OS1VisualStyle.textFaint
         }
     }
 }
