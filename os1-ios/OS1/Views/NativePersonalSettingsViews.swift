@@ -423,10 +423,10 @@ struct AppearanceSettingsView: View {
                         }
                     }
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, 10)
                 .frame(maxWidth: 430)
                 .frame(maxWidth: .infinity)
-                .listRowBackground(Color.clear)
+                // Keep the Form row surface so the swatches read as one picker.
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Accent colour")
             } header: {
