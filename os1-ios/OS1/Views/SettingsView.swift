@@ -128,19 +128,33 @@ struct SettingsView: View {
             // Last card, as in the web settings sheet: who your sessions act
             // as, and the way out.
             Section("Account") {
-                HStack(spacing: 12) {
-                    UserAvatar(size: 34)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(config.userName)
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(OS1VisualStyle.text)
-                        Text(accountSubtitle)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                // Tappable, not a label: the two things people come here to
+                // change — which GitHub account they are signed in as, and the
+                // name their prompts carry — both live in the connection form,
+                // and an inert identity row reads as "this can't be changed".
+                Button {
+                    showingConnection = true
+                } label: {
+                    HStack(spacing: 12) {
+                        UserAvatar(size: 34)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(config.userName)
+                                .font(.body.weight(.medium))
+                                .foregroundStyle(OS1VisualStyle.text)
+                            Text(accountSubtitle)
+                                .font(.footnote)
+                                .foregroundStyle(Color.secondary)
+                        }
+                        Spacer(minLength: 12)
+                        Image(systemName: "chevron.forward")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.55))
                     }
                 }
                 .padding(.vertical, 2)
                 .accessibilityElement(children: .combine)
+                .accessibilityLabel("Account, \(config.userName), \(accountSubtitle)")
+                .accessibilityHint("Change your name or GitHub account")
 
                 // The connection form used to hang off a toolbar button in the
                 // top-left corner, which read as navigation rather than as a
@@ -260,6 +274,19 @@ struct SettingsView: View {
                         Spacer()
                         Button("Sign out", role: .destructive) { signOut() }
                     }
+                    // Signing in again replaces the token outright, so
+                    // switching accounts needs no sign-out first — and asking
+                    // for one is what made "change my account" feel like a
+                    // dead end.
+                    Button {
+                        startSignIn()
+                    } label: {
+                        Label(
+                            signIn.starting ? "Starting…" : "Switch GitHub account",
+                            systemImage: "arrow.trianglehead.2.clockwise.rotate.90"
+                        )
+                    }
+                    .disabled(signIn.starting)
                 } else {
                     Button {
                         startSignIn()
