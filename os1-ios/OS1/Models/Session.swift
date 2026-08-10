@@ -26,6 +26,12 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var waitingForInput: Bool?
     var queuedCount: Int?
     var archived: Bool?
+    /// This row is a summary from the archived index, not a whole session —
+    /// it carries what a list renders and nothing else. Anything that opens
+    /// one fetches the real thing first (`SessionsListViewModel.hydrated`);
+    /// without that, an archived session renders quietly missing its PR, its
+    /// walkthrough and its model.
+    var slim: Bool?
     var desk: Bool?
     var createdAt: String?
     var lastActivity: String?

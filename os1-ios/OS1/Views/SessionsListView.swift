@@ -319,8 +319,10 @@ struct SessionsListView: View {
         .sheet(isPresented: $showArchived) {
             ArchivedSessionsView(
                 sessions: visibleArchivedSessions,
+                loaded: viewModel.archivedHasLoaded,
                 onRestore: viewModel.unarchive
             )
+            .task { await viewModel.refreshArchived() }
         }
         .sheet(isPresented: $showDesk) {
             DeskSheet()
@@ -573,8 +575,10 @@ struct SessionsListView: View {
                 .sheet(isPresented: $showArchived) {
                     ArchivedSessionsView(
                         sessions: visibleArchivedSessions,
+                        loaded: viewModel.archivedHasLoaded,
                         onRestore: viewModel.unarchive
                     )
+                    .task { await viewModel.refreshArchived() }
                 }
                 .safeAreaInset(edge: .bottom) {
                     errorBanner
@@ -591,7 +595,12 @@ struct SessionsListView: View {
 
     @ViewBuilder
     private var loadingOrList: some View {
-        if !viewModel.hasLoaded {
+        // An empty live list isn't yet an empty account: the archived index
+        // is a second request, and a list whose sessions are all archived
+        // would otherwise flash "nothing here yet" before it arrives. Only
+        // ever waits when the live list came back empty, so the common case
+        // renders the moment it lands.
+        if !viewModel.hasLoaded || (hasNoRows && !viewModel.archivedHasLoaded) {
             loadingState
         } else if hasNoRows {
             if let failure = viewModel.loadFailure {
@@ -676,7 +685,15 @@ struct SessionsListView: View {
             #if os(macOS)
             selectedSessionID = session.id
             #else
-            path.append(session)
+            if session.slim == true {
+                // A row from the archived index carries what a list renders
+                // and nothing else — fetch the session itself before opening
+                // it, or the conversation comes up quietly missing its PR,
+                // its walkthrough and its model.
+                Task { path.append(await viewModel.hydrated(session)) }
+            } else {
+                path.append(session)
+            }
             #endif
             return .handled
         }
@@ -1945,13 +1962,27 @@ private struct SupportBandRow: View {
 
 private struct ArchivedSessionsView: View {
     let sessions: [Session]
+    /// Whether the archived index has arrived. Archived rows travel on their
+    /// own request, so this screen has a wait of its own now — and "Nothing
+    /// archived" would be a claim about a list that hasn't answered yet.
+    let loaded: Bool
     let onRestore: (Session) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
-                if sessions.isEmpty {
+                if sessions.isEmpty, !loaded {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Loading archived sessions…")
+                            .font(.footnote)
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 24)
+                    .listRowSeparator(.hidden)
+                } else if sessions.isEmpty {
                     ContentUnavailableView(
                         "Nothing archived",
                         systemImage: "archivebox"

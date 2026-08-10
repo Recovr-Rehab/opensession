@@ -125,6 +125,15 @@ then `-exportArchive`) before pushing, since a push IS the release.
   filter/sort in `SessionsListViewModel.prepared` (detached, decorated sort),
   and never allocate an `ISO8601DateFormatter` per call — `Session.parseISO`
   uses cached thread-safe formatters because it runs inside sort comparators.
+- **The list arrives in two pieces.** The 5s poll asks for the live slice
+  (`?archived=exclude`); archived sessions come from `?archived=only&slim=1`
+  on a 30s clock, as SUMMARY rows marked `slim` — they were about half the
+  payload and none of the first screen. A slim row is not a whole session:
+  anything that opens one calls `SessionsListViewModel.hydrated` first
+  (`GET /api/sessions/:id`), or the conversation comes up missing its PR,
+  walkthrough and model. Both parameters are opt-in server-side, so a server
+  that predates them answers with the whole list and `prepared` still splits
+  it — don't "simplify" that fallback away.
 
 ## Server coupling
 

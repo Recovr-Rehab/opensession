@@ -18,8 +18,20 @@ final class SessionsListViewModel {
     /// for the list itself, so it may only speak about loading the list.
     private(set) var loadFailure: Reachability.Diagnosis?
     private(set) var hasLoaded = false
+    /// Whether the archived index has come back at least once. Its own flag,
+    /// because it arrives on its own request: without it the Archived screen
+    /// would say "Nothing archived" for the seconds before the answer lands,
+    /// which is a statement about a list still in flight.
+    private(set) var archivedHasLoaded = false
 
     private var pollTask: Task<Void, Never>?
+
+    /// The server's archived index, kept apart from `archivedSessions` so the
+    /// local overlay (a row archived on this device, one restored a moment
+    /// ago) can be re-applied without a refetch.
+    @ObservationIgnored private var serverArchived: [Session] = []
+    @ObservationIgnored private var archivedFetchedAt: Date?
+    @ObservationIgnored private var archivedFetchInFlight = false
 
     /// Memoized sidebar rows for the current list — see `sidebarRows`.
     ///
@@ -449,14 +461,18 @@ final class SessionsListViewModel {
         var archived = session
         archived.archived = true
         locallyArchived[session.id] = (archived, Date())
-        archivedSessions.removeAll { $0.id == session.id }
-        archivedSessions.insert(archived, at: 0)
+        publishArchived()
         Task {
             do {
                 try await OS1API.setArchived(sessionId: session.id, archived: true)
+                // Archived rows travel on their own request now, so the one
+                // just archived reaches the Archived screen only when that
+                // request is made again — ask straight away instead of
+                // leaving the local placeholder to stand in for half a minute.
+                await refreshArchived(force: true)
             } catch {
                 locallyArchived.removeValue(forKey: session.id)
-                archivedSessions.removeAll { $0.id == session.id }
+                publishArchived()
                 self.error = "Couldn't archive: \(error.localizedDescription)"
                 await refresh()
             }
@@ -467,10 +483,10 @@ final class SessionsListViewModel {
     /// server. The short-lived suppression avoids a cached archived row
     /// flashing back into the sheet before the PATCH reaches `/api/sessions`.
     func unarchive(_ session: Session) {
-        archivedSessions.removeAll { $0.id == session.id }
         locallyUnarchived[session.id] = Date()
         var restored = session
         restored.archived = false
+        publishArchived()
         setSessions(
             [restored] + sessions,
             rows: sidebarRowsCache.flatMap { rowsInserting(restored, into: $0) }
@@ -478,9 +494,16 @@ final class SessionsListViewModel {
         Task {
             do {
                 try await OS1API.setArchived(sessionId: session.id, archived: false)
+                // The restored row is a summary until the live list carries
+                // it (and the archived index stops), so ask both rather than
+                // leaving a half-populated row in the sidebar until the next
+                // poll comes round.
+                await refresh()
+                await refreshArchived(force: true)
             } catch {
                 locallyUnarchived.removeValue(forKey: session.id)
                 setSessions(sessions.filter { $0.id != session.id })
+                publishArchived()
                 self.error = "Couldn't restore: \(error.localizedDescription)"
                 await refresh()
             }
@@ -555,6 +578,11 @@ final class SessionsListViewModel {
         pollTask = Task {
             while !Task.isCancelled {
                 await refresh()
+                // The archived index rides the same loop on its own, slower
+                // clock, and detached so the bigger, less urgent half of the
+                // list is never in the live one's way. `refreshArchived`
+                // throttles itself, so most turns here cost nothing.
+                Task { await self.refreshArchived() }
                 try? await Task.sleep(for: .seconds(5))
             }
         }
@@ -589,7 +617,6 @@ final class SessionsListViewModel {
             // ran on the main actor every 5s poll and hitched typing.
             let hiddenIds = Set(Array(locallyArchived.keys).filter { isLocallyArchived($0) })
             let restoredIds = Set(Array(locallyUnarchived.keys).filter { isLocallyUnarchived($0) })
-            let localArchivedRows = hiddenIds.compactMap { locallyArchived[$0]?.session }
             let hideKeys = Set(HideStore.shared.hides.keys)
             let prepared = await Task.detached(priority: .userInitiated) {
                 Self.prepared(
@@ -605,12 +632,15 @@ final class SessionsListViewModel {
             // row filter) keeps the mutation out of view body evaluation.
             HideStore.shared.clear(prepared.resurfacedHideKeys)
             let next = mergeOptimistic(into: prepared.active)
-            let serverArchivedIds = Set(prepared.archived.map(\.id))
-            for id in serverArchivedIds {
-                locallyArchived.removeValue(forKey: id)
+            // Archived rows arrive on their own request, so `prepared.archived`
+            // is normally empty here. It isn't against a server that predates
+            // the `archived=exclude` parameter and answers with the whole list
+            // — those rows ARE the index in that case, which is what makes an
+            // older server degrade to the old behaviour instead of to an
+            // Archived screen that is permanently empty.
+            if !prepared.archived.isEmpty {
+                setServerArchived(prepared.archived)
             }
-            let archivedNext = localArchivedRows.filter { !serverArchivedIds.contains($0.id) }
-                + prepared.archived
             // Most 5s polls change nothing — skip the assignment so the whole
             // list doesn't re-diff (grouping, sorting, row rebuilds) for a
             // byte-identical result.
@@ -624,9 +654,6 @@ final class SessionsListViewModel {
                 if let renamed { workspaceNames = renamed }
                 setSessions(next, rows: grouped.rows)
             }
-            if archivedNext != archivedSessions {
-                archivedSessions = archivedNext
-            }
             error = nil
             loadFailure = nil
         } catch {
@@ -639,6 +666,88 @@ final class SessionsListViewModel {
             self.loadFailure = diagnosis
         }
         hasLoaded = true
+    }
+
+    /// How stale the archived index may get before a poll refetches it. The
+    /// live list moves constantly; this one changes when someone archives
+    /// something, which the local overlay already covers on this device.
+    private static let archivedMaxAge: TimeInterval = 30
+
+    /// Fetch the archived index, unless a recent enough one is in hand.
+    ///
+    /// Separate from `refresh` because it is a separate response with its own
+    /// ETag: it settles into a 304 while the live slice keeps churning on
+    /// `isRunning` and `lastActivity`, so the archived half of the list stops
+    /// being re-sent every time anything moves.
+    func refreshArchived(force: Bool = false) async {
+        if archivedFetchInFlight { return }
+        if !force, let fetchedAt = archivedFetchedAt,
+           Date().timeIntervalSince(fetchedAt) < Self.archivedMaxAge {
+            return
+        }
+        archivedFetchInFlight = true
+        defer { archivedFetchInFlight = false }
+        do {
+            let index = try await OS1API.archivedSessions()
+            // Sort off the main actor for the same reason the live list does:
+            // this can be thousands of rows, and it lands while someone is
+            // typing.
+            let sorted = await Task.detached(priority: .userInitiated) {
+                Self.byRecency(index)
+            }.value
+            setServerArchived(sorted, presorted: true)
+        } catch {
+            // Keep the last good index. `refresh` owns the error banner —
+            // reporting a failure here too would say the same thing twice.
+        }
+        // Loaded either way: a screen that spins forever after a failed
+        // request says less than an empty one next to the error banner.
+        archivedHasLoaded = true
+    }
+
+    private func setServerArchived(_ rows: [Session], presorted: Bool = false) {
+        serverArchived = presorted ? rows : Self.byRecency(rows)
+        archivedFetchedAt = Date()
+        archivedHasLoaded = true
+        publishArchived()
+    }
+
+    /// Re-apply the local overlay to the server's index.
+    ///
+    /// Two corrections, both of them about a change this device made that the
+    /// index hasn't caught up with: a row archived here stands in until the
+    /// server's own copy of it arrives, and one restored here is held out of
+    /// the list so it can't flash back into the sheet it just left.
+    private func publishArchived() {
+        let restored = Set(Array(locallyUnarchived.keys).filter { isLocallyUnarchived($0) })
+        let serverRows = serverArchived.filter { !restored.contains($0.id) }
+        let serverIds = Set(serverRows.map(\.id))
+        for id in serverIds { locallyArchived.removeValue(forKey: id) }
+        let localRows = Array(locallyArchived.keys)
+            .filter { isLocallyArchived($0) && !serverIds.contains($0) }
+            .compactMap { locallyArchived[$0]?.session }
+        let next = localRows.isEmpty
+            ? serverRows
+            : Self.byRecency(localRows + serverRows)
+        if next != archivedSessions { archivedSessions = next }
+    }
+
+    /// Newest first, parsing each row's date once rather than once per
+    /// comparison — the same decorated sort the live list uses.
+    nonisolated static func byRecency(_ sessions: [Session]) -> [Session] {
+        sessions
+            .map { (session: $0, key: $0.lastActivityDate ?? .distantPast) }
+            .sorted { $0.key > $1.key }
+            .map(\.session)
+    }
+
+    /// A session whole, for a summary row from the archived index. Anything
+    /// else is returned untouched, and a failed fetch falls back to the row
+    /// in hand: an archived session that opens missing its walkthrough beats
+    /// one that doesn't open.
+    func hydrated(_ session: Session) async -> Session {
+        guard session.slim == true else { return session }
+        return (try? await OS1API.session(id: session.id)) ?? session
     }
 
     /// Name the reason a first load can't land while it's still trying. Only

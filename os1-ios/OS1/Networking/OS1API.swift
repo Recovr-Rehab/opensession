@@ -49,8 +49,35 @@ enum OS1API {
         }
     }
 
+    /// The live sessions list — everything except archived.
+    ///
+    /// Archived sessions are the larger half of this instance's list and none
+    /// of the first screen, so they travel on their own slice below. Asking
+    /// for the live one is opt-in: a server that predates the parameter
+    /// answers with the whole list, which still splits correctly downstream
+    /// (`prepared` sorts archived rows out either way).
     static func sessions() async throws -> [Session] {
-        try await get("/api/sessions")
+        try await get("/api/sessions?archived=exclude")
+    }
+
+    /// Archived sessions, as summaries.
+    ///
+    /// Each row carries what the Archived screen renders — title, repo,
+    /// activity, who — and is marked `slim`, so anything that opens one
+    /// hydrates it first (`session(id:)`). Barely changes between polls, so
+    /// it settles into a 304 while the live slice keeps churning.
+    static func archivedSessions() async throws -> [Session] {
+        try await get("/api/sessions?archived=only&slim=1")
+    }
+
+    /// One session, whole. The list used to be the only source of a session
+    /// object; this is what lets a client stop carrying every archived row
+    /// and still open one.
+    static func session(id: String) async throws -> Session {
+        let encoded = id.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? id
+        return try await get("/api/sessions/\(encoded)")
     }
 
     struct WorkspaceSummary: Decodable, Sendable {
@@ -1047,9 +1074,11 @@ enum OS1API {
     }
 
     /// Decode off the main actor. OS1API is @MainActor, and decoding inline
-    /// parked multi-megabyte payloads on the main thread — `/api/sessions`
-    /// alone is ~4MB / thousands of rows every 5s poll, a visible periodic
-    /// hitch while typing (long transcripts weren't small either).
+    /// parked multi-megabyte payloads on the main thread — the sessions list
+    /// is thousands of rows every 5s poll, a visible periodic hitch while
+    /// typing (long transcripts weren't small either). Taking archived
+    /// sessions off that poll roughly halved it; it is still the biggest
+    /// thing this app decodes.
     private static func decodeDetached<T: Decodable & Sendable>(
         _ type: T.Type,
         from data: Data
