@@ -462,7 +462,7 @@ struct AppearanceSettingsView: View {
     }
 
     private var accentFooter: String {
-        "\(AccentStore.shared.theme.title) — the primary colour the send button, the tint on system controls and every active glyph wear. Each colour carries a deeper value for light and a lighter one for dark. On this device."
+        "\(AccentStore.shared.theme.title), on this device."
     }
 
     private var themeFooter: String {
