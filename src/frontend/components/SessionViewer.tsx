@@ -73,6 +73,7 @@ import {
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
 import { useBackSwipe } from "../hooks/useBackSwipe";
+import { dedupeViewers, otherViewers } from "../lib/presence";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
 import { Composer } from "./Composer";
 import { ComposerAgents } from "./ComposerAgents";
@@ -3646,6 +3647,9 @@ export function SessionViewer({
 	}, [compactHeader]);
 
 	const me = getCurrentUser();
+	// The pile is about the people you can't see, so your own sockets come out
+	// first (lib/presence.ts documents why, and is tested).
+	const others = otherViewers(viewers, me);
 
 	// Media items in the live transcript — bumping this refreshes the floating
 	// overview panel as new screenshots land during a run.
@@ -4372,12 +4376,16 @@ export function SessionViewer({
 				</div>
 				<div className={VIEWER_HEADER_ACTIONS}>
 					{!isPhone && secondaryActions(false)}
-					{/* Everyone with the session open, Figma/Notion-style, right
-					    before Share. You're always in it (rightmost); others stack
-					    in front with their GitHub picture. */}
-					{!isPhone && viewers.length > 0 && (
-						<div className={VIEWER_PRESENCE} title={`Viewing: ${viewers.join(", ")}`}>
-							{dedupeViewers(viewers, me).map((v) => (
+					{/* Whoever ELSE has the session open, right before Share. Your
+					    own face used to sit here too, which meant every session
+					    you opened showed a face permanently — the one thing a
+					    presence pile must never do, since it reads as somebody
+					    standing behind you. You know you're here; this row is for
+					    the people you can't see. (The native app has always
+					    filtered its own name out — this matches it.) */}
+					{!isPhone && others.length > 0 && (
+						<div className={VIEWER_PRESENCE} title={`Viewing: ${others.join(", ")}`}>
+							{dedupeViewers(others).map((v) => (
 								<UserAvatar
 									key={v.name}
 									name={v.name}
@@ -5810,16 +5818,4 @@ function StreamingMessage({ store }: { store: LiveTurnStore }) {
 			)}
 		</div>
 	);
-}
-
-function dedupeViewers(
-	viewers: string[],
-	me?: string,
-): Array<{ name: string; count: number }> {
-	const counts = new Map<string, number>();
-	for (const v of viewers) counts.set(v, (counts.get(v) || 0) + 1);
-	const list = Array.from(counts, ([name, count]) => ({ name, count }));
-	// Others first, you last (nearest Share) — the Figma/Notion facepile order.
-	if (me) list.sort((a, b) => Number(a.name === me) - Number(b.name === me));
-	return list;
 }
