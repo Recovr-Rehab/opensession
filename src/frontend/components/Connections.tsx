@@ -644,7 +644,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
             <div className="flex flex-wrap items-center gap-2.5">
               <DeviceCode code={flow.userCode} />
               <a href={flow.verificationUri} target="_blank" rel="noreferrer">
-                <Button variant="primary" icon={<IconArrowUpRight size={20} />}>
+                <Button size="sm" variant="primary" icon={<IconArrowUpRight size={20} />}>
                   Open GitHub
                 </Button>
               </a>

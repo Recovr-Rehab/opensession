@@ -323,7 +323,7 @@ function GithubSignIn({
             </p>
             <DeviceCode code={flow.userCode} className="text-section-title" />
             <a href={flow.verificationUri} target="_blank" rel="noreferrer">
-              <Button variant="primary" icon={<IconArrowUpRight size={20} />}>
+              <Button size="sm" variant="primary" icon={<IconArrowUpRight size={20} />}>
                 Open GitHub
               </Button>
             </a>
