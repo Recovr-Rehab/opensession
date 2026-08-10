@@ -278,3 +278,19 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
 4. Only after the default flip is approved: build the separate credential-free
    automation profile plus egress allowlist. Automation-owned sessions remain
    refused by the credential-bearing interactive sandbox path today.
+
+## 2026-08-10 — final live acceptance
+
+- The restarted production process reports healthy and re-adopted detached
+  engine turns across the restart.
+- A live `opensession` prewarm ran setup, parked `microvm-64` with compute
+  inactive, and published a 25 GiB sparse/reflink repo template. A separate
+  scratch VM cold-booted that template, proved the warm Git checkout and stable
+  setup stamp existed, and reported only the scrubbed public origin
+  `https://github.com/tellahq/opensession.git`; it was then destroyed.
+- A real Bun service listening on the managed MicroVM private veth was placed
+  behind the generated Caddy Portal contract. The same URL returned **401**
+  without an Open Session cookie and **200 `PORTAL_OK`** with a valid team
+  cookie. The VM returned to its parked/inactive state after the check.
+- Final repository verification at HEAD: **1,872 pass, 4 skip, 0 fail** across
+  188 test files; `bun run typecheck` passes; `/api/health` reports `ok: true`.
