@@ -4,7 +4,7 @@ import { renderMarkdown } from "../lib/markdown";
 import { relativeTime } from "../lib/api";
 import { cn } from "../ui/cn";
 import { IconChevronDown, IconPlay, IconPlayOutline } from "./icons";
-import { useMarkdownRepo } from "./MarkdownBody";
+import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { openLightbox, type LightboxItem } from "./MediaLightbox";
 
 /** Stream server-side media (staged under the uploads dir) through the
@@ -93,12 +93,14 @@ export function WalkthroughCard({
 		<div
 			className={cn(
 				// p-4 deliberately exceeds the mt-3 rhythm between the blocks
-				// inside, so the card edge reads as an edge — at 12px a trailing
-				// screenshot looks like it runs out of the card rather than sitting
-				// in it. The card inherits its surrounding surface; the hairline is
-				// enough to separate it without introducing a darker grey panel.
-				"rounded-xl bg-transparent p-4",
-				session && "border border-line/60",
+				// inside, so the card edge reads as an edge. Folded, the card stays
+				// transparent in the transcript; open, it steps onto the quiet raised
+				// surface so the summary and evidence cards have a shared frame.
+				"rounded-xl p-4 transition-[background-color,border-color]",
+				session && "border",
+				session && expanded
+					? "border-line bg-raised"
+					: "border-line/60 bg-transparent",
 				// In the session the card is a transcript block like any other, so it
 				// takes the same centered reading column the turns and footers use
 				// (mx-auto + --session-col) instead of spanning the whole pane. It
@@ -113,27 +115,27 @@ export function WalkthroughCard({
 					type="button"
 					aria-expanded={expanded}
 					onClick={() => setExpanded(!expanded)}
-					// The transcript's fold line, verbatim from TurnBlock: same 14px
-					// text, same 20px chevron, same baseline alignment mixing a
-					// title with faint meta runs. A card that borrows the fold's
-					// behaviour but not its typography reads as a different control.
-					className="-m-1 mb-1 flex w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+					// Keep the fold's 14px title and 20px chevron, but give the
+					// walkthrough's play mark a small surface of its own. The 40px row
+					// remains a comfortable pointer and touch target in either state.
+					className="-m-1 flex min-h-10 w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 				>
 					{/* The walkthrough's own icon leads the line, so the row is
 					    named before it is operated; the chevron trails at the far
 					    edge, where it reads as this card's disclosure rather than
 					    as another indent level in the transcript. */}
-					<IconPlayOutline
-						size={14}
-						className="flex-shrink-0 self-center text-faint"
-					/>
-					<span className="flex-shrink-0 font-medium">Walkthrough</span>
-					{walkthrough.publishedBy && (
-						<span className="min-w-0 truncate text-label leading-4 text-faint">
-							· {walkthrough.publishedBy}
-						</span>
-					)}
-					<span className="ml-auto flex-shrink-0 text-label leading-4 text-faint">
+					<span className="grid size-8 flex-shrink-0 place-items-center rounded-md bg-panel text-dim shadow-[inset_0_0_0_1px_var(--border)]">
+						<IconPlayOutline size={20} />
+					</span>
+					<span className="flex min-w-0 items-baseline gap-1.5">
+						<span className="flex-shrink-0 font-semibold text-fg">Walkthrough</span>
+						{walkthrough.publishedBy && (
+							<span className="min-w-0 truncate text-label leading-4 text-faint phone:hidden">
+								by {walkthrough.publishedBy}
+							</span>
+						)}
+					</span>
+					<span className="ml-auto max-w-40 flex-shrink truncate text-label leading-4 text-faint phone:max-w-24">
 						{expanded
 							? walkthrough.publishedAt
 								? relativeTime(walkthrough.publishedAt)
@@ -142,7 +144,7 @@ export function WalkthroughCard({
 					</span>
 					<span
 						className={cn(
-							"grid size-5 flex-shrink-0 place-items-center self-center leading-none text-faint transition-transform duration-150",
+							"grid size-5 flex-shrink-0 place-items-center leading-none text-faint transition-transform duration-150",
 							!expanded && "-rotate-90",
 						)}
 					>
@@ -240,86 +242,109 @@ export function WalkthroughCard({
 			)}
 
 			{expanded && (
-				<>
-					{walkthrough.video && (
-						<>
-							<video
-								className={cn(
-									"w-full rounded-md border border-line bg-black",
-									session ? "max-h-[60vh] object-contain" : "",
-								)}
-								src={mediaUrl(walkthrough.video)}
-								controls
-								preload="metadata"
-								title={walkthrough.videoTitle || "Demo video"}
-							/>
-							{session && walkthrough.videoTitle ? (
-								<div className="mb-2 mt-1 text-[11px] text-faint">
-									{walkthrough.videoTitle}
-								</div>
-							) : (
-								<div className="mb-2" />
-							)}
-						</>
+				<div
+					className={cn(
+						"space-y-4",
+						session ? "mt-3 border-t border-line/60 pt-4" : "mt-3",
 					)}
-					<div
-						className="markdown text-[13px]"
-						dangerouslySetInnerHTML={{ __html: summaryHtml }}
-					/>
-					{(walkthrough.shots || []).map((shot, i) => (
-						<div className="mt-3" key={i}>
-							{shot.caption && (
-								<div className="mb-1 text-xs text-dim">{shot.caption}</div>
-							)}
-							<div className="flex gap-2">
-								{(["before", "after"] as const).map(
-									(side) =>
-										shot[side] && (
-											<figure className="m-0 min-w-0 flex-1" key={side}>
-												<figcaption
-													className={cn(
-														"mb-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4",
-														side === "before"
-															? "bg-red-soft text-red"
-															: "bg-green-soft text-green",
-													)}
-												>
-													{side === "before" ? "Before" : "After"}
-												</figcaption>
-												<button
-													type="button"
-													className="block w-full cursor-zoom-in rounded-control border-0 bg-transparent p-0 text-left outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-													onClick={(event) =>
-														open(`${i}:${side}`, event.currentTarget)
-													}
-												>
-													<img
-														className={cn(
-															"rounded-md border border-line",
-															// In the session the card sits in the message flow,
-															// so cap the stills (full size lives one click away
-															// in the lightbox) instead of pushing the
-															// conversation down by a screenful per pair. The cap
-															// bounds the IMAGE rather than a box it is contained
-															// in: `object-contain` letterboxes inside a
-															// full-width box, and the hairline then frames empty
-															// gutters instead of the screenshot.
-															session
-																? "max-h-52 max-w-full"
-																: "w-full",
-														)}
-														src={mediaUrl(shot[side]!)}
-														alt={`${shot.caption || "change"} — ${side}`}
-														loading="lazy"
-													/>
-												</button>
-											</figure>
-										),
+				>
+					<section className="rounded-lg border border-line bg-panel px-4 py-3.5">
+						<h3 className="m-0 mb-1.5 text-[11px] font-semibold leading-4 text-faint">
+							Summary
+						</h3>
+						<MarkdownBody
+							html={summaryHtml}
+							className="markdown max-w-[68ch] text-[13px] leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]"
+						/>
+					</section>
+
+					{walkthrough.video && (
+						<figure className="m-0 overflow-hidden rounded-lg border border-line bg-panel">
+							<figcaption className="flex min-h-9 items-center gap-2 border-b border-line px-3 text-xs font-medium text-fg">
+								<span className="size-1.5 flex-shrink-0 rounded-full bg-blue" />
+								<span className="flex-shrink-0">Demo</span>
+								{walkthrough.videoTitle && (
+									<span className="min-w-0 truncate font-normal text-faint">
+										{walkthrough.videoTitle}
+									</span>
 								)}
+							</figcaption>
+							<div className="p-2.5">
+								<video
+									className={cn(
+										"w-full rounded-md bg-black shadow-[0_0_0_1px_var(--border)]",
+										session && "max-h-[60vh] object-contain",
+									)}
+									src={mediaUrl(walkthrough.video)}
+									controls
+									preload="metadata"
+									title={walkthrough.videoTitle || "Demo video"}
+								/>
 							</div>
-						</div>
-					))}
-				</>
+						</figure>
+					)}
+
+					{(walkthrough.shots || []).map((shot, i) => {
+						const paired = Boolean(shot.before && shot.after);
+						return (
+							<section
+								className="rounded-lg border border-line bg-panel p-2.5"
+								key={i}
+							>
+								{shot.caption && (
+									<h3 className="m-0 px-0.5 pb-2.5 text-xs font-medium leading-5 text-fg">
+										{shot.caption}
+									</h3>
+								)}
+								<div
+									className={cn(
+										"grid gap-2.5",
+										paired ? "grid-cols-2 phone:grid-cols-1" : "grid-cols-1",
+									)}
+								>
+									{(["before", "after"] as const).map(
+										(side) =>
+											shot[side] && (
+												<figure
+													className="m-0 min-w-0 overflow-hidden rounded-md border border-line bg-raised"
+													key={side}
+												>
+													<figcaption className="flex h-8 items-center gap-2 border-b border-line px-2.5 text-[11px] font-semibold leading-4 text-dim">
+														<span
+															className={cn(
+																"size-1.5 flex-shrink-0 rounded-full",
+																side === "before" ? "bg-red" : "bg-green",
+															)}
+														/>
+														{side === "before" ? "Before" : "After"}
+													</figcaption>
+													<button
+														type="button"
+														className="flex w-full cursor-zoom-in items-start justify-center border-0 bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
+														onClick={(event) =>
+															open(`${i}:${side}`, event.currentTarget)
+														}
+													>
+														<img
+															className={cn(
+																"block object-contain object-top",
+																session
+																	? "max-h-64 max-w-full"
+																	: "w-full",
+															)}
+															src={mediaUrl(shot[side]!)}
+															alt={`${shot.caption || "change"} — ${side}`}
+															loading="lazy"
+														/>
+													</button>
+												</figure>
+											),
+									)}
+								</div>
+							</section>
+						);
+					})}
+				</div>
 			)}
 		</div>
 	);
