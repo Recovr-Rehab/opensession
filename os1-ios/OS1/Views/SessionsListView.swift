@@ -1654,7 +1654,7 @@ struct SessionsListView: View {
             }
 
             #if os(iOS)
-            mobileSupportCard
+            mobileSupportRow
             #endif
         }
     }
@@ -1685,43 +1685,32 @@ struct SessionsListView: View {
     }
 
     #if os(iOS)
-    /// Support stays a destination card, using the same UI as the tools strip
-    /// it came from, but sits after the session and archive sections.
-    private var mobileSupportCard: some View {
+    /// One destination row after the worktree/session sections — not a card
+    /// and not an inline copy of the queue.
+    private var mobileSupportRow: some View {
         Section {
             Button {
                 showSupport = true
             } label: {
-                ZStack(alignment: .topLeading) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Image(systemName: "lifepreserver")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            .frame(width: 22, height: 22)
-                        Spacer(minLength: 8)
-                        Text("Support")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(OS1VisualStyle.text)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                HStack(spacing: 9) {
+                    Image(systemName: "lifepreserver")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(width: 22, height: 22)
+                    Text("Support")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                    Spacer()
                 }
-                .frame(width: 108, height: 60)
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(OS1VisualStyle.raised)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(OS1VisualStyle.border.opacity(0.65), lineWidth: 0.5)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.vertical, 11)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open the support queue")
         }
-        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+        .listRowInsets(EdgeInsets(
+            top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
+        ))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
