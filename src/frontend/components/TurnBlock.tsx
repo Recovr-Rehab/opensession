@@ -240,7 +240,7 @@ function TurnMessage({
 }) {
   return (
     <div
-      className="mx-auto my-2 w-full max-w-[var(--session-col)] px-1"
+      className="mx-auto my-2 w-full max-w-[var(--session-col)] px-1 desktop:pl-2"
       data-eid={entry.id}
     >
       <ClampedBody
