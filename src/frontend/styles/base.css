@@ -483,6 +483,10 @@ html[data-theme="light"] {
 			0 4px 20px rgba(0, 0, 0, 0.08);
 	}
 }
+html[data-theme="light"] .markdown code {
+	background: rgba(0, 0, 0, 0.06);
+	color: #953b39;
+}
 /* A code block is a well: it has to read as sunk BELOW whatever it sits on.
    In dark that's free — #0c0c10 is below every surface in the ramp. Light has
    no absolute that works on both containers a `.markdown` block gets: an
@@ -496,6 +500,16 @@ html[data-theme="light"] .markdown pre {
 	border-color: rgba(0, 0, 0, 0.1);
 	color: #1f2328;
 }
+/* `.markdown pre code { background: none }` is out-specified in light by the
+   inline-code rule above (html[data-theme] + .markdown + code beats
+   .markdown + pre + code), so a block's own lines picked up the inline chip
+   wash as a band behind each line. Dark never had it — there the two rules
+   are the same weight and pre code wins on order. */
+html[data-theme="light"] .markdown pre code {
+	background: none;
+	color: inherit;
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -966,20 +980,19 @@ html.wco .app-body.sidebar-collapsed
 	line-height: 1.55;
 }
 
-/* Inline code is the monospace face and nothing else. A sentence naming four
-   files or symbols was a row of grey chips with prose squeezed between them —
-   the chip is the loudest thing in a paragraph that is mostly names. The
-   typeface already says "this is code", so the fill, the padding and the
-   colour of its own go, and the run inherits the ink of whatever it sits in
-   (dim inside a work fold, the link colour inside a link). Same treatment as
-   the native app's `codeBackgroundColor: .clear`. 0.9em stays: monospace at
-   the paragraph's own size reads a step too big. */
 .markdown code {
 	font-family: var(--mono);
 	font-size: 0.9em;
+	background: rgba(255, 255, 255, 0.06);
+	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
+	padding: 1.5px 5px;
+	color: #dde1f0;
 }
 .markdown pre code {
+	background: none;
+	padding: 0;
 	font-size: 12px;
+	color: inherit;
 }
 
 /* Live code tints in the composer draft — the same case as `.markdown` above,

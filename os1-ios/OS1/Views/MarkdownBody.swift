@@ -185,12 +185,6 @@ private extension MarkdownRenderConfig {
     /// the config stops asserting something it does not mean. `quote` is the
     /// one colour already subordinate at full strength, so it cannot simply
     /// follow `text`.
-    ///
-    /// Inline code carries no chip and no dotted underline (both `.clear`):
-    /// the monospace face already says "this is code", and a paragraph naming
-    /// four files or symbols was a line of grey boxes with prose squeezed
-    /// between them. Removing the fill leaves the sentence one texture, and
-    /// the words in it still read as code.
     static func os1Config(text: Color, quote: Color) -> MarkdownRenderConfig {
         #if os(iOS)
         let base = MarkdownRenderConfig.default
@@ -234,8 +228,8 @@ private extension MarkdownRenderConfig {
                 linkTextColor: OS1VisualStyle.link,
                 codeTextFont: base.inlineStyle.codeTextFont,
                 codeTextColor: text,
-                codeBackgroundColor: .clear,
-                codeUnderlineColor: .clear
+                codeBackgroundColor: OS1VisualStyle.panel,
+                codeUnderlineColor: OS1VisualStyle.border
             ),
             codeBlockConfig: .init(
                 theme: .github,
@@ -277,8 +271,8 @@ private extension MarkdownRenderConfig {
                 linkTextColor: OS1VisualStyle.link,
                 codeTextFont: .monospacedSystemFont(ofSize: 12, weight: .regular),
                 codeTextColor: text,
-                codeBackgroundColor: .clear,
-                codeUnderlineColor: .clear
+                codeBackgroundColor: OS1VisualStyle.panel,
+                codeUnderlineColor: OS1VisualStyle.border
             ),
             codeBlockConfig: .init(
                 theme: .github,
