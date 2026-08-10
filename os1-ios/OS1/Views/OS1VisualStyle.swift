@@ -68,6 +68,17 @@ enum OS1VisualStyle {
             ? UIColor(white: 0.145, alpha: 1)
             : UIColor(white: 0.953, alpha: 1)
     })
+    /// The OPEN session's tab pill. Pure white on light — a step ABOVE
+    /// `chatCanvas`, which is the only direction left when the tab you are in
+    /// has to out-read its siblings: tinting it instead (the old
+    /// `quaternarySystemFill`) made the current tab the greyest thing in the
+    /// strip. Dark can't use `background`, which IS the page there, so it
+    /// lifts to a grey the same distance above the canvas.
+    static let tabActive = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.180, alpha: 1)
+            : UIColor(white: 1.0, alpha: 1)
+    })
     #else
     static let background = Color(nsColor: .windowBackgroundColor)
     static let raised = Color(nsColor: .underPageBackgroundColor)
@@ -104,26 +115,29 @@ enum OS1VisualStyle {
             ? NSColor(white: 0.145, alpha: 1)
             : NSColor(white: 0.953, alpha: 1)
     })
+    /// The open session's tab pill — see the iOS note. Light lifts to white
+    /// off the Mac's grey window background; dark lifts the same distance.
+    static let tabActive = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 0.180, alpha: 1)
+            : NSColor(white: 1.0, alpha: 1)
+    })
     #endif
-    /// The brand mark: a teal blue, deeper on light so a white glyph can sit on
-    /// it, lighter on dark so it reads against the black page. It is a FILL
-    /// colour — the send disc, the app tint, an active icon — and deliberately
-    /// not a text colour: at label contrast, words wearing it are
+    /// The brand mark, and the app's one primary colour: whichever `AccentTheme`
+    /// is selected in Settings › Appearance, resolved per appearance. It is a
+    /// FILL colour — the send disc, the app tint, an active icon — and
+    /// deliberately not a text colour: at label contrast, words wearing it are
     /// indistinguishable from body copy, so inline affordances (links, fold
-    /// toggles) take `link` instead. The two values are a pair with `onAccent`:
-    /// light carries white at ~3.8:1, dark carries near-black at ~10:1, which
-    /// is the same split the monochrome accent had before the hue.
-    #if os(iOS)
-    static let accent = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.310, green: 0.788, blue: 0.871, alpha: 1)
-            : UIColor(red: 0.078, green: 0.561, blue: 0.639, alpha: 1)
-    })
+    /// toggles) take `link` instead.
+    ///
+    /// Computed rather than stored so a view that reads it inside `body` picks
+    /// up a change to the setting immediately; see `AccentStore`.
+    static var accent: Color { AccentStore.shared.theme.accent }
     /// What sits on top of an `accent` fill, so the glyph in the send disc
-    /// stays legible in either appearance.
-    static let onAccent = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark ? .black : .white
-    })
+    /// stays legible in either appearance. Derived from the fill's luminance —
+    /// see `AccentTheme.onAccent`.
+    static var onAccent: Color { AccentStore.shared.theme.onAccent }
+    #if os(iOS)
     /// Links and other tappable words in running text.
     static let link = Color(uiColor: .link)
     /// The settings row icons. Neutral by design: the chrome is monochrome, and
@@ -137,12 +151,6 @@ enum OS1VisualStyle {
             : UIColor(white: 0.35, alpha: 1)
     })
     #else
-    static let accent = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .white : .black
-    })
-    static let onAccent = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .black : .white
-    })
     static let link = Color(nsColor: .linkColor)
     static let iconTint = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

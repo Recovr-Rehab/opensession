@@ -262,6 +262,9 @@ OS1/
     SessionLinks.swift       `bks-…` ids in output -> in-app links + titles
     PrDetails.swift          PR panel payload
     SettingsModels.swift     Settings payloads (tools/personal/workspace)
+    AccentTheme.swift        The app's primary colour: one table of light/dark
+                             fills, a derived glyph colour, and the store the
+                             Appearance picker writes
   Networking/
     ServerConfig.swift       URL/name (UserDefaults) + token (keychain)
     Keychain.swift           Minimal Security wrapper
@@ -277,6 +280,7 @@ OS1/
     SessionViewModelCache.swift  Bounded recently visited conversation cache
   Views/
     OS1VisualStyle.swift      Shared web palette, session width, and repo tile
+                              (`accent`/`onAccent` come from `AccentTheme`)
     SessionsListView.swift   List + status rows + settings sheet
     SessionView.swift        Transcript, streaming bubble, ask card, input bar
     NewSessionView.swift     Full-height create-session editor

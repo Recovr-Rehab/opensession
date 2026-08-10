@@ -407,6 +407,35 @@ struct AppearanceSettingsView: View {
             }
 
             Section {
+                // One control for the app's whole primary colour: every accent
+                // surface reads `OS1VisualStyle.accent`, which reads the
+                // selection here, so the app repaints as the ring moves.
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 46), spacing: 14)],
+                    spacing: 14
+                ) {
+                    ForEach(AccentTheme.allCases) { theme in
+                        AccentOptionSwatch(
+                            theme: theme,
+                            selected: AccentStore.shared.theme == theme
+                        ) {
+                            AccentStore.shared.theme = theme
+                        }
+                    }
+                }
+                .padding(.vertical, 6)
+                .frame(maxWidth: 430)
+                .frame(maxWidth: .infinity)
+                .listRowBackground(Color.clear)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Accent colour")
+            } header: {
+                Text("Accent")
+            } footer: {
+                Text(accentFooter)
+            }
+
+            Section {
                 NavigationLink {
                     RepoOrderSettingsView()
                 } label: {
@@ -430,6 +459,10 @@ struct AppearanceSettingsView: View {
         }
         .navigationTitle("Appearance")
         .task { await loadRepos() }
+    }
+
+    private var accentFooter: String {
+        "\(AccentStore.shared.theme.title) — the primary colour the send button, the tint on system controls and every active glyph wear. Each colour carries a deeper value for light and a lighter one for dark. On this device."
     }
 
     private var themeFooter: String {
@@ -482,6 +515,50 @@ private struct RepoOrderPreview: View {
 
 /// One theme swatch: a miniature of the app in that tone, its name under it,
 /// and a ring when it is the one in use.
+/// One accent choice: the colour as it resolves in the CURRENT appearance,
+/// with the selected one ringed. Showing the resolved value rather than both
+/// halves of the pair is the honest preview — it is exactly the fill the send
+/// disc will wear a moment later — and it keeps the checkmark, which is drawn
+/// in the same derived `onAccent` the disc's glyph uses, legible on every
+/// swatch including `mono`.
+private struct AccentOptionSwatch: View {
+    let theme: AccentTheme
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Circle()
+                .fill(theme.accent)
+                .frame(width: 34, height: 34)
+                .overlay {
+                    // Mono's light fill is black and its dark fill white, so on
+                    // one appearance or the other it sits flush against the
+                    // row — a hairline keeps every swatch a disc.
+                    Circle().strokeBorder(OS1VisualStyle.border, lineWidth: 0.5)
+                }
+                .overlay {
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(theme.onAccent)
+                    }
+                }
+                .padding(3)
+                .overlay {
+                    Circle().strokeBorder(
+                        selected ? theme.accent : .clear,
+                        lineWidth: 2
+                    )
+                }
+                .animation(.easeOut(duration: 0.15), value: selected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(theme.title)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
 private struct ThemeOptionCard: View {
     let option: String
     let label: String
