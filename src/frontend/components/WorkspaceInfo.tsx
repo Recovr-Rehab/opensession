@@ -778,7 +778,7 @@ function AgentReviewCard({
 		<div data-agent-score className={INFO_SECTION_CLASS}>
 			<div className="flex items-center gap-2 px-1">
 				<div className={INFO_LABEL_CLASS}>{AGENT_NAME} score</div>
-				<div className="ml-auto flex items-center gap-1.5">
+				<div className="ml-auto flex items-center gap-2">
 					{active ? (
 						<span className="inline-flex items-center gap-1 text-meta font-semibold text-accent">
 							<span className="size-1.5 animate-pulse rounded-full bg-accent" />
@@ -788,19 +788,9 @@ function AgentReviewCard({
 						<span className="text-meta font-semibold text-faint">Stale</span>
 					) : null}
 					{actionable && (
-						<Button
-							size="xs"
-							disabled={busy !== null || active}
-							onClick={() => run(reviewAction)}
-							title={reviewAction.hint}
-						>
-							{busy === "review" ? "Starting..." : review ? "Review again" : "Run review"}
-						</Button>
-					)}
-					{actionable && (
 						<Menu.Root>
 							<Menu.Trigger
-								className="grid size-6 shrink-0 place-items-center rounded-control border border-line bg-control text-dim shadow-control transition-[color,border-color,scale] hover:border-line-strong hover:text-fg active:scale-[0.96] disabled:opacity-50"
+								className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-50"
 								disabled={busy !== null}
 								aria-label={`More ${AGENT_NAME} actions`}
 							>
@@ -905,6 +895,18 @@ function AgentReviewCard({
 						</Popover.Popup>
 					)}
 				</Popover.Root>
+				{actionable && (
+					<Button
+						variant="ghost"
+						size="xs"
+						className="shrink-0 text-meta"
+						disabled={busy !== null || active}
+						onClick={() => run(reviewAction)}
+						title={reviewAction.hint}
+					>
+						{busy === "review" ? "Starting..." : review ? "Review again" : "Run review"}
+					</Button>
+				)}
 				{canFix && (
 					<button
 						type="button"
