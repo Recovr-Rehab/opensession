@@ -129,10 +129,13 @@ struct DeskSheet: View {
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(
-                                Capsule().fill(OS1VisualStyle.raised)
-                            )
-                            .overlay(Capsule().strokeBorder(OS1VisualStyle.border))
+                            // No outline, and a fill you look past: these are
+                            // suggestions you may never take, so they read as
+                            // grey shapes rather than controls asking to be
+                            // pressed. quaternarySystemFill is the system's
+                            // own fill for small shapes like this, and it
+                            // carries the capsule without a border.
+                            .background(Capsule().fill(OS1VisualStyle.hover))
                     }
                     .buttonStyle(.plain)
                 }

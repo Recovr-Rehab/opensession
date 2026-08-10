@@ -335,7 +335,13 @@ export function DeskConversation({
 						<button
 							type="button"
 							key={s}
-							className="shrink-0 whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-dim hover:bg-hover hover:text-fg"
+							/* No outline, and a fill BELOW the panel rather than above it:
+							   these are suggestions you may never take, so they read as
+							   grey shapes you can skip, not as controls asking to be
+							   pressed. Without the border the old bg-surface fill was
+							   white on a white panel — invisible — so the fill carries
+							   the shape on its own. */
+							className="shrink-0 whitespace-nowrap rounded-full bg-hover px-3 py-1.5 text-[12px] font-medium text-dim hover:bg-active hover:text-fg"
 							onClick={() => {
 								setDraft(s);
 								textareaRef.current?.focus();
