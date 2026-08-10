@@ -829,17 +829,21 @@ struct SessionView: View {
                 Text(viewModel.session.displayTitle)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(OS1VisualStyle.text)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .mask(titleTrailingFade)
                 if !dynamicTypeSize.isAccessibilitySize {
                     HStack(spacing: 4) {
                         // Inline with its label so the tile doesn't reserve a
                         // full-height column beside the title.
-                        RepoTile(name: viewModel.session.effectiveRepo, size: 16)
+                        RepoTile(name: viewModel.session.effectiveRepo, size: 14)
                         Text(headerSubtitle)
                             .font(.footnote)
                             .foregroundStyle(OS1VisualStyle.textDim)
-                            .lineLimit(1)
                     }
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .mask(titleTrailingFade)
                 }
             }
             // Match the bar's system navigation and actions controls so the
@@ -851,13 +855,25 @@ struct SessionView: View {
             .padding(.leading, 6)
             .padding(.trailing, 10)
             .padding(.vertical, 1)
-            .frame(maxWidth: 200, alignment: .leading)
+            .frame(maxWidth: 190, alignment: .leading)
             .contentShape(Capsule())
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
         .tint(.primary)
         .accessibilityLabel("Workspace details")
+    }
+
+    private var titleTrailingFade: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black, location: 0.86),
+                .init(color: .clear, location: 1),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
     #endif
 
