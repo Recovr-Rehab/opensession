@@ -492,6 +492,28 @@ function navState(depth: number | null): NavState {
 	return depth === null ? null : { d: depth };
 }
 
+// Pop `steps` entries, or synthesize the destination when the browser can't.
+// Depth counts every panel we ever pushed, but the session history it indexes
+// into is capped — Chrome keeps 50 entries and drops the oldest — so a tab
+// that has opened enough panels no longer has the root beneath it. `history.go`
+// past the end of the stack is a silent no-op (no popstate, no navigation, no
+// error), which left Back stranded on the very page it was asked to leave.
+// Pruning only ever takes the root *below* us, never entries between it and
+// here, so the out-of-range no-op is the whole failure: nothing lands us on the
+// wrong panel. Wait a frame or two for the pop, then fall back if none came.
+function popOr(steps: number, fallback: () => void) {
+	let popped = false;
+	const onPop = () => {
+		popped = true;
+	};
+	window.addEventListener("popstate", onPop);
+	history.go(-steps);
+	setTimeout(() => {
+		window.removeEventListener("popstate", onPop);
+		if (!popped) fallback();
+	}, 150);
+}
+
 // Two routes address the same panel when they open the same thing. A tab or
 // query tweak on the page you are already looking at (the workspace's
 // Review↔Conversation tabs, say) refines it rather than opening a new page, so
@@ -913,7 +935,8 @@ export function App(
 	// stack never grows.
 	function goBack() {
 		const depth = entryDepth();
-		if (depth !== null && depth > 0) history.go(-depth);
+		if (depth !== null && depth > 0)
+			popOr(depth, () => navigate({ view: "home" }, { replace: true }));
 		else navigate({ view: "home" }, { replace: true });
 	}
 
@@ -924,7 +947,8 @@ export function App(
 	// nothing and costs you the session you were reading before the detour.
 	function leaveDeck() {
 		const depth = entryDepth();
-		if (depth !== null && depth > 0) history.back();
+		if (depth !== null && depth > 0)
+			popOr(1, () => navigate({ view: "home" }, { replace: true }));
 		else navigate({ view: "home" }, { replace: true });
 	}
 

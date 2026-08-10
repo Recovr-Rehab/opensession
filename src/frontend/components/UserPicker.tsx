@@ -202,7 +202,13 @@ function GithubSignIn({
     try {
       const err = new URLSearchParams(window.location.search).get("auth_error");
       if (err) {
-        window.history.replaceState(null, "", window.location.pathname);
+        // Keep the entry's state: it carries the router's depth, and blanking
+        // it costs Back the root it counts down to.
+        window.history.replaceState(
+          window.history.state,
+          "",
+          window.location.pathname,
+        );
         return err;
       }
     } catch {}
