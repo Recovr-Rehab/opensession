@@ -97,21 +97,23 @@ export const SIDEBAR_PIN_ENTRY_DRAGGING =
 export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
 
 /**
- * The RepoTile a repo/feed band header leads with. It fills the 22px leading
- * slot rather than riding centred inside it at its 18px default: centred, the
- * tile's ink started 2px right of every other mark in the sidebar (the nav
- * icons and the Pinned/Needs-review glyphs are 22px and start at the slot's own
- * edge), which read as the repo band being indented under headers that aren't.
- * At full size its left AND right edges land on theirs, and the letter scales
- * with it.
+ * The RepoTile a repo/feed band header leads with. It rides centred in the 22px
+ * leading slot rather than filling it: the tile is a SOLID block of colour
+ * where every other mark on that column is a stroke glyph or a small dot, so at
+ * the slot's full size it outweighed them all and the band read as shouting.
+ * 18px is the same box the session rows' own marks (WsStatusMark) wear one row
+ * below, so the tile now sits in a column of equal-sized marks — the 2px it
+ * gives up against the 22px Pinned/Needs-review glyphs costs less than the
+ * weight did, and the band's label still starts on the shared text rail either
+ * way (the rail sets that, not the tile).
  *
  * Passed as RepoTile's `className`, NOT as its `size`: `size` also recomputes
- * the tile's radius (round(22 * 0.28) = 6px) as inline style, where the band
+ * the tile's radius (round(18 * 0.28) = 5px) as inline style, where the band
  * header's tile keeps the `.repo-tile` base radius of 4px. The type size is
  * arbitrary rather than `text-xs` because it is the tile's geometry — it tracks
- * the 22px box, not the sidebar's type scale.
+ * the 18px box, not the sidebar's type scale.
  */
-export const SIDEBAR_REPO_TILE = "size-[22px] shrink-0 text-[13px]";
+export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-[11px]";
 
 /**
  * ── Group headers ───────────────────────────────────────────────────────────
