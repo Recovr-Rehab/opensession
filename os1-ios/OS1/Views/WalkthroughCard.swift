@@ -184,10 +184,17 @@ private struct WalkthroughThumbnailStrip: View {
     /// picture of small things, and at the postage-stamp size this strip
     /// started at, a before and an after of the same screen were
     /// indistinguishable — which makes the folded card decorative rather than
-    /// the answer to "what changed". A pair now fills the card's width, so
-    /// the two sit side by side at a size worth comparing and the next pair
-    /// peeks in from the edge.
-    private static let tile = CGSize(width: 168, height: 104)
+    /// the answer to "what changed".
+    ///
+    /// The width is not a choice: a pair has to sit side by side within the
+    /// card, which at phone width is 168 each, and the next pair then peeks in
+    /// from the edge. So height is the only room left, and the tile is now
+    /// SQUARE-ish rather than a 1.6 letterbox. That is the orientation-neutral
+    /// shape: these tiles crop to fill, so a tall tile shows more of a phone
+    /// screenshot and less of a wide one. 190 was measured too — it reads
+    /// beautifully for phone shots and cuts a wide crop down to its middle
+    /// 41%, which is the way a before and an after start looking alike again.
+    private static let tile = CGSize(width: 168, height: 160)
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
