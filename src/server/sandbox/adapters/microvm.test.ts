@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RemoteDriver } from "./bootstrap";
+import { assertDialbackReachable, type RemoteDriver } from "./bootstrap";
 import { microvmBootstrapDriver } from "./microvm";
 
 function driverWith(
@@ -48,5 +48,22 @@ describe("microvmBootstrapDriver", () => {
 
     expect((await driver.exec("id")).exitCode).toBe(7);
     expect(calls).toBe(1);
+  });
+
+  test("the dial-back probe uses the explicit private callback base", async () => {
+    let command = "";
+    const driver = driverWith(async (next) => {
+      command = next;
+      return { exitCode: 0, stdout: "200", stderr: "" };
+    });
+
+    await assertDialbackReachable(
+      driver,
+      "microvm",
+      "wss://microvm.internal.example/",
+    );
+
+    expect(command).toContain("https://microvm.internal.example/");
+    expect(command).not.toContain("publicIngress");
   });
 });

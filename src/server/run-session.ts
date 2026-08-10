@@ -1078,14 +1078,13 @@ export async function maybeLaunchSandboxedRun(
 	// leak the run token (spawnHostRun's error path does the same cleanup).
 	let rpcToken: string | undefined;
 	try {
-		// "Brain outside, hands inside": remote providers and MicroVMs keep
-		// OpenCode auth + engine state on the host and reach the sandbox through
-		// opensession-workspace. Docker retains its mounted runner path.
-		// Once a session records the brain/hands split, keep that boundary
-		// stable across provider fallback and model rotation.
+		// Remote providers can still use the transitional "brain outside, hands
+		// inside" path. Local Firecracker is brain-inside now; deliberately ignore
+		// its pre-conversion sticky `engine: host` value and recompute placement.
+		const desiredPlacement = sandboxEnginePlacement(session.model, sbProvider);
 		const engineOutsideSandbox =
-			session.sandbox?.engine === "host" ||
-			sandboxEnginePlacement(session.model, sbProvider) === "host";
+			desiredPlacement === "host" ||
+			(sbProvider !== "microvm" && session.sandbox?.engine === "host");
 		const provider = getSandboxProvider(sbProvider);
 		const sandbox = await provider.ensure({
 			sessionId: session.id,

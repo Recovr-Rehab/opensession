@@ -2,7 +2,7 @@
  * Sandbox provider CONFORMANCE suite (the sandbox rollout plan, Phase 3.3) —
  * the verify.ts checks parameterized over providers. Run MANUALLY:
  *
- *   bun run deploy/sandbox/conformance.ts [docker-socket] [docker-ws] [daytona] [e2b] [box] [modal] [lambda-microvm]
+ *   bun run deploy/sandbox/conformance.ts [docker-socket] [docker-ws] [daytona] [e2b] [box] [modal] [microvm] [lambda-microvm]
  *
  * (no args = the full matrix). Per entry: ensure/reuse, exec argv+stderr
  * semantics, workspace git (bind worktree for docker, in-sandbox volume-style
@@ -117,6 +117,8 @@ const modalTokenSecret: string =
   liveCfg?.modal?.tokenSecret || process.env.MODAL_TOKEN_SECRET || "";
 const modalProfileAvailable = existsSync(process.env.MODAL_CONFIG_PATH || `${HOME}/.modal.toml`);
 const lambdaMicrovmImage: string = liveCfg?.awsLambdaMicrovm?.imageIdentifier || "";
+const microvmCallbackBase: string =
+  process.env.SBX_CONF_MICROVM_BASE || liveCfg?.callbackBaseUrl || "";
 
 function githubToken(): string {
   if (process.env.GITHUB_API_TOKEN) return process.env.GITHUB_API_TOKEN;
@@ -246,6 +248,7 @@ interface Entry {
     | "e2b"
     | "box"
     | "modal"
+    | "microvm"
     | "lambda-microvm";
   /** null = run it; string = print SKIPPED reason. */
   skip: string | null;
@@ -366,6 +369,25 @@ const entries: Entry[] = [
     repoId: PUB_REPO_ID,
     branch: PUB_BRANCH,
     expectPort: "url",
+    remote: true,
+  },
+  {
+    name: "microvm",
+    providerId: "microvm",
+    skip: !liveCfg?.firecrackerMicrovm?.enabled
+      ? "SKIPPED: local Firecracker is not enabled in ~/.opensession-sandbox.json"
+      : !microvmCallbackBase
+        ? "SKIPPED: no private callback URL (set callbackBaseUrl or SBX_CONF_MICROVM_BASE)"
+        : null,
+    config: {
+      provider: "microvm",
+      callbackBaseUrl: microvmCallbackBase,
+      firecrackerMicrovm: liveCfg?.firecrackerMicrovm || {},
+      ...(githubToken() ? { cloneCredential: { type: "https-token", token: githubToken() } } : {}),
+    },
+    repoId: PUB_REPO_ID,
+    branch: PUB_BRANCH,
+    expectPort: "none",
     remote: true,
   },
   {
@@ -502,8 +524,9 @@ async function runEntry(entry: Entry): Promise<void> {
     //    launchRun; docker reaches it via the bridge gateway).
     // Remote entries probe /ingress-health — the path a publicIngress front
     // (Caddy/tunnel) actually forwards; /ping only exists on direct listeners.
+    const callbackBase = String(entry.config.callbackBaseUrl || "");
     const probeUrl = entry.remote
-      ? remoteBase && `${remoteBase.replace(/^ws(s?):\/\//, "http$1://")}/ingress-health`
+      ? callbackBase && `${callbackBase.replace(/^ws(s?):\/\//, "http$1://")}/ingress-health`
       : `http://${bridgeGw}:${wsSrv.port}/ping`;
     let reachable = false;
     if (probeUrl) {
@@ -580,7 +603,9 @@ async function runEntry(entry: Entry): Promise<void> {
         mode: "ask",
         model: "claude-haiku-4-5",
         mcpServers: [],
-        journalKind: "sandbox-conformance",
+        // Exercise the same interactive policy lane a real session uses. The
+        // runner gate is intentionally deny-by-default on unknown journal kinds.
+        journalKind: "prompt",
       };
       // REGRESSION (2026-07-09 launch→attach stalls, bks-019f46e9/bks-019f4729):
       // the launch's attach chain must never wait behind another long-running

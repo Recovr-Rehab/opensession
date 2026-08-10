@@ -2,15 +2,19 @@
  * Local Firecracker MicroVM sandbox provider.
  *
  * This reuses the proven preview-pool clone/network/control machinery but
- * requires a separate credential-free, control-only golden. Each session gets
- * a COW ext4 disk and restored VM in a transient systemd scope. The guest is a
- * volume-style workspace: model/provider auth stays on the host and only the
- * explicit opensession-workspace methods cross the control API.
+ * requires a separate credential-free, runner-baked golden. Each session gets
+ * a COW ext4 disk and restored VM in a transient systemd scope. The engine and
+ * volume-style workspace live inside the guest; scoped credentials arrive per
+ * launch and the run dials back to Open Session over WebSocket.
  */
 
 import { homeDir } from "../../paths";
 import { getRepo } from "../../worktree";
-import { sandboxConfig, sandboxProviderConfigured } from "../config";
+import {
+  sandboxCallbackBaseUrl,
+  sandboxConfig,
+  sandboxProviderConfigured,
+} from "../config";
 import type {
   PortMap,
   Sandbox,
@@ -19,6 +23,8 @@ import type {
   SandboxStatus,
 } from "../provider";
 import {
+  assertDialbackReachable,
+  bootstrapRemoteSandbox,
   bootstrapRemoteWorkspaceRuntime,
   findRemoteStateBySession,
   listRemoteStates,
@@ -265,11 +271,6 @@ export class MicrovmProvider implements SandboxProvider {
   }
 
   private async ensureInner(spec: SandboxSessionSpec): Promise<Sandbox> {
-    if (spec.runtime !== "workspace") {
-      throw new Error(
-        "local Firecracker MicroVM currently supports host-engine/workspace mode only; choose an OpenCode provider whose auth stays on Host",
-      );
-    }
     if (spec.attachedDirs?.length) {
       throw new Error(
         "attached repos are not supported in MicroVM sandboxes — detach them or use docker/local",
@@ -279,9 +280,8 @@ export class MicrovmProvider implements SandboxProvider {
     let previous = findRemoteStateBySession(this.id, spec.sessionId);
     const repo = getRepo(spec.repo || previous?.repoId);
     const branch = spec.branch || previous?.branch || repo.defaultBranch;
-    // Keep workspaces in a guest-only namespace. The minimal golden deliberately
-    // has no runner checkout, and the Sandbox handle reports this real cwd to
-    // the host-side engine.
+    // Keep workspaces in a guest-only namespace. The runner checkout is baked
+    // separately at REMOTE_REPO; the Sandbox handle reports the cloned repo cwd.
     const cwd = previous?.cwd || workspacePath(spec.sessionId);
 
     let idx = previous ? indexFromId(previous.sandboxId) : null;
@@ -344,10 +344,14 @@ export class MicrovmProvider implements SandboxProvider {
       // clone.sh repairs the snapshot-frozen clock through the root control
       // port before it returns. Doing it again here can sever an in-flight
       // keep-alive socket when the guest clock jumps.
-      await bootstrapRemoteWorkspaceRuntime(
-        microvmBootstrapDriver(driver),
+      const bootstrapDriver = microvmBootstrapDriver(driver);
+      const callbackBaseUrl = sandboxCallbackBaseUrl();
+      await assertDialbackReachable(
+        bootstrapDriver,
         "microvm",
+        callbackBaseUrl,
       );
+      await bootstrapRemoteSandbox(bootstrapDriver, "microvm");
       await setupRemoteWorkspace(
         driver,
         cwd,
@@ -384,6 +388,7 @@ export class MicrovmProvider implements SandboxProvider {
       sessionId,
       cwd,
       driver: driverFor(idx),
+      callbackBaseUrl: sandboxCallbackBaseUrl(),
       async ports(): Promise<PortMap> {
         // The guest subnet is host-private. Add a Caddy proxy before exposing
         // browser preview URLs; structured workspace execution needs no port.

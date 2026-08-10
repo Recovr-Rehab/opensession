@@ -97,3 +97,43 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
    instrumentation/scorecard per docs/sandboxes-plan.md.
 4. Remember the shared-checkout git rules (CLAUDE.md): specific-file adds,
    check the staged index, pathspec commits, push promptly.
+
+## 2026-08-10 — Slice A verified, Slice B implemented
+
+- Slice A landed as 3593fdb0. Its commit records a full golden rebuild and
+  scratch-clone verification: bootstrap marker, OpenCode, Claude, and the
+  runner checkout's `.git` all passed before the scratch VM was destroyed.
+- Slice B converts local `microvm` to brain-inside: every ensure probes the
+  private dial-back path, reconciles the baked runner through
+  `bootstrapRemoteSandbox`, and launches the in-guest runner host over the
+  existing run-ws/rpc-ws transport. `callbackBaseUrl` is now an optional
+  per-handle override, so local Firecracker uses `sandboxCallbackBaseUrl()`
+  while external providers keep the public-ingress default.
+- Native Claude and OpenCode OpenAI/Anthropic now select the in-VM engine on
+  microvm. Old sticky `sandbox.engine: host` state is deliberately ignored for
+  microvm so pre-conversion sessions migrate. Pi and OpenCode-other still use
+  the transitional host-engine/workspace path until their promised Slice C
+  design addendum lands; no engine architecture was changed.
+- Added `microvm` to `deploy/sandbox/conformance.ts`, including an explicit
+  private callback base requirement. Final real Firecracker run: **28/28** —
+  clone in 5.1s, reuse, exec semantics, volume workspace, private dial-back,
+  real model response, WS drop/redial/replay, steer, cancel, get() reattach,
+  destroy, and state cleanup. The run also found/fixed a stale conformance
+  journal kind that the deny-by-default runner gate correctly rejected.
+- Focused tests: 28 pass (`microvm.test.ts` + `capability-status.test.ts`);
+  `bun run typecheck` passes. This host's private untracked sandbox config now
+  points `callbackBaseUrl` at its tailnet-only Caddy endpoint for live runs.
+- The tella-fusion lifecycle migration was already completed by the Slice A
+  worker: private-repo PR #5604, commit d1c4c79a9f, moves `.opensession/` to
+  `.agents/` and renames `setup.sh` to executable `setup` with internal path
+  references updated.
+
+## Next steps (updated)
+
+1. Commit/push Slice B, restart Open Session once, and smoke health plus a
+   live microvm session through the main server.
+2. Recover or recreate the missing Pi + OpenCode-other design addendum before
+   Slice C. Slice C must preserve the hard constraint that sandboxes adapt to
+   each engine; engines and non-sandboxed paths do not change architecture.
+3. Then implement Slice C (matrix/workspace-MCP deletion), Slice D (prewarm +
+   docs), optional Slice E, wake-on-demand, and snapshot-after-setup.

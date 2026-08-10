@@ -264,12 +264,15 @@ describe("model-family × environment capability matrix", () => {
     });
   });
 
-  test("remote OpenAI/Claude engines stay on host; Docker keeps its runner", () => {
+  test("remote OpenAI/Claude engines stay on host; Docker and microvm run inside", () => {
     expect(sandboxEnginePlacement("opencode/openai/gpt-5.6-sol", "daytona")).toBe("host");
     expect(
       sandboxEnginePlacement("opencode/anthropic/claude-sonnet-5", "modal"),
     ).toBe("host");
-    expect(sandboxEnginePlacement("opencode/openai/gpt-5.6-sol", "microvm")).toBe("host");
+    expect(sandboxEnginePlacement("opencode/openai/gpt-5.6-sol", "microvm")).toBe("sandbox");
+    expect(
+      sandboxEnginePlacement("opencode/anthropic/claude-sonnet-5", "microvm"),
+    ).toBe("sandbox");
     expect(sandboxEnginePlacement("opencode/openai/gpt-5.6-sol", "docker")).toBe("sandbox");
     expect(
       sandboxEnginePlacement("opencode/anthropic/claude-sonnet-5", "docker"),

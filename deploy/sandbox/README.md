@@ -309,7 +309,7 @@ needed after changing it.
   image argument still skips both builds for controlled experiments. Never
   reuse the preview-pool golden in `/opt/firecracker/store`.
 - `deploy/sandbox/conformance.ts` — the provider conformance matrix
-  (`bun run deploy/sandbox/conformance.ts [docker-socket|docker-ws|daytona|e2b|box|modal|lambda-microvm]`):
+  (`bun run deploy/sandbox/conformance.ts [docker-socket|docker-ws|daytona|e2b|box|modal|microvm|lambda-microvm]`):
   verify.ts's checks parameterized over providers. Docker entries always run
   and must stay green; daytona/e2b/box/modal run only with credentials (else
   `SKIPPED: no credentials`) and leave zero sandboxes behind.

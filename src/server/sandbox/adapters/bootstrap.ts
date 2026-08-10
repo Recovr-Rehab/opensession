@@ -376,8 +376,9 @@ export async function remoteCloneUrl(repo: {
 export async function assertDialbackReachable(
   driver: RemoteDriver,
   label: string,
+  callbackBaseUrl = remoteSandboxCallbackBaseUrl(),
 ): Promise<void> {
-  const wsBase = remoteSandboxCallbackBaseUrl();
+  const wsBase = callbackBaseUrl.replace(/\/+$/, "");
   const httpBase = wsBase.replace(/^ws(s?):\/\//, "http$1://");
   const probe = await driver.exec(
     `command -v curl >/dev/null 2>&1 || { echo __OPENSESSION_NO_CURL__; exit 0; }; ` +
@@ -786,7 +787,11 @@ function readJsonSafe<T>(path: string): T | null {
  * in-sandbox: spec.json exists in BOTH (host mirror feeds restart-resume;
  * the in-sandbox copy feeds HOST_ENTRY), meta/journal/log are sandbox-only.
  */
-function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): HostLauncher {
+function makeRemoteLauncher(
+  driver: RemoteDriver,
+  sessionId: string,
+  callbackBaseUrl = remoteSandboxCallbackBaseUrl(),
+): HostLauncher {
   return {
     async alive(dir) {
       const meta = await driver.exec(`cat ${shellQuoteWord(`${dir}/meta.json`)} 2>/dev/null`);
@@ -913,10 +918,10 @@ function makeRemoteLauncher(driver: RemoteDriver, sessionId: string): HostLaunch
         );
       }
       mark("accounts uploaded");
-      // Remote sandboxes dial back over the public ingress when it's enabled
-      // (publicIngress.publicBaseUrl), else the plain callbackBaseUrl. Docker
-      // stays on sandboxCallbackBaseUrl — its bridge path never leaves the box.
-      const base = remoteSandboxCallbackBaseUrl();
+      // Remote sandboxes default to the public ingress when it is enabled.
+      // Local providers can override this with their internal/tailnet base so
+      // runs do not hairpin through the internet-facing ingress.
+      const base = callbackBaseUrl.replace(/\/+$/, "");
       registerRunWsHost(hostId, spec.wsToken);
       try {
         const env: Record<string, string> = {
@@ -1155,6 +1160,9 @@ export interface RemoteSandboxParts {
   sessionId: string;
   cwd: string;
   driver: RemoteDriver;
+  /** Override the public-ingress default for providers that can reach the
+   *  server over a private/local route (notably local Firecracker). */
+  callbackBaseUrl?: string;
   ports(): Promise<PortMap>;
   status(): Promise<SandboxStatus>;
   /** Activity ping (state file + provider-native keepalive, e.g. E2B's
@@ -1166,7 +1174,11 @@ export interface RemoteSandboxParts {
 const remoteParts = new WeakMap<object, { driver: RemoteDriver; launcher: HostLauncher }>();
 
 export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
-  const launcher = makeRemoteLauncher(parts.driver, parts.sessionId);
+  const launcher = makeRemoteLauncher(
+    parts.driver,
+    parts.sessionId,
+    parts.callbackBaseUrl,
+  );
   const touch = () => {
     try {
       void parts.touchActivity();

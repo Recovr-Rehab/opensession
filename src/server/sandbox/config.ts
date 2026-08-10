@@ -619,17 +619,16 @@ const ALL_ENVIRONMENTS: Record<SandboxEnvironmentId, boolean> = {
 
 export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
   {
-    // Docker can run the OpenCode engine in-container with its mounted account
-    // material. Remote providers and MicroVMs keep the engine/auth on the host
-    // and expose only the workspace runtime (sandboxEnginePlacement below).
+    // Docker and local Firecracker run the OpenCode engine inside. Other remote
+    // providers keep the engine/auth on the host until the matrix is retired.
     id: "opencode-openai",
     label: "GPT (OpenCode)",
     match: { provider: "opencode", idPrefix: "opencode/openai/" },
     environments: { ...ALL_ENVIRONMENTS },
   },
   {
-    // Docker can run the OpenCode engine in-container with its mounted bridge
-    // config. Remote providers and MicroVMs keep the engine/auth on the host.
+    // Docker and local Firecracker run the OpenCode engine inside. Other remote
+    // providers keep the engine/auth on the host until the matrix is retired.
     id: "opencode-anthropic",
     label: "Claude (OpenCode)",
     match: { provider: "opencode", idPrefix: "opencode/anthropic/" },
@@ -669,7 +668,7 @@ export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
     id: "claude",
     label: "Claude",
     match: { provider: "claude" },
-    environments: { ...ALL_ENVIRONMENTS, microvm: false },
+    environments: { ...ALL_ENVIRONMENTS },
   },
 ];
 
@@ -702,11 +701,10 @@ export function sandboxModelFamilyFor(model?: string | null): SandboxModelFamily
 /**
  * Decide where the model loop runs for a sandboxed session.
  *
- * Remote providers and MicroVMs are workspace sandboxes for every OpenCode
- * family: credentials, account rotation and engine state stay on this host.
- * Docker retains the existing in-container OpenAI/Anthropic runner because it
- * already has explicit local mounts; OpenCode-other remains host-only there
- * because its provider auth is not mounted. Pi is host-only on EVERY provider:
+ * Remote providers remain workspace sandboxes for every OpenCode family.
+ * Docker and local Firecracker run OpenAI/Anthropic OpenCode inside because
+ * their scoped auth is mounted/uploaded. OpenCode-other remains host-only
+ * until its provider-auth upload design lands. Pi is host-only on EVERY provider:
  * its bridge auth, session state and in-memory MCP servers exist only in this
  * process, so the in-sandbox runner-host can never run it.
  */
@@ -719,6 +717,7 @@ export function sandboxEnginePlacement(
   if (family === "opencode-other") return "host";
   if (
     provider !== "docker" &&
+    provider !== "microvm" &&
     (family === "opencode-openai" || family === "opencode-anthropic")
   ) {
     return "host";
