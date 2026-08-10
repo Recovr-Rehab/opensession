@@ -359,6 +359,10 @@ struct RepoTile: View {
         name == "backstage" ? "opensession" : name  // legacy repo id on older instances
     }
 
+    static func usesBundledProductIcon(for name: String) -> Bool {
+        name == "opensession" || name == "backstage"
+    }
+
     private var letter: String {
         if name == "backstage" { return "O" }
         return String(name.prefix(1)).uppercased()
@@ -368,6 +372,25 @@ struct RepoTile: View {
 
     @MainActor
     private var iconURL: URL? { Self.iconURL(for: name) }
+
+    @MainActor
+    private var bundledProductIcon: Image? {
+        guard Self.usesBundledProductIcon(for: name) else { return nil }
+        #if os(macOS)
+        return Image(nsImage: NSApplication.shared.applicationIconImage)
+        #else
+        return Image("AppIcon")
+        #endif
+    }
+
+    @MainActor
+    private var displayedIcon: Image? {
+        if let iconURL,
+           let image = RepoImageCache.shared.images[iconURL.absoluteString] {
+            return image
+        }
+        return bundledProductIcon
+    }
 
     /// Bumped when the icons behind /repo-icon are redrawn — keep it in step
     /// with ICON_VERSION in the web tile. The response is cacheable and
@@ -412,15 +435,11 @@ struct RepoTile: View {
 
     var body: some View {
         ZStack {
-            // The fallback letter swatch only stands in while the real icon
-            // loads: many icons (org avatars) carry transparent margins, so a
-            // swatch kept underneath bleeds through as a colored border.
-            // It always stands in — the sessions list wears this tile as its
-            // Settings button, and suppressing the fallback there rendered an
-            // invisible (though still tappable) control until the icon
-            // arrived over the network.
-            if let iconURL,
-               let image = RepoImageCache.shared.images[iconURL.absoluteString] {
+            // A letter swatch stands in while a repo's icon loads; Open Session
+            // can use its bundled app mark immediately instead. Nothing stays
+            // underneath the eventual image: transparent icon margins would
+            // otherwise reveal the fallback as a colored border.
+            if let image = displayedIcon {
                 image
                     .resizable()
                     .scaledToFill()
