@@ -203,7 +203,10 @@ describe("renderMarkdown asset references", () => {
     const html = renderMarkdown("Open `report.html` to inspect it.", assets);
     expect(html).toContain('class="asset-ref"');
     expect(html).toContain('data-asset-path="report.html"');
-    expect(html).toContain("<code>report.html</code>");
+    expect(html).toContain('class="asset-ref-icon" aria-hidden="true"');
+    expect(html).toContain(
+      '<span class="asset-ref-label"><code>report.html</code></span>',
+    );
     expect(html).toContain(
       'href="/api/sessions/os-assets-test/assets/raw/report.html"',
     );
@@ -212,7 +215,9 @@ describe("renderMarkdown asset references", () => {
   it("resolves an unambiguous trailing filename to its nested asset", () => {
     const html = renderMarkdown("Compare before.png with the result.", assets);
     expect(html).toContain('data-asset-path="shots/before.png"');
-    expect(html).toContain(">before.png</a>");
+    expect(html).toContain(
+      '<span class="asset-ref-label">before.png</span></a>',
+    );
   });
 
   it("leaves unknown and ambiguous names as plain text", () => {
