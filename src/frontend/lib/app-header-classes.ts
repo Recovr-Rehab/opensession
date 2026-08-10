@@ -335,13 +335,21 @@ const HEADER_ACTIONS_BASE =
  * the 10px the loose pair sat on, and `overflow-hidden` keeps a segment's press
  * dim inside the capsule's own curve.
  *
+ * It is white (`bg-surface`) and undivided, which is what the native app's own
+ * grouped toolbar item looks like — glass over the page, holding two glyphs
+ * with no rule between them. That also lines it up with the Back bubble and
+ * title pill on a pushed page, which are the same white capsule on the same
+ * bar. The segments inside are wide rather than square for the same reason:
+ * the glyph is ~22pt and the air around it is what makes the group read as one
+ * control instead of two buttons that happen to touch.
+ *
  * Only the root variant groups. A pushed page portals SessionViewer's whole
  * header into this slot, which is a row of unrelated controls and keeps the
  * loose spacing.
  */
 export const APP_HEADER_ACTIONS =
 	`${HEADER_ACTIONS_BASE} phone:ml-auto phone:gap-0 phone:overflow-hidden ` +
-	"phone:rounded-full phone:border phone:border-line phone:bg-panel " +
+	"phone:rounded-full phone:border phone:border-line phone:bg-surface " +
 	"phone:shadow-[0_2px_12px_rgba(0,0,0,0.1)]";
 
 /**
@@ -354,13 +362,14 @@ export const APP_HEADER_ACTIONS_DETAIL =
 	`${HEADER_ACTIONS_BASE} phone:ml-2.5 phone:flex-none phone:gap-2.5`;
 
 /**
- * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 44pt square,
- * no chrome of its own — the capsule around it draws the border, fill and
- * shadow. The glyph is thickened past its 1.5 stroke because iOS nav-bar glyphs
- * are bold and it reads spindly at this size otherwise.
+ * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 44pt tall
+ * and wider than it is high, with no chrome of its own — the capsule around it
+ * draws the border, fill and shadow. The glyph is thickened past its 1.5 stroke
+ * because iOS nav-bar glyphs are bold and it reads spindly at this size
+ * otherwise.
  */
 const MOBILE_BAR_SEGMENT =
-	"phone:relative phone:inline-flex phone:size-11 phone:shrink-0 " +
+	"phone:relative phone:inline-flex phone:h-11 phone:w-13 phone:shrink-0 " +
 	"phone:items-center phone:justify-center phone:rounded-none " +
 	"phone:border-none phone:bg-transparent phone:p-0 phone:shadow-none " +
 	"phone:cursor-pointer phone:touch-manipulation " +
@@ -369,19 +378,12 @@ const MOBILE_BAR_SEGMENT =
 	"phone:[&_svg]:size-[25px] phone:[&_svg]:[stroke-width:2]";
 
 /**
- * Search — the trailing half of the pair, so it carries the hairline that
- * divides the two. The divider is spelled as its LEFT border rather than the
- * filter's right one because the filter is portaled in after it and reordered
- * ahead of it visually; a border on the visually-second segment lands between
- * them either way.
- *
- * It is one arbitrary `border-left` shorthand and not `border-l border-l-line`
- * because the segment resets its own chrome with `border-none`: that sets
- * Tailwind's `--tw-border-style` to none, which a later `border-l` then reads
- * for its style, so the hairline compiles but never paints.
+ * Search — the trailing half of the pair. No rule divides it from the filter:
+ * the two glyphs sit in one undivided capsule, as they do in the native app's
+ * grouped toolbar item. The air between them is the separation.
  */
 export const MOBILE_SEARCH_BTN =
-	`${MOBILE_BAR_SEGMENT} phone:[border-left:1px_solid_var(--border)] phone:text-accent ` +
+	`${MOBILE_BAR_SEGMENT} phone:text-accent ` +
 	"phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
 	"phone:ease-[var(--ease)]";
 
