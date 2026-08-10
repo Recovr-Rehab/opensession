@@ -1746,10 +1746,10 @@ export function WorkspaceInfo({
 							<div className={INFO_LABEL_CLASS}>
 								{media.length} screenshot{media.length === 1 ? "" : "s"}
 							</div>
-							{/* Keep the filmstrip to two complete frames per view. The
-							    previous 76% width left the next card visibly severed at
-							    the panel edge; two-up stays large enough to scan while
-							    making the horizontal overflow feel intentional. */}
+							{/* Two complete frames per view, plus a sliver of the third:
+							    two-up exactly filling the panel reads as the whole set,
+							    so a third tile peeking past the edge is the only thing
+							    that says the strip scrolls. */}
 							<div
 								// The same panel surface the neighbouring lists sit on
 								// (INFO_LIST_CLASS), but laid out as a scroller — spelled
@@ -1768,7 +1768,12 @@ export function WorkspaceInfo({
 											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-control border border-line bg-surface transition-colors hover:border-line-strong hover:bg-hover",
 											media.length === 1
 												? "w-full"
-												: "w-[calc((100%-4px)/2)]",
+												: media.length === 2
+													? "w-[calc((100%-8px)/2)]"
+													: // Two full tiles + an 8px gap + a 22px sliver
+														// of the next one, which is what makes the
+														// strip legible as scrollable.
+														"w-[calc((100%-38px)/2)]",
 										)}
 										title={[m.sessionTitle, new Date(m.at).toLocaleString()]
 											.filter(Boolean)
