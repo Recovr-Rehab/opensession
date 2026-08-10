@@ -5256,9 +5256,7 @@ export function SessionViewer({
 								</>
 							)}
 
-							{isBusy &&
-								!waitingForWorkspace &&
-								!hasLiveWorkDisclosure(entries) && (
+							{isBusy && !waitingForWorkspace && (
 								<BusyInline
 									since={busySince}
 								/>
@@ -5817,16 +5815,6 @@ function BusyInline({
 			{since != null && <BusyElapsed since={since} />}
 		</div>
 	);
-}
-
-/** The work disclosure owns live progress once this turn has used a tool. */
-function hasLiveWorkDisclosure(entries: TranscriptEntry[]): boolean {
-	for (let i = entries.length - 1; i >= 0; i--) {
-		const entry = entries[i];
-		if (entry.type === "user" || entry.type === "system") return false;
-		if (entry.type === "tool_use") return true;
-	}
-	return false;
 }
 
 function StreamingMessage({
