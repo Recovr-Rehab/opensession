@@ -24,10 +24,12 @@ import UIKit
 /// fill reads against a black page, and they take a near-black glyph.
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case teal
+    case sky
     case blue
     case indigo
     case purple
     case pink
+    case coral
     case orange
     case green
     case mono
@@ -39,12 +41,14 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .teal: "Teal"
-        case .blue: "Blue"
+        case .sky: "Sky"
+        case .blue: "Cobalt"
         case .indigo: "Indigo"
-        case .purple: "Purple"
-        case .pink: "Pink"
-        case .orange: "Orange"
-        case .green: "Green"
+        case .purple: "Violet"
+        case .pink: "Rose"
+        case .coral: "Coral"
+        case .orange: "Tangerine"
+        case .green: "Clover"
         case .mono: "Mono"
         }
     }
@@ -55,12 +59,14 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
         case .teal: (0x14_8F_A3, 0x4F_C9_DE)
-        case .blue: (0x0A_6C_D8, 0x5B_A8_FF)
-        case .indigo: (0x4B_4A_CF, 0x9A_96_FF)
-        case .purple: (0x7A_3F_BF, 0xC3_9B_FF)
-        case .pink: (0xC0_32_6F, 0xFF_8F_BE)
-        case .orange: (0xB3_5A_00, 0xFF_A2_4D)
-        case .green: (0x1C_7A_45, 0x54_D0_8A)
+        case .sky: (0x24_7C_CB, 0x72_C3_FF)
+        case .blue: (0x31_5D_C6, 0x7D_A3_FF)
+        case .indigo: (0x52_46_C7, 0xA4_99_FF)
+        case .purple: (0x7D_3D_BA, 0xC9_9B_FF)
+        case .pink: (0xBE_32_6A, 0xFF_8C_B6)
+        case .coral: (0xC9_4F_45, 0xFF_98_8A)
+        case .orange: (0xB6_5A_00, 0xFF_A2_4D)
+        case .green: (0x24_7A_49, 0x59_D2_8D)
         case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
     }

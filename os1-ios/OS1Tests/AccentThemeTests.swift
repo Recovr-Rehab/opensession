@@ -2,6 +2,14 @@ import XCTest
 @testable import OS1
 
 final class AccentThemeTests: XCTestCase {
+    func testPaletteHasTenDistinctOptions() {
+        XCTAssertEqual(AccentTheme.allCases.count, 10)
+        XCTAssertEqual(
+            Set(AccentTheme.allCases.map { "\($0.fills.light)-\($0.fills.dark)" }).count,
+            AccentTheme.allCases.count
+        )
+    }
+
     /// The guard that makes adding a colour safe: whatever ends up in `fills`,
     /// the derived glyph has to be readable on it in both appearances. 3:1 is
     /// WCAG's non-text contrast, which is what an arrow in a disc is.
