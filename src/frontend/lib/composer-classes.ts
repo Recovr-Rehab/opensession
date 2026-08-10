@@ -135,15 +135,15 @@ export const composerMenuAnchorLeft =
    40px phone size is what the last of the three (!) competing phone blocks in
    legacy.css resolved to. */
 export const composerSend =
-	"inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[filter,border-radius,transform] enabled:hover:scale-105 disabled:cursor-default disabled:opacity-35 phone:size-10";
+	"inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[background-color,border-color,color,filter,scale] enabled:active:scale-[0.96] disabled:cursor-default disabled:opacity-35 phone:size-10";
 /** Ordinary send: the accent plate. Hover goes to ink rather than brightening —
  *  the accent is a wash now, and brightening it read as a disabled state. */
 export const composerSendDefault =
 	"bg-accent text-on-accent enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))]";
-/** Busy + queue: a ring, not a plate. 2px because at 1px it read as a disabled
- *  send rather than a different one. */
-export const composerSendQueue =
-	"border-2 border-accent bg-raised text-accent enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))]";
+/** Busy + queue keeps the send plate and changes the glyph. The old 2px ring
+ *  read like a selected toggle, then hovered to dark-on-dark because its ink
+ *  did not invert with the fill. */
+export const composerSendQueue = composerSendDefault;
 /** Busy + steer: folds into the running turn, so it warns rather than commits.
  *  Saturated red brightens fine, which is why it keeps the filter hover. */
 export const composerSendSteer =

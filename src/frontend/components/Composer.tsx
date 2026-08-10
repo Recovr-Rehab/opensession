@@ -1146,18 +1146,10 @@ export function Composer({
               <Tooltip
                 label={
                   steerSend
-                    ? `Steer — fold into the running turn now, without stopping it${
-                        modifierPicks && entSteer && !modSteer
-                          ? "; hold ⌘/Ctrl to queue"
-                          : ""
-                      }`
+                    ? "Steer message"
                     : sendTitle ||
                       (busy
-                        ? `Queue — delivered when the agent fully finishes${
-                            modifierPicks && modSteer
-                              ? "; hold ⌘/Ctrl to steer"
-                              : ""
-                          } (${sendKeyLabel(sendKey)})`
+                        ? "Queue message"
                         : `Send (${sendKeyLabel(sendKey)})`)
                 }
               >

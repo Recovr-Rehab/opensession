@@ -2856,7 +2856,6 @@ export function SessionViewer({
 		!session.claudeSessionId &&
 		!session.codexThreadId &&
 		session.source !== "opensession";
-	const busySendLabel = `Queue — ${AGENT_NAME} sees it after fully finishing this run`;
 	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
 	// still fork as a new sibling with a transcript handoff.
 	const canForkSession =
@@ -5387,7 +5386,6 @@ export function SessionViewer({
 									askMode={isAsk}
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}
-									sendTitle={isBusy ? busySendLabel : undefined}
 									// Leaving ask mode is a setting of this session, so it sits in
 									// the composer's "+" with the rest of them rather than as its
 									// own chip. The row stays open reading "Switching to code…"
