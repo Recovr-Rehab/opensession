@@ -92,6 +92,9 @@ struct SessionsListView: View {
     /// Surfaced when a background session create fails after the sheet closed.
     @State private var createError: String?
     @State private var showArchived = false
+    /// An archived row opens only after its sheet has dismissed; pushing while
+    /// the sheet is still closing can drop the navigation transition on iOS.
+    @State private var pendingArchivedOpen: Session?
     /// A tapped "Try again" on the unreachable screen, until it lands.
     @State private var isRetrying = false
     #if os(iOS)
@@ -338,8 +341,12 @@ struct SessionsListView: View {
         }
         .sheet(isPresented: $showArchived) {
             ArchivedSessionsView(
-                sessions: visibleArchivedSessions,
+                sessions: viewModel.archivedSessions,
                 loaded: viewModel.archivedHasLoaded,
+                onOpen: { session in
+                    pendingArchivedOpen = session
+                    showArchived = false
+                },
                 onRestore: viewModel.unarchive
             )
             .task { await viewModel.refreshArchived() }
@@ -588,11 +595,20 @@ struct SessionsListView: View {
                 }
                 .sheet(isPresented: $showArchived) {
                     ArchivedSessionsView(
-                        sessions: visibleArchivedSessions,
+                        sessions: viewModel.archivedSessions,
                         loaded: viewModel.archivedHasLoaded,
+                        onOpen: { session in
+                            pendingArchivedOpen = session
+                            showArchived = false
+                        },
                         onRestore: viewModel.unarchive
                     )
                     .task { await viewModel.refreshArchived() }
+                }
+                .onChange(of: showArchived) { _, shown in
+                    guard !shown, let session = pendingArchivedOpen else { return }
+                    pendingArchivedOpen = nil
+                    Task { path.append(await viewModel.hydrated(session)) }
                 }
                 .safeAreaInset(edge: .bottom) {
                     errorBanner
@@ -1998,8 +2014,66 @@ private struct ArchivedSessionsView: View {
     /// own request, so this screen has a wait of its own now — and "Nothing
     /// archived" would be a claim about a list that hasn't answered yet.
     let loaded: Bool
+    let onOpen: (Session) -> Void
     let onRestore: (Session) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+    @State private var owner = "mine"
+    @State private var repo = "all"
+    @State private var reason = "all"
+
+    private var repositories: [String] {
+        Array(Set(sessions.map(\.effectiveRepo))).sorted()
+    }
+
+    private var hasAutoArchived: Bool {
+        sessions.contains(where: isAutoArchived)
+    }
+
+    private var activeFilterCount: Int {
+        (owner == "mine" ? 1 : 0) + (repo == "all" ? 0 : 1) + (reason == "all" ? 0 : 1)
+    }
+
+    private var filteredSessions: [Session] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return sessions.filter { session in
+            if owner == "mine", !isMine(session) { return false }
+            if repo != "all", session.effectiveRepo != repo { return false }
+            if reason == "auto", !isAutoArchived(session) { return false }
+            if reason == "manual", isAutoArchived(session) { return false }
+            guard !query.isEmpty else { return true }
+            let terms = [session.displayTitle, session.effectiveRepo]
+                + [session.branch, session.startedBy].compactMap { $0 }
+            return terms
+                .map { $0.lowercased() }
+                .contains { $0.contains(query) }
+        }
+    }
+
+    private func isMine(_ session: Session) -> Bool {
+        guard !session.isAutomation, let startedBy = session.startedBy?.lowercased() else {
+            return false
+        }
+        let config = ServerConfig.shared
+        let displayName = config.userName.lowercased()
+        let firstName = displayName.split(separator: " ").first.map(String.init)
+        return startedBy == displayName || startedBy == firstName || startedBy == config.githubLogin.lowercased()
+    }
+
+    private func isAutoArchived(_ session: Session) -> Bool {
+        guard let archivedReason = session.archivedReason else { return false }
+        return archivedReason != "manual"
+    }
+
+    private func metadata(for session: Session) -> String {
+        var parts = [RepoTile.label(for: session.effectiveRepo)]
+        if owner == "everyone", let startedBy = session.startedBy { parts.append(startedBy) }
+        if reason == "all", isAutoArchived(session) { parts.append("Auto-archived") }
+        if let date = session.lastActivityDate {
+            parts.append(date.formatted(.relative(presentation: .named)))
+        }
+        return parts.joined(separator: " · ")
+    }
 
     var body: some View {
         NavigationStack {
@@ -2014,35 +2088,41 @@ private struct ArchivedSessionsView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 24)
                     .listRowSeparator(.hidden)
-                } else if sessions.isEmpty {
+                } else if filteredSessions.isEmpty {
                     ContentUnavailableView(
-                        "Nothing archived",
-                        systemImage: "archivebox"
+                        sessions.isEmpty ? "Nothing archived" : "No matches",
+                        systemImage: sessions.isEmpty ? "archivebox" : "magnifyingglass"
                     )
                 } else {
-                    ForEach(sessions) { session in
-                        HStack(spacing: 10) {
-                            RepoTile(name: session.effectiveRepo, size: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(session.displayTitle)
-                                    .font(.body.weight(.medium))
-                                    .lineLimit(2)
-                                Text(RepoTile.label(for: session.effectiveRepo))
-                                    .font(.footnote)
-                                    .foregroundStyle(OS1VisualStyle.textDim)
-                            }
-                            Spacer(minLength: 8)
-                            Button {
-                                onRestore(session)
-                            } label: {
-                                HStack(spacing: 5) {
-                                    WebIcon(kind: .unarchive, size: 18)
-                                    Text("Restore")
+                    Section {
+                        ForEach(filteredSessions) { session in
+                            HStack(spacing: 10) {
+                                RepoTile(name: session.effectiveRepo, size: 24)
+                                #if os(iOS)
+                                Button {
+                                    onOpen(session)
+                                } label: {
+                                    archivedRowLabel(session)
                                 }
+                                .buttonStyle(.plain)
+                                #else
+                                archivedRowLabel(session)
+                                #endif
+                                Button {
+                                    onRestore(session)
+                                } label: {
+                                    WebIcon(kind: .unarchive, size: 18)
+                                        .frame(width: 44, height: 44)
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Restore session")
                             }
-                            .buttonStyle(.borderless)
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 4)
+                    } header: {
+                        Text(filteredSessions.count == sessions.count
+                             ? "\(sessions.count) archived"
+                             : "\(filteredSessions.count) of \(sessions.count) archived")
                     }
                 }
             }
@@ -2050,14 +2130,73 @@ private struct ArchivedSessionsView: View {
             .scrollContentBackground(.hidden)
             .background(OS1VisualStyle.background)
             #endif
+            .searchable(text: $searchText, prompt: "Search archived")
             .navigationTitle("Archived")
             .inlineTitleBarCompat()
             .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Section("Owner") {
+                            Picker("Owner", selection: $owner) {
+                                Text("My archived").tag("mine")
+                                Text("Everyone").tag("everyone")
+                            }
+                        }
+                        if repositories.count > 1 {
+                            Section("Repository") {
+                                Picker("Repository", selection: $repo) {
+                                    Text("All repos").tag("all")
+                                    ForEach(repositories, id: \.self) { repository in
+                                        Text(RepoTile.label(for: repository)).tag(repository)
+                                    }
+                                }
+                            }
+                        }
+                        if hasAutoArchived {
+                            Section("Reason") {
+                                Picker("Reason", selection: $reason) {
+                                    Text("All").tag("all")
+                                    Text("Auto-archived").tag("auto")
+                                    Text("Manual").tag("manual")
+                                }
+                            }
+                        }
+                        if activeFilterCount > 0 {
+                            Button("Clear filters") {
+                                owner = "everyone"
+                                repo = "all"
+                                reason = "all"
+                            }
+                        }
+                    } label: {
+                        Label(
+                            activeFilterCount > 0 ? "Filters (\(activeFilterCount))" : "Filters",
+                            systemImage: activeFilterCount > 0
+                                ? "line.3.horizontal.decrease.circle.fill"
+                                : "line.3.horizontal.decrease.circle"
+                        )
+                    }
+                    .accessibilityLabel("Filters, \(activeFilterCount) active")
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
             }
         }
+    }
+
+    private func archivedRowLabel(_ session: Session) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(session.displayTitle)
+                .font(.body.weight(.medium))
+                .foregroundStyle(OS1VisualStyle.text)
+                .lineLimit(2)
+            Text(metadata(for: session))
+                .font(.footnote)
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

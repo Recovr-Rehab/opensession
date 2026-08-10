@@ -73,5 +73,5 @@ export const ARCHIVED_ROW_TIME =
 export const ARCHIVED_ROW_ACTION =
 	"absolute right-3 top-1/2 z-[1] -translate-y-1/2 opacity-0 transition-opacity " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
-	"focus-visible:opacity-100 phone:gap-0 phone:px-2 phone:opacity-100 " +
+	"focus-visible:opacity-100 phone:min-h-11 phone:w-11 phone:gap-0 phone:px-0 phone:opacity-100 " +
 	"[@media(hover:none)]:opacity-100";

@@ -43,6 +43,14 @@ final class ArchivedSliceTests: XCTestCase {
         XCTAssertNotNil(row.lastActivityDate)
     }
 
+    func testIndexRowKeepsItsArchiveReason() throws {
+        let row = try sessions(
+            #"[{"id":"os-1","archived":true,"slim":true,"archivedReason":"idle"}]"#
+        )[0]
+
+        XCTAssertEqual(row.archivedReason, "idle")
+    }
+
     /// A server that predates `?archived=exclude` answers with the whole list.
     /// `prepared` still splits it, which is what keeps an older server on the
     /// old behaviour instead of an Archived screen that is permanently empty.

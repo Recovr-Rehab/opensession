@@ -19,10 +19,10 @@ import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { PageLayout } from "../ui/page";
 import { Button } from "../ui/button";
 import { Card, CardList } from "../ui/card";
-import { Input, Select } from "../ui/input";
-import { Segmented, SegmentedOption } from "../ui/segmented";
+import { Input } from "../ui/input";
+import { Menu } from "../ui/menu";
 import { EmptyState, ListSkeleton } from "../ui/state";
-import { IconUnarchive } from "./icons";
+import { IconCheck, IconFilter, IconUnarchive } from "./icons";
 import { RepoTile } from "./RepoTile";
 
 interface Props {
@@ -108,6 +108,9 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 		() => sessions.filter((s) => s.archived),
 		[sessions],
 	);
+	const hasAutoArchived = allArchived.some(isAutoReason);
+	const activeFilterCount =
+		(owner === "mine" ? 1 : 0) + (repo !== "all" ? 1 : 0) + (reason !== "all" ? 1 : 0);
 
 	// Repos present in the archived set, most-used first — the repo dropdown options.
 	const repos = useMemo(() => {
@@ -147,6 +150,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 			list = list.filter(
 				(s) =>
 					s.title.toLowerCase().includes(q) ||
+					sessionRepo(s).toLowerCase().includes(q) ||
 					(s.branch || "").toLowerCase().includes(q) ||
 					(s.startedBy || "").toLowerCase().includes(q) ||
 					(s.automation || "").toLowerCase().includes(q),
@@ -170,81 +174,95 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 		<PageLayout
 			title="Archived"
 			description={
-				<>
-					{/* A count is a claim. Until the index lands there is nothing to
-					    count, and "0 archived sessions" above a loading list is the
-					    same false statement the empty state used to make. */}
-					{loaded &&
-						`${archived.length} archived session${archived.length === 1 ? "" : "s"}. `}
-					Done Plain tickets and anything idle for over a week land here
-					automatically.
-				</>
+				loaded
+					? archived.length === allArchived.length
+						? `${archived.length} archived session${archived.length === 1 ? "" : "s"}`
+						: `${archived.length} of ${allArchived.length} archived sessions`
+					: "Loading archived sessions"
 			}
 			actions={
-				<Input
-					className="w-[240px] phone:w-full"
-					type="search"
-					aria-label="Search archived sessions"
-					placeholder="Search archived…"
-					value={search}
-					onChange={(e) => setSearch(e.target.value)}
-				/>
-			}
-			filters={
-				<>
-					<Segmented label="Owner">
-						<SegmentedOption
-							selected={owner === "mine"}
-							onClick={() => setOwner("mine")}
-						>
-							My archived
-						</SegmentedOption>
-						<SegmentedOption
-							selected={owner === "everyone"}
-							onClick={() => setOwner("everyone")}
-						>
-							Everyone
-						</SegmentedOption>
-					</Segmented>
-					{/* Spelled out, every repo on the instance wrapped the filter bar
-					    onto a second line and outweighed the list it was filtering.
-					    A field, so it sits at the same height as the search beside it. */}
-					{repos.length > 1 && (
-						<Select
-							className="w-auto"
-							aria-label="Repo"
-							value={repo}
-							onChange={(e) => setRepo(e.target.value)}
-						>
-							<option value="all">All repos</option>
-							{repos.map((name) => (
-								<option key={name} value={name}>
-									{repoLabel(name)}
-								</option>
-							))}
-						</Select>
-					)}
-					<Segmented label="Reason">
-						<SegmentedOption
-							selected={reason === "all"}
-							onClick={() => setReason("all")}
-						>
-							All
-						</SegmentedOption>
-						<SegmentedOption
-							selected={reason === "auto"}
-							onClick={() => setReason("auto")}
-						>
-							Auto-archived
-						</SegmentedOption>
-						<SegmentedOption
-							selected={reason === "manual"}
-							onClick={() => setReason("manual")}
-						>
-							Manual
-						</SegmentedOption>
-					</Segmented>
-				</>
+				<div className="flex items-center gap-2 phone:w-full">
+					<Input
+						className="w-[240px] phone:min-w-0 phone:flex-1"
+						type="search"
+						aria-label="Search archived sessions"
+						placeholder="Search archived…"
+						value={search}
+						onChange={(e) => setSearch(e.target.value)}
+					/>
+					<Menu.Root>
+						<Menu.Trigger
+							render={
+								<Button
+									icon={<IconFilter size={18} />}
+									aria-label={`Filters, ${activeFilterCount} active`}
+									className={activeFilterCount > 0 ? "text-fg" : undefined}
+								>
+									Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
+								</Button>
+							}
+						/>
+						<Menu.Popup align="end" className="min-w-[220px]">
+							<Menu.Group>
+								<Menu.GroupLabel>Owner</Menu.GroupLabel>
+								<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(value as OwnerFilter)}>
+									{(["mine", "everyone"] as const).map((value) => (
+										<Menu.RadioItem key={value} value={value} closeOnClick>
+											<span className="min-w-0 flex-1">{value === "mine" ? "My archived" : "Everyone"}</span>
+											{owner === value && <IconCheck size={17} className="shrink-0 text-accent" />}
+										</Menu.RadioItem>
+									))}
+								</Menu.RadioGroup>
+							</Menu.Group>
+							{repos.length > 1 && (
+								<>
+									<Menu.Separator />
+									<Menu.Group>
+										<Menu.GroupLabel>Repository</Menu.GroupLabel>
+										<Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
+											<Menu.RadioItem value="all" closeOnClick>
+												<span className="size-[18px] shrink-0" />
+												<span className="min-w-0 flex-1">All repos</span>
+												{repo === "all" && <IconCheck size={17} className="shrink-0 text-accent" />}
+											</Menu.RadioItem>
+											{repos.map((name) => (
+												<Menu.RadioItem key={name} value={name} closeOnClick>
+													<RepoTile name={name} size={18} />
+													<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+													{repo === name && <IconCheck size={17} className="shrink-0 text-accent" />}
+												</Menu.RadioItem>
+											))}
+										</Menu.RadioGroup>
+									</Menu.Group>
+								</>
+							)}
+							{hasAutoArchived && (
+								<>
+									<Menu.Separator />
+									<Menu.Group>
+										<Menu.GroupLabel>Reason</Menu.GroupLabel>
+										<Menu.RadioGroup value={reason} onValueChange={(value) => setReason(value as ReasonFilter)}>
+											{(["all", "auto", "manual"] as const).map((value) => (
+												<Menu.RadioItem key={value} value={value} closeOnClick>
+													<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
+													{reason === value && <IconCheck size={17} className="shrink-0 text-accent" />}
+												</Menu.RadioItem>
+											))}
+										</Menu.RadioGroup>
+									</Menu.Group>
+								</>
+							)}
+							{activeFilterCount > 0 && (
+								<>
+									<Menu.Separator />
+									<Menu.Item onClick={() => { setOwner("everyone"); setRepo("all"); setReason("all"); }}>
+										Clear filters
+									</Menu.Item>
+								</>
+							)}
+						</Menu.Popup>
+					</Menu.Root>
+				</div>
 			}
 		>
 			{archived.length === 0 && !loaded ? (
@@ -319,11 +337,11 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 									size="sm"
 									className={ARCHIVED_ROW_ACTION}
 									icon={<IconUnarchive size={15} className="phone:size-[17px]" />}
-									aria-label="Unarchive"
+									aria-label="Restore session"
 									disabled={busy === s.id}
 									onClick={(e) => handleUnarchive(e, s.id)}
 								>
-									<span className="phone:hidden">Unarchive</span>
+									<span className="phone:hidden">Restore</span>
 								</Button>
 							</li>
 						);

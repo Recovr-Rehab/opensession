@@ -26,6 +26,9 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var waitingForInput: Bool?
     var queuedCount: Int?
     var archived: Bool?
+    /// Why the session was archived. Missing means a manual archive from a
+    /// server or session record that predates this field.
+    var archivedReason: String?
     /// This row is a summary from the archived index, not a whole session —
     /// it carries what a list renders and nothing else. Anything that opens
     /// one fetches the real thing first (`SessionsListViewModel.hydrated`);
