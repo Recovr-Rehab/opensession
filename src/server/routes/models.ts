@@ -74,6 +74,17 @@ export async function handleModelsRoutes(
 		return Response.json(sandboxCapabilityStatus());
 	}
 
+	// Audit-backed real-work scorecard. This is evidence for the human
+	// sandbox-default decision, never an automatic config mutation.
+	if (path === "/api/sandbox/scorecard" && req.method === "GET") {
+		const requested = Number(url.searchParams.get("days") || 30);
+		const days = Number.isFinite(requested)
+			? Math.min(90, Math.max(1, Math.floor(requested)))
+			: 30;
+		const { readSandboxScorecard } = await import("../sandbox/scorecard");
+		return Response.json(readSandboxScorecard(days));
+	}
+
 	// Warm-on-typing sandbox prewarm (src/server/sandbox/prewarm.ts):
 	// the New-session palette POSTs {provider, repo, user} on the first
 	// keystroke (and ~every 60s while typing) with a REMOTE provider

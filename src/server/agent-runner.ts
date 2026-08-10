@@ -68,6 +68,7 @@ import {
 import { readEngineTranscriptAsync } from "./sessions";
 import type { GitIdentity } from "./shared/user-mappings";
 import type { TranscriptEntry } from "./types";
+import { audit } from "./audit";
 
 export type { StreamEvent };
 
@@ -769,6 +770,21 @@ export function resumeInterruptedRuns(
       const isDocker = run.sandboxProvider === "docker";
       if (run.osSessionId) resumed.push(run.osSessionId);
       recoveryTasks.push(async () => {
+        const recoveryStartedAt = Date.now();
+        let recoveryRecorded = false;
+        const recordRecovery = (outcome: "ok" | "failed", reason?: string) => {
+          if (recoveryRecorded) return;
+          recoveryRecorded = true;
+          audit({
+            kind: "sandbox_restart_survival_metric",
+            session_id: run.osSessionId,
+            provider: run.sandboxProvider,
+            sandbox_id: run.sandboxId,
+            recovery_ms: Date.now() - recoveryStartedAt,
+            outcome,
+            ...(reason ? { reason } : {}),
+          });
+        };
         try {
           const resume = isDocker
             ? (await import("./sandbox/docker")).resumeDockerSandboxRun
@@ -782,15 +798,19 @@ export function resumeInterruptedRuns(
             );
             journalClear(run.runKey);
             onResumed?.(run.osSessionId);
+            recordRecovery("failed", "sandbox_unavailable");
             return;
           }
           for await (const event of events) {
             if (run.osSessionId) onEvent?.(run.osSessionId, event);
             if (event.type === "done" || event.type === "error") {
               onResumed?.(run.osSessionId, event);
+              recordRecovery(event.type === "done" ? "ok" : "failed", event.type);
             }
           }
+          recordRecovery("failed", "stream_ended_without_terminal_event");
         } catch (e) {
+          recordRecovery("failed", "recovery_error");
           console.error(`[runner] Sandbox resume failed for ${run.runKey}:`, e);
         }
       });
