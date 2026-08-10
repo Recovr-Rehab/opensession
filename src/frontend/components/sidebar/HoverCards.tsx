@@ -372,14 +372,16 @@ function WsOverviewInfo({
 				// A filmstrip, like the info panel's screenshots: a 62px square
 				// crop of a 1440px screenshot is a grey band of text, not a
 				// picture of anything. Whole frames, scrolled sideways — and
-				// everything is reachable instead of hidden behind a "+3".
-				<div className="mt-2 flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+				// everything is reachable instead of hidden behind a "+3". Bleed
+				// through the card's right inset so the carousel peek is clipped
+				// at the card edge rather than stopping inside its padding.
+				<div className="mt-2 -mr-[13px] flex snap-x snap-mandatory gap-1.5 overflow-x-auto pr-[13px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 					{media.slice(0, MAX_HOVERCARD_MEDIA).map((m, i) => (
 						<button
 							key={`${m.sessionId}:${m.at}:${i}`}
 							type="button"
 							onClick={() => openLightbox(media, i)}
-							className="relative block aspect-video w-[calc((100%-12px)/2)] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
+							className="relative block aspect-video w-[124px] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
 							title={[m.sessionTitle, new Date(m.at).toLocaleString()]
 								.filter(Boolean)
 								.join(" · ")}
