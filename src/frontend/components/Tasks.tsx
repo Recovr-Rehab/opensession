@@ -249,7 +249,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
 						</div>
 					</Card>
 				) : open.length ? (
-					<CardList as="ul" className="m-0 list-none p-0">
+					<CardList as="ul">
 						{open.map((task) => (
 							<TaskRow
 								key={task.id}
@@ -287,7 +287,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
 							<span className="text-faint">{done.length}</span>
 						</button>
 						{showDone && (
-							<CardList as="ul" className="m-0 list-none p-0">
+							<CardList as="ul">
 								{done.map((task) => (
 									<TaskRow
 										key={task.id}
