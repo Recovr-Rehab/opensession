@@ -126,10 +126,8 @@ struct CatchUpDeckView: View {
         }
         // Arming is a state change you can feel before you commit to it — one
         // tick crossing in, a softer one crossing back out.
-        .sensoryFeedback(trigger: armed) { _, now in
-            now == nil
-                ? .impact(weight: .light, intensity: 0.35)
-                : .impact(weight: .medium, intensity: 0.8)
+        .haptic(trigger: armed) { _, now in
+            now == nil ? .released : .armed
         }
     }
 

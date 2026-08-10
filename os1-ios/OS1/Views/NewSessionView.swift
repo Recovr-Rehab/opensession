@@ -638,6 +638,11 @@ struct NewSessionView: View {
     /// create (worktree prep — seconds) runs in the background. The list
     /// swaps the temp id for the server's when it resolves.
     private func create() {
+        // Played here rather than from a trigger on the view: the sheet
+        // dismisses two lines down, and a dismissed view never observes its
+        // own state change. Starting a session is the same gesture as sending
+        // a message, and wears the same disc — so it gets the same cue.
+        Haptics.play(.send)
         dictation.stop()
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageURLs = images.map(\.dataURL)

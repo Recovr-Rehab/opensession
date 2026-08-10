@@ -352,6 +352,9 @@ struct AppearanceSettingsView: View {
     @AppStorage("os1.appearance") private var appearance = "system"
     @AppStorage("os1.list.lastUsed") private var lastUsed = "off"
     @AppStorage("os1.sidebar.repoOrder") private var repoOrderJSON = "[]"
+    /// Device-local like the theme, and for the same reason: the Taptic Engine
+    /// belongs to this phone, not to the account signed into it.
+    @AppStorage(Haptics.preferenceKey) private var haptics = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
@@ -433,6 +436,18 @@ struct AppearanceSettingsView: View {
                 Text("Accent")
             }
 
+            #if os(iOS)
+            Section {
+                Toggle("Haptic feedback", isOn: $haptics)
+            } header: {
+                Text("Feedback")
+            } footer: {
+                Text(
+                    "A tap when a message sends, a question is answered or a run is stopped. This device only — silent mode doesn't affect it, and the system's own Vibration setting turns it off everywhere."
+                )
+            }
+            #endif
+
             Section {
                 NavigationLink {
                     RepoOrderSettingsView()
@@ -456,6 +471,14 @@ struct AppearanceSettingsView: View {
             }
         }
         .navigationTitle("Appearance")
+        #if os(iOS)
+        // Switching it on plays the send cue once, so the control demonstrates
+        // what it does instead of describing it — and proves the engine works
+        // on this device before you go looking for the tap in a composer.
+        .onChange(of: haptics) { _, on in
+            if on { Haptics.play(.send) }
+        }
+        #endif
         .task { await loadRepos() }
     }
 

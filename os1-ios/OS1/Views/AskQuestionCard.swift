@@ -52,6 +52,12 @@ struct AskQuestionCard: View {
         .overlay(cardShape.stroke(OS1VisualStyle.border, lineWidth: 0.5))
         .animation(.snappy(duration: 0.2), value: chosen)
         .animation(.snappy(duration: 0.2), value: trimmedFreeText.isEmpty)
+        // Answering is the moment a stuck session starts moving again — worth
+        // the success cue rather than a send's tap, and it covers both ways of
+        // answering because both set `chosen`.
+        .haptic(trigger: chosen) { previous, chosen in
+            previous == nil && chosen != nil ? .commit : nil
+        }
     }
 
     // MARK: - Pieces

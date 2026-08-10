@@ -1873,6 +1873,20 @@ private struct SessionInputBar: View {
         .padding(.top, Self.barTopPadding)
         .padding(.bottom, 8)
         .animation(.smooth(duration: 0.22), value: visibleNotice)
+        // The send you can feel. Keyed on the view model's send counter rather
+        // than the button's action, so every way of sending gets it: the disc,
+        // the hold menu's steer/queue, Return on the software keyboard and
+        // ⌘/Ctrl+Return on the Mac. A send that was REFUSED (a full outbox)
+        // never increments it, so it stays silent and the notice below speaks
+        // instead.
+        .haptic(.send, trigger: viewModel.sendSeq)
+        // Only the notices that carry bad news knock: "switched to code mode"
+        // is information, and a phone that buzzes at information is a phone
+        // people turn haptics off on.
+        .haptic(trigger: visibleNotice) { previous, notice in
+            guard let notice, notice != previous else { return nil }
+            return NoticeTone.derived(fromText: notice) == .info ? nil : .warn
+        }
         // A notice is a passing remark, not a state: most of them describe
         // something that has already finished happening ("app update paused",
         // "switched to code mode"), and one that sits over the composer for
@@ -2276,7 +2290,14 @@ private struct SessionInputBar: View {
                     viewModel.userDidInteract()
                     // Starting to write is a statement about where you want to
                     // be: at the end of the conversation you're replying to.
-                    if previous.isEmpty, !draft.isEmpty { viewModel.draftStarted() }
+                    if previous.isEmpty, !draft.isEmpty {
+                        viewModel.draftStarted()
+                        // The first character is the earliest honest signal
+                        // that a send is coming — warm the engine there, so
+                        // the tap and the tick happen together rather than a
+                        // beat apart.
+                        Haptics.prepare()
+                    }
                 }
                 // A vertical-axis TextField is greedy: without an explicit
                 // fill it claims the row's whole width in the pill and pushes
@@ -2549,6 +2570,9 @@ private struct SessionInputBar: View {
         .help("Stop current turn")
         #else
         Button {
+            // Firmer than a send on purpose: stopping a run is the one thing
+            // in the composer you can't take back.
+            Haptics.play(.stop)
             viewModel.cancelRun()
         } label: {
             Image(systemName: "stop.fill")
@@ -2849,13 +2873,19 @@ private struct SessionInputBar: View {
                     .onChanged { value in
                         guard let onMove else { return }
                         let travelled = value.translation.height
+                        // A tick per swap, the way a picker ticks per notch:
+                        // the rows move under the finger while your eyes are
+                        // on the one you're dragging, so the count of swaps is
+                        // otherwise something you have to look up to check.
                         while travelled - dragConsumed > Self.rowStep {
                             dragConsumed += Self.rowStep
                             onMove(1)
+                            Haptics.play(.selection)
                         }
                         while travelled - dragConsumed < -Self.rowStep {
                             dragConsumed -= Self.rowStep
                             onMove(-1)
+                            Haptics.play(.selection)
                         }
                         dragTravel = travelled - dragConsumed
                     }

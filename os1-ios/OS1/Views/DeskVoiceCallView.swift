@@ -38,6 +38,17 @@ struct DeskVoiceCallView: View {
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 560)
         #endif
+        // The call says when it went live. Connecting takes long enough that
+        // people look at the screen to find out whether it worked — and this
+        // is the one screen you're most likely to be holding to your ear, not
+        // watching. A refusal knocks instead.
+        .haptic(trigger: engine.state) { previous, state in
+            switch state {
+            case .listening where previous == .connecting: .armed
+            case .error where previous != .error: .warn
+            default: nil
+            }
+        }
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.linear(duration: 9).repeatForever(autoreverses: false)) {
@@ -210,6 +221,8 @@ struct DeskVoiceCallView: View {
                 label: engine.muted ? "Unmute the microphone" : "Mute the microphone",
                 prominent: engine.muted
             ) {
+                // Muting is a state you can't see with the phone at your ear.
+                Haptics.play(.selection)
                 engine.toggleMute()
             }
             .disabled(!engine.active)
@@ -228,6 +241,8 @@ struct DeskVoiceCallView: View {
                 tint: OS1VisualStyle.red,
                 onAccent: .white
             ) {
+                // Closes the pair the connect cue opened.
+                Haptics.play(.released)
                 engine.stop()
                 dismiss()
             }

@@ -532,6 +532,9 @@ private struct PrReviewSheet: View {
 
     private func send() {
         guard !submitting else { return }
+        // On the tap, not on the result: the sheet dismisses itself the moment
+        // the submit returns, and a review that fails says so in words.
+        Haptics.play(.send)
         submitting = true
         errorText = nil
         summaryFocused = false

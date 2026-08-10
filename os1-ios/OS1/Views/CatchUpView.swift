@@ -33,8 +33,8 @@ struct CatchUpView: View {
         .task { await model.settle(from: list) }
         // Not `.success` on every finish: the chime belongs to the moment the
         // last card leaves, and only when there was something to clear.
-        .sensoryFeedback(trigger: model.isDone) { was, now in
-            now && !was && model.handled > 0 ? .success : nil
+        .haptic(trigger: model.isDone) { was, now in
+            now && !was && model.handled > 0 ? .commit : nil
         }
         .sheet(isPresented: $replying) {
             if let card = model.current {
@@ -275,6 +275,8 @@ private struct CatchUpReplySheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Send") {
+                        // The sheet is gone before a trigger could fire.
+                        Haptics.play(.send)
                         onSend(text)
                         dismiss()
                     }

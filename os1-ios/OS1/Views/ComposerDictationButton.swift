@@ -22,9 +22,18 @@ struct ComposerDictationButton: View {
 
     var body: some View {
         Button {
+            // The mic is the one control here you keep talking to after you
+            // let go of it, so it says when it opened and when it closed —
+            // the release deliberately lighter than the arm, so the pair reads
+            // as one gesture rather than two taps. Played on the tap, not on
+            // `dictation.active`: authorisation and engine start-up sit
+            // between the two, and feedback that arrives after a permission
+            // sheet isn't feedback for the tap any more.
             if dictation.active {
+                Haptics.play(.released)
                 dictation.stop()
             } else {
+                Haptics.play(.armed)
                 let base = draft
                 Task { await dictation.start(base: base) { draft = $0 } }
             }
