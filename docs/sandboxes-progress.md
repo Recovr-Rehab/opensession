@@ -77,6 +77,14 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
 - A design agent is investigating pi + opencode-other in-sandbox; its
   addendum will amend Slice C of sandboxes-phase1-brain-inside.md. Slice C
   should not be implemented until that addendum lands.
+- Refinement from Michiel (hard constraint, relayed to the design agent):
+  **sandboxes adapt to the engines, never the reverse.** Opencode and pi
+  stay architecturally exactly as they are — no pi service extraction, no
+  dispatch-layer redesign, no engine auth-flow changes. Target shape: the
+  in-guest runner-host embeds pi in-process the same way the server does on
+  the host; opencode runs in-guest as the same subprocess + in-guest bridge
+  it already is on remote providers. All non-sandboxed paths keep working
+  unchanged.
 
 ## Next steps (for whoever picks this up)
 
