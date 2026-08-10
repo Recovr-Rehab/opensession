@@ -116,28 +116,6 @@ export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
 export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-[11px]";
 
 /**
- * The band header's name and count, lifted a pixel.
- *
- * Both are flex-centred and MEASURE as centred — the label's box centre lands on
- * the tile's to the half-pixel. What the eye reads is the word's mass, which for
- * a lowercase repo name is its x-height band, and that band sits ~1.2px below
- * the line box's own centre (this font; ~1.5px in macOS's SF, whose ascent runs
- * further above the cap). Against a stroke glyph that goes unnoticed, but the
- * band's mark is a SOLID block whose optical centre is exactly its geometric
- * one, so the name read as hanging low off it. Only the two band headers carry
- * the nudge for that reason — the other headers' marks are glyphs with ink
- * offsets of their own.
- *
- * A transform rather than `text-box: trim-both cap|ex alphabetic`, which is the
- * proper tool for this and cannot be used here: the label is `truncate`, so its
- * box clips, and trimming the line box to the cap or x-height band cuts the tops
- * off the ascenders that overflow it (measured — `ex` beheaded "tella-fusion").
- *
- * The count wears it too, so the pair keeps one baseline.
- */
-export const SIDEBAR_REPO_BAND_TEXT = "-translate-y-px";
-
-/**
  * ── Group headers ───────────────────────────────────────────────────────────
  * The collapsible headings INSIDE the workspace list: Needs review, Pinned,
  * Archived, the repo bands, the automation groups. `group/gh` is what the
