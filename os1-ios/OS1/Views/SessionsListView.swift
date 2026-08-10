@@ -484,33 +484,21 @@ struct SessionsListView: View {
                     // The bare app tile is the control; the toolbar's glass
                     // circle around it read as a stray border.
                     .sharedBackgroundVisibility(.hidden)
-                    // The Desk is a place you go, not nav chrome for this
-                    // list, so it rides the bottom edge within thumb reach —
-                    // placing search explicitly keeps it leading and parks
-                    // the Desk in the bottom-right corner beside it.
+                    ToolbarItem(placement: .topTrailingCompat) {
+                        filterMenu
+                    }
+                    ToolbarItem(placement: .topTrailingCompat) {
+                        Button {
+                            newSessionRequest = NewSessionRequest()
+                        } label: {
+                            Image(systemName: "plus")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel("New session")
+                    }
+                    // Destinations now live in the horizontal tool cards;
+                    // search remains the bottom bar's one list control.
                     DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                    ToolbarSpacer(.fixed, placement: .bottomBar)
-                    // Support rides beside the Desk: both are places rather
-                    // than controls for this list, and a ticket queue is read
-                    // on the move more than anything else here.
-                    ToolbarItem(placement: .bottomBar) {
-                        Button {
-                            showSupport = true
-                        } label: {
-                            Image(systemName: "lifepreserver")
-                                .foregroundStyle(OS1VisualStyle.text)
-                        }
-                        .accessibilityLabel("Open the support queue")
-                    }
-                    ToolbarItem(placement: .bottomBar) {
-                        Button {
-                            showDesk = true
-                        } label: {
-                            Image(systemName: "lamp.desk")
-                                .foregroundStyle(OS1VisualStyle.text)
-                        }
-                        .accessibilityLabel("Open the Desk")
-                    }
                 }
                 .sheet(isPresented: $showSettings) {
                     SettingsView()
@@ -1677,21 +1665,14 @@ struct SessionsListView: View {
         Section {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    Menu {
-                        filterMenuContent
-                    } label: {
-                        mobileToolCardLabel(title: "Filter") {
-                            WebIcon(
-                                kind: .filter,
-                                size: 22,
-                                color: repoFilter == "all"
-                                    ? OS1VisualStyle.textDim
-                                    : OS1VisualStyle.accent
-                            )
-                        }
+                    mobileToolCardLabel(title: "Home", active: true) {
+                        Image(systemName: "house")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(OS1VisualStyle.text)
                     }
-                    .accessibilityLabel("Filter sessions")
-                    .accessibilityValue(filterAccessibilityValue)
+                    .accessibilityElement()
+                    .accessibilityLabel("Home")
+                    .accessibilityAddTraits(.isSelected)
 
                     Button {
                         showCatchUp = true
@@ -1713,16 +1694,28 @@ struct SessionsListView: View {
                     )
 
                     Button {
-                        newSessionRequest = NewSessionRequest()
+                        showSupport = true
                     } label: {
-                        mobileToolCardLabel(title: "New session") {
-                            Image(systemName: "plus")
-                                .font(.system(size: 21, weight: .medium))
+                        mobileToolCardLabel(title: "Support") {
+                            Image(systemName: "lifepreserver")
+                                .font(.system(size: 20, weight: .medium))
                                 .foregroundStyle(OS1VisualStyle.textDim)
                         }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("New session")
+                    .accessibilityLabel("Open the support queue")
+
+                    Button {
+                        showDesk = true
+                    } label: {
+                        mobileToolCardLabel(title: "Desk") {
+                            Image(systemName: "lamp.desk")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(OS1VisualStyle.textDim)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open the Desk")
                 }
                 .padding(.horizontal, 16)
             }
@@ -1737,6 +1730,7 @@ struct SessionsListView: View {
     private func mobileToolCardLabel<Icon: View>(
         title: String,
         count: Int? = nil,
+        active: Bool = false,
         @ViewBuilder icon: () -> Icon
     ) -> some View {
         ZStack(alignment: .topTrailing) {
@@ -1765,11 +1759,14 @@ struct SessionsListView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(OS1VisualStyle.raised)
+                .fill(active ? OS1VisualStyle.hover : OS1VisualStyle.raised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(OS1VisualStyle.border.opacity(0.65), lineWidth: 0.5)
+                .strokeBorder(
+                    OS1VisualStyle.border.opacity(active ? 1 : 0.65),
+                    lineWidth: active ? 1 : 0.5
+                )
         )
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
