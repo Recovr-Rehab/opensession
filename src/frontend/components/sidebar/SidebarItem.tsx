@@ -38,9 +38,11 @@ import React, { useEffect, useRef, useState } from "react";
  *  `data-sidebar-row` is the hook the ⌘↑/⌘↓ row walker queries by.
  *
  *  Rows wrapped in a swipe shell add `mt-0` — the wrapper carries the 2px gap
- *  for them — plus the swipe transform; bare rows keep the margin. */
+ *  for them — plus the swipe transform; bare rows keep the margin. On phones,
+ *  row content sits one 4px step inside the repo and lane headings, matching
+ *  the native list hierarchy instead of flattening every label onto one rail. */
 export const SIDEBAR_ROW =
-	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg phone:px-1 phone:py-[13px]";
+	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg phone:px-2 phone:py-[13px]";
 
 /** A row's title: one line that fades smoothly at the available edge instead
  *  of ending in an ellipsis. Read conversations stay quiet; unread ones

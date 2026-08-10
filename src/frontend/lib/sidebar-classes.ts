@@ -181,7 +181,7 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * step up from the desktop caption so it survives arm's-length reading.
  */
 export const SIDEBAR_LANE_HEADER =
-	"pt-[9px] pb-[5px] text-[13px] font-semibold desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
+	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:gap-[9px] desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
@@ -522,7 +522,7 @@ export const SIDEBAR_WS_ACTION =
  * would split the free space and strand one of them mid-row.
  */
 export const SIDEBAR_WS_TIME =
-	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint desktop:min-w-[34px] desktop:pr-0";
+	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint desktop:min-w-[34px] desktop:pr-1";
 
 /** Revealed on row hover. The room for the action cluster is the row's own —
  *  see {@link SIDEBAR_WS_ROW} — so this no longer carries a margin of its own. */
@@ -541,7 +541,7 @@ export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex";
  * stands in for instead of growing a clock's worth of digits.
  */
 export const SIDEBAR_WS_TICKER =
-	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-0";
+	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-0.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-1";
 
 /**
  * Slack-style unsent-draft pencil. Its left margin is the call site's: on a
