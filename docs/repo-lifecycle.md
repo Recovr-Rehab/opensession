@@ -1,13 +1,14 @@
-# Repo lifecycle scripts: `.opensession/`
+# Repo lifecycle scripts: `.agents/`
 
-Commit a `.opensession/` directory to a repository and every agent host that
+Commit a `.agents/` directory to a repository and every agent host that
 follows this convention — Open Session, and anything else that adopts it —
 knows how to provision a workspace for that repo and boot its dev server.
-Three files, each optional:
+Four files, each optional:
 
 | File          | When it runs                              | Job                                       |
 | ------------- | ----------------------------------------- | ----------------------------------------- |
-| `setup.sh`    | once per workspace materialization        | install deps, fetch prebuilt assets       |
+| `setup`       | once per workspace materialization, before the post-setup snapshot | install deps, fetch prebuilt assets |
+| `resume`      | after a paused/snapshotted workspace wakes | idempotent post-wake repair               |
 | `start.sh`    | when a preview starts                     | bring the dev server up in the foreground |
 | `preview.json`| warm-pool / warm-template refreshes       | declare which routes to pre-compile       |
 
@@ -19,19 +20,19 @@ own worktree and verify its changes in a real browser (screenshots, DOM
 checks, CDP) without a human bootstrapping anything. See
 [Letting the agent test the app itself](#letting-the-agent-test-the-app-itself).
 
-`setup.sh` is always taken from the same directory as the resolved
+`setup` is always taken from the same directory as the resolved
 `start.sh` — the pair ships together.
 
-## setup.sh — one-shot provisioning
+## setup — one-shot provisioning
 
 Runs once per workspace materialization, `cwd` = repo root, no arguments —
 everything arrives by environment:
 
 - **Worktree creation.** Every new session worktree runs the repo's
-  `setup.sh` when present (it beats the instance-level `worktreeSetup`
+  `setup` hook when present (it beats the instance-level `worktreeSetup`
   command); afterwards the configured `depsInstall` — or a plain
   `bun install` when there is a root `package.json` — still runs, so
-  `setup.sh` only needs to cover what that default doesn't.
+  `setup` only needs to cover what that default doesn't.
   See [worktrees.md](worktrees.md).
 - **Sandbox workspace setup.** Once per sandbox workspace, skipped on
   snapshot restores (the restored layer already carries its effects), never
@@ -51,6 +52,20 @@ message rather than exiting quietly.
 Keep it scoped to what the dev server needs: dependency install, prebuilt
 artifact fetch, codegen. Slow extras belong behind an existence check.
 
+## resume — idempotent post-wake repair
+
+Sandboxed workspaces get paused and snapshotted aggressively; `resume` runs
+after a workspace wakes from a pause, a snapshot restore, or a host-reboot
+re-clone — the place to repair anything wall-clock- or environment-sensitive
+that a frozen filesystem image gets wrong (stale pid/lock files, expired
+short-lived tokens the repo's tooling caches, clock-skewed build caches).
+Same conventions as `setup`: `cwd` = repo root, no arguments, **idempotent**
+(it can run many times over a workspace's life), non-fatal on failure, loud
+and actionable when something important breaks.
+
+No host runs it yet — the reader lands with the sandbox plan's Phase 1
+(docs/sandboxes-plan.md); committing one today is forward-compatible.
+
 ## start.sh — boot the dev server
 
 Runs when someone — or the agent itself — starts a preview: detached, `cwd` =
@@ -68,13 +83,13 @@ repo root, no arguments. Two rules make it work:
    | `OPENSESSION_BOOT_MODE` | `fresh` \| `snapshot-restore`, informational. Host previews always say `fresh`. |
 
 Beyond that it should be just a script: a developer with a normal setup can
-run `./.opensession/start.sh` by hand and get the usual dev server with sane
+run `./.agents/start.sh` by hand and get the usual dev server with sane
 defaults. Assume no TTY and no human — never prompt. When a one-time human
 step is missing (a gitignored `.env` that needs an interactive login to pull,
 say), exit non-zero with the exact commands to run; that error message is
 what both the session UI and the agent will act on.
 
-**Resolution chain.** `.opensession/start.sh` → the
+**Resolution chain.** `.agents/start.sh` → the
 instance-config `previewCommand` (invoked with the worktree path as `$1` —
 for repos you can't commit to). One chain, shared by host and sandbox
 previews (`resolvePreviewBoot` in src/server/preview.ts); no rung resolves →
@@ -109,13 +124,13 @@ boot, so the first human or agent visit is fast:
 
 Keep it to the handful of routes people actually open first from a preview.
 Precedence: explicit instance Settings → the repo's committed
-`.opensession/preview.json` → built-in defaults.
+`.agents/preview.json` → built-in defaults.
 
 ## A minimal pair
 
 ```bash
 #!/usr/bin/env bash
-# .opensession/setup.sh — one-shot per workspace. Idempotent.
+# .agents/setup — one-shot per workspace. Idempotent.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 bun install
@@ -123,7 +138,7 @@ bun install
 
 ```bash
 #!/usr/bin/env bash
-# .opensession/start.sh — boot the dev server in the foreground.
+# .agents/start.sh — boot the dev server in the foreground.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -170,14 +185,14 @@ repos, these are the patterns that make it work:
   the app *reachable*; the instructions make it *drivable*.
 - **Human-once bootstrap, machine-many reuse.** Secrets that genuinely need
   an interactive login get pulled once into the main checkout by a human;
-  `setup.sh` (or the skill) seeds them from there into each worktree. Scripts
+  `setup` (or the skill) seeds them from there into each worktree. Scripts
   fail with the copy-pasteable bootstrap commands when the seed is missing.
 
 ## Pointers
 
-- [worktrees.md](worktrees.md) — worktree creation and where `setup.sh` fits
-  in the dependency-install chain
+- [worktrees.md](worktrees.md) — worktree creation and where the `setup` hook
+  fits in the dependency-install chain
 - [deploy/sandbox/README.md](../deploy/sandbox/README.md) — the same
   convention inside sandboxes: port publishing, `.tunnels.env`, setup logs
 - [self-development.md](self-development.md) — Open Session's own
-  `.opensession/` scripts, a real in-tree example
+  `.agents/` scripts, a real in-tree example

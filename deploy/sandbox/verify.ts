@@ -37,8 +37,8 @@
  * rpc-ws bridge via the hostId+wsToken handshake.
  *
  * PREVIEW + LIFECYCLE section (Phase 4A): a fifth sbxtest session exercises
- * the sandboxed Preview flow end-to-end — `.opensession/setup.sh` one-shot,
- * `.opensession/start.sh` bring-up on a port allocated from the pre-published
+ * the sandboxed Preview flow end-to-end — `.agents/setup` one-shot,
+ * `.agents/start.sh` bring-up on a port allocated from the pre-published
  * range, the namespaced Caddy https route (live Caddy admin; asserted
  * collision-free against the host webapp+6000 scheme AND a second sandbox on
  * the same webapp port), the `.tunnels.env` contract, stop/route teardown,
@@ -716,7 +716,7 @@ try {
   // ══ PREVIEW + LIFECYCLE (Phase 4A) ═══════════════════════════════════════
   // A bind-mode sandbox with the repo-local lifecycle hooks: setup.sh must run
   // exactly once; startSandboxPreview must allocate a webapp port from the
-  // pre-published range, run .opensession/start.sh with the port/URL env, route
+  // pre-published range, run .agents/start.sh with the port/URL env, route
   // Caddy at a NAMESPACED https port (never the host's webapp+6000 scheme),
   // and write the .tunnels.env contract. Uses the LIVE Caddy admin API — all
   // routes/allocations are cleaned up here and in cleanup().
@@ -727,13 +727,13 @@ try {
     process.env.OPENSESSION_SANDBOX_CONFIG!,
     JSON.stringify({ provider: "docker", devServerInSandbox: true, previewPorts: PRE_PORTS }),
   );
-  mkdirSync(`${WT}/.opensession`, { recursive: true });
+  mkdirSync(`${WT}/.agents`, { recursive: true });
   await Bun.write(
-    `${WT}/.opensession/setup.sh`,
+    `${WT}/.agents/setup`,
     `#!/usr/bin/env bash\necho "setup boot=$OPENSESSION_BOOT_MODE" >> .opensession-setup-runs\n`,
   );
   await Bun.write(
-    `${WT}/.opensession/start.sh`,
+    `${WT}/.agents/start.sh`,
     `#!/usr/bin/env bash
 echo "start boot=$OPENSESSION_BOOT_MODE port=$WEBAPP_PORT url=$PREVIEW_URL" > .opensession-start-ran
 exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0.0", fetch: () => new Response("lifecycle-preview-ok") })'
@@ -758,7 +758,7 @@ exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0
     await new Promise((r) => setTimeout(r, 500));
     pst = await previewMod.getSandboxPreviewStatus(pre, WT);
   }
-  ok("webapp came up in-container via .opensession/start.sh", pst.running,
+  ok("webapp came up in-container via .agents/start.sh", pst.running,
     pst.services.map((s) => `${s.key}=${s.port}:${s.running}`).join(","));
   ok("allocated webapp port came from the published range",
     pst.webappPort != null && PRE_PORTS.includes(pst.webappPort), String(pst.webappPort));

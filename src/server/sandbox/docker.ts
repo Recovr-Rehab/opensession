@@ -174,7 +174,7 @@ const SWEEP_INTERVAL_MS = 5 * 60_000;
  *  routable port — startSandboxPreview allocates from this set. Config
  *  `previewPorts` overrides; exhaustion = widen it + recreate the container. */
 const DEFAULT_PREVIEW_PORTS = [3300, 3301, 3302];
-/** Cap for a `.backstage/setup.sh` lifecycle run (one-shot, per workspace). */
+/** Cap for a `.agents/setup` lifecycle run (one-shot, per workspace). */
 const SETUP_TIMEOUT_MS = 10 * 60_000;
 
 /** Provider-owned state, one file per sandbox — lets get() reattach (or fully
@@ -207,7 +207,7 @@ interface DockerSandboxState {
    *  flip recreates the container on the next ensure (mounts are create-time).
    *  Absent (pre-Phase-3 state files) = "socket". */
   transport?: SandboxTransport;
-  /** Whether the `.backstage/setup.sh` lifecycle hook already ran (or was
+  /** Whether the `.agents/setup` lifecycle hook already ran (or was
    *  skipped — snapshot restore / script absent). One-shot per sandbox. */
   setupRan?: boolean;
   /** How the current container came to exist: fresh create vs snapshot
@@ -852,14 +852,14 @@ async function setupContainer(name: string, cwd: string): Promise<void> {
 }
 
 /**
- * Repo-local lifecycle hook `.backstage/setup.sh` (the background-agents
- * convention, kept minimal): run ONCE per workspace materialization, inside
+ * Repo-local lifecycle hook `.agents/setup` (docs/repo-lifecycle.md, kept
+ * minimal): run ONCE per workspace materialization, inside
  * the container, cwd = the workspace — the place for repo-specific dep
  * installs / codegen a sandboxed dev server needs. Skipped when the container
  * was restored from a snapshot (its container layer already carries the
  * setup's effects — that's what snapshots capture). Failure logs loudly but
  * never blocks the session, and is NOT retried (one-shot semantics; the log
- * lives in the session's bind-mounted run dir). `.backstage/start.sh` is the
+ * lives in the session's bind-mounted run dir). `.agents/start.sh` is the
  * sibling hook — preview.ts runs it as the dev-server bring-up.
  *
  * Returns true when the hook is settled (ran / skipped / absent) so the
@@ -871,14 +871,8 @@ async function runWorkspaceSetup(
   cwd: string,
   bootMode: "fresh" | "snapshot-restore",
 ): Promise<boolean> {
-  // Repo hooks: `.opensession/setup.sh` (new) with `.backstage/setup.sh`
-  // (pre-rename) fallback.
-  let script = `${cwd}/.opensession/setup.sh`;
-  let probe = await docker(["exec", name, "test", "-f", script]);
-  if (probe.exitCode !== 0) {
-    script = `${cwd}/.backstage/setup.sh`;
-    probe = await docker(["exec", name, "test", "-f", script]);
-  }
+  const script = `${cwd}/.agents/setup`;
+  const probe = await docker(["exec", name, "test", "-f", script]);
   if (probe.exitCode !== 0) return true; // no hook — settled
   if (bootMode === "snapshot-restore") {
     console.log(`[sandbox] ${name}: skipping ${script} (snapshot restore carries its effects)`);
@@ -1446,7 +1440,7 @@ export class DockerProvider implements SandboxProvider {
     if (!wasRunning) {
       await docker(["exec", name, "sh", "-c", `rm -f ${assertSafePath(cwd)}/.tunnels.env`]);
     }
-    // One-shot `.backstage/setup.sh` lifecycle hook (skipped on snapshot
+    // One-shot `.agents/setup` lifecycle hook (skipped on snapshot
     // restore; never retried once settled — see runWorkspaceSetup).
     let setupRan = existing?.setupRan === true;
     if (!setupRan) {

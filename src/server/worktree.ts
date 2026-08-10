@@ -136,9 +136,8 @@ export interface WorktreeInfo {
 
 /**
  * Best-effort dependency install in a fresh worktree — sessions can always run
- * `bun install` themselves. A repo-owned `.opensession/setup.sh` (or legacy
- * `.backstage/setup.sh`) is preferred; `worktreeSetup` is the instance-level
- * fallback. `depsInstall` then overrides the generic root package install.
+ * `bun install` themselves. A repo-owned `.agents/setup` hook is preferred;
+ * `worktreeSetup` is the instance-level fallback. `depsInstall` then overrides the generic root package install.
  *
  * Interactive create paths fire this WITHOUT awaiting (a tella-fusion webapp
  * `bun install` is ~20-25s — it was the bulk of the "Waiting for workspace"
@@ -170,12 +169,10 @@ async function seedAndInstallWorktree(
 
 export async function installWorktreeDeps(repo: Repo, wtPath: string, branchLabel: string): Promise<void> {
   try {
-    // `.opensession/setup.sh`, with `.backstage/` as the pre-rename name repos
-    // may still ship (same pair as preview.ts's LIFECYCLE_DIRS).
-    const repoSetup = ["opensession", "backstage"]
-      .map((dir) => `${wtPath}/.${dir}/setup.sh`)
-      .find((path) => existsSync(path));
-    if (repoSetup) {
+    // `.agents/setup` — the repo lifecycle provision hook (same dir preview.ts
+    // resolves; docs/repo-lifecycle.md).
+    const repoSetup = `${wtPath}/.agents/setup`;
+    if (existsSync(repoSetup)) {
       await $`bash ${repoSetup}`.cwd(wtPath).quiet();
     } else if (repo.worktreeSetup) {
       await $`sh -c ${repo.worktreeSetup}`.cwd(wtPath).quiet();

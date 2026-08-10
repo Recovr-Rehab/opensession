@@ -26,7 +26,7 @@ import {
 
 // Any worktree session gets the control; whether a repo can actually boot a
 // preview comes back on the status itself (`bootable` — repo-committed
-// .opensession/start.sh → configured previewCommand).
+// .agents/start.sh → configured previewCommand).
 // Repos with no mechanism show a disabled button explaining what to add.
 function isPreviewable(session: UnifiedSession): boolean {
   return !!session.worktreeDir;
@@ -140,7 +140,7 @@ export function PreviewButton({
   // Absent on pre-field servers — treat as bootable so the button still works
   // against a not-yet-restarted backend.
   const bootable = status.bootable !== false;
-  const notBootableHint = `No preview boot mechanism for this repo — commit an .opensession/start.sh to the repo, or set previewCommand on its repos config entry`;
+  const notBootableHint = `No preview boot mechanism for this repo — commit an .agents/start.sh to the repo, or set previewCommand on its repos config entry`;
 
   // Same-origin interstitial that waits for the boot and then redirects itself
   // to the preview (PreviewWait.tsx). The agent-flagged deep link rides along
@@ -353,7 +353,7 @@ export function PreviewButton({
         ) : bootable ? (
           "Runs the repo's preview boot script in this worktree (first build ~1 min)."
         ) : (
-          "Add .opensession/start.sh or configure previewCommand."
+          "Add .agents/start.sh or configure previewCommand."
         )}
       </div>
     </Popover.Popup>

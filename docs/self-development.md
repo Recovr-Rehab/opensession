@@ -36,14 +36,14 @@ byte-identical to today's behavior.
 The Preview button uses the repo's own lifecycle scripts, the same convention
 every other repo uses ([repo-lifecycle.md](repo-lifecycle.md)):
 
-- `.opensession/setup.sh` — one-shot per worktree: `bun install
+- `.agents/setup` — one-shot per worktree: `bun install
   --frozen-lockfile`. Safe to re-run.
-- `.opensession/start.sh` — boots the dev instance in the foreground on
+- `.agents/start.sh` — boots the dev instance in the foreground on
   `$WEBAPP_PORT`, loopback only, with the three flags above and
   `OPENSESSION_STATE_DIR=$PWD/.dev-state`.
 
 Flow: press Preview in an opensession session → the running server allocates a
-port (3100–3999), runs `setup.sh` once, then `start.sh` detached with cwd =
+port (3100–3999), runs the `setup` hook once, then `start.sh` detached with cwd =
 the session's checkout → Caddy fronts the port at
 `https://<host>:<port+6000>` (the `PREVIEW_URL` in the button). Stop kills the
 script's process group, which kills the instance because `start.sh` `exec`s it.

@@ -244,7 +244,7 @@ function goldenImage(repoId: string): string {
 }
 
 /**
- * Artifacts that MUST exist in a workspace after setup.sh for the app to
+ * Artifacts that MUST exist in a workspace after the .agents/setup hook for the app to
  * actually render — the golden build refuses to commit without them (their
  * absence only surfaces later as module-not-found crashes on page compile).
  */
@@ -666,7 +666,7 @@ async function poolUnfreeze(c: PoolContainer): Promise<boolean> {
 async function poolRestartDev(c: PoolContainer): Promise<void> {
   if (isMicrovm(c)) {
     await mvmAgent(c, {
-      command: `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; cd ${WORKSPACE} && : > /tmp/boot.log && (setpriv --reuid 1000 --regid 1000 --init-groups env HOME=${homeDir()} USER=ubuntu PATH=/usr/local/sbin:/usr/local/bin:/usr/local/bun/bin:/usr/sbin:/usr/bin:/sbin:/bin WEBAPP_PORT=${CONTAINER_PORT} OPENSESSION_BOOT_MODE=snapshot-restore bash .opensession/start.sh < /dev/null > /tmp/boot.log 2>&1 &) && echo relaunched`,
+      command: `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; cd ${WORKSPACE} && : > /tmp/boot.log && (setpriv --reuid 1000 --regid 1000 --init-groups env HOME=${homeDir()} USER=ubuntu PATH=/usr/local/sbin:/usr/local/bin:/usr/local/bun/bin:/usr/sbin:/usr/bin:/sbin:/bin WEBAPP_PORT=${CONTAINER_PORT} OPENSESSION_BOOT_MODE=snapshot-restore bash .agents/start.sh < /dev/null > /tmp/boot.log 2>&1 &) && echo relaunched`,
       timeoutMs: 30_000,
     }, true);
     return;
@@ -688,7 +688,7 @@ async function launchDaytonaDev(c: PoolContainer): Promise<void> {
   // stdin MUST be detached: next dev exits cleanly on stdin EOF (its
   // keyboard-shortcut listener), and the process session's pipe closing
   // produced exactly that — "next dev exited with code 0" crash-loops.
-  const script = `export PATH="/usr/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH" && ${BOOT_PREP} && ${env} bash .opensession/start.sh < /dev/null > /tmp/boot.log 2>&1`;
+  const script = `export PATH="/usr/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH" && ${BOOT_PREP} && ${env} bash .agents/start.sh < /dev/null > /tmp/boot.log 2>&1`;
   const b64 = Buffer.from(script, "utf-8").toString("base64");
   const sbx = await daytonaSbx(c.name);
   const sid = `os-preview-dev-${Date.now().toString(36)}`;
@@ -852,7 +852,7 @@ async function httpCode(url: string, host: string, timeoutSec: number): Promise<
 async function warmRoutes(repo: Repo, hostPort: number): Promise<void> {
   let routes = ["/"];
   try {
-    const raw = await dockerReadWorkspaceFile(repo, ".opensession/preview.json");
+    const raw = await dockerReadWorkspaceFile(repo, ".agents/preview.json");
     const parsed = raw ? JSON.parse(raw) : null;
     if (Array.isArray(parsed?.warmRoutes) && parsed.warmRoutes.length) routes = parsed.warmRoutes;
   } catch {}
@@ -924,7 +924,7 @@ async function waitForPoolUp(c: PoolContainer, timeoutMs: number): Promise<{ ok:
 async function warmRoutesPool(repo: Repo, c: PoolContainer): Promise<void> {
   let routes = ["/"];
   try {
-    const raw = await dockerReadWorkspaceFile(repo, ".opensession/preview.json");
+    const raw = await dockerReadWorkspaceFile(repo, ".agents/preview.json");
     const parsed = raw ? JSON.parse(raw) : null;
     if (Array.isArray(parsed?.warmRoutes) && parsed.warmRoutes.length) routes = parsed.warmRoutes;
   } catch {}
@@ -1022,10 +1022,10 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
 
     const setup = await poolExec(
       c,
-      `export PATH="/usr/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"; cd ${WORKSPACE} && [ -f .opensession/setup.sh ] && OPENSESSION_BOOT_MODE=fresh bash .opensession/setup.sh || true`,
+      `export PATH="/usr/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"; cd ${WORKSPACE} && [ -f .agents/setup ] && OPENSESSION_BOOT_MODE=fresh bash .agents/setup || true`,
       20 * 60_000,
     );
-    if (setup.out.includes("ERROR:")) return void (await fail(`setup.sh: ${setup.out.slice(-400)}`));
+    if (setup.out.includes("ERROR:")) return void (await fail(`.agents/setup: ${setup.out.slice(-400)}`));
     for (const marker of provisionMarkers(repo.id)) {
       const chk = await poolExec(c, `test -e ${WORKSPACE}/${marker}`);
       if (!chk.ok) {
@@ -1188,17 +1188,17 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<void> {
     // One-shot provisioning via the repo's own lifecycle contract.
     const setup = await dockerExec(
       name,
-      `cd ${WORKSPACE} && [ -f .opensession/setup.sh ] && OPENSESSION_BOOT_MODE=fresh bash .opensession/setup.sh || true`,
+      `cd ${WORKSPACE} && [ -f .agents/setup ] && OPENSESSION_BOOT_MODE=fresh bash .agents/setup || true`,
       15 * 60_000,
     );
-    if (setup.out.includes("ERROR:")) return void (await fail(`setup.sh: ${setup.out.slice(-500)}`));
-    // setup.sh treats a failed WASM install as a non-fatal WARN, but a golden
+    if (setup.out.includes("ERROR:")) return void (await fail(`.agents/setup: ${setup.out.slice(-500)}`));
+    // The setup hook treats a failed WASM install as a non-fatal WARN, but a golden
     // without these artifacts boots into module-not-found crashes on first
     // page compile — verify hard instead of shipping a degraded image.
     for (const marker of provisionMarkers(repoId)) {
       const chk = await dockerExec(name, `test -e ${WORKSPACE}/${marker}`);
       if (!chk.ok) {
-        return void (await fail(`provisioning incomplete: ${marker} missing after setup.sh (S3 WASM install failed? ${setup.out.slice(-300)})`));
+        return void (await fail(`provisioning incomplete: ${marker} missing after .agents/setup (S3 WASM install failed? ${setup.out.slice(-300)})`));
       }
     }
 
@@ -1210,7 +1210,7 @@ async function doRefreshGolden(repoId: string, force: boolean): Promise<void> {
       "exec", "-d",
       "-e", `WEBAPP_PORT=${CONTAINER_PORT}`, "-e", "OPENSESSION_BOOT_MODE=fresh",
       "-w", WORKSPACE, name,
-      "bash", "-c", `${BOOT_PREP} && exec bash .opensession/start.sh > /tmp/boot.log 2>&1`,
+      "bash", "-c", `${BOOT_PREP} && exec bash .agents/start.sh > /tmp/boot.log 2>&1`,
     ]);
     const up = await waitForUp(name, hostPort, 5 * 60_000);
     if (!up.ok) return void (await fail(`boot: ${up.detail}`));
@@ -1308,7 +1308,7 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
     "-w", WORKSPACE,
     `${goldenImage(repo.id)}:latest`,
     "bash", "-c",
-    `${BOOT_PREP} && ${advance}exec bash .opensession/start.sh > /tmp/boot.log 2>&1`,
+    `${BOOT_PREP} && ${advance}exec bash .agents/start.sh > /tmp/boot.log 2>&1`,
   ]);
   if (!run.ok) {
     patchContainer(repo.id, name, null);

@@ -5,8 +5,7 @@ import { dirname, join } from "node:path";
 import { repoLifecycle, resolvePreviewBoot } from "./preview";
 
 // The resolver is the ONE bring-up chain shared by host and sandbox previews:
-// repo-committed .opensession/start.sh (.backstage/ pre-rename fallback) →
-// configured previewCommand.
+// repo-committed .agents/start.sh → configured previewCommand.
 // `exists` abstracts host-fs vs in-container checks, so these tests drive it
 // with plain sets of paths.
 
@@ -18,27 +17,27 @@ function existsIn(paths: string[]) {
 }
 
 describe("resolvePreviewBoot", () => {
-  test("repo-committed .opensession/start.sh wins over previewCommand", async () => {
+  test("repo-committed .agents/start.sh wins over previewCommand", async () => {
     const boot = await resolvePreviewBoot(
       WT,
       { id: "widget", previewCommand: PREVIEW_COMMAND },
-      existsIn([`${WT}/.opensession/start.sh`, PREVIEW_COMMAND]),
+      existsIn([`${WT}/.agents/start.sh`, PREVIEW_COMMAND]),
     );
     expect(boot).toEqual({
       kind: "repo-script",
-      cmd: `bash ${WT}/.opensession/start.sh`,
+      cmd: `bash ${WT}/.agents/start.sh`,
       setupScript: undefined,
     });
   });
 
-  test("start.sh resolution picks up the sibling setup.sh one-shot hook", async () => {
+  test("start.sh resolution picks up the sibling .agents/setup one-shot hook", async () => {
     const boot = await resolvePreviewBoot(
       WT,
       { id: "widget" },
-      existsIn([`${WT}/.opensession/start.sh`, `${WT}/.opensession/setup.sh`]),
+      existsIn([`${WT}/.agents/start.sh`, `${WT}/.agents/setup`]),
     );
     expect(boot?.kind).toBe("repo-script");
-    expect(boot?.setupScript).toBe(`${WT}/.opensession/setup.sh`);
+    expect(boot?.setupScript).toBe(`${WT}/.agents/setup`);
   });
 
   test("previewCommand runs with the worktree as $1", async () => {
@@ -71,28 +70,13 @@ describe("resolvePreviewBoot", () => {
     expect(boot).toBeNull();
   });
 
-  test(".backstage/ (pre-rename) still resolves, .opensession/ wins when both exist", async () => {
-    const legacy = await resolvePreviewBoot(
+  test("a retired .opensession/ dir no longer resolves", async () => {
+    const boot = await resolvePreviewBoot(
       WT,
       { id: "widget" },
-      existsIn([`${WT}/.backstage/start.sh`, `${WT}/.backstage/setup.sh`]),
+      existsIn([`${WT}/.opensession/start.sh`, `${WT}/.opensession/setup.sh`]),
     );
-    expect(legacy?.cmd).toBe(`bash ${WT}/.backstage/start.sh`);
-    expect(legacy?.setupScript).toBe(`${WT}/.backstage/setup.sh`);
-
-    const both = await resolvePreviewBoot(
-      WT,
-      { id: "widget" },
-      // Only .backstage/ carries a setup.sh — the sibling must come from the
-      // SAME dir as the resolved start.sh, so it stays undefined here.
-      existsIn([
-        `${WT}/.opensession/start.sh`,
-        `${WT}/.backstage/start.sh`,
-        `${WT}/.backstage/setup.sh`,
-      ]),
-    );
-    expect(both?.cmd).toBe(`bash ${WT}/.opensession/start.sh`);
-    expect(both?.setupScript).toBeUndefined();
+    expect(boot).toBeNull();
   });
 
   test("no mechanism at all resolves to null (UI: disabled Start)", async () => {
@@ -117,13 +101,13 @@ describe("repoLifecycle", () => {
     expect(
       repoLifecycle(
         repoWith([
-          ".opensession/setup.sh",
-          ".opensession/start.sh",
-          ".opensession/preview.json",
+          ".agents/setup",
+          ".agents/start.sh",
+          ".agents/preview.json",
         ]),
       ),
     ).toEqual({
-      dir: ".opensession",
+      dir: ".agents",
       setup: true,
       start: true,
       previewJson: true,
@@ -139,24 +123,14 @@ describe("repoLifecycle", () => {
     });
   });
 
-  test("the winning dir is exclusive — .backstage/ never fills gaps in .opensession/", () => {
-    // Same rule as resolvePreviewBoot: mixing dirs would pair files that
-    // never shipped together.
+  test("the retired .opensession/ dir contributes nothing", () => {
     expect(
-      repoLifecycle(repoWith([".opensession/start.sh", ".backstage/setup.sh"])),
+      repoLifecycle(repoWith([".opensession/start.sh", ".opensession/setup.sh"])),
     ).toEqual({
-      dir: ".opensession",
+      dir: null,
       setup: false,
-      start: true,
+      start: false,
       previewJson: false,
-    });
-  });
-
-  test("falls back to the pre-rename .backstage/ dir", () => {
-    expect(repoLifecycle(repoWith([".backstage/start.sh"]))).toMatchObject({
-      dir: ".backstage",
-      start: true,
-      setup: false,
     });
   });
 });

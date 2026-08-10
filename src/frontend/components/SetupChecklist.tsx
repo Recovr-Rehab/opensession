@@ -156,7 +156,7 @@ export function SetupChecklist({
 					description={
 						missing.length === 0
 							? "Every repo commits lifecycle scripts — sessions provision themselves, previews boot, and agents can check their own UI changes in a browser."
-							: `No boot script in ${namedMissing}${restMissing > 0 ? ` and ${restMissing} more` : ""} — the Preview button stays disabled there. Add .opensession/start.sh to the repo (docs/repo-lifecycle.md).`
+							: `No boot script in ${namedMissing}${restMissing > 0 ? ` and ${restMissing} more` : ""} — the Preview button stays disabled there. Add .agents/start.sh to the repo (docs/repo-lifecycle.md).`
 					}
 					tone={
 						bootable.length === status.repos.length

@@ -20,13 +20,13 @@ This is also where your disk goes, so it is worth understanding.
 `~/.opensession/worktrees`). One directory per session branch.
 
 Creating a worktree installs dependencies — a repo-owned
-`.opensession/setup.sh` or your configured `worktreeSetup`/`depsInstall`
+`.agents/setup` hook or your configured `worktreeSetup`/`depsInstall`
 command when present, plain `bun install` when there is a `package.json` — so a
 session starts with dependencies already installed rather than spending its
 first two minutes on `bun install`.
 
-That script is half of a small convention: commit `.opensession/setup.sh` and
-`.opensession/start.sh` to a repo and every worktree of it provisions itself
+That script is half of a small convention: commit `.agents/setup` and
+`.agents/start.sh` to a repo and every worktree of it provisions itself
 and can boot its dev server on demand — which is also what lets an agent open
 its own change in a browser. See
 [repo-lifecycle.md](repo-lifecycle.md).

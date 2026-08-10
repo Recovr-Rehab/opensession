@@ -86,7 +86,7 @@ function configFile(): string {
 
 /** Per-repo warm config, read fresh per call (Settings PUTs rewrite it).
  *  warmRoutes precedence: explicit instance config → the repo's committed
- *  `.opensession/preview.json` (read from the template worktree, so the repo
+ *  `.agents/preview.json` (read from the template worktree, so the repo
  *  itself declares which routes to pre-compile) → defaults. */
 export function warmTemplateConfig(repoId: string): WarmTemplateRepoConfig {
   const raw = readWarmConfigRaw()[repoId];
@@ -104,23 +104,20 @@ export function warmTemplateConfig(repoId: string): WarmTemplateRepoConfig {
   };
 }
 
-/** `warmRoutes` from the repo's committed `.opensession/preview.json`
- *  (`.backstage/` honored as the pre-rename fallback), read out of the
- *  template worktree when it exists. Null = the repo doesn't declare any. */
+/** `warmRoutes` from the repo's committed `.agents/preview.json`, read out of
+ *  the template worktree when it exists. Null = the repo doesn't declare any. */
 function repoWarmRoutes(repoId: string): string[] | null {
   const repo = configuredRepos()[repoId];
   if (!repo) return null;
-  for (const lifecycleDir of [".opensession", ".backstage"]) {
-    try {
-      const f = join(warmTemplateDir(repo), lifecycleDir, "preview.json");
-      if (!existsSync(f)) continue;
-      const routes = JSON.parse(readFileSync(f, "utf-8"))?.warmRoutes;
-      if (Array.isArray(routes)) {
-        const out = routes.filter((r: unknown): r is string => typeof r === "string");
-        if (out.length) return out;
-      }
-    } catch {}
-  }
+  try {
+    const f = join(warmTemplateDir(repo), ".agents", "preview.json");
+    if (!existsSync(f)) return null;
+    const routes = JSON.parse(readFileSync(f, "utf-8"))?.warmRoutes;
+    if (Array.isArray(routes)) {
+      const out = routes.filter((r: unknown): r is string => typeof r === "string");
+      if (out.length) return out;
+    }
+  } catch {}
   return null;
 }
 

@@ -153,6 +153,21 @@ Honest status, because these are the newest parts:
 If you are starting out: use Docker, leave prewarm and snapshots off, and come
 back to them when cold starts actually bother you.
 
+## Repo lifecycle hooks — `.agents/`
+
+Sandboxes honor the repo-committed lifecycle contract
+([docs/repo-lifecycle.md](repo-lifecycle.md)); a repo that commits these
+files provisions and boots itself in any sandbox with zero instance config:
+
+- `.agents/setup` — provision hook. Runs once per workspace materialization,
+  before the post-setup snapshot, skipped on snapshot restore.
+- `.agents/resume` — idempotent post-wake repair, for anything a pause /
+  snapshot restore / host-reboot re-clone leaves stale. No provider runs it
+  yet — the reader lands with the sandbox plan's Phase 1
+  (docs/sandboxes-plan.md); committing one today is forward-compatible.
+- `.agents/start.sh` — dev-server / preview entry, foreground, honoring
+  `WEBAPP_PORT` / `PREVIEW_URL` / `OPENSESSION_BOOT_MODE`.
+
 ## Config schema — `~/.opensession-sandbox.json`
 
 Read fresh per run (no restart for value changes — but see "What needs a

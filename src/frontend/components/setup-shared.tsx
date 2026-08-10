@@ -42,8 +42,8 @@ export interface SetupGithub {
 }
 
 /** Whether a repo commits the lifecycle scripts that let sessions provision
- *  and boot it unattended (docs/repo-lifecycle.md). `dir` is the winning
- *  lifecycle directory, null when the repo commits neither. */
+ *  and boot it unattended (docs/repo-lifecycle.md). `dir` is the lifecycle
+ *  directory (`.agents`), null when the repo doesn't commit one. */
 export interface SetupRepoLifecycle {
 	dir: string | null;
 	setup: boolean;
@@ -176,10 +176,11 @@ export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string
 }
 
 /** Does this repo carry what a session needs to provision and boot it on its
- *  own? `start.sh` (or an instance `previewCommand`) is the load-bearing half
- *  — without it the Preview button has nothing to run and an agent can't see
- *  its own UI change. `setup.sh` alone still helps: worktrees provision, but
- *  nothing boots. Explained in docs/repo-lifecycle.md. */
+ *  own? `.agents/start.sh` (or an instance `previewCommand`) is the
+ *  load-bearing half — without it the Preview button has nothing to run and an
+ *  agent can't see its own UI change. `.agents/setup` alone still helps:
+ *  worktrees provision, but nothing boots. Explained in
+ *  docs/repo-lifecycle.md. */
 export function repoLifecycleState(repo: SetupRepo): {
 	tone: ChipTone;
 	label: string;
@@ -187,14 +188,14 @@ export function repoLifecycleState(repo: SetupRepo): {
 	description: string;
 } {
 	const { dir, setup, start, previewCommand } = repo.lifecycle;
-	const where = dir ?? ".opensession";
+	const where = dir ?? ".agents";
 	if (start)
 		return {
 			tone: "on",
 			label: setup ? "Ready" : "Boots",
 			description: setup
 				? `${where}/ provisions each worktree and boots the dev server.`
-				: `${where}/start.sh boots the dev server — add setup.sh to provision worktrees.`,
+				: `${where}/start.sh boots the dev server — add ${where}/setup to provision worktrees.`,
 		};
 	if (previewCommand)
 		return {
@@ -206,7 +207,7 @@ export function repoLifecycleState(repo: SetupRepo): {
 		return {
 			tone: "warn",
 			label: "Setup only",
-			description: `${where}/setup.sh provisions worktrees — add start.sh to enable previews.`,
+			description: `${where}/setup provisions worktrees — add start.sh to enable previews.`,
 		};
 	return {
 		tone: "off",

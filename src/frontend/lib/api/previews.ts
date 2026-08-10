@@ -15,7 +15,7 @@ export interface PreviewStatus {
 	starting: boolean;
 	previewUrl: string | null;
 	/** Whether the repo has any bring-up mechanism (committed
-	 *  .backstage/start.sh, configured previewCommand, or the tella-local
+	 *  .agents/start.sh, configured previewCommand, or the tella-local
 	 *  fallback). Absent on servers that predate the field — treat as true. */
 	bootable?: boolean;
 	services: PreviewService[];

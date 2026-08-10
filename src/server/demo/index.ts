@@ -87,14 +87,14 @@ export async function startDemo(): Promise<void> {
   // strict OPENSESSION_STATE_DIR master knob is required — a sessions-dir-only
   // redirect would leak the stateDir() stores into the operator's live state.
   // The engine-transcripts dir must ALSO resolve inside the state root (it has
-  // an independent default under ~/.claude): .opensession/start.sh sets it;
+  // an independent default under ~/.claude): .agents/start.sh sets it;
   // a manual boot that forgot gets refused here instead of scribbling demo
   // JSONL next to real engine transcripts.
   const stateRoot = process.env.OPENSESSION_STATE_DIR;
   if (!stateRoot) {
     console.error(
       "[demo] refusing to start: OPENSESSION_DEMO=1 requires OPENSESSION_STATE_DIR " +
-        "(demo data must never seed live state; boot via .opensession/start.sh or set it explicitly)",
+        "(demo data must never seed live state; boot via .agents/start.sh or set it explicitly)",
     );
     return;
   }
@@ -103,7 +103,7 @@ export async function startDemo(): Promise<void> {
     console.error(
       `[demo] refusing to start: engine transcripts dir (${OPENCODE_TRANSCRIPTS_DIR}) resolves ` +
         "outside OPENSESSION_STATE_DIR — set OPENSESSION_OPENCODE_TRANSCRIPTS_DIR under the state dir " +
-        "(as .opensession/start.sh does) so demo transcripts can't land next to real ones",
+        "(as .agents/start.sh does) so demo transcripts can't land next to real ones",
     );
     return;
   }

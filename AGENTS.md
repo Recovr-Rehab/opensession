@@ -185,7 +185,7 @@ chaos:
   — and it refuses to boot without `OPENSESSION_STATE_DIR` (or a chats-dir
   override), so it can never touch live state or steal the run-rpc socket. Add
   `OPENSESSION_DEMO=1` for synthetic demo data. The repo's
-  `.opensession/start.sh` wires all of this for the session Preview button;
+  `.agents/start.sh` wires all of this for the session Preview button;
   see docs/self-development.md.
 
 ## Frontend UI system (Base UI + Tailwind + Motion)

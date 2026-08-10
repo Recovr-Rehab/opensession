@@ -18,9 +18,8 @@
  * `https://<host>:<httpsPort>`.
  *
  * The bring-up itself is repo-generic: resolvePreviewBoot picks a committed
- * `.opensession/start.sh` from the target repo first (`.backstage/` pre-rename
- * fallback), then the repo's configured `previewCommand` — one chain shared by
- * host and sandboxed previews.
+ * `.agents/start.sh` from the target repo first, then the repo's configured
+ * `previewCommand` — one chain shared by host and sandboxed previews.
  */
 import { $ } from "bun";
 import {
@@ -83,7 +82,7 @@ export interface PreviewStatus {
   /** HTTPS preview URL (Caddy-fronted) when the webapp is up, else null. */
   previewUrl: string | null;
   /** Whether a bring-up mechanism exists for this worktree's repo (repo
-   *  `.opensession/start.sh` → config `previewCommand`).
+   *  `.agents/start.sh` → config `previewCommand`).
    *  False = the Start button can't do anything; the UI shows what to add. */
   bootable: boolean;
   services: PreviewService[];
@@ -104,37 +103,35 @@ export function externalPreviewCommandDirs(): string[] {
 
 // ── Bring-up resolution (ONE chain, shared by host + sandbox previews) ────────
 // The boot command should live IN the target repo, not in opensession: a
-// committed `.opensession/start.sh` (with `.backstage/` as the pre-rename
-// fallback, matching docker.ts's workspace-setup hook) beats instance config
-// (`previewCommand` on the repos registry entry). Docs:
+// committed `.agents/start.sh` (matching docker.ts's workspace-setup hook)
+// beats instance config (`previewCommand` on the repos registry entry). Docs:
 // deploy/sandbox/README.md "Previews in sandboxes".
 
-// Repo lifecycle dirs, in precedence order.
-const LIFECYCLE_DIRS = [".opensession", ".backstage"] as const;
+// The repo lifecycle dir (docs/repo-lifecycle.md): `.agents/setup` (one-shot
+// provisioning), `.agents/resume` (idempotent post-wake repair; reader lands
+// with the sandbox plan's Phase 1), `.agents/start.sh` (dev-server bring-up),
+// `.agents/preview.json` (warm routes).
+const LIFECYCLE_DIR = ".agents";
 
 /** What a repo's committed lifecycle directory provides. Read straight off
  *  the main checkout for Settings → Setup, which tells operators whether
  *  sessions in that repo can install deps and boot a preview on their own.
  *  Docs: docs/repo-lifecycle.md. */
 export interface RepoLifecycle {
-  /** The winning lifecycle dir (`.opensession`, or the `.backstage`
-   *  fallback), or null when the repo commits neither. */
+  /** The lifecycle dir (`.agents`), or null when the repo doesn't commit one. */
   dir: string | null;
   setup: boolean;
   start: boolean;
   previewJson: boolean;
 }
 
-/** Inspect `repoRoot`'s lifecycle dir. Same precedence as resolvePreviewBoot:
- *  the first dir that exists wins outright, so a leftover `.backstage/` never
- *  contributes files to an `.opensession/` repo. */
+/** Inspect `repoRoot`'s lifecycle dir. */
 export function repoLifecycle(repoRoot: string): RepoLifecycle {
-  for (const dir of LIFECYCLE_DIRS) {
-    const base = `${repoRoot}/${dir}`;
-    if (!existsSync(base)) continue;
+  const base = `${repoRoot}/${LIFECYCLE_DIR}`;
+  if (existsSync(base)) {
     return {
-      dir,
-      setup: existsSync(`${base}/setup.sh`),
+      dir: LIFECYCLE_DIR,
+      setup: existsSync(`${base}/setup`),
       start: existsSync(`${base}/start.sh`),
       previewJson: existsSync(`${base}/preview.json`),
     };
@@ -146,8 +143,8 @@ export interface PreviewBoot {
   kind: "repo-script" | "preview-command";
   /** `sh -c`-ready command; every path component passes assertSafePath. */
   cmd: string;
-  /** `setup.sh` next to the resolved start.sh when present — the one-shot
-   *  sibling hook (repo-script kind only). */
+  /** `.agents/setup` next to the resolved start.sh when present — the
+   *  one-shot sibling hook (repo-script kind only). */
   setupScript?: string;
 }
 
@@ -162,16 +159,13 @@ export async function resolvePreviewBoot(
   repo: Pick<Repo, "id" | "previewCommand">,
   exists: (path: string) => Promise<boolean> | boolean,
 ): Promise<PreviewBoot | null> {
-  for (const dir of LIFECYCLE_DIRS) {
-    const startSh = `${worktreeDir}/${dir}/start.sh`;
-    if (!(await exists(startSh))) continue;
-    // The setup sibling comes from the SAME dir as the start script — mixing
-    // dirs would pair scripts that never shipped together.
-    const setupSh = `${worktreeDir}/${dir}/setup.sh`;
+  const startSh = `${worktreeDir}/${LIFECYCLE_DIR}/start.sh`;
+  if (await exists(startSh)) {
+    const setupHook = `${worktreeDir}/${LIFECYCLE_DIR}/setup`;
     return {
       kind: "repo-script",
       cmd: `bash ${assertSafePath(startSh)}`,
-      setupScript: (await exists(setupSh)) ? setupSh : undefined,
+      setupScript: (await exists(setupHook)) ? setupHook : undefined,
     };
   }
   if (repo.previewCommand) {
@@ -527,8 +521,9 @@ async function allocateHostWebappPort(worktreeDir: string): Promise<number | nul
   return null;
 }
 
-// One-shot lifecycle `setup.sh` stamps for HOST previews (the sandbox path
-// runs setup.sh at workspace materialization instead — see sandbox/adapters).
+// One-shot lifecycle `.agents/setup` stamps for HOST previews (the sandbox
+// path runs the hook at workspace materialization instead — see
+// sandbox/adapters).
 // Stamped per worktree; "settled" once run, success or not, mirroring the
 // sandbox semantics: setup never blocks or retries.
 const SETUP_STAMP_DIR = join(OPENSESSION_SESSIONS_DIR, "preview-setup");
@@ -538,7 +533,7 @@ function setupStampPath(worktreeDir: string): string {
 
 /**
  * Bring the session's dev server up if it isn't already, using the shared
- * resolution chain (repo `.opensession/start.sh` → config `previewCommand` →
+ * resolution chain (repo `.agents/start.sh` → config `previewCommand` →
  * tella-local). Bring-ups can take minutes (first build) — so we spawn the
  * command in the background and return immediately with `starting: true`;
  * callers poll `getPreviewStatus` to see it flip to `running`.
@@ -933,8 +928,7 @@ async function writeSandboxTunnelsEnv(
  *     (PREVIEW_URL against the allocated sandbox https port).
  *  3. Run the bring-up, detached in-container, with WEBAPP_PORT/PREVIEW_URL/
  *     OPENSESSION_BOOT_MODE in its env. Command resolution (lifecycle
- *     convention): `<worktree>/.opensession/start.sh` (or pre-rename
- *     `.backstage/`) when present, else the
+ *     convention): `<worktree>/.agents/start.sh` when present, else the
  *     repo's configured `previewCommand`.
  */
 export async function startSandboxPreview(
@@ -980,7 +974,7 @@ export async function startSandboxPreview(
   }
 
   // 2. Resolve the bring-up command — the same chain as host previews
-  //    (repo .opensession/start.sh → previewCommand), with
+  //    (repo .agents/start.sh → previewCommand), with
   //    existence checked in-container.
   const boot = await resolvePreviewBoot(
     worktreeDir,
@@ -989,7 +983,7 @@ export async function startSandboxPreview(
   );
   if (!boot) {
     console.warn(
-      `[preview] ${sandbox.id}: no .opensession/start.sh or usable repo previewCommand in the sandbox — cannot start`,
+      `[preview] ${sandbox.id}: no .agents/start.sh or usable repo previewCommand in the sandbox — cannot start`,
     );
     return status;
   }
@@ -1047,8 +1041,7 @@ export async function stopSandboxPreview(
     `[ -f .ports/dev-pgid ] && kill -TERM -- "-$(cat .ports/dev-pgid)" 2>/dev/null; true`,
   ]);
   await sandbox.exec(["pkill", "-f", "next dev"]);
-  await sandbox.exec(["pkill", "-f", ".opensession/start.sh"]);
-  await sandbox.exec(["pkill", "-f", ".backstage/start.sh"]);
+  await sandbox.exec(["pkill", "-f", ".agents/start.sh"]);
   await sandbox.exec(["sh", "-c", "rm -f .ports/dev-pgid .tunnels.env"]);
   return getSandboxPreviewStatus(sandbox, worktreeDir);
 }

@@ -74,8 +74,8 @@ install dependencies in a fresh worktree, and how to boot its dev server for
 previews. They live in `~/.opensession/config.json` — see
 [docs/instance-configuration.md](docs/instance-configuration.md).
 
-A repo can also commit its own lifecycle scripts (`.opensession/setup.sh`,
-`.opensession/start.sh`) so every worktree provisions and boots itself without
+A repo can also commit its own lifecycle scripts (`.agents/setup`,
+`.agents/start.sh`) so every worktree provisions and boots itself without
 instance config. That convention is what lets an agent open its own change in a
 real browser — see [docs/repo-lifecycle.md](docs/repo-lifecycle.md).
 

@@ -152,10 +152,9 @@ sandboxed AND host previews (the Preview button on a plain non-sandboxed
 session resolves identically; only the existence checks and process plumbing
 differ):
 
-1. `<worktree>/.opensession/start.sh` when present — a script committed IN
-   the target repo (`.backstage/` is honored as the pre-rename fallback; when
-   both dirs exist, `.opensession/` wins and the setup sibling is taken from
-   the same dir). Run detached with `WEBAPP_PORT` (the allocated port —
+1. `<worktree>/.agents/start.sh` when present — a script committed IN
+   the target repo (docs/repo-lifecycle.md; the `.agents/setup` sibling is
+   taken from the same dir). Run detached with `WEBAPP_PORT` (the allocated port —
    pre-published container port in sandboxes, a free host port for host
    previews, seeded into `.ports.conf` either way), `PREVIEW_URL`, and
    `OPENSESSION_BOOT_MODE` (`fresh` | `snapshot-restore`; host previews always
@@ -174,13 +173,13 @@ service cgroup denies IMDS (IPAddressDeny) for every child, which otherwise
 breaks bring-ups that need AWS access (e.g. an `aws` preflight or an
 S3-backed prebuilt-artifact install).
 
-`<worktree>/.opensession/setup.sh` is the sibling one-shot hook: it runs once
+`<worktree>/.agents/setup` is the sibling one-shot hook: it runs once
 per workspace materialization (first ensure of the sandbox, cwd = workspace,
 same `OPENSESSION_BOOT_MODE` env), is **skipped on snapshot restore** (the
 restored container layer already carries its effects), is never retried once
 settled (log: `~/.opensession-sessions/sandbox-runs/<session>/workspace-setup.log`),
 and never blocks the session on failure. Keep both scripts convention-level:
-no framework, no arguments beyond env. Host previews honor setup.sh too, with
+no framework, no arguments beyond env. Host previews honor the setup hook too, with
 one asymmetry: there is no workspace-materialization moment on the host, so it
 runs (and settles, success or not) as part of the FIRST repo-script preview
 start, stamped per worktree under `<chats-dir>/preview-setup/` (SETUP_STAMP_DIR

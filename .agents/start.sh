@@ -6,14 +6,14 @@
 # button (src/server/preview.ts, resolvePreviewBoot/startPreview). It must
 # bring the server up in the FOREGROUND (exec, no backgrounding) so the
 # caller's process-group kill can stop it. It is also just a plain script:
-# `./.opensession/start.sh` with WEBAPP_PORT set works from any shell.
+# `./.agents/start.sh` with WEBAPP_PORT set works from any shell.
 #
 # Environment contract (provided by the preview flow):
-#   WEBAPP_PORT          Port the instance must listen on (host previews
-#                        allocate 3100-3999). REQUIRED — refused when absent.
-#   PREVIEW_URL          Public HTTPS origin fronting that port via Caddy
-#                        (https://<host>:<WEBAPP_PORT+6000>). Optional.
-#   BACKSTAGE_BOOT_MODE  "fresh" | "snapshot-restore" (informational).
+#   WEBAPP_PORT           Port the instance must listen on (host previews
+#                         allocate 3100-3999). REQUIRED — refused when absent.
+#   PREVIEW_URL           Public HTTPS origin fronting that port via Caddy
+#                         (https://<host>:<WEBAPP_PORT+6000>). Optional.
+#   OPENSESSION_BOOT_MODE "fresh" | "snapshot-restore" (informational).
 #
 # CRITICAL — why every override below is EXPLICIT: when the preview flow runs
 # this script, the inherited environment is the calling server's env. On a
