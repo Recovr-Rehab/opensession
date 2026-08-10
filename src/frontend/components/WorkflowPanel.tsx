@@ -44,7 +44,7 @@ interface Props {
 }
 
 const RUN_PILL: Record<WorkflowRunSnapshot["status"], string> = {
-	running: "bg-green-soft text-green",
+	running: "bg-orange-soft text-orange",
 	done: "bg-active text-dim",
 	error: "bg-red-soft text-red",
 	cancelled: "bg-active text-faint",
@@ -52,8 +52,9 @@ const RUN_PILL: Record<WorkflowRunSnapshot["status"], string> = {
 };
 
 /** Status mark: glyphs for the terminal states (✓/✕ stay legible at a glance
- *  — a red accent dot and an error dot would read the same), pulsing green
- *  dot = running (matches the run pill's green), dim dot = pending/cancelled. */
+ *  — a red accent dot and an error dot would read the same), pulsing orange
+ *  dot = running (matches the run pill, and the "In progress" lane), dim dot =
+ *  pending/cancelled. */
 function StatusMark({ status }: { status: WorkflowAgentSnapshot["status"] }) {
 	if (status === "done" || status === "error") {
 		const ok = status === "done";
@@ -80,7 +81,7 @@ function StatusMark({ status }: { status: WorkflowAgentSnapshot["status"] }) {
 			<span
 				className={cn(
 					"size-2 rounded-full",
-					status === "running" ? "bg-green animate-pulse" : "bg-line-strong",
+					status === "running" ? "bg-orange animate-pulse" : "bg-line-strong",
 				)}
 			/>
 		</span>
@@ -286,8 +287,8 @@ function SubagentsCard({
 						Sub-agents
 					</span>
 					{runningN > 0 && (
-						<span className="inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-green-soft px-1.5 py-0.5 text-[11px] font-medium text-green">
-							<span className="size-1.5 animate-pulse rounded-full bg-green" />
+						<span className="inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-orange-soft px-1.5 py-0.5 text-[11px] font-medium text-orange">
+							<span className="size-1.5 animate-pulse rounded-full bg-orange" />
 							running
 						</span>
 					)}
@@ -539,7 +540,7 @@ function RunCard({
 							)}
 						>
 							{run.status === "running" && (
-								<span className="size-1.5 animate-pulse rounded-full bg-green" />
+								<span className="size-1.5 animate-pulse rounded-full bg-orange" />
 							)}
 							{run.status}
 						</span>

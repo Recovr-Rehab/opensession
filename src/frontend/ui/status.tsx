@@ -3,6 +3,11 @@ import { cn } from "./cn";
 /**
  * Liveness indicators — the pulsing dot and the "Running" pill.
  *
+ * Both are orange, not green: orange is this app's in-progress tone (the
+ * "In progress" lane, `SIDEBAR_STATUS_DOT.running`), while green means a
+ * finished, reviewable result — "Ready to merge", an open PR, a passing check.
+ * A green dot on running work read as "done" next to those.
+ *
  * These were `.working-pill` / `.working-dot` / `.pulse-dot` in the legacy
  * stylesheet, plus five rules that reached in from an ancestor to adjust them
  * (`.viewer-header-compact .working-pill`, `.automations-row .working-pill`,
@@ -48,7 +53,7 @@ export function PulseDot({
 		<span
 			aria-hidden
 			className={cn(
-				"shrink-0 rounded-full bg-green",
+				"shrink-0 rounded-full bg-orange",
 				size === 8 ? "size-2" : "size-[7px]",
 				PULSE,
 				className,
@@ -67,7 +72,7 @@ export function WorkingPill({
 	return (
 		<span
 			className={cn(
-				"inline-flex shrink-0 items-center gap-1.5 rounded-full bg-green-soft px-2.5 py-[3px] text-meta font-semibold text-green",
+				"inline-flex shrink-0 items-center gap-1.5 rounded-full bg-orange-soft px-2.5 py-[3px] text-meta font-semibold text-orange",
 				className,
 			)}
 		>

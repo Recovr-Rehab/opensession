@@ -55,7 +55,7 @@ const ITEM =
 
 const STATUS_META: Record<Status, { label: string; dotClass: string }> = {
 	needsinput: { label: "Needs input", dotClass: "bg-accent" },
-	running: { label: "Running", dotClass: "bg-green" },
+	running: { label: "Running", dotClass: "bg-orange" },
 	review: { label: "In review", dotClass: "bg-yellow" },
 	merged: { label: "Merged", dotClass: "bg-purple" },
 	pending: { label: "Pending", dotClass: "bg-faint" },

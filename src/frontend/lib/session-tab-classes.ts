@@ -261,7 +261,7 @@ export const tabDotClass = (waiting: boolean) =>
 	waiting
 		? `${DOT_BASE} bg-blue shadow-[0_0_6px_var(--blue)] animate-[pulse_1.2s_ease-in-out_infinite] ` +
 			"motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!"
-		: `${DOT_BASE} bg-green animate-[pulse_1.4s_ease-in-out_infinite] ` +
+		: `${DOT_BASE} bg-orange animate-[pulse_1.4s_ease-in-out_infinite] ` +
 			"motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!";
 
 /** A view tab's status dot (PR state). Shared with the right panel's tabs,

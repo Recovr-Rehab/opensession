@@ -59,11 +59,11 @@ function PlanMark({ status }: { status: PlanItem["status"] }) {
 		<span
 			className={cn(
 				"flex size-[14px] flex-none translate-y-[2px] items-center justify-center rounded-full border",
-				status === "in_progress" ? "border-green" : "border-line",
+				status === "in_progress" ? "border-orange" : "border-line",
 			)}
 		>
 			{status === "in_progress" && (
-				<span className="size-[6px] rounded-full bg-green" />
+				<span className="size-[6px] rounded-full bg-orange" />
 			)}
 		</span>
 	);
