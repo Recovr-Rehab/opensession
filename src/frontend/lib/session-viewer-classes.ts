@@ -212,14 +212,16 @@ export const VIEWER_MESSAGES_REGION =
  * and in a flex container auto cross-axis margins disable `align-items:
  * stretch`, so they would size to their content and overflow sideways.
  *
- * The bottom inset is the WASH's depth, not the composer's overlap: clearing
- * the whole ramp is what makes a soft edge affordable, and it is what the
- * native app's bar does too.
+ * The bottom inset is the bottom WASH's depth, not the composer's overlap:
+ * clearing the whole ramp is what makes a soft edge affordable, and it is what
+ * the native app's bar does too. That ramp is its own token
+ * (--wash-depth-down, shallower than the top's) because reserving it costs
+ * resting space in a way the scroll-driven top edge does not — see base.css.
  */
 export const VIEWER_MESSAGES =
 	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
 	// Keep the reader's place when content loads or expands above them.
-	"[overflow-anchor:auto] px-5 pt-[18px] pb-[var(--wash-depth)] " +
+	"[overflow-anchor:auto] px-5 pt-[18px] pb-[var(--wash-depth-down)] " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
 	"desktop:supports-[animation-timeline:scroll()]:[scroll-timeline:--viewer-session-scroll_y] " +
 	// Phone: clear the floating pills at rest, then scroll under them.
@@ -252,7 +254,7 @@ export const VIEWER_MESSAGES =
  */
 export const VIEWER_INPUT =
 	"relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 bg-surface px-5 pt-1 pb-3.5 " +
-	"before:absolute before:inset-x-0 before:bottom-full before:h-[var(--wash-depth)] " +
+	"before:absolute before:inset-x-0 before:bottom-full before:h-[var(--wash-depth-down)] " +
 	"before:pointer-events-none before:[background:var(--wash-down)] before:content-[''] " +
 	// Phone: clear the home indicator rather than jamming the composer against
 	// the very bottom edge — that gap is also all the room the composer's
