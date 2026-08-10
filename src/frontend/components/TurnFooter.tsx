@@ -259,7 +259,7 @@ function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
       <button
         type="button"
         onClick={(e) => asset.open(path, e.currentTarget)}
-        className={cn(CHIP, "cursor-pointer pr-1 hover:bg-hover")}
+        className={cn(CHIP, "cursor-pointer pr-1 hover:bg-pressed")}
       >
         {body}
       </button>
@@ -270,7 +270,7 @@ function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
 /** The shared chip shell: the footer's file and asset chips are the same
  * object with different tails (± counts, or a way in). */
 const CHIP =
-  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-transparent py-0 pl-1 text-left";
+  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-hover py-0 pl-1 text-left";
 
 function FileChip({ file }: { file: TouchedFile }) {
   const name = file.path.split("/").pop() || file.path;
@@ -280,7 +280,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         openOnHover
         delay={250}
         closeDelay={100}
-        className={cn(CHIP, "cursor-pointer pr-1.5 hover:bg-hover")}
+        className={cn(CHIP, "cursor-pointer pr-1.5 hover:bg-pressed")}
       >
         <ExtBadge name={name} />
         <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
@@ -396,8 +396,8 @@ export function LineStats({
 
 /**
  * The file's language mark: the brand glyph where one reads at this size, its
- * letters otherwise. Its old solid plate is now only a faint tint behind the
- * coloured ink, enough to hold the mark without turning it back into a badge.
+ * letters otherwise. The faint background belongs to the whole file chip, not
+ * this mark, so the icon, filename and counts read as one object.
  *
  * Mixing a quarter of the theme's own text colour into the ink lifts the dark
  * ones (Ruby's #701516, JSON's #953800) off `--bg` in dark mode and settles the
@@ -413,13 +413,10 @@ function ExtBadge({ name, className }: { name: string; className?: string }) {
   return (
     <span
       className={cn(
-        "flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-sm px-0.5 text-meta font-bold leading-none",
+        "flex h-4 min-w-4 flex-shrink-0 items-center justify-center px-0.5 text-meta font-bold leading-none",
         className
       )}
-      style={{
-        color: `color-mix(in oklab, ${color} 75%, var(--text))`,
-        backgroundColor: `color-mix(in oklab, ${color} 10%, transparent)`,
-      }}
+      style={{ color: `color-mix(in oklab, ${color} 75%, var(--text))` }}
     >
       <span className="flex translate-y-px items-center justify-center">
         {Glyph ? <Glyph size={12} /> : extLabel(ext)}
