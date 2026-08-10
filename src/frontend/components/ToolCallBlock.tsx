@@ -6,7 +6,13 @@ import { PlanChecklist } from "./PlanChecklist";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { BASE_PATH } from "../lib/base";
 import { cn } from "../ui/cn";
-import { TOOL_CODE_WELL, TOOL_PRE, TOOL_RESULT_MEDIA, TOOL_ROW_CHIP } from "../lib/tool-classes";
+import {
+  TOOL_CODE_WELL,
+  TOOL_PRE,
+  TOOL_RESULT_MEDIA,
+  TOOL_ROW_CHIP,
+  TOOL_ROW_MEDIA_HINT,
+} from "../lib/tool-classes";
 import { tidyPath, type PathRoot } from "../lib/tidy-path";
 import {
   assetToolPath,
@@ -281,11 +287,12 @@ function RunningToolDuration({ entry }: { entry: TranscriptEntry }) {
 export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionId }: Props) {
   const entryNeedsHydration = entry.contentClamped || isBoundedToolInput(entry.toolInput);
   const resultNeedsHydration = Boolean(result?.contentClamped);
-  // Default closed for text-only output, but auto-open when media arrives
-  // (covers both initial render and the live tool_result streaming in later).
-  const [expanded, setExpanded] = useState(
-    Boolean(result?.images?.length || result?.videos?.length)
-  );
+  // Default closed, and open only for media the agent asked to SHOW — an
+  // OPENSESSION_IMAGE/_VIDEO marker (server-side: featuredMedia). Media it
+  // merely touched — a Read of a PNG, a path that turned up in output — still
+  // attaches and is one click away, but opening every one of those turns a
+  // forty-screenshot verification loop into forty full-size images.
+  const [expanded, setExpanded] = useState(Boolean(result?.featuredMedia?.length));
   const fullEntry = useHydratedTranscriptEntry(
     entry,
     expanded && Boolean(entryNeedsHydration),
@@ -299,10 +306,23 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   );
   const shownInput = fullEntry?.toolInput ?? entry.toolInput;
   const shownResult = fullResult ?? result;
-  const hasMedia = Boolean(shownResult?.images?.length || shownResult?.videos?.length);
+  const imageCount = shownResult?.images?.length ?? 0;
+  const videoCount = shownResult?.videos?.length ?? 0;
+  const hasMedia = imageCount + videoCount > 0;
+  const mediaLabel = !hasMedia
+    ? ""
+    : videoCount === 0
+      ? `${imageCount} image${imageCount === 1 ? "" : "s"}`
+      : imageCount === 0
+        ? `${videoCount} video${videoCount === 1 ? "" : "s"}`
+        : `${imageCount + videoCount} media`;
+  // Featured media streaming in later still opens the row; incidental media no
+  // longer does — which also means a row you collapsed by hand stays collapsed
+  // when the next screenshot arrives.
+  const hasFeaturedMedia = Boolean(shownResult?.featuredMedia?.length);
   useEffect(() => {
-    if (hasMedia) setExpanded(true);
-  }, [hasMedia]);
+    if (hasFeaturedMedia) setExpanded(true);
+  }, [hasFeaturedMedia]);
   const toolName = entry.toolName || "Tool";
   const canonical = canonicalToolName(toolName);
   const roots = useToolPathRoots();
@@ -457,6 +477,14 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
             {subagentLive ? "Watch" : "Open"}
             <IconArrowUpRight className="size-4 shrink-0 opacity-70" />
           </span>
+        )}
+
+        {!expanded && hasMedia && (
+          // The only sign a folded row is holding a screenshot. Always shown,
+          // never hover-gated — hover isn't a way to discover anything on a
+          // phone, and this is the whole discovery path now that incidental
+          // media no longer opens its own row.
+          <span className={TOOL_ROW_MEDIA_HINT}>{mediaLabel}</span>
         )}
 
         {duration && (

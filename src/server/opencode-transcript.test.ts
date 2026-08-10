@@ -470,6 +470,47 @@ describe("readOpencodeTranscript (SQLite)", () => {
       content: "Image read successfully",
       images: ["/media?path=%2Ftmp%2Fstoryboard-videos.png"],
     });
+    // Reading an image is the agent LOOKING at it, not showing it: the row
+    // stays folded until a marker says otherwise.
+    expect(entries[1].featuredMedia).toBeUndefined();
+  });
+
+  test("a marker in tool output features that src on the re-parse path", () => {
+    const sessionId = "ses_marker_media";
+    const createdAt = 1783501600000;
+    const db = new Database(dbPath);
+    db.query("INSERT INTO session VALUES (?, 'p', 't', 1, 1)").run(sessionId);
+    db.query("INSERT INTO message VALUES (?, ?, ?, ?, ?)").run(
+      "msg_marker_media",
+      sessionId,
+      createdAt,
+      createdAt,
+      JSON.stringify({ role: "assistant", time: { created: createdAt } }),
+    );
+    db.query("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)").run(
+      "prt_marker_media",
+      "msg_marker_media",
+      sessionId,
+      createdAt,
+      createdAt,
+      JSON.stringify({
+        type: "tool",
+        tool: "bash",
+        state: {
+          status: "completed",
+          input: { command: "shot.sh" },
+          output: "captured\nOPENSESSION_IMAGE: /tmp/final-shot.png\n",
+        },
+      }),
+    );
+    db.close();
+
+    const entries = readOpencodeTranscript(sessionId);
+    const result = entries.find(
+      (e: { type: string }) => e.type === "tool_result",
+    );
+    expect(result?.images).toEqual(["/media?path=%2Ftmp%2Ffinal-shot.png"]);
+    expect(result?.featuredMedia).toEqual(["/media?path=%2Ftmp%2Ffinal-shot.png"]);
   });
   test("autocompact summaries become compaction system entries", () => {
     const sessionId = "ses_compaction";

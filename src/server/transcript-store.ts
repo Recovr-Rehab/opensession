@@ -831,6 +831,7 @@ function boundEntryForStore(entry: TranscriptEntry): {
     delete stripped.videos;
     delete stripped.files;
     delete stripped.images;
+    delete stripped.featuredMedia;
     json = safeStringify(stripped);
     bytes = Buffer.byteLength(json);
   }

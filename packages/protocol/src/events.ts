@@ -125,6 +125,14 @@ export interface StreamEvent {
    * play the moment the tool returns, no reload needed.
    */
   videos?: string[];
+  /**
+   * The subset of `images`/`videos` that came from an explicit
+   * `OPENSESSION_IMAGE:`/`OPENSESSION_VIDEO:` marker — the agent asking for
+   * this one to be shown. Viewers open the tool row for these and leave
+   * incidental media (a Read, a path mentioned in output) folded away. Mirrors
+   * `TranscriptEntry.featuredMedia`; see that field for the full contract.
+   */
+  featuredMedia?: string[];
   /** Which backend emitted this event (set on init/done). */
   provider?: "claude" | "codex" | "opencode" | "pi";
   /** Effective model for the run (set on init/done). */

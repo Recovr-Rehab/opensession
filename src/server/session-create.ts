@@ -598,6 +598,9 @@ export async function openCreatedSession(
 						...(event.videos && event.videos.length > 0
 							? { videos: event.videos }
 							: {}),
+						...(event.featuredMedia && event.featuredMedia.length > 0
+							? { featuredMedia: event.featuredMedia }
+							: {}),
 					};
 					io.emit({ type: "stream_tool_result", entry });
 				}

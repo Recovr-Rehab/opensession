@@ -644,6 +644,90 @@ describe("extractVideoMarkers", () => {
   });
 });
 
+describe("featuredMedia (which tool-result media the agent asked to show)", () => {
+  /** A real file, because the implicit-mention path requires existsSync. */
+  function writeMediaFile(name: string): string {
+    const path = join(dir, name);
+    writeFileSync(path, "x");
+    return path;
+  }
+
+  it("features marker media and leaves an implicit path mention folded", () => {
+    const shown = writeMediaFile("shown.png");
+    const touched = writeMediaFile("touched.png");
+    const path = writeFixture([
+      toolResultLine(
+        "u1",
+        "toolu_1",
+        `wrote ${touched}\nOPENSESSION_IMAGE: ${shown}\n`,
+      ),
+    ]);
+    const [entry] = parseTranscript(path);
+    // Both still attach — the change is prominence, not availability.
+    expect(entry.images).toEqual(
+      expect.arrayContaining([
+        `/media?path=${encodeURIComponent(shown)}`,
+        `/media?path=${encodeURIComponent(touched)}`,
+      ]),
+    );
+    expect(entry.featuredMedia).toEqual([
+      `/media?path=${encodeURIComponent(shown)}`,
+    ]);
+  });
+
+  it("does not feature a Read's image block", () => {
+    const path = writeFixture([
+      JSON.stringify({
+        type: "user",
+        uuid: "u1",
+        timestamp: TS,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_read",
+              content: [
+                { type: "text", text: "Image read successfully." },
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/png", data: "AAAA" },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ]);
+    const [entry] = parseTranscript(path);
+    expect(entry.images).toEqual(["data:image/png;base64,AAAA"]);
+    expect(entry.featuredMedia).toBeUndefined();
+  });
+
+  it("features a video marker alongside an image marker", () => {
+    const png = writeMediaFile("both.png");
+    const mp4 = writeMediaFile("both.mp4");
+    const path = writeFixture([
+      toolResultLine(
+        "u1",
+        "toolu_2",
+        `OPENSESSION_IMAGE: ${png}\nOPENSESSION_VIDEO: ${mp4}\n`,
+      ),
+    ]);
+    const [entry] = parseTranscript(path);
+    expect(entry.featuredMedia).toEqual([
+      `/media?path=${encodeURIComponent(png)}`,
+      `/media?path=${encodeURIComponent(mp4)}`,
+    ]);
+  });
+
+  it("leaves a tool result with no media unfeatured", () => {
+    const path = writeFixture([toolResultLine("u1", "toolu_3", "all done")]);
+    const [entry] = parseTranscript(path);
+    expect(entry.featuredMedia).toBeUndefined();
+  });
+});
+
 describe("steer-joined composite user turns", () => {
   it("splits co-released attributed messages into separate entries", () => {
     const path = writeFixture([

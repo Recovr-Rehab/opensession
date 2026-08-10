@@ -278,6 +278,11 @@ import {
   transcriptLineToolResult,
   opencodeToolResultImages,
 } from "./opencode-transcript";
+import {
+  extractImageMarkers,
+  extractImplicitMedia,
+  extractVideoMarkers,
+} from "./jsonl-parser";
 import { bashAskPolicyReply } from "./command-policy";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { recoverFreshEngineTranscript } from "./engine-handoff-transcript";
@@ -2875,6 +2880,17 @@ function makePartMirror(ctx: {
       finishedTools.add(part.id);
       const result = state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
       const images = opencodeToolResultImages(part);
+      // The persisted line is re-parsed by jsonl-parser, which also picks up
+      // OPENSESSION_IMAGE/_VIDEO markers and implicit path mentions. Do the
+      // same for the live event off the FULL output (`result`, not the 500-char
+      // wire copy) or a marked screenshot would only appear — and only open its
+      // row — after a reload.
+      const markerImages = extractImageMarkers(result);
+      const markerVideos = extractVideoMarkers(result);
+      const implicit = extractImplicitMedia(result);
+      const liveImages = [...new Set([...images, ...markerImages, ...implicit.images])];
+      const liveVideos = [...new Set([...markerVideos, ...implicit.videos])];
+      const featuredMedia = [...new Set([...markerImages, ...markerVideos])];
       turnEvent({
         direction: "in",
         kind: "tool_result",
@@ -2895,7 +2911,9 @@ function makePartMirror(ctx: {
         type: "tool_result",
         toolUseId: part.id,
         content: result.length > 500 ? result.slice(0, 500) + "..." : result,
-        ...(images.length ? { images } : {}),
+        ...(liveImages.length ? { images: liveImages } : {}),
+        ...(liveVideos.length ? { videos: liveVideos } : {}),
+        ...(featuredMedia.length ? { featuredMedia } : {}),
       });
     }
   };

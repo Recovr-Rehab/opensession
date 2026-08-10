@@ -537,6 +537,7 @@ export async function handleSessionsRoutes(
 						}).content,
 						toolInput: full.toolInput,
 						images: full.images,
+						featuredMedia: full.featuredMedia,
 					});
 			} catch {
 				// store read failed — the legacy scan below still serves the entry
@@ -551,6 +552,7 @@ export async function handleSessionsRoutes(
 				content: entry.content,
 				toolInput: entry.toolInput,
 				images: entry.images,
+				featuredMedia: entry.featuredMedia,
 			});
 		}
 	}

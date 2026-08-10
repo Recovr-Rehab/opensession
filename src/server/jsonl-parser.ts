@@ -376,19 +376,23 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
                     .join("\n")
                 : "";
           const implicitTool = extractImplicitMedia(resultText);
+          // Markers are the agent asking for this one to be SHOWN; a Read's
+          // image block and a path that merely turns up in output are working
+          // artifacts. Both attach, only the marked ones are featured — see
+          // TranscriptEntry.featuredMedia.
+          const markerImages = extractImageMarkers(resultText);
+          const markerVideos = extractVideoMarkers(resultText);
           const images = [
             ...new Set([
               ...extractImages(block.content),
-              ...extractImageMarkers(resultText),
+              ...markerImages,
               ...implicitTool.images,
             ]),
           ];
           const videos = [
-            ...new Set([
-              ...extractVideoMarkers(resultText),
-              ...implicitTool.videos,
-            ]),
+            ...new Set([...markerVideos, ...implicitTool.videos]),
           ];
+          const featuredMedia = [...new Set([...markerImages, ...markerVideos])];
           // A Task/Agent result carries the spawned sub-agent's id on the line's
           // toolUseResult; attach it so the UI can open the sub-agent transcript.
           const agentId = raw.toolUseResult?.agentId;
@@ -405,6 +409,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             ...(agentId ? { agentId } : {}),
             ...(images.length > 0 ? { images } : {}),
             ...(videos.length > 0 ? { videos } : {}),
+            ...(featuredMedia.length > 0 ? { featuredMedia } : {}),
           });
         } else if (block.type === "text" && !raw.isMeta) {
           const harness = harnessEntryFor(

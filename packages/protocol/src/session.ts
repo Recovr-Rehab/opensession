@@ -50,6 +50,17 @@ export interface TranscriptEntry {
   // Ready-to-render video srcs (served via the media endpoint) parsed from
   // `OPENSESSION_VIDEO: <path>` markers a tool printed.
   videos?: string[];
+  /** The subset of `images`/`videos` the agent chose to SHOW rather than
+   *  merely touched — srcs that came from an `OPENSESSION_IMAGE:` /
+   *  `OPENSESSION_VIDEO:` marker. Only carried on tool_result entries, and
+   *  it records provenance, not a verdict: a Read of a PNG and a path that
+   *  merely appears in tool output are working artifacts, so they still
+   *  attach but stay behind the fold, while a marker means "look at this".
+   *  User and assistant media is deliberate by definition (a person attached
+   *  it, or the agent named it in its own prose) and carries no subset.
+   *  Absent on entries stored before the field existed — which reads as
+   *  "nothing featured", i.e. old tool rows stop auto-opening. */
+  featuredMedia?: string[];
   // Non-media composer attachments (staged to disk server-side) — rendered as
   // downloadable chips on the user bubble.
   files?: { name: string; path: string }[];

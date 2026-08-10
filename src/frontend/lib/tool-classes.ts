@@ -63,3 +63,14 @@ export const TOOL_ROW_CHIP =
 	"bg-hover py-[2px] pl-2 pr-1 text-meta font-medium leading-4 text-dim " +
 	"transition-[color,background-color,scale] hover:bg-pressed hover:text-fg " +
 	"active:scale-[0.96] focus-ring";
+
+/**
+ * Says a collapsed row is holding media the agent didn't ask to show — a Read
+ * of a screenshot, a path that turned up in output. Not a control: the row
+ * itself is the button, and this only has to make the media discoverable, so
+ * it sits in the trailing meta at the same weight as the duration rather than
+ * competing with the "Open ↗" chip beside it.
+ */
+export const TOOL_ROW_MEDIA_HINT =
+	"inline-flex flex-shrink-0 self-center items-center gap-1 text-meta " +
+	"leading-4 text-faint transition-colors group-hover:text-dim";

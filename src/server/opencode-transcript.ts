@@ -1398,6 +1398,13 @@ export function readOpencodeTranscript(
             const allImages = [
               ...new Set([...images, ...markerImages, ...implicit.images]),
             ];
+            // Only the marked srcs are "show this" — the read attachment and
+            // any path that merely appears in the output stay folded away.
+            // Must match jsonl-parser's tool_result branch, or the same result
+            // would feature differently live vs. after a refresh re-parse.
+            const featuredMedia = [
+              ...new Set([...markerImages, ...markerVideos]),
+            ];
             entries.push({
               id: `tr-${p.id}`,
               type: "tool_result",
@@ -1409,6 +1416,7 @@ export function readOpencodeTranscript(
               ...(markerVideos.length || implicit.videos.length
                 ? { videos: [...new Set([...markerVideos, ...implicit.videos])] }
                 : {}),
+              ...(featuredMedia.length ? { featuredMedia } : {}),
             });
           }
         }

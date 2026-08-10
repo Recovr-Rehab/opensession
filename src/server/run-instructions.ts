@@ -404,6 +404,17 @@ export function buildRunInstructions(input: {
             "commit screenshots to the PR branch.")
     );
   }
+  parts.push(
+    "## Showing images and videos\nMedia you produce or read is attached to its tool call " +
+      "automatically, but folded away — a Read of a screenshot, or a path that merely appears " +
+      "in some output, stays behind the fold, because a verification loop that takes forty " +
+      "screenshots should not put forty images in the conversation. When you want the human to " +
+      "actually LOOK at one, say so: print `OPENSESSION_IMAGE: /abs/path.png` or " +
+      "`OPENSESSION_VIDEO: /abs/path.mp4` on its own line, and that one opens inline where it " +
+      "happened. Naming the absolute path in your own message text shows it too. Use this for " +
+      "the finished artifact, the before/after pair, the frame that proves the bug — not for " +
+      "every intermediate shot you took along the way."
+  );
   if (inproc["opensession-turn"]) {
     parts.push(
       "## Ending without reporting anything\nThis run is unattended: nobody is watching it " +
