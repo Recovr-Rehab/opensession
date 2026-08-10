@@ -28,6 +28,19 @@ struct WalkthroughCard: View {
     let walkthrough: SessionWalkthrough
     let state: TurnFoldState
 
+    /// The card's own inset — and the amount its pictures give back. Text is
+    /// read at the card's margin; the media runs to its edges, because on a
+    /// phone the walkthrough is already the narrowest thing on the narrowest
+    /// screen (the transcript's margin, then the card's, then a letterbox) and
+    /// every inset comes off the one screenshot the reader opened it for.
+    fileprivate static let padding: CGFloat = 14
+
+    /// How tall one piece of media may get before it stops being part of a
+    /// conversation and becomes a page of its own. Shared by the video and the
+    /// stills so a before/after pair and the demo of the same screen come out
+    /// the same size.
+    fileprivate static let mediaHeightCap: CGFloat = 640
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
@@ -46,6 +59,7 @@ struct WalkthroughCard: View {
             if state.expanded {
                 if let video = walkthrough.video, let url = OS1API.mediaURL(path: video) {
                     WalkthroughVideo(url: url)
+                        .padding(.horizontal, -Self.padding)
                 }
                 if !walkthrough.summary.isEmpty {
                     MarkdownBody(walkthrough.summary)
@@ -58,7 +72,7 @@ struct WalkthroughCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(Self.padding)
         .background(OS1VisualStyle.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -200,22 +214,40 @@ private struct WalkthroughThumbnailStrip: View {
         // The strip is the card's own width, but scrolls to the card's edges:
         // a tile cut off by the padding looks like a rendering bug, where one
         // that runs under the edge reads as "there is more this way".
-        .padding(.horizontal, -14)
-        .contentMargins(.horizontal, 14, for: .scrollContent)
+        .padding(.horizontal, -WalkthroughCard.padding)
+        .contentMargins(.horizontal, WalkthroughCard.padding, for: .scrollContent)
     }
 }
 
 /// The demo recording. `VideoPlayer` streams it over the same range-enabled
 /// media route the web `<video>` uses, so it seeks without downloading first.
+///
+/// Sized to the recording's own shape, not to a fixed box. A player is a black
+/// rectangle that letterboxes whatever it is given: at the 200pt height this
+/// started at, a landscape demo lost the card's width to bars down both sides
+/// and a PORTRAIT one — a phone recording, which is most of what the app's own
+/// walkthroughs show — played as a sliver about a fifth the size of the room
+/// the card had for it.
 private struct WalkthroughVideo: View {
     let url: URL
 
     @State private var player: AVPlayer?
+    /// The recording's display ratio, once the asset says what it is. 16:9
+    /// until then, so the row doesn't resize under a reader who is already
+    /// watching — landscape is the common case and the cheap guess.
+    @State private var ratio: CGFloat?
 
     var body: some View {
         VideoPlayer(player: player)
-            .frame(height: 200)
+            .aspectRatio(ratio ?? 16 / 9, contentMode: .fit)
+            // A tall recording would otherwise fill the screen and bury the
+            // writeup under it; the same ceiling the stills use.
+            .frame(maxWidth: .infinity, maxHeight: WalkthroughCard.mediaHeightCap)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .task {
+                guard ratio == nil else { return }
+                ratio = await Self.displayRatio(of: url)
+            }
             .onAppear {
                 guard player == nil else { return }
                 player = AVPlayer(url: url)
@@ -223,6 +255,22 @@ private struct WalkthroughVideo: View {
             // Deliberately not autoplaying: a transcript that starts talking
             // at you while you scroll past is worse than a tap.
             .onDisappear { player?.pause() }
+    }
+
+    /// Width over height as the recording is MEANT to be shown — the natural
+    /// size turned by the track's transform, since a phone recording is stored
+    /// landscape with a rotation on it and its raw size claims the opposite
+    /// shape of what plays.
+    private static func displayRatio(of url: URL) async -> CGFloat? {
+        let asset = AVURLAsset(url: url)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let size = try? await track.load(.naturalSize),
+              let transform = try? await track.load(.preferredTransform)
+        else { return nil }
+        let shown = size.applying(transform)
+        let width = abs(shown.width), height = abs(shown.height)
+        guard width > 0, height > 0 else { return nil }
+        return width / height
     }
 }
 
@@ -265,6 +313,9 @@ private struct WalkthroughShotView: View {
                 gallery: gallery,
                 galleryIndex: gallery.firstIndex { $0.id == path } ?? 0
             )
+            // The label reads at the card's margin; the picture it labels runs
+            // to the card's edges.
+            .padding(.horizontal, -WalkthroughCard.padding)
         }
     }
 }
@@ -309,8 +360,15 @@ private struct MediaImage: View {
                     image
                         .aspectRatio(ratio ?? 16 / 9, contentMode: .fit)
                         // A tall screenshot would otherwise take the whole
-                        // screen and bury the rest of the walkthrough under it.
-                        .frame(maxWidth: .infinity, maxHeight: 420)
+                        // screen and bury the rest of the walkthrough under
+                        // it. The cap is what a PHONE shot runs into — at the
+                        // card's width one wants ~780pt of height — and it is
+                        // a ceiling on HEIGHT, so it costs a portrait shot
+                        // width too: every point taken off the cap narrows the
+                        // picture by about half a point. 640 keeps the card's
+                        // bottom edge and the start of the next block in view
+                        // on the shortest phone this app runs on.
+                        .frame(maxWidth: .infinity, maxHeight: WalkthroughCard.mediaHeightCap)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             } else {
