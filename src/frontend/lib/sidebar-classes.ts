@@ -248,8 +248,9 @@ export const SIDEBAR_AUTO_COG =
  * The desktop sidebar is ONE scroll rail, and two tiers of heading pin inside
  * it: a band heading (Tools / Workspaces / Automations / People) holds the top
  * slot, and the lane, repo and status headers under it pin one row lower.
- * Every pinning element also carries `data-sticky-head`, which repo drag uses
- * to find the band header without coupling to its visual class names.
+ * Every pinning element also carries `data-sticky-head`, which is what
+ * Sidebar's scroll listener queries — CSS has no interoperable `:stuck`, so
+ * `is-stuck` is toggled from JS and only then does a header paint its backing.
  *
  * Everything here is gated on `min-[721px]`: on phones the whole sidebar is a
  * page that scrolls as one, and nothing pins.
@@ -328,6 +329,21 @@ export const SIDEBAR_BAND_TOGGLE_INSET =
  * space at the row's right edge, which is invisible.
  */
 export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
+
+/**
+ * The scroll-under wash a header paints once it is actually pinned. It starts
+ * in the sidebar's exact material, then dissolves over the rows passing behind
+ * it instead of ending as a hard full-width bar. The ±400px overhang keeps the
+ * wash edge-to-edge regardless of the heading's own inset; the sidebar clips
+ * the excess horizontally.
+ *
+ * This deliberately avoids backdrop-filter. Toggling blur from the scroll
+ * listener re-rasterized the whole sidebar mid-scroll on loaded machines. Two
+ * matched gradients preserve the material-over-base composition at the label,
+ * then fade both layers together through the final 16px.
+ */
+export const SIDEBAR_STUCK_BACKING =
+	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-0 desktop:[&.is-stuck::before]:bottom-[-16px] desktop:[&.is-stuck::before]:left-[-400px] desktop:[&.is-stuck::before]:right-[-400px] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(to_bottom,var(--sidebar-material)_0%,var(--sidebar-material)_70%,transparent_100%),linear-gradient(to_bottom,var(--bg-raised)_0%,var(--bg-raised)_70%,transparent_100%)]";
 
 /**
  * The live-state dot a row, group header or hover card carries, minus the
