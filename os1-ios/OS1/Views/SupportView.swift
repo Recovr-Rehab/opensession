@@ -6,17 +6,6 @@ import UIKit
 import AppKit
 #endif
 
-/// Plain — the support queue — on the phone.
-///
-/// Two screens: the Todo queue in priority lanes, and one ticket's timeline
-/// with the composer. The triage loop is the whole point of carrying this in a
-/// pocket: read what the customer said, answer it or leave the team a note,
-/// then move it out of the queue.
-///
-/// What the web has and this deliberately doesn't (yet): assign, labels,
-/// priority, rename, mark-spam, and the triage hand-off that spawns a session.
-/// Each needs its own picker; spam is customer-wide and destructive enough to
-/// deserve a considered flow rather than a v1 sheet.
 /// The Plain queue as a panel — pushed on the phone, the detail column on the
 /// Mac. Not a sheet: support is a place in the app, and a modal would cover the
 /// list you came from and refuse to sit beside anything.
@@ -31,8 +20,6 @@ import AppKit
 /// Each needs its own picker; spam is customer-wide and destructive enough to
 /// deserve a considered flow rather than a v1 sheet.
 struct SupportQueueView: View {
-    /// Shared with the list's own band, so the two never disagree about what
-    /// is in the queue and a ticket finished here leaves both at once.
     @Bindable var model: SupportQueueModel
     /// Opening a ticket is the container's call: the phone pushes it onto the
     /// same stack this view sits on, the Mac swaps the detail column.
@@ -65,6 +52,13 @@ struct SupportQueueView: View {
                         ForEach(lane.threads) { row in
                             Button { onOpen(row) } label: { SupportRow(row: row) }
                                 .buttonStyle(.plain)
+                                #if os(iOS)
+                                .listRowInsets(EdgeInsets(
+                                    top: 2, leading: 20, bottom: 2, trailing: 20
+                                ))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                #endif
                         }
                     } header: {
                         HStack(spacing: 6) {
@@ -76,8 +70,12 @@ struct SupportQueueView: View {
                 }
             }
             #if os(iOS)
+            .listStyle(.plain)
+            .environment(\.defaultMinListRowHeight, 8)
             .scrollContentBackground(.hidden)
             .background(OS1VisualStyle.background)
+            .listSectionSpacing(10)
+            .contentMargins(.top, 4, for: .scrollContent)
             #endif
             .refreshable { await model.load() }
         }
@@ -88,36 +86,40 @@ private struct SupportRow: View {
     let row: SupportThreadSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                if row.lane == .urgent {
-                    Circle()
-                        .fill(OS1VisualStyle.red)
-                        .frame(width: 6, height: 6)
-                }
-                Text(row.customerLabel)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                Spacer(minLength: 6)
-                if let assignee = row.assignee?.name?.nilIfBlank {
-                    Text(assignee)
-                        .font(.caption2)
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                        .lineLimit(1)
-                }
-            }
-            Text(row.displayTitle)
-                .font(.subheadline)
+        HStack(spacing: 9) {
+            Circle()
+                .fill(priorityColor)
+                .frame(width: 8, height: 8)
+                .frame(width: 22, height: 22)
+            Text(row.rowLabel)
+                #if os(iOS)
+                .font(.callout.weight(.medium))
                 .foregroundStyle(OS1VisualStyle.textDim)
-                .lineLimit(2)
-            if let labels = row.labels, !labels.isEmpty {
-                Text(labels.compactMap { $0.name?.nilIfBlank }.joined(separator: " · "))
-                    .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-                    .lineLimit(1)
-            }
+                #else
+                .font(.body)
+                .foregroundStyle(.primary)
+                #endif
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 2)
+        #if os(iOS)
+        .padding(.vertical, 13)
+        #else
+        .padding(.vertical, 3)
+        #endif
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(row.rowLabel)
+        .accessibilityValue(row.lane.label)
+    }
+
+    private var priorityColor: Color {
+        switch row.lane {
+        case .urgent: OS1VisualStyle.red
+        case .high: OS1VisualStyle.yellow
+        case .normal: OS1VisualStyle.blue
+        case .low: OS1VisualStyle.textFaint
+        }
     }
 }
 

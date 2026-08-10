@@ -54,13 +54,12 @@ struct SessionsListView: View {
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
     @State private var showDesk = false
-    /// The Plain support queue. A place you go, like the Desk — and, since
-    /// tickets are work waiting on a person the same way sessions are, a band
-    /// at the top of this list too.
+    /// The Plain support queue. A place you reach from the lifebuoy control,
+    /// like the Desk, rather than another band inside the sessions list.
     @State private var showSupport = false
     @State private var supportQueue = SupportQueueModel()
-    /// The ticket a band row opened. A sheet rather than a push: this screen's
-    /// navigation path is typed `[Session]`, and a ticket is not one.
+    /// The ticket opened from the support queue. It has its own destination
+    /// because this screen's navigation path is typed `[Session]`.
     @State private var openTicket: SupportThreadSummary?
     /// The push stack, typed rather than a `NavigationPath`, so a create that
     /// resolves after the person has navigated elsewhere can find its own
@@ -207,16 +206,6 @@ struct SessionsListView: View {
                 // color, and without it every tile falls back to its own
                 // hash, which is exactly where two repos can collide.
                 _ = try? await OS1API.repos()
-            }
-            // The support band's own loop, in its own task so it can't hold up
-            // the one above it. A minute, like the web sidebar's: the queue
-            // changes on someone else's schedule and the server caches it for
-            // 30s anyway. SwiftUI cancels it when the view goes away.
-            .task {
-                while !Task.isCancelled {
-                    await supportQueue.load()
-                    try? await Task.sleep(for: .seconds(60))
-                }
             }
             .onDisappear {
                 viewModel.stopPolling()
@@ -1566,7 +1555,6 @@ struct SessionsListView: View {
             #endif
 
             catchUpBand
-            supportBand
 
             if groupBy == .repoStatus || groupBy == .repoInbox {
                 ForEach(groupBy == .repoInbox ? repoInboxGroups : repoSessionGroups) { repoGroup in
@@ -1709,14 +1697,6 @@ struct SessionsListView: View {
     // status marks. What they do carry is the fold control: the heading is a
     // button, and its chevron says which way the section sits (on iOS, only
     // when it sits shut — see `collapseChevron`).
-    /// Support in the list, not only behind a button.
-    ///
-    /// A ticket is work waiting on a person, which is what every other row
-    /// here is, so the queue reads as another band of the inbox — the web
-    /// sidebar carries the same one. It leads, because a customer waiting
-    /// outranks your own sessions, and it folds shut like any other band for
-    /// anyone who doesn't work the queue.
-    ///
     /// The offer to catch up, at the top of the list and only when there is
     /// something to catch up ON. A permanent entry would be a tool you have to
     /// remember; a row that appears when unread work does is a prompt.
@@ -1775,53 +1755,6 @@ struct SessionsListView: View {
             viewerLogin: config.githubLogin,
             isUnread: { reads.isUnread($0) }
         )
-    }
-
-    /// Only the top of the queue is inline. The band is a prompt, not the
-    /// queue itself: 50 tickets above your sessions would bury them, so the
-    /// urgent end shows and the rest stays one tap away in the sheet.
-    @ViewBuilder
-    private var supportBand: some View {
-        if !supportQueue.threads.isEmpty {
-            let inline = Array(supportQueue.prioritised.prefix(supportBandLimit))
-            Section {
-                if !isCollapsed("support") {
-                    ForEach(inline) { row in
-                        Button {
-                            openTicket = row
-                        } label: {
-                            SupportBandRow(row: row)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    if supportQueue.threads.count > inline.count {
-                        Button {
-                            showSupport = true
-                        } label: {
-                            Text("All \(supportQueue.threads.count) tickets")
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(OS1VisualStyle.textDim)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            } header: {
-                groupHeader(
-                    title: "Support",
-                    count: supportQueue.threads.count,
-                    collapseKey: "support"
-                )
-            }
-        }
-    }
-
-    /// Enough to see what's waiting, few enough that the list is still yours.
-    private var supportBandLimit: Int {
-        #if os(macOS)
-        8
-        #else
-        5
-        #endif
     }
 
     private func groupHeader(
@@ -2066,40 +1999,6 @@ struct SessionsListView: View {
         Task {
             await viewModel.refresh()
             isRetrying = false
-        }
-    }
-}
-
-/// A ticket as a sidebar row — shaped like the web's, which is shaped like
-/// every other row in this list: one line, a status dot, a title. The customer
-/// and the preview live inside the ticket; a two-line row made the band read as
-/// a different kind of list than the sessions under it.
-///
-/// The dot is the ticket's priority, in the web's own four colours.
-private struct SupportBandRow: View {
-    let row: SupportThreadSummary
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Circle()
-                .fill(dot)
-                .frame(width: 7, height: 7)
-            Text(row.rowLabel)
-                .font(.body)
-                .foregroundStyle(OS1VisualStyle.text)
-                .lineLimit(1)
-            Spacer(minLength: 6)
-        }
-        .padding(.vertical, 3)
-        .contentShape(Rectangle())
-    }
-
-    private var dot: Color {
-        switch row.lane {
-        case .urgent: OS1VisualStyle.red
-        case .high: OS1VisualStyle.yellow
-        case .normal: OS1VisualStyle.blue
-        case .low: OS1VisualStyle.textFaint
         }
     }
 }

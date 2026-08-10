@@ -13,21 +13,13 @@ final class SupportQueueModel {
     private(set) var isLoading = false
     private(set) var errorText: String?
 
-    /// Lanes, in Plain's own priority order, empty ones dropped. The web
-    /// sidebar groups the same way; a flat list by time buries the urgent
-    /// ones under whatever arrived last.
+    /// Lanes, in Plain's own priority order, empty ones dropped. A flat list
+    /// by time buries urgent tickets under whatever arrived last.
     var lanes: [(priority: SupportPriority, threads: [SupportThreadSummary])] {
         SupportPriority.allCases.compactMap { priority in
             let rows = threads.filter { $0.lane == priority }
             return rows.isEmpty ? nil : (priority, rows)
         }
-    }
-
-    /// The queue in lane order, flattened — what a band shows when it only has
-    /// room for the top of it. Plain's own ordering (most recently moved to
-    /// Todo first) survives within each lane.
-    var prioritised: [SupportThreadSummary] {
-        lanes.flatMap(\.threads)
     }
 
     func load() async {
