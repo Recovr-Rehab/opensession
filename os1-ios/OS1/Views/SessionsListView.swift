@@ -498,6 +498,19 @@ struct SessionsListView: View {
                     ToolbarItem(placement: .topTrailingCompat) {
                         filterMenu
                     }
+                    ToolbarItem(placement: .topTrailingCompat) {
+                        Button {
+                            showCatchUp = true
+                        } label: {
+                            Image(systemName: "rectangle.stack")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel(
+                            catchUpCount > 0
+                                ? "Catch up on \(catchUpCount) unread workspaces"
+                                : "Open Catch Up"
+                        )
+                    }
                     // New session lives in the top bar; search moved into the
                     // system bottom search field, which owns the bottom edge.
                     ToolbarItem(placement: .topTrailingCompat) {
