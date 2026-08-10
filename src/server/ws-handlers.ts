@@ -30,6 +30,8 @@ import { engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync,
 import { handleSlashCommand } from "./slash-commands";
 import { maybeRecapOnReturn } from "./recap";
 import { resizeTerminal, startSessionTerminal, stopAllTerminals, stopTerminal, writeTerminal } from "./terminals";
+import { classifyEntries } from "@tellahq/opensession-protocol/notices";
+import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
@@ -176,6 +178,25 @@ const V2_SYNC_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 /** Session ids with a background import scheduled (dedupe). */
 const v2BgImports: Set<string> = ((globalThis as any).__osTranscriptV2BgImports ??=
 	new Set());
+
+/**
+ * What `entriesForWire` does for every legacy send site, for the v2 store
+ * path: classify how each entry reads and say what each tool call is. Store
+ * rows are RAW — the marker-derived `noticeKind` is on them, but the `notice`
+ * a client renders from is not, and delivery plumbing ("[Name] " prefixes,
+ * worker/session sentinels, the "💬 X answered" header) is still in `content`.
+ * The web re-classifies client-side, so this went unnoticed until the native
+ * apps moved onto seq paging: they read `notice`/`sender` only, so a recap
+ * arrived as an anonymous system chip and a teammate's answer as words the
+ * session owner appeared to have typed.
+ *
+ * Clamping stays separate and comes after (see clampV2InitEntries): the
+ * classifier strips plumbing out of `content`, so a clamp applied afterwards
+ * measures the text a reader actually sees.
+ */
+function classifyV2Entries(entries: SeqEntry[]): SeqEntry[] {
+	return withToolPresentations(classifyEntries(entries)) as SeqEntry[];
+}
 
 /**
  * §4 snapshot clamp: v2 store rows are wire-bounded at 32KB, but the legacy
@@ -366,6 +387,7 @@ function serveTranscriptV2(
 			...(msg.supportsChangeSeq === true && typeof msg.sinceChangeSeq === "number"
 				? { sinceChangeSeq: msg.sinceChangeSeq }
 				: {}),
+			prepareEntries: classifyV2Entries,
 			clampSnapshot: clampV2InitEntries,
 			formatAppend: (frame, event) =>
 				ws.data?.supportsFeed && event?.feed
@@ -654,7 +676,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 								sessionId: msg.sessionId,
 								// Backlog pages take the same init clamp as legacy history
 								// pages (see clampV2InitEntries).
-								entries: clampV2InitEntries(page.entries),
+								entries: clampV2InitEntries(classifyV2Entries(page.entries)),
 								firstSeq: page.firstSeq,
 								lastSeq: page.lastSeq,
 								truncated: page.firstSeq > 1,

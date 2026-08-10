@@ -29,6 +29,16 @@ export interface StartTranscriptWatchOptions {
   ) => () => void;
   isCurrent: () => boolean;
   sinceChangeSeq?: number;
+  /**
+   * Everything an entry batch needs before it leaves the server: classify how
+   * each entry reads and strip its delivery plumbing (notices.ts). Applied at
+   * EVERY send site here, snapshot and append alike, because a store row is
+   * raw — a client that reads only the classified form (the native apps read
+   * `notice`/`sender` and never see `noticeKind`) would otherwise render a
+   * recap as an anonymous system chip and a teammate's routed-back answer as
+   * words the session owner typed.
+   */
+  prepareEntries?: (entries: SeqEntry[]) => SeqEntry[];
   clampSnapshot?: (entries: SeqEntry[]) => SeqEntry[];
   formatAppend?: (
     frame: Record<string, unknown>,
@@ -59,6 +69,7 @@ export function startTranscriptWatch(
     socket,
     subscribe,
     isCurrent,
+    prepareEntries = (entries) => entries,
     clampSnapshot = (entries) => entries,
     formatAppend = (frame) => frame,
   } = options;
@@ -81,7 +92,9 @@ export function startTranscriptWatch(
     send({
       type: "transcript_init",
       sessionId,
-      entries: clampSnapshot(tail.entries),
+      // Classify first, clamp second: the classifier strips plumbing out of
+      // `content`, so the clamp then measures the text a reader will see.
+      entries: clampSnapshot(prepareEntries(tail.entries)),
       truncated: tail.firstSeq > 1,
       firstSeq: tail.firstSeq,
       lastSeq: tail.lastSeq,
@@ -116,7 +129,7 @@ export function startTranscriptWatch(
           const append = {
             type: "transcript_append",
             sessionId,
-            entries: page.entries,
+            entries: prepareEntries(page.entries),
             firstSeq: page.firstSeq,
             lastSeq: page.lastSeq,
             lastChangeSeq: cursor,
@@ -175,7 +188,7 @@ export function startTranscriptWatch(
           send({
             type: "transcript_append",
             sessionId,
-            entries: changes.entries,
+            entries: prepareEntries(changes.entries),
             firstSeq: changes.firstSeq,
             lastSeq: changes.lastSeq,
             lastChangeSeq: cursor,

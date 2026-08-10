@@ -237,4 +237,51 @@ describe("race-free transcript watch", () => {
     handle.unsubscribe();
     expect(state.frames).toHaveLength(1);
   });
+
+  test("every entry batch is prepared before it goes on the wire", async () => {
+    // Store rows are raw: classification (notices.ts) happens on the way out,
+    // and a client that only reads the classified form has no second chance.
+    // Snapshot, resume append and live append must all go through it.
+    const state = setup();
+    const sid = `bks-prepare-${crypto.randomUUID()}`;
+    const prepareEntries = (entries: any[]) =>
+      entries.map((e) => ({ ...e, prepared: true }));
+    state.store.appendTranscriptEvents(sid, [entry("a", "snapshot")]);
+    const cursor = state.store.getLastChangeSeq(sid);
+    state.store.appendTranscriptEvents(sid, [entry("b", "resume")]);
+
+    const handle = startTranscriptWatch({
+      sessionId: sid,
+      store: state.store,
+      socket: state.socket,
+      subscribe: subscribeTranscript,
+      isCurrent: () => true,
+      sinceChangeSeq: cursor,
+      prepareEntries,
+    });
+    cleanups.push(() => handle.unsubscribe());
+    state.store.appendTranscriptEvents(sid, [entry("c", "live")]);
+    // The bus fans out on the microtask queue, never inside the write.
+    await Promise.resolve();
+
+    const sent = state.frames.flatMap((frame) => frame.entries ?? []);
+    expect(sent.map((e: any) => e.id)).toEqual(["b", "c"]);
+    expect(sent.every((e: any) => e.prepared)).toBe(true);
+
+    // …and the snapshot path too, for a watch that can't resume.
+    state.frames.length = 0;
+    const fresh = startTranscriptWatch({
+      sessionId: sid,
+      store: state.store,
+      socket: state.socket,
+      subscribe: subscribeTranscript,
+      isCurrent: () => true,
+      prepareEntries,
+    });
+    cleanups.push(() => fresh.unsubscribe());
+    expect(state.frames[0].type).toBe("transcript_init");
+    expect(
+      state.frames[0].entries.every((e: any) => e.prepared)
+    ).toBe(true);
+  });
 });
