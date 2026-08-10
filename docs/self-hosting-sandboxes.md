@@ -690,7 +690,7 @@ that means a bare-metal instance or the 8i-generation nested-virt families
   MUST be XFS — `/opt/firecracker/store.img` loop-mounted via fstab), a
   private netns recreating exactly `bkstap0`/172.16.100.2, snapshot load
   (~18ms), guest clock resync via the root agent (SigV4 tolerates <5min
-  skew). VMs run in transient scopes (`bks-fc-clone<idx>`) so they survive
+  skew). VMs run in transient scopes (`os-fc-clone<idx>`) so they survive
   opensession restarts.
 - `bks-host-setup.service` — boot oneshot re-arming the docker/guest IMDS
   drop rules. Enable it; nothing else needs manual re-arming after reboot.

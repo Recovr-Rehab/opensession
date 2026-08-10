@@ -1,12 +1,12 @@
 /**
- * Sandbox provider registry (Phase 0 of the sandbox rollout plan).
+ * Sandbox provider registry (docs/sandboxes-plan.md).
  *
  * `getSandboxProvider()` resolves the provider for a run: an explicit spec
  * wins, otherwise the config file (~/.opensession-sandbox.json) decides, and the
  * kill-switch file (<sessions-dir>/disable-sandboxes) forces "local".
- * Only the local provider exists today — docker (Phase 1) and daytona/e2b
- * (Phase 3) throw until their adapters land, so a premature config flip fails
- * loudly at run start instead of silently running unsandboxed.
+ * Every registered provider is implemented (local host, docker, the microvm
+ * backends, and the remote daytona/e2b/box/modal adapters); an unknown id
+ * still throws at run start instead of silently running unsandboxed.
  */
 
 import { LocalProvider } from "./local";

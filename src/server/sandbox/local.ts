@@ -1,20 +1,17 @@
 /**
- * LocalProvider — today's behavior behind the Sandbox interface (Phase 0 of
- * the sandbox rollout plan). The "sandbox" is just the host: `ensure` resolves a
+ * LocalProvider — the host-worktree default behind the Sandbox interface
+ * (docs/sandboxes-plan.md). The "sandbox" is just the host: `ensure` resolves a
  * workspace exactly the way the existing session paths do (delegating to
  * worktree.ts — never duplicating its git logic), `exec` runs on the host via
  * Bun's `$`, and `launchRun` is the current in-process `runAgent` path.
  *
- * Zero behavior change by construction:
+ * Identical to the plain host path by construction:
  *  - `ensure` only *reuses* the resolution helpers the create/prompt paths
  *    already call (getRepo/listWorktrees/createWorktree/reviveWorktree), so a
  *    cwd derived through it is byte-identical to one derived without it.
  *  - `destroy` is a no-op: local worktree lifecycle stays with
  *    removeWorktree/sweepArchivedWorktrees — a sandbox teardown must never
  *    delete a worktree that outlives the session concept today.
- *
- * NOT yet threaded through opensession.ts (`runSessionPromptInner` still
- * computes its own cwd) — that threading is the Phase 1 TODO.
  */
 
 import { $ } from "bun";

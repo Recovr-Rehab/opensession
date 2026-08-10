@@ -1,6 +1,6 @@
 /**
- * run-ws — the WebSocket transport for sandboxed runs (the sandbox rollout plan
- * §5 Phase 3). Remote sandboxes can't share unix sockets with this host, so
+ * run-ws — the WebSocket transport for sandboxed runs
+ * (docs/sandboxes-plan.md). Remote sandboxes can't share unix sockets with this host, so
  * both host-to-opensession channels get an outbound-dial WS mode: the sandbox
  * dials OUT to opensession (which already listens on the Tailscale bind), never
  * the other way around.

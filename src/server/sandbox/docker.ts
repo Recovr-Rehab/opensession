@@ -1,6 +1,6 @@
 /**
- * DockerProvider — the Docker sandbox backend (the sandbox rollout plan §5
- * Phase 1, "bind-mount mode").
+ * DockerProvider — the Docker sandbox backend (docs/sandboxes-plan.md;
+ * "bind-mount mode" is the default).
  *
  * One long-lived container per session (`bks-sbx-<sessionId>`, image
  * `opensession-runner:latest` — see deploy/sandbox/), kept alive across turns so
@@ -51,7 +51,7 @@
  *  - ~/.opensession-audit is mounted rw so in-container runs land in the same
  *    audit log stream as host runs (appendFileSync, O_APPEND).
  *
- * Phase 2 additions (the sandbox rollout plan, Phase 2):
+ * Later additions (docs/sandboxes-plan.md):
  *  - VOLUME workspaces (config `workspace: "volume"`, new sandboxes only): the
  *    workspace is a per-session named volume (`<name>-ws`) mounted at the
  *    session's canonical worktree path, cloned from the repo's origin INSIDE
@@ -884,7 +884,6 @@ async function runWorkspaceSetup(
     [
       "exec", "-w", assertSafePath(cwd),
       "-e", `OPENSESSION_BOOT_MODE=${bootMode}`,
-      "-e", `OPENSESSION_BOOT_MODE=${bootMode}`, // deprecated alias for older hooks
       name,
       "sh", "-c", `bash ${assertSafePath(script)} >> ${log} 2>&1`,
     ],
@@ -1338,7 +1337,7 @@ export class DockerProvider implements SandboxProvider {
     }
     // A main checkout must never be bind-mounted rw into a sandbox as its
     // workspace: shared checkouts (opensession self-hosting) and repo mainlines
-    // stay host-only forever (the sandbox rollout plan, §7.2). This also catches
+    // stay host-only forever (docs/sandboxes-plan.md). This also catches
     // the "falsy worktreeDir defaulted to the main checkout" session shape.
     if (isMainCheckout(cwd)) {
       throw new Error(

@@ -1,6 +1,6 @@
 /**
  * E2bProvider — remote sandbox adapter over the E2B API
- * (the sandbox rollout plan §5 Phase 3).
+ * (docs/sandboxes-plan.md).
  *
  * LICENSING: the `e2b` JS SDK (pinned 2.32.0) is **MIT** (verified from the
  * npm `license` field, 2026-07-08); E2B's platform/infra repo is Apache-2.0.
@@ -42,6 +42,7 @@ import type {
   SandboxStatus,
 } from "../provider";
 import {
+  assertDialbackReachable,
   bootstrapRemoteSandbox,
   bootstrapRemoteWorkspaceRuntime,
   findRemoteStateBySession,
@@ -170,9 +171,14 @@ export class E2bProvider implements SandboxProvider {
 
     const driver = e2bDriver(sbx);
     await driver.ensureStarted();
+    // Cheap dial-back probe BEFORE the expensive bootstrap (same as the other
+    // remote adapters): a sandbox that can't reach our callback URL can never
+    // run anything — fail fast with the documented error instead of 30s+ of
+    // doomed bootstrap.
     if (spec.runtime === "workspace") {
       await bootstrapRemoteWorkspaceRuntime(driver, "e2b");
     } else {
+      await assertDialbackReachable(driver, "e2b");
       await bootstrapRemoteSandbox(driver, "e2b");
     }
     await setupRemoteWorkspace(

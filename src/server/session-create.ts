@@ -988,7 +988,7 @@ export async function handleCreateSessionMessage(
 				if (branch)
 					branch = await resolveUniqueBranch(branch, repo.id);
 				wtPath = worktreePathFor(branch, repo.id);
-				// Volume-mode sandbox (the sandbox rollout plan Phase 2): the
+				// Volume-mode sandbox (docs/sandboxes-plan.md): the
 				// workspace is cloned into a per-session volume INSIDE the
 				// sandbox — skip host createWorktree entirely. The session
 				// keeps the canonical path; the provider's ensure()

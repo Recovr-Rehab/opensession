@@ -14,7 +14,16 @@ TAR="$1"; OUT="$2"; SIZE_GB="${3:-25}"
 INIT="${OPENSESSION_INIT:-$HERE/bks-init}"
 
 BUSYBOX_URL=https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox
+# Pinned digest of the upstream static binary (verified against a fresh
+# download 2026-08-10) — the cache is checked too, so a tampered or truncated
+# file is rejected wherever it came from.
+BUSYBOX_SHA256=6e123e7f3202a8c1e9b1f94d8941580a25135382b99e8d3e34fb858bba311348
 [ -f "$HERE/.cache-busybox" ] || curl -fsSL "$BUSYBOX_URL" -o "$HERE/.cache-busybox"
+echo "$BUSYBOX_SHA256  $HERE/.cache-busybox" | sha256sum -c - >/dev/null || {
+  echo "ERROR: busybox checksum mismatch for $HERE/.cache-busybox (want $BUSYBOX_SHA256)" >&2
+  echo "       delete the file and re-run to re-download." >&2
+  exit 1
+}
 
 MNT="$(mktemp -d)"
 trap 'sudo umount "$MNT" 2>/dev/null || true; rmdir "$MNT" 2>/dev/null || true' EXIT

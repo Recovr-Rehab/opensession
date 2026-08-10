@@ -1,9 +1,9 @@
 /**
- * Docker sandbox verification suite (Phases 1 + 2) — run MANUALLY:
+ * Docker sandbox verification suite — run MANUALLY:
  *
  *   bun run deploy/sandbox/verify.ts
  *
- * BIND section (Phase 1): exercises the DockerProvider end-to-end against a
+ * BIND section: exercises the DockerProvider end-to-end against a
  * scratch git repo + worktree (never a real session, never a real worktree):
  * container ensure/reuse, git status+commit THROUGH the bind-mounted worktree
  * + common .git, exec, RPC-socket reachability, the claude CLI, and — when
@@ -11,7 +11,7 @@
  * (cheapest Claude model, "reply with OK", hard timeout). Degrades to a
  * dry-run notice when no account token exists.
  *
- * VOLUME section (Phase 2): a second sbxtest session materializes a
+ * VOLUME section: a second sbxtest session materializes a
  * volume-only workspace (cloned in-container from a scratch LOCAL BARE repo —
  * no real GitHub repo involved), then drives the exec-routed surfaces
  * (workspaceExecFor → searchRepoEntries/getSessionDiff/getGitStatus), the
@@ -27,7 +27,7 @@
  * (marker present) with the bind-mounted workspace still correct. Also
  * checks maxPerSession pruning and that destroy() removes the images.
  *
- * WS-TRANSPORT section (Phase 3): a third sbxtest session runs with
+ * WS-TRANSPORT section: a third sbxtest session runs with
  * `transport: "ws"` — the in-container run host DIALS BACK to a scratch WS
  * server in this process (the same run-ws module opensession.ts wires) instead
  * of serving a unix socket, and the rpc socket isn't mounted at all. Checks:
@@ -36,7 +36,7 @@
  * account gating), steer delivery + cancel over WS, and the in-container
  * rpc-ws bridge via the hostId+wsToken handshake.
  *
- * PREVIEW + LIFECYCLE section (Phase 4A): a fifth sbxtest session exercises
+ * PREVIEW + LIFECYCLE section: a fifth sbxtest session exercises
  * the sandboxed Preview flow end-to-end — `.agents/setup` one-shot,
  * `.agents/start.sh` bring-up on a port allocated from the pre-published
  * range, the namespaced Caddy https route (live Caddy admin; asserted
@@ -389,7 +389,7 @@ try {
   ok("volumes removed", goneV.code !== 0);
   ok("worktree untouched by destroy", existsSync(`${WT}/sandbox-file.txt`));
 
-  // ══ VOLUME MODE (Phase 2) ═════════════════════════════════════════════════
+  // ══ VOLUME MODE ═════════════════════════════════════════════════
   // The workspace lives ONLY in a per-session volume: ensure() clones the
   // scratch bare origin inside the container; nothing appears host-side. The
   // read surfaces are exercised exec-routed (workspaceExecFor), exactly the
@@ -485,7 +485,7 @@ try {
   ok("volume container removed", volGoneC.code !== 0);
   ok("workspace volume removed (documented data loss)", volGoneWs.code !== 0);
 
-  // ══ WS TRANSPORT (Phase 3) ═══════════════════════════════════════════════
+  // ══ WS TRANSPORT ═══════════════════════════════════════════════
   // The run host dials back to a scratch WS server in THIS process (same
   // run-ws module opensession.ts wires), bound on 0.0.0.0 so the container can
   // reach it via the docker bridge gateway. No rpc-socket mount, no host.sock.
@@ -713,7 +713,7 @@ try {
   const imgsLeft = await sh(["docker", "image", "ls", snapRepo, "--format", "{{.Tag}}"]);
   ok("destroy removed the snapshot images", !imgsLeft.out.trim(), imgsLeft.out.trim() || "none");
 
-  // ══ PREVIEW + LIFECYCLE (Phase 4A) ═══════════════════════════════════════
+  // ══ PREVIEW + LIFECYCLE ═══════════════════════════════════════
   // A bind-mode sandbox with the repo-local lifecycle hooks: setup.sh must run
   // exactly once; startSandboxPreview must allocate a webapp port from the
   // pre-published range, run .agents/start.sh with the port/URL env, route

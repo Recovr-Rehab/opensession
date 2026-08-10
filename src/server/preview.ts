@@ -747,7 +747,7 @@ export async function stopPreview(worktreeDir: string): Promise<PreviewStatus> {
   return getPreviewStatus(worktreeDir);
 }
 
-// ── Sandboxed previews (the sandbox rollout plan Phase 2 + 4A) ──────────────────
+// ── Sandboxed previews (docs/sandboxes-plan.md) ──────────────────
 // A sandboxed session's dev server runs INSIDE its container, so the host-side
 // mechanics above can't see it: `ss` can't observe container listeners, and
 // signaling host process groups can't stop them. These variants keep the same

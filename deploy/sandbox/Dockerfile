@@ -1,4 +1,5 @@
-# opensession-runner — prebaked image for the Docker sandbox provider (the sandbox rollout plan §5 Phase 1)
+# opensession-runner — prebaked image for the Docker sandbox provider
+# (docs/sandboxes-plan.md; operator guide: docs/self-hosting-sandboxes.md)
 #
 # Contains the exact toolchain an Open Session runner needs to execute an agent run
 # inside a container: bun (pinned to host), node LTS, git, gh, ripgrep, the Claude
@@ -7,7 +8,7 @@
 # and the Claude Agent SDK (@anthropic-ai/claude-agent-sdk).
 #
 # PATH PARITY IS LOAD-BEARING. The runner config points at
-# /home/ubuntu/.local/bin/claude and /home/ubuntu/projects/tella-backstage, and the
+# /home/ubuntu/.local/bin/claude and /home/ubuntu/projects/opensession, and the
 # session worktree is bind-mounted at its identical host path. So this image must
 # reproduce those absolute paths exactly and run as uid 1000 (host `ubuntu`) so
 # bind-mounted files keep sane ownership.
@@ -34,11 +35,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # --- system packages ---
 # ripgrep lives in universe (enabled by default in the ubuntu image). python3 +
 # build-essential are for worktrees whose `bun install` builds native deps.
-# just + direnv + lsof are the tella-local ensure-up.sh / `just dev` chain
-# (dev-services.sh probes ports with lsof; ensure-up hard-depends on
-# `direnv exec`); the aws CLI is deliberately NOT installed — tella-fusion's
-# ensure-aws-sso.sh preflight self-skips without it, and the WASM S3 install
-# scripts use the JS SDK (see deploy/sandbox/README.md "Previews in sandboxes").
+# just + direnv + lsof cover common repo dev-server bring-up chains (port
+# probing, `direnv exec`, Justfile-driven `just dev`); the aws CLI is
+# deliberately NOT installed — cloud access in bring-ups should ride the
+# injected short-lived credentials and language SDKs instead (see
+# deploy/sandbox/README.md "Previews in sandboxes").
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -56,8 +57,8 @@ RUN apt-get update \
 
 # --- just (pinned upstream release) ---
 # NOT apt's: noble ships just 1.21, which predates Justfile `mod` support —
-# tella-fusion's root Justfile uses modules, so `just dev` inside the sandbox
-# dies with "Modules are currently unstable" on the apt version.
+# repos whose root Justfile uses modules die with "Modules are currently
+# unstable" on the apt version.
 ARG JUST_VERSION=1.43.1
 RUN curl -fsSL https://just.systems/install.sh \
         | bash -s -- --tag "${JUST_VERSION}" --to /usr/local/bin \
@@ -98,7 +99,7 @@ RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local/bun bash -s "bun-
 # Prepare the exact absolute paths the runner expects, owned by ubuntu.
 RUN mkdir -p /home/ubuntu/.local/bin \
              /home/ubuntu/.claude \
-             /home/ubuntu/projects/tella-backstage \
+             /home/ubuntu/projects/opensession \
     && chown -R ubuntu:ubuntu /home/ubuntu
 
 # Minimal ~/.claude so settingSources:["user"] doesn't error.
@@ -124,7 +125,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_VERSION}" \
 
 # --- Open Session runner bundle ---
 # Deps first for layer caching: only re-installs when package.json / bun.lock change.
-WORKDIR /home/ubuntu/projects/tella-backstage
+WORKDIR /home/ubuntu/projects/opensession
 COPY --chown=ubuntu:ubuntu package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
@@ -135,14 +136,13 @@ COPY --chown=ubuntu:ubuntu src ./src
 WORKDIR /home/ubuntu
 
 # Pre-create HOME dirs that are PARENTS of bind-mount targets (~/.config/gh,
-# ~/.backstage-chats/sandbox-runs/…, the rpc socket) — if they don't exist,
-# docker creates them ROOT-owned when materializing the mount target, and then
-# uid-1000 tools can't write siblings (opencode needs ~/.config/opencode and
-# ~/.backstage-chats/opencode — both EACCES'd before this). Runs as USER
-# ubuntu, so ownership is right by construction.
+# ~/.opensession-sessions/sandbox-runs/…, the rpc socket) — if they don't
+# exist, docker creates them ROOT-owned when materializing the mount target,
+# and then uid-1000 tools can't write siblings (opencode needs
+# ~/.config/opencode and ~/.opensession-sessions/opencode — both EACCES'd
+# before this). Runs as USER ubuntu, so ownership is right by construction.
 RUN mkdir -p /home/ubuntu/.config \
              /home/ubuntu/.local/share \
-             /home/ubuntu/.backstage-chats \
              /home/ubuntu/.opensession-sessions
 
 # Containers are started long-lived and `docker exec`'d into (one per session).

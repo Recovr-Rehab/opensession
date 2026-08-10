@@ -1028,7 +1028,7 @@ export async function autoPushSessionBranches(session: UnifiedSession): Promise<
 
 
 /**
- * Sandbox routing for runSessionPromptInner (docs/sandboxes-plan.md Phase 1;
+ * Sandbox routing for runSessionPromptInner (docs/sandboxes-plan.md;
  * generalized to every registry provider — docker/daytona/e2b). Returns the
  * run's event stream when the session opted into a sandbox at create time AND
  * the kill-switch + provider config currently allow it — otherwise null, and
@@ -1901,7 +1901,7 @@ async function runSessionPromptInner(
 		isRunning: true,
 	});
 
-	// Sandbox routing (docs/sandboxes-plan.md Phase 1): a session that opted
+	// Sandbox routing (docs/sandboxes-plan.md): a session that opted
 	// into a sandbox (docker/daytona/e2b) runs this prompt inside its
 	// per-session sandbox; null (the default for every session without the
 	// opt-in field, plus every failure/kill-switch case) = the unchanged

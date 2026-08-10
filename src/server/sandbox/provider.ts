@@ -1,9 +1,9 @@
 /**
- * Sandbox seam (Phase 0 of the sandbox rollout plan): the interfaces every
- * execution backend implements. A "sandbox" is where a session's work happens —
- * today that's a git worktree on this host (LocalProvider, src/server/sandbox/
- * local.ts); later it can be a Docker container per session, or a remote
- * Daytona/E2B sandbox, all behind these two interfaces.
+ * Sandbox seam (docs/sandboxes-plan.md): the interfaces every execution
+ * backend implements. A "sandbox" is where a session's work happens — a git
+ * worktree on this host (LocalProvider, src/server/sandbox/local.ts), a
+ * Docker container or local microVM per session, or a remote
+ * Daytona/E2B/Box/Modal sandbox, all behind these two interfaces.
  *
  * Deliberately small, mirroring the existing run-host layer's idioms:
  *  - `launchRun` takes the same serializable `RunHostSpec` the detached
@@ -12,17 +12,16 @@
  *  - `RunHandle`'s control surface mirrors host-registry's `HostRunControl`
  *    (steer / interruptSteer / cancel returning booleans, `steerable` flag).
  *
- * Phase 0 is zero behavior change: nothing in opensession.ts threads a Sandbox
- * handle yet — `runSessionPromptInner` still computes a bare `cwd` itself.
- * Threading the handle through the prompt/create paths is the documented
- * Phase 1 TODO (see the sandbox rollout plan §5 Phase 1).
+ * Sessions opt in at create time; run-session.ts's maybeRunSandboxed routes
+ * their prompts through the provider registry, and sessions without a
+ * `sandbox` field keep the unchanged in-process host path.
  */
 
 import type { StreamEvent } from "../run-events";
 import type { RunAgentOpts } from "../agent-runner";
 import type { RunHostSpec } from "../../runner-host/protocol";
 
-/** The provider ids the registry knows. Only "local" is wired in Phase 0. */
+/** The provider ids the registry knows (all implemented — see index.ts). */
 export type SandboxProviderId =
   | "local"
   | "docker"
