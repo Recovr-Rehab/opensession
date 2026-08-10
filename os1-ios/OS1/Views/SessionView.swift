@@ -709,34 +709,12 @@ struct SessionView: View {
             if viewModel.jumpingToStart {
                 ProgressView()
                     .controlSize(.small)
-                Text("Finding first message…")
+                Text("Loading full history…")
             } else if viewModel.loadingEarlier {
                 ProgressView()
                     .controlSize(.small)
-                Text("Loading older messages…")
+                Text("Loading earlier…")
             } else {
-                #if os(iOS)
-                Menu {
-                    Button { requestEarlier() } label: {
-                        Label("Load older messages", systemImage: "arrow.up")
-                    }
-                    Button { requestJumpToStart() } label: {
-                        Label("Go to first message", systemImage: "arrow.up.to.line")
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Text("Earlier messages")
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .font(.footnote.weight(.medium))
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Earlier messages")
-                #else
                 Button("Load earlier history") { requestEarlier() }
                     .buttonStyle(.borderless)
                 Divider()
@@ -748,7 +726,6 @@ struct SessionView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Jump to the start of the session")
-                #endif
             }
         }
         .font(.caption)

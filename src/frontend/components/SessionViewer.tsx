@@ -5140,35 +5140,47 @@ export function SessionViewer({
 								<>
 									{historyTruncated && (
 										<div className="flex justify-center [overflow-anchor:none] px-0 pt-1 pb-3.5">
-											{/* Segmented: a page at a time, or the whole backlog in
-											    one go for readers who'd otherwise click a hundred
-											    times to reach the first message. */}
-											<div className="flex items-stretch overflow-hidden rounded-full border border-line bg-raised text-label text-dim">
-												<button
-													className="cursor-pointer px-3.5 py-[5px] transition-[background,color] hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
-													disabled={loadingHistory}
-													onClick={loadEarlierHistory}
-												>
-													{jumpingToStart
-														? "Loading full history…"
-														: loadingHistory
-															? "Loading earlier history…"
-															: "↑ Load earlier history"}
-												</button>
-												<span
-													className="w-px shrink-0 self-stretch bg-line"
-													aria-hidden
-												/>
-												<button
-													className="flex cursor-pointer items-center px-2 transition-[background,color] hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-60 disabled:hover:bg-transparent"
-													disabled={loadingHistory}
-													onClick={jumpToStart}
-													title="Jump to the start of the session"
-													aria-label="Jump to the start of the session"
-												>
-													<IconArrowUpToLine size={20} />
-												</button>
-											</div>
+											{loadingHistory ? (
+												<div className="flex min-h-10 items-center gap-2 px-3 text-label font-medium text-dim phone:min-h-11">
+													<PixelSpinner className="text-faint" />
+													<span>
+														{jumpingToStart
+															? "Finding first message…"
+															: "Loading older messages…"}
+													</span>
+												</div>
+											) : (
+												<Menu.Root>
+													<Menu.Trigger
+														type="button"
+														className="group flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[999px] px-3 text-label font-medium text-dim transition-[background-color,color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg phone:min-h-11"
+													>
+														<span>Earlier messages</span>
+														<IconChevronDown size={14} className="text-faint" />
+													</Menu.Trigger>
+													<Menu.Popup
+														side="bottom"
+														align="center"
+														sideOffset={6}
+														className="min-w-[230px] rounded-[18px]"
+													>
+														<Menu.Item
+															onClick={loadEarlierHistory}
+															className="gap-3 rounded-[12px] px-3 py-2.5 text-label"
+														>
+															<IconArrowUp size={20} className="shrink-0 text-dim" />
+															<span>Load older messages</span>
+														</Menu.Item>
+														<Menu.Item
+															onClick={jumpToStart}
+															className="gap-3 rounded-[12px] px-3 py-2.5 text-label"
+														>
+															<IconArrowUpToLine size={20} className="shrink-0 text-dim" />
+															<span>Go to first message</span>
+														</Menu.Item>
+													</Menu.Popup>
+												</Menu.Root>
+											)}
 										</div>
 									)}
 									<OpenAssetPathsProvider value={assetPaths}>
