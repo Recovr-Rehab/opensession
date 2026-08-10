@@ -5,14 +5,8 @@
  * avatar puts its mark on 62% of its canvas, an Apple-style app icon on 80%.
  * A letter tile fills its square completely, so those icons sit in a row of
  * tiles reading visibly smaller than the ones beside them — the thing this
- * fixes. Cropping to the artwork and re-padding makes every icon land at the
- * same weight, whatever it came wrapped in.
- *
- * The padding is by ink rather than by bounding box: a circle or a
- * heavily-rounded squircle covers less of its box than a square does, so at an
- * identical box it still reads lighter. Rounder art therefore keeps less
- * margin, up to none at all. It never goes past that — a square icon gets the
- * plain margin and is never cropped to match something rounder.
+ * fixes. Cropping to the artwork, and squaring it off without adding any
+ * margin back, makes every icon land at the size the tile actually is.
  *
  * Deliberately dependency-free: this runs on a handful of small PNGs when an
  * icon is fetched or first served, and a tile is not worth adding an image
@@ -212,22 +206,19 @@ function encode({ width, height, pixels }: Decoded): Uint8Array {
 }
 
 /**
- * Crop a PNG to its artwork and re-pad it to a square, so it fills a tile like
- * every other icon does.
+ * Crop a PNG to its artwork and square it off, so it fills a tile like every
+ * other icon does.
  *
- * `margin` is the breathing room a SQUARE icon gets; rounder art gets less of
- * it, down to none, so that what lands in the tile is the same amount of ink
- * rather than the same bounding box. Square art is never padded to less than
- * zero, i.e. never cropped to match something rounder.
+ * No margin is added back. A letter tile paints its color to its own edges, so
+ * any breathing room left around the artwork reads as a smaller icon sitting in
+ * a row beside the lettered ones — which is the whole thing this exists to
+ * stop. The tile's own rounding is the only frame an icon gets.
  *
  * Returns null when there's nothing to do — already tight, fully opaque (a
  * photo avatar has no margin to find, and guessing one from edge color would
  * eat real artwork), or a PNG shape this doesn't decode.
  */
-export function trimIconMargin(
-	bytes: Uint8Array,
-	margin = 0.04,
-): Uint8Array | null {
+export function trimIconMargin(bytes: Uint8Array): Uint8Array | null {
 	let image: Decoded | null;
 	try {
 		image = decode(bytes);
@@ -256,36 +247,19 @@ export function trimIconMargin(
 
 	const contentW = maxX - minX + 1;
 	const contentH = maxY - minY + 1;
-	const side = Math.max(contentW, contentH);
+	const out = Math.max(contentW, contentH);
 
-	// How much of that square is actually inked, alpha-weighted. A letter tile
-	// and a flat square icon are 1; a squircle with a heavy corner radius
-	// ~0.94; a circular avatar ~0.79.
-	let ink = 0;
-	for (let y = minY; y <= maxY; y++) {
-		for (let x = minX; x <= maxX; x++) ink += pixels[(y * width + x) * 4 + 3];
-	}
-	const coverage = ink / 255 / (side * side) || 1;
-	// Equal ink, not equal bounding box. Padding every icon to the same margin
-	// still leaves a round mark reading smaller than a square one beside it —
-	// same box, less of it filled — so the margin shrinks with the coverage
-	// (its square root, since this scales a side and the eye reads the area).
-	// Capped at the tile's own edge: a square icon is already all ink, keeps
-	// the plain margin, and no icon is ever cropped to hit a target.
-	const targetFill = Math.min(1, 1 / (1 + 2 * margin) / Math.sqrt(coverage));
-	// Already tile-shaped: its margin is no wider than the one this would add,
-	// so cropping again (a re-serve, a re-fetch) would only shave it further.
-	// Measured against the fill this produces, which is what makes the trim
-	// idempotent — coverage survives a crop and a re-pad, so a second pass
-	// aims at the same target and finds it already met.
-	if (side / Math.max(width, height) >= targetFill - 0.02) return null;
+	// Already tight: the artwork reaches the canvas edge (within a rounding
+	// pixel or two), so there is nothing to crop. This is also what makes the
+	// trim idempotent — a re-serve or a re-fetch of an icon this already
+	// squared off finds it done rather than eating into the art.
+	if (out / Math.max(width, height) >= 0.98) return null;
 
-	const pad = Math.round((side * (1 / targetFill - 1)) / 2);
-	const out = side + pad * 2;
 	const canvas = new Uint8Array(out * out * 4);
-	// Centred: the artwork's own box, not the file's, decides the middle.
-	const offsetX = pad + Math.round((side - contentW) / 2);
-	const offsetY = pad + Math.round((side - contentH) / 2);
+	// Centred: the artwork's own box, not the file's, decides the middle. Only
+	// the shorter side gets any inset, and only to make the result square.
+	const offsetX = Math.round((out - contentW) / 2);
+	const offsetY = Math.round((out - contentH) / 2);
 	for (let y = 0; y < contentH; y++) {
 		const src = ((minY + y) * width + minX) * 4;
 		const dst = ((offsetY + y) * out + offsetX) * 4;

@@ -22,10 +22,11 @@ const trimmedIcons = new Map<string, { mtimeMs: number; bytes: Uint8Array }>();
 /**
  * A tile icon that lives on disk, or undefined when the file isn't there.
  *
- * Served with its empty margin cropped off (see png-trim.ts): icons come drawn
- * to whatever proportions their author chose — a GitHub avatar puts its mark
- * on ~60% of its canvas, an app icon on 80% — while a letter tile fills its
- * square, so untouched art reads visibly smaller than the tiles beside it.
+ * Served with its empty margin cropped off and no margin added back (see
+ * png-trim.ts): icons come drawn to whatever proportions their author chose — a
+ * GitHub avatar puts its mark on ~60% of its canvas, an app icon on 80% — while
+ * a letter tile fills its square, so untouched art reads visibly smaller than
+ * the tiles beside it.
  */
 function localIcon(iconPath: string): Response | undefined {
 	if (!existsSync(iconPath)) return undefined;

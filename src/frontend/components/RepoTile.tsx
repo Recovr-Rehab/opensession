@@ -15,8 +15,10 @@ export { repoColor } from "../lib/repo-colors";
 // art until its copy expires. 3 dropped the owner/org-avatar fallback, so the
 // repos that were wearing their org's mark had to stop asking for it; 4 trims
 // the empty margin around every icon, so the copies drawn small have to go; 5
-// pads by ink rather than by bounding box, which grows the round ones.
-const ICON_VERSION = 5;
+// pads by ink rather than by bounding box, which grows the round ones; 6 drops
+// the padding entirely, so an icon reaches the tile's edge the way a lettered
+// tile's color does.
+const ICON_VERSION = 6;
 
 // A repo's icon tile (sidebar Repo dropdown, session-header breadcrumb, repo
 // menus): the server's /repo-icon/<id>.png when the repo was given an icon of
@@ -81,13 +83,12 @@ export function RepoTile({
 			<span className={cn(TILE, className)} style={style}>
 				{/* The img fills the tile and inherits its rounding; the tile keeps
 				    no colored backing, so icons with transparency sit on the
-				    surface itself. No inset on purpose: the route already crops
-				    every icon to its artwork and re-pads it (png-trim.ts) — a
-				    square one to ~93% fill, a rounder one to more, so that what
-				    lands in the tile is the same amount of ink either way. The
-				    breathing room is baked into the image, and shrinking again on
-				    top of it took icons to ~71% of the tile while a lettered tile
-				    fills 100% of its.
+				    surface itself. No inset on purpose, at either end: the route
+				    crops every icon to its artwork and adds no margin back
+				    (png-trim.ts), so the art reaches the tile's edge exactly the
+				    way a lettered tile's color reaches its own. Any breathing
+				    room here — or baked into the image — is what makes an icon
+				    read a size smaller than the tiles beside it.
 				    `border-radius: inherit` is spelled as the property rather
 				    than `rounded-[inherit]`: any `rounded-*` class also picks up
 				    base.css's squircle grant, and this img has always worn a

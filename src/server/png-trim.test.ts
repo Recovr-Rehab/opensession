@@ -65,13 +65,14 @@ describe("trimIconMargin", () => {
 		x >= 20 && x < 80 && y >= 20 && y < 80 ? [10, 20, 30, 255] : [0, 0, 0, 0],
 	);
 
-	test("crops the empty margin down to a small even one", () => {
+	test("crops the empty margin off entirely", () => {
 		const out = trimIconMargin(padded);
 		expect(out).not.toBeNull();
 		const { width, height } = sizeOf(out!);
 		expect(width).toBe(height);
-		// 60px of art plus 4% each side, rather than the 100px it arrived in.
-		expect(width).toBe(64);
+		// The 60px of art, and nothing else: no margin is added back, so the
+		// icon fills its tile the way a letter tile fills its own.
+		expect(width).toBe(60);
 	});
 
 	test("leaves art that already fills its canvas alone", () => {
@@ -89,44 +90,17 @@ describe("trimIconMargin", () => {
 				: [0, 0, 0, 0],
 		);
 
-	test("gives round art the margin back, so it carries a square's ink", () => {
-		// Same 60px box as `padded`, but a circle fills ~79% of it. It ends up
-		// bigger in the tile than the square does (64px of canvas), which is
-		// what makes the two read the same weight.
+	test("crops round art to its own edge, like a square one", () => {
+		// Same 60px box as `padded`, drawn as a circle. Roundness buys no
+		// margin: both land at the tile's edge, and the tile's own rounding is
+		// what shapes them.
 		const out = trimIconMargin(disc(100, 30));
 		expect(out).not.toBeNull();
 		const { width, height } = sizeOf(out!);
 		expect(width).toBe(height);
-		expect(width).toBeLessThan(64);
-		expect(width).toBeLessThanOrEqual(62); // i.e. no margin left to give
-
-		// A gently rounded square sits between the two: some margin, less than
-		// a flat square's.
-		const r = 18; // corner radius, as heavy as the OpenSession mark's
-		const rounded = png(100, (x, y) => {
-			const ax = Math.abs(x + 0.5 - 50);
-			const ay = Math.abs(y + 0.5 - 50);
-			const dx = Math.max(0, ax - (30 - r));
-			const dy = Math.max(0, ay - (30 - r));
-			const inside = ax <= 30 && ay <= 30 && dx * dx + dy * dy <= r * r;
-			return inside ? [10, 20, 30, 255] : [0, 0, 0, 0];
-		});
-		const roundedOut = trimIconMargin(rounded);
-		expect(roundedOut).not.toBeNull();
-		expect(sizeOf(roundedOut!).width).toBeLessThan(64);
-		expect(sizeOf(roundedOut!).width).toBeGreaterThan(sizeOf(out!).width);
-	});
-
-	test("never crops a square icon to match a rounder one", () => {
-		// The compensation only ever removes margin. Square art that already
-		// fills its canvas keeps every pixel...
-		const full = png(40, () => [10, 20, 30, 255]);
-		expect(trimIconMargin(full)).toBeNull();
-		// ...and padded square art lands at the plain margin, not tighter.
-		expect(sizeOf(trimIconMargin(padded)!).width).toBe(64);
-		// Round art is idempotent too: once it has no margin left, a re-serve
-		// finds nothing to do rather than eating into the artwork.
-		expect(trimIconMargin(trimIconMargin(disc(100, 30))!)).toBeNull();
+		expect(width).toBe(60);
+		// And a re-serve finds nothing to do rather than eating into the art.
+		expect(trimIconMargin(out!)).toBeNull();
 	});
 
 	test("keeps the artwork centred when it sits off to one side", () => {
@@ -136,7 +110,7 @@ describe("trimIconMargin", () => {
 		const out = trimIconMargin(corner);
 		expect(out).not.toBeNull();
 		const { width } = sizeOf(out!);
-		expect(width).toBe(44);
+		expect(width).toBe(40);
 	});
 
 	test("declines anything it can't decode rather than mangling it", () => {
