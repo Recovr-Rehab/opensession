@@ -3499,7 +3499,7 @@ export function App(
 						    bar carries the brand instead. */}
 						{/* `sidebar-brand` / `sidebar-brand-actions` stay as hooks: base.css
 						    drives the WCO/desktop-shell chrome off them (traffic-light
-						    inset, drag regions, the optical 5px nudge).
+						    inset, drag regions).
 						    The brand trigger carries its own 8px of left padding, so the
 						    row pulls its own in to keep the logo on the list icons'
 						    --sidebar-icon-left column. */}

@@ -819,12 +819,11 @@ html.wco .app {
 html.wco .sidebar-brand {
 	padding-left: max(env(titlebar-area-x, 78px), calc(var(--sidebar-icon-left) - 8px));
 }
-/* AppKit's traffic-light glyphs sit a little below the geometric center of the
-   titlebar. Match that optical center without changing the shared web header. */
-html.wco .sidebar-brand > :is(.sidebar-brand-actions, .wco-nav, button) {
-	position: relative;
-	top: 5px;
-}
+/* No vertical nudge here on purpose. The shell centers the traffic lights on
+   this exact row (os1-mac passes trafficLightPosition {x:18, y:18} for 12px
+   buttons on the 48px --desktop-header-h), and the session header centers its
+   own contents the same way — so anything that offsets this row's controls
+   puts them out of line with both the lights and the chat topbar. */
 /* The whole first row doubles as the titlebar — everything interactive in it
    opts back out so it stays clickable. */
 html.wco .sidebar-brand,
