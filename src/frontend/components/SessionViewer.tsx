@@ -3273,7 +3273,7 @@ export function SessionViewer({
 												})
 											}
 										>
-											<IconTrash size={24} />
+											<IconTrash size={20} />
 										</button>
 									</Tooltip>
 								)}
@@ -3332,7 +3332,7 @@ export function SessionViewer({
 												className={composerQueueAction}
 												onClick={() => editQueuedInComposer(q, i)}
 											>
-												<IconPencil size={24} />
+												<IconPencil size={20} />
 											</button>
 										</Tooltip>
 									</>
@@ -3353,7 +3353,7 @@ export function SessionViewer({
 											})
 										}
 									>
-										<IconTrash size={24} />
+										<IconTrash size={20} />
 									</button>
 								</Tooltip>
 								{!isGitHub && (
@@ -3381,7 +3381,7 @@ export function SessionViewer({
 												})
 											}
 										>
-											<IconArrowUp size={24} />
+											<IconArrowUp size={20} />
 										</button>
 									</Tooltip>
 								)}
