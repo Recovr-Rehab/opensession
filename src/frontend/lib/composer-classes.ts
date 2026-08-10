@@ -214,20 +214,16 @@ export const composerQueueItemDraggable =
  *  its own actions need — it used to be absolutely positioned over a fixed
  *  128px of padding, which clipped the rows carrying a pill into the text.
  *  Written before the message in the markup (it owns the row's controls) and
- *  painted after it, hence `order-1`. The negative block margins keep the 40px
+ *  painted after it, hence `order-1`. The negative block margins keep the 36px
  *  cluster from setting the height of a one-line row. */
 export const composerQueueActions =
 	"order-1 z-[1] -mt-[11px] -mb-2.5 inline-flex shrink-0 items-center gap-0.5";
-/** Deliberately the same 40px box, `rounded-control` corner and inset hover
- *  wash as the composer's own toolbar buttons right below them (see
- *  `paletteIconBtn` in lib/palette-classes.ts) — these are peers of those, and
- *  at 34px they read as a smaller, weaker class of control. They are not the
- *  same constant because the details genuinely differ: the wash sits 3px in
- *  rather than 4px, there is no transparent border holding layout, and a
- *  disabled action fades further (it stays visible next to enabled siblings on
- *  the same row, where a toolbar button is alone). */
+/** A compact 36px action with the same `rounded-control` corner and inset
+ *  hover wash as the composer's toolbar buttons. It remains a separate
+ *  constant because the wash sits 3px in rather than 4px, there is no
+ *  transparent border holding layout, and disabled actions fade further. */
 export const composerQueueAction =
-	"relative inline-flex size-10 items-center justify-center rounded-control text-dim disabled:cursor-default disabled:opacity-35 enabled:hover:text-fg " +
+	"relative inline-flex size-9 items-center justify-center rounded-control text-dim disabled:cursor-default disabled:opacity-35 enabled:hover:text-fg " +
 	"before:absolute before:inset-[3px] before:z-0 before:rounded-[calc(9px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] enabled:hover:before:bg-hover " +
 	"[&>*]:relative [&>*]:z-[1]";
 /** Destructive action: the wash goes red rather than neutral. */
