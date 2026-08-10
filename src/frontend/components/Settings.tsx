@@ -587,13 +587,13 @@ function NavSearch({
 					size={sheet ? "lg" : "md"}
 					className={cn(
 						"[&::-webkit-search-cancel-button]:hidden",
-					// `rounded-full`, not the app's squircle corner: a capsule is what
-					// iOS puts a search field in, and base.css grants the squircle to
-					// every `rounded-*` EXCEPT this one, so it is also the spelling
-					// that gets true round ends rather than a superellipse.
-					sheet
-						? cn("h-10 rounded-full border-transparent bg-raised pl-11 text-[16px]", value && "pr-11")
-						: cn("pl-8", value && "pr-8"),
+						// `rounded-full`, not the app's squircle corner: a capsule is what
+						// iOS puts a search field in, and base.css grants the squircle to
+						// every `rounded-*` EXCEPT this one, so it is also the spelling
+						// that gets true round ends rather than a superellipse.
+						sheet
+							? cn("h-10 rounded-full border-transparent bg-raised pl-11 text-[16px]", value && "pr-11")
+							: cn("pl-8", value && "pr-8"),
 					)}
 					onChange={(e) => onChange(e.target.value)}
 					onKeyDown={(e) => {
