@@ -199,12 +199,12 @@ export const VIEWER_MESSAGES_REGION =
 	"desktop:supports-[animation-timeline:scroll()]:before:[background:var(--wash-up)] " +
 	"desktop:supports-[animation-timeline:scroll()]:before:[animation:session-edge-fade-in_1ms_both] " +
 	"desktop:supports-[animation-timeline:scroll()]:before:[animation-timeline:--viewer-session-scroll] " +
-	// Spend the resting 6px inset before the wash starts. Otherwise the fade is
+	// Spend the resting 2px inset before the wash starts. Otherwise the fade is
 	// already strong while the first message is still under it, so the reader can
 	// see older text but cannot make it fully legible at the upper scroll limit.
-	// The shorter 28px ramp keeps that protection without leaving a broad blank
+	// The shorter 20px ramp keeps that protection without leaving a broad blank
 	// band below the header in a workspace with only one session.
-	"desktop:supports-[animation-timeline:scroll()]:before:[animation-range:6px_34px] " +
+	"desktop:supports-[animation-timeline:scroll()]:before:[animation-range:2px_22px] " +
 	"desktop:supports-[animation-timeline:scroll()]:before:content-['']";
 
 /**
@@ -225,7 +225,7 @@ export const VIEWER_MESSAGES_REGION =
 export const VIEWER_MESSAGES =
 	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
 	// Keep the reader's place when content loads or expands above them.
-	"[overflow-anchor:auto] px-5 pt-1.5 pb-[calc(var(--session-under)_+_16px)] " +
+	"[overflow-anchor:auto] px-5 pt-0.5 pb-[calc(var(--session-under)_+_16px)] " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
 	"desktop:supports-[animation-timeline:scroll()]:[scroll-timeline:--viewer-session-scroll_y] " +
 	// Phone: clear the floating pills at rest, then scroll under them.
