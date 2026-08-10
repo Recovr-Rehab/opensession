@@ -54,6 +54,8 @@ struct SessionsListView: View {
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
     @State private var showDesk = false
+    /// The Plain support queue. A place you go, like the Desk.
+    @State private var showSupport = false
     /// The push stack, typed rather than a `NavigationPath`, so a create that
     /// resolves after the person has navigated elsewhere can find its own
     /// pending entry instead of assuming it is still on top.
@@ -308,6 +310,10 @@ struct SessionsListView: View {
             DeskSheet()
                 .frame(minWidth: 520, minHeight: 600)
         }
+        .sheet(isPresented: $showSupport) {
+            SupportSheet()
+                .frame(minWidth: 520, minHeight: 600)
+        }
         .safeAreaInset(edge: .bottom) {
             errorBanner
         }
@@ -330,6 +336,13 @@ struct SessionsListView: View {
                     .menuIndicator(.hidden)
                     .controlSize(.small)
                     .help("Filter, group, and sort sessions")
+                Button {
+                    showSupport = true
+                } label: {
+                    Image(systemName: "lifepreserver")
+                }
+                .controlSize(.small)
+                .help("Open the support queue")
                 Button {
                     showDesk = true
                 } label: {
@@ -458,6 +471,18 @@ struct SessionsListView: View {
                     // the Desk in the bottom-right corner beside it.
                     DefaultToolbarItem(kind: .search, placement: .bottomBar)
                     ToolbarSpacer(.fixed, placement: .bottomBar)
+                    // Support rides beside the Desk: both are places rather
+                    // than controls for this list, and a ticket queue is read
+                    // on the move more than anything else here.
+                    ToolbarItem(placement: .bottomBar) {
+                        Button {
+                            showSupport = true
+                        } label: {
+                            Image(systemName: "lifepreserver")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel("Open the support queue")
+                    }
                     ToolbarItem(placement: .bottomBar) {
                         Button {
                             showDesk = true
@@ -473,6 +498,11 @@ struct SessionsListView: View {
                 }
                 .sheet(isPresented: $showDesk) {
                     DeskSheet()
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                }
+                .sheet(isPresented: $showSupport) {
+                    SupportSheet()
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
                 }
@@ -492,6 +522,9 @@ struct SessionsListView: View {
                     // target a scripted click reliably misses.
                     if env["OS1_OPEN_NEW"] != nil {
                         newSessionRequest = NewSessionRequest()
+                    }
+                    if env["OS1_OPEN_SUPPORT"] != nil {
+                        showSupport = true
                     }
                     #endif
                 }

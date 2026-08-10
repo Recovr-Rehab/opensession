@@ -860,6 +860,102 @@ enum OS1API {
         let _: OkResponse = try await post("/api/desk/voice/diag", body: body)
     }
 
+    // MARK: - Plain (support)
+
+    /// The Todo queue. The server caches it for 30s and caps it at 100
+    /// threads — there is no cursor, so a busier inbox truncates silently.
+    static func supportThreads() async throws -> [SupportThreadSummary] {
+        struct ThreadsResponse: Decodable, Sendable {
+            let threads: [SupportThreadSummary]?
+        }
+        let response: ThreadsResponse = try await get("/api/plain/threads")
+        return response.threads ?? []
+    }
+
+    /// One thread's timeline. Uncached server-side, so this is what to refetch
+    /// after sending — the queue's own cache lags by up to 30s.
+    static func supportThread(id: String) async throws -> SupportThread {
+        struct ThreadResponse: Decodable, Sendable { let thread: SupportThread }
+        let encoded = id.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? id
+        let response: ThreadResponse = try await get("/api/plain/threads/\(encoded)")
+        return response.thread
+    }
+
+    /// Send a customer reply or post an internal note.
+    ///
+    /// Send the RAW text: the server adds the sign-off on a reply (skipping it
+    /// when the author already signed) and the `**Name (via …):**` prefix on a
+    /// note. Pre-signing here would produce two signatures.
+    ///
+    /// The answer says how it went out — `"user"` when the teammate's own
+    /// Plain grant carried it, `"system"` when it fell back to the workspace
+    /// bot. Worth showing: the customer sees a different sender.
+    ///
+    /// A reply emails a real person and there is no idempotency key, so this
+    /// must never be auto-retried; a second attempt is a second email.
+    @discardableResult
+    static func sendSupportReply(
+        threadId: String,
+        text: String,
+        isNote: Bool
+    ) async throws -> String? {
+        struct ReplyResponse: Decodable, Sendable { let sentAs: String? }
+        let encoded = threadId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? threadId
+        var body: [String: Any] = [
+            "text": text,
+            "kind": isNote ? "note" : "reply",
+        ]
+        // Without a name the reply goes out unsigned and the note lands
+        // unattributed. A signed-in server overrides this with the verified
+        // identity anyway.
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["user"] = user }
+        let response: ReplyResponse = try await post(
+            "/api/plain/threads/\(encoded)/reply",
+            body: body
+        )
+        return response.sentAs
+    }
+
+    /// Move a thread through the queue. Writes take the LOWERCASE status;
+    /// reads hand back Plain's uppercase one.
+    static func setSupportStatus(
+        threadId: String,
+        status: String,
+        durationSeconds: Int? = nil
+    ) async throws {
+        struct StatusResponse: Decodable, Sendable { let ok: Bool? }
+        let encoded = threadId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? threadId
+        var body: [String: Any] = ["status": status]
+        if let durationSeconds { body["durationSeconds"] = durationSeconds }
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["user"] = user }
+        let _: StatusResponse = try await post(
+            "/api/plain/threads/\(encoded)/status",
+            body: body
+        )
+    }
+
+    /// An attachment's bytes, through the server's proxy.
+    ///
+    /// Never build a Plain URL: its signed links expire in about three
+    /// minutes, which is why the thread payload carries only the id and the
+    /// proxy re-mints one per request. It also needs our bearer token, so this
+    /// can't be handed to `AsyncImage` — the same reason the assets viewer
+    /// fetches its own bytes.
+    static func supportAttachment(id: String) async throws -> Data {
+        let encoded = id.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? id
+        return try await getData("/api/plain/attachments/\(encoded)")
+    }
+
     private static func post<T: Decodable & Sendable>(
         _ path: String,
         body: [String: Any]

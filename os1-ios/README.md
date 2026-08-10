@@ -185,6 +185,25 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   server over a raw WebSocket to OpenAI's Realtime API (`DeskVoiceEngine`) —
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
+- **Support** (`SupportView.swift`, `SupportViewModel.swift`) — the Plain
+  queue, as a sheet beside the Desk (iOS: `lifepreserver` in the bottom bar;
+  macOS: the sidebar header). Two screens: the Todo queue in Plain's four
+  priority lanes (`GET /api/plain/threads`), and one ticket's timeline
+  (`GET /api/plain/threads/:id`) with the customer on the left, us on the
+  right, and notes full-width in between. The composer's Reply / Internal note
+  control posts to `…/reply`; the ⋯ menu covers done, snooze (1h/4h/1d/3d/1w)
+  and reopen. Attachments come through the server's proxy — Plain's own signed
+  URLs expire in ~3 minutes, and the proxy needs our bearer token, so images
+  are fetched as data rather than handed to `AsyncImage`.
+  Send the raw text: the reply's sign-off and the `**Name (via …):**` prefix on
+  a note are added server-side (`routes/plain.ts`), and the app unpicks that
+  prefix again when rendering (`SupportNote.unpick`). The reply response's
+  `sentAs` is surfaced, because `"system"` means it went out as the workspace
+  bot rather than as you. A reply emails a real person and the route has no
+  idempotency key, so sends are one at a time and never retried automatically.
+  Polling only (20s on an open thread, stopped when it closes) — Plain has no
+  push, and `/ws` carries session events. Not ported: assign, labels,
+  priority, rename, mark-spam, and the triage hand-off.
 - **Voice call** — the call itself is a full-screen surface
   (`DeskVoiceCallView`): one orb that scales with real metered loudness — the
   mic while you talk, the model's own output while it answers — the spoken
