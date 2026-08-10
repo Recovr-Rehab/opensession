@@ -101,6 +101,10 @@ struct PreviewImage: Identifiable, Equatable {
         /// source: assets are served from their own route, and the path in
         /// that URL is what makes them resolvable at all.
         case asset(sessionId: String, path: String)
+        /// A support message's attachment, by id. Fetched through the proxy
+        /// that carries the app's token, the same way the thread renders its
+        /// inline copy.
+        case support(id: String)
     }
 
     let id: String
@@ -612,6 +616,9 @@ private struct PreviewPage: View {
                 let loaded = try? await OS1API.assetData(
                     sessionId: sessionId, path: path
                 )
+                image = loaded.flatMap(UIImage.init(data:))
+            case .support(let id):
+                let loaded = try? await OS1API.supportAttachment(id: id)
                 image = loaded.flatMap(UIImage.init(data:))
             }
             failed = image == nil

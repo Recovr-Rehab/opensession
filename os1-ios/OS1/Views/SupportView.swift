@@ -350,12 +350,30 @@ private struct SupportEntryRow: View {
 private struct SupportAttachments: View {
     let attachments: [SupportEntry.Attachment]
 
+    /// Every picture in the message, so opening one pages through the rest: a
+    /// visual bug report is usually several shots of the same screen, and a
+    /// viewer that only ever shows the one you tapped makes you close it to
+    /// see the next.
+    private var gallery: [PreviewImage] {
+        attachments.filter(\.isImage).map { attachment in
+            PreviewImage(
+                id: attachment.id,
+                source: .support(id: attachment.id),
+                label: attachment.fileName?.nilIfBlank
+            )
+        }
+    }
+
     var body: some View {
         if !attachments.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(attachments) { attachment in
                     if attachment.isImage {
-                        SupportImage(attachment: attachment)
+                        SupportImage(
+                            attachment: attachment,
+                            gallery: gallery,
+                            galleryIndex: gallery.firstIndex { $0.id == attachment.id } ?? 0
+                        )
                     } else {
                         Label(
                             [attachment.fileName?.nilIfBlank ?? "Attachment",
@@ -373,24 +391,43 @@ private struct SupportAttachments: View {
     }
 }
 
-/// One image attachment.
+/// One image attachment. A tap opens it in the same zoomable full-screen
+/// viewer the transcript's pictures use — inline it is capped at 220pt, which
+/// is a thumbnail of a screenshot: the thing the customer is pointing at is
+/// unreadable until it fills the screen. (The web makes the same picture a
+/// link to the full-size file.)
 ///
 /// Fetched by hand rather than through `AsyncImage`: the proxy needs the app's
 /// bearer token, and an image view's own subresource load doesn't carry it —
 /// the same reason the assets viewer fetches its bytes itself.
 private struct SupportImage: View {
     let attachment: SupportEntry.Attachment
+    /// The message's other pictures, and where this one sits among them.
+    var gallery: [PreviewImage] = []
+    var galleryIndex: Int = 0
+
     @State private var data: Data?
     @State private var failed = false
+    #if os(iOS)
+    @State private var previewing = false
+
+    /// Falls back to the bytes already in hand, so a picture is never a
+    /// button that opens an empty viewer.
+    private var items: [PreviewImage] {
+        gallery.isEmpty
+            ? [PreviewImage(
+                id: attachment.id,
+                source: .support(id: attachment.id),
+                label: attachment.fileName?.nilIfBlank
+            )]
+            : gallery
+    }
+    #endif
 
     var body: some View {
         Group {
             if let data, let image = decoded(data) {
-                image
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxHeight: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                picture(image)
             } else if failed {
                 Label(
                     attachment.fileName?.nilIfBlank ?? "Attachment",
@@ -412,6 +449,34 @@ private struct SupportImage: View {
                 failed = true
             }
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $previewing) {
+            FullScreenImagePreview(items: items, index: galleryIndex)
+        }
+        #endif
+    }
+
+    /// The picture at its inline size, tappable into the viewer on iOS. The
+    /// Mac has no full-screen cover to open, so there it stays a picture.
+    @ViewBuilder
+    private func picture(_ image: Image) -> some View {
+        let inline = image
+            .resizable()
+            .scaledToFit()
+            .frame(maxHeight: 220)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        #if os(iOS)
+        Button {
+            previewing = true
+        } label: {
+            inline
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(attachment.fileName?.nilIfBlank ?? "Attached image")
+        .accessibilityHint("Shows the attachment full screen")
+        #else
+        inline
+        #endif
     }
 
     private func decoded(_ data: Data) -> Image? {
@@ -480,6 +545,18 @@ private struct SupportComposer: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.bar)
+        // A customer reply is the one send in the app that leaves the
+        // building, so it reports the OUTCOME rather than the tap: the round
+        // trip through Plain is long enough that a tap-time tick would be
+        // reassurance about something that hadn't happened yet.
+        .haptic(trigger: model.sending) { previous, sending in
+            guard previous != sending else { return nil }
+            switch sending {
+            case .sent: return .commit
+            case .failed: return .warn
+            case .idle, .sending: return nil
+            }
+        }
     }
 
     private var placeholder: String {
