@@ -259,7 +259,7 @@ function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
       <button
         type="button"
         onClick={(e) => asset.open(path, e.currentTarget)}
-        className={cn(CHIP, "cursor-pointer pr-1 hover:bg-pressed")}
+        className={cn(CHIP, "cursor-pointer pr-1 hover:bg-hover")}
       >
         {body}
       </button>
@@ -270,7 +270,7 @@ function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
 /** The shared chip shell: the footer's file and asset chips are the same
  * object with different tails (± counts, or a way in). */
 const CHIP =
-  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-hover py-0 pl-1 text-left";
+  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-fg/[0.03] py-0 pl-1 text-left";
 
 function FileChip({ file }: { file: TouchedFile }) {
   const name = file.path.split("/").pop() || file.path;
@@ -280,7 +280,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         openOnHover
         delay={250}
         closeDelay={100}
-        className={cn(CHIP, "cursor-pointer pr-1.5 hover:bg-pressed")}
+        className={cn(CHIP, "cursor-pointer pr-1.5 hover:bg-hover")}
       >
         <ExtBadge name={name} />
         <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
