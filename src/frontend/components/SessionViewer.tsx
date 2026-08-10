@@ -5345,7 +5345,9 @@ export function SessionViewer({
 								)}
 							</div>
 
-							<div className={VIEWER_INPUT}>
+							<div
+								className={cn(VIEWER_INPUT, following && "before:opacity-0")}
+							>
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--session-col)] text-[13px] text-faint">
 										No engine session to resume
