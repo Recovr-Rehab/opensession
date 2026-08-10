@@ -42,7 +42,74 @@ import { ResponsiveDialog } from "../ui/sheet";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { MarkdownBody } from "./MarkdownBody";
-import { IconDotsHorizontal, IconX } from "./icons";
+import {
+	IconChevronLeft,
+	IconChevronRight,
+	IconDotsHorizontal,
+	IconX,
+} from "./icons";
+
+type AssetNavigation = {
+	index: number;
+	count: number;
+	onPrevious: () => void;
+	onNext: () => void;
+};
+
+function AssetPager({ navigation }: { navigation: AssetNavigation }) {
+	const { index, count, onPrevious, onNext } = navigation;
+	const positionLabel = `Asset ${index + 1} of ${count}`;
+	return (
+		<nav
+			aria-label="Asset navigation"
+			className="flex shrink-0 items-center gap-1 phone:order-last phone:basis-full phone:justify-center phone:pt-1"
+		>
+			<Tooltip label="Previous asset (Left arrow)">
+				<Button
+					variant="ghost"
+					size="xs"
+					icon={<IconChevronLeft size={16} />}
+					aria-label="Previous asset"
+					className="size-7 phone:size-9"
+					onClick={onPrevious}
+				/>
+			</Tooltip>
+			<div
+				role="status"
+				aria-label={positionLabel}
+				title={positionLabel}
+				className="flex min-w-10 items-center justify-center gap-1 px-1"
+			>
+				{count <= 7 ? (
+					Array.from({ length: count }, (_, dot) => (
+						<span
+							key={dot}
+							aria-hidden="true"
+							className={cn(
+								"size-1.5 rounded-full",
+								dot === index ? "bg-fg" : "bg-line-strong",
+							)}
+						/>
+					))
+				) : (
+					<span className="text-[11px] tabular-nums text-faint">
+						{index + 1} / {count}
+					</span>
+				)}
+			</div>
+			<Tooltip label="Next asset (Right arrow)">
+				<Button
+					variant="ghost"
+					size="xs"
+					icon={<IconChevronRight size={16} />}
+					aria-label="Next asset"
+					className="size-7 phone:size-9"
+					onClick={onNext}
+				/>
+			</Tooltip>
+		</nav>
+	);
+}
 
 /**
  * The asset's name and everything you can do to it, in one row.
@@ -58,6 +125,7 @@ export function AssetActions({
 	refresh,
 	onOpenAsTab,
 	onClose,
+	navigation,
 	showSize = false,
 	className,
 }: {
@@ -70,6 +138,8 @@ export function AssetActions({
 	/** Dismiss the surface — the overlay's ✕. Also called after a delete, since
 	 *  there is nothing left to show. */
 	onClose?: () => void;
+	/** Previous/next controls for the overlay. Omitted in the Assets tab. */
+	navigation?: AssetNavigation;
 	/** False for a chip path whose folder listing has not caught up yet. */
 	showSize?: boolean;
 	className?: string;
@@ -95,7 +165,7 @@ export function AssetActions({
 	return (
 		<div
 			className={cn(
-				"flex shrink-0 items-center gap-2 border-b border-line px-3 py-2",
+				"flex shrink-0 items-center gap-2 border-b border-line px-3 py-2 phone:flex-wrap phone:gap-y-1",
 				className,
 			)}
 		>
@@ -105,8 +175,9 @@ export function AssetActions({
 					<div className="truncate text-[11px] text-faint">{folder}</div>
 				)}
 			</div>
+			{navigation && <AssetPager navigation={navigation} />}
 			{showSize && (
-				<span className="shrink-0 text-[11px] text-faint">
+				<span className="shrink-0 text-[11px] text-faint phone:hidden">
 					{formatAssetSize(file.size)}
 				</span>
 			)}
@@ -390,6 +461,15 @@ export function AssetOverlay({
 	if (!shown) return null;
 	const file = assetFileFor(shown, files);
 	const listed = files.some((candidate) => candidate.path === shown);
+	const listedIndex = files.findIndex((candidate) => candidate.path === shown);
+	const navigate = (direction: -1 | 1) => {
+		const next = adjacentAssetPath(
+			files.map((candidate) => candidate.path),
+			shown,
+			direction,
+		);
+		if (next) onSelectPath(next);
+	};
 
 	return (
 		<ResponsiveDialog
@@ -409,6 +489,16 @@ export function AssetOverlay({
 				refresh={refresh}
 				onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
 				onClose={onClose}
+				navigation={
+					listedIndex >= 0 && files.length > 1
+						? {
+								index: listedIndex,
+								count: files.length,
+								onPrevious: () => navigate(-1),
+								onNext: () => navigate(1),
+							}
+						: undefined
+				}
 				showSize={listed}
 			/>
 			{missingPath === file.path ? (
