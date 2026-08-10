@@ -12,9 +12,9 @@
  * alone would have left the others quietly winning their old values.
  *
  * The shell also has two complete layouts rather than one with tweaks. On
- * desktop it is an inset rounded card: the sidebar is a column beside it and
- * only a narrow strip of the raised app surface shows around the workspace. On
- * phones the whole card DISSOLVES — `.workspace-shell` was `display: contents`
+ * desktop it is two flush columns: the sidebar, then the workspace filling the
+ * rest of the window, with a single hairline seam between them. On phones the
+ * outer box DISSOLVES — `.workspace-shell` was `display: contents`
  * — and the pane becomes an iOS-style page stack, absolutely positioned and
  * slid in from the right over the sidebar. The desktop form is unprefixed and
  * the phone form overrides it, because Tailwind emits every breakpoint variant
@@ -42,10 +42,9 @@
 
 /**
  * The row under the top bar: sidebar + workspace. Desktop paints the shared
- * chrome material here, so the sidebar and the gutter around the workspace are
- * one continuous surface and an opaque sticky header scrolls over the same
- * colour instead of revealing a seam. Phones get the page stack's positioning
- * context instead, and the plain page colour.
+ * chrome material here so the sidebar sits on it, and an opaque sticky header
+ * scrolls over the same colour instead of revealing a seam. Phones get the
+ * page stack's positioning context instead, and the plain page colour.
  */
 export const APP_BODY =
 	"app-body flex min-h-0 flex-1 bg-raised " +
@@ -53,22 +52,20 @@ export const APP_BODY =
 	"phone:relative phone:overflow-hidden phone:bg-surface";
 
 /**
- * The detail pane and its optional right panel as one inset object. Its corner
- * follows the host window language through `--workspace-shell-radius` (a token
- * in base.css, 8px on mac and Windows), still spent through `--rf`/`--cs` so
- * the app's round-vs-squircle treatment applies.
+ * The detail pane and its optional right panel as one object, flush to the
+ * window: the workspace takes every pixel the sidebar leaves, and the only
+ * thing between the two is the seam on its left edge. No gutter, so no corner
+ * and no shadow either — both only ever read against the strip of raised app
+ * surface that used to run around it.
  *
  * `display: contents` on phones is load-bearing rather than tidy: dissolving
  * the box restores `.detail-pane` and the fixed panel portal to the layout
  * relationship their mobile positioning rules expect.
  */
 export const WORKSPACE_SHELL =
-	"relative z-[1] m-1 flex min-h-0 min-w-0 flex-1 overflow-hidden border border-line bg-surface " +
-	"rounded-[calc(var(--workspace-shell-radius)*var(--rf))] [corner-shape:var(--cs)] " +
-	"shadow-[-2px_1px_5px_-1px_rgba(0,0,0,0.1)] " +
-	// Collapsed sidebar: the column is gone, so the workspace keeps only a
-	// hairline of gutter on that side instead of the full 4px.
-	"[.app-body.sidebar-collapsed_&]:ml-[3px] " +
+	"relative z-[1] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-line bg-surface " +
+	// Collapsed sidebar: nothing to divide from, so the seam goes too.
+	"[.app-body.sidebar-collapsed_&]:border-l-0 " +
 	"phone:contents";
 
 /**

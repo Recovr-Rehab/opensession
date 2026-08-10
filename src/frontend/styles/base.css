@@ -740,19 +740,6 @@ a {
 	}
 }
 
-/* The workspace shell's base corner, as a token rather than a rule on the
-   element: the only thing that varies is the PLATFORM, and a host-window
-   language is exactly what this file owns. It inherits down to the shell,
-   which spends it as `calc(var(--workspace-shell-radius) * var(--rf))` — so
-   --rf/--cs keep their say over round-vs-squircle either way. */
-:root {
-	--workspace-shell-radius: 12px;
-}
-html[data-platform="mac"],
-html[data-platform="windows"] {
-	--workspace-shell-radius: 8px;
-}
-
 /* A drag in progress owns the cursor for the whole document, not just the
    handle under the pointer — the pointer routinely leaves the 4px handle
    mid-drag, and without this the cursor flickers back to a caret over the
@@ -787,8 +774,8 @@ html.wco .app {
 	border-top: none;
 }
 /* Updated macOS shell builds supply one native visual-effect surface beneath
-   Chromium. Reveal it only through the structural chrome: the sidebar and the
-   narrow gutter around the opaque workspace. The shell capability flag keeps
+   Chromium. Reveal it only through the structural chrome: the sidebar, the one
+   region left beside the opaque workspace. The shell capability flag keeps
    PWAs and older opaque shell builds on the normal solid surfaces. Native
    vibrancy provides the blur, so this deliberately adds no backdrop-filter. */
 @media (min-width: 721px) {
