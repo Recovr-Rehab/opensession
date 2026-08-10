@@ -59,6 +59,13 @@ final class AccentThemeTests: XCTestCase {
         XCTAssertEqual(AccentStore(defaults: defaults).theme, .default)
     }
 
+    func testLegacyBlueSelectionMigratesToSky() {
+        let defaults = scratchDefaults()
+        defaults.set("blue", forKey: AccentStore.defaultsKey)
+        XCTAssertEqual(AccentStore(defaults: defaults).theme, .sky)
+        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "sky")
+    }
+
     func testSelectionPersists() {
         let defaults = scratchDefaults()
         let store = AccentStore(defaults: defaults)

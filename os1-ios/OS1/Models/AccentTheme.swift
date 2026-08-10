@@ -25,12 +25,12 @@ import UIKit
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case teal
     case sky
-    case blue
     case indigo
     case purple
     case pink
     case coral
     case orange
+    case gold
     case green
     case mono
 
@@ -42,31 +42,31 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .teal: "Teal"
         case .sky: "Sky"
-        case .blue: "Cobalt"
         case .indigo: "Indigo"
         case .purple: "Violet"
         case .pink: "Rose"
         case .coral: "Coral"
         case .orange: "Tangerine"
+        case .gold: "Gold"
         case .green: "Clover"
         case .mono: "Mono"
         }
     }
 
-    /// The one table. `mono` is the app's original monochrome accent — black on
-    /// light, white on dark — expressed as just another entry, which is the
-    /// check that this abstraction didn't lose anything.
+    /// The chromatic entries share OKLCH L 0.60/0.79 and 84% of each hue's
+    /// maximum sRGB chroma. `mono` is the app's original monochrome accent,
+    /// expressed as one more entry so the abstraction loses nothing.
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
-        case .teal: (0x14_8F_A3, 0x4F_C9_DE)
-        case .sky: (0x24_7C_CB, 0x72_C3_FF)
-        case .blue: (0x31_5D_C6, 0x7D_A3_FF)
-        case .indigo: (0x52_46_C7, 0xA4_99_FF)
-        case .purple: (0x7D_3D_BA, 0xC9_9B_FF)
-        case .pink: (0xBE_32_6A, 0xFF_8C_B6)
-        case .coral: (0xC9_4F_45, 0xFF_98_8A)
-        case .orange: (0xB6_5A_00, 0xFF_A2_4D)
-        case .green: (0x24_7A_49, 0x59_D2_8D)
+        case .teal: (0x32_8F_99, 0x4D_CF_DD)
+        case .sky: (0x31_88_BE, 0x7D_C3_F4)
+        case .indigo: (0x6A_6E_EB, 0xAD_B5_F4)
+        case .purple: (0xB1_3A_E9, 0xD5_A3_F4)
+        case .pink: (0xD4_36_92, 0xF5_99_C5)
+        case .coral: (0xE0_38_45, 0xF5_A0_9D)
+        case .orange: (0xBB_67_2C, 0xF5_A5_74)
+        case .gold: (0x9C_7B_2D, 0xE2_B3_45)
+        case .green: (0x33_97_51, 0x4D_DA_78)
         case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
     }
@@ -197,6 +197,12 @@ final class AccentStore {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let stored = defaults.string(forKey: Self.defaultsKey) ?? ""
-        theme = AccentTheme(rawValue: stored) ?? .default
+        // Cobalt briefly shipped as `blue`; Sky is its nearest successor in
+        // the evenly spaced palette, so preserve the choice across the rename.
+        let normalized = stored == "blue" ? AccentTheme.sky.rawValue : stored
+        theme = AccentTheme(rawValue: normalized) ?? .default
+        if normalized != stored {
+            defaults.set(normalized, forKey: Self.defaultsKey)
+        }
     }
 }
