@@ -144,12 +144,17 @@ const MCP_BADGE =
 /* Split button: primary Create action + a caret that opens a mode dropdown.
    The two halves' corners are scoped to mutually exclusive media queries, so
    no two radius utilities ever race: phones drop the caret and round the main
-   button out to a full pill. */
+   button out to a full pill.
+
+   Desktop rounds on `rounded-control`, the corner every other button in the
+   chrome shares (the Button primitive, the header CTAs). It used to be
+   `rounded-md` — one step down, 9.45px against 13.5px — which on a 36px-tall
+   plate read visibly square next to its neighbours. */
 const CREATE_SPLIT = "relative inline-flex shrink-0 items-stretch";
 const CREATE_MAIN =
-	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-40 desktop:rounded-l-md phone:rounded-[999px] max-[560px]:px-3";
+	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-40 desktop:rounded-l-control phone:rounded-[999px] max-[560px]:px-3";
 const CREATE_CARET =
-	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-md border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] phone:hidden";
+	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] phone:hidden";
 const CREATE_KBD = "opacity-70";
 const CREATE_MENU =
 	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control border border-line bg-raised p-[5px] shadow-[0_10px_30px_rgba(0,0,0,0.28)]";
