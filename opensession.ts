@@ -18,7 +18,7 @@ import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
 import { makeAskHandler } from "./src/server/asks";
-import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, startScheduler } from "./src/server/automations";
+import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, frontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
@@ -694,6 +694,16 @@ if (!g.__opensessionBooted) {
 								? "Run stopped"
 								: undefined,
 						},
+					);
+					// The in-process settleRun died with the restart — close the
+					// automation ledger entry here or it stays "running" forever.
+					settleResumedAutomationRun(
+						bksSessionId,
+						failed
+							? terminalEvent.content ||
+								terminalEvent.result ||
+								"Recovered run failed"
+							: null,
 					);
 				}
 				invalidateSessionsCache();

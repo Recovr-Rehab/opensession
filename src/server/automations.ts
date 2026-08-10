@@ -825,6 +825,33 @@ function settleRun(id: string, sessionId: string, patch: Pick<AutomationRun, "st
   });
 }
 
+/**
+ * Settle the ledger entry for a session whose run finished OUTSIDE
+ * runAutomation — the boot-resume path (resumeInterruptedRuns) drives runs
+ * that were live at a restart, and settleRun only fires in-process, so every
+ * such run used to stay "running" in the ledger forever (97 stranded entries
+ * counted 2026-08-10). Called from the resume sweep's terminal callback;
+ * returns true when a running entry was settled. Old corpses from before
+ * this hook stay as they are — this settles runs the sweep actually drove
+ * to an end, it does not rewrite history.
+ */
+export function settleResumedAutomationRun(sessionId: string, error: string | null): boolean {
+  for (const automation of listAutomations()) {
+    const run = (automation.runs || []).find((r) => r.sessionId === sessionId);
+    if (!run || run.status !== "running") continue;
+    settleRun(automation.id, sessionId, {
+      status: error ? "error" : "ok",
+      error: error || undefined,
+      durationMs: Math.max(0, Date.now() - new Date(run.at).getTime()),
+    });
+    console.log(
+      `[automations] Settled resumed run ${sessionId} for "${automation.name}" (${error ? "error" : "ok"})`
+    );
+    return true;
+  }
+  return false;
+}
+
 // Automation runs are headless and often driven by untrusted text (e.g.
 // customer ticket content), so they must stay read-only toward the customer:
 // no replying to or changing the state of a Plain thread. Enforced at the
