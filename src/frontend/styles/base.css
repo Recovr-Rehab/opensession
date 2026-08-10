@@ -107,7 +107,7 @@
 	/* Top scroll-edge wash: content dissolves into the fixed session header.
 	   The composer owns its much shorter overlap gradient directly; keeping the
 	   two separate lets rows scroll under the input without a blank band. */
-	--wash-depth: 40px;
+	--wash-depth: 28px;
 	--wash-up: linear-gradient(
 		to top,
 		transparent 0,
