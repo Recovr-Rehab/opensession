@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type WorkspaceMediaItem } from "../lib/api";
+import { cn } from "../ui/cn";
 import { IconChevronLeft, IconChevronRight, IconX } from "./icons";
 
 /**
@@ -740,6 +741,10 @@ function ZoomableImage({
 	);
 }
 
+// Past this many, dots stop being countable at a glance and start being a
+// smear of identical targets — the plain counter reads better.
+const MAX_DOTS = 10;
+
 function MediaLightbox({
 	items,
 	index,
@@ -774,6 +779,12 @@ function MediaLightbox({
 		setImageZoomed(false);
 		setDirection(1);
 		onIndex((index + 1) % items.length);
+	};
+	const go = (i: number) => {
+		if (i === index) return;
+		setImageZoomed(false);
+		setDirection(i > index ? 1 : -1);
+		onIndex(i);
 	};
 	const requestClose = () => onClose(!imageZoomed);
 
@@ -963,11 +974,36 @@ function MediaLightbox({
 					</div>
 				)}
 				<div className="flex items-center gap-3 text-xs text-white/60">
-					{many && (
-						<span className="tabular-nums">
-							{index + 1} / {items.length}
-						</span>
-					)}
+					{many &&
+						(items.length <= MAX_DOTS ? (
+							// Dots instead of "3 / 7": at a glance they say how much
+							// there is and where you are, and each one is a jump.
+							<div className="flex items-center">
+								{items.map((it, i) => (
+									<button
+										key={`${i}-${it.src}`}
+										type="button"
+										onClick={() => go(i)}
+										aria-label={`Show ${i + 1} of ${items.length}`}
+										aria-current={i === index ? "true" : undefined}
+										className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
+									>
+										<span
+											className={cn(
+												"block size-1.5 rounded-full transition-colors",
+												i === index
+													? "bg-white"
+													: "bg-white/35 group-hover:bg-white/70",
+											)}
+										/>
+									</button>
+								))}
+							</div>
+						) : (
+							<span className="tabular-nums">
+								{index + 1} / {items.length}
+							</span>
+						))}
 					<button
 						type="button"
 						onClick={() => void downloadItem(item)}
