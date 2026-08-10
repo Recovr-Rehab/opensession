@@ -33,18 +33,17 @@ export function DeviceCode({
 				aria-label={`${label} ${code}`}
 				onClick={() => copy(code, { toast: "Code copied" })}
 				className={cn(
-					"group relative inline-flex items-center justify-center rounded-control border border-line bg-control px-9 py-1",
+					"group inline-flex items-center gap-1.5 rounded-control border border-line bg-control px-2.5 py-1",
 					"font-mono text-item-title font-bold text-fg shadow-control",
 					"transition-[background-color,border-color,scale] active:scale-[0.98]",
 					"hover:border-line-strong hover:bg-hover focus-ring",
 					className,
 				)}
 			>
-				<span className="tracking-[0.14em] -mr-[0.14em]">{code}</span>
+				<span className="translate-y-px tracking-[0.14em] -mr-[0.14em]">{code}</span>
 				<CopyCheck
 					copied={copied}
 					size={20}
-					className="absolute right-2.5"
 					idle={
 						<IconCopy
 							size={20}
