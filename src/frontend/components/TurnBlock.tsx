@@ -197,19 +197,12 @@ export const TurnBlock = React.memo(function TurnBlock({
                 sessionId={sessionId}
               />
             ) : messagesInline ? null : (
-              // Indented one disclosure step on desktop, so the tool rows read
-              // as the fold's children: 27px puts a tool glyph's ink under the
-              // "W" of "Working" (the header spends 4px padding + a 20px
-              // chevron + an 8px gap before its title, a tool row 4px padding
-              // + the 1px its 20px glyph is inset inside a 22px box).
-              // Narration between tool runs deliberately keeps the column —
-              // the work indents, the agent's own words don't. On a phone the
-              // column is the whole screen and every row already truncates, so
-              // the step comes straight off the command and the rows stay
-              // flush; the -1px is the same 22-vs-20 glyph correction.
+              // Tool rows get a modest desktop indent so they read as the
+              // fold's children without drifting away from the narration.
+              // Phones keep the rows flush to preserve command width.
               <div
                 key={sec.items[0].id}
-                className="-ml-px desktop:ml-[27px]"
+                className="-ml-px desktop:ml-3"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
                 {sec.items.map((entry) => (
