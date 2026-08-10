@@ -188,13 +188,12 @@ export const TurnBlock = React.memo(function TurnBlock({
       </button>
 
       {(expanded || messagesInline) && (
-        // The indent marks what the header can actually close, so it appears
-        // only when the fold is open. Under the "messages" preference a
-        // folded turn still shows its notes, and those are NOT collapsible —
-        // indenting them would suggest a container the header cannot shut.
-        // Folded, the notes sit flush and read as ordinary transcript, which
-        // is the whole point of that preference.
-        <div className={cn("mt-0.5", expanded && "ml-1 pl-3")}>
+        // Flush with the header, not indented: a tool row's glyph then sits in
+        // the same column as the fold's chevron and its name under "Working",
+        // so the open turn reads as one list rather than a nested one. The
+        // -1px offsets the glyph's 22px box against the chevron's 20px, which
+        // would otherwise leave the column a pixel out.
+        <div className="-ml-px mt-0.5">
           {sections.map((sec) =>
             sec.kind === "msg" ? (
               <TurnMessage
