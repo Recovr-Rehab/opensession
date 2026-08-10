@@ -69,7 +69,7 @@ struct SessionView: View {
     /// immediately so it can never fight the reader.
     @State private var holdingAtLatest = true
     @State private var holdTask: Task<Void, Never>?
-    private let initialHoldSeconds: Double = 2.5
+    private static let initialHoldSeconds: Double = 2.5
 
     /// Whether the reader is at (or near) the bottom, from live scroll
     /// geometry. New AI output only auto-scrolls while true; scrolling up to
@@ -84,11 +84,11 @@ struct SessionView: View {
 
     /// How close to the bottom (pt) still counts as pinned.
     ///
-    /// `scrollToBottom` aligns the LAST BLOCK's bottom edge with the visible
-    /// bottom, so "as far down as this view ever scrolls itself" already sits
-    /// the transcript's trailing padding short of the content's end. The
-    /// tolerance has to clear that, plus slack for keyboard/inset transitions
-    /// and lazy rows settling.
+    /// `scrollToBottom` aligns the LAST ROW's frame with the visible bottom,
+    /// so "as far down as this view ever scrolls itself" already sits the
+    /// stack's own trailing padding short of the content's end. The tolerance
+    /// has to clear that, plus slack for keyboard/inset transitions and lazy
+    /// rows settling.
     private let pinTolerance: CGFloat = 76
 
     /// Model/effort catalog for the toolbar picker; fetched on first open.
@@ -140,6 +140,29 @@ struct SessionView: View {
         copy.composerAccessory = { AnyView(build()) }
         return copy
     }
+
+    /// The transcript's last row — what "go to the bottom" travels to.
+    /// `nil` when there is nothing to travel to, which is an empty transcript:
+    /// that space belongs to whatever the caller put in its place (the Desk's
+    /// board), and it reads from the top.
+    private var tailId: String? {
+        if let ask = viewModel.pendingQuestion { return "ask-\(ask.id)" }
+        // While work is in flight the run clock IS the last row.
+        if viewModel.isRunning { return "run-status" }
+        if !viewModel.liveText.isEmpty { return "live-stream" }
+        return viewModel.displayBlocks.last?.id
+    }
+
+    /// Air under the LAST row, and the reason it is on the row rather than on
+    /// the stack: `scrollTo(_:anchor: .bottom)` puts the target's frame on the
+    /// visible bottom, so padding below the target is the only kind it
+    /// travels past. Without it the newest row lands hard against the visible
+    /// bottom — which is inside the composer's fade, where the scroll edge
+    /// effect has already washed it out. Measured on an iPhone 17 Pro: going
+    /// to the bottom parked the last row 20pt lower than a hand-drag to the
+    /// same end, grey and unreadable, while the row above it stayed crisp.
+    /// This is that 20pt, so both ways of arriving land in the same place.
+    fileprivate static let tailClearance: CGFloat = 20
 
     /// The caller's stand-in currently owns the transcript area.
     private var showingEmptyContent: Bool {
@@ -235,10 +258,12 @@ struct SessionView: View {
                                         ? nil : viewModel.session.startedBy
                                 )
                                 .id(block.id)
+                                .transcriptTail(block.id == tailId)
                             }
                             if !viewModel.liveText.isEmpty {
                                 StreamingBubble(text: viewModel.liveText)
                                     .id("live-stream")
+                                    .transcriptTail(tailId == "live-stream")
                             }
                             // The run clock closes the transcript while work
                             // is in flight, under whatever the last message
@@ -247,12 +272,14 @@ struct SessionView: View {
                             if viewModel.isRunning {
                                 RunStatusFooter(since: viewModel.runStartedAt)
                                     .id("run-status")
+                                    .transcriptTail(tailId == "run-status")
                             }
                             if let ask = viewModel.pendingQuestion {
                                 AskQuestionCard(ask: ask) { answers in
                                     viewModel.answer(question: ask, answers: answers)
                                 }
                                 .id("ask-\(ask.id)")
+                                .transcriptTail(true)
                             }
                             // A small child at the very end, and the reason is
                             // not spacing: a `LazyVStack` realizes the children
@@ -268,7 +295,9 @@ struct SessionView: View {
                             // stays BLANK until a touch forces a layout pass.
                             // Something small down here always intersects the
                             // window at the bottom, which keeps the stack
-                            // realizing its neighbour.
+                            // realizing its neighbour. (It is NOT what
+                            // `scrollToBottom` aims at, for the same reason —
+                            // see the note there.)
                             Color.clear
                                 .frame(height: 1)
                                 .id("transcript-end")
@@ -355,6 +384,19 @@ struct SessionView: View {
                             ScrollToLatestButton(hasNewOutput: newBelow) {
                                 newBelow = false
                                 scrollToBottom(proxy, animated: true)
+                                // Output that lands WHILE the scroll animates
+                                // leaves it short of the end — and it stays
+                                // there, because following only resumes once
+                                // the pin re-arms, which it doesn't at a
+                                // position that far up. So hold at the latest
+                                // for a beat afterwards, exactly like opening
+                                // a conversation does; a scroll gesture ends
+                                // the hold immediately either way.
+                                beginHold(
+                                    proxy,
+                                    seconds: 0.8,
+                                    after: .milliseconds(450)
+                                )
                             }
                             .padding(.bottom, 10)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -952,15 +994,29 @@ struct SessionView: View {
         }
     }
 
-    /// Re-pin to the latest for a beat while the opening transcript settles.
-    private func beginHold(_ proxy: ScrollViewProxy) {
+    /// Re-pin to the latest for a beat while the transcript settles.
+    ///
+    /// - Parameters:
+    ///   - seconds: how long to keep re-asserting.
+    ///   - delay: wait this long before the first re-assert — for a hold that
+    ///     follows an ANIMATED scroll, which would otherwise be cut off
+    ///     mid-glide by the first one.
+    private func beginHold(
+        _ proxy: ScrollViewProxy,
+        seconds: Double = SessionView.initialHoldSeconds,
+        after delay: Duration = .zero
+    ) {
         holdTask?.cancel()
         holdingAtLatest = true
         holdTask = Task {
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled, holdingAtLatest else { return }
+            }
             // Re-assert during the window, not just at its end: a row that
             // grows at 0.4s pushes the bottom away, and one scroll at 2.5s
             // would leave the reader looking at the wrong place until then.
-            for _ in 0..<Int(initialHoldSeconds / 0.25) {
+            for _ in 0..<max(1, Int(seconds / 0.25)) {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled, holdingAtLatest else { return }
                 scrollToBottom(proxy, animated: false)
@@ -975,27 +1031,33 @@ struct SessionView: View {
         holdingAtLatest = false
     }
 
+    /// Take the transcript to its last row — the ask card, the run clock, the
+    /// live stream or the newest block, whichever ends it.
+    ///
+    /// It aims at a REAL row rather than at the trailing sentinel, even though
+    /// the sentinel is the content's actual last point: a `LazyVStack` only
+    /// realizes what intersects the visible window, and a session whose whole
+    /// loaded transcript is one long turn has exactly one giant child — land
+    /// on the 1pt sentinel below it and the screen comes up BLANK until a
+    /// touch forces a layout pass (measured; it stayed blank for a minute).
+    /// The row's own `transcriptTail` padding is what keeps it clear of the
+    /// composer's fade, since this puts its frame's bottom edge on the visible
+    /// bottom.
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
-        let target: String
-        if viewModel.pendingQuestion != nil {
-            target = "ask-\(viewModel.pendingQuestion!.id)"
-        } else if viewModel.isRunning {
-            // While work is in flight the run clock IS the last row. Stopping
-            // at the block above it parks the clock in the strip the composer
-            // floats over, where the glass eats everything but the dot.
-            target = "run-status"
-        } else if !viewModel.liveText.isEmpty {
-            target = "live-stream"
-        } else if let last = viewModel.displayBlocks.last {
-            target = last.id
-        } else {
-            return
-        }
+        guard let target = tailId else { return }
         if animated {
             withAnimation(.snappy) { proxy.scrollTo(target, anchor: .bottom) }
         } else {
             proxy.scrollTo(target, anchor: .bottom)
         }
+    }
+}
+
+private extension View {
+    /// Mark the transcript's last row, which carries the clearance that keeps
+    /// it out of the composer's fade — see `SessionView.tailClearance`.
+    func transcriptTail(_ isTail: Bool) -> some View {
+        padding(.bottom, isTail ? SessionView.tailClearance : 0)
     }
 }
 
