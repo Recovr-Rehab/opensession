@@ -18,9 +18,9 @@ import UIKit
 /// What sits ON the accent is deliberately NOT part of that table. It is
 /// derived from the fill's own luminance — whichever of black or white
 /// contrasts more — so a colour can never ship with an illegible glyph, and
-/// nobody adding one has to remember to pick its counterpart. Chromatic fills
-/// are deliberately bright in both appearances and take a near-black glyph;
-/// `mono` remains the high-contrast black/white exception.
+/// nobody adding one has to remember to pick its counterpart. Light appearance
+/// uses saturated jewel tones with white glyphs; dark appearance lifts the
+/// same hues into airy tints with near-black glyphs.
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case teal
     case sky
@@ -52,20 +52,20 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// The chromatic entries share OKLCH L 0.70/0.80 and 84% of each hue's
-    /// maximum sRGB chroma. `mono` is the app's original monochrome accent,
-    /// expressed as one more entry so the abstraction loses nothing.
+    /// Light appearance uses OKLCH L 0.58 at 92% of each hue's maximum sRGB
+    /// chroma; dark appearance uses L 0.80 at 84%. `mono` is the app's original
+    /// monochrome accent, expressed as one more entry so nothing is lost.
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
-        case .teal: (0x40_B0_BC, 0x4E_D3_E1)
-        case .sky: (0x3E_A8_E9, 0x84_C6_F5)
-        case .indigo: (0x8C_95_F0, 0xB0_B9_F5)
-        case .purple: (0xC4_77_F0, 0xD7_A7_F5)
-        case .pink: (0xF2_62_AF, 0xF6_9F_C8)
-        case .coral: (0xF2_70_70, 0xF6_A5_A2)
-        case .orange: (0xE6_80_38, 0xF5_AA_7B)
-        case .gold: (0xC1_98_39, 0xE6_B6_46)
-        case .green: (0x40_BA_65, 0x4F_DE_7A)
+        case .teal: (0x20_8A_94, 0x4E_D3_E1)
+        case .sky: (0x1F_82_BB, 0x84_C6_F5)
+        case .indigo: (0x63_61_F5, 0xB0_B9_F5)
+        case .purple: (0xAD_26_E8, 0xD7_A7_F5)
+        case .pink: (0xD1_23_8C, 0xF6_9F_C8)
+        case .coral: (0xDD_24_3B, 0xF6_A5_A2)
+        case .orange: (0xB8_5F_1B, 0xF5_AA_7B)
+        case .gold: (0x98_74_1C, 0xE6_B6_46)
+        case .green: (0x20_91_48, 0x4F_DE_7A)
         case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
     }

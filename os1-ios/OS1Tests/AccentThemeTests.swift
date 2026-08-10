@@ -25,11 +25,11 @@ final class AccentThemeTests: XCTestCase {
         }
     }
 
-    /// Dark ink is what releases the chromatic palette from the muddy end of
-    /// each hue. Keep both appearances bright; Mono owns the white-glyph case.
-    func testChromaticFillsCarryDarkGlyphsInBothAppearances() {
+    /// The pair's identity: jewel tones with white ink on light surfaces,
+    /// airy tints with dark ink on dark surfaces.
+    func testChromaticFillsSwitchGlyphsBetweenAppearances() {
         for theme in AccentTheme.allCases where theme != .mono {
-            XCTAssertFalse(theme.glyphIsWhite(dark: false), "\(theme.rawValue) light fill")
+            XCTAssertTrue(theme.glyphIsWhite(dark: false), "\(theme.rawValue) light fill")
             XCTAssertFalse(theme.glyphIsWhite(dark: true), "\(theme.rawValue) dark fill")
         }
     }
