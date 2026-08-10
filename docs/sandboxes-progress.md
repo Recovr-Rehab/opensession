@@ -341,3 +341,20 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
   cookie. The VM returned to its parked/inactive state after the check.
 - Final repository verification at HEAD: **1,872 pass, 4 skip, 0 fail** across
   188 test files; `bun run typecheck` passes; `/api/health` reports `ok: true`.
+
+## 2026-08-10 — closeout verification
+
+- The final full repository run after the scorecard, certification, Portal and
+  A2A changes completed with **1,881 pass, 4 skip, 0 fail** across 189 test
+  files; `bun run typecheck` passed.
+- A deliberate production restart came back healthy, adopted 17 detached
+  engine servers and reattached the one interrupted run. The live scorecard,
+  provider-status and fail-closed stale-Portal endpoints all returned the
+  expected results after that restart.
+- A running Tella worktree supplied the host multi-service acceptance case.
+  Its Webapp, Workflow and Emails preview listeners each received a distinct
+  HTTPS Portal; every Portal returned 401 without Open Session authentication,
+  while authenticated traffic reached all three upstreams. The Webapp and
+  Workflow upstreams returned 307 and 200 respectively; the Emails preview
+  upstream itself returned 500 at `/`, independently of the working Portal
+  authentication and routing layer.
