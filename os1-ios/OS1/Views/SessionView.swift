@@ -2220,6 +2220,20 @@ private struct SessionInputBar: View {
                 .glassSurface(
                     in: composerShape
                 )
+                // Ask mode is ambient — it lasts the session's whole life, not
+                // one message — so it's said by tinting the surface you write
+                // on rather than by a chip you'd stop seeing. Same green, and
+                // the same lighter hand, as the web composer's.
+                //
+                // An overlay, not another `.background`: each background in
+                // this stack sits further back, and the page colour above is
+                // near-opaque, so a tint added there paints where nothing can
+                // see it.
+                .overlay {
+                    if viewModel.session.mode == "ask" {
+                        composerShape.fill(OS1VisualStyle.green.opacity(0.09))
+                    }
+                }
         }
         #if os(iOS)
         // No focus ring: an accent-coloured border around the input read as a

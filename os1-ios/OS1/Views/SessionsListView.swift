@@ -487,6 +487,12 @@ struct SessionsListView: View {
                     if env["OS1_VOICE_AUTOSTART"] != nil || env["OS1_OPEN_DESK"] != nil {
                         showDesk = true
                     }
+                    // Same reason as the Desk: the new-session palette sits
+                    // behind a toolbar tap, and a toolbar glyph is the one
+                    // target a scripted click reliably misses.
+                    if env["OS1_OPEN_NEW"] != nil {
+                        newSessionRequest = NewSessionRequest()
+                    }
                     #endif
                 }
                 .sheet(item: $newSessionRequest) { request in

@@ -4,8 +4,8 @@ import SwiftUI
 /// session IS — the repo, and what it's created from — reads across the top,
 /// the prompt fills the middle, and how it runs sits in the footer with the
 /// attach button. Only the controls this app actually carries appear; the rest
-/// of the palette's row (plan mode, connected services, run environment) has
-/// no native equivalent yet, so it stays absent rather than half-present.
+/// of the palette's row (connected services, run environment) has no native
+/// equivalent yet, so it stays absent rather than half-present.
 /// Screenshots paste straight into the attachments (Cmd+V on the Mac,
 /// long-press Paste on iOS).
 ///
@@ -39,6 +39,10 @@ struct NewSessionView: View {
 
     @State private var prompt = ""
     @State private var mode = "code"
+    /// Plan first: the session opens in plan mode, so the agent proposes
+    /// before it edits. Not remembered between sheets — it's a choice about
+    /// this piece of work, not a preference.
+    @State private var planFirst = false
     @State private var repos: [OS1API.RepoInfo] = []
     @State private var repo = ""
     @State private var catalog: ModelCatalog?
@@ -190,6 +194,13 @@ struct NewSessionView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Plan mode tints the surface you're writing on, like the web
+        // palette's — the state belongs to the prompt, not to a control in
+        // the corner, and a tint says so without spending a row on a chip.
+        .background(
+            planFirst && mode == "code"
+                ? OS1VisualStyle.accent.opacity(0.06) : .clear
+        )
         #if os(iOS)
         .contentShape(Rectangle())
         .onTapGesture { promptFocused = true }
@@ -354,6 +365,7 @@ struct NewSessionView: View {
         HStack(spacing: 8) {
             AttachImagesButton(images: $images)
             ComposerDictationButton(dictation: dictation, draft: $prompt)
+            if mode == "code" { planButton }
             Spacer(minLength: 8)
             #if os(macOS)
             if !availableEfforts.isEmpty { effortChip }
@@ -363,6 +375,34 @@ struct NewSessionView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, controlsVerticalPadding)
+    }
+
+    /// Start in plan mode: the agent works the problem out and writes the plan
+    /// before it touches the checkout. Code-mode only — an ask session can't
+    /// change anything to begin with, which is why the server drops `planFirst`
+    /// for it (session-create.ts) and why the button isn't offered there.
+    ///
+    /// A toggle rather than a menu item, and lit rather than checked, because
+    /// its state is also painted on the writing surface right above it: the
+    /// palette on the web says plan mode twice the same way.
+    private var planButton: some View {
+        Button {
+            planFirst.toggle()
+        } label: {
+            Image(systemName: "map")
+                .foregroundStyle(
+                    planFirst ? OS1VisualStyle.accent : OS1VisualStyle.text
+                )
+                .frame(width: 30, height: 30)
+                .background {
+                    if planFirst {
+                        Circle().fill(OS1VisualStyle.accent.opacity(0.14))
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(planFirst ? "Exit plan mode" : "Enter plan mode")
+        .help(planFirst ? "Exit plan mode" : "Enter plan mode")
     }
 
     /// The iOS attach button carries its own 44pt tap target, so the row only
@@ -628,7 +668,8 @@ struct NewSessionView: View {
                     effort: effort.isEmpty ? nil : effort,
                     fastMode: fastMode,
                     images: imageURLs,
-                    workspaceId: initialWorkspaceId
+                    workspaceId: initialWorkspaceId,
+                    planFirst: planFirst
                 )
                 onResolved(pending.id, .success(id))
             } catch {
