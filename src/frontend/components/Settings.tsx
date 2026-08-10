@@ -545,46 +545,76 @@ function NavSearch({
 	onChange,
 	onSubmit,
 	className,
+	sheet,
 }: {
 	value: string;
 	onChange: (v: string) => void;
 	onSubmit: () => void;
 	className?: string;
+	/** Phone sheet: the field sits in a page of grouped cards rather than in
+	 *  the desktop sidebar's chrome, so it takes the cards' own fill instead of
+	 *  an outlined well, and a touch-sized box with a 16px value — anything
+	 *  smaller and iOS zooms the page when the field takes focus (the command
+	 *  palette hardcodes 16px for the same reason). */
+	sheet?: boolean;
 }) {
+	// The positioned box wraps the field only, so a caller's className can pad
+	// or stick the strip around it without moving the icons off the field.
 	return (
-		<div className={cn("relative", className)}>
-			<IconSearch
-				size={18}
-				className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-faint"
-			/>
-			<Input
-				value={value}
-				placeholder="Search settings"
-				aria-label="Search settings"
-				spellCheck={false}
-				className={cn("pl-8", value && "pr-8")}
-				onChange={(e) => onChange(e.target.value)}
-				onKeyDown={(e) => {
-					if (e.key === "Enter") onSubmit();
-					else if (e.key === "Escape" && value) {
-						// Escape belongs to the field while it has something to clear —
-						// unhandled, it would dismiss the whole phone sheet instead.
-						e.stopPropagation();
-						e.preventDefault();
-						onChange("");
-					}
-				}}
-			/>
-			{value && (
-				<button
-					type="button"
-					aria-label="Clear search"
-					className="absolute right-1 top-1/2 flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-faint hover:bg-hover hover:text-fg"
-					onClick={() => onChange("")}
-				>
-					<IconX size={16} />
-				</button>
-			)}
+		<div className={className}>
+			<div className="relative">
+				<IconSearch
+					size={sheet ? 20 : 18}
+					className={cn(
+						"pointer-events-none absolute top-1/2 -translate-y-1/2 text-faint",
+						sheet ? "left-3" : "left-2",
+					)}
+				/>
+				<Input
+					value={value}
+					// type=search for the phone keyboard's Search key; the native
+					// cancel button goes, since the field renders its own (bigger,
+					// and present at both widths).
+					type="search"
+					enterKeyHint="search"
+					placeholder="Search settings"
+					aria-label="Search settings"
+					spellCheck={false}
+					autoCapitalize="off"
+					autoCorrect="off"
+					size={sheet ? "lg" : "md"}
+					className={cn(
+						"[&::-webkit-search-cancel-button]:hidden",
+						sheet
+							? cn("h-10 border-transparent bg-raised pl-10 text-[16px]", value && "pr-11")
+							: cn("pl-8", value && "pr-8"),
+					)}
+					onChange={(e) => onChange(e.target.value)}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") onSubmit();
+						else if (e.key === "Escape" && value) {
+							// Escape belongs to the field while it has something to clear —
+							// unhandled, it would dismiss the whole phone sheet instead.
+							e.stopPropagation();
+							e.preventDefault();
+							onChange("");
+						}
+					}}
+				/>
+				{value && (
+					<button
+						type="button"
+						aria-label="Clear search"
+						className={cn(
+							"absolute top-1/2 flex -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-faint hover:bg-hover hover:text-fg",
+							sheet ? "right-1.5 size-8" : "right-1 size-6",
+						)}
+						onClick={() => onChange("")}
+					>
+						<IconX size={sheet ? 18 : 16} />
+					</button>
+				)}
+			</div>
 		</div>
 	);
 }
@@ -835,11 +865,15 @@ function MobileSettings({
 							)}
 							aria-hidden={!!detail}
 						>
+							{/* Sticky: 22 sections is more than a phone screen, so the way
+							    out of a long scroll should stay in reach — the strip carries
+							    the page's own background so rows pass under it. */}
 							<NavSearch
+								sheet
 								value={query}
 								onChange={setQuery}
 								onSubmit={() => firstHit && onSelect(firstHit.key)}
-								className="mt-3"
+								className="sticky top-0 z-1 -mx-4 bg-surface px-4 pb-2 pt-3"
 							/>
 							{shown.map((g) => (
 								<div key={g.group}>

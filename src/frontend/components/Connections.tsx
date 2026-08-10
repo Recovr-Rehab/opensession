@@ -6,6 +6,11 @@ import { Button } from "../ui/button";
 import { InlineAlert, LoadingState } from "../ui/state";
 import {
   SettingCard,
+  SettingRow,
+  SettingRowControl,
+  SettingRowDescription,
+  SettingRowText,
+  SettingRowTitle,
   SettingsField,
   SettingsForm,
   SettingsFormActions,
@@ -582,31 +587,37 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
       <SettingCard>
-        <div className="flex items-center gap-3 px-4 py-3">
+        {/* The shared row primitives, not a local flex row: their `flex-wrap`
+            plus the text column's min width is what drops the chip and button
+            to their own line on a phone instead of squeezing the description
+            into a one-word column. `items-start` because this row's text runs
+            several lines — a centred icon would float away from its title. */}
+        <SettingRow className="items-start gap-x-3">
           <IconTile name="github" size={30} />
-          <div className="min-w-0 flex-1">
-            <div className="text-body font-medium text-fg">Per-user GitHub auth</div>
-            <div className="text-label leading-snug text-dim">
+          <SettingRowText>
+            <SettingRowTitle>Per-user GitHub auth</SettingRowTitle>
+            <SettingRowDescription className="leading-snug">
               {active
                 ? "Interactive sessions of a connected teammate open PRs as their own GitHub account. Everyone else (and all automations) keeps the bot."
                 : "Off — sessions open PRs as the bot account. Opt in via config: integrations.github { userPrAuth: true, oauthClientId } in ~/.opensession/config.json."}
-            </div>
-          </div>
-          <StatusChip
-            label={active ? "Enabled" : data.enabled ? "Missing client id" : "Disabled"}
-            dot={active ? "var(--green)" : "var(--yellow)"}
-          />
-          {active && flowState !== "waiting" && (
-            <Button
-              size="sm"
-              className="flex-shrink-0"
-              onClick={startConnect}
-              disabled={flowState === "starting"}
-            >
-              {flowState === "starting" ? "Starting…" : "Connect account"}
-            </Button>
-          )}
-        </div>
+            </SettingRowDescription>
+          </SettingRowText>
+          <SettingRowControl className="flex items-center gap-3">
+            <StatusChip
+              label={active ? "Enabled" : data.enabled ? "Missing client id" : "Disabled"}
+              dot={active ? "var(--green)" : "var(--yellow)"}
+            />
+            {active && flowState !== "waiting" && (
+              <Button
+                size="sm"
+                onClick={startConnect}
+                disabled={flowState === "starting"}
+              >
+                {flowState === "starting" ? "Starting…" : "Connect account"}
+              </Button>
+            )}
+          </SettingRowControl>
+        </SettingRow>
 
         {flow && (
           <div className="px-4 py-3 text-body">
@@ -650,42 +661,49 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
               (a) => a.login.toLowerCase() === m.github.toLowerCase(),
             );
             return (
-              <div key={m.github} className="flex items-center gap-3 px-4 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <span className="text-body font-medium text-fg">{m.name}</span>
-                  <span className="ml-2 text-label text-faint">@{m.github}</span>
-                </div>
-                {account && (
-                  <span className="text-meta text-faint">
-                    since {new Date(account.connectedAt).toLocaleDateString()}
-                  </span>
-                )}
-                <StatusChip
-                  label={
-                    m.needsReconnect
-                      ? "Reconnect needed"
-                      : m.connected
-                        ? "Connected"
-                        : "Not connected"
-                  }
-                  dot={
-                    m.needsReconnect
-                      ? "var(--red)"
-                      : m.connected
-                        ? "var(--green)"
-                        : "var(--line-strong, var(--text-faint))"
-                  }
-                />
-                {m.connected && m.canManage && (
-                  <Button
-                    size="sm"
-                    className="hover:border-red hover:text-red"
-                    onClick={() => disconnect(m.github)}
-                  >
-                    Disconnect
-                  </Button>
-                )}
-              </div>
+              <SettingRow key={m.github} className="gap-x-3 py-3">
+                <SettingRowText>
+                  <SettingRowTitle className="truncate">
+                    {m.name}
+                    <span className="ml-2 text-label font-normal text-faint">@{m.github}</span>
+                  </SettingRowTitle>
+                  {/* Under the name rather than beside it: as a third column it
+                      had nothing to shrink into on a phone and overlapped the
+                      name it belongs to. */}
+                  {account && (
+                    <SettingRowDescription className="text-meta text-faint">
+                      since {new Date(account.connectedAt).toLocaleDateString()}
+                    </SettingRowDescription>
+                  )}
+                </SettingRowText>
+                <SettingRowControl className="flex items-center gap-3">
+                  <StatusChip
+                    label={
+                      m.needsReconnect
+                        ? "Reconnect needed"
+                        : m.connected
+                          ? "Connected"
+                          : "Not connected"
+                    }
+                    dot={
+                      m.needsReconnect
+                        ? "var(--red)"
+                        : m.connected
+                          ? "var(--green)"
+                          : "var(--line-strong, var(--text-faint))"
+                    }
+                  />
+                  {m.connected && m.canManage && (
+                    <Button
+                      size="sm"
+                      className="hover:border-red hover:text-red"
+                      onClick={() => disconnect(m.github)}
+                    >
+                      Disconnect
+                    </Button>
+                  )}
+                </SettingRowControl>
+              </SettingRow>
             );
           })}
       </SettingCard>
