@@ -54,8 +54,8 @@ struct SessionsListView: View {
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
     @State private var showDesk = false
-    /// The Plain support queue. Tickets are work waiting on a person, so iOS
-    /// keeps a compact band of them inside the sessions sidebar.
+    /// The Plain support queue. iOS reaches it from the Support card at the
+    /// bottom of the sessions sidebar; Mac keeps it in the sidebar header.
     @State private var showSupport = false
     @State private var supportQueue = SupportQueueModel()
     /// The ticket opened from the support queue. It has its own destination
@@ -207,14 +207,6 @@ struct SessionsListView: View {
                 // hash, which is exactly where two repos can collide.
                 _ = try? await OS1API.repos()
             }
-            #if os(iOS)
-            .task {
-                while !Task.isCancelled {
-                    await supportQueue.load()
-                    try? await Task.sleep(for: .seconds(60))
-                }
-            }
-            #endif
             .onDisappear {
                 viewModel.stopPolling()
             }
@@ -1535,8 +1527,6 @@ struct SessionsListView: View {
     private var listSections: some View {
         Group {
             #if os(iOS)
-            supportBand
-
             if !pinnedWorkspaces.isEmpty {
                 Section {
                     ForEach(
@@ -1662,6 +1652,10 @@ struct SessionsListView: View {
                     #endif
                 }
             }
+
+            #if os(iOS)
+            mobileSupportCard
+            #endif
         }
     }
 
@@ -1691,42 +1685,45 @@ struct SessionsListView: View {
     }
 
     #if os(iOS)
-    /// The top of the support queue lives among the sessions it competes with
-    /// for attention. Keep it short so customer work does not bury the list.
-    @ViewBuilder
-    private var supportBand: some View {
-        if !supportQueue.threads.isEmpty {
-            let prioritised = supportQueue.lanes.flatMap(\.threads)
-            let inline = Array(prioritised.prefix(5))
-            Section {
-                if !isCollapsed("support") {
-                    ForEach(inline) { row in
-                        Button {
-                            openTicket = row
-                        } label: {
-                            SupportBandRow(row: row)
-                        }
-                        .buttonStyle(.plain)
+    /// Support stays a destination card, using the same UI as the tools strip
+    /// it came from, but sits after the session and archive sections.
+    private var mobileSupportCard: some View {
+        Section {
+            Button {
+                showSupport = true
+            } label: {
+                ZStack(alignment: .topLeading) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Image(systemName: "lifepreserver")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .frame(width: 22, height: 22)
+                        Spacer(minLength: 8)
+                        Text("Support")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(OS1VisualStyle.text)
+                            .lineLimit(1)
                     }
-                    if supportQueue.threads.count > inline.count {
-                        Button {
-                            showSupport = true
-                        } label: {
-                            Text("All \(supportQueue.threads.count) tickets")
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(OS1VisualStyle.textDim)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 }
-            } header: {
-                groupHeader(
-                    title: "Support",
-                    count: supportQueue.threads.count,
-                    collapseKey: "support"
+                .frame(width: 108, height: 60)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(OS1VisualStyle.raised)
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(OS1VisualStyle.border.opacity(0.65), lineWidth: 0.5)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open the support queue")
         }
+        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
     }
     #endif
 
@@ -1988,36 +1985,6 @@ struct SessionsListView: View {
         Task {
             await viewModel.refresh()
             isRetrying = false
-        }
-    }
-}
-
-/// A Plain ticket shaped like every other sidebar row: one priority dot and
-/// one title. Customer and message detail belong on the ticket screen.
-private struct SupportBandRow: View {
-    let row: SupportThreadSummary
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Circle()
-                .fill(dot)
-                .frame(width: 7, height: 7)
-            Text(row.rowLabel)
-                .font(.body)
-                .foregroundStyle(OS1VisualStyle.text)
-                .lineLimit(1)
-            Spacer(minLength: 6)
-        }
-        .padding(.vertical, 3)
-        .contentShape(Rectangle())
-    }
-
-    private var dot: Color {
-        switch row.lane {
-        case .urgent: OS1VisualStyle.red
-        case .high: OS1VisualStyle.yellow
-        case .normal: OS1VisualStyle.blue
-        case .low: OS1VisualStyle.textFaint
         }
     }
 }
