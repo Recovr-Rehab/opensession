@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   cachedPrDetailsForSession,
   isNoPrError,
+  latestWorkflowChecks,
   prApiErrorMessage,
   reconcilePrDetails,
   type PrDetails,
@@ -34,6 +35,39 @@ describe("prApiErrorMessage", () => {
     expect(prApiErrorMessage("stream error: INTERNAL_ERROR")).toBe(
       "GitHub's pull request API is unavailable right now.",
     );
+  });
+});
+
+describe("latestWorkflowChecks", () => {
+  test("keeps only the newest run of a workflow job", () => {
+    const checks = latestWorkflowChecks([
+      {
+        name: "Deploy",
+        workflowName: "Preview",
+        status: "COMPLETED",
+        conclusion: "FAILURE",
+        startedAt: "2026-08-04T15:50:53Z",
+      },
+      {
+        name: "Deploy",
+        workflowName: "Preview",
+        status: "COMPLETED",
+        conclusion: "SUCCESS",
+        startedAt: "2026-08-10T10:11:27Z",
+      },
+    ]);
+
+    expect(checks).toHaveLength(1);
+    expect(checks[0]?.conclusion).toBe("SUCCESS");
+  });
+
+  test("does not combine commit status contexts", () => {
+    const checks = latestWorkflowChecks([
+      { name: "Vercel", status: "COMPLETED", conclusion: "SUCCESS" },
+      { name: "Vercel", status: "COMPLETED", conclusion: "SUCCESS" },
+    ]);
+
+    expect(checks).toHaveLength(2);
   });
 });
 

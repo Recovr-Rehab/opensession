@@ -31,6 +31,24 @@ export interface PrCheck {
   workflowName?: string;
 }
 
+export function latestWorkflowChecks(checks: PrCheck[]): PrCheck[] {
+  const latest = new Map<string, PrCheck>();
+  const statusContexts: PrCheck[] = [];
+
+  for (const check of checks) {
+    if (!check.workflowName || !check.startedAt) {
+      statusContexts.push(check);
+      continue;
+    }
+
+    const key = `${check.workflowName}\0${check.name}`;
+    const previous = latest.get(key);
+    if (!previous?.startedAt || check.startedAt > previous.startedAt) latest.set(key, check);
+  }
+
+  return [...statusContexts, ...latest.values()];
+}
+
 export interface PrComment {
   author: string;
   body: string;
@@ -1033,15 +1051,17 @@ async function fetchPrDetails(
       reviewDecision: pr.reviewDecision || "",
       author: pr.author?.login || "",
       body: pr.body || "",
-      checks: (pr.statusCheckRollup || []).map((c: any) => ({
-        name: c.name || c.context || "check",
-        status: c.status || (c.state ? "COMPLETED" : ""),
-        conclusion: c.conclusion || c.state || "",
-        url: c.detailsUrl || c.targetUrl || undefined,
-        startedAt: c.startedAt || undefined,
-        completedAt: c.completedAt || undefined,
-        workflowName: c.workflowName || undefined,
-      })),
+      checks: latestWorkflowChecks(
+        (pr.statusCheckRollup || []).map((c: any) => ({
+          name: c.name || c.context || "check",
+          status: c.status || (c.state ? "COMPLETED" : ""),
+          conclusion: c.conclusion || c.state || "",
+          url: c.detailsUrl || c.targetUrl || undefined,
+          startedAt: c.startedAt || undefined,
+          completedAt: c.completedAt || undefined,
+          workflowName: c.workflowName || undefined,
+        })),
+      ),
       comments: (pr.comments || [])
         .filter((c: any) => String(c.body || "").trim())
         .map((c: any) => ({
