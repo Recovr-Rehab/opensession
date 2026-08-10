@@ -42,15 +42,19 @@ export function fakeServer(init?: Partial<Pick<FakeServer, "sessions" | "workspa
 			const url = typeof input === "string" ? input : input.toString();
 			const path = url.replace(/^https?:\/\/[^/]+/, "");
 			server.calls.push(path);
+			// Match on the route, not the query — callers scope their requests
+			// (e.g. /api/sessions?archived=exclude) and `calls` keeps the full
+			// path so assertions can still see what was asked for.
+			const route = path.split("?")[0];
 			const json = (body: unknown) =>
 				new Response(JSON.stringify(body), {
 					status: 200,
 					headers: { "content-type": "application/json" },
 				});
-			if (path === "/api/sessions") return json(server.sessions);
-			if (path === "/api/workspaces") return json({ workspaces: server.workspaces });
-			if (path === "/api/health") return json({ ok: true });
-			if (path.startsWith("/api/auth/status")) return json({ authenticated: true, login: "tester" });
+			if (route === "/api/sessions") return json(server.sessions);
+			if (route === "/api/workspaces") return json({ workspaces: server.workspaces });
+			if (route === "/api/health") return json({ ok: true });
+			if (route === "/api/auth/status") return json({ authenticated: true, login: "tester" });
 			return json({});
 		}) as typeof fetch,
 	};

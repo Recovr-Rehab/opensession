@@ -68,6 +68,7 @@ import {
 	githubMutationCredential,
 } from "./github-credential";
 import { defaultRepo } from "../config";
+import type { UnifiedSession } from "../types";
 
 const SESSIONS_RESPONSE_TTL_MS = 5_000;
 interface SessionsResponseSnapshot {
@@ -77,7 +78,20 @@ interface SessionsResponseSnapshot {
 	expiresAt: number;
 	gzip?: Blob;
 }
-let sessionsResponseSnapshot: SessionsResponseSnapshot | null = null;
+/**
+ * Which slice of the session list a request asked for.
+ *
+ * Archived sessions are ~46% of this instance's payload (2,772 of 6,223 rows,
+ * 3.9 MB of 8.5 MB raw), and a client that never opens one shouldn't carry
+ * them through every poll. Each variant caches its own body, hash and ETag, so
+ * the archived slice settles into a near-permanent 304 while the live slice
+ * keeps churning on `isRunning` / `lastActivity`.
+ */
+type SessionsVariant = "include" | "exclude" | "only" | "only-slim";
+const sessionsResponseSnapshots = new Map<
+	SessionsVariant,
+	SessionsResponseSnapshot
+>();
 
 function sessionsListResponse(
 	req: Request,
@@ -103,6 +117,68 @@ function sessionsListResponse(
 		]);
 	}
 	return new Response(snapshot.gzip, { headers });
+}
+
+/**
+ * Overlay the live, in-process signals that aren't on the cached session
+ * objects: whether a run is blocked on a human question (pendingAsks) and how
+ * many prompts are queued behind it. Drives the sidebar/tab "needs input"
+ * highlight without a second round-trip.
+ *
+ * Shared by the list and by the single-session route, so a session hydrated on
+ * open carries exactly what the list would have handed the client.
+ */
+function enrichSession(s: UnifiedSession) {
+	return {
+		...s,
+		repo: s.repo || defaultRepo().id,
+		waitingForInput: pendingAsks.has(s.id),
+		queuedCount: promptQueues.get(s.id)?.length || 0,
+		// Worktree still being created by this session's create run — the
+		// viewer shows "Waiting for workspace" and queues sends meanwhile.
+		...(preparingWorkspaces.has(s.id) ? { workspacePreparing: true } : {}),
+		// Terminal failure of the last run (credits/limits/API) — persisted
+		// on opensession session files, in-memory for slack/linear sessions.
+		lastRunError: runErrors.get(s.id) || s.lastRunError,
+	};
+}
+
+/**
+ * An archived session as the Archived surfaces actually render it: the row's
+ * own text, who closed it, when, and enough identity to group and open it.
+ *
+ * Everything else on a session object is weight nobody reads there — a full
+ * row averages ~1,400 bytes on this instance, of which `walkthrough` alone is
+ * ~300 and `prs`/`usage` another ~190. Opening one of these rows hydrates the
+ * real session (GET /api/sessions/:id), so nothing downstream has to make do
+ * with the subset.
+ */
+function archivedIndexRow(s: UnifiedSession) {
+	return {
+		id: s.id,
+		...(s.aliasIds?.length ? { aliasIds: s.aliasIds } : {}),
+		title: s.title,
+		source: s.source,
+		lastActivity: s.lastActivity,
+		archived: true as const,
+		...(s.archivedReason ? { archivedReason: s.archivedReason } : {}),
+		...(s.startedBy ? { startedBy: s.startedBy } : {}),
+		...(s.mode ? { mode: s.mode } : {}),
+		...(s.automation ? { automation: s.automation } : {}),
+		...(s.repo ? { repo: s.repo } : {}),
+		...(s.workspaceId ? { workspaceId: s.workspaceId } : {}),
+		// The tab strip's history menu groups by workspace, falling back to a
+		// shared isolated worktree for sessions that predate workspaces.
+		...(s.worktreeDir ? { worktreeDir: s.worktreeDir } : {}),
+		// sessionRepo() falls back to the first external ref's kind, so a
+		// repo-less feed session files under its feed rather than the default
+		// repo — keep the shape, drop the ids nothing here reads.
+		...(s.externalRefs?.length
+			? { externalRefs: [{ kind: s.externalRefs[0].kind }] }
+			: {}),
+		// Desk sessions are hidden from every list; clients filter on it.
+		...(s.desk ? { desk: true as const } : {}),
+	};
 }
 
 /**
@@ -217,42 +293,50 @@ export async function handleSessionsRoutes(
 		}
 	}
 
-	// List sessions
+	// List sessions.
+	//
+	// `?archived=` slices the payload — `exclude` for the cold-start list,
+	// `only` (with `slim=1` for the narrow index) for the Archived surfaces.
+	// The default stays the whole list on purpose: os1-ios reads archived rows
+	// straight off it (SessionsListViewModel splits the one response into
+	// active + archived), so moving the default would empty the Archived
+	// screen of every TestFlight build already in the wild. Clients opt in as
+	// they learn to fetch the index and hydrate what they open.
 	if (path === "/api/sessions" && req.method === "GET") {
-		if (
-			sessionsResponseSnapshot &&
-			sessionsResponseSnapshot.expiresAt > Date.now()
-		) {
-			return sessionsListResponse(req, sessionsResponseSnapshot);
-		}
-		// Enrich with live, in-process signals that aren't on the cached session
-		// objects: whether a run is blocked on a human question (pendingAsks) and
-		// how many prompts are queued behind it. Drives the sidebar/tab "needs
-		// input" highlight without a second round-trip.
-		const enriched = getCachedSessions()
-			.map((s) => ({
-				...s,
-				repo: s.repo || defaultRepo().id,
-				waitingForInput: pendingAsks.has(s.id),
-				queuedCount: promptQueues.get(s.id)?.length || 0,
-				// Worktree still being created by this session's create run — the
-				// viewer shows "Waiting for workspace" and queues sends meanwhile.
-				...(preparingWorkspaces.has(s.id)
-					? { workspacePreparing: true }
-					: {}),
-				// Terminal failure of the last run (credits/limits/API) — persisted
-				// on opensession session files, in-memory for slack/linear sessions.
-				lastRunError: runErrors.get(s.id) || s.lastRunError,
-			}));
+		const archivedParam = url.searchParams.get("archived");
+		const variant: SessionsVariant =
+			archivedParam === "exclude"
+				? "exclude"
+				: archivedParam !== "only"
+					? "include"
+					: url.searchParams.get("slim") === "1"
+						? "only-slim"
+						: "only";
+		const cached = sessionsResponseSnapshots.get(variant);
+		if (cached && cached.expiresAt > Date.now())
+			return sessionsListResponse(req, cached);
+		const enriched = getCachedSessions().map(enrichSession);
+		// Slice AFTER the cloud merge: on a local profile the upstream's
+		// archived sessions belong on the Archived page too, and filtering
+		// first would drop them without a trace.
 		const { sessions, cloudUnreachable } = await mergedCloudSessions(enriched);
-		const text = JSON.stringify(sessions);
-		sessionsResponseSnapshot = {
+		const sliced =
+			variant === "include"
+				? sessions
+				: variant === "exclude"
+					? sessions.filter((s) => !s.archived)
+					: sessions.filter((s) => s.archived);
+		const text = JSON.stringify(
+			variant === "only-slim" ? sliced.map(archivedIndexRow) : sliced,
+		);
+		const snapshot: SessionsResponseSnapshot = {
 			text,
 			hash: Bun.hash(text).toString(16),
 			cloudUnreachable,
 			expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
 		};
-		return sessionsListResponse(req, sessionsResponseSnapshot);
+		sessionsResponseSnapshots.set(variant, snapshot);
+		return sessionsListResponse(req, snapshot);
 	}
 
 	// Deliver a follow-up prompt to an existing session. REST shape for the

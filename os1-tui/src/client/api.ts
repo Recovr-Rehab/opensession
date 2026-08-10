@@ -76,8 +76,14 @@ export class Api {
 		return (await response.json()) as T;
 	}
 
+	/**
+	 * The TUI archives sessions but never lists or reopens one, so it asks the
+	 * server to leave them out — they are ~46% of the payload on a busy
+	 * instance. The client-side `!s.archived` filters stay: an older server
+	 * ignores the parameter and answers with the whole list.
+	 */
 	sessions(): Promise<Session[]> {
-		return this.request<Session[]>("/api/sessions");
+		return this.request<Session[]>("/api/sessions?archived=exclude");
 	}
 
 	async workspaces(): Promise<{ id: string; name: string }[]> {

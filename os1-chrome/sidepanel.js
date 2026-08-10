@@ -472,7 +472,10 @@ async function loadTranscript(initial = false) {
     }
     // Session meta (state/queue) every other tick — it's a full list fetch.
     if (detail.metaTick++ % 2 === 0) {
-      const sessions = await api("/sessions");
+    // The side panel only ever shows live sessions, so it asks the server to
+    // leave archived ones out — ~46% of the payload on a busy instance. The
+    // filter below stays for older servers, which ignore the parameter.
+    const sessions = await api("/sessions?archived=exclude");
       const s = sessions.find((x) => x.id === detail.id);
       if (s) {
         $("detail-title").textContent = s.title || detail.title || s.id;

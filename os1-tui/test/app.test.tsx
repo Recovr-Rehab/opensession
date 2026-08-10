@@ -452,7 +452,7 @@ describe("degraded states", () => {
 		const server = fakeServer();
 		const unauthorized = (async (input: RequestInfo | URL) => {
 			const path = input.toString().replace(/^https?:\/\/[^/]+/, "");
-			if (path === "/api/sessions") {
+			if (path.split("?")[0] === "/api/sessions") {
 				return new Response(JSON.stringify({ error: "Sign in required" }), { status: 401 });
 			}
 			return server.fetch(input);
