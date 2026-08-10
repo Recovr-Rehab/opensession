@@ -5,7 +5,7 @@
  */
 
 import type { RouteContext } from "./context";
-import { buildAnalytics, buildHomeStats } from "../analytics";
+import { buildHomeStats, getAnalytics } from "../analytics";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,7 +27,8 @@ export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response
 	if (utcDays(from, to) > 366) {
 		return Response.json({ error: "range too large (max 366 days)" }, { status: 400 });
 	}
-	return Response.json(await buildAnalytics(from, to > today ? today : to));
+	// Served through the stale-while-revalidate summary cache — see analytics.ts.
+	return Response.json(await getAnalytics(from, to > today ? today : to));
 }
 
 function utcDays(from: string, to: string): number {

@@ -12,6 +12,7 @@ import {
 import { enableOpencodeServerDetach } from "./src/server/opencode-detach";
 import { adoptDetachedOpencodeServers } from "./src/server/opencode-runner";
 import { startAccountHealthMonitor } from "./src/server/account-health";
+import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startTodoReminderTicker } from "./src/server/todos";
@@ -609,6 +610,10 @@ if (!g.__opensessionBooted) {
 
 	// Reclaim rust target/ build caches from idle worktrees we keep (disk-gc.ts)
 	startDiskGc();
+
+	// Keep the Analytics presets' summaries warm so the view opens instantly
+	// (analytics.ts — gh fetches + composed summaries are disk-cached too)
+	startAnalyticsPrewarm();
 
 	// Remove worktrees whose work is merged / PR closed, sweep removal husks
 	// (worktree-reaper.ts — in-process port of the cleanup-closed-worktrees cron)

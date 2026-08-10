@@ -14,7 +14,7 @@
  *   ask-mode and don't own their branch, so reviewed-only PRs don't count).
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { $ } from "bun";
 import { stateDir , isNativeSessionId} from "./paths";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
@@ -263,6 +263,47 @@ function cachedRollup(date: string): DayRollup {
 	return rollup;
 }
 
+// ── Generic timestamped disk cache (gh fetches + composed summaries) ──
+//
+// The gh caches below are the expensive part of buildAnalytics (network,
+// paginated GraphQL, occasional 504s) and used to be memory-only, so every
+// deploy restart threw them away. Entries carry their own `at` timestamp;
+// callers decide freshness. Keys roll with the date range, so stale files
+// are pruned by age (day rollups above are deliberately not touched — past
+// days never recompute).
+
+let lastCachePrune = 0;
+
+function writeDiskCache(name: string, data: unknown): void {
+	try {
+		mkdirSync(CACHE_DIR, { recursive: true });
+		writeFileSync(`${CACHE_DIR}/${name}.json`, JSON.stringify({ at: Date.now(), data }));
+	} catch (e) {
+		console.error("[analytics] disk cache write failed:", e);
+	}
+	if (Date.now() - lastCachePrune < 86_400_000) return;
+	lastCachePrune = Date.now();
+	try {
+		for (const f of readdirSync(CACHE_DIR)) {
+			if (!f.startsWith("gh-") && !f.startsWith("summary-")) continue;
+			const p = `${CACHE_DIR}/${f}`;
+			if (Date.now() - statSync(p).mtimeMs > 7 * 86_400_000) unlinkSync(p);
+		}
+	} catch {}
+}
+
+function readDiskCache<T>(name: string): { at: number; data: T } | null {
+	try {
+		const p = `${CACHE_DIR}/${name}.json`;
+		if (!existsSync(p)) return null;
+		const parsed = JSON.parse(readFileSync(p, "utf-8"));
+		if (typeof parsed?.at !== "number" || parsed.data === undefined) return null;
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
 // ── Session store scan ──
 
 interface SessionMeta {
@@ -340,12 +381,18 @@ const prCache = new Map<string, { at: number; prs: AnalyticsPr[] }>();
 
 async function fetchRepoPrs(repoId: string, ghRepo: string, fromDate: string): Promise<AnalyticsPr[]> {
 	const key = `${ghRepo}:${fromDate}`;
-	const cached = prCache.get(key);
+	const diskName = `gh-prs-${repoId}-${fromDate}`;
+	let cached = prCache.get(key);
+	if (!cached) {
+		const disk = readDiskCache<AnalyticsPr[]>(diskName);
+		if (disk) prCache.set(key, (cached = { at: disk.at, prs: disk.data }));
+	}
 	if (cached && Date.now() - cached.at < PR_CACHE_TTL_MS) return cached.prs;
 	if (ghRateLimited() && cached) return cached.prs; // serve stale during a backoff window
 
 	const fields = "number,title,url,state,createdAt,mergedAt,headRefName";
 	const seen = new Map<number, AnalyticsPr>();
+	let failed = false;
 	// Two searches: PRs created in range (any state) + PRs merged in range
 	// (which may have been created before it). Capped at 1000 (the GitHub
 	// search ceiling) — tella-fusion alone opens 400+ PRs in a 30-day window.
@@ -368,12 +415,17 @@ async function fetchRepoPrs(repoId: string, ghRepo: string, fromDate: string): P
 				});
 			}
 		} catch (e) {
+			failed = true;
 			console.error(`[analytics] gh pr list failed for ${ghRepo}:`, e);
 			if (isGhRateLimitMsg(String((e as any)?.stderr || e))) noteGhRateLimited("analytics");
 		}
 	}
+	// A failed search means `seen` is partial — serve it (or the stale cache)
+	// without caching, so the next request retries instead of pinning a hole.
+	if (failed) return cached?.prs ?? [...seen.values()];
 	const prs = [...seen.values()];
 	prCache.set(key, { at: Date.now(), prs });
+	writeDiskCache(diskName, prs);
 	return prs;
 }
 
@@ -440,7 +492,12 @@ const FACTORY_QUERY = `query($q: String!, $cursor: String) {
 
 async function fetchRepoFactoryPrs(repoId: string, ghRepo: string, fromDate: string): Promise<FactoryPr[]> {
 	const key = `${ghRepo}:${fromDate}`;
-	const cached = factoryCache.get(key);
+	const diskName = `gh-factory-${repoId}-${fromDate}`;
+	let cached = factoryCache.get(key);
+	if (!cached) {
+		const disk = readDiskCache<FactoryPr[]>(diskName);
+		if (disk) factoryCache.set(key, (cached = { at: disk.at, prs: disk.data }));
+	}
 	if (cached && Date.now() - cached.at < FACTORY_CACHE_TTL_MS) return cached.prs;
 	if (ghRateLimited() && cached) return cached.prs;
 
@@ -488,6 +545,7 @@ async function fetchRepoFactoryPrs(repoId: string, ghRepo: string, fromDate: str
 		return cached?.prs ?? [];
 	}
 	factoryCache.set(key, { at: Date.now(), prs });
+	writeDiskCache(diskName, prs);
 	return prs;
 }
 
@@ -1052,6 +1110,86 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		factory,
 		reviewQuality,
 	};
+}
+
+// ── Composed-summary cache (stale-while-revalidate) ──
+//
+// buildAnalytics is gh-bound: a cold 30d build takes tens of seconds when the
+// paginated GraphQL queries run (or 504). The route therefore serves through
+// this cache: a fresh summary returns directly; a stale one returns
+// immediately while a single background rebuild refreshes it; concurrent
+// misses share one build. Summaries also persist to disk so the first request
+// after a restart serves the last known numbers instead of blocking.
+
+const SUMMARY_FRESH_MS = 5 * 60 * 1000;
+/** Older than this and we'd rather make the user wait than show it. */
+const SUMMARY_STALE_SERVE_MS = 24 * 60 * 60 * 1000;
+const summaryCache = new Map<string, { at: number; summary: AnalyticsSummary }>();
+const summaryInflight = new Map<string, Promise<AnalyticsSummary>>();
+
+async function buildAndStore(key: string, from: string, to: string): Promise<AnalyticsSummary> {
+	const summary = await buildAnalytics(from, to);
+	summaryCache.set(key, { at: Date.now(), summary });
+	writeDiskCache(`summary-${from}-${to}`, summary);
+	// Bound the map under arbitrary custom ranges (entries are ~100KB).
+	if (summaryCache.size > 24) {
+		const oldest = [...summaryCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+		if (oldest) summaryCache.delete(oldest[0]);
+	}
+	return summary;
+}
+
+export async function getAnalytics(from: string, to: string): Promise<AnalyticsSummary> {
+	const key = `${from}:${to}`;
+	let cached = summaryCache.get(key);
+	if (!cached) {
+		const disk = readDiskCache<AnalyticsSummary>(`summary-${from}-${to}`);
+		if (disk) summaryCache.set(key, (cached = { at: disk.at, summary: disk.data }));
+	}
+	const age = cached ? Date.now() - cached.at : Infinity;
+	if (cached && age < SUMMARY_FRESH_MS) return cached.summary;
+	let inflight = summaryInflight.get(key);
+	if (!inflight) {
+		inflight = buildAndStore(key, from, to).finally(() => summaryInflight.delete(key));
+		summaryInflight.set(key, inflight);
+	}
+	if (cached && age < SUMMARY_STALE_SERVE_MS) {
+		inflight.catch((e) => console.error("[analytics] background summary rebuild failed:", e));
+		return cached.summary;
+	}
+	return inflight;
+}
+
+// ── Preset prewarm ──
+//
+// The date-range presets (7/14/30/90d) roll their `from` at UTC midnight, so
+// without this the first Analytics visitor of the day always ate a cold
+// build. Refresh them sequentially on a ticker; actual GitHub traffic stays
+// bounded by the gh caches' own TTLs (10/30 min), so most ticks are cheap
+// rollup+compose passes.
+
+const PREWARM_INTERVAL_MS = 5 * 60 * 1000;
+let prewarmTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Start the preset prewarm. Call once from the __opensessionBooted block. */
+export function startAnalyticsPrewarm(): void {
+	if (prewarmTimer) return;
+	if (process.env.OPENSESSION_ANALYTICS_PREWARM === "0") {
+		console.log("[analytics] prewarm disabled (OPENSESSION_ANALYTICS_PREWARM=0)");
+		return;
+	}
+	const run = async () => {
+		for (const days of [7, 14, 30, 90]) {
+			const to = new Date().toISOString().slice(0, 10);
+			const from = new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+			// Sequential on purpose: one gh-heavy build at a time. getAnalytics
+			// no-ops when the summary is still fresh.
+			await getAnalytics(from, to).catch((e) => console.error(`[analytics] prewarm ${days}d failed:`, e));
+		}
+	};
+	setTimeout(() => void run(), 20_000);
+	prewarmTimer = setInterval(() => void run(), PREWARM_INTERVAL_MS);
+	console.log(`[analytics] preset prewarm started (every ${PREWARM_INTERVAL_MS / 60_000}m)`);
 }
 
 // ── Home overview strip ──
