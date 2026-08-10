@@ -12,6 +12,9 @@ import { UserAvatar } from "./UserAvatar";
  * in both it opens the same thing: the app's person lens (`TeamLensMenu`), so
  * you can pick up someone else's sidebar from wherever you noticed them.
  *
+ * Your own face isn't in it — the pile answers "who else is around", and the
+ * menu behind it is where you appear, as the lens you switch back to.
+ *
  * The pile is deliberately as much as we say about anyone: a face is dimmed
  * when the person has OS¹ closed, carries a hollow green dot when they're in
  * the app, and a filled one while a session of theirs has a turn in flight.
@@ -122,8 +125,8 @@ export function useTeamPresence({
 	});
 
 	// Working first, then online, then whoever moved most recently. You sort
-	// last within your own bucket so a teammate never loses a slot in a capped
-	// pile to your own face.
+	// last within your own bucket, so any pile that does render your face (a
+	// team of one) keeps it out of the team's way.
 	const rank = (m: TeamMember) => (m.working ? 0 : m.online ? 1 : 2);
 	return members.sort((a, b) => {
 		if (rank(a) !== rank(b)) return rank(a) - rank(b);
@@ -330,6 +333,12 @@ export function TeamLensMenu({
 	// order. The pile behind the trigger keeps its own order, where whoever is
 	// working leads.
 	const rows = [...members].sort((a, b) => Number(b.isYou) - Number(a.isYou));
+	// The pile is everyone else. Your own presence is the one thing you never
+	// need reporting back to you, and the slot it takes is a teammate the cap
+	// would otherwise have shown. You stay in the menu, named "(you)" — except
+	// on a team of one, where dropping the only face would leave the compact
+	// trigger with nothing to be.
+	const faces = members.some((m) => !m.isYou) ? members.filter((m) => !m.isYou) : members;
 	return (
 		<Menu.Root>
 			<Menu.Trigger
@@ -343,7 +352,7 @@ export function TeamLensMenu({
 				aria-label={`Whose work this shows: ${label}`}
 			>
 				<TeamFacepile
-					members={members}
+					members={faces}
 					size={size}
 					max={max}
 					ring={ring}
@@ -352,7 +361,7 @@ export function TeamLensMenu({
 					// face reads as a black box rather than a selection — and the
 					// header right below it already names the lens in words.
 					selectedKey={
-						!compact && members.some((m) => m.key === value) ? value : null
+						!compact && faces.some((m) => m.key === value) ? value : null
 					}
 				/>
 				{!compact && (
