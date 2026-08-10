@@ -3,7 +3,7 @@ import type { SessionWalkthrough } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { relativeTime } from "../lib/api";
 import { cn } from "../ui/cn";
-import { IconChevronDown, IconPlay, IconPlayOutline } from "./icons";
+import { IconChevronDown, IconPlay, IconPlayRectangle } from "./icons";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { openLightbox, type LightboxItem } from "./MediaLightbox";
 
@@ -92,15 +92,10 @@ export function WalkthroughCard({
 	return (
 		<div
 			className={cn(
-				// p-4 deliberately exceeds the mt-3 rhythm between the blocks
-				// inside, so the card edge reads as an edge. Folded, the card stays
-				// transparent in the transcript; open, it steps onto the quiet raised
-				// surface so the summary and evidence cards have a shared frame.
-				"rounded-xl p-4 transition-[background-color,border-color]",
-				session && "border",
-				session && expanded
-					? "border-line bg-raised"
-					: "border-line/60 bg-transparent",
+				// Keep the walkthrough in the transcript's own surface. The media has
+				// an edge already; another card around the header, summary, and media
+				// turned the open state into boxes nested inside boxes.
+				"bg-transparent p-4",
 				// In the session the card is a transcript block like any other, so it
 				// takes the same centered reading column the turns and footers use
 				// (mx-auto + --session-col) instead of spanning the whole pane. It
@@ -115,18 +110,16 @@ export function WalkthroughCard({
 					type="button"
 					aria-expanded={expanded}
 					onClick={() => setExpanded(!expanded)}
-					// Keep the fold's 14px title and 20px chevron, but give the
-					// walkthrough's play mark a small surface of its own. The 40px row
-					// remains a comfortable pointer and touch target in either state.
+					// Keep the fold's 14px title and 20px chevron. The play-in-screen
+					// glyph mirrors the native app without adding another icon tile.
+					// The 40px row remains a comfortable target in either state.
 					className="-m-1 flex min-h-10 w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 				>
 					{/* The walkthrough's own icon leads the line, so the row is
 					    named before it is operated; the chevron trails at the far
 					    edge, where it reads as this card's disclosure rather than
 					    as another indent level in the transcript. */}
-					<span className="grid size-8 flex-shrink-0 place-items-center rounded-md bg-panel text-dim shadow-[inset_0_0_0_1px_var(--border)]">
-						<IconPlayOutline size={20} />
-					</span>
+					<IconPlayRectangle size={20} className="flex-shrink-0 text-faint" />
 					<span className="flex min-w-0 items-baseline gap-1.5">
 						<span className="flex-shrink-0 font-semibold text-fg">Walkthrough</span>
 						{walkthrough.publishedBy && (
@@ -153,7 +146,7 @@ export function WalkthroughCard({
 				</button>
 			) : (
 				<div className="mb-2 flex items-center gap-1.5">
-					<IconPlayOutline size={13} className="text-faint" />
+					<IconPlayRectangle size={20} className="text-faint" />
 					<span className="text-xs font-semibold text-dim">Walkthrough</span>
 				</div>
 			)}

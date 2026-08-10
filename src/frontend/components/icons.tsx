@@ -255,6 +255,16 @@ export function IconPlayOutline(p: IconProps) {
   );
 }
 
+/** Play inside a screen outline, matching Apple's `play.rectangle`. */
+export function IconPlayRectangle(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect {...stroke} x="3.75" y="6" width="16.5" height="12" rx="2.25" />
+      <path {...stroke} d="M10 9L15 12L10 15V9Z" />
+    </Svg>
+  );
+}
+
 // Camera — snapshot the preview. Redrawn on the 24-grid so it carries the same
 // weight as its split-button siblings (the old hand-drawn 16-viewBox one read
 // denser and off-scale).
