@@ -14,8 +14,9 @@ export { repoColor } from "../lib/repo-colors";
 // is cacheable, so without a new URL an installed PWA keeps painting the old
 // art until its copy expires. 3 dropped the owner/org-avatar fallback, so the
 // repos that were wearing their org's mark had to stop asking for it; 4 trims
-// the empty margin around every icon, so the copies drawn small have to go.
-const ICON_VERSION = 4;
+// the empty margin around every icon, so the copies drawn small have to go; 5
+// pads by ink rather than by bounding box, which grows the round ones.
+const ICON_VERSION = 5;
 
 // A repo's icon tile (sidebar Repo dropdown, session-header breadcrumb, repo
 // menus): the server's /repo-icon/<id>.png when the repo was given an icon of
@@ -81,11 +82,12 @@ export function RepoTile({
 				{/* The img fills the tile and inherits its rounding; the tile keeps
 				    no colored backing, so icons with transparency sit on the
 				    surface itself. No inset on purpose: the route already crops
-				    every icon to its artwork and re-pads it to a fixed margin
-				    (png-trim.ts), landing them all at ~93% fill — the breathing
-				    room is baked into the image, and shrinking again on top of it
-				    took icons to ~71% of the tile while a lettered tile fills
-				    100% of its.
+				    every icon to its artwork and re-pads it (png-trim.ts) — a
+				    square one to ~93% fill, a rounder one to more, so that what
+				    lands in the tile is the same amount of ink either way. The
+				    breathing room is baked into the image, and shrinking again on
+				    top of it took icons to ~71% of the tile while a lettered tile
+				    fills 100% of its.
 				    `border-radius: inherit` is spelled as the property rather
 				    than `rounded-[inherit]`: any `rounded-*` class also picks up
 				    base.css's squircle grant, and this img has always worn a

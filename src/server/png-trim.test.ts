@@ -81,6 +81,54 @@ describe("trimIconMargin", () => {
 		expect(trimIconMargin(trimIconMargin(padded)!)).toBeNull();
 	});
 
+	/** A disc of `r` centred in a `size` canvas — the roundest icon there is. */
+	const disc = (size: number, r: number) =>
+		png(size, (x, y) =>
+			(x + 0.5 - size / 2) ** 2 + (y + 0.5 - size / 2) ** 2 <= r * r
+				? [10, 20, 30, 255]
+				: [0, 0, 0, 0],
+		);
+
+	test("gives round art the margin back, so it carries a square's ink", () => {
+		// Same 60px box as `padded`, but a circle fills ~79% of it. It ends up
+		// bigger in the tile than the square does (64px of canvas), which is
+		// what makes the two read the same weight.
+		const out = trimIconMargin(disc(100, 30));
+		expect(out).not.toBeNull();
+		const { width, height } = sizeOf(out!);
+		expect(width).toBe(height);
+		expect(width).toBeLessThan(64);
+		expect(width).toBeLessThanOrEqual(62); // i.e. no margin left to give
+
+		// A gently rounded square sits between the two: some margin, less than
+		// a flat square's.
+		const r = 18; // corner radius, as heavy as the OpenSession mark's
+		const rounded = png(100, (x, y) => {
+			const ax = Math.abs(x + 0.5 - 50);
+			const ay = Math.abs(y + 0.5 - 50);
+			const dx = Math.max(0, ax - (30 - r));
+			const dy = Math.max(0, ay - (30 - r));
+			const inside = ax <= 30 && ay <= 30 && dx * dx + dy * dy <= r * r;
+			return inside ? [10, 20, 30, 255] : [0, 0, 0, 0];
+		});
+		const roundedOut = trimIconMargin(rounded);
+		expect(roundedOut).not.toBeNull();
+		expect(sizeOf(roundedOut!).width).toBeLessThan(64);
+		expect(sizeOf(roundedOut!).width).toBeGreaterThan(sizeOf(out!).width);
+	});
+
+	test("never crops a square icon to match a rounder one", () => {
+		// The compensation only ever removes margin. Square art that already
+		// fills its canvas keeps every pixel...
+		const full = png(40, () => [10, 20, 30, 255]);
+		expect(trimIconMargin(full)).toBeNull();
+		// ...and padded square art lands at the plain margin, not tighter.
+		expect(sizeOf(trimIconMargin(padded)!).width).toBe(64);
+		// Round art is idempotent too: once it has no margin left, a re-serve
+		// finds nothing to do rather than eating into the artwork.
+		expect(trimIconMargin(trimIconMargin(disc(100, 30))!)).toBeNull();
+	});
+
 	test("keeps the artwork centred when it sits off to one side", () => {
 		const corner = png(100, (x, y) =>
 			x < 40 && y < 40 ? [255, 0, 0, 255] : [0, 0, 0, 0],
