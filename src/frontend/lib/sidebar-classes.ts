@@ -284,19 +284,6 @@ export const SIDEBAR_STICKY_LANE_NESTED =
 	"desktop:top-[74px] desktop:z-[14]";
 
 /**
- * The surface a header paints once it is actually pinned. A full-width backing
- * pseudo-element in the sidebar's OWN material layered over the opaque sidebar
- * base, so a stuck header matches the sidebar colour exactly instead of
- * stacking a second darker layer, and spans edge to edge regardless of how deep
- * the header is inset (the ±400px overhang is clipped by the sidebar's
- * overflow-x). The bottom overhang covers the host's translucent bottom border,
- * which text passing underneath would otherwise show through.
- *
- * Opaque on purpose — this used to backdrop-blur the rows sliding beneath, but
- * toggling a blur from the scroll listener re-rasterized the whole sidebar
- * mid-scroll (visible flashing on loaded machines).
- */
-/**
  * ── Band headings ───────────────────────────────────────────────────────────
  * The top-level bands (Tools / Automations / People) — small quiet labels that
  * read like section kickers but behave like Notion's: the whole heading is a
@@ -343,8 +330,20 @@ export const SIDEBAR_BAND_TOGGLE_INSET =
  */
 export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
 
+/**
+ * The scroll-under wash a header paints once it is actually pinned. It starts
+ * in the sidebar's exact material, then dissolves over the rows passing behind
+ * it instead of ending as a hard full-width bar. The ±400px overhang keeps the
+ * wash edge-to-edge regardless of the heading's own inset; the sidebar clips
+ * the excess horizontally.
+ *
+ * This deliberately avoids backdrop-filter. Toggling blur from the scroll
+ * listener re-rasterized the whole sidebar mid-scroll on loaded machines. Two
+ * matched gradients preserve the material-over-base composition at the label,
+ * then fade both layers together through the final 16px.
+ */
 export const SIDEBAR_STUCK_BACKING =
-	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-0 desktop:[&.is-stuck::before]:bottom-[-1px] desktop:[&.is-stuck::before]:left-[-400px] desktop:[&.is-stuck::before]:right-[-400px] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]";
+	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-0 desktop:[&.is-stuck::before]:bottom-[-16px] desktop:[&.is-stuck::before]:left-[-400px] desktop:[&.is-stuck::before]:right-[-400px] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(to_bottom,var(--sidebar-material)_0%,var(--sidebar-material)_70%,transparent_100%),linear-gradient(to_bottom,var(--bg-raised)_0%,var(--bg-raised)_70%,transparent_100%)]";
 
 /**
  * The live-state dot a row, group header or hover card carries, minus the
