@@ -331,19 +331,17 @@ export const SIDEBAR_BAND_TOGGLE_INSET =
 export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
 
 /**
- * The scroll-under wash a header paints once it is actually pinned. It starts
- * in the sidebar's exact material, then dissolves over the rows passing behind
- * it instead of ending as a hard full-width bar. The ±400px overhang keeps the
- * wash edge-to-edge regardless of the heading's own inset; the sidebar clips
- * the excess horizontally.
+ * The full-width surface a header paints once it is actually pinned. It uses
+ * the sidebar's exact material and extends one pixel below the host so rows
+ * cannot show through its translucent bottom border. The ±400px overhang keeps
+ * the backing edge-to-edge regardless of the heading's own inset; the sidebar
+ * clips the excess horizontally.
  *
  * This deliberately avoids backdrop-filter. Toggling blur from the scroll
- * listener re-rasterized the whole sidebar mid-scroll on loaded machines. Two
- * matched gradients preserve the material-over-base composition at the label,
- * then fade both layers together through the final 16px.
+ * listener re-rasterized the whole sidebar mid-scroll on loaded machines.
  */
 export const SIDEBAR_STUCK_BACKING =
-	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-0 desktop:[&.is-stuck::before]:bottom-[-16px] desktop:[&.is-stuck::before]:left-[-400px] desktop:[&.is-stuck::before]:right-[-400px] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(to_bottom,var(--sidebar-material)_0%,var(--sidebar-material)_70%,transparent_100%),linear-gradient(to_bottom,var(--bg-raised)_0%,var(--bg-raised)_70%,transparent_100%)]";
+	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-0 desktop:[&.is-stuck::before]:bottom-[-1px] desktop:[&.is-stuck::before]:left-[-400px] desktop:[&.is-stuck::before]:right-[-400px] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]";
 
 /**
  * The live-state dot a row, group header or hover card carries, minus the
