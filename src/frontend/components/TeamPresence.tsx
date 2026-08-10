@@ -7,10 +7,10 @@ import { IconCheck, IconChevronDown } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 
 /**
- * The team, as a face row. One derivation (`useTeamPresence`) feeds two
- * surfaces: the pile in the Home header, which opens the app's person lens
- * (`TeamLensMenu`), and the decoration on the sidebar's Home entry, which is
- * just "who's around" on the way to that page.
+ * The team, as a face row. One derivation (`useTeamPresence`) feeds both
+ * places the pile appears — the Home header and the sidebar's Home entry — and
+ * in both it opens the same thing: the app's person lens (`TeamLensMenu`), so
+ * you can pick up someone else's sidebar from wherever you noticed them.
  *
  * The pile is deliberately as much as we say about anyone: a face is dimmed
  * when the person has OS¹ closed, carries a hollow green dot when they're in
@@ -305,6 +305,9 @@ export function TeamLensMenu({
 	size,
 	max,
 	ring,
+	compact,
+	side,
+	align = "end",
 	className,
 }: {
 	members: TeamMember[];
@@ -316,6 +319,11 @@ export function TeamLensMenu({
 	size?: number;
 	max?: number;
 	ring?: string;
+	/** Faces only: for the sidebar's Home row, where the words don't fit. The
+	 *  accessible name still carries the lens. */
+	compact?: boolean;
+	side?: React.ComponentProps<typeof Menu.Popup>["side"];
+	align?: React.ComponentProps<typeof Menu.Popup>["align"];
 	className?: string;
 }) {
 	// You first — it's the lens you return to — then the team in presence
@@ -326,7 +334,10 @@ export function TeamLensMenu({
 		<Menu.Root>
 			<Menu.Trigger
 				className={cn(
-					"flex min-w-0 items-center gap-2.5 rounded-control border-0 bg-transparent p-1 text-control-label text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+					"flex min-w-0 items-center border-0 bg-transparent text-control-label text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+					compact
+						? "gap-0 rounded-full p-0.5"
+						: "gap-2.5 rounded-control p-1",
 					className,
 				)}
 				aria-label={`Whose work this shows: ${label}`}
@@ -337,12 +348,21 @@ export function TeamLensMenu({
 					max={max}
 					ring={ring}
 					status
-					selectedKey={members.some((m) => m.key === value) ? value : null}
+					// Compact sits in a 20px sidebar row, where an accent ring on one
+					// face reads as a black box rather than a selection — and the
+					// header right below it already names the lens in words.
+					selectedKey={
+						!compact && members.some((m) => m.key === value) ? value : null
+					}
 				/>
-				<span className="truncate max-[860px]:hidden">{label}</span>
-				<IconChevronDown className="shrink-0" size={17} />
+				{!compact && (
+					<>
+						<span className="truncate max-[860px]:hidden">{label}</span>
+						<IconChevronDown className="shrink-0" size={17} />
+					</>
+				)}
 			</Menu.Trigger>
-			<Menu.Popup align="end" className="min-w-[210px]">
+			<Menu.Popup side={side} align={align} className="min-w-[210px]">
 				<Menu.RadioGroup value={value} onValueChange={(next) => onPick(String(next))}>
 					{rows.map((m) => (
 						<Menu.RadioItem

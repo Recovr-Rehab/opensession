@@ -179,6 +179,24 @@ export function personFilterFor(key: string, currentUser: string): string {
 	return key === currentUser.trim().toLowerCase() ? "me" : key;
 }
 
+// The person lens is picked from two places — Home's header and the sidebar's
+// Home row — so the mapping between "what the menu is showing" and "what the
+// filter stores" lives here rather than once per surface.
+
+/** The lens as the menu spells it: a person key, or "everyone" / "unassigned". */
+export function personLensValue(person: string, currentUser: string): string {
+	if (person === "unassigned") return "unassigned";
+	const scope = personScope(person, currentUser);
+	return scope === "all" ? "everyone" : scope;
+}
+
+/** What the menu's pick stores on the filter. */
+export function personLensFilter(picked: string, currentUser: string): string {
+	return picked === "all" || picked === "everyone"
+		? "everyone"
+		: personFilterFor(picked, currentUser);
+}
+
 export function readFilter(): FilterState {
 	try {
 		const v = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");

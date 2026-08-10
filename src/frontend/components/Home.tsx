@@ -9,7 +9,8 @@ import { UserAvatar } from "./UserAvatar";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
 import {
-  personFilterFor,
+  personLensFilter,
+  personLensValue,
   personScope,
   setFilter,
   useSidebarFilter,
@@ -404,15 +405,8 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
   // filter for the app, not one per surface.
   const filter = useSidebarFilter();
   const person = personScope(filter.person, currentUser);
-  // Takes a person key, or "all"/"everyone" for the whole team. Your own key
-  // stores as "me", so the lens keeps meaning "mine" across sign-ins.
   const setPerson = (next: string) =>
-    setFilter({
-      person:
-        next === "all" || next === "everyone"
-          ? "everyone"
-          : personFilterFor(next, currentUser),
-    });
+    setFilter({ person: personLensFilter(next, currentUser) });
   // The lens in words. "Unassigned" is a sidebar-only lens — this page has no
   // backlog rows of its own — but it still says so rather than claiming to be
   // showing everyone.
@@ -546,13 +540,7 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
                 size={isPhone ? 24 : 27}
                 max={isPhone ? 4 : 8}
                 ring="var(--bg-surface)"
-                value={
-                  filter.person === "unassigned"
-                    ? "unassigned"
-                    : person === "all"
-                      ? "everyone"
-                      : person
-                }
+                value={personLensValue(filter.person, currentUser)}
                 label={lensLabel}
                 onPick={setPerson}
               />

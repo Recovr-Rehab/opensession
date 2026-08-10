@@ -90,7 +90,7 @@ import {
 import { Reorder } from "motion/react";
 import { getRecents, onRecentsChanged } from "../lib/recents";
 import { getReads, isUnread, markRead, markUnread, onReadsChanged } from "../lib/reads";
-import { TeamFacepile, useTeamPresence } from "./TeamPresence";
+import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
 import { getWsTimePref, onWsTimeChanged } from "../lib/workspace-time";
@@ -161,6 +161,8 @@ import {
 	FEED_FILTERS_KEY,
 	SUPPORT_PRIORITY_GROUPS,
 	dget,
+	personLensFilter,
+	personLensValue,
 	readExpanded,
 	readFeedFilters,
 	setFilter,
@@ -903,13 +905,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// facepile's roster is asked first, so a teammate picked on Home is named
 	// even before anything of theirs has landed in this list.
 	const personLensName =
-		filter.person === "everyone"
-			? "Everyone"
-			: filter.person === "unassigned"
-				? "Unassigned"
-				: team.find((m) => m.key === filter.person)?.person.name ||
-					people.find((p) => p.key === filter.person)?.label ||
-					filter.person;
+		filter.person === "me"
+			? "You"
+			: filter.person === "everyone"
+				? "Everyone"
+				: filter.person === "unassigned"
+					? "Unassigned"
+					: team.find((m) => m.key === filter.person)?.person.name ||
+						people.find((p) => p.key === filter.person)?.label ||
+						filter.person;
 
 	// Every non-archived session, narrowed by the repo/person filters and search.
 	// Rows are built per-workspace below; a session matching the filter surfaces its
@@ -4040,23 +4044,31 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</ContextMenu.Root>
 						);
 						// Home carries the team at its right edge: who's around, at a
-						// glance, on the way to the page where the faces are the person
-						// lens. It's decoration — clicks fall through to the row — so
-						// there is no surface here for watching what anyone is doing.
-						// Phones render the tools as a card strip, where there's no room.
+						// glance, and the way to pick up their sidebar without leaving
+						// the one you're in — the pile opens the same lens menu Home's
+						// header does. It has to be a sibling of the row, not a child:
+						// a button can't nest one. Phones render the tools as a card
+						// strip, where there's no room.
 						if (tool.id !== "home" || isPhone || team.length === 0) return row;
 						return (
 							<div key={tool.id} className="relative">
 								{row}
-								<TeamFacepile
+								<TeamLensMenu
 									members={team}
 									size={20}
 									max={4}
-									status
 									// The faces ring themselves in whatever the row is
 									// painted with, so the pile separates on both states.
 									ring={tool.active ? "var(--bg-active)" : "var(--bg-raised)"}
-									className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
+									compact
+									side="right"
+									align="start"
+									value={personLensValue(filter.person, currentUser)}
+									label={personLensName}
+									onPick={(next) =>
+										setFilter({ person: personLensFilter(next, currentUser) })
+									}
+									className="absolute right-2 top-1/2 -translate-y-1/2"
 								/>
 							</div>
 						);
