@@ -523,7 +523,7 @@ private struct AccentOptionSwatch: View {
     var body: some View {
         Button(action: action) {
             Circle()
-                .fill(theme.accent)
+                .fill(theme.gradient)
                 .frame(width: 34, height: 34)
                 .overlay {
                     // Mono's light fill is black and its dark fill white, so on
@@ -541,7 +541,7 @@ private struct AccentOptionSwatch: View {
                 .padding(3)
                 .overlay {
                     Circle().strokeBorder(
-                        selected ? theme.accent : .clear,
+                        selected ? AnyShapeStyle(theme.gradient) : AnyShapeStyle(.clear),
                         lineWidth: 2
                     )
                 }

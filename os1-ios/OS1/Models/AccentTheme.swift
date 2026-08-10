@@ -76,6 +76,33 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         ))
     }
 
+    /// The picker presentation: barely lifted at the top-left and shaded at
+    /// the bottom-right. Both stops derive from `fills`, so replacing a palette
+    /// hex still changes the whole swatch in one place.
+    var gradient: LinearGradient {
+        let highlight = Color(platformColor: AccentTheme.dynamic(
+            light: AccentTheme.platformColor(
+                AccentTheme.blend(fills.light, toward: 0xFF_FF_FF, by: 0.03)
+            ),
+            dark: AccentTheme.platformColor(
+                AccentTheme.blend(fills.dark, toward: 0xFF_FF_FF, by: 0.03)
+            )
+        ))
+        let shade = Color(platformColor: AccentTheme.dynamic(
+            light: AccentTheme.platformColor(
+                AccentTheme.blend(fills.light, toward: 0x00_00_00, by: 0.06)
+            ),
+            dark: AccentTheme.platformColor(
+                AccentTheme.blend(fills.dark, toward: 0x00_00_00, by: 0.06)
+            )
+        ))
+        return LinearGradient(
+            colors: [highlight, shade],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     /// What sits on top of the fill — the glyph in the send disc and every
     /// other prominent accent control. Chromatic accents always use white;
     /// monochrome keeps the app's original black/white inversion.
@@ -116,6 +143,15 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
             blue: Double(hex & 0xFF) / 255,
             alpha: 1
         )
+    }
+
+    private static func blend(_ hex: UInt32, toward target: UInt32, by amount: Double) -> UInt32 {
+        let mixed = [16, 8, 0].map { shift -> UInt32 in
+            let source = Double((hex >> shift) & 0xFF)
+            let destination = Double((target >> shift) & 0xFF)
+            return UInt32((source + (destination - source) * amount).rounded()) << shift
+        }
+        return mixed.reduce(0, |)
     }
 
     /// WCAG relative luminance.
