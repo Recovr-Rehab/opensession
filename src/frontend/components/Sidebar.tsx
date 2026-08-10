@@ -2671,7 +2671,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// the node, so the transform reads it rather than a React style.
 						SIDEBAR_WS_ROW,
 						"z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))] hover:bg-hover",
-						waiting ? "bg-blue-soft" : active && "bg-active",
+						// "Needs you" is the one row state that is urgent rather than
+						// merely informational, so its wash matches the Needs action
+						// caption above it (--red) instead of reading as a selection.
+						waiting ? "bg-red-soft" : active && "bg-active",
 						draggingRow
 							? "transition-none"
 							: swipeSide

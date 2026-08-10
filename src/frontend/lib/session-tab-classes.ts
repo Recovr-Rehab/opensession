@@ -207,7 +207,9 @@ export function tabClass(state: TabState): string {
 					"bg-[color-mix(in_srgb,var(--tab-color)_14%,var(--bg-panel))] " +
 					"hover:bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))]"
 				: waiting
-					? "border-blue bg-blue-soft hover:bg-blue-soft"
+					? // Same hue as the sidebar's "needs you" row and the Needs
+						// action band: blocked-on-you is urgent, not informational.
+						"border-red bg-red-soft hover:bg-red-soft"
 					: active
 						? // The pointed-at wash beats the selected fill here, exactly as
 							// `.session-tab:hover` (0,2,0) beat `.session-tab-active` (0,1,0).
