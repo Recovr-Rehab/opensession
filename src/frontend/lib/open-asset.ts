@@ -3,8 +3,6 @@ import {
 	assetToolPath,
 	parseMcpTool,
 } from "@tellahq/opensession-protocol/tool-presentation";
-import { openLightbox } from "../components/MediaLightbox";
-import { sessionAssetRawUrl } from "./api";
 import type { TranscriptEntry } from "./types";
 
 /**
@@ -14,51 +12,27 @@ import type { TranscriptEntry } from "./types";
  *
  * Context rather than a prop because the callers are a tool row and a turn
  * footer, both several memoized layers below the session view. Null where
- * there is no tab to open into (the Desk overlay, a sub-agent pane) — and a
- * caller then draws no affordance at all, because a chip that does nothing is
- * worse than no chip.
+ * there is no session view to open over (the Desk overlay, a sub-agent pane) —
+ * and a caller then draws no affordance at all, because a chip that does
+ * nothing is worse than no chip.
  */
 const OpenAssetContext = createContext<((path: string) => void) | null>(null);
 export const OpenAssetProvider = OpenAssetContext.Provider;
 
 /**
- * Assets that read better lifted over the conversation than opened beside it:
- * a picture or a clip is a glance, and the lightbox is already where every
- * other image in a transcript opens. Everything else — a report, a page, a
- * log — is something you read, and goes to the Assets tab, where an HTML
- * artifact's relative references resolve and the folder is there to browse.
- * SVG is deliberately not here: an animated or scripted one needs the frame.
- */
-export function assetMediaKind(path: string): "image" | "video" | null {
-	const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-	if (["png", "jpg", "jpeg", "gif", "webp", "ico"].includes(ext)) return "image";
-	if (["mp4", "webm", "mov"].includes(ext)) return "video";
-	return null;
-}
-
-/**
  * How a transcript surface opens a scratch file. `available` is false where
- * nothing can be opened — no Assets tab to land in, or no session to resolve
- * the path against — so the surface can leave the affordance out entirely.
+ * there is no session overlay to host it, so the surface can leave the
+ * affordance out entirely.
  */
-export function useOpenAsset(sessionId?: string): {
+export function useOpenAsset(): {
 	available: boolean;
-	open: (path: string, origin?: HTMLElement | null) => void;
+	open: (path: string) => void;
 } {
-	const openInTab = useContext(OpenAssetContext);
+	const openInOverlay = useContext(OpenAssetContext);
 	return {
-		available: Boolean(openInTab),
-		open(path, origin) {
-			const kind = assetMediaKind(path);
-			if (kind && sessionId) {
-				openLightbox(
-					[{ kind, src: sessionAssetRawUrl(sessionId, path) }],
-					0,
-					origin,
-				);
-				return;
-			}
-			openInTab?.(path);
+		available: Boolean(openInOverlay),
+		open(path) {
+			openInOverlay?.(path);
 		},
 	};
 }

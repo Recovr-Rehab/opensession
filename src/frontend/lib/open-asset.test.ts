@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { assetMediaKind, collectWrittenAssets } from "./open-asset";
+import { collectWrittenAssets } from "./open-asset";
 import type { TranscriptEntry } from "./types";
 
 function toolUse(toolName: string, toolInput: unknown, id = "1"): TranscriptEntry {
@@ -42,12 +42,4 @@ test("a delete leaves nothing to open, and non-tool entries are ignored", () => 
 		} as TranscriptEntry,
 	];
 	expect(collectWrittenAssets(entries)).toEqual([]);
-});
-
-test("pictures and clips are lifted over the conversation, documents are not", () => {
-	expect(assetMediaKind("chart.png")).toBe("image");
-	expect(assetMediaKind("demo.MP4")).toBe("video");
-	expect(assetMediaKind("report.html")).toBe(null);
-	// An animated or scripted SVG needs the frame, so it reads as a document.
-	expect(assetMediaKind("diagram.svg")).toBe(null);
 });

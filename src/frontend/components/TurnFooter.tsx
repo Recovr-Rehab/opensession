@@ -127,7 +127,7 @@ export const TurnFooter = React.memo(function TurnFooter({
         </Menu.Popup>
       </Menu.Root>
       {assets.map((path) => (
-        <AssetChip key={path} path={path} sessionId={sessionId} />
+        <AssetChip key={path} path={path} />
       ))}
       {shown.map((f) => (
         <FileChip key={f.path} file={f} />
@@ -226,9 +226,9 @@ const FOOTER_TIME =
   "[@media(hover:hover)]:[.transcript-window:hover+.transcript-window_&]:opacity-100";
 
 /**
- * One scratch file the turn wrote. Clicking opens it: a picture or a clip in
- * the lightbox over the conversation, anything else in the Assets tab — the
- * same destinations the write_asset row's own Open chip uses, so the two ways
+ * One scratch file the turn wrote. Clicking lifts it over the conversation;
+ * the overlay can promote it into the Assets tab when it needs to stay open.
+ * The write_asset row's own Open chip takes the same route, so the two ways
  * into one file don't disagree.
  *
  * Unlike a touched file there is no diff to preview: an asset lives outside
@@ -236,9 +236,9 @@ const FOOTER_TIME =
  * nothing can open it (the Desk overlay, a sub-agent pane) the chip stays, but
  * as a plain label — a name is still worth reading; a dead button isn't.
  */
-function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
+function AssetChip({ path }: { path: string }) {
   const name = path.split("/").pop() || path;
-  const asset = useOpenAsset(sessionId);
+  const asset = useOpenAsset();
   const body = (
     <>
       <ExtBadge name={name} />
@@ -258,7 +258,7 @@ function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
     <Tooltip label="Open this file">
       <button
         type="button"
-        onClick={(e) => asset.open(path, e.currentTarget)}
+        onClick={() => asset.open(path)}
         className={cn(CHIP, "cursor-pointer pr-1 hover:bg-hover")}
       >
         {body}

@@ -103,6 +103,7 @@ import { SlackChannelPane } from "./SlackChannelPane";
 import { feedForRefKind } from "../lib/feeds-meta";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { AssetsPanel, useSessionAssets } from "./AssetsPanel";
+import { AssetOverlay } from "./AssetView";
 import {
 	SessionReportsPanel,
 	useSessionReports,
@@ -1232,21 +1233,31 @@ export function SessionViewer({
 		session.id,
 		addHandler,
 	);
-	// Which asset the main-area Assets view-tab previews — set when an asset row
-	// in the Info panel is clicked (the main-tab tree is hidden, so the Info-panel
-	// list is the navigator).
+	// Which asset the main-area Assets view-tab previews. Controlled here so a
+	// tree selection and a later overlay promotion never drift apart.
 	const [selectedAssetPath, setSelectedAssetPath] = useState<string | null>(
 		null,
 	);
-	// …and what the transcript's own asset rows open. The same destination as
-	// the Info-panel list, so the two ways into one file don't disagree.
+	// One file, lifted over the conversation. Every way into an asset — a
+	// transcript chip, a tool row, the Info panel's list — lands here, so the
+	// file behaves the same whichever one you used; the Assets tab is where you
+	// go deliberately, and the overlay's own header is how you get promoted
+	// into it.
+	const [overlayAssetPath, setOverlayAssetPath] = useState<string | null>(null);
 	// Through a ref because `onOpenAssets` is a fresh closure on every App
 	// render, and this reaches the memoized transcript as a context value —
 	// an unstable one would re-render the whole thing on every sessions poll.
 	const openAssetsRef = useRef(onOpenAssets);
 	openAssetsRef.current = onOpenAssets;
 	const openAssetFromTranscript = useCallback((path: string) => {
+		setOverlayAssetPath(path);
+	}, []);
+	const closeAssetOverlay = useCallback(() => setOverlayAssetPath(null), []);
+	// The overlay's "Open as tab": the file it was showing becomes the Assets
+	// tab's selection, and the overlay gets out of the way.
+	const promoteAssetToTab = useCallback((path: string) => {
 		setSelectedAssetPath(path);
+		setOverlayAssetPath(null);
 		openAssetsRef.current?.();
 	}, []);
 	const sessionReports = useSessionReports(session.id, addHandler);
@@ -4650,10 +4661,9 @@ export function SessionViewer({
 											send={connected ? send : undefined}
 											assets={assetFiles}
 											onOpenAsset={(path) => {
-												setInfoPageOpen(false);
-												setSelectedAssetPath(path);
-												onOpenAssets?.();
-											}}
+											setInfoPageOpen(false);
+											setOverlayAssetPath(path);
+										}}
 											onOpenTab={(tab) => {
 												if (tab === "changes" || tab === "pr") {
 													setInfoPageOpen(false);
@@ -4977,7 +4987,7 @@ export function SessionViewer({
 								files={assetFiles}
 								refresh={refreshAssets}
 								selectedPath={selectedAssetPath}
-								showTree={false}
+								onSelectPath={setSelectedAssetPath}
 								onOpenNewSession={onOpenNewSession}
 							/>
 						</div>
@@ -5638,10 +5648,7 @@ export function SessionViewer({
 										onOpenChecks={() => focusPrInReview(undefined, "checks")}
 										send={connected ? send : undefined}
 										assets={assetFiles}
-										onOpenAsset={(path) => {
-											setSelectedAssetPath(path);
-											onOpenAssets?.();
-										}}
+										onOpenAsset={(path) => setOverlayAssetPath(path)}
 										onOpenTab={(tab) =>
 											tab === "pr"
 												? onOpenReview?.()
@@ -5717,6 +5724,18 @@ export function SessionViewer({
 				return rightPanelEl ? createPortal(rightRegion, rightPanelEl) : rightRegion;
 				})()}
 			</div>
+			{/* Portals to the body, so it sits over the whole viewer rather than
+			    inside whichever column opened it. */}
+			<AssetOverlay
+				sessionId={session.id}
+				path={overlayAssetPath}
+				files={assetFiles}
+				refresh={refreshAssets}
+				onClose={closeAssetOverlay}
+				onSelectPath={setOverlayAssetPath}
+				onOpenAsTab={onOpenAssets ? promoteAssetToTab : undefined}
+				onOpenNewSession={onOpenNewSession}
+			/>
 		</div>
 	);
 }

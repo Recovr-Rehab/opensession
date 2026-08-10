@@ -319,11 +319,11 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   // assets live outside every worktree and nothing else in the transcript can
   // say what the path means. A delete names one too, with nothing left to open.
   const assetPath = assetToolPath(toolName, shownInput);
-  const asset = useOpenAsset(sessionId);
+  const asset = useOpenAsset();
   const canOpenAsset =
     Boolean(assetPath && asset.available) && mcp?.tool !== "delete_asset";
-  function showAsset(origin: HTMLElement) {
-    asset.open(assetPath, origin);
+  function showAsset() {
+    asset.open(assetPath);
   }
 
   // A Task/Agent call whose sub-agent transcript we can open in the sidebar.
@@ -423,13 +423,13 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
             className="flex-shrink-0 rounded border border-line px-1.5 py-px text-meta text-dim transition-colors hover:border-line-strong hover:text-fg"
             onClick={(e) => {
               e.stopPropagation();
-              showAsset(e.currentTarget);
+              showAsset();
             }}
             onKeyDown={(e) => {
               if (e.key !== "Enter" && e.key !== " ") return;
               e.preventDefault();
               e.stopPropagation();
-              showAsset(e.currentTarget);
+              showAsset();
             }}
             title="Open this file"
           >

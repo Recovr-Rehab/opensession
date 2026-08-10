@@ -1,34 +1,25 @@
 /**
  * Assets tab — the session's scratch folder of agent-produced artifacts
  * (HTML/JS visualizations, reports, diagrams, sample data; see
- * src/server/session-assets.ts). Split view: file tree on top, live preview
- * below. HTML previews in an iframe served from the path-based raw route, so
- * relative references between assets (./style.css, ./data.json) resolve.
+ * src/server/session-assets.ts). Split view: file tree on top, preview below.
+ *
+ * This is the place you go to sit with the folder. One file on its own arrives
+ * over the conversation instead, in `AssetOverlay` — and both render the same
+ * `AssetPreview` under the same `AssetActions`, so a file looks and behaves
+ * the same whichever way you reached it.
  */
 
-import React, {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { marked } from "marked";
-import {
-	deleteSessionAssetApi,
-	fetchSessionAssets,
-	sessionAssetDownloadUrl,
-	sessionAssetPreviewUrl,
-	type SessionAssetFile,
-} from "../lib/api";
+import { fetchSessionAssets, type SessionAssetFile } from "../lib/api";
 import type { WSServerMessage } from "../lib/types";
-import { parseNewSessionLink, type NewSessionPrefill } from "../lib/new-session-link";
+import type { NewSessionPrefill } from "../lib/new-session-link";
 import { Button } from "../ui/button";
-import { MarkdownBody } from "./MarkdownBody";
+import { AssetActions, AssetPreview } from "./AssetView";
+import { resolvedAssetPath } from "../lib/asset-preview";
 
 /** Lives in SessionViewer (not the panel) so the tab button can show/hide on
- *  the file count without the panel being mounted. */
+ * the file count without the panel being mounted. */
 export function useSessionAssets(
 	sessionId: string,
 	addHandler: (h: (msg: WSServerMessage) => void) => () => void,
@@ -52,41 +43,6 @@ export function useSessionAssets(
 		[addHandler, sessionId, refresh],
 	);
 	return { files, refresh };
-}
-
-type PreviewKind =
-	| "html"
-	| "pdf"
-	| "image"
-	| "video"
-	| "audio"
-	| "markdown"
-	| "text"
-	| "binary";
-
-function previewKind(path: string): PreviewKind {
-	const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-	if (ext === "html" || ext === "htm" || ext === "svg") return "html";
-	if (ext === "pdf") return "pdf";
-	if (["png", "jpg", "jpeg", "gif", "webp", "ico"].includes(ext))
-		return "image";
-	if (["mp4", "webm", "mov"].includes(ext)) return "video";
-	if (["mp3", "wav"].includes(ext)) return "audio";
-	if (ext === "md") return "markdown";
-	if (
-		[
-			"txt", "js", "mjs", "ts", "tsx", "jsx", "css", "json", "csv", "tsv",
-			"xml", "yaml", "yml", "log", "py", "sh", "sql",
-		].includes(ext)
-	)
-		return "text";
-	return "binary";
-}
-
-function fmtSize(n: number): string {
-	if (n < 1024) return `${n} B`;
-	if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-	return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /** Every ancestor dir across the file set — small trees, keep them all open. */
@@ -126,76 +82,35 @@ function AssetsTree({
 	return <FileTree model={model} className="block h-full [color-scheme:dark]" />;
 }
 
-const TEXT_CAP = 256 * 1024;
-
 export function AssetsPanel({
 	sessionId,
 	files,
 	refresh,
 	selectedPath = null,
-	showTree = true,
+	onSelectPath,
 	onOpenNewSession,
 }: {
 	sessionId: string;
 	files: SessionAssetFile[];
 	refresh: () => void;
-	/** Controlled selection — when the Info-panel assets list opens a specific
-	 *  asset, the main-tab panel previews it. */
+	/** Controlled selection — the file the overlay was promoted from. */
 	selectedPath?: string | null;
-	/** Show the built-in file tree. false in the main-tab preview, where the
-	 *  Info-panel assets list is the navigator instead. */
-	showTree?: boolean;
+	onSelectPath: (path: string | null) => void;
 	onOpenNewSession: (prefill: NewSessionPrefill) => void;
 }) {
-	const [selected, setSelected] = useState<string | null>(selectedPath);
-	// Follow the controlled selection when the list opens a new asset.
-	useEffect(() => {
-		if (selectedPath) setSelected(selectedPath);
-	}, [selectedPath]);
 	const paths = useMemo(() => files.map((f) => f.path), [files]);
-
-	// Keep the selection while its file survives; otherwise default to the
-	// shallowest index.html (the natural entry point of a multi-file viz),
-	// else the first file.
+	const selected = useMemo(
+		() => resolvedAssetPath(paths, selectedPath),
+		[paths, selectedPath],
+	);
+	// Keep SessionViewer aligned with tree navigation. Without this, promoting
+	// the same overlay twice can be a React no-op after the tree selected
+	// another file in between.
 	useEffect(() => {
-		if (selected && paths.includes(selected)) return;
-		const index = [...paths]
-			.filter((p) => /(^|\/)index\.html$/.test(p))
-			.sort((a, b) => a.split("/").length - b.split("/").length)[0];
-		setSelected(index || paths[0] || null);
-	}, [paths, selected]);
+		if (selected !== selectedPath) onSelectPath(selected);
+	}, [selected, selectedPath, onSelectPath]);
 
 	const file = files.find((f) => f.path === selected) || null;
-	const kind = selected ? previewKind(selected) : null;
-	const rawUrl = file ? sessionAssetPreviewUrl(sessionId, file) : null;
-
-	// Text-ish previews fetch the body themselves.
-	const [text, setText] = useState<string | null>(null);
-	useEffect(() => {
-		setText(null);
-		if (!rawUrl || (kind !== "text" && kind !== "markdown")) return;
-		let alive = true;
-		fetch(rawUrl)
-			.then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
-			.then((t) => {
-				if (alive) setText(t.length > TEXT_CAP ? t.slice(0, TEXT_CAP) : t);
-			})
-			.catch(() => {
-				if (alive) setText(null);
-			});
-		return () => {
-			alive = false;
-		};
-	}, [rawUrl, kind]);
-
-	async function onDelete() {
-		if (!selected) return;
-		if (!confirm(`Delete ${selected}?`)) return;
-		try {
-			await deleteSessionAssetApi(sessionId, selected);
-			refresh();
-		} catch {}
-	}
 
 	if (!files.length) {
 		return (
@@ -212,7 +127,6 @@ export function AssetsPanel({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			{showTree ? (
 			<div className="flex max-h-[38%] min-h-[88px] flex-col overflow-hidden border-b border-line">
 				<div className="flex items-center justify-between px-3 pt-2 pb-1">
 					<span className="text-[11px] font-medium uppercase tracking-wide text-faint">
@@ -233,118 +147,23 @@ export function AssetsPanel({
 						key={paths.join("\n")}
 						paths={paths}
 						selected={selected}
-						onSelect={setSelected}
+						onSelect={onSelectPath}
 					/>
 				</div>
 			</div>
-			) : null}
-			{file && rawUrl ? (
+			{file ? (
 				<>
-					<div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
-						<span
-							className="min-w-0 flex-1 truncate text-label text-fg"
-							title={file.path}
-						>
-							{file.path}
-						</span>
-						<span className="shrink-0 text-[11px] text-faint">
-							{fmtSize(file.size)}
-						</span>
-						<a
-							className="shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-fg"
-							href={rawUrl}
-							target="_blank"
-							rel="noreferrer"
-						>
-							Open
-						</a>
-						<a
-							className="shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-fg"
-							href={sessionAssetDownloadUrl(sessionId, file)}
-						>
-							Download
-						</a>
-						{/* Sits in a row with the Open/Download links above and matches
-						    them exactly; only the hover color differs. */}
-						<Button
-							variant="ghost"
-							size="xs"
-							className="min-h-0 shrink-0 rounded-sm border-0 px-1.5 py-0.5 text-[11px] font-medium hover:bg-hover hover:text-red"
-							onClick={onDelete}
-						>
-							Delete
-						</Button>
-					</div>
-					<div className="min-h-0 flex-1 overflow-auto">
-						{kind === "html" ? (
-							// allow-same-origin so the page can fetch() sibling assets
-							// (./data.json); the sandbox still blocks top navigation. The
-							// content is our own agents' output on a tailnet-only UI.
-							<iframe
-								key={rawUrl}
-								title={file.path}
-								src={rawUrl}
-								sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-downloads"
-								onLoad={(event) => {
-									const document = event.currentTarget.contentDocument;
-									if (!document) return;
-									document.addEventListener("click", (clickEvent) => {
-										const link = (clickEvent.target as Element | null)?.closest?.("a");
-										const prefill = link ? parseNewSessionLink(link.href) : null;
-										if (!prefill) return;
-										clickEvent.preventDefault();
-										onOpenNewSession(prefill);
-									});
-								}}
-								className="h-full w-full border-0 bg-white"
-							/>
-						) : kind === "pdf" ? (
-							// No sandbox: Chrome's built-in PDF viewer won't render in a
-							// sandboxed iframe.
-							<iframe
-								key={rawUrl}
-								title={file.path}
-								src={rawUrl}
-								className="h-full w-full border-0"
-							/>
-						) : kind === "image" ? (
-							<div className="flex h-full items-center justify-center overflow-auto p-3">
-								<img
-									src={rawUrl}
-									alt={file.path}
-									className="max-h-full max-w-full object-contain"
-								/>
-							</div>
-						) : kind === "video" ? (
-							<video src={rawUrl} controls className="h-full w-full" />
-						) : kind === "audio" ? (
-							<div className="p-4">
-								<audio src={rawUrl} controls className="w-full" />
-							</div>
-						) : kind === "markdown" ? (
-							text === null ? (
-								<div className="p-4 text-label text-faint">Loading…</div>
-							) : (
-								<MarkdownBody
-									className="markdown px-4 py-3 text-[13px]"
-									html={marked.parse(text, { async: false }) as string}
-								/>
-							)
-						) : kind === "text" ? (
-							text === null ? (
-								<div className="p-4 text-label text-faint">Loading…</div>
-							) : (
-								<pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-label leading-[1.5] text-fg">
-									{text}
-									{file.size > TEXT_CAP ? "\n… (truncated preview)" : ""}
-								</pre>
-							)
-						) : (
-							<div className="flex h-full items-center justify-center text-label text-faint">
-								No inline preview for this file type — use Download.
-							</div>
-						)}
-					</div>
+					<AssetActions
+						sessionId={sessionId}
+						file={file}
+						refresh={refresh}
+						showSize
+					/>
+					<AssetPreview
+						sessionId={sessionId}
+						file={file}
+						onOpenNewSession={onOpenNewSession}
+					/>
 				</>
 			) : null}
 		</div>

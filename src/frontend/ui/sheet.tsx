@@ -123,6 +123,9 @@ export function ResponsiveDialog({
 		if (!open) return;
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === "Escape") {
+				// This capture listener runs before a portalled Base UI menu. Let the
+				// menu consume the first Escape instead of closing the whole dialog.
+				if (document.querySelector(".app-menu-popup")) return;
 				e.stopPropagation();
 				onClose();
 			}
