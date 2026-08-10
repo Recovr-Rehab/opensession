@@ -23,14 +23,18 @@ struct WorktreeInfoView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
+                // Ordered by what the sheet is opened to find out: what this
+                // workspace is doing and what came out of it. The worktree's
+                // own metadata — branch, path, mode — changes once and is
+                // reference material, so it sits below the answer rather than
+                // filling the first screen with it.
                 LazyVStack(alignment: .leading, spacing: 22) {
                     hero
-                    worktreeSection
-                    gitSection
-                    pullRequestSection
-                    changesSection
-                    assetsSection
                     overviewSection
+                    pullRequestSection
+                    workSection
+                    assetsSection
+                    worktreeSection
                     runSettingsSection
                 }
                 .padding(.horizontal, 16)
@@ -68,21 +72,68 @@ struct WorktreeInfoView: View {
                 .foregroundStyle(OS1VisualStyle.textDim)
                 .multilineTextAlignment(.center)
             if let stateLabel {
-                Label(stateLabel.text, systemImage: stateLabel.icon)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(stateLabel.color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(stateLabel.color.opacity(0.12), in: Capsule())
+                HStack(spacing: 5) {
+                    Label(stateLabel.text, systemImage: stateLabel.icon)
+                    // The state alone can't say whether this started a minute
+                    // ago or has been going for an hour, which is the whole
+                    // question when you open the sheet on a running workspace.
+                    if viewModel.isRunning, let since = viewModel.runStartedAt {
+                        Text("·").foregroundStyle(stateLabel.color.opacity(0.6))
+                        RunElapsedLabel(since: since)
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(stateLabel.color)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(stateLabel.color.opacity(0.12), in: Capsule())
+            }
+            if let heroFooter {
+                Text(heroFooter)
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 18)
     }
 
+    /// The line under the state: how long ago this stopped, what is queued
+    /// behind it, how many sessions share the worktree. Written as wrapping
+    /// text rather than a row of pills on purpose — pills are intrinsically
+    /// sized, and at accessibility type a row of them is wider than the
+    /// scroll view, which centres the overflow and clips every sibling.
+    private var heroFooter: String? {
+        var parts: [String] = []
+        if !viewModel.isRunning, let last = latestActivity {
+            parts.append("Updated \(Self.ago(Date().timeIntervalSince(last)))")
+        }
+        let queued = max(viewModel.queuedCount, currentSession.queuedCount ?? 0)
+        if queued > 0 { parts.append("\(queued) queued") }
+        if sessions.count > 1 { parts.append("\(sessions.count) sessions") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var latestActivity: Date? {
+        (sessions.isEmpty ? [currentSession] : sessions)
+            .compactMap(\.lastActivityDate)
+            .max()
+    }
+
+    private static func ago(_ elapsed: TimeInterval) -> String {
+        let total = max(0, Int(elapsed))
+        if total < 60 { return "just now" }
+        if total < 3_600 { return "\(total / 60)m ago" }
+        if total < 86_400 { return "\(total / 3_600)h ago" }
+        return "\(total / 86_400)d ago"
+    }
+
     private var worktreeSection: some View {
+        // No Repository row: the hero already reads "<repo> · <model>", and a
+        // card that repeats the line above it is what pushed the worktree's
+        // own details off the screen.
         InfoSection(title: "Worktree") {
-            InfoRow(label: "Repository", value: repoLabel, icon: "shippingbox")
             if let branch = gitStatus?.branch ?? currentSession.branch, !branch.isEmpty {
                 InfoRow(label: "Branch", value: branch, icon: "arrow.triangle.branch")
             }
@@ -93,11 +144,6 @@ struct WorktreeInfoView: View {
                 label: "Mode",
                 value: (currentSession.mode ?? "ask").capitalized,
                 icon: "terminal"
-            )
-            InfoRow(
-                label: "Sessions",
-                value: "\(sessions.count)",
-                icon: "bubble.left.and.bubble.right"
             )
             if let startedBy = oldestSession?.startedBy, !startedBy.isEmpty {
                 InfoRow(label: "Started by", value: startedBy, icon: "person")
@@ -112,22 +158,37 @@ struct WorktreeInfoView: View {
         }
     }
 
+    /// Git state and the diff in one card. They answer the same question —
+    /// what this workspace did to the tree — and on most workspaces each is a
+    /// line or two, so two titled cards for them cost a third of the first
+    /// screen and pushed the PR and the overview below the fold.
     @ViewBuilder
-    private var gitSection: some View {
+    private var workSection: some View {
+        let files = diff?.files ?? []
+        InfoSection(
+            title: files.isEmpty
+                ? "Git status"
+                : "\(files.count) file\(files.count == 1 ? "" : "s") changed",
+            trailing: files.isEmpty ? nil : diff.map { AnyView(diffTotals($0)) }
+        ) {
+            gitStatusRow
+            changedFileRows(files)
+        }
+    }
+
+    @ViewBuilder
+    private var gitStatusRow: some View {
         if loading && gitStatus == nil {
-            InfoSection(title: "Git status") {
-                HStack(spacing: 9) {
-                    ProgressView().controlSize(.small)
-                    Text("Checking worktree…")
-                        .font(.subheadline)
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+            HStack(spacing: 9) {
+                ProgressView().controlSize(.small)
+                Text("Checking worktree…")
+                    .font(.subheadline)
+                    .foregroundStyle(OS1VisualStyle.textDim)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
         } else if let gitStatus {
-            InfoSection(title: "Git status") {
-                FlowLayout(spacing: 7) {
+            FlowLayout(spacing: 7) {
                     if gitStatus.uncommittedFiles > 0 {
                         StatusPill(
                             text: "\(gitStatus.uncommittedFiles) uncommitted",
@@ -166,21 +227,18 @@ struct WorktreeInfoView: View {
                             color: OS1VisualStyle.green
                         )
                     }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
         }
     }
 
     @ViewBuilder
-    private var changesSection: some View {
-        if let diff, !diff.files.isEmpty {
-            InfoSection(
-                title: "\(diff.files.count) file\(diff.files.count == 1 ? "" : "s") changed",
-                trailing: AnyView(diffTotals(diff))
-            ) {
-                ForEach(diff.files.prefix(8)) { file in
+    private func changedFileRows(_ files: [OS1API.DiffFile]) -> some View {
+        if !files.isEmpty {
+            let shown = Array(files.prefix(8))
+            Divider()
+                ForEach(shown) { file in
                     Button {
                         panel = .changes(
                             sessionId: currentSession.id,
@@ -216,7 +274,7 @@ struct WorktreeInfoView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    if file.id != diff.files.prefix(8).last?.id { Divider() }
+                    if file.id != shown.last?.id { Divider() }
                 }
                 Divider()
                 Button {
@@ -224,8 +282,8 @@ struct WorktreeInfoView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(
-                            diff.files.count > 8
-                                ? "Show all \(diff.files.count) files"
+                            files.count > shown.count
+                                ? "Show all \(files.count) files"
                                 : "Open changes"
                         )
                         Image(systemName: "chevron.right")
@@ -239,7 +297,6 @@ struct WorktreeInfoView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-            }
         }
     }
 
@@ -334,14 +391,31 @@ struct WorktreeInfoView: View {
     @ViewBuilder
     private var overviewSection: some View {
         if let overview, overview.prompt != nil || overview.lastMessage != nil {
+            // Latest first: on a workspace you already know the shape of, what
+            // it just said is the news, and the original ask is the thing you
+            // scroll back to.
             InfoSection(title: "Overview") {
-                if let prompt = overview.prompt {
-                    SummaryBlock(label: "Started with", content: prompt.content)
-                }
                 if let lastMessage = overview.lastMessage {
-                    if overview.prompt != nil { Divider() }
                     SummaryBlock(label: "Latest update", content: lastMessage.content)
                 }
+                if let prompt = overview.prompt {
+                    if overview.lastMessage != nil { Divider() }
+                    SummaryBlock(label: "Started with", content: prompt.content, lines: 4)
+                }
+            }
+        } else if loading {
+            // The overview is the slowest thing on the sheet (it reads every
+            // session's transcript) and now the topmost, so it holds its place
+            // instead of shoving the whole page down when it lands.
+            InfoSection(title: "Overview") {
+                HStack(spacing: 9) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading the transcript…")
+                        .font(.subheadline)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
             }
         } else if loadFailed {
             InfoSection(title: "Overview") {
@@ -688,6 +762,7 @@ private struct StatusPill: View {
 private struct SummaryBlock: View {
     let label: String
     let content: String
+    var lines = 5
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -697,7 +772,7 @@ private struct SummaryBlock: View {
             Text(content)
                 .font(.subheadline)
                 .foregroundStyle(OS1VisualStyle.text)
-                .lineLimit(5)
+                .lineLimit(lines)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)

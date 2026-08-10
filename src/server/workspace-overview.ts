@@ -13,14 +13,24 @@
  */
 
 import { parseTranscriptAsync } from "./jsonl-parser";
-import type { TranscriptEntry } from "./types";
+import { mergedSessionTranscriptAsync } from "./sessions";
+import type { TranscriptEntry, UnifiedSession } from "./types";
 
-export interface OverviewSession {
+/**
+ * What the overview needs off a session row. The transcript-locating fields
+ * are picked straight off `UnifiedSession` because they are handed to
+ * `mergedSessionTranscriptAsync`: a session written since the transcript-v2
+ * store landed has no `transcriptPath` at all, and its history is reachable
+ * only through the store.
+ */
+export type OverviewSession = {
   id: string;
   title?: string;
   createdAt?: string;
-  transcriptPath?: string | null;
-}
+} & Pick<
+  UnifiedSession,
+  "transcriptPath" | "opencodeSessionId" | "claudeSessionId"
+>;
 
 export interface WorkspaceMediaItem {
   kind: "image" | "video";
@@ -66,10 +76,13 @@ export async function buildWorkspaceOverview(
   const media: WorkspaceMediaItem[] = [];
 
   for (const session of ordered) {
-    if (!session.transcriptPath) continue;
     // Async: this loops over EVERY session in the workspace — back-to-back sync
     // parses of fat transcripts wedged the event loop for the whole sweep.
-    const entries = await parseTranscriptAsync(session.transcriptPath);
+    // Read the way the transcript route does: a v2-store session carries no
+    // `transcriptPath` at all, and skipping on that returned an all-null
+    // overview for every session written since the store landed.
+    const entries = await mergedSessionTranscriptAsync(session);
+    if (entries.length === 0) continue;
     if (!prompt) {
       const first = entries.find(isOpeningPrompt);
       if (first)
