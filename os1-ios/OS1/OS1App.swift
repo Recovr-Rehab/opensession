@@ -98,7 +98,11 @@ struct RootView: View {
                 }
             }
             .task(id: preferenceHydrationID) {
-                guard scenePhase == .active else { return }
+                guard scenePhase == .active else {
+                    PresenceStore.shared.stop()
+                    return
+                }
+                PresenceStore.shared.start()
                 while !Task.isCancelled {
                     await NativePreferences.hydrate()
                     await HideStore.shared.hydrate()
