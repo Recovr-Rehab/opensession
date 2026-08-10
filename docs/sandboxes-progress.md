@@ -65,6 +65,19 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
   microvm today (host-engine). The conversion makes the whole distinction
   moot: everything runs inside the VM, matrix deleted.
 
+## 2026-08-10 — scope extension: ALL engines go inside
+
+- Michiel: "we really need to host the pi and opencode engine in the
+  sandboxes!" — so the phase-1 design's "survives" residue shrinks further:
+  the flat family check should end up excluding ONLY native Codex
+  (CODEX_HOME rotation). Pi needs a real design (in-process engine: bridge
+  auth, session state, in-memory MCP servers live in the server process);
+  opencode-other likely just needs a scoped per-launch provider-auth upload
+  next to the existing Claude-slice/OpenAI-seed uploads in bootstrap.ts.
+- A design agent is investigating pi + opencode-other in-sandbox; its
+  addendum will amend Slice C of sandboxes-phase1-brain-inside.md. Slice C
+  should not be implemented until that addendum lands.
+
 ## Next steps (for whoever picks this up)
 
 1. Confirm Slice A's commit landed + its verification result (worker report).
