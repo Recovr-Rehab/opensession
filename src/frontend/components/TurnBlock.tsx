@@ -197,12 +197,11 @@ export const TurnBlock = React.memo(function TurnBlock({
                 sessionId={sessionId}
               />
             ) : messagesInline ? null : (
-              // Tool rows get a modest desktop indent so they read as the
-              // fold's children without drifting away from the narration.
-              // Phones keep the rows flush to preserve command width.
+              // Tool icons align with the fold chevron on desktop. Phones use
+              // the 1px optical correction for the icon's inset glyph.
               <div
                 key={sec.items[0].id}
-                className="-ml-px desktop:ml-1"
+                className="-ml-px desktop:ml-0"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
                 {sec.items.map((entry) => (
@@ -240,7 +239,7 @@ function TurnMessage({
 }) {
   return (
     <div
-      className="mx-auto my-2 w-full max-w-[var(--session-col)] px-1 desktop:pl-2"
+      className="mx-auto my-2 w-full max-w-[var(--session-col)] px-1"
       data-eid={entry.id}
     >
       <ClampedBody
