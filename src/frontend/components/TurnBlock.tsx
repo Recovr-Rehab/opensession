@@ -61,8 +61,8 @@ export const TurnBlock = React.memo(function TurnBlock({
   // working and folds it again the moment the turn settles — a failed step or
   // a screenshot inside the turn used to pin it open forever, which is the one
   // thing both "Always folded" and "Expand while running" promise never
-  // happens. The fold line already reports failures ("· 2 failed", in red);
-  // media is one click away. "messages" folds the tool calls and nothing else,
+  // happens. Failures and media are one click away inside the disclosure.
+  // "messages" folds the tool calls and nothing else,
   // "collapsed" folds the notes away too, and both stay folded even during a
   // live turn — the work line's tail reports the running tool. ToolCallBlock
   // owns its own disclosure, so this never expands a Bash input (including
