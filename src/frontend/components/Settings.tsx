@@ -569,7 +569,7 @@ function NavSearch({
 					size={sheet ? 20 : 18}
 					className={cn(
 						"pointer-events-none absolute top-1/2 -translate-y-1/2 text-faint",
-						sheet ? "left-3" : "left-2",
+						sheet ? "left-3.5" : "left-2",
 					)}
 				/>
 				<Input
@@ -587,9 +587,13 @@ function NavSearch({
 					size={sheet ? "lg" : "md"}
 					className={cn(
 						"[&::-webkit-search-cancel-button]:hidden",
-						sheet
-							? cn("h-10 border-transparent bg-raised pl-10 text-[16px]", value && "pr-11")
-							: cn("pl-8", value && "pr-8"),
+					// `rounded-full`, not the app's squircle corner: a capsule is what
+					// iOS puts a search field in, and base.css grants the squircle to
+					// every `rounded-*` EXCEPT this one, so it is also the spelling
+					// that gets true round ends rather than a superellipse.
+					sheet
+						? cn("h-10 rounded-full border-transparent bg-raised pl-11 text-[16px]", value && "pr-11")
+						: cn("pl-8", value && "pr-8"),
 					)}
 					onChange={(e) => onChange(e.target.value)}
 					onKeyDown={(e) => {
@@ -608,8 +612,9 @@ function NavSearch({
 						type="button"
 						aria-label="Clear search"
 						className={cn(
-							"absolute top-1/2 flex -translate-y-1/2 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-faint hover:bg-hover hover:text-fg",
-							sheet ? "right-1.5 size-8" : "right-1 size-6",
+							"absolute top-1/2 flex -translate-y-1/2 cursor-pointer items-center justify-center border-none bg-transparent text-faint hover:bg-hover hover:text-fg",
+							// Round inside a capsule; the desktop field keeps the app's corner.
+							sheet ? "right-1.5 size-8 rounded-full" : "right-1 size-6 rounded-md",
 						)}
 						onClick={() => onChange("")}
 					>
