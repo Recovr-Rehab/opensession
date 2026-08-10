@@ -21,6 +21,8 @@ import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir } from "../paths";
 import type { SandboxProviderId } from "./provider";
 
+export const DEFAULT_SANDBOX_PREVIEW_PORTS = [3300, 3301, 3302] as const;
+
 const HOME = homeDir();
 // Env-overridable so the verify suite (and unit tests) can point a scratch
 // config at a scratch docker setup without touching the live file (which is

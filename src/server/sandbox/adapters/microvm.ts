@@ -11,6 +11,7 @@
 import { homeDir } from "../../paths";
 import { getRepo } from "../../worktree";
 import {
+  DEFAULT_SANDBOX_PREVIEW_PORTS,
   sandboxCallbackBaseUrl,
   sandboxConfig,
   sandboxProviderConfigured,
@@ -396,9 +397,16 @@ export class MicrovmProvider implements SandboxProvider {
       driver: driverFor(idx),
       callbackBaseUrl: sandboxCallbackBaseUrl(),
       async ports(): Promise<PortMap> {
-        // The guest subnet is host-private. Add a Caddy proxy before exposing
-        // browser preview URLs; structured workspace execution needs no port.
-        return {};
+        // The guest veth is host-private, but Caddy runs on this host and can
+        // dial it directly. Browser access still goes through the authenticated
+        // portal route; the private address is never handed to the client.
+        const ports =
+          sandboxConfig().previewPorts?.length
+            ? sandboxConfig().previewPorts!
+            : [...DEFAULT_SANDBOX_PREVIEW_PORTS];
+        return Object.fromEntries(
+          ports.map((port) => [port, { upstream: `${ipFor(idx)}:${port}` }]),
+        );
       },
       async status(): Promise<SandboxStatus> {
         if (!(await unitRunning(idx))) return "gone";

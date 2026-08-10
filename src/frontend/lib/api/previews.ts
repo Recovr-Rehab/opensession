@@ -6,6 +6,7 @@ export interface PreviewService {
 	port: number;
 	running: boolean;
 	pids: number[];
+	previewUrl?: string | null;
 }
 
 export interface PreviewStatus {

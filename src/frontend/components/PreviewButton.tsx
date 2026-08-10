@@ -299,7 +299,7 @@ export function PreviewButton({
       ) : (
         <ul className="mb-2 flex list-none flex-col gap-[5px] p-0">
           {status.services.map((s) => (
-            <li key={s.key} className="flex items-center gap-[7px] text-xs text-dim">
+            <li key={s.key} className="flex min-h-10 items-center gap-[7px] text-xs text-dim">
               <span
                 className={cn(
                   "size-[7px] shrink-0 rounded-full",
@@ -308,7 +308,18 @@ export function PreviewButton({
                     : "bg-[var(--text-faint)] shadow-none",
                 )}
               />
-              <span className="font-semibold">{s.name}</span>
+              {s.running && s.previewUrl ? (
+                <a
+                  href={s.previewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-fg underline decoration-transparent underline-offset-2 transition-[text-decoration-color] hover:decoration-current focus-visible:decoration-current"
+                >
+                  {s.name}
+                </a>
+              ) : (
+                <span className="font-semibold">{s.name}</span>
+              )}
               <span className="text-faint">:{s.port}</span>
               <span className={cn("ml-auto text-[11px] text-faint", s.running && "text-green")}>
                 {s.running ? "running" : "stopped"}

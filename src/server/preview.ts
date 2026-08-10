@@ -69,6 +69,8 @@ export interface PreviewService {
   port: number;
   running: boolean;
   pids: number[];
+  /** Authenticated URL for this individual service when it is reachable. */
+  previewUrl?: string | null;
 }
 
 export interface PreviewStatus {
@@ -282,11 +284,11 @@ async function pgidOf(pid: number): Promise<number | null> {
 
 const caddyAdmin = () => configuredServer().caddyAdmin.replace(/\/+$/, "");
 const g = globalThis as unknown as {
-  __previewRoutes?: Map<number, number>;
+  __previewRoutes?: Map<number, string>;
   __previewHost?: string;
 };
 // httpsPort -> webappPort we've already configured (survives --hot reloads).
-const previewRoutes: Map<number, number> = (g.__previewRoutes ??= new Map());
+const previewRoutes: Map<number, string> = (g.__previewRoutes ??= new Map());
 
 /** This machine's tailnet hostname (e.g. example-host.your-tailnet.ts.net). */
 export async function previewHost(): Promise<string> {
@@ -310,19 +312,68 @@ export function httpsPortFor(webappPort: number): number {
   return webappPort + 6000;
 }
 
-/** Add/refresh the Caddy server for this webapp (idempotent, cached). */
-async function ensurePreviewRoute(httpsPort: number, webappPort: number, host: string): Promise<boolean> {
-  if (previewRoutes.get(httpsPort) === webappPort) return true;
-  const server = {
+/** Caddy JSON for one permission-coupled portal. The first reverse proxy is
+ *  the JSON expansion of Caddy's `forward_auth`: a 2xx response continues to
+ *  the app upstream; any auth rejection is returned directly. The browser's
+ *  Open Session cookie is same-host and therefore rides across HTTPS ports. */
+export function previewServerConfig(
+  httpsPort: number,
+  upstream: string,
+  host: string,
+) {
+  const authPort = configuredServer().port;
+  return {
     listen: [`:${httpsPort}`],
     routes: [
       {
         match: [{ host: [host] }],
-        handle: [{ handler: "reverse_proxy", upstreams: [{ dial: `127.0.0.1:${webappPort}` }] }],
+        handle: [
+          {
+            handler: "subroute",
+            routes: [
+              {
+                handle: [
+                  {
+                    handler: "reverse_proxy",
+                    upstreams: [{ dial: `127.0.0.1:${authPort}` }],
+                    rewrite: {
+                      method: "GET",
+                      uri: `/api/portal-auth/${httpsPort}`,
+                    },
+                    headers: {
+                      request: {
+                        set: {
+                          "X-Forwarded-Method": ["{http.request.method}"],
+                          "X-Forwarded-Uri": ["{http.request.uri}"],
+                        },
+                      },
+                    },
+                    handle_response: [
+                      {
+                        match: { status_code: [2] },
+                        routes: [{ handle: [{ handler: "vars" }] }],
+                      },
+                    ],
+                  },
+                  {
+                    handler: "reverse_proxy",
+                    upstreams: [{ dial: upstream }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
         terminal: true,
       },
     ],
   };
+}
+
+/** Add/refresh the Caddy server for this webapp (idempotent, cached). */
+async function ensurePreviewRoute(httpsPort: number, upstream: string, host: string): Promise<boolean> {
+  if (previewRoutes.get(httpsPort) === upstream) return true;
+  const server = previewServerConfig(httpsPort, upstream, host);
   const path = `${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`;
   const put = () =>
     fetch(path, {
@@ -340,7 +391,7 @@ async function ensurePreviewRoute(httpsPort: number, webappPort: number, host: s
       res = await put();
     }
     if (!res.ok) return false;
-    previewRoutes.set(httpsPort, webappPort);
+    previewRoutes.set(httpsPort, upstream);
     return true;
   } catch {
     return false;
@@ -407,7 +458,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
   if (webapp?.running) {
     const httpsPort = httpsPortFor(webapp.port);
     const host = await previewHost();
-    if (await ensurePreviewRoute(httpsPort, webapp.port, host)) {
+    if (await ensurePreviewRoute(httpsPort, `127.0.0.1:${webapp.port}`, host)) {
       previewUrl = `https://${host}:${httpsPort}`;
     }
   } else if (webapp) {
@@ -792,45 +843,45 @@ export async function getSandboxPreviewStatus(
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
   const services: PreviewService[] = [];
+  const portMap = await sandbox.ports();
+  const host = await previewHost();
   for (const { key, port } of ports) {
     const running = await sandboxPortListening(sandbox, port);
+    let previewUrl: string | null = null;
+    if (running) {
+      const entry = portMap[port];
+      const published = typeof entry === "number" ? entry : entry?.hostPort;
+      const privateUpstream = typeof entry === "object" ? entry?.upstream : undefined;
+      const directUrl = typeof entry === "object" ? entry?.url : undefined;
+      if (directUrl) {
+        previewUrl = directUrl;
+      } else if (published || privateUpstream) {
+        const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
+        const upstream = privateUpstream || `127.0.0.1:${published}`;
+        if (await ensurePreviewRoute(httpsPort, upstream, host))
+          previewUrl = `https://${host}:${httpsPort}`;
+      }
+    } else {
+      const allocated = lookupSandboxHttpsPort(sandbox.id, port);
+      if (allocated != null) await removePreviewRoute(allocated);
+    }
     // PIDs are container-internal — meaningless to the host UI; leave empty.
-    services.push({ name: friendly(key), key, port, running, pids: [] });
+    services.push({
+      name: friendly(key),
+      key,
+      port,
+      running,
+      pids: [],
+      previewUrl,
+    });
   }
   const webapp = services.find((s) => s.key === "WEBAPP_PORT");
 
-  let previewUrl: string | null = null;
-  if (webapp?.running) {
-    const entry = (await sandbox.ports())[webapp.port];
-    const published = typeof entry === "number" ? entry : entry?.hostPort;
-    const directUrl = typeof entry === "object" ? entry?.url : undefined;
-    if (directUrl) {
-      // Remote providers (daytona/e2b) hand out a URL on their own preview
-      // domain — no Caddy hop needed (or possible: the upstream isn't a local
-      // port). Auth caveats (e.g. Daytona's preview token for non-public
-      // sandboxes) are the operator's provider-side setting.
-      previewUrl = directUrl;
-    } else if (published) {
-      // Same Caddy route machinery as host previews, but the https port comes
-      // from the sandbox allocator (stable per sandbox+container-port across
-      // restarts AND collision-free by construction against host previews and
-      // other sandboxes — see sandbox/preview-ports.ts). The upstream dials
-      // the published loopback port, which may change when the container is
-      // recreated — ensurePreviewRoute re-points an existing route on
-      // mismatch.
-      const httpsPort = sandboxHttpsPortFor(sandbox.id, webapp.port);
-      const host = await previewHost();
-      if (await ensurePreviewRoute(httpsPort, published, host)) {
-        previewUrl = `https://${host}:${httpsPort}`;
-      }
-    } else {
+  const previewUrl = webapp?.previewUrl || null;
+  if (webapp?.running && !previewUrl) {
       console.warn(
         `[preview] ${sandbox.id}: webapp on ${webapp.port} is up in-container but the port isn't published — add it to sandbox previewPorts`,
       );
-    }
-  } else if (webapp) {
-    const allocated = lookupSandboxHttpsPort(sandbox.id, webapp.port);
-    if (allocated != null) await removePreviewRoute(allocated);
   }
 
   if (webapp?.running) starting.delete(worktreeDir);

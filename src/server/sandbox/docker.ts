@@ -134,6 +134,7 @@ import { redactUrl } from "../shared/redact";
 import { REPOS, getRepo, repoForPath, worktreePathFor, type Repo } from "../worktree";
 import { LocalProvider } from "./local";
 import {
+  DEFAULT_SANDBOX_PREVIEW_PORTS,
   sandboxConfig,
   sandboxSnapshots,
   sandboxTransport,
@@ -173,7 +174,6 @@ const SWEEP_INTERVAL_MS = 5 * 60_000;
  *  started AFTER creation (ports are create-time-only in docker) still has a
  *  routable port — startSandboxPreview allocates from this set. Config
  *  `previewPorts` overrides; exhaustion = widen it + recreate the container. */
-const DEFAULT_PREVIEW_PORTS = [3300, 3301, 3302];
 /** Cap for a `.agents/setup` lifecycle run (one-shot, per workspace). */
 const SETUP_TIMEOUT_MS = 10 * 60_000;
 
@@ -675,7 +675,7 @@ async function createContainer(
   // nothing is exposed off-host). Create-time only, hence the pre-published
   // DEFAULT range: a dev server started later still lands on a routable port
   // (startSandboxPreview allocates from this set).
-  const portArgs = (cfg.previewPorts?.length ? cfg.previewPorts : DEFAULT_PREVIEW_PORTS)
+  const portArgs = (cfg.previewPorts?.length ? cfg.previewPorts : DEFAULT_SANDBOX_PREVIEW_PORTS)
     .flatMap((p) => ["-p", `127.0.0.1::${p}`]);
 
   const r = await docker([

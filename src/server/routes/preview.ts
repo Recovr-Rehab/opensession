@@ -17,6 +17,17 @@ export async function handlePreviewRoutes(
 ): Promise<Response | undefined> {
 	const { req, url, path, publicPrefix } = ctx;
 
+	// Caddy-backed Portals authenticate every request through this endpoint
+	// before proxying it to a session service. The global API auth gate has
+	// already verified the Open Session cookie/Bearer token; returning 204 lets
+	// Caddy continue, while an unauthenticated request never reaches here.
+	if (/^\/api\/portal-auth\/\d+$/.test(path) && req.method === "GET") {
+		return new Response(null, {
+			status: 204,
+			headers: { "Cache-Control": "no-store" },
+		});
+	}
+
 	// Local dev-server ("Preview") status for a session's worktree — which
 	// services (.ports.conf) are listening, so the header can link to the
 	// webapp and show/stop running processes.

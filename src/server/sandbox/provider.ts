@@ -80,6 +80,9 @@ export interface ExecResult {
 export interface PortEntry {
   /** Host loopback port the sandbox port is published on (docker). */
   hostPort?: number;
+  /** Caddy-reachable dial address for private runtimes that do not publish a
+   *  loopback port (for example a local Firecracker guest veth). */
+  upstream?: string;
   /** Direct preview URL (remote providers' port-forward domains). */
   url?: string;
 }
