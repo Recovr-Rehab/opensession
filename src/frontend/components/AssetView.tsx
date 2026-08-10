@@ -167,11 +167,13 @@ function AssetMenu({
 	file,
 	refresh,
 	onClose,
+	triggerClassName,
 }: {
 	sessionId: string;
 	file: SessionAssetFile;
 	refresh?: () => void;
 	onClose?: () => void;
+	triggerClassName?: string;
 }) {
 	const rawUrl = sessionAssetPreviewUrl(sessionId, file);
 	const stableUrl = sessionAssetRawUrl(sessionId, file.path);
@@ -191,7 +193,10 @@ function AssetMenu({
 		<Menu.Root>
 			<Menu.Trigger
 				aria-label="Asset actions"
-				className="flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+				className={cn(
+					"flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+					triggerClassName,
+				)}
 			>
 				<IconDotsHorizontal size={16} />
 			</Menu.Trigger>
@@ -251,17 +256,17 @@ function AssetOverlayFooter({
 				"z-20 flex shrink-0 flex-col items-center gap-1 px-3 py-2",
 				phone
 					? "border-t border-line"
-					: "absolute left-0 right-0 top-full mt-2 rounded-lg border border-line-strong bg-raised shadow-control",
+					: "absolute left-0 right-0 top-full mt-2",
 			)}
 		>
 			{file.description && (
-				<div className="max-w-full line-clamp-2 text-center text-supporting leading-snug text-dim">
+				<div className="max-w-full line-clamp-2 text-center text-supporting leading-snug text-fg">
 					{file.description}
 				</div>
 			)}
 			<div className="flex max-w-full items-center justify-center gap-2">
 				{showSize && (
-					<span className="shrink-0 text-[11px] text-faint">
+					<span className={cn("shrink-0 text-[11px]", phone ? "text-faint" : "text-fg")}>
 						{formatAssetSize(file.size)}
 					</span>
 				)}
@@ -273,6 +278,7 @@ function AssetOverlayFooter({
 						variant="ghost"
 						size="xs"
 						icon={<IconArrowUpRight size={15} />}
+						className={!phone ? "text-fg" : undefined}
 						onClick={onOpenAsTab}
 					>
 						Open
@@ -283,6 +289,7 @@ function AssetOverlayFooter({
 					file={file}
 					refresh={refresh}
 					onClose={onClose}
+					triggerClassName={!phone ? "text-fg" : undefined}
 				/>
 			</div>
 		</div>
@@ -465,7 +472,14 @@ export function AssetPreview({
 						className="flex max-h-full max-w-full cursor-zoom-in border-0 bg-transparent"
 						onClick={(event) =>
 							openLightbox(
-								[{ kind: "image", src: rawUrl, sessionTitle: file.path }],
+								[
+									{
+										kind: "image",
+										src: rawUrl,
+										sessionTitle: file.path,
+										description: file.description,
+									},
+								],
 								0,
 								event.currentTarget,
 							)

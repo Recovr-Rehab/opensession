@@ -35,6 +35,7 @@ export interface LightboxItem {
 	kind: "image" | "video";
 	src: string;
 	sessionTitle?: string;
+	description?: string;
 	at?: string;
 }
 
@@ -87,7 +88,7 @@ html[data-lightbox-transition="closing"]::view-transition-old(root) {
 }
 
 ::view-transition-group(${HERO_TRANSITION_NAME}) {
-  z-index: 401;
+  z-index: 11001;
   animation-duration: var(--dur-lg);
   animation-timing-function: var(--ease);
 }
@@ -865,6 +866,7 @@ function MediaLightbox({
 	]
 		.filter(Boolean)
 		.join(" · ");
+	const description = item.description?.trim();
 	// z-10 keeps the chrome floating above a zoomed image, which is free to
 	// spread under it across the whole viewport (z-index applies to flex items
 	// without needing position).
@@ -874,7 +876,7 @@ function MediaLightbox({
 	return (
 		<motion.div
 			ref={dialogRef}
-			className="fixed inset-0 z-[400] flex flex-col bg-black/85"
+			className="fixed inset-0 z-[11000] flex flex-col bg-black/85"
 			role="dialog"
 			aria-modal="true"
 			aria-label={item.kind === "image" ? "Image preview" : "Video preview"}
@@ -974,14 +976,23 @@ function MediaLightbox({
 			    a "Before"/"After" label ends up read as another link. The scrim
 			    keeps it legible when a zoomed photo spreads underneath. */}
 			<div
-				className="z-10 flex flex-col items-center gap-1 bg-gradient-to-t from-black/75 to-transparent px-4 pb-4 pt-4"
+				className="z-10 flex flex-col items-center gap-1 bg-gradient-to-t from-black from-70% to-transparent px-4 pb-4 pt-4"
 				onMouseDown={(e) => {
 					if (e.target === e.currentTarget) requestClose();
 				}}
 			>
-				{caption && (
-					<div className="max-w-full truncate text-center text-sm font-medium text-white">
-						{caption}
+				{(caption || description) && (
+					<div className="flex max-w-full flex-col items-center gap-0.5 text-center">
+						{caption && (
+							<div className="max-w-full truncate text-sm font-medium text-white">
+								{caption}
+							</div>
+						)}
+						{description && (
+							<div className="max-w-[min(720px,90vw)] line-clamp-2 text-sm leading-snug text-white/75">
+								{description}
+							</div>
+						)}
 					</div>
 				)}
 				<div className="flex items-center gap-3 text-xs text-white/60">
