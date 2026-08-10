@@ -197,8 +197,11 @@ export const VIEWER_MESSAGES_REGION =
 	"desktop:supports-[animation-timeline:scroll()]:before:[background:var(--wash-up)] " +
 	"desktop:supports-[animation-timeline:scroll()]:before:[animation:session-edge-fade-in_1ms_both] " +
 	"desktop:supports-[animation-timeline:scroll()]:before:[animation-timeline:--viewer-session-scroll] " +
-	// Fully in after a couple of lines of scroll-back.
-	"desktop:supports-[animation-timeline:scroll()]:before:[animation-range:0_56px] " +
+	// Spend the resting 18px inset before the wash starts. Otherwise the fade is
+	// already strong while the first message is still under it, so the reader can
+	// see older text but cannot make it fully legible at the upper scroll limit.
+	// Keep the full 56px ramp after that inset rather than shortening the dissolve.
+	"desktop:supports-[animation-timeline:scroll()]:before:[animation-range:18px_74px] " +
 	"desktop:supports-[animation-timeline:scroll()]:before:content-['']";
 
 /**
