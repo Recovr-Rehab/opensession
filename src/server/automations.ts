@@ -133,7 +133,9 @@ export interface Automation {
   enabled: boolean;
   createdBy: string;
   createdAt: string;
-  webhookSecret: string; // every automation is also webhook-triggerable
+  webhookSecret: string;
+  /** False removes the public trigger route while retaining the rotatable secret. */
+  webhookEnabled?: boolean;
   eventKey?: string; // internal event subscription, e.g. "plain:thread_created"
   /**
    * MCP server allowlist for this automation's runs (least privilege).
@@ -420,6 +422,7 @@ export function createAutomation(input: {
   slackWatch?: SlackWatchConfig;
   inputs?: AutomationInput[];
   outputs?: AutomationOutput[];
+  webhookEnabled?: boolean;
 }): Automation | { error: string } {
   if (!input.name.trim()) return { error: "Name is required" };
   if (!input.prompt.trim()) return { error: "Prompt is required" };
@@ -465,6 +468,7 @@ export function createAutomation(input: {
     createdBy: input.createdBy || "Anonymous",
     createdAt: new Date().toISOString(),
     webhookSecret: generateSecret(),
+    webhookEnabled: input.webhookEnabled === false ? false : undefined,
     eventKey: (input.eventKey || "").trim() || undefined,
     mcpServers: sanitizeMcpList(input.mcpServers),
     repo,
@@ -530,7 +534,7 @@ export function ensureConfiguredAutomations(): void {
 
 export function updateAutomation(
   id: string,
-  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch" | "inputs" | "outputs">>
+  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch" | "inputs" | "outputs" | "webhookEnabled">>
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
@@ -581,6 +585,9 @@ export function updateAutomation(
     const outputs = sanitizeAutomationOutputs(patch.outputs);
     if (outputs && "error" in outputs) return outputs;
     next.outputs = outputs;
+  }
+  if ("webhookEnabled" in patch) {
+    next.webhookEnabled = patch.webhookEnabled === false ? false : undefined;
   }
   if ("model" in patch) {
     const model = sanitizeModel(patch.model);
@@ -1517,7 +1524,12 @@ export function getWebhookRoutes(
 
     const automation = getAutomation(m[1]);
     // Same response for unknown id and bad secret — don't leak which ids exist
-    if (!automation || !automation.webhookSecret || automation.webhookSecret !== m[2]) {
+    if (
+      !automation ||
+      automation.webhookEnabled === false ||
+      !automation.webhookSecret ||
+      automation.webhookSecret !== m[2]
+    ) {
       return Response.json({ error: "Not found" }, { status: 404 });
     }
     if (!automation.enabled) {
