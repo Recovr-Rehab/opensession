@@ -1,28 +1,33 @@
 /**
- * The Archived list's row optics.
- *
- * The page used to render a bordered `bg-panel` card per session, stacked with
- * gaps — thirteen grey slabs to a screen for a list that is 600 rows long, each
- * one carrying an always-on outlined "Unarchive" pill across ~500px of empty
- * gutter. That is a lot of chrome for a page whose whole job is "find the thing
- * I closed". So: one card, hairline rows, and the secondary action stays out of
- * sight until the row is under the cursor (or focused, or on a touch device,
- * where there is no hover to reveal it).
+ * A plain list rather than a bordered card. At 200 rows an outer border is a
+ * box around the page itself; inset row separators carry the useful structure.
  */
+export const ARCHIVED_LIST = "m-0 list-none p-0";
 
 /**
- * A row. `relative` positions two things: the open-button's full-bleed overlay
- * (see ROW_OPEN) and the action that has to sit above it.
+ * A row. `relative` positions three things: the separator below it, the
+ * open-button's full-bleed overlay (see ROW_OPEN) and the action that has to
+ * sit above that overlay.
  *
  * `focus-within:bg-hover` matters as much as the hover: with the whole row
  * clickable through an overlay, keyboard focus lands on a button whose visible
  * text is only the title — lighting the row is what says how far the target
  * reaches.
+ *
+ * The separator is the row's own `::after`, inset past the repo tile and gone
+ * on the last row. It also clears out around the highlight: the
+ * hovered row hides its own, and `:has(+ li:hover)` hides the one above it, so
+ * a lit row is a clean slab rather than a strip with a line cutting its corner
+ * — the same tidying an iOS list does around a highlighted cell.
  */
 export const ARCHIVED_ROW =
-	"group relative flex items-center gap-3 px-3.5 py-2.5 transition-colors " +
+	"group relative flex items-center gap-3 rounded-control px-3 py-2.5 transition-colors " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover focus-within:bg-hover " +
-	"phone:gap-2.5 phone:py-3 phone:pr-[54px]";
+	"after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:left-[46px] " +
+	"after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
+	"last:after:opacity-0 hover:after:opacity-0 focus-within:after:opacity-0 " +
+	"[&:has(+li:hover)]:after:opacity-0 [&:has(+li:focus-within)]:after:opacity-0 " +
+	"phone:gap-2.5 phone:py-3 phone:pr-[54px] phone:after:left-[42px]";
 
 /**
  * The open action, stretched over the whole row by its own `::after` so a click
@@ -43,23 +48,17 @@ export const ARCHIVED_ROW_TITLE =
 export const ARCHIVED_ROW_META =
 	"mt-1 flex min-w-0 items-center gap-2.5 text-meta text-faint phone:text-[12px]";
 
-/**
- * The timestamp column. Fixed width so the right edge lines up down the list
- * (a ragged column of "34m ago" / "2d ago" is the thing that reads as untidy),
- * and it steps aside for the action rather than reserving a second column of
- * air beside it. On phones the time joins the meta line instead, where the
- * action is always visible and there is no room for both.
- */
+/** The fixed timestamp column steps aside for the restore action on hover. */
 export const ARCHIVED_ROW_TIME =
 	"w-[62px] shrink-0 text-right text-meta tabular-nums text-faint transition-opacity " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-0 " +
 	"group-focus-within:opacity-0 phone:hidden";
 
 /**
- * Unarchive: absolutely placed over the timestamp it replaces, so a row costs
- * no width for an action that is usually not wanted. Revealed by hover, by
- * focus, and unconditionally where hover can't reveal it — a control that only
- * exists on `:hover` does not exist on a phone.
+ * Restore: absolutely placed over the timestamp it replaces, so a row
+ * costs no width for an action that is usually not wanted. Revealed by hover,
+ * by focus, and unconditionally where hover can't reveal it — a control that
+ * only exists on `:hover` does not exist on a phone.
  *
  * Both the width query and the pointer query, and deliberately: `phone:` is
  * the one a narrow window can be checked against (a hover-capable browser
@@ -71,7 +70,7 @@ export const ARCHIVED_ROW_TIME =
  * of a 390px row, and the row is mostly title.
  */
 export const ARCHIVED_ROW_ACTION =
-	"absolute right-3 top-1/2 z-[1] -translate-y-1/2 opacity-0 transition-opacity " +
+	"absolute right-2.5 top-1/2 z-[1] -translate-y-1/2 opacity-0 transition-opacity " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
 	"focus-visible:opacity-100 phone:min-h-11 phone:w-11 phone:gap-0 phone:px-0 phone:opacity-100 " +
 	"[@media(hover:none)]:opacity-100";

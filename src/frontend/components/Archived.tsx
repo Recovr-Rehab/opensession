@@ -4,6 +4,7 @@ import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
 import { sessionSourceLabel } from "../lib/brand";
 import { SOURCE_CHIP, sourceChipTone } from "../lib/source-chip-classes";
 import {
+	ARCHIVED_LIST,
 	ARCHIVED_ROW,
 	ARCHIVED_ROW_ACTION,
 	ARCHIVED_ROW_META,
@@ -284,7 +285,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 					</EmptyState>
 				</Card>
 			) : (
-				<CardList as="ul">
+				<ul className={ARCHIVED_LIST}>
 					{archived.slice(0, PAGE_SIZE).map((s) => {
 						const chip = originChip(s);
 						// A field the current filter already fixes is the same word on
@@ -352,7 +353,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 							reach the older ones.
 						</li>
 					)}
-				</CardList>
+				</ul>
 			)}
 		</PageLayout>
 	);
