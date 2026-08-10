@@ -7,6 +7,7 @@ import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
 import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
+import { collectWrittenAssets } from "../lib/open-asset";
 
 type RenderBlock =
 	| { kind: "entry"; entry: TranscriptEntry }
@@ -16,6 +17,7 @@ type RenderBlock =
 			entry: TranscriptEntry;
 			durationMs: number;
 			files: TouchedFile[];
+			assets: string[];
 	  }
 	| { kind: "walkthrough"; walkthrough: SessionWalkthrough };
 
@@ -87,8 +89,9 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			if (final) blocks.push({ kind: "entry", entry: final });
 		}
 		// Meta row under the settled turn's final answer: duration, copy / ⋯
-		// actions, per-file edit chips. The live trailing turn skips it — its
-		// footer appears when the run finishes.
+		// actions, per-file edit chips and the scratch files the turn wrote.
+		// The live trailing turn skips it — its footer appears when the run
+		// finishes.
 		if (final && !(live && trailing)) {
 			blocks.push({
 				kind: "footer",
@@ -97,6 +100,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 					new Date(final.timestamp).getTime() -
 					new Date(turn[0].timestamp).getTime(),
 				files: collectTouchedFiles(turn),
+				assets: collectWrittenAssets(turn),
 			});
 		}
 		turn = [];
@@ -159,6 +163,8 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						entry={block.entry}
 						durationMs={block.durationMs}
 						files={block.files}
+						assets={block.assets}
+						sessionId={sessionId}
 						onFork={onFork}
 					/>
 				) : (

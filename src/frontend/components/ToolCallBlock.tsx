@@ -22,8 +22,12 @@ import {
   toolLineStats,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { formatDuration } from "../lib/time";
-import { openGalleryFrom, openLightbox } from "./MediaLightbox";
-import { sessionAssetRawUrl } from "../lib/api";
+import { openGalleryFrom } from "./MediaLightbox";
+import { useOpenAsset } from "../lib/open-asset";
+// Re-exported so the session view keeps one import for the transcript's
+// context providers; the context itself lives with the rest of the
+// open-an-asset behaviour, which the turn footer shares.
+export { OpenAssetProvider } from "../lib/open-asset";
 import {
   IconTerminal,
   IconFile,
@@ -163,37 +167,6 @@ const LiveSubagentsContext = createContext<ReadonlyMap<string, LiveSubagent>>(
   new Map()
 );
 export const LiveSubagentsProvider = LiveSubagentsContext.Provider;
-
-/**
- * Opens one of the session's scratch assets in the Assets view-tab — the
- * transcript's own way into an artifact, so a report or a visualization can be
- * looked at from the row that announced it instead of hunted for in a tab you
- * have to know exists. Same destination as the Info panel's assets list, so
- * the two ways into one file don't disagree.
- *
- * Context rather than a prop for the same reason the sub-agent map is one: the
- * caller is a tool row several memoized layers below the session view. Null
- * where there is no tab to open into (the Desk overlay, a sub-agent pane) —
- * and a row then draws no affordance at all, because a button that does
- * nothing is worse than no button.
- */
-const OpenAssetContext = createContext<((path: string) => void) | null>(null);
-export const OpenAssetProvider = OpenAssetContext.Provider;
-
-/**
- * Assets that read better lifted over the conversation than opened beside it:
- * a picture or a clip is a glance, and the lightbox is already where every
- * other image in a transcript opens. Everything else — a report, a page, a
- * log — is something you read, and goes to the Assets tab, where an HTML
- * artifact's relative references resolve and the folder is there to browse.
- * SVG is deliberately not here: an animated or scripted one needs the frame.
- */
-function assetMediaKind(path: string): "image" | "video" | null {
-  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  if (["png", "jpg", "jpeg", "gif", "webp", "ico"].includes(ext)) return "image";
-  if (["mp4", "webm", "mov"].includes(ext)) return "video";
-  return null;
-}
 
 /**
  * One-line human summary of a tool call (also used for collapsed previews).
@@ -346,19 +319,11 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   // assets live outside every worktree and nothing else in the transcript can
   // say what the path means. A delete names one too, with nothing left to open.
   const assetPath = assetToolPath(toolName, shownInput);
-  const openAsset = useContext(OpenAssetContext);
-  const canOpenAsset = Boolean(assetPath && openAsset) && mcp?.tool !== "delete_asset";
+  const asset = useOpenAsset(sessionId);
+  const canOpenAsset =
+    Boolean(assetPath && asset.available) && mcp?.tool !== "delete_asset";
   function showAsset(origin: HTMLElement) {
-    const kind = assetMediaKind(assetPath);
-    if (kind && sessionId) {
-      openLightbox(
-        [{ kind, src: sessionAssetRawUrl(sessionId, assetPath) }],
-        0,
-        origin
-      );
-      return;
-    }
-    openAsset?.(assetPath);
+    asset.open(assetPath, origin);
   }
 
   // A Task/Agent call whose sub-agent transcript we can open in the sidebar.

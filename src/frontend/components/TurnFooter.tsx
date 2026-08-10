@@ -6,6 +6,7 @@ import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import { TOOL_CODE_WELL, TOOL_PRE } from "../lib/tool-classes";
 import {
+  IconArrowUpRight,
   IconBranches,
   IconCheck,
   IconClock,
@@ -13,6 +14,7 @@ import {
   IconDotsHorizontal,
   IconSparkle,
 } from "./icons";
+import { useOpenAsset } from "../lib/open-asset";
 import { formatDuration, fullTime } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { canonicalToolName } from "./ToolCallBlock";
@@ -44,6 +46,10 @@ interface Props {
   entry: TranscriptEntry;
   durationMs: number;
   files: TouchedFile[];
+  /** Scratch files the turn wrote (`opensession-assets`), in first-write order. */
+  assets: string[];
+  /** Whose scratch folder those assets open into. */
+  sessionId?: string;
   onFork?: (entryId: string) => void;
 }
 
@@ -57,6 +63,8 @@ export const TurnFooter = React.memo(function TurnFooter({
   entry,
   durationMs,
   files,
+  assets,
+  sessionId,
   onFork,
 }: Props) {
   const [copied, setCopied] = useState(false);
@@ -68,8 +76,12 @@ export const TurnFooter = React.memo(function TurnFooter({
   };
 
   const duration = formatDuration(durationMs);
-  const shown = files.slice(0, MAX_CHIPS);
-  const rest = files.slice(MAX_CHIPS);
+  // Assets come first and are never cut. An edited file is named in the
+  // Changes tab too, so its chip is a shortcut; a scratch file the turn wrote
+  // is named nowhere else outside the work fold — which is shut by default —
+  // so its chip is the only way to it without going looking.
+  const shown = files.slice(0, Math.max(0, MAX_CHIPS - assets.length));
+  const rest = files.slice(shown.length);
 
   return (
     <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
@@ -114,6 +126,9 @@ export const TurnFooter = React.memo(function TurnFooter({
           )}
         </Menu.Popup>
       </Menu.Root>
+      {assets.map((path) => (
+        <AssetChip key={path} path={path} sessionId={sessionId} />
+      ))}
       {shown.map((f) => (
         <FileChip key={f.path} file={f} />
       ))}
@@ -136,9 +151,13 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
     prev.entry !== next.entry ||
     prev.durationMs !== next.durationMs ||
     prev.onFork !== next.onFork ||
-    prev.files.length !== next.files.length
+    prev.sessionId !== next.sessionId ||
+    prev.files.length !== next.files.length ||
+    prev.assets.length !== next.assets.length
   )
     return false;
+  for (let i = 0; i < next.assets.length; i++)
+    if (prev.assets[i] !== next.assets[i]) return false;
   for (let i = 0; i < next.files.length; i++) {
     const a = prev.files[i];
     const b = next.files[i];
@@ -206,6 +225,53 @@ const FOOTER_TIME =
   "[@media(hover:hover)]:[.transcript-window:hover_&]:opacity-100 " +
   "[@media(hover:hover)]:[.transcript-window:hover+.transcript-window_&]:opacity-100";
 
+/**
+ * One scratch file the turn wrote. Clicking opens it: a picture or a clip in
+ * the lightbox over the conversation, anything else in the Assets tab — the
+ * same destinations the write_asset row's own Open chip uses, so the two ways
+ * into one file don't disagree.
+ *
+ * Unlike a touched file there is no diff to preview: an asset lives outside
+ * every worktree, and the file itself is the thing worth looking at. Where
+ * nothing can open it (the Desk overlay, a sub-agent pane) the chip stays, but
+ * as a plain label — a name is still worth reading; a dead button isn't.
+ */
+function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
+  const name = path.split("/").pop() || path;
+  const asset = useOpenAsset(sessionId);
+  const body = (
+    <>
+      <ExtBadge name={name} flush />
+      <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
+        {name}
+      </span>
+      <IconArrowUpRight size={20} className="size-4 flex-shrink-0 text-faint" />
+    </>
+  );
+  if (!asset.available)
+    return (
+      <span className={cn(CHIP, "pr-1")}>
+        {body}
+      </span>
+    );
+  return (
+    <Tooltip label="Open this file">
+      <button
+        type="button"
+        onClick={(e) => asset.open(path, e.currentTarget)}
+        className={cn(CHIP, "cursor-pointer pr-1 hover:bg-hover")}
+      >
+        {body}
+      </button>
+    </Tooltip>
+  );
+}
+
+/** The shared chip shell: the footer's file and asset chips are the same
+ * object with different tails (± counts, or a way in). */
+const CHIP =
+  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-panel p-0 text-left";
+
 function FileChip({ file }: { file: TouchedFile }) {
   const name = file.path.split("/").pop() || file.path;
   return (
@@ -214,7 +280,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         openOnHover
         delay={250}
         closeDelay={100}
-        className="ml-1 flex h-6 min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-control bg-panel pr-1.5"
+        className={cn(CHIP, "cursor-pointer pr-1.5")}
       >
         <ExtBadge name={name} flush />
         <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
