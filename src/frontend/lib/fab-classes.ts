@@ -25,12 +25,19 @@
  * Phones only: the new-session + in the thumb corner of the root list.
  * App.tsx already gates it on `!mobileDetail`; `hidden` covers desktop, where
  * the sidebar's own + does the job.
+ *
+ * The shadow is deliberately shallower than the ambient-occlusion stack a
+ * material FAB carries: this button is solid ink on a near-white page, so a
+ * 20px/0.3 spread read as a smudge under it rather than as lift. iOS floats
+ * controls on a tight contact shadow plus a short soft one, which is what these
+ * two layers are — and the same pair, lightened for an outlined white surface,
+ * is what the Desk trigger beside it now uses.
  */
 export const MOBILE_FAB =
 	"hidden phone:fixed phone:right-3 phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
 	"phone:z-500 phone:flex phone:size-[58px] phone:items-center phone:justify-center " +
 	"phone:rounded-full phone:border-none phone:bg-accent phone:text-on-accent " +
-	"phone:shadow-[0_6px_20px_rgba(0,0,0,0.3),0_2px_6px_rgba(0,0,0,0.18)] " +
+	"phone:shadow-[0_4px_14px_rgba(0,0,0,0.16),0_1px_3px_rgba(0,0,0,0.10)] " +
 	"phone:transition-transform phone:active:scale-[0.92]";
 
 /**
@@ -39,6 +46,10 @@ export const MOBILE_FAB =
  * the same press tick the + uses. `transition` lists the properties the states
  * actually move — `scale` and `translate` are their own properties in Tailwind
  * v4, so a bare `transform` in the list would animate neither.
+ *
+ * On phones it keeps its border, so it needs less shadow than the + to sit off
+ * the page — a matched pair of deep shadows made the two read as one heavy
+ * slab. This is the desktop shadow's weight, spread for the bigger circle.
  */
 export const DESK_FAB =
 	"fixed right-[18px] bottom-[18px] z-500 flex size-11 items-center justify-center " +
@@ -47,5 +58,5 @@ export const DESK_FAB =
 	"transition-[color,translate,scale] hover:-translate-y-px hover:text-fg " +
 	"phone:right-[calc(12px+58px+12px)] phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
 	"phone:size-[58px] phone:text-fg " +
-	"phone:shadow-[0_6px_20px_rgba(0,0,0,0.3),0_2px_6px_rgba(0,0,0,0.18)] " +
+	"phone:shadow-[0_2px_10px_rgba(0,0,0,0.10),0_1px_2px_rgba(0,0,0,0.06)] " +
 	"phone:hover:translate-y-0 phone:active:scale-[0.92]";

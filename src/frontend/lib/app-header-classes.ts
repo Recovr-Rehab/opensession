@@ -317,11 +317,32 @@ export const HEADER_SESSIONBAR_USAGE =
  * filter; on a pushed page SessionViewer portals its whole header in here.
  *
  * `app-header-actions` stays on the markup as a hook — see the module note.
+ *
+ * The gap belongs to each variant rather than here: the two faces want
+ * different spacing, and two `gap-*` utilities on one element are resolved by
+ * Tailwind's OUTPUT order rather than the order they are written, so a `gap-0`
+ * appended after this string silently loses to a `gap-2.5` inside it.
  */
 const HEADER_ACTIONS_BASE =
-	"app-header-actions phone:flex phone:min-w-0 phone:items-center phone:gap-2.5";
+	"app-header-actions phone:flex phone:min-w-0 phone:items-center";
 
-export const APP_HEADER_ACTIONS = `${HEADER_ACTIONS_BASE} phone:ml-auto`;
+/**
+ * On the root page the two glyphs in this slot — Filter and Search — are one
+ * control, the way adjacent bar-button items group on iOS: a single capsule
+ * carrying both, split by a hairline, rather than two separate circles floating
+ * next to each other. So the surface (border, fill, shadow, radius) lives here
+ * on the container and the segments inside it are transparent; `gap-0` closes
+ * the 10px the loose pair sat on, and `overflow-hidden` keeps a segment's press
+ * dim inside the capsule's own curve.
+ *
+ * Only the root variant groups. A pushed page portals SessionViewer's whole
+ * header into this slot, which is a row of unrelated controls and keeps the
+ * loose spacing.
+ */
+export const APP_HEADER_ACTIONS =
+	`${HEADER_ACTIONS_BASE} phone:ml-auto phone:gap-0 phone:overflow-hidden ` +
+	"phone:rounded-full phone:border phone:border-line phone:bg-panel " +
+	"phone:shadow-[0_2px_12px_rgba(0,0,0,0.1)]";
 
 /**
  * On a pushed page the title pill already carries `mr-auto` to shove this
@@ -330,32 +351,43 @@ export const APP_HEADER_ACTIONS = `${HEADER_ACTIONS_BASE} phone:ml-auto`;
  * no shrinking, keeps air between them.
  */
 export const APP_HEADER_ACTIONS_DETAIL =
-	`${HEADER_ACTIONS_BASE} phone:ml-2.5 phone:flex-none`;
+	`${HEADER_ACTIONS_BASE} phone:ml-2.5 phone:flex-none phone:gap-2.5`;
 
 /**
- * Search, moved from the sidebar into the bar on phones. A visible circle so
- * the tap target reads as a target, with `::after` padding the real hit area
- * back out past the 44pt minimum. 44px and not 40: an outlined circle is mostly
- * air, so beside the app mark opposite it — 42px of solid ink — it read as the
- * smaller control. The glyph is thickened past its 1.5 stroke because iOS
- * nav-bar glyphs are bold and it reads spindly at this size otherwise.
+ * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 44pt square,
+ * no chrome of its own — the capsule around it draws the border, fill and
+ * shadow. The glyph is thickened past its 1.5 stroke because iOS nav-bar glyphs
+ * are bold and it reads spindly at this size otherwise.
+ */
+const MOBILE_BAR_SEGMENT =
+	"phone:relative phone:inline-flex phone:size-11 phone:shrink-0 " +
+	"phone:items-center phone:justify-center phone:rounded-none " +
+	"phone:border-none phone:bg-transparent phone:p-0 phone:shadow-none " +
+	"phone:cursor-pointer phone:touch-manipulation " +
+	"phone:[-webkit-tap-highlight-color:transparent] " +
+	"phone:active:opacity-35 phone:active:duration-0 " +
+	"phone:[&_svg]:size-[25px] phone:[&_svg]:[stroke-width:2]";
+
+/**
+ * Search — the trailing half of the pair, so it carries the hairline that
+ * divides the two. The divider is spelled as its LEFT border rather than the
+ * filter's right one because the filter is portaled in after it and reordered
+ * ahead of it visually; a border on the visually-second segment lands between
+ * them either way.
+ *
+ * It is one arbitrary `border-left` shorthand and not `border-l border-l-line`
+ * because the segment resets its own chrome with `border-none`: that sets
+ * Tailwind's `--tw-border-style` to none, which a later `border-l` then reads
+ * for its style, so the hairline compiles but never paints.
  */
 export const MOBILE_SEARCH_BTN =
-	"phone:relative phone:inline-flex phone:size-11 phone:items-center " +
-	"phone:justify-center phone:rounded-full phone:border phone:border-line " +
-	"phone:bg-panel phone:p-0 phone:text-accent " +
-	"phone:shadow-[0_2px_12px_rgba(0,0,0,0.1)] phone:cursor-pointer " +
-	"phone:touch-manipulation phone:[-webkit-tap-highlight-color:transparent] " +
+	`${MOBILE_BAR_SEGMENT} phone:[border-left:1px_solid_var(--border)] phone:text-accent ` +
 	"phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
-	"phone:ease-[var(--ease)] phone:active:opacity-35 phone:active:duration-0 " +
-	"phone:after:absolute phone:after:-inset-1 phone:after:rounded-full " +
-	"phone:after:content-[''] " +
-	"phone:[&_svg]:size-[27px] phone:[&_svg]:[stroke-width:2]";
+	"phone:ease-[var(--ease)]";
 
 /**
- * Filter, portaled out of the sidebar header and docked beside Search.
- * `-order-1` seats it to Search's left. Same circle as Search one size down,
- * muted until a filter is actually set.
+ * Filter, portaled out of the sidebar header into the same capsule. `-order-1`
+ * seats it to Search's left. Muted until a filter is actually set.
  *
  * Two whole strings rather than a shared base plus a colour: two `text-*`
  * utilities on one element are resolved by Tailwind's OUTPUT order, not the
@@ -363,16 +395,8 @@ export const MOBILE_SEARCH_BTN =
  * own set. Read them through `mobileFilterBtn()`, never build the class name.
  */
 const MOBILE_FILTER_BTN_BASE =
-	"phone:-order-1 phone:relative phone:inline-flex phone:size-10 " +
-	"phone:items-center phone:justify-center phone:rounded-full phone:border " +
-	"phone:border-line phone:bg-panel phone:p-0 " +
-	"phone:shadow-[0_2px_12px_rgba(0,0,0,0.1)] phone:cursor-pointer " +
-	"phone:touch-manipulation phone:[-webkit-tap-highlight-color:transparent] " +
-	"phone:[transition:opacity_var(--dur)_var(--ease),color_var(--dur-micro)_var(--ease)] " +
-	"phone:active:opacity-35 phone:active:duration-0 " +
-	"phone:after:absolute phone:after:-inset-1 phone:after:rounded-full " +
-	"phone:after:content-[''] " +
-	"phone:[&_svg]:size-[25px] phone:[&_svg]:[stroke-width:2]";
+	`${MOBILE_BAR_SEGMENT} phone:-order-1 ` +
+	"phone:[transition:opacity_var(--dur)_var(--ease),color_var(--dur-micro)_var(--ease)] ";
 
 const MOBILE_FILTER_BTN = {
 	muted: `${MOBILE_FILTER_BTN_BASE} phone:text-dim`,
