@@ -241,7 +241,7 @@ function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
   const asset = useOpenAsset(sessionId);
   const body = (
     <>
-      <ExtBadge name={name} flush />
+      <ExtBadge name={name} />
       <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
         {name}
       </span>
@@ -270,7 +270,7 @@ function AssetChip({ path, sessionId }: { path: string; sessionId?: string }) {
 /** The shared chip shell: the footer's file and asset chips are the same
  * object with different tails (± counts, or a way in). */
 const CHIP =
-  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-transparent p-0 text-left";
+  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-transparent py-0 pl-1 text-left";
 
 function FileChip({ file }: { file: TouchedFile }) {
   const name = file.path.split("/").pop() || file.path;
@@ -282,7 +282,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         closeDelay={100}
         className={cn(CHIP, "cursor-pointer pr-1.5 hover:bg-hover")}
       >
-        <ExtBadge name={name} flush />
+        <ExtBadge name={name} />
         <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
           {name}
         </span>
@@ -297,7 +297,7 @@ function FileChip({ file }: { file: TouchedFile }) {
             sans, and two fonts at one size still centre to different baselines
             (1px apart here) because their ascents differ. */}
         <div className="flex items-baseline gap-2 border-b border-line px-2.5 py-2">
-          <ExtBadge name={name} />
+          <ExtBadge name={name} className="self-center" />
           <span className="min-w-0 flex-1 truncate text-meta text-dim">
             {tidyPath(file.path)}
           </span>
@@ -395,12 +395,17 @@ export function LineStats({
 }
 
 /**
- * Compact colored file-type badge (linguist-ish hues, muted for white text).
- * `flush` fills its container edge to edge instead of floating inside it — the
- * file chip clips it to its own rounded corners, so the colour becomes the
- * chip's leading edge rather than a square with padding around it.
+ * The file's language mark, drawn as an icon rather than a plate: the brand
+ * glyph where one reads at this size, its letters otherwise.
+ *
+ * The hue is the same linguist-ish colour the old filled badge used, but it
+ * now paints the ink instead of the ground, so it has to hold against the page
+ * rather than against white. Mixing a quarter of the theme's own text colour
+ * into it lifts the dark ones (Ruby's #701516, JSON's #953800) off `--bg` in
+ * dark mode and settles the bright ones in light mode, from one expression and
+ * without a second palette to keep in sync.
  */
-function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
+function ExtBadge({ name, className }: { name: string; className?: string }) {
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toLowerCase() : "";
   const color = EXT_COLORS[ext] || "#6e7681";
@@ -408,14 +413,12 @@ function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
   return (
     <span
       className={cn(
-        "flex flex-shrink-0 items-center justify-center text-meta font-bold leading-none text-white",
-        flush
-          ? "min-w-6 self-stretch px-1"
-          : "h-5 min-w-5 self-center rounded-xs px-0.5"
+        "flex h-4 min-w-4 flex-shrink-0 items-center justify-center text-meta font-bold leading-none",
+        className
       )}
-      style={{ background: color }}
+      style={{ color: `color-mix(in oklab, ${color} 75%, var(--text))` }}
     >
-      {Glyph ? <Glyph size={flush ? 13 : 11} /> : extLabel(ext)}
+      {Glyph ? <Glyph size={14} /> : extLabel(ext)}
     </span>
   );
 }

@@ -3,14 +3,13 @@ import React from "react";
 /**
  * Brand marks for the file-type badge — a different family from the interface
  * glyphs in icons.tsx (those are a 24-grid stroke set; these are filled
- * silhouettes drawn in `currentColor`, so they take the badge's white).
+ * silhouettes drawn in `currentColor`, so they take the language's own hue).
  *
- * A language only gets a mark if its logo still reads at badge size. At 13px,
+ * A language only gets a mark if its logo still reads at badge size. At 14px,
  * Go's wordmark, Java's duke, the Sass swirl, the SVG flower and MySQL's
- * dolphin all collapse into a smudge, and Markdown's mark is a rounded box — a
- * box inside the badge's own box. Those keep their letters, which is no loss:
- * "GO", "MD" and "SVG" are already the whole name. TypeScript, JavaScript and
- * CSS keep letters too, because letters on a coloured square ARE their logo.
+ * dolphin all collapse into a smudge. Those keep their letters, which is no
+ * loss: "GO", "MD" and "SVG" are already the whole name, and TypeScript,
+ * JavaScript and CSS have never been anything but letters either.
  *
  * Paths from simple-icons (CC0), except ReScript's, which is from
  * rescript-lang.org's own brandmark. Each is cropped to its ink (see Mark), so
