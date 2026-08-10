@@ -1036,6 +1036,61 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2"])
     }
 
+    /// A text-only edit names no images, and the server reads that as "leave
+    /// them alone" — sending [] instead would strip the screenshot off a
+    /// message whose words were the only thing being changed.
+    func testTextOnlyEditLeavesAttachmentsAlone() {
+        queueWithImage()
+        viewModel.editQueued(viewModel.queuedItems[0], content: "look again")
+        XCTAssertEqual(socket.updatedQueued.count, 1)
+        XCTAssertNil(socket.updatedQueued[0].images)
+        XCTAssertEqual(viewModel.queuedItems[0].images, [Self.pngURL])
+    }
+
+    func testEditingQueuedMessageReplacesItsAttachments() {
+        queueWithImage()
+        viewModel.editQueued(
+            viewModel.queuedItems[0], content: "this one instead", images: [Self.jpegURL]
+        )
+        XCTAssertEqual(socket.updatedQueued[0].images, [Self.jpegURL])
+        XCTAssertEqual(viewModel.queuedItems[0].images, [Self.jpegURL])
+    }
+
+    /// A picture with no words is a legitimate send, so emptying the text of a
+    /// message that still carries one is an edit, not a discard.
+    func testEditingAwayTheTextOfAnImageMessageKeepsIt() {
+        queueWithImage()
+        viewModel.editQueued(
+            viewModel.queuedItems[0], content: "  ", images: [Self.pngURL]
+        )
+        XCTAssertTrue(socket.deletedQueueIds.isEmpty)
+        XCTAssertEqual(socket.updatedQueued.map(\.content), [""])
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1"])
+    }
+
+    /// Removing the last picture AND the text leaves nothing to send.
+    func testEditingAwayBothTextAndImagesDiscardsTheMessage() {
+        queueWithImage()
+        viewModel.editQueued(viewModel.queuedItems[0], content: "", images: [])
+        XCTAssertTrue(socket.updatedQueued.isEmpty)
+        XCTAssertEqual(socket.deletedQueueIds, ["q1"])
+        XCTAssertTrue(viewModel.queuedItems.isEmpty)
+    }
+
+    private static let pngURL = "data:image/png;base64,iVBORw0KGgo="
+    private static let jpegURL = "data:image/jpeg;base64,/9j/4AAQ"
+
+    /// One server-known message waiting behind a run, carrying a screenshot.
+    private func queueWithImage() {
+        let json = """
+        {"type":"queue_update","sessionId":"bks-1",
+         "queued":[{"id":"q1","content":"look at this","user":"ios",
+                    "images":["\(Self.pngURL)"]}],
+         "steered":[]}
+        """
+        viewModel.handle(ServerEvent.parse(Data(json.utf8)))
+    }
+
     /// A chip minted by the composer has an id the server has never seen, so
     /// the id-addressed actions have to wait for the real queue_update.
     func testLocalEchoChipIsNotEditableOrReorderable() async {
@@ -1379,7 +1434,7 @@ private final class MockSocket: SessionSocket {
     private(set) var prompts: [PromptCall] = []
     private(set) var steeredQueueIds: [String] = []
     private(set) var deletedQueueIds: [String] = []
-    private(set) var updatedQueued: [(id: String, content: String)] = []
+    private(set) var updatedQueued: [(id: String, content: String, images: [String]?)] = []
     private(set) var reorders: [[String]] = []
     private(set) var awayFrames: [Bool] = []
 
@@ -1416,8 +1471,10 @@ private final class MockSocket: SessionSocket {
     }
     func steerQueued(sessionId: String, queueId: String) { steeredQueueIds.append(queueId) }
     func deleteQueued(sessionId: String, queueId: String) { deletedQueueIds.append(queueId) }
-    func updateQueued(sessionId: String, queueId: String, content: String) {
-        updatedQueued.append((id: queueId, content: content))
+    func updateQueued(
+        sessionId: String, queueId: String, content: String, images: [String]?
+    ) {
+        updatedQueued.append((id: queueId, content: content, images: images))
     }
     func reorderQueued(sessionId: String, order: [String]) { reorders.append(order) }
     func cancelWatchedRun() {}

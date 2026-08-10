@@ -1933,7 +1933,9 @@ private struct SessionInputBar: View {
                     initial: item.content,
                     images: item.images,
                     hasFiles: item.hasFiles,
-                    onSave: { viewModel.editQueued(item, content: $0) },
+                    onSave: { content, images in
+                        viewModel.editQueued(item, content: content, images: images)
+                    },
                     onDelete: { viewModel.deleteQueued(item) }
                 )
             }
@@ -2909,37 +2911,45 @@ private struct SessionInputBar: View {
 /// and leave a window — one backgrounded app away — where it exists nowhere
 /// but a text field.
 private struct QueuedMessageEditor: View {
-    let onSave: (String) -> Void
+    /// The message as it should be after the edit: its text, and the pictures
+    /// it carries as `data:` URLs.
+    let onSave: (String, [String]) -> Void
     let onDelete: () -> Void
 
     private let original: String
-    /// What the message carries besides its text, as the `data:` URLs the
-    /// queue holds. Shown, not editable: the server's update takes a new
-    /// content string and nothing else, so the pictures ride along whatever
-    /// the text becomes — and an editor that showed only the words made a
-    /// message sent with a screenshot look like it had lost it.
-    private let images: [String]
+    /// The pictures the message arrived with, by id, so "did anything change"
+    /// is a comparison of two small arrays rather than of six base64 blobs on
+    /// every keystroke.
+    private let originalImageIDs: [String]
+    /// Non-image attachments. Shown but not editable: they're staged
+    /// server-side references (a PDF already on disk), not something a
+    /// composer can hand back — removing one means discarding the message.
     private let hasFiles: Bool
-    /// Decoded once, in `init`: the sheet's body re-evaluates on every
+    /// Decoded once, when the sheet opens: the body re-evaluates on every
     /// keystroke, and base64-decoding six screenshots per character typed is
     /// not something a text field should be paying for.
-    private let decoded: [Data]
+    @State private var attached: [AttachedImage]
     @State private var text: String
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
+
+    /// Same ceiling as the composer, so a message can't grow attachments here
+    /// that it couldn't have been sent with.
+    private static let maxImages = 6
 
     init(
         initial: String,
         images: [String] = [],
         hasFiles: Bool = false,
-        onSave: @escaping (String) -> Void,
+        onSave: @escaping (String, [String]) -> Void,
         onDelete: @escaping () -> Void
     ) {
         original = initial.trimmingCharacters(in: .whitespacesAndNewlines)
         _text = State(initialValue: initial)
-        self.images = images
+        let staged = images.compactMap(AttachedImage.init(dataURL:))
+        _attached = State(initialValue: staged)
+        originalImageIDs = staged.map(\.id)
         self.hasFiles = hasFiles
-        decoded = images.compactMap(DataImage.decode(dataURL:))
         self.onSave = onSave
         self.onDelete = onDelete
     }
@@ -2948,51 +2958,32 @@ private struct QueuedMessageEditor: View {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Says what stays with the message, so the pictures above don't read as
-    /// something the sheet is asking about.
-    private var attachmentNote: String {
-        let pictures = images.count == 1 ? "1 image" : "\(images.count) images"
-        switch (images.isEmpty, hasFiles) {
-        case (true, _): return "Files stay attached."
-        case (false, true): return "\(pictures) and files stay attached."
-        case (false, false): return "\(pictures) stay\(images.count == 1 ? "s" : "") attached."
-        }
+    private var changed: Bool {
+        trimmed != original || attached.map(\.id) != originalImageIDs
     }
 
-    /// The pictures as a group, so tapping one pages through the rest.
-    private var gallery: [PreviewImage] {
-        decoded.enumerated().map { index, data in
-            PreviewImage(id: "\(index)", source: .data(data))
-        }
-    }
-
-    /// The attachments, above the text the way the composer stacks them over
-    /// the input — square thumbnails that wrap, and tappable, since a 64pt
-    /// screenshot can't answer "is this the right one?" on its own.
+    /// The pictures, stacked over the text the way the composer stacks them
+    /// over its input — and literally the composer's own strip, so they are
+    /// viewed, paged through and removed here with the same taps they answer
+    /// to while you're writing the message.
     @ViewBuilder
     private var attachments: some View {
-        if !images.isEmpty || hasFiles {
+        if !attached.isEmpty || hasFiles {
             VStack(alignment: .leading, spacing: 6) {
-                if !decoded.isEmpty {
-                    FlowLayout(spacing: 6) {
-                        ForEach(Array(decoded.enumerated()), id: \.offset) { index, data in
-                            ExpandableDataImage(
-                                data: data, gallery: gallery, galleryIndex: index
-                            )
-                            .frame(width: 64, height: 64)
-                            .clipShape(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            )
-                        }
+                if !attached.isEmpty {
+                    AttachedImagesRow(images: attached) { image in
+                        attached.removeAll { $0.id == image.id }
                     }
                 }
-                Text(attachmentNote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if hasFiles {
+                    Label("Files stay attached", systemImage: "paperclip")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
-            .padding(.top, 10)
+            .padding(.top, 8)
         }
     }
 
@@ -3016,7 +3007,21 @@ private struct QueuedMessageEditor: View {
 
                 Divider()
 
-                HStack(alignment: .firstTextBaseline) {
+                // Laid out like the composer's control row: the attach button
+                // leads at the bottom-left, exactly where the "+" sits when
+                // you're writing a message, so adding a picture to a message
+                // you already sent is the same reach as adding one to a
+                // message you haven't. Discard keeps the far end, well away
+                // from it.
+                HStack(spacing: 8) {
+                    AttachImagesButton(images: $attached, maxCount: Self.maxImages)
+
+                    Text("Keeps its place in the queue.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Spacer(minLength: 12)
+
                     Button(role: .destructive) {
                         onDelete()
                         dismiss()
@@ -3026,15 +3031,15 @@ private struct QueuedMessageEditor: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(OS1VisualStyle.red)
-
-                    Spacer(minLength: 12)
-
-                    Text("Keeps its place in the queue.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                #if os(iOS)
+                // The attach button carries its own 44pt hit area, so the row
+                // needs no more than the air that keeps it off the divider.
+                .padding(.vertical, 4)
+                #else
+                .padding(.vertical, 10)
+                #endif
             }
             .navigationTitle("Edit message")
             #if os(iOS)
@@ -3046,10 +3051,14 @@ private struct QueuedMessageEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(trimmed)
+                        onSave(trimmed, attached.map(\.dataURL))
                         dismiss()
                     }
-                    .disabled(trimmed.isEmpty || trimmed == original)
+                    // A message that still carries a picture is worth
+                    // sending without a word of text — what can't be saved
+                    // is one edited down to nothing at all, which is what
+                    // Discard is for.
+                    .disabled(!changed || (trimmed.isEmpty && attached.isEmpty))
                 }
             }
         }

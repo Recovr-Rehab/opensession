@@ -871,16 +871,25 @@ final class SessionViewModel {
     /// Rewrite a queued message in place, keeping its position in the queue.
     /// Only server-known entries can be addressed this way — a local echo has
     /// an id the server has never seen.
-    func editQueued(_ item: QueueItem, content: String) {
+    /// `images` is what the message carries after the edit, as `data:` URLs —
+    /// nil for a text-only edit, which leaves the attachments alone. A message
+    /// edited down to nothing at all (no text, no pictures) is a discard;
+    /// text-less but still carrying an image is a legitimate send, so it
+    /// stays.
+    func editQueued(_ item: QueueItem, content: String, images: [String]? = nil) {
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !item.isLocalEcho else { return }
-        guard !text.isEmpty else {
+        let attachments = images ?? item.images
+        guard !text.isEmpty || !attachments.isEmpty else {
             deleteQueued(item)
             return
         }
-        socket?.updateQueued(sessionId: session.id, queueId: item.id, content: text)
+        socket?.updateQueued(
+            sessionId: session.id, queueId: item.id, content: text, images: images
+        )
         if let index = queuedItems.firstIndex(where: { $0.id == item.id }) {
-            queuedItems[index] = queuedItems[index].withContent(text)
+            queuedItems[index] = queuedItems[index]
+                .withContent(text, images: images)
         }
     }
 

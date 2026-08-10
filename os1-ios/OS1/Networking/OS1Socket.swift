@@ -19,7 +19,9 @@ protocol SessionSocket: AnyObject {
     )
     func steerQueued(sessionId: String, queueId: String)
     func deleteQueued(sessionId: String, queueId: String)
-    func updateQueued(sessionId: String, queueId: String, content: String)
+    func updateQueued(
+        sessionId: String, queueId: String, content: String, images: [String]?
+    )
     func reorderQueued(sessionId: String, order: [String])
     func cancelWatchedRun()
     func answer(sessionId: String, questionId: String, answers: [String: String]?)
@@ -166,11 +168,19 @@ final class OS1Socket: SessionSocket {
     /// the message's position — unlike delete-then-resend, which drops it to
     /// the back of the queue and leaves a window where it exists nowhere but
     /// the composer.
-    func updateQueued(sessionId: String, queueId: String, content: String) {
-        send([
+    ///
+    /// `images` is the message's attachments after the edit; nil leaves them
+    /// as they were, and an empty array is how they're removed — so the key
+    /// is sent even when it's empty, and only omitted for a text-only edit.
+    func updateQueued(
+        sessionId: String, queueId: String, content: String, images: [String]? = nil
+    ) {
+        var frame: [String: Any] = [
             "type": "update_queued_prompt", "sessionId": sessionId,
             "queueId": queueId, "content": content,
-        ])
+        ]
+        if let images { frame["images"] = images }
+        send(frame)
     }
 
     func reorderQueued(sessionId: String, order: [String]) {
