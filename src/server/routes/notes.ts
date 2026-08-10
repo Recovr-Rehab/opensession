@@ -8,7 +8,7 @@
 
 import type { RouteContext } from "./context";
 import { editNote } from "../note-edit";
-import { createNote, deleteNote, getNoteText, isValidNoteId, listNotes, noteTextHash, seedIfEmpty, setNoteText } from "../notes";
+import { createNote, deleteNote, getNoteText, isValidNoteId, listNotes, seedIfEmpty, setNoteText } from "../notes";
 import { getWikiFile, getWikiTree, searchWiki } from "../wiki";
 import { b64encode, broadcastToNote } from "../ws-hub";
 
@@ -59,52 +59,7 @@ export async function handleNotesRoutes(
 		const notes = listNotes();
 		const meta = notes.find((n) => n.id === id);
 		if (!meta) return Response.json({ error: "Not found" }, { status: 404 });
-		const text = getNoteText(id);
-		// `hash` is what a REST writer sends back as `ifMatch`; the web editor
-		// syncs over Yjs and ignores it.
-		return Response.json({ ...meta, text, hash: noteTextHash(text) });
-	}
-
-	// Whole-text write, for clients that can't speak Yjs (the native app).
-	// It lands through the same `setNoteText` diff the Haiku rewrite uses, so
-	// web editors see it live as an ordinary update rather than a reload.
-	// `ifMatch` (sha256 of the text the client read) is what keeps a stale
-	// phone buffer from reverting someone's concurrent typing: the diff is
-	// only minimal with respect to what the client SENT, so an edit based on
-	// old text carries the undo of every newer edit between the two changes.
-	if (noteMatch && req.method === "PUT") {
-		const id = decodeURIComponent(noteMatch[1]);
-		if (!isValidNoteId(id))
-			return Response.json({ error: "Invalid id" }, { status: 400 });
-		// getNoteDoc() mints a doc for any id, so a PUT racing a DELETE would
-		// otherwise resurrect the note. Existence is the list's answer.
-		if (!listNotes().some((n) => n.id === id))
-			return Response.json({ error: "Not found" }, { status: 404 });
-		const body = await req.json().catch(() => null);
-		const text = body?.text;
-		if (typeof text !== "string")
-			return Response.json({ error: "text required" }, { status: 400 });
-		if (text.length > 1_000_000)
-			return Response.json({ error: "Note too large" }, { status: 413 });
-		const current = getNoteText(id);
-		const ifMatch = typeof body?.ifMatch === "string" ? body.ifMatch : null;
-		if (ifMatch && ifMatch !== noteTextHash(current))
-			return Response.json(
-				{
-					error: "conflict",
-					text: current,
-					hash: noteTextHash(current),
-				},
-				{ status: 409 },
-			);
-		const update = setNoteText(id, text);
-		if (update.length)
-			broadcastToNote(id, {
-				type: "note_update",
-				noteId: id,
-				update: b64encode(update),
-			});
-		return Response.json({ ok: true, hash: noteTextHash(text) });
+		return Response.json({ ...meta, text: getNoteText(id) });
 	}
 
 	if (noteMatch && req.method === "DELETE") {

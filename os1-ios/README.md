@@ -185,23 +185,6 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   server over a raw WebSocket to OpenAI's Realtime API (`DeskVoiceEngine`) —
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
-- **Notes** (`NotesView.swift`, `NotesViewModel.swift`) — the instance's shared
-  markdown documents, as a sheet beside the Desk (iOS: `note.text` in the
-  bottom bar; macOS: the sidebar header). A note reads as rendered markdown
-  and edits as monospaced source behind an Edit toggle, which focuses the
-  editor so the keyboard arrives with the decision. Saves are debounced ~2s
-  and flushed on leave, backgrounding and Edit→read.
-  The web editor is Yjs over the shared socket; this client has no CRDT, so it
-  reads and writes whole documents over REST (`GET/PUT /api/notes/:id`) and
-  uses `watch_note` purely as a change bell and a presence feed. Every save
-  carries `ifMatch` — the sha256 of the text it was based on — because
-  `setNoteText`'s server-side diff is only minimal with respect to what the
-  client SENT: a stale buffer would otherwise carry the undo of every edit
-  made in between. A refused save (409) becomes a Keep mine / Use theirs
-  alert; a bell arriving over unsaved text is compared against the last text
-  written before it raises a banner, since the server echoes our own save back
-  to us. Not ported from the web: the wiki tree, search, backlinks, mention
-  chips, pinning, and live cursors (the last needs a Swift Yjs).
 - **Voice call** — the call itself is a full-screen surface
   (`DeskVoiceCallView`): one orb that scales with real metered loudness — the
   mic while you talk, the model's own output while it answers — the spoken

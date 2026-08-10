@@ -25,7 +25,6 @@ import {
 	statSync,
 	unlinkSync,
 } from "fs";
-import { createHash } from "crypto";
 import * as Y from "yjs";
 import { stateDir } from "./paths";
 
@@ -224,13 +223,6 @@ export function applyNoteUpdate(id: string, update: Uint8Array): void {
 /** Current plain-markdown text of a note (for the Haiku rewrite). */
 export function getNoteText(id: string): string {
 	return getNoteDoc(id).getText(TEXT_FIELD).toString();
-}
-
-/** Version tag for a note's text, so a whole-text writer can say what it read.
- *  Yjs clients don't need this — their updates carry their own causality; the
- *  REST PUT does (see the `ifMatch` check in routes/notes.ts). */
-export function noteTextHash(text: string): string {
-	return createHash("sha256").update(text).digest("hex");
 }
 
 /** A note's text without forcing its Y.Doc into memory: live doc when loaded,
