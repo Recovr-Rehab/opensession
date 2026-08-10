@@ -137,3 +137,23 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
    each engine; engines and non-sandboxed paths do not change architecture.
 3. Then implement Slice C (matrix/workspace-MCP deletion), Slice D (prewarm +
    docs), optional Slice E, wake-on-demand, and snapshot-after-setup.
+
+## 2026-08-10 — Slice B shipped and live-smoked
+
+- 2ad94e9c committed and pushed Slice B; Open Session was deliberately
+  restarted and is healthy. Detached engine turns were re-adopted across the
+  restart as designed.
+- Main-server smoke used the normal authenticated `create_session` WebSocket
+  path (not the standalone harness): an ask session on the `opensession` repo,
+  `opencode/openai/gpt-5.6-sol`, `sandbox: "microvm"` materialized
+  `microvm-64` and returned exactly `LIVE_MICROVM_OK` from the in-guest engine.
+  The API then deleted the scratch session; the clone unit became inactive and
+  the provider state file disappeared.
+- The first live attempt proved the guest cannot resolve this host's
+  MagicDNS-only `*.ts.net` name because the golden intentionally uses public
+  resolvers. The private untracked config now uses `wss://os.tella.dev`: public
+  DNS resolves it to the host's Tailscale IP, while Caddy binds that vhost only
+  on the tailnet. The Phase 1 design's networking note was corrected.
+- Slice B is complete. Slice C remains intentionally blocked on the missing Pi
+  + OpenCode-other design addendum; do not delete the host-engine bridge until
+  that design exists.

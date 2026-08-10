@@ -172,7 +172,10 @@ Brain-inside changes what *uses* the egress, not the rules:
   git hosts, bun registry only during a pin-bump reconcile.
 - **Dial-back reachability is the one real risk.** The guest's resolv.conf is
   pinned to public DNS (`bks-sandbox-init:23`), so a DNS-named
-  `callbackBaseUrl` must be publicly resolvable (ts.net MagicDNS names are).
+  `callbackBaseUrl` must be publicly resolvable. MagicDNS-only `*.ts.net`
+  names do not resolve through the guest's public resolver; use a public DNS
+  name whose address and listener remain tailnet-only when private routing is
+  required.
   Mitigate like the remote adapters: `assertDialbackReachable(driver,
   "microvm")` before bootstrap in `ensure()`. Document that the callback host
   must accept connections from `10.200.0.0/16` (strict rp_filter setups are
