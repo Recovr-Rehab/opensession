@@ -127,10 +127,10 @@
 	/* The bottom edge reserves less space than its 56px visual ramp. Reserving
 	   the full wash made a hole between the final row and the composer, while
 	   shortening the ramp made rows stop abruptly as they scrolled underneath.
-	   Keep the full dissolve and pay only 32px in the resting layout; the row's
+	   Keep the full dissolve and pay only 20px in the resting layout; the row's
 	   own bottom margin plus the composer's overlap keeps text out of the veil
 	   while the session is pinned to the bottom. */
-	--wash-depth-down: 32px;
+	--wash-depth-down: 20px;
 	--wash-down: linear-gradient(
 		to bottom,
 		transparent 0,

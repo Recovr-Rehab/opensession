@@ -4879,7 +4879,7 @@ export function SessionViewer({
 			)}
 
 			<div className="flex min-h-0 flex-1">
-				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:22px] phone:[--wash-depth:40px] phone:[--wash-depth-down:28px]">
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:22px] phone:[--wash-depth:40px] phone:[--wash-depth-down:16px]">
 					{showPreviewTab ? (
 						<div className={VIEWER_REVIEW_MAIN}>
 							<PreviewPane
