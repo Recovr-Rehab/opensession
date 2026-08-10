@@ -42,7 +42,7 @@ import React, { useEffect, useRef, useState } from "react";
  *  row content sits one 4px step inside the repo and lane headings, matching
  *  the native list hierarchy instead of flattening every label onto one rail. */
 export const SIDEBAR_ROW =
-	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg phone:px-2 phone:py-[13px]";
+	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-3.5 text-left text-fg phone:px-2 phone:py-[13px]";
 
 /** A row's title: one line that fades smoothly at the available edge instead
  *  of ending in an ellipsis. Read conversations stay quiet; unread ones
