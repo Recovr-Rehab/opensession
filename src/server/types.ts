@@ -74,15 +74,6 @@ export interface UnifiedSession {
    */
   runStartedAt?: string;
   /**
-   * Who prompted the in-flight run — the display name from the run journal, so
-   * it survives a refresh like `runStartedAt` does. This is what lets a client
-   * say "Michiel is working in here" without inferring it from presence, which
-   * only ever knew who had the session OPEN. Only set while isRunning, and
-   * absent for automation runs (they pass no user) and external CLI/tmux runs
-   * (no journal record).
-   */
-  runBy?: string;
-  /**
    * The run-state machine's view of this session (src/server/run-state.ts),
    * stamped by the session-cache enrichment. Only present when not "idle" —
    * lets the UI and session-control tools distinguish running / ask_blocked /

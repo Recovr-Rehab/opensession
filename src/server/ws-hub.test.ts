@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
 	allClients,
 	computeGlobalPresence,
+	leaveSession,
 	revalidateLocalClients,
+	sessionWatchers,
 } from "./ws-hub";
 
 const sockets = new Set<any>();
@@ -10,6 +12,7 @@ const sockets = new Set<any>();
 afterEach(() => {
 	for (const socket of sockets) allClients.delete(socket);
 	sockets.clear();
+	sessionWatchers.clear();
 });
 
 function socket(login?: string) {
@@ -50,15 +53,12 @@ describe("revalidateLocalClients", () => {
 });
 
 describe("computeGlobalPresence", () => {
-	// `activeAt` defaults to now: presence is earned by recent activity, so a
-	// fixture that never refreshed reads as gone (the last test below).
 	const viewer = (
 		user: string | null,
 		at: number,
 		away?: boolean,
-		activeAt = Date.now(),
 	) => ({
-		data: { user, watchJoinedAt: at, away, activeAt },
+		data: { user, watchJoinedAt: at, away, lastSeenAt: Date.now() },
 	});
 	const watchers = (entries: Record<string, any[]>) =>
 		new Map(Object.entries(entries).map(([id, set]) => [id, new Set(set)]));
@@ -89,13 +89,38 @@ describe("computeGlobalPresence", () => {
 		).toEqual([{ user: "Ada", sessionId: "looking" }]);
 	});
 
-	test("a window left open stops claiming its owner once it goes quiet", () => {
+	test("a focused window keeps claiming its owner while they read", () => {
 		expect(
 			computeGlobalPresence(
 				watchers({
-					// Parked on the session since this morning, nothing touched it
-					// since: the watch survives, the face does not.
-					parked: [viewer("Ada", 1, false, Date.now() - 10 * 60_000)],
+					// Input inactivity is irrelevant; only an explicit away signal
+					// removes a focused viewer.
+					reading: [{
+						data: {
+							user: "Ada",
+							watchJoinedAt: 1,
+							away: false,
+							activeAt: 0,
+							lastSeenAt: Date.now(),
+						},
+					}],
+				}),
+			),
+		).toEqual([{ user: "Ada", sessionId: "reading" }]);
+	});
+
+	test("a focused viewer disappears when its transport stops heartbeating", () => {
+		expect(
+			computeGlobalPresence(
+				watchers({
+					stale: [{
+						data: {
+							user: "Ada",
+							watchJoinedAt: 1,
+							away: false,
+							lastSeenAt: Date.now() - 5 * 60_000,
+						},
+					}],
 				}),
 			),
 		).toEqual([]);
@@ -107,5 +132,22 @@ describe("computeGlobalPresence", () => {
 				watchers({ s: [viewer("Anonymous", 1), viewer(null, 2)] }),
 			),
 		).toEqual([]);
+	});
+
+	test("disconnect cleanup removes the viewer from global presence", () => {
+		const ws = {
+			data: {
+				watchingSessionId: "s",
+				user: "Ada",
+				watchJoinedAt: 1,
+				lastSeenAt: Date.now(),
+			},
+			send() {},
+		};
+		sessionWatchers.set("s", new Set([ws]));
+		expect(computeGlobalPresence(sessionWatchers)).toHaveLength(1);
+
+		leaveSession(ws);
+		expect(computeGlobalPresence(sessionWatchers)).toEqual([]);
 	});
 });

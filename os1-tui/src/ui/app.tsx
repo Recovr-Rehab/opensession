@@ -108,9 +108,11 @@ export function App({
 	// One live watch per open tab; the active tab's is the one we render.
 	useEffect(() => {
 		if (!activeSessionId) {
+			pool.setActive(undefined);
 			setWatched(undefined);
 			return;
 		}
+		pool.setActive(activeSessionId);
 		setWatched(pool.ensure(activeSessionId));
 	}, [activeSessionId, pool]);
 

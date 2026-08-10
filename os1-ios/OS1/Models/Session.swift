@@ -23,9 +23,6 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var runState: String?
     /// Journaled start of the current run — only present while running.
     var runStartedAt: String?
-    /// Teammate who prompted the current run. Unlike co-viewing presence, this
-    /// stays stable for the run's lifetime and is absent for unattended work.
-    var runBy: String?
     var waitingForInput: Bool?
     var queuedCount: Int?
     var archived: Bool?
@@ -164,32 +161,6 @@ struct AttachedRepo: Decodable, Equatable, Hashable, Identifiable {
 }
 
 extension Session {
-    /// Teammates actively driving work in these sessions. Sidebar faces use
-    /// this instead of co-viewing presence so opening somebody's chat leaves no
-    /// trace, while a real in-flight run stays visible until it finishes.
-    static func workingUsers(in sessions: [Session], excluding currentUser: String) -> [String] {
-        let mine = personKey(currentUser)
-        var seen = Set<String>()
-        var users: [String] = []
-
-        for session in sessions where session.isRunning == true {
-            guard let user = session.runBy?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !user.isEmpty
-            else { continue }
-            let key = personKey(user)
-            guard !key.isEmpty, key != mine, seen.insert(key).inserted else { continue }
-            users.append(user)
-        }
-        return users
-    }
-
-    private static func personKey(_ name: String) -> String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: \.isWhitespace)
-            .first?
-            .lowercased() ?? ""
-    }
-
     /// Locally-built placeholder for a session the server just created but
     /// hasn't persisted to the list yet — rendered (and opened) immediately
     /// instead of polling until `GET /api/sessions` includes it.

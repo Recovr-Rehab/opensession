@@ -648,6 +648,7 @@ struct WorktreeInfoView: View {
 /// Opens workspace details directly from a list-row context menu while still
 /// giving its model controls the live session socket they use in SessionView.
 struct WorktreeInfoSheet: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: SessionViewModel
     @State private var catalog: ModelCatalog?
     @Bindable private var listViewModel: SessionsListViewModel
@@ -670,9 +671,17 @@ struct WorktreeInfoSheet: View {
         WorktreeInfoView(viewModel: viewModel, sessions: workspace.sessions, catalog: catalog)
             .task {
                 viewModel.start()
+                if scenePhase != .active { viewModel.appDidEnterBackground() }
                 catalog = try? await OS1API.models()
             }
             .onDisappear { viewModel.stop() }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active: viewModel.appDidBecomeActive()
+                case .inactive, .background: viewModel.appDidEnterBackground()
+                @unknown default: viewModel.appDidEnterBackground()
+                }
+            }
     }
 }
 

@@ -111,6 +111,10 @@ export class WatchedSession {
 		this.socket.markActive();
 	}
 
+	setAway(away: boolean): void {
+		this.socket.setAway(away);
+	}
+
 	steerQueued(queueId: string): void {
 		this.socket.steerQueued(this.sessionId, queueId);
 	}

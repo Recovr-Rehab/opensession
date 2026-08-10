@@ -144,6 +144,9 @@ final class SessionViewModel {
     /// When the last server frame arrived — any frame counts.
     private var lastEventAt = Date.distantPast
     private var stopped = true
+    /// Scene focus survives socket replacement so an inactive app cannot
+    /// reappear as present when a half-open connection reconnects.
+    private var isAway = false
     /// stream_done arrived; the durable entry lands via the next transcript_append.
     private var streamEnded = true
     /// Optimistic local user messages, removed once the server echoes them back.
@@ -384,6 +387,10 @@ final class SessionViewModel {
 
     private func startConnection() {
         stopped = false
+        // Reopening a cached view model happens in an active scene unless the
+        // view immediately tells us otherwise. Socket reconnects bypass this
+        // method and intentionally preserve the current away state.
+        isAway = false
         // While this conversation is on screen it shows its own deliveries;
         // a closed session needs no observer (reopening it resyncs from the
         // server, which by then holds the message).
@@ -498,35 +505,25 @@ final class SessionViewModel {
             .lowercased() ?? ""
     }
 
-    /// When we last told the server its owner is really here. Throttles
-    /// `userDidInteract()`, which fires on every scroll tick and keystroke.
+    /// Activity refreshes remain for compatibility with older servers that
+    /// expired presence. Current servers hold it until the app sends `away`.
     private var lastPresenceRefresh = Date.distantPast
-    /// Comfortably inside the server's presence window, rare enough to cost
-    /// nothing on a session someone reads for an hour.
+    /// Rare enough to cost nothing on a session someone reads for an hour.
     private static let presenceRefreshInterval: TimeInterval = 45
 
-    /// The app went to the background. The watch stays — the transcript has to
-    /// keep streaming for unread counts and notifications — but our face comes
-    /// off the session, so a phone asleep in a pocket stops claiming its owner
-    /// is reading along.
+    /// The app is no longer active. The watch stays so the transcript keeps
+    /// streaming, but our face comes off the selected session.
     func appDidEnterBackground() {
         guard !stopped else { return }
+        isAway = true
         // Coming back has to re-claim the face immediately, not wait out the
         // refresh interval below.
         lastPresenceRefresh = .distantPast
         socket?.setAway(true)
     }
 
-    /// The person did something with this session — scrolled the transcript,
-    /// typed, sent. Presence is EARNED, not held: the server ages a face off a
-    /// session unless the client keeps saying its owner is really there
-    /// (`PRESENCE_TTL_MS` in ws-hub.ts), so this is what keeps ours alive.
-    ///
-    /// The point is what happens when it is NOT called. A Mac left open on a
-    /// session overnight, or a phone face-up on a desk, pays nothing and drops
-    /// off within a couple of minutes — the app being open stops being a claim
-    /// that anyone is reading. Backgrounding still drops presence at once
-    /// (`appDidEnterBackground`); this covers the foreground half.
+    /// Reassert active presence for older servers with an inactivity timeout.
+    /// Current servers use scene focus instead, so this is only compatibility.
     func userDidInteract() {
         guard !stopped, let socket, connectionState == .connected else { return }
         let now = Date()
@@ -538,6 +535,7 @@ final class SessionViewModel {
 
     func appDidBecomeActive() {
         guard !stopped else { return }
+        isAway = false
         // Coming back is the most likely moment for "we have signal again".
         outbox.clearBackoff()
         outbox.poke()
@@ -966,6 +964,10 @@ final class SessionViewModel {
         switch event {
         case .hello:
             connectionState = .connected
+            // A replacement socket defaults to present. Restore scene focus
+            // before joining the session so a background reconnect never
+            // flashes (or remains) as an active viewer.
+            if isAway { socket?.setAway(true) }
             // Watch after the handshake frame so the send cannot race the upgrade.
             socket?.watch(sessionId: session.id)
             // A completed handshake is proof the server is reachable — better

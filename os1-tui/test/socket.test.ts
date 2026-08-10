@@ -37,6 +37,15 @@ describe("connection lifecycle", () => {
 		expect(ws.sentOfType("watch")[0]!.sessionId).toBe("bks-1");
 	});
 
+	test("an away tab restores away before re-watching", () => {
+		const { watched, ws } = wire();
+		watched.setAway(true);
+		ws.open();
+
+		expect(ws.sent.map((frame) => frame.type)).toEqual(["away", "watch"]);
+		expect(ws.sentOfType("away")[0]!.away).toBe(true);
+	});
+
 	test("a reconnect re-watches from the byte cursor", () => {
 		const { watched, ws } = wire();
 		ws.open();

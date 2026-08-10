@@ -94,8 +94,8 @@ final class OS1Socket: SessionSocket {
     /// Presence, not subscription: backgrounding the app keeps the watch (the
     /// transcript must keep streaming so unread counts and notifications still
     /// land) but takes our face off the session for everyone else. A client
-    /// that never sends this reads as present forever — which is what a
-    /// suspended phone in someone's pocket used to look like to the team.
+    /// that never sends this remains present until its transport heartbeat
+    /// expires, which is too long for a normal focus transition.
     func setAway(_ away: Bool) {
         send(["type": "away", "away": away])
     }

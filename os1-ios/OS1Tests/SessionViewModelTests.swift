@@ -227,6 +227,27 @@ final class SessionViewModelTests: XCTestCase {
         viewModel.stop()
     }
 
+    func testReconnectWhileBackgroundedRestoresAwayBeforeWatching() async {
+        let first = MockSocket()
+        let replacement = MockSocket()
+        var sockets = [first, replacement]
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"),
+            socketFactory: { sockets.removeFirst() }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+        viewModel.appDidEnterBackground()
+
+        first.onClose?("connection lost")
+        try? await Task.sleep(for: .seconds(2.1))
+        viewModel.handle(.hello(bootId: "boot-2"))
+
+        XCTAssertEqual(replacement.awayFrames, [true])
+        XCTAssertEqual(replacement.watched, ["bks-1"])
+        viewModel.stop()
+    }
+
     func testTranscriptInitPopulatesEntries() {
         let viewModel = makeViewModel()
         XCTAssertTrue(viewModel.isLoadingConversation)

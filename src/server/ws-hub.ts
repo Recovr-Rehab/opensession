@@ -68,17 +68,13 @@ export interface WSClientData {
 	/**
 	 * This socket is still WATCHING its session (transcript keeps streaming, so
 	 * unread/notifications work) but nobody is LOOKING at it — the tab is
-	 * hidden, or there's been no input for a while. Presence hides these: a
+	 * hidden or its window/app is unfocused. Presence hides these: a
 	 * face on a row must mean "here now", not "left a tab open on it".
 	 */
 	away?: boolean;
-	/**
-	 * When this socket's owner last did something (see PRESENCE_TTL_MS). Every
-	 * frame that isn't a heartbeat refreshes it, and clients re-send `away:
-	 * false` while the person keeps using the app — so presence expires on its
-	 * own for a client that has gone quiet, whatever it forgot to tell us.
-	 */
-	activeAt?: number;
+	/** Last frame from this connection, including protocol heartbeat. Presence
+	 * uses it only to clear half-open sockets; input activity is irrelevant. */
+	lastSeenAt?: number;
 	/** This viewer understands ordered session_feed envelopes. */
 	supportsFeed?: boolean;
 	sinceFeedSeq?: number;
@@ -107,8 +103,7 @@ export function joinSession(ws: any, sessionId: string) {
 	// Global presence shows each person once, at their most recent join — this
 	// stamp is how a two-tab user resolves to a single row.
 	ws.data.watchJoinedAt = Date.now();
-	// Opening a session is itself proof you're here; the TTL runs from now.
-	ws.data.activeAt = Date.now();
+	ws.data.lastSeenAt = Date.now();
 	ensurePresenceSweep();
 	broadcastPresence(sessionId);
 }
@@ -150,61 +145,38 @@ export function broadcastToSession(
 	}
 }
 
-/**
- * How long a face outlives the last thing its owner actually did.
- *
- * Presence is EARNED, never held. Clients refresh it while a person is really
- * using the app, so a window merely left open on a session — a second monitor,
- * a desktop app parked on it overnight, a phone in a pocket — drops off within
- * a couple of minutes. That's the whole contract of a face here: "with you
- * right now", which is exactly what makes it safe. It can never accumulate
- * into "has been watching you all afternoon", and a teammate cannot leave
- * their face sitting on your session by accident or on purpose.
- *
- * The cost of expiring is small and self-correcting: a reader who has gone
- * still for two minutes drops off and reappears on their next scroll.
- */
-const PRESENCE_TTL_MS = 2 * 60_000;
-
-/** How often expired faces are noticed. Presence broadcasts on CHANGE only, so
- *  without a sweep a face that simply stopped refreshing would never come off
- *  the other viewers' screens. */
+/** A focused viewer must also have a live transport. All clients heartbeat far
+ * inside this window, so reading without input stays present indefinitely while
+ * a crashed, sleeping, or partitioned client clears promptly. */
+const PRESENCE_LIVENESS_MS = 75_000;
 const PRESENCE_SWEEP_MS = 15_000;
 
-/** Watching AND looking: an away socket keeps its stream but shows no face,
- *  and so does one whose owner hasn't done anything in PRESENCE_TTL_MS. */
 function isPresent(ws: any, now = Date.now()): boolean {
-	const data = ws?.data;
-	if (!data || data.away === true) return false;
-	return now - (data.activeAt || 0) < PRESENCE_TTL_MS;
+	if (!ws?.data || ws.data.away === true) return false;
+	return now - (ws.data.lastSeenAt || 0) < PRESENCE_LIVENESS_MS;
 }
 
-/**
- * Somebody did something on this socket — the TTL restarts. Deliberately does
- * NOT clear `away`: a hidden tab still sends frames (a reconnect re-watches,
- * a queued prompt flushes), and none of that means its owner is back looking.
- */
-export function markClientActive(ws: any) {
+/** Any client frame proves the transport is alive. Unlike the old activity
+ * lease, heartbeats count, so a focused reader never expires for being still. */
+export function markClientSeen(ws: any) {
 	if (!ws?.data) return;
 	const was = isPresent(ws);
-	ws.data.activeAt = Date.now();
-	if (was) return; // already showing a face — nothing to tell anyone
+	ws.data.lastSeenAt = Date.now();
+	if (was || ws.data.away === true) return;
 	const sessionId = ws.data.watchingSessionId;
 	if (sessionId) broadcastPresence(sessionId);
 	else broadcastGlobalPresence();
 }
 
 /**
- * A viewer went hidden/idle (or came back). The socket keeps watching — only
+ * A viewer went hidden/unfocused (or came back). The socket keeps watching — only
  * its visibility to other people changes, so both presence frames go out again.
- * `away: false` doubles as the activity refresh: clients re-send it while the
- * person is still at the keyboard, which is what keeps a face alive.
  */
 export function setClientAway(ws: any, away: boolean) {
 	if (!ws?.data) return;
 	const was = isPresent(ws);
 	ws.data.away = away;
-	if (!away) ws.data.activeAt = Date.now();
+	ws.data.lastSeenAt = Date.now();
 	if (isPresent(ws) === was) return;
 	const sessionId = ws.data.watchingSessionId;
 	if (sessionId) broadcastPresence(sessionId);
@@ -217,10 +189,9 @@ const lastPresence: Map<string, string> = (g.__lastPresence ??= new Map());
 
 function broadcastPresence(sessionId: string) {
 	const set = sessionWatchers.get(sessionId);
-	const now = Date.now();
 	const viewers = set
 		? Array.from(set)
-				.filter((ws) => isPresent(ws, now))
+				.filter((ws) => isPresent(ws))
 				.map((ws: any) => ws.data?.user || "Anonymous")
 		: [];
 	const key = viewers.join("\u0000");
@@ -232,10 +203,7 @@ function broadcastPresence(sessionId: string) {
 	broadcastGlobalPresence();
 }
 
-/**
- * Expired faces come off on their own. Runs only while somebody is watching
- * something, and each broadcast is change-gated, so a quiet server is quiet.
- */
+/** Expire only dead transports. Change-gated broadcasts keep the sweep quiet. */
 function ensurePresenceSweep() {
 	if (g.__presenceSweep) return;
 	g.__presenceSweep = setInterval(() => {
@@ -244,8 +212,7 @@ function ensurePresenceSweep() {
 			g.__presenceSweep = null;
 			return;
 		}
-		for (const sessionId of [...sessionWatchers.keys()])
-			broadcastPresence(sessionId);
+		for (const sessionId of sessionWatchers.keys()) broadcastPresence(sessionId);
 	}, PRESENCE_SWEEP_MS);
 	g.__presenceSweep?.unref?.();
 }
@@ -255,7 +222,7 @@ function ensurePresenceSweep() {
  * faces and follow mode. One entry per USER (a person with two tabs open would
  * otherwise show twice): the session they joined most recently wins. Anonymous
  * viewers are skipped (nothing to follow), and so are away sockets — a hidden
- * or idle tab still streams its session but must not claim its owner is there.
+ * or unfocused tab still streams its session but must not claim its owner is there.
  * That also breaks the tie correctly for a person with one visible tab and one
  * hidden one: the away socket can no longer win on recency.
  */

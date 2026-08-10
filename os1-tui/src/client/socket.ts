@@ -34,7 +34,8 @@ export interface SessionSocket {
 	connect(): void;
 	close(): void;
 	watch(sessionId: string, resume?: { offset: number; rev: string }): void;
-	/** A key was pressed: keep this viewer's face on the session (throttled). */
+	setAway(away: boolean): void;
+	/** A key was pressed: refresh presence for older servers (throttled). */
 	markActive(): void;
 	prompt(
 		sessionId: string,
@@ -52,7 +53,7 @@ export interface SessionSocket {
 export type WsFactory = (url: string, protocols?: { headers: Record<string, string> }) => WebSocket;
 
 const PING_MS = 15_000;
-/** Comfortably inside the server's presence window (see `markActive`). */
+/** Compatibility cadence for older servers with an inactivity timeout. */
 const ACTIVE_REFRESH_MS = 45_000;
 const PONG_DEADLINE_MS = 45_000;
 const MAX_BACKOFF_MS = 30_000;
@@ -63,6 +64,7 @@ export class WsSessionSocket implements SessionSocket {
 	private lastPong = Date.now();
 	/** Throttles `markActive` — one frame per interval, not one per keypress. */
 	private lastActiveSent = 0;
+	private away = false;
 	private attempt = 0;
 	private closedByUs = false;
 	private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -93,6 +95,7 @@ export class WsSessionSocket implements SessionSocket {
 		ws.onopen = () => {
 			this.attempt = 0;
 			for (const frame of this.pending.splice(0)) ws.send(frame);
+			if (this.away) ws.send('{"type":"away","away":true}');
 			this.startPinging();
 			this.events.onOpen?.();
 		};
@@ -182,18 +185,19 @@ export class WsSessionSocket implements SessionSocket {
 		if (this.pending.length > 32) this.pending.shift();
 	}
 
-	/**
-	 * Presence is earned, not held: the server ages a viewer off a session a
-	 * couple of minutes after their last real action (PRESENCE_TTL_MS in
-	 * ws-hub.ts), so a terminal left open on a session stops claiming its owner
-	 * is reading. Every keypress pays the toll again — cheaply, since only the
-	 * first one per interval sends anything. Pings deliberately do not count.
-	 */
+	/** Reassert presence for older servers; current servers hold it until away. */
 	markActive(): void {
+		if (this.away) return;
 		const now = Date.now();
 		if (now - this.lastActiveSent < ACTIVE_REFRESH_MS) return;
 		this.lastActiveSent = now;
 		this.send({ type: "away", away: false });
+	}
+
+	setAway(away: boolean): void {
+		if (this.away === away) return;
+		this.away = away;
+		if (this.ws?.readyState === 1) this.send({ type: "away", away });
 	}
 
 	watch(sessionId: string, resume?: { offset: number; rev: string }): void {

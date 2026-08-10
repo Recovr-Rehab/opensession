@@ -39,6 +39,7 @@ export function openWatch(sessionId: string, opts: PoolOptions): WatchedSession 
 
 export class WatchPool {
 	private open = new Map<string, WatchedSession>();
+	private activeSessionId: string | undefined;
 
 	constructor(private readonly opts: PoolOptions) {}
 
@@ -52,7 +53,15 @@ export class WatchPool {
 		if (existing) return existing;
 		const watched = openWatch(sessionId, this.opts);
 		this.open.set(sessionId, watched);
+		watched.setAway(sessionId !== this.activeSessionId);
 		return watched;
+	}
+
+	/** Only the selected tab contributes presence; background tabs keep
+	 * streaming over their existing sockets without claiming focus. */
+	setActive(sessionId: string | undefined): void {
+		this.activeSessionId = sessionId;
+		for (const [id, watched] of this.open) watched.setAway(id !== sessionId);
 	}
 
 	release(sessionId: string): void {
