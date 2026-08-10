@@ -128,14 +128,23 @@
 	   .btn-viewer-newsession and friends; naming it here lets the Button primitive
 	   and any Tailwind-authored control land on the same corner instead of
 	   re-deriving it with an arbitrary value. Because it is built from --rf it
-	   tracks the squircle bump on its own (8.5px round → 13.5px squircle), and
+	   tracks the squircle bump on its own (10.2px round → 16.2px squircle), and
 	   base.css gives every `rounded-*` class `corner-shape: squircle`, so it
-	   needs no entry in the @supports block below. */
-	--radius-control: calc(10px * var(--rf));
+	   needs no entry in the @supports block below.
+
+	   12px, not the 10px legacy.css authored: at the 26-36px heights these
+	   controls actually ship at, 10px read square next to the app's panels and
+	   rows (a 36px button at 13.5px is barely a third of the way to its own
+	   half-height). One token carries the whole chrome, so buttons, chips and
+	   the split Create button move together rather than drifting apart. */
+	--radius-control: calc(12px * var(--rf));
 	/* The corner of a full-width selectable ROW in a left rail — a session in
-	   the sidebar, a section in settings' side nav, a person, a tool. One step
-	   softer than a control, because a row is a surface you land on rather than
-	   a thing you press. legacy.css authors it as `calc(12px * var(--rf))` on
+	   the sidebar, a section in settings' side nav, a person, a tool. It used
+	   to be one step softer than a control; the control has since caught up to
+	   it, so the two now describe the same corner. The token stays because the
+	   two answer different questions — a row is a surface you land on, a
+	   control a thing you press — and either may move without the other.
+	   legacy.css authors it as `calc(12px * var(--rf))` on
 	   .sidebar-item and .settings-sidenav-item; naming it here is what stops a
 	   Tailwind-authored row reaching for `rounded-lg` (18.9px) or `rounded-panel`
 	   (also 18.9px) and landing a third of a corner away from the rows it is
