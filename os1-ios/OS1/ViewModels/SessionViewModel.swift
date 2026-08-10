@@ -804,8 +804,16 @@ final class SessionViewModel {
                 )
             }
         } else {
-            canLoadEarlier = false
-            endJump()
+            // Older history exists, but the server gave us no cursor to reach
+            // it with — a session it serves from the cross-engine merge, which
+            // has no byte window to page into (`startOffset: 0`) and no seq
+            // store to page through. The cursor-less request is what the web
+            // sends in exactly this state, and the server answers it with the
+            // whole transcript in one transcript_init. Clearing the control
+            // instead (what this did before) left the reader stuck at the tail
+            // with a "Load earlier history" button that silently did nothing.
+            loadingEarlier = true
+            socket.loadWholeHistory(sessionId: session.id)
         }
     }
 

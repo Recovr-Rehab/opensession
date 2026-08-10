@@ -506,6 +506,40 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.jumpLandedSeq, 1)
     }
 
+    /// A session served from the cross-engine merge answers with a tail,
+    /// `truncated: true` and NO cursor of either kind (`startOffset: 0`, no
+    /// firstSeq). Paging must fall back to the cursor-less whole-transcript
+    /// request — clearing the control instead stranded the reader at the tail.
+    func testLoadEarlierAsksForTheWholeTranscriptWithoutACursor() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"), socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e9", "user", text: "recent")],
+            cursor: HistoryCursor(
+                truncated: true, startOffset: 0, rev: nil, firstSeq: nil
+            )
+        ))
+        XCTAssertTrue(viewModel.canLoadEarlier)
+
+        viewModel.loadEarlier()
+        XCTAssertEqual(socket.historyRequests, [.whole])
+        XCTAssertTrue(viewModel.loadingEarlier)
+
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e1", "user", text: "first"), entry("e9", "user", text: "recent")],
+            cursor: .empty
+        ))
+        XCTAssertFalse(viewModel.loadingEarlier)
+        XCTAssertFalse(viewModel.canLoadEarlier)
+        XCTAssertEqual(viewModel.entries.map(\.id), ["e1", "e9"])
+    }
+
     /// A socket that dies mid-walk must not leave the control spinning on a
     /// request nobody will answer — nor scroll the reader to a start we never
     /// reached.
