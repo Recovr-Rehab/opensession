@@ -661,33 +661,46 @@ export function Analytics() {
 									))}
 								</div>
 							</ChartCard>
-							<ChartCard title="Repos" subtitle={`${PRODUCT_NAME}'s share of PRs, per repo`}>
-								<table className="w-full border-collapse text-label">
-									<thead>
-										<tr className="text-left text-meta text-faint">
-											<th className="pb-1.5 font-medium">Repo</th>
-											<th className="pb-1.5 text-right font-medium">Opened</th>
-											<th className="pb-1.5 text-right font-medium">Merged</th>
-											<th className="pb-1.5 text-right font-medium">Share of merges</th>
-										</tr>
-									</thead>
-									<tbody>
-										{data.repos.map((r) => (
-											<tr key={r.repo} className="border-t border-line">
-												<td className="py-1.5 text-fg">{repoLabel(r.repo)}</td>
-												<td className="py-1.5 text-right tabular-nums text-dim">
-													{fmtInt(r.prsOpened)} <span className="text-faint">/ {fmtInt(r.allOpened)}</span>
-												</td>
-												<td className="py-1.5 text-right tabular-nums text-dim">
-													{fmtInt(r.prsMerged)} <span className="text-faint">/ {fmtInt(r.allMerged)}</span>
-												</td>
-												<td className="py-1.5 text-right tabular-nums text-fg">
-													{r.allMerged ? `${Math.round((100 * r.prsMerged) / r.allMerged)}%` : "–"}
-												</td>
+							<ChartCard title="Repos" subtitle="Sessions, turns, tokens and PRs per repo">
+								<div className="overflow-x-auto">
+									<table className="w-full border-collapse text-label">
+										<thead>
+											<tr className="text-left text-meta text-faint">
+												<th className="pb-1.5 font-medium">Repo</th>
+												<th className="pb-1.5 text-right font-medium">Sessions</th>
+												<th className="pb-1.5 text-right font-medium">Turns</th>
+												<th className="pb-1.5 text-right font-medium">Output</th>
+												<th className="pb-1.5 text-right font-medium">Opened</th>
+												<th className="pb-1.5 text-right font-medium">Merged</th>
+												<th className="pb-1.5 text-right font-medium">Share</th>
 											</tr>
-										))}
-									</tbody>
-								</table>
+										</thead>
+										<tbody>
+											{data.repos.map((r) => (
+												<tr key={r.repo || "(none)"} className="border-t border-line">
+													<td className={`max-w-32 truncate py-1.5 ${r.repo ? "text-fg" : "text-faint"}`}>
+														{r.repo ? repoLabel(r.repo) : "No repo"}
+													</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.sessions || 0)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.turns || 0)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(r.outputTokens || 0)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">
+														{fmtInt(r.prsOpened)} <span className="text-faint">/ {fmtInt(r.allOpened)}</span>
+													</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">
+														{fmtInt(r.prsMerged)} <span className="text-faint">/ {fmtInt(r.allMerged)}</span>
+													</td>
+													<td className="py-1.5 text-right tabular-nums text-fg">
+														{r.allMerged ? `${Math.round((100 * r.prsMerged) / r.allMerged)}%` : "–"}
+													</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+								<p className="m-0 mt-2 text-meta text-faint">
+									Opened/Merged = {PRODUCT_NAME} PRs / all PRs in range · share = {PRODUCT_NAME}'s cut of merges.
+								</p>
 							</ChartCard>
 						</div>
 

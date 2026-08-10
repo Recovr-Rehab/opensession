@@ -800,8 +800,13 @@ export interface AnalyticsAutomation {
 	errors: number;
 }
 
-export interface AnalyticsRepoPrs {
+export interface AnalyticsRepo {
+	/** Repo id, or "" for activity not attributable to a registered repo. */
 	repo: string;
+	sessions: number;
+	turns: number;
+	outputTokens: number;
+	errors: number;
 	prsOpened: number;
 	prsMerged: number;
 	allOpened: number;
@@ -854,7 +859,7 @@ export interface AnalyticsSummary {
 	models: AnalyticsModel[];
 	people: AnalyticsPerson[];
 	automations: AnalyticsAutomation[];
-	repos: AnalyticsRepoPrs[];
+	repos: AnalyticsRepo[];
 	prs: AnalyticsPr[];
 	factory: {
 		days: Array<{ date: string; reviewed: number; unreviewed: number }>;

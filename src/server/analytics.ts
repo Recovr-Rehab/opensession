@@ -656,7 +656,13 @@ export interface AnalyticsSummary {
 		errors: number;
 	}>;
 	repos: Array<{
+		/** Repo id, or "" for activity not attributable to a registered repo
+		 *  (Slack/Linear runs, pruned sessions). */
 		repo: string;
+		sessions: number;
+		turns: number;
+		outputTokens: number;
+		errors: number;
 		prsOpened: number;
 		prsMerged: number;
 		allOpened: number;
@@ -757,6 +763,20 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 	}
 	const peopleAgg = new Map<string, OwnerAgg>();
 	const automationAgg = new Map<string, OwnerAgg>();
+	// Session activity per repo (key "" = not attributable to a registered repo:
+	// Slack/Linear runs, sessions pruned from the store).
+	interface RepoActivity {
+		sessions: Set<string>;
+		turns: number;
+		outputTokens: number;
+		errors: number;
+	}
+	const repoActivity = new Map<string, RepoActivity>();
+	const repoActivityOf = (repo: string): RepoActivity => {
+		let a = repoActivity.get(repo);
+		if (!a) repoActivity.set(repo, (a = { sessions: new Set(), turns: 0, outputTokens: 0, errors: 0 }));
+		return a;
+	};
 	const ownerAgg = (m: Map<string, OwnerAgg>, name: string): OwnerAgg => {
 		let a = m.get(name);
 		if (!a) m.set(name, (a = { sessionsCreated: 0, sessionsActive: new Set(), turns: 0, outputTokens: 0, errors: 0 }));
@@ -817,6 +837,11 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			agg.turns += s.turns;
 			agg.outputTokens += s.output;
 			agg.errors += s.errors;
+			const ra = repoActivityOf(m?.repo || "");
+			ra.sessions.add(id);
+			ra.turns += s.turns;
+			ra.outputTokens += s.output;
+			ra.errors += s.errors;
 		}
 		const outputByModel: Record<string, number> = {};
 		const addModel = (model: string, m: ModelAgg) => {
@@ -866,8 +891,35 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 	totals.sessions = allSessions.size;
 
 	const repoAgg = new Map<string, AnalyticsSummary["repos"][number]>();
+	const repoRow = (repo: string): AnalyticsSummary["repos"][number] => {
+		let r = repoAgg.get(repo);
+		if (!r) {
+			repoAgg.set(
+				repo,
+				(r = {
+					repo,
+					sessions: 0,
+					turns: 0,
+					outputTokens: 0,
+					errors: 0,
+					prsOpened: 0,
+					prsMerged: 0,
+					allOpened: 0,
+					allMerged: 0,
+				}),
+			);
+		}
+		return r;
+	};
+	for (const [repo, a] of repoActivity) {
+		const r = repoRow(repo);
+		r.sessions = a.sessions.size;
+		r.turns = a.turns;
+		r.outputTokens = a.outputTokens;
+		r.errors = a.errors;
+	}
 	for (const pr of allPrs) {
-		const r = repoAgg.get(pr.repo) || { repo: pr.repo, prsOpened: 0, prsMerged: 0, allOpened: 0, allMerged: 0 };
+		const r = repoRow(pr.repo);
 		if (inRange(pr.createdAt)) {
 			r.allOpened++;
 			if (pr.byOpensession) r.prsOpened++;
@@ -876,7 +928,6 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			r.allMerged++;
 			if (pr.byOpensession) r.prsMerged++;
 		}
-		repoAgg.set(pr.repo, r);
 	}
 	for (const r of repoAgg.values()) {
 		totals.prsOpened += r.prsOpened;
@@ -979,7 +1030,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		models,
 		people,
 		automations,
-		repos: [...repoAgg.values()].sort((a, b) => b.allOpened - a.allOpened),
+		repos: [...repoAgg.values()].sort((a, b) => b.sessions - a.sessions || b.allOpened - a.allOpened),
 		prs,
 		factory,
 		reviewQuality,
