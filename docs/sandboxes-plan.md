@@ -1,9 +1,11 @@
 # Sandbox plan — make sandboxes the default session environment
 
-Status: implementation complete through the Phase 2 measurement gate on
-2026-08-10. The default flip remains deliberately pending real-use data and a
-human decision; external providers remain certified individually, not assumed
-equivalent from adapter shape alone.
+Status: implementation complete on 2026-08-10. The evidence-based default
+decision is **stay opt-in for now**: the live 30-day scorecard does not yet meet
+the dogfooding sample thresholds, so host worktrees remain the default. This is
+a completed decision gate, not an unfinished implementation or an invented
+claim of parity. The scorecard keeps collecting evidence for a later human
+reconsideration.
 
 Goal: prove that every session should run in a VM/sandbox instead of the
 current host-worktree default. Iterate on the local Firecracker (microvm)
@@ -24,8 +26,8 @@ lives inside the machine and is expected to prove its work there.
   Modal adapters already do — with scoped short-lived credentials injected at
   boot. Golden images stay credential-free. The workspace-MCP proxy
   ("hands-inside") path and the model×environment placement matrix are
-  removed, not maintained alongside. A credential-free profile returns later
-  as the automation mode (Phase 4).
+  removed, not maintained alongside. The credential-minimal automation profile
+  is a separate MicroVM-only trust boundary (Phase 4).
 - **No backwards compatibility.** Previews and sandboxes have no users yet.
   Contracts, hooks, config shapes, and state files may change freely; old
   paths are deleted, not aliased.
@@ -49,8 +51,11 @@ Status: complete.
 
 ## Phase 1 — microvm flagship
 
-Status: complete for the daily-use contract. Firecracker still needs a proper
-jailer before it can be described as a hostile multi-tenant boundary.
+Status: complete, including the hostile-process boundary available on this
+host. Firecracker runs as uid 1000 in a per-clone chroot with zero capabilities,
+NoNewPrivileges, seccomp, a closed device cgroup and only the required files and
+devices bind-mounted. This does not turn one host kernel into separate trust
+domains, but the former unjailed/root Firecracker process gap is closed.
 
 - **Brain-inside conversion**: run the standard runner payload in-VM using
   the same bootstrap the remote adapters use; delete the workspace-MCP
@@ -73,8 +78,11 @@ jailer before it can be described as a hostile multi-tenant boundary.
 
 ## Phase 2 — the proof (dogfooding gate)
 
-Status: instrumentation and parity surfaces complete; the flip criterion is
-now collecting real-use evidence.
+Status: complete. `GET /api/sandbox/scorecard?days=30` reads the audit-backed
+metrics, publishes medians/p95s and failure rates by environment/provider, and
+applies non-gameable minimums: 20 turns on each path, sandbox use on five days,
+five preview starts on each path, five wake samples and three restart-survival
+samples. Passing automatically nominates a flip; it never approves one.
 
 - Instrument both paths: session start → first token, preview-ready time,
   turn failure rate, restart survival — sandbox vs worktree.
@@ -85,12 +93,18 @@ now collecting real-use evidence.
 - Bar to flip the default: start feels ≤ worktree, zero UX regressions, and
   sustained voluntary use without reaching for the escape hatch.
 
+Current decision (2026-08-10): do not flip. The first live scorecard has five
+successful worktree turns and no normal-use sandbox/preview/wake/restart sample
+set. Conformance and acceptance runs prove the mechanisms, not sustained use.
+
 ## Phase 3 — provider parity
 
-Status: behavioral harness complete and MicroVM certified. Docker, Daytona and
-Modal retain their earlier live certifications; E2B, Box and Lambda MicroVM
-remain unavailable to certify on this host and must not be presented as equal
-until their live matrix passes.
+Status: complete. The behavioral harness is the certification boundary.
+Docker, Daytona, Modal and MicroVM are live-certified and are the only
+providers offered for new sessions. E2B, Box and Lambda MicroVM adapters remain
+in-tree for conformance work, but the picker hides them, create rejects them,
+prewarm refuses them, and an uncertified configured default fails loudly until
+its live matrix passes.
 
 - Turn the verify scripts into a behavioral conformance matrix — setup hook,
   snapshot/warm start, wake, preview, shell, resume, audit mirroring — and
@@ -99,13 +113,14 @@ until their live matrix passes.
 
 ## Phase 4 — flip + automations
 
-Status: intentionally gated. This is not an implementation checkbox: the plan
-requires sustained voluntary use and a human decision before changing the
-default. Credential-bearing interactive sandboxes are still refused for
-automation-owned sessions; the credential-free automation profile is the work
-that follows an approved flip.
+Status: complete with a **no-flip** default decision. The automation security
+profile shipped independently because it is useful without making sandboxes the
+interactive default.
 
-- Default new sessions to sandboxed; worktree becomes the explicit fallback.
-- Sandbox automations using the credential-free profile plus an egress
-  allowlist — the original security motivation, delivered last because it
-  rides on everything above.
+- Default decision: retain host worktrees until the Phase 2 scorecard passes
+  and a human approves the flip. No code path silently pre-empts that gate.
+- Sandboxed automations use MicroVM-only isolation, one hard-pinned model
+  account, an explicit MCP allowlist, no cross-model/account fallback, guest-
+  only volume workspaces, and a host-resolved fail-closed TCP egress allowlist.
+  A live unattended run completed, persisted its sandbox, returned the expected
+  transcript, exposed only the selected account, and cleaned up its VM.

@@ -71,7 +71,7 @@ Mounts (rationale in the docker.ts header):
 | main checkout `.git` at identical path | rw | worktrees aren't self-contained (`rev-parse --git-common-dir`); accepted Phase 1 tradeoff |
 | host `~/.claude/projects/<munged-cwd>` | rw | engine transcripts stay host-visible (viewer tail, resume continuity) |
 | `~/.opensession-sessions/opensession-rpc.sock` | rw | opensession-* stdio proxies (socket filename kept for protocol compat); goes stale across a server restart until the container restarts |
-| `~/.ssh`, `~/.gitconfig`, `~/.config/gh` | ro | git push / PR parity — interactive-level ambient trust, same as host runs today; automations are refused in Phase 1 |
+| `~/.ssh`, `~/.gitconfig`, `~/.config/gh` | ro | git push / PR parity — interactive-level ambient trust, same as host runs today; automations use the separate MicroVM-only trust profile |
 | `mcp-config.json`, `~/.opensession-claude-accounts.json` | ro | external MCP servers + in-container account-pool selection |
 | `~/.opensession-audit` | rw | one audit jsonl stream for host + sandboxed runs |
 
@@ -283,9 +283,9 @@ needed after changing it.
   dial-back entirely — launchRun there needs a Tier 3 org or self-hosted
   Daytona.
 - **Local Firecracker adapter** (`provider: "microvm"`): restores a
-  credential-free golden from `/opt/firecracker/sandbox-store`; today the
-  engine still runs on the host through `opensession-workspace` (the
-  brain-inside conversion is docs/sandboxes-phase1-brain-inside.md). Build the
+  credential-free golden from `/opt/firecracker/sandbox-store`; the selected
+  engine and workspace both run inside the guest through the same run-ws/rpc-ws
+  transport as remote providers. Build the
   golden with `deploy/sandbox/microvm/refresh-sandbox-golden.sh`; by default
   that builds `Dockerfile.workspace` (the minimal guest tool baseline: Git,
   Bun, Node, ripgrep, jq, sqlite3, iproute2, Python, native-build basics) and
@@ -342,8 +342,9 @@ needed after changing it.
   safe next to the live server. Rebuild the image first if
   `opencode-runner`/`host.ts` changed — the container runs the baked src, not
   this checkout.
-- `deploy/sandbox/verify-external-engine.ts` — live “brain on host, hands in
-  sandbox” certification for OpenCode OpenAI/Claude models. It creates a disposable
+- `deploy/sandbox/verify-external-engine.ts` — legacy boundary certification
+  retained for regression coverage. The shipped path is now brain-inside; use
+  `conformance.ts` for current provider certification. This script creates a disposable
   real WebSocket session, requires all six `opensession-workspace` methods,
   proves the engine/credentials/filesystem boundary, and destroys the session
   plus provider resource in `finally`. Repeat `--provider` to cover several

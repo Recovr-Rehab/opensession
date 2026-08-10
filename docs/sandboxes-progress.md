@@ -283,6 +283,53 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
 
 - The restarted production process reports healthy and re-adopted detached
   engine turns across the restart.
+
+## 2026-08-10 — Firecracker jail and unattended profile accepted
+
+- `5b6b29e6` moved every clone into a private chroot and runs Firecracker as
+  uid 1000 / group kvm with zero effective capabilities, NoNewPrivileges,
+  seccomp and a closed device cgroup. A live clone booted from both a repo
+  template and a clean memory snapshot; `/proc/<pid>/root` was the jail and did
+  not expose the host's `/etc/shadow`. Pause/wake preserved a disk marker.
+- `31db6832` shipped MicroVM-only sandbox automations: one hard-pinned account,
+  explicit MCP scope, no fallback, guest-only workspaces, selected config/
+  credential projection, and host-resolved fail-closed egress rules.
+- A disposable live automation completed with transcript
+  `SANDBOX_AUTOMATION_OK`. Audit evidence recorded exactly one uploaded model
+  account, the resolved egress set and successful outcome; the persisted
+  session named its MicroVM, and deleting the temporary automation/session
+  destroyed the clone.
+
+## 2026-08-10 — measurement and provider gates made executable
+
+- `a5213294` added `GET /api/sandbox/scorecard?days=30`. The gate requires real
+  volume over multiple days and compares first-token latency and turn failure
+  rate, plus preview, wake and restart-survival evidence. Restart recovery now
+  emits its own terminal metric.
+- The first live result is intentionally red: 5/20 worktree turns, 0/20 normal-
+  use sandbox turns, zero preview/wake/restart sample sets. The default decision
+  is therefore **remain opt-in**. Acceptance and conformance smokes were not
+  relabelled as dogfooding.
+- `0a831bd8` made the live matrix an enforcement boundary. Docker, Daytona,
+  Modal and MicroVM are selectable; E2B, Box and Lambda MicroVM stay in the
+  harness but are hidden and rejected for new sessions/prewarm until certified.
+
+## 2026-08-10 — Portals and A2A raised to the same bar
+
+- `d10dd599` fixed host-worktree multi-service Portals: every normal listening
+  `.ports.conf` service now gets the authenticated Caddy URL already available
+  to sandbox services, and all URLs are reflected into `.tunnels.env`.
+- Portal forward auth now fails closed for Caddy routes the current Open Session
+  process has not rediscovered after restart. Stop removes every service route,
+  closing the stale-upstream/reused-port window.
+- Cross-session messages now retain agent/session provenance instead of
+  impersonating the inherited human identity. Every send gets a stable delivery
+  receipt carried through persisted queues/steer receipts and emits a content-
+  free source/target/outcome audit event. Binary file transfers share the same
+  receipt convention.
+- The tella-fusion lifecycle-hook migration is already complete: PR #5604,
+  “Move agent lifecycle hooks from .opensession/ to .agents/,” merged at
+  2026-08-10 19:50 UTC.
 - A live `opensession` prewarm ran setup, parked `microvm-64` with compute
   inactive, and published a 25 GiB sparse/reflink repo template. A separate
   scratch VM cold-booted that template, proved the warm Git checkout and stable

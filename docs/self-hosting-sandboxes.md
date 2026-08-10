@@ -148,11 +148,15 @@ Honest status, because these are the newest parts:
   process cannot safely inherit its bootstrap promise.
 - **The MicroVM backend is live-certified** for provisioning, engine launch,
   reconnect/replay, steering, cancellation, durable pause/wake, workspace
-  survival and teardown. It is not yet a hostile multi-tenant security
-  boundary: Firecracker jailer integration remains open.
+  survival and teardown. Each Firecracker process is unprivileged and jailed
+  in a per-clone chroot with zero capabilities, NoNewPrivileges, seccomp and a
+  closed device cgroup. It still shares the host kernel, so do not describe it
+  as a separate hardware trust domain.
 - **Docker, Daytona, Modal and MicroVM** have live certifications. E2B, Box and
-  Lambda MicroVM are implemented but remain unproven on this host; see the
-  per-provider status below.
+  Lambda MicroVM are implemented but remain unproven on this host. They are not
+  offered for new sessions: configuring one does not certify it, and create
+  fails until its live matrix passes and the code certification registry is
+  updated.
 
 If you are starting out: use Docker, leave prewarm and snapshots off, and come
 back to them when cold starts actually bother you.
@@ -307,6 +311,15 @@ to `provider: "local"` (today's host behavior). Env override for the path:
     "indexEnd": 127
   },
 
+  // Credential-minimal unattended runs. MicroVM is deliberately the only
+  // admitted backend until another provider proves an equally enforceable
+  // outbound policy. Baseline model/Git/callback hosts are added by the
+  // launcher; entries here are extra HTTPS hosts, IPv4 addresses or CIDRs.
+  "automation": {
+    "provider": "microvm",
+    "egressAllowlist": ["api.example.internal", "10.40.0.0/16"]
+  },
+
   // How remote sandboxes authenticate `git clone` (they can't mount host
   // creds). "none" = public clone; "https-token" injects the token into the
   // https URL (GitHub PAT / x-access-token).
@@ -378,6 +391,33 @@ the private control lane). Portal ports are routed from the guest's private
 veth through authenticated Caddy routes; private guest addresses are never
 sent to browsers. The session header's sandbox panel shows live state, setup /
 resume logs, pause, wake and destructive recreate controls.
+
+### Sandbox automations
+
+An automation can opt into the MicroVM profile from its Advanced form. This is
+not the interactive credential-bearing profile with a different label. Save is
+refused unless the automation has one hard-pinned provider account and an
+explicit MCP selection (`[]` means none); model/account fallback and nested
+Claude/Codex CLI credentials are disabled. Only selected MCP configurations and
+dynamic credentials are projected into the guest, and the workspace exists
+only on the guest volume.
+
+Outbound TCP is rejected before allow rules are installed. The host resolves
+the model, Git, callback, configured MCP and operator allowlist endpoints to
+IPv4/CIDRs; DNS and established return traffic remain available. Guest-provided
+hostnames never reach the privileged firewall script. This boundary currently
+requires the local MicroVM provider, so an automation's `sandbox: true` fails
+loudly when that provider/golden is unavailable.
+
+### Real-work scorecard
+
+`GET /api/sandbox/scorecard?days=30` reports turn/preview/wake/restart evidence
+from the structured audit log. The automatic gate requires 20 turns per
+environment, five distinct sandbox-use days, five preview starts per
+environment, five wake samples, three perfect restart-survival samples, median
+first-token time no slower than worktrees, and no turn-failure regression over
+two percentage points. It never changes configuration: a human still approves
+any future default flip.
 
 ## Public dial-back ingress (remote providers)
 
@@ -506,21 +546,17 @@ is `sbxtest-*` scratch), and keep the conformance matrix green:
 bun run deploy/sandbox/conformance.ts docker-socket docker-ws
 ```
 
-To certify the external-engine path through the real Open Session WebSocket
-and session lifecycle, run:
+For the retired host-engine boundary's regression coverage, the legacy verifier
+still exists:
 
 ```sh
 bun run deploy/sandbox/verify-external-engine.ts --provider daytona --provider modal
 bun run deploy/sandbox/verify-external-engine.ts --provider microvm --restart
 ```
 
-This suite accepts OpenCode OpenAI and Claude models: on remote providers and
-MicroVMs, the model loop and provider credentials stay on the host while explicit
-`opensession-workspace` methods operate the sandbox. It checks all six methods,
-file locality, credential/runner absence, persisted placement, provider
-reattachment, and cleanup. Use
-`deploy/sandbox/external-engine-test-prompt.md` for the equivalent manual UI
-smoke test.
+This no longer certifies the shipped architecture: remote providers and
+MicroVMs now run the engine inside the sandbox. Use the behavioral conformance
+matrix above for current certification.
 
 ### Daytona (implemented, live-certified — full launchRun matrix green 2026-07-09)
 
@@ -562,7 +598,9 @@ E2B account** — treat it as untested until the conformance suite passes.
   extends — **expiry KILLS the sandbox and its workspace** (vs. Daytona's
   stop/start). Push early.
 - To certify: `bun run deploy/sandbox/conformance.ts e2b` with credentials,
-  fix what fails, and record the certification in this doc + the plan.
+fix what fails, and record the certification in this doc + the plan.
+Until then, the adapter is available only to the conformance harness; it is
+hidden from the picker and rejected by session creation/prewarm.
 
 ### Box / ascii.dev (implemented, NOT yet certified)
 
@@ -585,7 +623,9 @@ Box account** — treat it as untested until the conformance suite passes.
 - No prewarm adapter and no Shell-tab remote PTY yet (SSH-key provisioning
   is the follow-up path for the latter).
 - To certify: `bun run deploy/sandbox/conformance.ts box` with credentials,
-  fix what fails, and record the certification in this doc + the plan.
+fix what fails, and record the certification in this doc + the plan.
+Until then, the adapter is available only to the conformance harness; it is
+hidden from the picker and rejected by session creation.
 
 ### Modal (implemented, live-certified 2026-07-17)
 
@@ -650,6 +690,8 @@ in `deploy/sandbox/lambda-microvm/`.
 - No prewarm adapter or Shell-tab integration yet.
 - To certify: `bun run deploy/sandbox/conformance.ts lambda-microvm` after the
   image and IAM resources exist.
+Until then, the adapter is available only to the conformance harness; it is
+hidden from the picker and rejected by session creation.
 
 ## Licensing notes
 
@@ -671,11 +713,10 @@ in `deploy/sandbox/lambda-microvm/`.
 - Process/env/resource isolation per session; minimal env (no
   `~/.opensession.env` tokens); IMDS blocked (setup-host.sh / the systemd
   `IPAddressDeny` mirror).
-- Phase 1 docker mounts carry **interactive-level ambient trust**: `~/.ssh`,
+- Docker interactive mounts carry **interactive-level ambient trust**: `~/.ssh`,
   `~/.gitconfig`, `~/.config/gh` are mounted read-only for push/PR parity.
-  That's the same trust host runs have today — but it's why **automation
-  sessions are refused** by the docker launcher in this phase; untrusted
-  ticket text never runs with those mounts.
+  That's the same trust host runs have today. Automations never use this path;
+  they require the credential-minimal MicroVM profile described above.
 - Volume mode removes the host-worktree mount entirely (per-session disk,
   instant cleanup) at the cost of the destroy-deletes-work contract.
 
@@ -703,8 +744,8 @@ that means a bare-metal instance or the 8i-generation nested-virt families
   drop rules. Enable it; nothing else needs manual re-arming after reboot.
 
 Host prereqs: `firecracker` + a CI `vmlinux` under /opt/firecracker, the
-service user in the `kvm` group, the XFS store mounted. Known limits: no
-jailer isolation yet (previews run our own code; harden before anything
-multi-tenant), claims need ~8GB free page cache for comfort (the memory
-file is pre-faulted), and un-pushed branches ship to clones via the agent
-/files channel (30MB bundle cap).
+service user in the `kvm` group, the XFS store mounted. Firecracker runs
+unprivileged in a per-clone chroot with the same capability/device/seccomp
+hardening as session MicroVMs. Claims still need ~8GB free page cache for
+comfort (the memory file is pre-faulted), and un-pushed branches ship to clones
+via the agent `/files` channel (30MB bundle cap).
