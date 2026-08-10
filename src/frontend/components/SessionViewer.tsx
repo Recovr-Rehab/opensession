@@ -4879,7 +4879,7 @@ export function SessionViewer({
 			)}
 
 			<div className="flex min-h-0 flex-1">
-				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:22px] phone:[--wash-depth:40px] phone:[--wash-depth-down:16px]">
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]">
 					{showPreviewTab ? (
 						<div className={VIEWER_REVIEW_MAIN}>
 							<PreviewPane
@@ -5345,9 +5345,7 @@ export function SessionViewer({
 								)}
 							</div>
 
-							<div
-								className={cn(VIEWER_INPUT, following && "before:opacity-0")}
-							>
+							<div className={VIEWER_INPUT}>
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--session-col)] text-[13px] text-faint">
 										No engine session to resume

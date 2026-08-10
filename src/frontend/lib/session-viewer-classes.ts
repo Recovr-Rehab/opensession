@@ -215,16 +215,14 @@ export const VIEWER_MESSAGES_REGION =
  * and in a flex container auto cross-axis margins disable `align-items:
  * stretch`, so they would size to their content and overflow sideways.
  *
- * The bottom inset is the clear resting space, not the composer's overlap or
- * the wash's visual depth. --wash-depth-down owns that layout clearance; the
- * full ramp still hangs from the composer so rows dissolve gradually as
- * they pass underneath. Separating those values keeps the last row close at
- * rest without shortening the scroll-under effect.
+ * A small bottom inset leaves the latest row clear at rest. It is smaller
+ * than the composer's overlap, so older rows can scroll directly underneath
+ * the input instead of stopping above it.
  */
 export const VIEWER_MESSAGES =
 	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
 	// Keep the reader's place when content loads or expands above them.
-	"[overflow-anchor:auto] px-5 pt-[18px] pb-[var(--wash-depth-down)] " +
+	"[overflow-anchor:auto] px-5 pt-[18px] pb-2 " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
 	"desktop:supports-[animation-timeline:scroll()]:[scroll-timeline:--viewer-session-scroll_y] " +
 	// Phone: clear the floating pills at rest, then scroll under them.
@@ -233,7 +231,7 @@ export const VIEWER_MESSAGES =
 	"phone:px-3 " +
 	"phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] " +
 	// Dissolve the transcript into the header as it scrolls up under the pills.
-	// Same non-linear distribution as --wash-down mirrored into mask alpha:
+	// A non-linear fade mirrored into mask alpha:
 	// hidden for the first fifth, 45% by three fifths, full at the bar height.
 	"phone:[-webkit-mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
 	"phone:[mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
@@ -249,16 +247,13 @@ export const VIEWER_MESSAGES =
  * smaller than that margin, so the box rises a few px above where the
  * transcript ends and the last row tucks slightly under it.
  *
- * The transcript's bottom scroll edge hangs off the COMPOSER rather than the
- * scroll container, for the same reason the native app hangs its wash off the
- * bar: an overlay inside the scroll box is laid out inside the inset the
- * composer already took, so it paints in the wrong place — and the composer is
- * the thing content actually disappears behind.
+ * The input's background is transparent at the top of that overlap and solid
+ * by the composer's edge. Content therefore remains crisp as it enters beneath
+ * the input, then disappears behind the composer itself without a blank band.
  */
 export const VIEWER_INPUT =
-	"relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 bg-surface px-5 pt-1 pb-3.5 " +
-	"before:absolute before:inset-x-0 before:bottom-full before:h-[var(--wash-depth)] " +
-	"before:pointer-events-none before:[background:var(--wash-down)] before:content-[''] " +
+	"relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 px-5 pt-1 pb-3.5 " +
+	"[background:linear-gradient(to_bottom,transparent_0,var(--bg)_var(--session-under))] " +
 	// Phone: clear the home indicator rather than jamming the composer against
 	// the very bottom edge — that gap is also all the room the composer's
 	// shadow gets in mobile Safari, where there is no safe-area inset.

@@ -104,39 +104,10 @@
 	--border: #333333;
 	--border-strong: #464646;
 	--top-divider: color-mix(in srgb, var(--border) 68%, transparent);
-	/* Scroll-edge wash — how the transcript meets fixed chrome (the session
-	   header, the composer), ported from the native app's Glass.swift
-	   (composerBottomWash / tabStripTopWash). Two ideas come across.
-	   First: separate chrome from content with a VEIL of the page colour, not a
-	   1px rule — a row dissolves into the bar instead of being sliced by a line.
-	   Second, and the part that actually does the work: the stops are
-	   deliberately NON-LINEAR. A plain two-colour ramp only reaches full
-	   strength on its very last row, so text stays legible right up against the
-	   chrome and the edge still reads as a cut. The veil here is at 55% by four
-	   tenths of the ramp and full by eight tenths, holding for the last fifth —
-	   the native app's stop distribution exactly (`veil * 0.55` then `veil`).
-	   So a row has already gone quiet well before it meets the bar.
-	   One deliberate deviation: there the veil tops out at 0.62, because the
-	   transcript genuinely continues under floating glass and should stay
-	   faintly present. Every edge here ends at a scroll container's CLIP, so
-	   leaving 38% at the boundary would paint half-visible text that then
-	   vanishes on a hard line — the worst of both. The ceiling is the full page
-	   colour instead; the shape, which is what sells it, is unchanged.
-	   Derived from --bg, so both themes get the right wash from one definition. */
+	/* Top scroll-edge wash: content dissolves into the fixed session header.
+	   The composer owns its much shorter overlap gradient directly; keeping the
+	   two separate lets rows scroll under the input without a blank band. */
 	--wash-depth: 56px;
-	/* The bottom edge reserves less space than its 56px visual ramp. Reserving
-	   the full wash made a hole between the final row and the composer, while
-	   shortening the ramp made rows stop abruptly as they scrolled underneath.
-	   Keep the full dissolve and pay only 20px in the resting layout; the row's
-	   own bottom margin plus the composer's overlap keeps text out of the veil
-	   while the session is pinned to the bottom. */
-	--wash-depth-down: 20px;
-	--wash-down: linear-gradient(
-		to bottom,
-		transparent 0,
-		color-mix(in srgb, var(--bg) 55%, transparent) 40%,
-		var(--bg) 80%
-	);
 	--wash-up: linear-gradient(
 		to top,
 		transparent 0,
