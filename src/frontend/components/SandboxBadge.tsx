@@ -1,42 +1,146 @@
-import React from "react";
-import { Tooltip } from "../ui/tooltip";
+import React, { useCallback, useEffect, useState } from "react";
+import { Popover } from "../ui/popover";
+import { cn } from "../ui/cn";
+import {
+	fetchSessionSandbox,
+	sandboxAction,
+	type SessionSandboxStatus,
+} from "../lib/api/sandboxes";
 import { IconBox } from "./icons";
 
-/**
- * Small "this session runs in a sandbox" badge (the sandbox rollout plan Phase 4):
- * provider name + workspace mode, rendered purely from the session's `sandbox`
- * field — no live container polling from the frontend (state that isn't on the
- * session object is deliberately not shown). Renders nothing for plain host
- * sessions and for `provider: "local"` (a recorded opt-in that resolved to
- * today's host behavior — a badge there would only confuse).
- */
+type SandboxRef = {
+	provider: string;
+	sandboxId?: string;
+	workspace?: "bind" | "volume";
+};
+
+const actionClass =
+	"flex min-h-10 w-full items-center rounded-md px-2.5 text-left text-xs font-semibold text-dim outline-none transition-[color,background-color,scale] hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg active:scale-[0.96] disabled:pointer-events-none disabled:opacity-45";
+
+/** Live sandbox status + lifecycle controls. The compact trigger remains the
+ * old provider badge; opening it resolves provider state without polling every
+ * session row in the background. */
 export function SandboxBadge({
+	sessionId,
 	sandbox,
 }: {
-	sandbox?: { provider: string; sandboxId?: string; workspace?: "bind" | "volume" };
+	sessionId: string;
+	sandbox?: SandboxRef;
 }) {
+	const [open, setOpen] = useState(false);
+	const [status, setStatus] = useState<SessionSandboxStatus | null>(null);
+	const [working, setWorking] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const load = useCallback(async () => {
+		try {
+			setStatus(await fetchSessionSandbox(sessionId));
+			setError(null);
+		} catch (cause: any) {
+			setError(cause?.message || "Sandbox status unavailable");
+		}
+	}, [sessionId]);
+
+	useEffect(() => {
+		if (!open) return;
+		void load();
+		const timer = setInterval(() => void load(), 5000);
+		return () => clearInterval(timer);
+	}, [open, load]);
+
 	if (!sandbox?.provider || sandbox.provider === "local") return null;
 	const mode = sandbox.workspace === "volume" ? "volume" : "bind";
-	const materialized = Boolean(sandbox.sandboxId);
-	const label = [
-		`Runs in an isolated ${sandbox.provider} sandbox. The agent and its commands run inside a per-session container, not on the host.`,
-		mode === "volume"
-			? "Volume workspace: the checkout lives only inside the sandbox; deleting the session deletes un-pushed work."
-			: "Bind workspace: the host worktree is mounted into the sandbox, so diffs, pushes and previews work as usual.",
-		materialized ? undefined : "Not started yet. It's created on the first run.",
-	]
-		.filter(Boolean)
-		.join(" ");
+	const state = status?.status || (sandbox.sandboxId ? "running" : "gone");
+	const dot =
+		state === "running"
+			? "bg-green"
+			: state === "stopped"
+				? "bg-yellow"
+				: "bg-faint";
+
+	async function act(action: "pause" | "resume" | "recreate") {
+		if (
+			action === "recreate" &&
+			!window.confirm(
+				"Recreate this sandbox? Unpushed files that exist only inside it will be deleted.",
+			)
+		)
+			return;
+		setWorking(action);
+		setError(null);
+		try {
+			setStatus(await sandboxAction(sessionId, action));
+		} catch (cause: any) {
+			setError(cause?.message || `Could not ${action} sandbox`);
+		} finally {
+			setWorking(null);
+		}
+	}
+
 	return (
-		<Tooltip label={label} multiline>
-			<span
-				className="flex flex-none cursor-default items-center gap-1 rounded-md border border-line bg-surface px-1.5 py-0.5 text-meta font-medium text-dim"
+		<Popover.Root open={open} onOpenChange={setOpen}>
+			<Popover.Trigger
+				className="flex min-h-10 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
 				data-testid="sandbox-badge"
 			>
+				<span className={cn("size-2 rounded-full", dot)} aria-hidden="true" />
 				<IconBox size={20} className="text-faint" />
 				<span>{sandbox.provider}</span>
 				<span className="text-faint">· {mode}</span>
-			</span>
-		</Tooltip>
+			</Popover.Trigger>
+			<Popover.Popup
+				side="bottom"
+				align="start"
+				initialFocus
+				className="w-[300px] p-2.5"
+			>
+				<div className="px-2 pb-2 pt-1">
+					<div className="flex items-center gap-2 text-xs font-semibold text-fg">
+						<span className={cn("size-2 rounded-full", dot)} />
+						<span className="capitalize">{state}</span>
+						<span className="ml-auto font-medium text-faint">{sandbox.provider}</span>
+					</div>
+					{status?.cwd ? (
+						<div className="mt-1 truncate font-mono text-[10px] text-faint" title={status.cwd}>
+							{status.cwd}
+						</div>
+					) : null}
+				</div>
+				{state === "running" && status?.canPause ? (
+					<button
+						className={actionClass}
+						disabled={Boolean(working || status.busy)}
+						onClick={() => void act("pause")}
+					>
+						{working === "pause" ? "Pausing…" : "Pause compute"}
+					</button>
+				) : null}
+				{state === "stopped" && status?.canResume ? (
+					<button
+						className={actionClass}
+						disabled={Boolean(working)}
+						onClick={() => void act("resume")}
+					>
+						{working === "resume" ? "Waking…" : "Wake sandbox"}
+					</button>
+				) : null}
+				<button
+					className={cn(actionClass, "text-red hover:text-red")}
+					disabled={Boolean(working || status?.busy)}
+					onClick={() => void act("recreate")}
+				>
+					{working === "recreate" ? "Recreating…" : "Recreate from clean image"}
+				</button>
+				{status?.logs?.setup || status?.logs?.resume ? (
+					<details className="mt-1 rounded-md bg-surface px-2.5 py-2 text-[11px] text-dim">
+						<summary className="cursor-pointer font-semibold text-fg">Lifecycle logs</summary>
+						<pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed">
+							{status.logs.setup ? `setup\n${status.logs.setup}` : ""}
+							{status.logs.resume ? `\nresume\n${status.logs.resume}` : ""}
+						</pre>
+					</details>
+				) : null}
+				{error ? <div className="px-2 py-1.5 text-[11px] font-medium text-red">{error}</div> : null}
+			</Popover.Popup>
+		</Popover.Root>
 	);
 }

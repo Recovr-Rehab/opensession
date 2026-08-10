@@ -1632,7 +1632,7 @@ export function WorkspaceInfo({
 				/>
 				{sandbox && (
 					<div className="mt-1 flex flex-wrap items-center gap-1.5">
-						<SandboxBadge sandbox={sandbox} />
+						<SandboxBadge sessionId={sessionId} sandbox={sandbox} />
 					</div>
 				)}
 				{pr && <ChecksChip pr={pr} onOpenChecks={onOpenChecks} />}

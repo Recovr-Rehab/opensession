@@ -21,6 +21,7 @@ import { handleFeedsRoutes } from "./feeds";
 import { handleSlackChannelRoutes } from "./slack-channels";
 import { handleSystemRoutes } from "./system";
 import { handleSessionAssetsRoutes } from "./session-assets";
+import { handleSandboxRoutes } from "./sandbox";
 import { handleSessionsRoutes } from "./sessions";
 import { handlePrRoutes } from "./pr";
 import { handleSessionGitRoutes } from "./session-git";
@@ -78,6 +79,7 @@ export const routeHandlers: RouteHandler[] = [
 	// Before the generic session routes: /api/sessions/:id/assets* is inside
 	// their path family and must not be swallowed by broader matches.
 	handleSessionAssetsRoutes,
+	handleSandboxRoutes,
 	handleSessionsRoutes,
 	handlePrRoutes,
 	handleSessionGitRoutes,
