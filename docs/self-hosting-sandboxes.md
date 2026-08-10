@@ -135,7 +135,7 @@ Worth setting, because Daytona's default is 1 vCPU / 1 GB / 3 GiB, which is too
 small for a real repository. Note that custom `resources` are rejected when
 creating from a snapshot — sizing lives in the snapshot itself.
 
-### Still rough
+### Current limits
 
 Honest status, because these are the newest parts:
 
@@ -143,12 +143,16 @@ Honest status, because these are the newest parts:
   refs; the `quickSyncOnRestore` setting (a non-destructive `git fetch` +
   `git status` after a volume restore, default on) exists for exactly that. If
   a session starts confused about what branch it is on, suspect this first.
-- **Prewarm accounting** across restarts is imperfect — orphaned prewarms are
-  reaped, but you may briefly pay for a sandbox nobody adopted.
-- **The MicroVM backend is experimental** and not certified. It is the fastest
-  option and the least proven.
-- Only **Docker, Daytona and Modal** are live-certified. The rest are
-  implemented and unproven; see the per-provider status below.
+- **Prewarm accounting** is crash-safe by cleanup rather than adoption: an
+  unclaimed prewarm left by a server restart is destroyed because the new
+  process cannot safely inherit its bootstrap promise.
+- **The MicroVM backend is live-certified** for provisioning, engine launch,
+  reconnect/replay, steering, cancellation, durable pause/wake, workspace
+  survival and teardown. It is not yet a hostile multi-tenant security
+  boundary: Firecracker jailer integration remains open.
+- **Docker, Daytona, Modal and MicroVM** have live certifications. E2B, Box and
+  Lambda MicroVM are implemented but remain unproven on this host; see the
+  per-provider status below.
 
 If you are starting out: use Docker, leave prewarm and snapshots off, and come
 back to them when cold starts actually bother you.
@@ -161,10 +165,8 @@ files provisions and boots itself in any sandbox with zero instance config:
 
 - `.agents/setup` — provision hook. Runs once per workspace materialization,
   before the post-setup snapshot, skipped on snapshot restore.
-- `.agents/resume` — idempotent post-wake repair, for anything a pause /
-  snapshot restore / host-reboot re-clone leaves stale. No provider runs it
-  yet — the reader lands with the sandbox plan's Phase 1
-  (docs/sandboxes-plan.md); committing one today is forward-compatible.
+- `.agents/resume` — idempotent post-wake repair, run after an actual durable
+  MicroVM wake. Failures surface in the sandbox panel with the retained log.
 - `.agents/start.sh` — dev-server / preview entry, foreground, honoring
   `WEBAPP_PORT` / `PREVIEW_URL` / `OPENSESSION_BOOT_MODE`.
 
@@ -333,13 +335,14 @@ to `provider: "local"` (today's host behavior). Env override for the path:
 }
 ```
 
-### Local Firecracker MicroVM (host engine, guest workspace)
+### Local Firecracker MicroVM (brain and workspace inside)
 
-The `microvm` provider is the local version of the brain/hands split. The
-OpenCode model loop and provider credentials stay on the Open Session host;
-`opensession-workspace` executes explicit filesystem and command methods
-against a per-session Firecracker guest. OpenCode OpenAI and Claude models use
-this host-engine path too.
+The `microvm` provider runs the normal runner payload and selected engine
+inside a per-session Firecracker guest. OpenCode, Pi and native Claude use the
+same brain-inside run-ws/rpc-ws transport as remote providers; only native
+Codex stays host-only because its writable rotating `CODEX_HOME` is not safe to
+project across the boundary. Per-launch credentials are scoped and copied into
+the guest; the golden and shared repo templates remain credential-free.
 
 Build the dedicated control-only golden, then enable it:
 
@@ -348,29 +351,33 @@ sudo -n bash deploy/sandbox/microvm/refresh-sandbox-golden.sh \
   /opt/firecracker/sandbox-store
 ```
 
-With no image argument, the refresh builds
-`deploy/sandbox/microvm/Dockerfile.workspace`: a dedicated credential-free
-workspace image with Git, Bun, Node, ripgrep, jq, sqlite3, iproute2, Python and
-native-build basics. It deliberately contains no Claude/OpenCode CLI,
-Open Session runner checkout, or model account directories. Passing a second
-image argument is an explicit experimental override. Golden publication is
-locked against clone creation and rolls back all three artifacts on failure,
-so a clone can never observe a disk/memory/vmstate generation mix.
+The refresh builds `deploy/sandbox/microvm/Dockerfile.runner`: a
+credential-free golden with the pinned runner and engines. Golden publication
+is locked against clone creation and atomically rolls back all artifacts on
+failure, so a clone cannot observe a mixed disk/memory/vmstate generation.
 
-MicroVMs participate in warm-on-typing when sandbox prewarming is enabled.
-The first prompt input restores a workspace-only clone and pre-clones the
-selected repo; session creation atomically adopts it. This is not a hidden
-model runner: dependency installation, OpenCode/Claude, and provider
-credentials remain outside the guest. Unused warm clones follow the normal
-prewarm TTL and restart-orphan cleanup.
+MicroVMs participate in warm-on-typing when sandbox prewarming is enabled. The
+first prompt input restores a clone, pre-clones the selected repo, runs the
+executable `.agents/setup` hook, scrubs clone authority, publishes a reflinked
+repo template, and parks the prepared VM with compute off. The template is
+keyed by repo plus runner signature and expires after 24 hours. Subsequent
+sessions clone this post-setup disk and cold-boot it, restore fresh clone
+authority only on their private copy, move the warm workspace into place, and
+skip setup through its stable repo stamp.
 
-Do not point this provider at `/opt/firecracker/store`: that is the preview
-pool's app-specific golden. The sandbox golden starts only the structured
-control daemon and contains no seeded app credentials. Clones use COW ext4
-disks and transient systemd scopes, so they survive an Open Session restart.
-They do not yet survive a host reboot/Firecracker crash; push work regularly.
-Each restored guest is currently 4 vCPU/12 GB, and browser preview ports are
-not exposed yet.
+Do not point this provider at `/opt/firecracker/store`: that is the legacy
+preview-pool store. Sandbox clones use COW ext4 disks and transient systemd
+scopes, so active guests survive an Open Session restart. An idle guest pauses
+after five minutes by default; prompts, workspace reads, shell attach and
+Portal requests wake the preserved disk transparently and run `.agents/resume`.
+The current cold wake is about five seconds. A host reboot stops compute but
+the COW disk remains recoverable through the same resume path.
+
+The Shell tab is a real PTY inside the guest (start/read/write/resize/close over
+the private control lane). Portal ports are routed from the guest's private
+veth through authenticated Caddy routes; private guest addresses are never
+sent to browsers. The session header's sandbox panel shows live state, setup /
+resume logs, pause, wake and destructive recreate controls.
 
 ## Public dial-back ingress (remote providers)
 

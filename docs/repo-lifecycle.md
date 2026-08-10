@@ -35,8 +35,10 @@ everything arrives by environment:
   `setup` only needs to cover what that default doesn't.
   See [worktrees.md](worktrees.md).
 - **Sandbox workspace setup.** Once per sandbox workspace, skipped on
-  snapshot restores (the restored layer already carries its effects), never
-  retried once settled. See
+  post-setup template restores (the restored layer already carries its
+  effects), never retried once settled. A sandbox setup failure is loud and
+  blocks materialization; its retained log is available in the sandbox panel.
+  See
   [deploy/sandbox/README.md](../deploy/sandbox/README.md).
 - **First host preview start**, as a safety net — there is no
   workspace-materialization moment on the host, so it runs (and settles,
@@ -60,8 +62,8 @@ re-clone — the place to repair anything wall-clock- or environment-sensitive
 that a frozen filesystem image gets wrong (stale pid/lock files, expired
 short-lived tokens the repo's tooling caches, clock-skewed build caches).
 Same conventions as `setup`: `cwd` = repo root, no arguments, **idempotent**
-(it can run many times over a workspace's life), non-fatal on failure, loud
-and actionable when something important breaks.
+(it can run many times over a workspace's life). Sandbox failures are loud and
+actionable because continuing with a half-repaired workspace is unsafe.
 
 No host runs it yet — the reader lands with the sandbox plan's Phase 1
 (docs/sandboxes-plan.md); committing one today is forward-compatible.
@@ -80,7 +82,7 @@ repo root, no arguments. Two rules make it work:
    | --- | --- |
    | `WEBAPP_PORT` | The port the app must listen on. On the host it's allocated and seeded into `.ports.conf`; in a sandbox it's a pre-published container port — honoring it is what makes the preview reachable. |
    | `PREVIEW_URL` | The public HTTPS origin fronting that port (e.g. `https://host.ts.net:9301`). Add its hostname to your framework's allowed dev origins so pages served through it actually hydrate. |
-   | `OPENSESSION_BOOT_MODE` | `fresh` \| `snapshot-restore`, informational. Host previews always say `fresh`. |
+   | `OPENSESSION_BOOT_MODE` | `fresh` \| `resume` \| `snapshot-restore`, informational. Host previews always say `fresh`. |
 
 Beyond that it should be just a script: a developer with a normal setup can
 run `./.agents/start.sh` by hand and get the usual dev server with sane

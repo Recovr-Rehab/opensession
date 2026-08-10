@@ -194,3 +194,87 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
    those smokes pass; leave `workspace-exec.ts` intact for UI git/file reads.
 3. Continue with Slice D prewarm/docs, optional Slice E, wake-on-demand, and
    snapshot-after-setup.
+
+## 2026-08-10 — Slice C shipped: every supported engine is brain-inside
+
+- `fefed4c5` narrowed guest credential projection to the selected account and
+  provider authority; stale authority is removed on every launch.
+- `2f765226` deleted the remaining host-engine/workspace-MCP placement path.
+  OpenCode, Pi and native Claude now run through the same in-guest runner. The
+  only deliberate exclusion is native Codex; GPT-in-sandbox uses OpenCode or
+  Pi because writable rotating `CODEX_HOME` is not copied into guests.
+- `99c7cb20` disabled keep-alive reuse on Firecracker control requests, fixing
+  the frozen TCP connection that could drop the first command after restore.
+- Real main-server MicroVM smokes proved the scoped files arrived in the guest.
+  OpenCode-other/Cerebras and Pi then hit provider-account exhaustion and
+  correctly fell back to OpenAI; this was external capacity, not a sandbox
+  auth or transport failure, so those requested-provider smokes are recorded
+  as inconclusive rather than passed.
+
+## 2026-08-10 — Portals and agent-to-agent artifacts shipped
+
+- `eb59972a` added binary-safe `send_file_to_session`. An agent can copy one
+  relative file from its host or sandbox-only workspace (or its Assets) into a
+  peer's Assets inbox, then notify/steer the peer. Traversal, absolute paths,
+  self-transfer and files over 4 MiB fail closed.
+- `cfcbedc0` made `.ports.conf` a multi-service Portal manifest: every running
+  `*_PORT` service receives a link in the Dev services menu. Each Caddy route
+  forward-authenticates against Open Session before reaching the service.
+  Firecracker exposes only a Caddy-reachable private upstream; its veth address
+  never reaches the browser.
+- `f0295662` extended the same authenticated wrapper to HTTPS endpoints issued
+  by external sandbox providers. A direct provider URL is now an upstream, not
+  an authentication bypass. The contract and security boundaries are recorded
+  in `docs/portals-and-agent-communication.md`.
+
+## 2026-08-10 — durable lifecycle, shell and post-setup repo templates shipped
+
+- `5c631150` added MicroVM pause/resume, a five-minute idle pause, transparent
+  wake for prompts/workspace reads/Portal requests, `.agents/setup` and
+  `.agents/resume` execution with retained logs, plus the real in-guest PTY
+  used by the Shell tab. A scratch VM preserved `survives` across pause/wake;
+  measured cold wake was about five seconds. The refreshed golden's runner SHA
+  matched the commit and a live PTY returned `PTY_LIVE_OK`.
+- `2b54aa1d` added the session-header sandbox panel and API: live status,
+  provider/id/cwd, setup/resume logs, busy locking, pause, wake and confirmed
+  destructive recreate.
+- `f0295662` completed snapshot-after-setup for local MicroVMs. Prewarm now
+  runs `.agents/setup`, uses a stable per-repo stamp, scrubs clone authority,
+  parks compute, and publishes a reflinked COW repo disk keyed by the runner
+  signature. Later sessions cold-boot private copies for 24 hours, re-inject
+  current clone authority on only that copy, fetch, branch and skip setup.
+- The behavioral conformance matrix now exercises durable pause/wake and byte
+  survival when a provider exposes lifecycle controls. A capacity failure to
+  initialize the second model run is reported as one failure instead of four
+  misleading reconnect/steer/cancel failures.
+
+## 2026-08-10 — Phase 2 evidence plumbing complete
+
+- `f0295662` emits structured audit metrics for worktree vs sandbox
+  start-to-first-event, start-to-first-token, total outcome, sandbox-ready
+  latency, Preview-ready latency and MicroVM wake latency. This supplies the
+  scorecard required by the approved plan without turning a few hand-picked
+  smokes into a default-flip claim.
+- Full suite before the final warm-template slice: **1,859 pass, 4 skip, 0
+  fail**; typecheck passed. Focused Portal/lifecycle/prewarm/file-transfer tests
+  after the slice: **33 pass, 0 fail**; conformance bundles successfully.
+- The full live MicroVM matrix previously passed **28/28**, including model
+  response, WS redial/replay, steering and cancellation. After the golden
+  refresh, the first real model run passed; the second could not initialize
+  while provider accounts were exhausted, so its four dependent assertions
+  timed out. The harness now avoids that cascade while continuing to fail the
+  missing initialization itself.
+
+## Remaining gates (not silently waived)
+
+1. Collect normal-use Phase 2 metrics and make the documented human decision
+   on changing the new-session default. The code does not pre-empt that gate.
+2. Run the live behavioral matrix for E2B, Box and Lambda MicroVM when those
+   provider accounts/images are available. Docker, Daytona, Modal and MicroVM
+   have live evidence; untested adapters are not called equivalent.
+3. Add a proper Firecracker jailer before claiming hostile multi-tenant
+   isolation. Today's MicroVM is a durable execution boundary for trusted team
+   code, not an adversarial tenant boundary.
+4. Only after the default flip is approved: build the separate credential-free
+   automation profile plus egress allowlist. Automation-owned sessions remain
+   refused by the credential-bearing interactive sandbox path today.

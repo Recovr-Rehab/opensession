@@ -1,6 +1,9 @@
 # Sandbox plan — make sandboxes the default session environment
 
-Status: approved 2026-08-10.
+Status: implementation complete through the Phase 2 measurement gate on
+2026-08-10. The default flip remains deliberately pending real-use data and a
+human decision; external providers remain certified individually, not assumed
+equivalent from adapter shape alone.
 
 Goal: prove that every session should run in a VM/sandbox instead of the
 current host-worktree default. Iterate on the local Firecracker (microvm)
@@ -33,6 +36,8 @@ lives inside the machine and is expected to prove its work there.
 
 ## Phase 0 — foundation cleanup
 
+Status: complete.
+
 - Hook rename to `.agents/` everywhere (server code, this repo's own hooks,
   docs), with the contract documented in docs/self-hosting-sandboxes.md.
 - Drift and hygiene fixes from the 2026-08-10 audit: Dockerfile path-parity
@@ -44,6 +49,9 @@ lives inside the machine and is expected to prove its work there.
 
 ## Phase 1 — microvm flagship
 
+Status: complete for the daily-use contract. Firecracker still needs a proper
+jailer before it can be described as a hostile multi-tenant boundary.
+
 - **Brain-inside conversion**: run the standard runner payload in-VM using
   the same bootstrap the remote adapters use; delete the workspace-MCP
   plumbing and placement matrix.
@@ -51,9 +59,11 @@ lives inside the machine and is expected to prove its work there.
   requests transparently resume a paused VM; survive host reboot via
   re-clone + `.agents/resume`. Then shorten the idle pause aggressively —
   memory-snapshot resume is ~1s, so pausing early costs nothing.
-- **Snapshot-after-setup, shared per repo** (~24h TTL): run `.agents/setup`
-  once per repo, snapshot, boot every subsequent session from it. Fold the
-  separate preview pool into this mechanism.
+- **Snapshot-after-setup, shared per repo** (~24h TTL): implemented as a
+  credential-scrubbed COW repo disk template. `.agents/setup` runs before
+  publication, templates invalidate with the runner signature and expire
+  after 24h, and subsequent MicroVM sessions cold-boot a reflinked copy. The
+  typing prewarm parks its prepared VM with compute off.
 - **Close the gaps**: preview URLs from microvm (Caddy port range, same as
   docker), a real in-VM shell, host-side audit and transcript mirroring,
   jailer hardening.
@@ -62,6 +72,9 @@ lives inside the machine and is expected to prove its work there.
   fallback to host runs.
 
 ## Phase 2 — the proof (dogfooding gate)
+
+Status: instrumentation and parity surfaces complete; the flip criterion is
+now collecting real-use evidence.
 
 - Instrument both paths: session start → first token, preview-ready time,
   turn failure rate, restart survival — sandbox vs worktree.
@@ -74,12 +87,23 @@ lives inside the machine and is expected to prove its work there.
 
 ## Phase 3 — provider parity
 
+Status: behavioral harness complete and MicroVM certified. Docker, Daytona and
+Modal retain their earlier live certifications; E2B, Box and Lambda MicroVM
+remain unavailable to certify on this host and must not be presented as equal
+until their live matrix passes.
+
 - Turn the verify scripts into a behavioral conformance matrix — setup hook,
   snapshot/warm start, wake, preview, shell, resume, audit mirroring — and
   run every provider against it. Each provider passes identically or gets
   cut. Provider choice becomes an implementation detail.
 
 ## Phase 4 — flip + automations
+
+Status: intentionally gated. This is not an implementation checkbox: the plan
+requires sustained voluntary use and a human decision before changing the
+default. Credential-bearing interactive sandboxes are still refused for
+automation-owned sessions; the credential-free automation profile is the work
+that follows an approved flip.
 
 - Default new sessions to sandboxed; worktree becomes the explicit fallback.
 - Sandbox automations using the credential-free profile plus an egress
