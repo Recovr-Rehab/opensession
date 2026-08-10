@@ -363,6 +363,33 @@ final class SessionsListViewModel {
         }
     }
 
+    /// The name of the WORKTREE a conversation sits in — what the session bar
+    /// puts where the chat's own title used to be.
+    ///
+    /// A workspace holds several chats and the strip under the bar already
+    /// names each one, so the bar spending itself on the active chat said the
+    /// same thing twice and never said where you were. This resolves through
+    /// the sidebar's own rule, so a renamed workspace, an unnamed one (its
+    /// first conversation's title) and a legacy worktree row (its branch) come
+    /// out exactly as they read in the list.
+    ///
+    /// `tabs` is one worktree's sessions (`tabSessions`). A solo conversation
+    /// is its own row, and that row's title falls back to the BRANCH — "main"
+    /// for every session in a shared checkout — so there being no worktree
+    /// above it, it keeps its own title.
+    nonisolated static func worktreeTitle(
+        for session: Session,
+        in tabs: [Session],
+        workspaceNames: [String: String]
+    ) -> String {
+        let row = sidebarWorkspaces(in: tabs, workspaceNames: workspaceNames)
+            .first { $0.sessions.contains { $0.id == session.id } }
+        guard let row, !row.id.hasPrefix("session:") else {
+            return session.displayTitle
+        }
+        return row.title
+    }
+
     nonisolated private static func workspaceKey(for session: Session) -> String {
         if let workspaceId = session.workspaceId, !workspaceId.isEmpty {
             return "workspace:\(workspaceId)"

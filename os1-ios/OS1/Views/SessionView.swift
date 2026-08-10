@@ -518,7 +518,9 @@ struct SessionView: View {
         .navigationTitle("")
         .macWindowTitle(viewModel.session.displayTitle)
         #else
-        .navigationTitle(viewModel.session.displayTitle)
+        // The system title backs the pill (VoiceOver, the back-swipe preview),
+        // so it names the same thing the pill does.
+        .navigationTitle(identityTitle)
         #endif
         .inlineTitleBarCompat()
         #if os(iOS)
@@ -828,7 +830,7 @@ struct SessionView: View {
                     // No run dot up here: the bar is identity and navigation,
                     // and the running state now reads where the work is — the
                     // clock at the end of the transcript.
-                    Text(viewModel.session.displayTitle)
+                    Text(identityTitle)
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(OS1VisualStyle.text)
                         .fixedSize(horizontal: true, vertical: false)
@@ -879,6 +881,17 @@ struct SessionView: View {
 
     private var currentModel: String {
         viewModel.model.isEmpty ? (catalog?.defaultModel ?? "") : viewModel.model
+    }
+
+    /// The bar names the WORKTREE, not the conversation open inside it — the
+    /// same name it carries in the sidebar, in Catch up and in the rename
+    /// alert one tap away. The identity of a place shouldn't change with which
+    /// room of it you are standing in; which room that is, the tab strip says.
+    /// Rule and fallbacks: `SessionsListViewModel.worktreeTitle`.
+    private var identityTitle: String {
+        SessionsListViewModel.worktreeTitle(
+            for: viewModel.session, in: tabs, workspaceNames: workspaceNames
+        )
     }
 
     private var headerSubtitle: String {
