@@ -147,19 +147,21 @@ struct SettingsView: View {
                 } label: {
                     Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
                 }
+                // On the button, not the list: the popover form of a
+                // confirmation dialog points at whatever it is attached to.
+                .confirmationDialog(
+                    "Sign out?",
+                    isPresented: $confirmingSignOut,
+                    titleVisibility: .visible
+                ) {
+                    Button("Sign out", role: .destructive) { signOut() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This device forgets its token. Your sessions keep running on the server.")
+                }
             }
         }
         .insetGroupedListCompat()
-        .confirmationDialog(
-            "Sign out?",
-            isPresented: $confirmingSignOut,
-            titleVisibility: .visible
-        ) {
-            Button("Sign out", role: .destructive) { signOut() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This device forgets its token. Your sessions keep running on the server.")
-        }
     }
 
     /// How the current identity was decided — the same two modes the web
