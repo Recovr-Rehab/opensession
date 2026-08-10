@@ -6,8 +6,8 @@
  *
  * 1. The strip has TWO complete looks, not one look with tweaks. On desktop it
  *    is a flat band in flow: plain-text tabs on the transcript's own
- *    background, closed off by hairlines that the active tab's underline rests
- *    on. On phones it is a solid bar docked under the floating header pills,
+ *    background, closed off by a bottom hairline that the active tab's underline
+ *    rests on. On phones it is a solid bar docked under the floating header pills,
  *    and its tabs are floating pills with a fill, a ring and a shadow. The old
  *    sheet wrote the pill unconditionally and then had `@media (min-width:
  *    721px)` undo every paint property of it, and that shape is kept: the pill
@@ -61,11 +61,11 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  */
 export const TAB_STRIP =
 	"session-tabs group/strip flex min-w-0 shrink-0 items-center gap-[3px] bg-surface px-2 " +
-	// Desktop: the flat band. Both dividers are inset shadows on THIS element
-	// so they share one element's sub-pixel rounding and stay identical at
-	// fractional display scales; the -1px lap hides the topbar's own border.
-	"desktop:-mt-px desktop:h-11 desktop:items-stretch desktop:py-0 " +
-	"desktop:shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--border)] " +
+	// Desktop: a compact flat band with one divider between its tabs and the
+	// content. The header above deliberately drops its own border when this strip
+	// follows, so adding a top inset here would recreate the unwanted middle line.
+	"desktop:h-10 desktop:items-stretch desktop:py-0 " +
+	"desktop:shadow-[inset_0_-1px_0_var(--border)] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
 	"phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
