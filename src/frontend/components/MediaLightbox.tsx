@@ -1018,37 +1018,37 @@ function MediaLightbox({
 						)}
 					</div>
 				)}
-				<div className="flex items-center text-xs text-white/60">
-					{many &&
-						(items.length <= MAX_DOTS ? (
-							// Dots instead of "3 / 7": at a glance they say how much
-							// there is and where you are, and each one is a jump.
-							<div className="flex items-center">
-								{items.map((it, i) => (
-									<button
-										key={`${i}-${it.src}`}
-										type="button"
-										onClick={() => go(i)}
-										aria-label={`Show ${i + 1} of ${items.length}`}
-										aria-current={i === index ? "true" : undefined}
-										className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
-									>
-										<span
-											className={cn(
-												"block size-1.5 rounded-full transition-colors",
-												i === index
-													? "bg-white"
-													: "bg-white/35 group-hover:bg-white/70",
-											)}
-										/>
-									</button>
-								))}
-							</div>
-						) : (
-							<span className="tabular-nums">
-								{index + 1} / {items.length}
-							</span>
-						))}
+				<div className="flex items-center gap-2 text-xs text-white/60">
+					{many && items.length <= MAX_DOTS && (
+						// Dots provide direct jumps; the counter beside them gives the
+						// exact position without making the reader count circles.
+						<div className="flex items-center">
+							{items.map((it, i) => (
+								<button
+									key={`${i}-${it.src}`}
+									type="button"
+									onClick={() => go(i)}
+									aria-label={`Show ${i + 1} of ${items.length}`}
+									aria-current={i === index ? "true" : undefined}
+									className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
+								>
+									<span
+										className={cn(
+											"block size-1.5 rounded-full transition-colors",
+											i === index
+												? "bg-white"
+												: "bg-white/35 group-hover:bg-white/70",
+										)}
+									/>
+								</button>
+							))}
+						</div>
+					)}
+					{many && (
+						<span className="tabular-nums">
+							{index + 1} / {items.length}
+						</span>
+					)}
 				</div>
 			</div>
 		</motion.div>
