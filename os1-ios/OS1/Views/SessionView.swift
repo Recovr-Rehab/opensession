@@ -822,21 +822,19 @@ struct SessionView: View {
         Button {
             showWorktreeInfo = true
         } label: {
-            HStack(spacing: 8) {
-                // 24pt, the same tile the sessions list uses. At 32 it stood
-                // as tall as the whole title/subtitle stack and read as the
-                // loudest thing in the bar — especially on the colored letter
-                // fallback that stands in until the repo icon loads.
-                RepoTile(name: viewModel.session.effectiveRepo, size: 24)
-                VStack(alignment: .leading, spacing: 1) {
-                    // No run dot up here: the bar is identity and navigation,
-                    // and the running state now reads where the work is — the
-                    // clock at the end of the transcript.
-                    Text(viewModel.session.displayTitle)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(OS1VisualStyle.text)
-                        .lineLimit(1)
-                    if !dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 1) {
+                // No run dot up here: the bar is identity and navigation,
+                // and the running state now reads where the work is — the
+                // clock at the end of the transcript.
+                Text(viewModel.session.displayTitle)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .lineLimit(1)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    HStack(spacing: 4) {
+                        // Inline with its label so the tile doesn't reserve a
+                        // full-height column beside the title.
+                        RepoTile(name: viewModel.session.effectiveRepo, size: 16)
                         Text(headerSubtitle)
                             .font(.footnote)
                             .foregroundStyle(OS1VisualStyle.textDim)
@@ -853,7 +851,7 @@ struct SessionView: View {
             .padding(.leading, 6)
             .padding(.trailing, 10)
             .padding(.vertical, 1)
-            .frame(maxWidth: 220, alignment: .leading)
+            .frame(maxWidth: 200, alignment: .leading)
             .contentShape(Capsule())
         }
         .buttonStyle(.glass)
