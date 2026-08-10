@@ -822,30 +822,28 @@ struct SessionView: View {
         Button {
             showWorktreeInfo = true
         } label: {
-            VStack(alignment: .leading, spacing: 1) {
-                // No run dot up here: the bar is identity and navigation,
-                // and the running state now reads where the work is — the
-                // clock at the end of the transcript.
-                Text(viewModel.session.displayTitle)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(width: 190, alignment: .leading)
-                    .clipped()
-                    .mask(titleTrailingFade)
-                if !dynamicTypeSize.isAccessibilitySize {
-                    HStack(spacing: 4) {
-                        // Inline with its label so the tile doesn't reserve a
-                        // full-height column beside the title.
-                        RepoTile(name: viewModel.session.effectiveRepo, size: 14)
+            HStack(spacing: 6) {
+                RepoTile(name: viewModel.session.effectiveRepo, size: 14)
+                VStack(alignment: .leading, spacing: 1) {
+                    // No run dot up here: the bar is identity and navigation,
+                    // and the running state now reads where the work is — the
+                    // clock at the end of the transcript.
+                    Text(viewModel.session.displayTitle)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(width: 170, alignment: .leading)
+                        .clipped()
+                        .mask(titleTrailingFade)
+                    if !dynamicTypeSize.isAccessibilitySize {
                         Text(headerSubtitle)
                             .font(.footnote)
                             .foregroundStyle(OS1VisualStyle.textDim)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(width: 170, alignment: .leading)
+                            .clipped()
+                            .mask(titleTrailingFade)
                     }
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(width: 190, alignment: .leading)
-                    .clipped()
-                    .mask(titleTrailingFade)
                 }
             }
             // Match the bar's system navigation and actions controls so the
