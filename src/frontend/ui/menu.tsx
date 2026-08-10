@@ -95,7 +95,7 @@ function ContextPopup({
 /** Shared row styling for anything that behaves like a menu item. Highlight
  * via Base UI's data-highlighted so keyboard navigation lights rows up too. */
 const itemClasses =
-	"flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-control-label text-fg outline-none data-[highlighted]:bg-hover";
+	"flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-control-label text-fg no-underline outline-none data-[highlighted]:bg-hover";
 
 function Item({
 	className,

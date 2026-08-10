@@ -3,9 +3,8 @@
  * that lifts it over the conversation.
  *
  * A file an agent wrote is reachable from three places — the chip on the turn
- * that wrote it, the Info panel's list, and the Assets tab — and all three
- * come through here, so the file can't look or behave like three different
- * things depending on where you clicked.
+ * that wrote it, the Info panel's list, and the Assets tab — and all three use
+ * this preview and action vocabulary, so the file behaves consistently.
  *
  * The overlay is the default way in: an artifact is something you glance at
  * mid-conversation, and an overlay costs nothing to dismiss. The Assets tab
@@ -42,11 +41,15 @@ import { ResponsiveDialog } from "../ui/sheet";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { MarkdownBody } from "./MarkdownBody";
+import { openLightbox } from "./MediaLightbox";
 import {
+	IconArrowDown,
 	IconArrowUpRight,
 	IconChevronLeft,
 	IconChevronRight,
+	IconCopy,
 	IconDotsHorizontal,
+	IconTrash,
 	IconX,
 } from "./icons";
 
@@ -203,11 +206,13 @@ function AssetMenu({
 				<Menu.Item
 					render={<a href={sessionAssetDownloadUrl(sessionId, file)} download />}
 				>
+					<IconArrowDown size={18} className="text-faint" />
 					Download
 				</Menu.Item>
 				<Menu.Item
 					render={<a href={rawUrl} target="_blank" rel="noreferrer" />}
 				>
+					<IconArrowUpRight size={18} className="text-faint" />
 					Open in a browser tab
 				</Menu.Item>
 				<Menu.Item
@@ -215,10 +220,12 @@ function AssetMenu({
 						copyToClipboard(absoluteLink(stableUrl), () => toast("Link copied"))
 					}
 				>
+					<IconCopy size={18} className="text-faint" />
 					Copy link
 				</Menu.Item>
 				<Menu.Separator />
 				<Menu.Item onClick={onDelete} className="text-red">
+					<IconTrash size={18} />
 					Delete
 				</Menu.Item>
 			</Menu.Popup>
@@ -226,23 +233,39 @@ function AssetMenu({
 	);
 }
 
-function AssetOverlayActions({
+function AssetOverlayCaption({
 	sessionId,
 	file,
 	refresh,
+	showSize,
 	onOpenAsTab,
 	onClose,
 }: {
 	sessionId: string;
 	file: SessionAssetFile;
 	refresh: () => void;
+	showSize: boolean;
 	onOpenAsTab?: () => void;
 	onClose: () => void;
 }) {
+	const name = file.path.split("/").pop() || file.path;
 	return (
-		<div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-control border border-line-strong bg-raised/95 p-1 shadow-control backdrop-blur-sm [@media(hover:hover)]:opacity-60 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-focus-within/asset:opacity-100 [@media(hover:hover)]:group-hover/asset:opacity-100">
-			{onOpenAsTab && (
-				<Tooltip label="Open in Assets">
+		<div className="flex shrink-0 items-center gap-3 px-3 py-2">
+			<div className="min-w-0 flex-1" title={file.path}>
+				<div className="truncate text-label font-medium text-fg">{name}</div>
+				{file.description && (
+					<div className="line-clamp-2 text-supporting leading-snug text-dim">
+						{file.description}
+					</div>
+				)}
+			</div>
+			{showSize && (
+				<span className="shrink-0 text-[11px] text-faint">
+					{formatAssetSize(file.size)}
+				</span>
+			)}
+			<div className="flex shrink-0 items-center gap-1">
+				{onOpenAsTab && (
 					<Button
 						variant="ghost"
 						size="xs"
@@ -251,20 +274,20 @@ function AssetOverlayActions({
 					>
 						Open
 					</Button>
-				</Tooltip>
-			)}
-			<AssetMenu
-				sessionId={sessionId}
-				file={file}
-				refresh={refresh}
-				onClose={onClose}
-			/>
+				)}
+				<AssetMenu
+					sessionId={sessionId}
+					file={file}
+					refresh={refresh}
+					onClose={onClose}
+				/>
+			</div>
 		</div>
 	);
 }
 
 /**
- * The asset's name and everything you can do to it, in one row.
+ * The Assets tab's file header and operations, in one row.
  *
  * The promotion into a tab earns a place on the surface. File operations
  * live behind the overflow, because a header of six
@@ -285,12 +308,12 @@ export function AssetActions({
 	file: SessionAssetFile;
 	/** Re-list the folder after a delete. */
 	refresh?: () => void;
-	/** Promote this file into the workspace's Assets tab. */
+	/** Optionally promote this file into the workspace's Assets tab. */
 	onOpenAsTab?: () => void;
 	/** Dismiss the surface — the overlay's ✕. Also called after a delete, since
 	 *  there is nothing left to show. */
 	onClose?: () => void;
-	/** The overlay moves file actions onto the preview itself. */
+	/** Hide this menu when another row owns the file actions. */
 	showMenu?: boolean;
 	/** False for a chip path whose folder listing has not caught up yet. */
 	showSize?: boolean;
@@ -325,16 +348,14 @@ export function AssetActions({
 				</span>
 			)}
 			{onOpenAsTab && (
-				<Tooltip label="Open in Assets">
-					<Button
-						variant="ghost"
-						size="xs"
-						className="shrink-0"
-						onClick={onOpenAsTab}
-					>
-						Open as tab
-					</Button>
-				</Tooltip>
+				<Button
+					variant="ghost"
+					size="xs"
+					className="shrink-0"
+					onClick={onOpenAsTab}
+				>
+					Open as tab
+				</Button>
 			)}
 			{showMenu && (
 				<AssetMenu
@@ -436,11 +457,24 @@ export function AssetPreview({
 				/>
 			) : kind === "image" ? (
 				<div className="flex h-full items-center justify-center overflow-auto p-3">
-					<img
-						src={rawUrl}
-						alt={file.path}
-						className="max-h-full max-w-full object-contain"
-					/>
+					<button
+						type="button"
+						className="flex max-h-full max-w-full cursor-zoom-in border-0 bg-transparent"
+						onClick={(event) =>
+							openLightbox(
+								[{ kind: "image", src: rawUrl, sessionTitle: file.path }],
+								0,
+								event.currentTarget,
+							)
+						}
+						aria-label={`Zoom ${file.path}`}
+					>
+						<img
+							src={rawUrl}
+							alt={file.path}
+							className="max-h-full max-w-full object-contain"
+						/>
+					</button>
 				</div>
 			) : kind === "video" ? (
 				<video src={rawUrl} controls className="h-full w-full" />
@@ -576,6 +610,7 @@ export function AssetOverlay({
 	const shown = path ?? lastPath;
 	if (!shown) return null;
 	const file = assetFileFor(shown, files);
+	const name = file.path.split("/").pop() || file.path;
 	const listed = files.some((candidate) => candidate.path === shown);
 	const listedIndex = files.findIndex((candidate) => candidate.path === shown);
 	const navigate = (direction: -1 | 1) => {
@@ -605,7 +640,7 @@ export function AssetOverlay({
 			open={Boolean(path)}
 			onClose={onClose}
 			phone={isPhone}
-			label={`Asset: ${file.path}`}
+			label={`Preview ${name}`}
 			// The default modal is a 30rem confirm box; an artifact needs the
 			// room a page or a chart was drawn for. `max-w-none` first, or the
 			// default clamp wins.
@@ -618,16 +653,7 @@ export function AssetOverlay({
 					!isPhone && "rounded-[inherit]",
 				)}
 			>
-				<AssetActions
-					sessionId={sessionId}
-					file={file}
-					refresh={refresh}
-					onClose={isPhone ? onClose : undefined}
-					showMenu={false}
-					showSize={listed}
-					className={!isPhone ? "pr-12" : undefined}
-				/>
-				<div className="group/asset relative flex min-h-0 flex-1">
+				<div className="relative flex min-h-0 flex-1">
 					{missingPath === file.path ? (
 						<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
 							This file is no longer available.
@@ -642,32 +668,31 @@ export function AssetOverlay({
 							}}
 						/>
 					)}
-					<AssetOverlayActions
-						sessionId={sessionId}
-						file={file}
-						refresh={refresh}
-						onOpenAsTab={
-							onOpenAsTab ? () => onOpenAsTab(file.path) : undefined
-						}
-						onClose={onClose}
-					/>
 				</div>
+				<AssetOverlayCaption
+					sessionId={sessionId}
+					file={file}
+					refresh={refresh}
+					showSize={listed}
+					onOpenAsTab={
+						onOpenAsTab ? () => onOpenAsTab(file.path) : undefined
+					}
+					onClose={onClose}
+				/>
 				{isPhone && navigation && (
 					<AssetPager navigation={navigation} arrows />
 				)}
 			</div>
-			{!isPhone && (
-				<Tooltip label="Close">
-					<Button
-						variant="ghost"
-						size="md"
-						icon={<IconX size={18} />}
-						aria-label="Close"
-						className="absolute right-2 top-2 z-20 size-8"
-						onClick={onClose}
-					/>
-				</Tooltip>
-			)}
+			<Tooltip label="Close">
+				<Button
+					variant="ghost"
+					size="md"
+					icon={<IconX size={18} />}
+					aria-label="Close"
+					className="absolute right-2 top-2 z-20 size-8"
+					onClick={onClose}
+				/>
+			</Tooltip>
 			{!isPhone && navigation && (
 				<>
 					<AssetSideButton direction="previous" onClick={navigation.onPrevious} />

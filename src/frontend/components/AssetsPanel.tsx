@@ -5,8 +5,8 @@
  *
  * This is the place you go to sit with the folder. One file on its own arrives
  * over the conversation instead, in `AssetOverlay` — and both render the same
- * `AssetPreview` under the same `AssetActions`, so a file looks and behaves
- * the same whichever way you reached it.
+ * `AssetPreview` with the same action menu, while placing metadata where it
+ * best fits each surface.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
