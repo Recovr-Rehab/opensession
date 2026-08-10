@@ -13,7 +13,8 @@
  *
  * The shell also has two complete layouts rather than one with tweaks. On
  * desktop it is two flush columns: the sidebar, then the workspace filling the
- * rest of the window, with a single hairline seam between them. On phones the
+ * rest of the window, with a hairline seam and a soft shadow falling back onto
+ * the sidebar. On phones the
  * outer box DISSOLVES — `.workspace-shell` was `display: contents`
  * — and the pane becomes an iOS-style page stack, absolutely positioned and
  * slid in from the right over the sidebar. The desktop form is unprefixed and
@@ -54,18 +55,18 @@ export const APP_BODY =
 /**
  * The detail pane and its optional right panel as one object, flush to the
  * window: the workspace takes every pixel the sidebar leaves, and the only
- * thing between the two is the seam on its left edge. No gutter, so no corner
- * and no shadow either — both only ever read against the strip of raised app
- * surface that used to run around it.
+ * thing between the two is the seam and a subtle shadow on its left edge. No
+ * gutter and no corner: the shadow only gives the sidebar a little depth
+ * against the workspace without turning the seam into a raised card edge.
  *
  * `display: contents` on phones is load-bearing rather than tidy: dissolving
  * the box restores `.detail-pane` and the fixed panel portal to the layout
  * relationship their mobile positioning rules expect.
  */
 export const WORKSPACE_SHELL =
-	"relative z-[1] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-line bg-surface " +
-	// Collapsed sidebar: nothing to divide from, so the seam goes too.
-	"[.app-body.sidebar-collapsed_&]:border-l-0 " +
+	"relative z-[1] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-line bg-surface desktop:shadow-[-4px_0_12px_rgba(0,0,0,0.06)] " +
+	// Collapsed sidebar: nothing to divide from or cast depth onto.
+	"[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:shadow-none " +
 	"phone:contents";
 
 /**
