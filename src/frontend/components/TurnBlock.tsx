@@ -188,15 +188,13 @@ export const TurnBlock = React.memo(function TurnBlock({
       </button>
 
       {(expanded || messagesInline) && (
-        // The rail marks what the header can actually close, so it appears
+        // The indent marks what the header can actually close, so it appears
         // only when the fold is open. Under the "messages" preference a
         // folded turn still shows its notes, and those are NOT collapsible —
-        // putting them in a rail would offer a container the header cannot
-        // shut. Folded, the notes sit flush and read as ordinary transcript,
-        // which is the whole point of that preference.
-        <div
-          className={cn("mt-0.5", expanded && "ml-1 border-l border-line pl-3")}
-        >
+        // indenting them would suggest a container the header cannot shut.
+        // Folded, the notes sit flush and read as ordinary transcript, which
+        // is the whole point of that preference.
+        <div className={cn("mt-0.5", expanded && "ml-1 pl-3")}>
           {sections.map((sec) =>
             sec.kind === "msg" ? (
               <TurnMessage
