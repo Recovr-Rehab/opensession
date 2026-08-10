@@ -233,7 +233,6 @@ struct AssistantMessage: View {
             }
         }
         .padding(.vertical, 2)
-        .padding(.trailing, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contextMenu {
             Button {
@@ -447,7 +446,6 @@ struct StreamingBubble: View {
     var body: some View {
         StreamingMarkdownBody(text)
             .padding(.vertical, 2)
-            .padding(.trailing, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
