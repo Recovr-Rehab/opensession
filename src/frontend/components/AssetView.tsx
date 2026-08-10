@@ -259,7 +259,7 @@ function AssetOverlayFooter({
 				"z-20 flex shrink-0 flex-col items-center gap-1 px-3 py-2",
 				phone
 					? "border-t border-line"
-					: "absolute left-0 right-0 top-full mt-2 bg-gradient-to-r from-transparent via-black/55 to-transparent",
+					: "absolute left-0 right-0 top-full mt-2 rounded-lg bg-gradient-to-r from-black/35 via-black/55 to-black/35",
 			)}
 		>
 			{file.description && (
