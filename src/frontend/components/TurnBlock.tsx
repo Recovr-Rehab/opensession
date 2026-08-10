@@ -188,12 +188,7 @@ export const TurnBlock = React.memo(function TurnBlock({
       </button>
 
       {(expanded || messagesInline) && (
-        // Flush with the header, not indented: a tool row's glyph then sits in
-        // the same column as the fold's chevron and its name under "Working",
-        // so the open turn reads as one list rather than a nested one. The
-        // -1px offsets the glyph's 22px box against the chevron's 20px, which
-        // would otherwise leave the column a pixel out.
-        <div className="-ml-px mt-0.5">
+        <div className="mt-0.5">
           {sections.map((sec) =>
             sec.kind === "msg" ? (
               <TurnMessage
@@ -202,8 +197,16 @@ export const TurnBlock = React.memo(function TurnBlock({
                 sessionId={sessionId}
               />
             ) : messagesInline ? null : (
+              // Indented one disclosure step, so the tool rows read as the
+              // fold's children. 27px puts a tool glyph's ink under the "W" of
+              // "Working": the header spends 4px padding + a 20px chevron + an
+              // 8px gap before its title, a tool row 4px padding + the 1px its
+              // 20px glyph is inset inside a 22px box. Narration between tool
+              // runs deliberately keeps the column — the work indents, the
+              // agent's own words don't.
               <div
                 key={sec.items[0].id}
+                className="ml-[27px]"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
                 {sec.items.map((entry) => (
