@@ -129,8 +129,10 @@ allowed navigation origin); the device-flow fallback link works too. The
 ## Deep links
 
 - `os1://…` opens the app and maps to the active server
-  (e.g. `os1://session/abc` → `/session/abc`). In local mode, incoming
-  universal links for the cloud host preserve their path on the local
+  (e.g. `os1://session/abc` → `/session/abc`). When the web app is already
+  loaded, the shell hands the route to its client-side router without reloading
+  the renderer; cold starts still load the target directly. In local mode,
+  incoming universal links for the cloud host preserve their path on the local
   origin.
 - **Universal links** (plain `https://os.tella.dev/…` links opening the app,
   e.g. from Slack — Tella's host; see the rebrand note under Signing & release):
