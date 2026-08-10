@@ -51,3 +51,15 @@ export const TOOL_PRE_CODE =
 
 /** Image and video grids under a tool result. */
 export const TOOL_RESULT_MEDIA = "mt-1.5 flex flex-wrap gap-2";
+
+/**
+ * The tool row's trailing drill-in chip — "Open ↗" on a file the call wrote,
+ * "Watch ↗" on a sub-agent still running.
+ * It matches the chip tier in `SessionRelations`: a compact pill with a
+ * translucent plate instead of a hairline box that reads like an input.
+ */
+export const TOOL_ROW_CHIP =
+	"inline-flex flex-shrink-0 self-center items-center gap-0.5 rounded-control " +
+	"bg-hover py-[2px] pl-2 pr-1 text-meta font-medium leading-4 text-dim " +
+	"transition-[color,background-color,scale] hover:bg-pressed hover:text-fg " +
+	"active:scale-[0.96] focus-ring";

@@ -6,7 +6,7 @@ import { PlanChecklist } from "./PlanChecklist";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { BASE_PATH } from "../lib/base";
 import { cn } from "../ui/cn";
-import { TOOL_CODE_WELL, TOOL_PRE, TOOL_RESULT_MEDIA } from "../lib/tool-classes";
+import { TOOL_CODE_WELL, TOOL_PRE, TOOL_RESULT_MEDIA, TOOL_ROW_CHIP } from "../lib/tool-classes";
 import { tidyPath, type PathRoot } from "../lib/tidy-path";
 import {
   assetToolPath,
@@ -43,6 +43,7 @@ import {
   IconChevronDown,
   IconX,
   IconExpand,
+  IconArrowUpRight,
 } from "./icons";
 
 // Shiki (the syntax highlighter) is multi-MB; keep it out of the initial
@@ -420,7 +421,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
           <span
             role="button"
             tabIndex={0}
-            className="flex-shrink-0 rounded border border-line px-1.5 py-px text-meta text-dim transition-colors hover:border-line-strong hover:text-fg"
+            className={TOOL_ROW_CHIP}
             onClick={(e) => {
               e.stopPropagation();
               showAsset();
@@ -433,7 +434,8 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
             }}
             title="Open this file"
           >
-            Open ↗
+            Open
+            <IconArrowUpRight className="size-4 shrink-0 opacity-70" />
           </span>
         )}
 
@@ -442,7 +444,8 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
             role="button"
             tabIndex={0}
             className={cn(
-              "flex-shrink-0 rounded border border-line px-1.5 py-px text-meta text-dim opacity-100 transition-opacity hover:border-line-strong hover:text-fg focus:opacity-100",
+              TOOL_ROW_CHIP,
+              "opacity-100 transition-[opacity,color,background-color] focus:opacity-100",
               !subagentLive && "md:opacity-0 md:group-hover:opacity-100"
             )}
             onClick={(e) => {
@@ -451,7 +454,8 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
             }}
             title="Open this sub-agent's conversation"
           >
-            {subagentLive ? "Watch ↗" : "Open ↗"}
+            {subagentLive ? "Watch" : "Open"}
+            <IconArrowUpRight className="size-4 shrink-0 opacity-70" />
           </span>
         )}
 
