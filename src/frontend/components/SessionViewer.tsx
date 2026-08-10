@@ -125,6 +125,7 @@ import {
 	IconArrowUp,
 	IconArrowUpToLine,
 	IconCrosshair,
+	IconDesk,
 	IconDotsHorizontal,
 	IconEye,
 	IconInbox,
@@ -2909,6 +2910,10 @@ export function SessionViewer({
 	}, [session.id]);
 
 	const currentUser = useCurrentUser();
+	// Whose Desk this is. Every Desk is titled "Desk" and carries no repo, so
+	// the owner is the only thing that tells one apart from another — see the
+	// mobile title pill's leading slot.
+	const deskOwner = session.desk ? session.startedBy || "" : "";
 	// The review request is stored per session, but the sidebar's "Awaiting/Needs
 	// review" bands group by workspace — so a request set on a sibling session lit
 	// the band while the open session's Reviewer chip read empty. Surface the
@@ -4718,12 +4723,33 @@ export function SessionViewer({
 			})()}
 
 			{/* Repo tile leads the mobile title pill (Slack-header style) — it
-			    portals into the pill's leading slot in front of the name. */}
+			    portals into the pill's leading slot in front of the name. A Desk
+			    has no repo, and every Desk is titled just "Desk": opening a
+			    teammate's from the People band gave a pill with nothing in front
+			    of the name — no way to tell whose it is, and the name sitting
+			    against the pill's edge where the tile's spacing should be. Their
+			    face answers both; your own Desk gets the lamp instead of a
+			    picture of yourself. */}
 			{isPhone &&
 				headerRepoEl &&
-				hasWorkspace &&
+				(session.desk || hasWorkspace) &&
 				createPortal(
-					<RepoTile name={session.repo || "repository"} size={18} round />,
+					session.desk ? (
+						deskOwner && personKey(deskOwner) !== personKey(currentUser) ? (
+							<UserAvatar
+								name={deskOwner}
+								size={18}
+								title={`${deskOwner}'s Desk`}
+							/>
+						) : (
+							// 20, not the tile's 18: these 24-grid glyphs are clamped
+							// at 20 (MIN_SIZE in icons.tsx) and only ink ~60% of
+							// their box, so the lamp still reads smaller than a face.
+							<IconDesk size={20} className="text-dim" />
+						)
+					) : (
+						<RepoTile name={session.repo || "repository"} size={18} round />
+					),
 					headerRepoEl,
 				)}
 
