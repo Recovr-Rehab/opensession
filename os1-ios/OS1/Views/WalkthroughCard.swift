@@ -14,20 +14,39 @@ import AppKit
 ///
 /// It reads as a raised card rather than a message, because it summarizes a
 /// stretch of the conversation rather than continuing it.
+///
+/// It folds, like a work turn does. A walkthrough is a screenful of video and
+/// a screenful per before/after pair, and on a phone that is a long way to
+/// drag past to reach what was said after it — in a session that published
+/// several, the conversation is mostly walkthrough. It opens by default,
+/// because the demo is the point of publishing one; folding is for afterwards.
 struct WalkthroughCard: View {
     let walkthrough: SessionWalkthrough
+    let state: TurnFoldState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            header
-            if let video = walkthrough.video, let url = OS1API.mediaURL(path: video) {
-                WalkthroughVideo(url: url)
+            Button {
+                withAnimation(.snappy(duration: 0.22, extraBounce: 0)) {
+                    state.toggle()
+                }
+            } label: {
+                header
             }
-            if !walkthrough.summary.isEmpty {
-                MarkdownBody(walkthrough.summary)
-            }
-            ForEach(walkthrough.stills) { shot in
-                WalkthroughShotView(shot: shot, gallery: gallery)
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityHint(state.expanded ? "Hide the walkthrough" : "Show the walkthrough")
+
+            if state.expanded {
+                if let video = walkthrough.video, let url = OS1API.mediaURL(path: video) {
+                    WalkthroughVideo(url: url)
+                }
+                if !walkthrough.summary.isEmpty {
+                    MarkdownBody(walkthrough.summary)
+                }
+                ForEach(walkthrough.stills) { shot in
+                    WalkthroughShotView(shot: shot, gallery: gallery)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -37,9 +56,11 @@ struct WalkthroughCard: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(OS1VisualStyle.border, lineWidth: 0.5)
         }
-        // It ends in media where its neighbours end in text, so it needs more
-        // room after it than between ordinary blocks.
-        .padding(.bottom, 6)
+        // Open, it ends in media where its neighbours end in text, so it needs
+        // more room after it than between ordinary blocks. Folded it ends in a
+        // line of text like everything else, and the extra gap would read as a
+        // break in the conversation.
+        .padding(.bottom, state.expanded ? 6 : 0)
     }
 
     /// Every still in the card, in reading order, so opening one pages
@@ -63,23 +84,62 @@ struct WalkthroughCard: View {
 
     private var header: some View {
         HStack(spacing: 6) {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .rotationEffect(.degrees(state.expanded ? 0 : -90))
             Image(systemName: "play.rectangle")
                 .font(.system(size: 11, weight: .semibold))
             Text("Walkthrough")
                 .font(.caption.weight(.semibold))
+                .lineLimit(1)
             if let by = walkthrough.publishedBy, !by.isEmpty {
                 Text("· \(by)")
                     .font(.caption)
                     .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
             }
             Spacer(minLength: 4)
-            if let published = walkthrough.publishedDate {
-                Text(published, format: .dateTime.month(.abbreviated).day().hour().minute())
-                    .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-            }
+            // Folded, what the card holds — the one thing a reader needs to
+            // decide whether to open it. Open, they can see that for
+            // themselves, so the slot goes back to saying when it was
+            // published (the same trade the work fold's header makes).
+            Text(state.expanded ? publishedLabel : contentsLabel)
+                .font(.caption2)
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .lineLimit(1)
+                .fixedSize()
         }
         .foregroundStyle(OS1VisualStyle.textDim)
+        .padding(.vertical, 1)
+        .contentShape(Rectangle())
+    }
+
+    /// "Demo · 2 stills" — omitted pieces collapse rather than leaving a
+    /// stray separator, and a writeup-only walkthrough says so instead of
+    /// looking empty.
+    private var contentsLabel: String {
+        var parts: [String] = []
+        if walkthrough.video != nil { parts.append("Demo") }
+        let stills = walkthrough.stills.reduce(0) { count, shot in
+            count + [shot.before, shot.after].compactMap { $0 }.count
+        }
+        if stills > 0 { parts.append("\(stills) still\(stills == 1 ? "" : "s")") }
+        if parts.isEmpty, !walkthrough.summary.isEmpty { parts.append("Writeup") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var publishedLabel: String {
+        guard let published = walkthrough.publishedDate else { return "" }
+        return published.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    }
+
+    private var accessibilityLabel: String {
+        var parts = ["Walkthrough"]
+        if let by = walkthrough.publishedBy, !by.isEmpty { parts.append("by \(by)") }
+        let contents = contentsLabel
+        if !contents.isEmpty { parts.append(contents.replacingOccurrences(of: " · ", with: ", ")) }
+        return parts.joined(separator: ", ")
     }
 }
 

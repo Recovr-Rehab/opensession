@@ -11,7 +11,9 @@ struct TranscriptRow: View {
     /// Resolves fold/expansion state that has to outlive the row scrolling
     /// out of the lazy stack.
     let foldState: (WorkTurn) -> TurnFoldState
-    let expansionState: (String) -> TurnFoldState
+    /// Id, and whether it starts open — a walkthrough does, everything else
+    /// that folds inside a row starts closed.
+    let expansionState: (String, Bool) -> TurnFoldState
     /// "Fold tool calls": a folded work turn still shows its notes.
     var showsMessagesWhenFolded = false
     /// Who started this session, for crediting turns that carry no explicit
@@ -27,7 +29,7 @@ struct TranscriptRow: View {
                 NoticeRow(
                     entry: entry,
                     notice: notice,
-                    state: expansionState("notice-\(entry.id)")
+                    state: expansionState("notice-\(entry.id)", false)
                 )
             } else if entry.isUser {
                 UserBubble(entry: entry, sessionId: sessionId, owner: owner)
@@ -35,7 +37,7 @@ struct TranscriptRow: View {
                 AssistantMessage(
                     entry: entry,
                     sessionId: sessionId,
-                    state: expansionState("body-\(entry.id)")
+                    state: expansionState("body-\(entry.id)", false)
                 )
             } else {
                 // A system entry from a server too old to classify it.
@@ -48,7 +50,7 @@ struct TranscriptRow: View {
                         body: nil,
                         link: nil
                     ),
-                    state: expansionState("notice-\(entry.id)")
+                    state: expansionState("notice-\(entry.id)", false)
                 )
             }
         case .tool(let item):
@@ -56,7 +58,7 @@ struct TranscriptRow: View {
                 item: item,
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
-                state: expansionState(item.id)
+                state: expansionState(item.id, false)
             )
         case .work(let turn):
             TurnBlockView(
@@ -65,12 +67,17 @@ struct TranscriptRow: View {
                 worktreeDir: worktreeDir,
                 state: foldState(turn),
                 showsMessagesWhenFolded: showsMessagesWhenFolded,
-                detailState: { expansionState($0.id) }
+                detailState: { expansionState($0.id, false) }
             )
         case .footer(let footer):
             TurnFooterView(footer: footer, sessionId: sessionId)
         case .walkthrough(let walkthrough):
-            WalkthroughCard(walkthrough: walkthrough)
+            // Open unless the reader folds it: a walkthrough is published to
+            // be watched, and one that arrives closed is one nobody sees.
+            WalkthroughCard(
+                walkthrough: walkthrough,
+                state: expansionState(block.id, true)
+            )
         }
     }
 }

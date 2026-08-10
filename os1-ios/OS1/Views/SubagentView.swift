@@ -82,7 +82,7 @@ struct SubagentView: View {
                         sessionId: sessionId,
                         worktreeDir: worktreeDir,
                         foldState: { folds.fold(for: $0, preference: turnActivity) },
-                        expansionState: { folds.expansion(id: $0) },
+                        expansionState: { folds.expansion(id: $0, defaultExpanded: $1) },
                         showsMessagesWhenFolded: turnActivity == "messages"
                     )
                     .id(block.id)

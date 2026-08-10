@@ -220,7 +220,7 @@ struct SessionView: View {
                                             preference: turnActivity
                                         )
                                     },
-                                    expansionState: { viewModel.expansionState(id: $0) },
+                                    expansionState: { viewModel.expansionState(id: $0, defaultExpanded: $1) },
                                     showsMessagesWhenFolded: turnActivity == "messages",
                                     // An automation's turns are not a person's
                                     // words, so they get no author fallback —
