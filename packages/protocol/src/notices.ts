@@ -365,7 +365,6 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
         kind: "recovery",
         title: "Session resumed after a service restart",
         tone: "info",
-        body: "collapsed",
       },
     };
 

@@ -268,7 +268,11 @@ describe("classifyEntry", () => {
 						"This session was interrupted by a Michael service restart mid-run. Continue.",
 				}),
 			).notice,
-		).toMatchObject({ kind: "recovery", body: "collapsed" });
+		).toEqual({
+			kind: "recovery",
+			title: "Session resumed after a service restart",
+			tone: "info",
+		});
 	});
 
 	it("credits steered turns and routed-back answers with their real origin", () => {
