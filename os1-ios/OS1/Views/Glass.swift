@@ -24,6 +24,12 @@ extension View {
     /// The bottom edge only fades if the composer is attached as a *bar*
     /// (`safeAreaBar`, not `safeAreaInset`) — that is what tells the scroll
     /// view content travels behind it.
+    ///
+    /// The transcript then hides the TOP one again (`transcriptTopWash`): a
+    /// soft edge effect ends at a hard line, which is exactly the seam that
+    /// wash exists to remove. Both are set here so any other scroll view
+    /// adopting `softScrollEdges` still gets the system behaviour on both
+    /// edges.
     func softScrollEdges() -> some View {
         scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
     }
@@ -90,67 +96,89 @@ extension View {
 
     /// The top counterpart of `composerBottomWash`. The transcript travels
     /// behind the navigation bar and — when a workspace has more than one tab —
-    /// behind the floating tab strip as well. The soft scroll edge effect BLURS
-    /// what passes under them but does not tint it, so a dark row (a terminal
-    /// block, a code fence) stayed dark and legible right under the status bar:
-    /// the fade read as broken. This ramps everything under the top chrome into
-    /// the page colour, and keeps ramping for a stretch below it so the
-    /// transcript emerges instead of starting at a cut.
+    /// behind the floating tab strip as well. This is what it dissolves into on
+    /// the way: rows ramp into the page colour as they climb under the chrome,
+    /// and are gone by the time they reach the glass.
+    ///
+    /// The wash REPLACES the system's soft scroll edge effect on this edge
+    /// rather than sitting on top of it. That effect blurs and lightens the
+    /// rows travelling under the bars — and then stops dead at the bottom of
+    /// the safe area, so a row was half-dissolved on one pixel row and fully
+    /// legible on the next. That cut is the full-width line people saw drawn
+    /// under the tab strip; no wash painted over it can remove it, because it
+    /// is a discontinuity in the thing underneath. With the effect hidden, one
+    /// gradient owns the whole transition and can land on zero exactly where
+    /// the chrome ends.
     ///
     /// It hangs off the TRANSCRIPT rather than the strip — the strip only exists
     /// when a workspace has two or more tabs, and the nav bar needs the wash
-    /// either way. An overlay on the scroll view is laid out inside the safe
-    /// area the bars have already inset, which is exactly where the ramp
-    /// belongs; `ignoresSafeArea` then lets the veil above it climb back over
-    /// the bars to the top of the screen. The bars themselves are drawn by
-    /// ancestors, so their glass still floats above this.
+    /// either way. An overlay on the scroll view is laid out INSIDE the safe
+    /// area the bars have already inset, so its top edge is exactly the bottom
+    /// of the chrome: the gradient hangs upward from there on a negative inset
+    /// and needs no measurement. (Measuring was the other half of the bug —
+    /// a `GeometryReader` reading `safeAreaInsets.top` under `ignoresSafeArea`
+    /// reported an inset that did not match the bars, which put the whole ramp
+    /// behind the glass where it changed nothing.) The bars themselves are
+    /// drawn by ancestors, so their glass still floats above this.
+    ///
+    /// Nothing BELOW the chrome is touched, deliberately. A ramp that carries
+    /// on into the page dims the top of a transcript that is sitting still and
+    /// has nothing under the bars at all — measured on a one-turn session,
+    /// whose first bubble came up grey.
+    ///
+    /// ONE gradient, not a solid band stacked on a ramp: two adjacent
+    /// translucent layers meet on a fractional pixel row that composites twice,
+    /// which is its own hairline.
     ///
     /// - Parameters:
-    ///   - ramp: how far BELOW the top chrome the dissolve runs.
-    ///   - veil: the wash's MAXIMUM opacity, held over the whole inset.
-    ///     Deliberately short of 1, matching the composer: the transcript should
-    ///     still be faintly there behind the glass rather than stopping at a
-    ///     hard edge.
+    ///   - ramp: how far UP from the bottom of the chrome the dissolve runs.
+    ///     Everything above it is held at full veil. Roughly the height of the
+    ///     tab strip: a row has to be gone by the time it reaches the pills,
+    ///     since the gaps between them show whatever is behind. Longer ramps
+    ///     look softer but leave rows half-legible against the glass.
+    ///   - veil: the wash's opacity over the bars. Near-total: this is the only
+    ///     thing hiding a dark code fence from the status bar now. Short of 1
+    ///     so the transcript is still faintly there behind the glass — at 0.97
+    ///     black text sits ~8/255 off the canvas, present but unreadable.
     func transcriptTopWash(
-        ramp: CGFloat = 96,
-        veil: Double = 0.82
+        ramp: CGFloat = 56,
+        veil: Double = 0.97
     ) -> some View {
-        overlay(alignment: .top) {
-            GeometryReader { geometry in
-                VStack(spacing: 0) {
-                    // The bars' own band, held at full veil.
-                    OS1VisualStyle.chatCanvas.opacity(veil)
-                        .frame(height: geometry.safeAreaInsets.top)
-                    // Smoothstep, not weighted linear stops. The ramp is
-                    // bounded by two FLAT regions — full veil above, bare
-                    // transcript below — so a stop list that arrives at zero
-                    // still moving leaves a first-derivative break at the
-                    // ramp's bottom edge, and a slope break in a wash reads as
-                    // a drawn line across the full width (Mach band). The old
-                    // front-loaded stops did exactly that: they spent their
-                    // last 45% falling from half veil to nothing, and the line
-                    // landed a ramp's height under the top chrome — right below
-                    // the tab strip. Smoothstep leaves AND arrives with zero
-                    // slope, so it meets both flats invisibly while still
-                    // holding near full veil where rows are up against the
-                    // glass, which is what the weighted stops were for.
-                    LinearGradient(
-                        stops: (0...16).map { step in
-                            let t = Double(step) / 16
-                            let eased = 1 - t * t * (3 - 2 * t)
-                            return Gradient.Stop(
-                                color: OS1VisualStyle.chatCanvas.opacity(veil * eased),
-                                location: CGFloat(t)
-                            )
-                        },
-                        startPoint: .top,
-                        endPoint: .bottom
+        // Enough to cover the tallest top chrome (status bar + nav bar + tab
+        // strip) on any device, plus slack; the excess lands off-screen.
+        let overshoot: CGFloat = 400
+        let flat = overshoot / (overshoot + ramp)
+        return scrollEdgeEffectHidden(true, for: .top).overlay(alignment: .top) {
+            // Smoothstep, not linear or weighted stops. The dissolve is bounded
+            // by two FLAT regions — full veil above, bare transcript below — so
+            // a stop list that arrives at zero still moving leaves a
+            // first-derivative break at its bottom edge, and a slope break in a
+            // wash reads as a drawn line across the full width (Mach band).
+            // Smoothstep leaves AND arrives with zero slope, so it meets both
+            // flats invisibly while still holding near full veil where rows are
+            // up against the glass.
+            LinearGradient(
+                stops: [
+                    Gradient.Stop(
+                        color: OS1VisualStyle.chatCanvas.opacity(veil),
+                        location: 0
                     )
-                    .frame(height: ramp)
-                    Spacer(minLength: 0)
-                }
-            }
-            .ignoresSafeArea(edges: .top)
+                ] + (0...16).map { step in
+                    let t = Double(step) / 16
+                    let eased = 1 - t * t * (3 - 2 * t)
+                    return Gradient.Stop(
+                        color: OS1VisualStyle.chatCanvas.opacity(veil * eased),
+                        location: flat + (1 - flat) * CGFloat(t)
+                    )
+                },
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: overshoot + ramp)
+            // The whole gradient hangs ABOVE the overlay's top edge, so its
+            // last row — the transparent one — lands on the bottom of the
+            // chrome.
+            .padding(.top, -(overshoot + ramp))
             .allowsHitTesting(false)
         }
     }

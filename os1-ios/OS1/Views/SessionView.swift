@@ -1651,7 +1651,7 @@ private struct SessionTabBar: View {
                 .foregroundStyle(
                     isActive
                         ? OS1VisualStyle.text
-                        : OS1VisualStyle.textDim
+                        : OS1VisualStyle.textFaint
                 )
                 .padding(.leading, 12)
                 // The × supplies the trailing inset when it's there.
@@ -1685,10 +1685,16 @@ private struct SessionTabBar: View {
         }
         // The active tab's fill sits INSIDE its own glass, above the material:
         // with every pill carrying its own surface there is no shared band for
-        // an indicator to slide along, so "selected" is a tint on the pill.
+        // an indicator to slide along, so "selected" is the pill's own surface.
+        //
+        // OPAQUE, and lighter than the canvas rather than tinted: a tint over a
+        // near-white pill (this was `hover`) made the tab you are IN the
+        // greyest chip in the strip, which is backwards. Now the open tab is
+        // solid white and its siblings are translucent, so the strip reads
+        // lit-one/dimmed-rest at a glance instead of by a shade of grey.
         .background {
             if isActive {
-                let indicator = pillShape.fill(OS1VisualStyle.hover)
+                let indicator = pillShape.fill(OS1VisualStyle.tabActive)
 
                 if reduceMotion {
                     indicator
@@ -1705,7 +1711,14 @@ private struct SessionTabBar: View {
         // under it — a dark code block dragged the whole tab dark. The page
         // colour over a thick material holds it at a stable brightness; the
         // session still shows around it, not through it.
-        .background(OS1VisualStyle.background.opacity(0.7), in: pillShape)
+        //
+        // The idle tabs keep less of that paint. They still sit on the thick
+        // material, so a dark row underneath can't drag them about — they just
+        // sit a step back from the open one instead of matching it.
+        .background(
+            OS1VisualStyle.background.opacity(isActive ? 0.7 : 0.3),
+            in: pillShape
+        )
         .background(.thickMaterial, in: pillShape)
         .glassSurface(in: pillShape, interactive: true)
         .id(pill.id)
