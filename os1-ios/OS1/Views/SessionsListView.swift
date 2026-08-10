@@ -1655,7 +1655,8 @@ struct SessionsListView: View {
     // Section and lane headings carry no status glyph of their own — like the
     // web sidebar, they're dividers, and the rows under them already wear the
     // status marks. What they do carry is the fold control: the heading is a
-    // button, and its chevron says which way the section sits.
+    // button, and its chevron says which way the section sits (on iOS, only
+    // when it sits shut — see `collapseChevron`).
     /// Support in the list, not only behind a button.
     ///
     /// A ticket is work waiting on a person, which is what every other row
@@ -1841,15 +1842,26 @@ struct SessionsListView: View {
 
     /// The fold marker: points down when the section is open, right when it's
     /// shut — same language as the web sidebar's group chevron.
+    ///
+    /// On iOS an open section wears no marker at all. The rows under a repo
+    /// already say it's open, so the only thing worth marking is the state
+    /// you can't see: a shut band gets the chevron, and the heading beside it
+    /// stays a plain name rather than a permanently decorated one.
+    @ViewBuilder
     private func collapseChevron(_ key: String) -> some View {
+        #if os(iOS)
+        if isCollapsed(key) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .transition(.opacity)
+        }
+        #else
         Image(systemName: "chevron.down")
-            #if os(iOS)
-            .font(.system(size: 11, weight: .semibold))
-            #else
             .font(.system(size: 9, weight: .semibold))
-            #endif
             .foregroundStyle(OS1VisualStyle.textFaint)
             .rotationEffect(.degrees(isCollapsed(key) ? -90 : 0))
+        #endif
     }
 
     private func collapseLabel(_ title: String, _ key: String) -> String {
