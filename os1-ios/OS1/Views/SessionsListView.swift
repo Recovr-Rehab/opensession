@@ -1228,12 +1228,6 @@ struct SessionsListView: View {
         pinButton(workspace)
 
         Button {
-            detailsWorkspace = workspace
-        } label: {
-            Label("Worktree details", systemImage: "info.circle")
-        }
-
-        Button {
             renameText = workspace.title
             renamingWorkspace = workspace
         } label: {
@@ -1251,6 +1245,16 @@ struct SessionsListView: View {
             Link(destination: prURL) {
                 Label("Open pull request", systemImage: "arrow.triangle.pull")
             }
+        }
+
+        // Last of the three that send you somewhere else (share sheet, Safari,
+        // this sheet), rather than sitting between Pin and Rename: it is the
+        // one you reach for least, and the run of state → edit → go-look-at-it
+        // is the order the web row's menu already reads in.
+        Button {
+            detailsWorkspace = workspace
+        } label: {
+            Label("Worktree details", systemImage: "info.circle")
         }
 
         if !workspace.isOptimistic {
