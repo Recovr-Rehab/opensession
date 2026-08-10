@@ -510,7 +510,13 @@ html[data-theme="light"] .markdown pre {
 	border-color: rgba(0, 0, 0, 0.1);
 	color: #1f2328;
 }
+/* `.markdown pre code { background: none }` is out-specified in light by the
+   inline-code rule above (html[data-theme] + .markdown + code beats
+   .markdown + pre + code), so a block's own lines picked up the inline chip
+   wash as a band behind each line. Dark never had it — there the two rules
+   are the same weight and pre code wins on order. */
 html[data-theme="light"] .markdown pre code {
+	background: none;
 	color: inherit;
 }
 
