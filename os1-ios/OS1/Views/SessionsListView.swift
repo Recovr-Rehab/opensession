@@ -484,35 +484,6 @@ struct SessionsListView: View {
                     // The bare app tile is the control; the toolbar's glass
                     // circle around it read as a stray border.
                     .sharedBackgroundVisibility(.hidden)
-                    ToolbarItem(placement: .topTrailingCompat) {
-                        filterMenu
-                    }
-                    ToolbarItem(placement: .topTrailingCompat) {
-                        Button {
-                            showCatchUp = true
-                        } label: {
-                            Image(systemName: "rectangle.stack")
-                                .foregroundStyle(OS1VisualStyle.text)
-                        }
-                        .accessibilityLabel(
-                            catchUpCount > 0
-                                ? "Catch up on \(catchUpCount) unread workspaces"
-                                : "Open Catch Up"
-                        )
-                    }
-                    // New session lives in the top bar; search moved into the
-                    // system bottom search field, which owns the bottom edge.
-                    ToolbarItem(placement: .topTrailingCompat) {
-                        Button {
-                            newSessionRequest = NewSessionRequest()
-                        } label: {
-                            Image(systemName: "plus")
-                                // Neutral, not the red accent: the plus is
-                                // chrome, not an alert.
-                                .foregroundStyle(OS1VisualStyle.text)
-                        }
-                        .accessibilityLabel("New session")
-                    }
                     // The Desk is a place you go, not nav chrome for this
                     // list, so it rides the bottom edge within thumb reach —
                     // placing search explicitly keeps it leading and parks
@@ -1087,27 +1058,7 @@ struct SessionsListView: View {
 
     private var filterMenu: some View {
         Menu {
-            Picker("Show", selection: $peopleFilter) {
-                Text("My sessions").tag("mine")
-                Text("Everyone").tag("all")
-            }
-            Picker("Group by", selection: $groupByRaw) {
-                ForEach(GroupBy.allCases, id: \.rawValue) { option in
-                    Text(option.label).tag(option.rawValue)
-                }
-            }
-            Picker("Repo", selection: $repoFilter) {
-                Text("All repos").tag("all")
-                ForEach(availableRepos, id: \.self) { repo in
-                    Text(repo).tag(repo)
-                }
-            }
-            .pickerStyle(.menu)
-            Picker("Sort by", selection: $sortByRaw) {
-                ForEach(SortBy.allCases, id: \.rawValue) { option in
-                    Text(option.label).tag(option.rawValue)
-                }
-            }
+            filterMenuContent
         } label: {
             #if os(macOS)
             Image(
@@ -1131,6 +1082,32 @@ struct SessionsListView: View {
         }
         .accessibilityLabel("Filter sessions")
         .accessibilityValue(filterAccessibilityValue)
+    }
+
+    private var filterMenuContent: some View {
+        Group {
+            Picker("Show", selection: $peopleFilter) {
+                Text("My sessions").tag("mine")
+                Text("Everyone").tag("all")
+            }
+            Picker("Group by", selection: $groupByRaw) {
+                ForEach(GroupBy.allCases, id: \.rawValue) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            }
+            Picker("Repo", selection: $repoFilter) {
+                Text("All repos").tag("all")
+                ForEach(availableRepos, id: \.self) { repo in
+                    Text(repo).tag(repo)
+                }
+            }
+            .pickerStyle(.menu)
+            Picker("Sort by", selection: $sortByRaw) {
+                ForEach(SortBy.allCases, id: \.rawValue) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            }
+        }
     }
 
     private var filterAccessibilityValue: String {
@@ -1537,6 +1514,8 @@ struct SessionsListView: View {
     private var listSections: some View {
         Group {
             #if os(iOS)
+            mobileToolsStrip
+
             if !pinnedWorkspaces.isEmpty {
                 Section {
                     ForEach(
@@ -1553,8 +1532,6 @@ struct SessionsListView: View {
                 }
             }
             #endif
-
-            catchUpBand
 
             if groupBy == .repoStatus || groupBy == .repoInbox {
                 ForEach(groupBy == .repoInbox ? repoInboxGroups : repoSessionGroups) { repoGroup in
@@ -1692,54 +1669,111 @@ struct SessionsListView: View {
         }
     }
 
-    // Section and lane headings carry no status glyph of their own — like the
-    // web sidebar, they're dividers, and the rows under them already wear the
-    // status marks. What they do carry is the fold control: the heading is a
-    // button, and its chevron says which way the section sits (on iOS, only
-    // when it sits shut — see `collapseChevron`).
-    /// The offer to catch up, at the top of the list and only when there is
-    /// something to catch up ON. A permanent entry would be a tool you have to
-    /// remember; a row that appears when unread work does is a prompt.
-    @ViewBuilder
-    private var catchUpBand: some View {
-        #if os(iOS)
-        let count = catchUpCount
-        if count > 0 {
-            Section {
-                Button {
-                    showCatchUp = true
-                } label: {
-                    HStack(spacing: 11) {
-                        Image(systemName: "rectangle.stack")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(OS1VisualStyle.onAccent)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(OS1VisualStyle.accent)
+    /// The PWA's phone tools are one horizontally scrollable line of 132×84
+    /// cards. The native list uses the same geometry and order rather than
+    /// shrinking these destinations into an anonymous toolbar capsule.
+    #if os(iOS)
+    private var mobileToolsStrip: some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Menu {
+                        filterMenuContent
+                    } label: {
+                        mobileToolCardLabel(title: "Filter") {
+                            WebIcon(
+                                kind: .filter,
+                                size: 22,
+                                color: repoFilter == "all"
+                                    ? OS1VisualStyle.textDim
+                                    : OS1VisualStyle.accent
                             )
-                        Text("Catch up")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(OS1VisualStyle.text)
-                        Spacer(minLength: 6)
-                        Text("\(count) unread")
-                            .font(.footnote)
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            .contentTransition(.numericText())
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(OS1VisualStyle.textFaint)
+                        }
                     }
-                    .padding(.vertical, 3)
-                    .contentShape(Rectangle())
+                    .accessibilityLabel("Filter sessions")
+                    .accessibilityValue(filterAccessibilityValue)
+
+                    Button {
+                        showCatchUp = true
+                    } label: {
+                        mobileToolCardLabel(
+                            title: "Catch up",
+                            count: catchUpCount
+                        ) {
+                            Image(systemName: "rectangle.stack")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(OS1VisualStyle.textDim)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        catchUpCount > 0
+                            ? "Catch up on \(catchUpCount) unread workspaces"
+                            : "Open Catch Up"
+                    )
+
+                    Button {
+                        newSessionRequest = NewSessionRequest()
+                    } label: {
+                        mobileToolCardLabel(title: "New session") {
+                            Image(systemName: "plus")
+                                .font(.system(size: 21, weight: .medium))
+                                .foregroundStyle(OS1VisualStyle.textDim)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("New session")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Catch up on \(count) unread workspaces")
+                .padding(.horizontal, 16)
             }
-            .animation(.snappy(duration: 0.3), value: count)
+            .contentMargins(.vertical, 0, for: .scrollContent)
         }
-        #endif
+        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 6, trailing: 0))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+        .animation(.snappy(duration: 0.3), value: catchUpCount)
     }
+
+    private func mobileToolCardLabel<Icon: View>(
+        title: String,
+        count: Int? = nil,
+        @ViewBuilder icon: () -> Icon
+    ) -> some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 0) {
+                icon()
+                    .frame(width: 22, height: 22)
+                Spacer(minLength: 8)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+
+            if let count, count > 0 {
+                Text("\(count)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OS1VisualStyle.onAccent)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(OS1VisualStyle.accent))
+                    .contentTransition(.numericText())
+            }
+        }
+        .frame(width: 108, height: 60)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(OS1VisualStyle.raised)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(OS1VisualStyle.border.opacity(0.65), lineWidth: 0.5)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+    #endif
 
     /// Counted off the memoized grouping, one predicate per row — see
     /// `CatchUpQueue.unreadRowCount` for why it must not group again here.
@@ -2335,10 +2369,9 @@ struct SessionRow: View {
                 #endif
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            // Teammates actively driving a run in this workspace. Merely
-            // opening somebody's chat is deliberately invisible in the list.
-            if !workingUsers.isEmpty {
-                PresenceFacepile(viewers: workingUsers, size: faceSize, stacked: false)
+            // Teammates focused on any session represented by this row.
+            if !rowViewers.isEmpty {
+                PresenceFacepile(viewers: rowViewers, size: faceSize, stacked: false)
             }
             if showsClock {
                 WorkspaceRunElapsedLabel(since: session.runStartedDate)
@@ -2390,11 +2423,10 @@ struct SessionRow: View {
         ReadsStore.shared.isUnread(sessions.isEmpty ? [session] : sessions)
     }
 
-    private var workingUsers: [String] {
-        Session.workingUsers(
-            in: sessions.isEmpty ? [session] : sessions,
-            excluding: ServerConfig.shared.userName
-        )
+    /// Read here rather than at the call site because `PresenceStore` is
+    /// `@Observable`: a global-presence frame invalidates only rows using it.
+    private var rowViewers: [String] {
+        PresenceStore.shared.viewers(of: sessions.isEmpty ? [session] : sessions)
     }
 
     private var markSize: CGFloat {
@@ -2502,10 +2534,10 @@ struct SessionRow: View {
         if let prState = session.prState?.lowercased() {
             parts.append("pull request \(prState)")
         }
-        // The faces are the only cue that someone else is working here.
-        if !workingUsers.isEmpty {
+        // The faces are the only cue that someone else is viewing this row.
+        if !rowViewers.isEmpty {
             parts.append(
-                "\(ListFormatter.localizedString(byJoining: workingUsers)) working here"
+                "\(ListFormatter.localizedString(byJoining: rowViewers)) viewing"
             )
         }
         if let idleAgo { parts.append("last used \(idleAgo)") }

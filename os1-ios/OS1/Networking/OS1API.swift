@@ -234,6 +234,14 @@ enum OS1API {
         return try await responseData(for: ServerConfig.shared.authorizedRequest(url))
     }
 
+    static func deleteAsset(sessionId: String, path: String) async throws {
+        struct DeleteResponse: Decodable, Sendable { let ok: Bool }
+        let _: DeleteResponse = try await post(
+            "/api/sessions/\(sessionId)/assets/delete",
+            body: ["path": path]
+        )
+    }
+
     /// Full content for an entry the WS delivered clamped.
     static func fullEntryContent(sessionId: String, entryId: String) async throws -> String {
         struct EntryResponse: Decodable { let content: String }

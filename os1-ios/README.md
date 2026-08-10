@@ -35,8 +35,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   means "new since you read it", not "never seen".
 - **Catch up** (`CatchUpView`, `CatchUpDeckView`, `CatchUpCardView`,
   `CatchUpQueue`, `CatchUpViewModel`) — a card deck over everything unread,
-  offered by a band at the top of the list whenever there is something to catch
-  up on. One card per unread *workspace* (the same grouping the list shows,
+  opened from the second card in the sessions list's PWA-style horizontal tools
+  strip, with its unread count pinned to the card's corner. One card per unread
+  *workspace* (the same grouping the list shows,
   built by `CatchUpQueue` from the shared `/api/reads` marks with the web
   deck's rules: yours, not archived, not an automation, not the Desk). The card
   is a glance — what you asked, where things stand — with `Open` for the real
@@ -344,15 +345,12 @@ OS1/
   header facepile drops our own name and dedupes devices; names resolve to
   GitHub pictures through `GET /api/people` (`TeamDirectory`).
 - `{"type":"away","away":true}` is presence, not subscription: the app sends it
-  on `.background` (never `.inactive` — that's a notification banner) so a
-  suspended phone stops showing its owner's face, while the watch stays put and
-  the transcript keeps streaming for unread counts and notifications.
-- Presence is EARNED, not held: the server expires a viewer roughly two minutes
-  after their last real action (`PRESENCE_TTL_MS`, ws-hub.ts), so an app merely
-  parked on a session — a Mac left open overnight — drops off instead of
-  claiming its owner is reading all day. `SessionViewModel.userDidInteract()`
-  re-sends `away: false` (throttled) on scrolling and typing; say nothing and
-  the face comes off, which is the safe direction to fail.
+  whenever the scene is no longer active, so leaving the app removes its owner's
+  face while the watch stays put and the transcript keeps streaming for unread
+  counts and notifications. Returning to the active scene sends `away: false`.
+- Presence is held while the app is active on the selected session. Reading
+  without touching the screen does not make the face expire; changing sessions
+  moves it, and leaving the app removes it.
 
 ## Next milestones
 

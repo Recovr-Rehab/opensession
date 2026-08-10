@@ -620,6 +620,7 @@ struct SessionView: View {
             let owner = UUID()
             viewModel.start(owner: owner)
             defer { viewModel.stop(owner: owner) }
+            if scenePhase != .active { viewModel.appDidEnterBackground() }
             catalog = try? await OS1API.models()
             #if DEBUG && os(iOS)
             if ProcessInfo.processInfo.environment["OS1_OPEN_WORKTREE_INFO"] == "1" {
@@ -648,16 +649,12 @@ struct SessionView: View {
             ))
         }
         .onChange(of: scenePhase) { _, phase in
-            // Backgrounding leaves the socket half-open more often than not;
-            // resync (and reconnect if dead) the moment we're visible again.
+            // Presence follows the foreground app, not input activity. Resync
+            // (and reconnect if dead) the moment it becomes active again.
             switch phase {
             case .active: viewModel.appDidBecomeActive()
-            // Only `.background` drops our presence: `.inactive` is a
-            // notification banner or Control Centre pulled down, and a face
-            // flickering off the session for that would be a lie in the
-            // other direction.
-            case .background: viewModel.appDidEnterBackground()
-            default: break
+            case .inactive, .background: viewModel.appDidEnterBackground()
+            @unknown default: viewModel.appDidEnterBackground()
             }
         }
     }
@@ -1255,9 +1252,9 @@ struct SessionTabsView: View {
     /// details OF the conversation, so the chevron and the edge swipe are the
     /// way back, and nothing has to be closed afterwards.
     @State private var panel: SessionPanel?
-    /// A scratch picture opened from a link in the prose. Same viewer a chip
-    /// lifts, held here because this is where those links are caught.
-    @State private var assetPicture: AssetPicture?
+    /// A scratch file opened from a link in the prose. Held here because this
+    /// is where those links are caught.
+    @State private var assetOverlay: AssetOverlayItem?
     /// A "+" that hasn't answered yet, so a second tap can't mint a second tab.
     @State private var openingTab = false
     /// The link handler INSTALLED ABOVE this view (the sessions list's, which
@@ -1358,10 +1355,7 @@ struct SessionTabsView: View {
                             AssetOpen.open(
                                 sessionId: session.id,
                                 path: path,
-                                openPanel: .pushing(sessionId: session.id) { pushed in
-                                    panel = pushed
-                                },
-                                picture: $assetPicture
+                                overlay: $assetOverlay
                             )
                             return .handled
                         }
@@ -1380,7 +1374,10 @@ struct SessionTabsView: View {
         }
         // Hosted beside the stack rather than on the transcript row that was
         // tapped: the link is caught here, so this is what owns the state.
-        .assetPicturePreview($assetPicture)
+        .assetOverlayPreview(
+            $assetOverlay,
+            openPanel: .pushing(sessionId: activeSession.id) { panel = $0 }
+        )
         // No .clipped() here: this container sits within the safe area, so a
         // clip cuts the transcript's edge-to-edge rendering at the safe-area
         // bounds — an opaque-looking nav bar and a dead strip above the home
@@ -1982,7 +1979,10 @@ private struct SessionInputBar: View {
     }
 
     /// The compact chip floating above the composer: what is waiting to be
-    /// sent, and the latest word from the server.
+    /// sent, and a word to the person who just tapped — a refused send, a
+    /// switch that didn't happen. A notice about the SESSION goes to the
+    /// transcript instead (`noteLocally`), where it reads in order and
+    /// doesn't sit over the composer after the thing it describes is over.
     ///
     /// The notice wears its tone rather than a blanket orange — the same
     /// grey/amber/red the transcript's own notices use, so "run failed" and
