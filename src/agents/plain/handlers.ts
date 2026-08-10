@@ -591,6 +591,62 @@ async function gateAndFireThreadCreated(payload: PlainWebhookPayload): Promise<v
   );
 }
 
+/**
+ * A teammate's note on a thread that has a live linked session is a message
+ * TO that session. Deliver it as the session's next prompt via the same
+ * surface the UI composer uses (steer if busy, queue behind an external run,
+ * fresh turn when idle — the queue is persisted, so unlike the old in-memory
+ * one-shot a restart can't silently drop it). Returns false when there's no
+ * live linked session (or delivery failed) so the caller can fall back to
+ * the legacy mention flow.
+ */
+async function deliverNoteToLinkedSession(
+  threadId: string,
+  noteId: string,
+  noteText: string
+): Promise<boolean> {
+  const triggerId = `note-${noteId}`;
+  if (processedMessages.has(triggerId)) return true;
+  try {
+    const { tryGetSessionControl } = await import("../../server/session-control");
+    const { getCachedSessions } = await import("../../server/session-cache");
+    const control = tryGetSessionControl();
+    if (!control) return false;
+    const session = getCachedSessions()
+      .filter((s) => s.plainThreadId === threadId && !s.archived)
+      .sort(
+        (a, b) =>
+          new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+      )[0];
+    if (!session) return false;
+
+    const request = noteText.replace(PLAIN_MENTION_RE, "").trim();
+    PLAIN_MENTION_RE.lastIndex = 0;
+    if (!request) return false;
+
+    processedMessages.add(triggerId);
+    const result = await control.deliverToSession(
+      session.id,
+      `Internal note from a teammate on this ticket's Plain thread (${threadId}):\n\n${request}\n\nAct on it. If a reply is useful, post it as an internal note on the thread.`,
+      "Plain"
+    );
+    if (result.status === "error") {
+      console.error(
+        `[plain] Note delivery to session ${session.id} failed: ${result.message}`
+      );
+      processedMessages.delete(triggerId);
+      return false;
+    }
+    console.log(
+      `[plain] Note on thread ${threadId} → session ${session.id} (${result.status})`
+    );
+    return true;
+  } catch (e) {
+    console.error(`[plain] Note→session delivery failed for thread ${threadId}:`, e);
+    return false;
+  }
+}
+
 export async function handleWebhook(payload: PlainWebhookPayload): Promise<Response> {
   const eventType = payload.type;
   console.log(`[plain] Webhook received: ${eventType}`);
@@ -617,20 +673,27 @@ export async function handleWebhook(payload: PlainWebhookPayload): Promise<Respo
     if (n > 0) console.log(`[plain] Archived ${n} session(s) for done thread ${thread.id}`);
   }
 
-  // Handle note_created for bot mentions
+  // Internal notes: a thread with a live linked session gets the note
+  // delivered INTO that session (steered into a busy run, queued behind it,
+  // or starting a fresh turn — persisted, so a restart can't drop it). The
+  // legacy one-shot @mention flow only handles threads with no session.
   if (eventType === "thread.note_created" && payload.payload.note) {
     const note = payload.payload.note;
     const noteText = note.text || note.markdown || "";
-
-    if (PLAIN_MENTION_RE.test(noteText)) {
-      PLAIN_MENTION_RE.lastIndex = 0;
-      // SECURITY: Only respond to notes from support agents (user), not customers or bots
-      const actorType = note.createdBy?.actorType;
-      if (actorType !== "user") {
+    // SECURITY: Only act on notes from support agents (user) — never the
+    // machine user's own notes (feedback loops) or customer/system actors.
+    const actorType = note.createdBy?.actorType;
+    if (actorType !== "user") {
+      if (PLAIN_MENTION_RE.test(noteText)) {
+        PLAIN_MENTION_RE.lastIndex = 0;
         console.log(`[plain] Ignoring ${PLAIN_MENTION} mention from non-user actor: ${actorType}`);
-        return Response.json({ ok: true });
       }
+      return Response.json({ ok: true });
+    }
 
+    const delivered = await deliverNoteToLinkedSession(thread.id, note.id, noteText);
+    if (!delivered && PLAIN_MENTION_RE.test(noteText)) {
+      PLAIN_MENTION_RE.lastIndex = 0;
       processAgentMention(thread.id, note.id, noteText).catch((e) =>
         console.error(`[plain] Error processing ${PLAIN_MENTION} mention:`, e)
       );
