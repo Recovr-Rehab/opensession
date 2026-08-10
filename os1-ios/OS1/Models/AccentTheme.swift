@@ -18,10 +18,9 @@ import UIKit
 /// What sits ON the accent is deliberately NOT part of that table. It is
 /// derived from the fill's own luminance — whichever of black or white
 /// contrasts more — so a colour can never ship with an illegible glyph, and
-/// nobody adding one has to remember to pick its counterpart. The light values
-/// are the deeper end of each hue so a white glyph clears ~3.5:1 (about where
-/// Apple's own tinted fills sit); the dark values are the lighter end so the
-/// fill reads against a black page, and they take a near-black glyph.
+/// nobody adding one has to remember to pick its counterpart. Chromatic fills
+/// are deliberately bright in both appearances and take a near-black glyph;
+/// `mono` remains the high-contrast black/white exception.
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case teal
     case sky
@@ -53,20 +52,20 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// The chromatic entries share OKLCH L 0.60/0.79 and 84% of each hue's
+    /// The chromatic entries share OKLCH L 0.70/0.80 and 84% of each hue's
     /// maximum sRGB chroma. `mono` is the app's original monochrome accent,
     /// expressed as one more entry so the abstraction loses nothing.
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
-        case .teal: (0x32_8F_99, 0x4D_CF_DD)
-        case .sky: (0x31_88_BE, 0x7D_C3_F4)
-        case .indigo: (0x6A_6E_EB, 0xAD_B5_F4)
-        case .purple: (0xB1_3A_E9, 0xD5_A3_F4)
-        case .pink: (0xD4_36_92, 0xF5_99_C5)
-        case .coral: (0xE0_38_45, 0xF5_A0_9D)
-        case .orange: (0xBB_67_2C, 0xF5_A5_74)
-        case .gold: (0x9C_7B_2D, 0xE2_B3_45)
-        case .green: (0x33_97_51, 0x4D_DA_78)
+        case .teal: (0x40_B0_BC, 0x4E_D3_E1)
+        case .sky: (0x3E_A8_E9, 0x84_C6_F5)
+        case .indigo: (0x8C_95_F0, 0xB0_B9_F5)
+        case .purple: (0xC4_77_F0, 0xD7_A7_F5)
+        case .pink: (0xF2_62_AF, 0xF6_9F_C8)
+        case .coral: (0xF2_70_70, 0xF6_A5_A2)
+        case .orange: (0xE6_80_38, 0xF5_AA_7B)
+        case .gold: (0xC1_98_39, 0xE6_B6_46)
+        case .green: (0x40_BA_65, 0x4F_DE_7A)
         case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
     }
