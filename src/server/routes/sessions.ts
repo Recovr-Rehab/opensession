@@ -33,6 +33,7 @@ import {
 } from "../session-cache";
 import { asDataUrlList, parseImageDataUrls } from "../uploads";
 import { mentionedUsers } from "../people";
+import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
 import {
 	promptReceipt,
@@ -826,7 +827,8 @@ export async function handleSessionsRoutes(
 	}
 
 	// Set (or clear) a session's review request — the info panel's Reviewer
-	// picker. `reviewer` is a teammate display name; null/empty clears the
+		// picker. `reviewer` is a teammate display name or configured review-team
+		// GitHub spec; null/empty clears the
 	// request. Setting one pushes a "needs your review" notification to the
 	// reviewer's registered devices (mirrors the needs-input ask push).
 	const reviewMatch = path.match(
@@ -879,18 +881,25 @@ export async function handleSessionsRoutes(
 
 		const reviewer =
 			typeof body?.reviewer === "string"
-				? body.reviewer.trim().slice(0, 40)
+				? body.reviewer.trim().slice(0, 120)
 				: "";
 		const prevReviewer = getReviewRequest(sessionId)?.to;
+		const reviewTeam = reviewTeamFor(reviewer);
+		const previousReviewTeam = reviewTeamFor(prevReviewer);
 		// Mirror the request onto GitHub's own Reviewers list before committing the
 		// local assignment, so an auth/API failure cannot leave the two disagreeing.
 		// setting a reviewer adds them, re-assigning swaps, clearing removes.
 		// Only for sessions with a branch/PR whose reviewer maps to a GitHub
 		// login — a phone buzz always fires below regardless.
-		const addLogin = reviewer ? githubLoginFor(reviewer) : null;
+		const addLogin = reviewer
+			? reviewTeam?.github || githubLoginFor(reviewer)
+			: null;
 		const removeLogin =
 			prevReviewer && prevReviewer !== reviewer
-				? githubLoginFor(prevReviewer)
+				? previousReviewTeam?.github ||
+					(/^[\w.-]+\/[\w.-]+$/.test(prevReviewer)
+						? prevReviewer
+						: githubLoginFor(prevReviewer))
 				: null;
 		const target = resolvePrTarget(session, body?.repo);
 		// Hosts without a reviewer concept (code.storage) have nothing to mirror
@@ -937,25 +946,36 @@ export async function handleSessionsRoutes(
 		setReviewRequest(
 			sessionId,
 			reviewer
-				? { to: reviewer, by: by || "someone", at: new Date().toISOString() }
+				? {
+						to: reviewTeam?.github || reviewer,
+						...(reviewTeam ? { recipients: reviewTeam.members } : {}),
+						by: by || "someone",
+						at: new Date().toISOString(),
+					}
 				: null,
 		);
 		invalidateSessionsCache();
 		if (reviewer) {
 			// Only suppress the watcher's own push when the request really landed on
 			// GitHub; marking a skipped mirror would swallow a later genuine one.
-			if (mirroredToGithub && target && addLogin)
-				markPrReviewNotified(target.ghRepo, target.branch, reviewer);
+			if (mirroredToGithub && target && addLogin) {
+				for (const recipient of reviewTeam?.members || [reviewer])
+					markPrReviewNotified(target.ghRepo, target.branch, recipient);
+			}
 			// Best-effort phone buzz — never let a push hiccup fail the request.
 			void (async () => {
 				try {
 					const { sendPushToUser } = await import("../../server/push");
-					await sendPushToUser(reviewer, {
-						title: "Needs your review",
-						body: `${by || "Someone"} asked you to review ${session.title || sessionId}`.slice(0, 180),
-						url: `/session/${encodeURIComponent(sessionId)}`,
-						tag: `review-${sessionId}`,
-					});
+					await Promise.all(
+						(reviewTeam?.members || [reviewer]).map((recipient) =>
+							sendPushToUser(recipient, {
+								title: "Needs your review",
+								body: `${by || "Someone"} asked you to review ${session.title || sessionId}`.slice(0, 180),
+								url: `/session/${encodeURIComponent(sessionId)}`,
+								tag: `review-${sessionId}`,
+							}),
+						),
+					);
 				} catch {}
 			})();
 		}

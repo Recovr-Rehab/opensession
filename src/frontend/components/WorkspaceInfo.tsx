@@ -26,6 +26,7 @@ import {
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
 import { getCurrentUser, TEAM, useCurrentUser } from "./UserPicker";
+import { useReviewTeams } from "../lib/people";
 import { UserAvatar } from "./UserAvatar";
 import { Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
@@ -40,7 +41,10 @@ import type {
 import { formatPrCommentPrompt } from "./PrPanel";
 import { renderMarkdown } from "../lib/markdown";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
-import { personKey } from "../lib/review-queue";
+import {
+	personKey,
+	reviewRequestTargetsPerson,
+} from "../lib/review-queue";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import {
 	loadOverview,
@@ -74,6 +78,7 @@ import {
 	IconPlay,
 	IconPullRequest,
 	IconSparkle,
+	IconStack,
 	IconX,
 } from "./icons";
 
@@ -93,6 +98,7 @@ type PanelTab = "changes" | "pr" | "staging" | "assets";
 
 type ReviewRequestInfo = {
 	to: string;
+	recipients?: string[];
 	by: string;
 	at: string;
 	accepted?: { by: string; at: string };
@@ -977,6 +983,7 @@ function ReviewerChip({
 	onReviewChange?: (sessionId: string, req: ReviewRequestInfo | null) => void;
 }) {
 	const currentUser = useCurrentUser();
+	const reviewTeams = useReviewTeams();
 	const [req, setReq] = useState(reviewRequest ?? null);
 	// Why the last pick/sign-off was rejected. Without this the chip just snaps
 	// back to its old state, which reads as the button doing nothing at all —
@@ -992,18 +999,28 @@ function ReviewerChip({
 	// The session that owns an existing request; a brand-new one anchors to the open session.
 	const owner = (req && requestSessionId) || sessionId;
 	const accepted = req?.accepted ?? null;
-	// This chip controls Open Session's sidebar state. GitHub's requested-reviewer
-	// list is deliberately separate: team requests can expand to several people,
-	// but they do not create sidebar requests for those people.
+	// This chip controls Open Session's sidebar state. GitHub's automatic
+	// requested-reviewer list stays separate; only a group picked here expands
+	// into explicit sidebar requests for its configured members.
 	const me = personKey(currentUser);
-	const needsMyReview = !!req && !accepted && personKey(req.to) === me;
+	const needsMyReview =
+		!!req && !accepted && reviewRequestTargetsPerson(req, me);
+	const selectedTeam = req
+		? reviewTeams.find((team) => team.github === req.to)
+		: undefined;
+	const targetLabel = selectedTeam?.name || req?.to;
 
-	function pick(name: string | null) {
+	function pick(name: string | null, recipients?: string[]) {
 		const prev = req;
 		const me = getCurrentUser();
 		// Re-assigning drops any prior sign-off (a fresh reviewer, fresh review).
 		const next = name
-			? { to: name, by: me, at: new Date().toISOString() }
+			? {
+					to: name,
+					...(recipients ? { recipients } : {}),
+					by: me,
+					at: new Date().toISOString(),
+				}
 			: null;
 		setReq(next);
 		setError(null);
@@ -1067,6 +1084,10 @@ function ReviewerChip({
 								<IconCheck size={12} />
 							</span>
 						</UserAvatar>
+					) : selectedTeam ? (
+						<span className={ACTION_ICON_CLASS}>
+							<IconStack size={20} />
+						</span>
 					) : req ? (
 						<UserAvatar name={req.to} size={20} />
 					) : (
@@ -1080,7 +1101,7 @@ function ReviewerChip({
 							: accepted
 								? `Reviewed by ${accepted.by}`
 								: req
-									? `Review: ${req.to}`
+									? `Review: ${targetLabel}`
 									: "Request review"}
 					</span>
 					{/* Inherit the chip's own tone at low strength — a fixed grey caret
@@ -1101,7 +1122,9 @@ function ReviewerChip({
 						(accepted ? (
 							<Menu.Item
 								onClick={() =>
-									acceptedFromPr && req ? pick(req.to) : accept(false)
+									acceptedFromPr && req
+										? pick(req.to, req.recipients)
+										: accept(false)
 								}
 							>
 								<IconBell size={20} className="text-dim" />
@@ -1114,6 +1137,21 @@ function ReviewerChip({
 							</Menu.Item>
 						))}
 					{req && <Menu.Separator />}
+					{reviewTeams.map((team) => (
+						<Menu.Item
+							key={team.github}
+							onClick={() => pick(team.github, team.members)}
+						>
+							<span className="grid size-[22px] place-items-center text-dim">
+								<IconStack size={20} />
+							</span>
+							<span className="min-w-0 flex-1 truncate">{team.name}</span>
+							{req?.to === team.github && (
+								<IconCheck size={20} className="text-dim" />
+							)}
+						</Menu.Item>
+					))}
+					{reviewTeams.length > 0 && <Menu.Separator />}
 					{TEAM.map((name) => (
 						<Menu.Item key={name} onClick={() => pick(name)}>
 							<UserAvatar name={name} size={22} />

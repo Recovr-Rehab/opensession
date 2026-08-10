@@ -18,6 +18,10 @@ point.
   per-user connector access, and the team web-sign-in allowlist. There is no
   built-in company roster. `identity.defaultTimezone` controls the fallback
   used for team-local scheduling and defaults to `UTC`.
+- `identity.reviewTeams` adds named GitHub teams to the reviewer picker. Each
+  entry has a display `name`, an `org/team` GitHub reviewer spec, and `members`
+  matching names or aliases from `identity.team`; an explicit group request is
+  added to every listed member's Open Session review sidebar.
 - `branding` and `persona` are injected into the frontend and prompt builders.
   The frontend bootstrap also receives the public base URL, default repo id,
   configured GitHub bot logins, and the Plain workspace id.

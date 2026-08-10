@@ -2,6 +2,7 @@ import "./lib/storage-migrate"; // must run before any lib reads its pref keys
 import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
 import { setKnownRepos, setSessionTitles } from "./lib/markdown";
+import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -973,7 +974,7 @@ export function App(
 			);
 		},
 		isMyReview: (s) =>
-			s.reviewRequest?.to?.toLowerCase() === getCurrentUser().toLowerCase() &&
+			reviewRequestTargetsPerson(s.reviewRequest, getCurrentUser()) &&
 			!s.reviewRequest?.accepted,
 		onOpen: (id) => navigate({ view: "session", id }),
 		connected,

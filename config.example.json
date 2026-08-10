@@ -86,6 +86,13 @@
         "timezone": "UTC"
       }
     ],
+    "reviewTeams": [
+      {
+        "name": "Platform reviewers",
+        "github": "acme/platform-reviewers",
+        "members": ["Alice"]
+      }
+    ],
     "slackNames": {}
   },
   "policy": {

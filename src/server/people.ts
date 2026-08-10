@@ -8,7 +8,7 @@
  * a mention roster of its own).
  */
 
-import { configuredIdentity } from "./config";
+import { configuredIdentity, type ReviewTeam } from "./config";
 
 export interface DirectoryPerson {
 	/** Picker/display first name — the value presence viewers,
@@ -38,6 +38,43 @@ export function teamDirectory(): DirectoryPerson[] {
 /** Picker first names — the mention-matching + push-key roster. */
 export function teamFirstNames(): string[] {
 	return teamDirectory().map((p) => p.name);
+}
+
+/** Review groups offered alongside individual people in reviewer pickers. */
+export function reviewTeamDirectory(): ReviewTeam[] {
+	const identity = configuredIdentity();
+	return identity.reviewTeams.flatMap((team) => {
+		const members = [
+			...new Set(
+				team.members.flatMap((ref) => {
+					const key = ref.trim().toLowerCase();
+					const member = identity.team.find((candidate) => {
+						const aliases = candidate.aliases?.length
+							? candidate.aliases
+							: [candidate.name.split(" ")[0] || ""];
+						return (
+							candidate.name.toLowerCase() === key ||
+							aliases.some((alias) => alias.toLowerCase() === key)
+						);
+					});
+					return member ? [member.name.split(" ")[0]!] : [];
+				}),
+			),
+		];
+		return members.length ? [{ ...team, members }] : [];
+	});
+}
+
+/** Resolve either a group's display name or its GitHub reviewer spec. */
+export function reviewTeamFor(ref?: string | null): ReviewTeam | null {
+	if (!ref) return null;
+	const key = ref.trim().toLowerCase();
+	return (
+		reviewTeamDirectory().find(
+			(team) =>
+				team.name.toLowerCase() === key || team.github.toLowerCase() === key,
+		) || null
+	);
 }
 
 /**

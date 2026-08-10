@@ -18,6 +18,17 @@ export interface ReviewQueueItem {
 	status: string;
 }
 
+export function reviewRequestTargetsPerson(
+	request: UnifiedSession["reviewRequest"],
+	person: string,
+): boolean {
+	if (!request) return false;
+	const key = person.trim().toLowerCase();
+	return [request.to, ...(request.recipients || [])].some(
+		(target) => target.toLowerCase() === key,
+	);
+}
+
 export function reviewRowMatchesPersonFilter(
 	owner: string,
 	requests: Array<UnifiedSession["reviewRequest"]>,
@@ -33,7 +44,8 @@ export function reviewRowMatchesPersonFilter(
 		owner === me ||
 		requests.some(
 			(request) =>
-				request?.to.toLowerCase() === me || request?.by.toLowerCase() === me,
+				reviewRequestTargetsPerson(request, me) ||
+				request?.by.toLowerCase() === me,
 		)
 	);
 }
@@ -43,16 +55,21 @@ export function prReviewCompletion(
 	session: UnifiedSession,
 ): { by: string; at: string } | null {
 	if (request.accepted || !session.prUpdatedAt) return null;
-	const reviewer = request.to.trim().toLowerCase();
+	const reviewers = [request.to, ...(request.recipients || [])];
 	const reviewedAt = Date.parse(session.prUpdatedAt);
 	const requestedAt = Date.parse(request.at);
-	if (!reviewer || !Number.isFinite(reviewedAt) || reviewedAt <= requestedAt)
+	if (!reviewers.length || !Number.isFinite(reviewedAt) || reviewedAt <= requestedAt)
 		return null;
-	const hasReviewer = (people?: string[]) =>
-		(people || []).some((person) => person.toLowerCase() === reviewer);
-	if (!hasReviewer(session.prReviewedBy) || hasReviewer(session.prReviewRequested))
-		return null;
-	return { by: request.to, at: session.prUpdatedAt };
+	const reviewer = reviewers.find(
+		(person) =>
+			(session.prReviewedBy || []).some(
+				(reviewed) => reviewed.toLowerCase() === person.toLowerCase(),
+			) &&
+			!(session.prReviewRequested || []).some(
+				(pending) => pending.toLowerCase() === person.toLowerCase(),
+			),
+	);
+	return reviewer ? { by: reviewer, at: session.prUpdatedAt } : null;
 }
 
 // FALLBACK_REPO never equals a real PR repo id, so a repo-less session

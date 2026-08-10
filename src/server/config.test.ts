@@ -16,6 +16,7 @@ import {
   productMark,
   updateIdentityConfig,
 } from "./config";
+import { reviewTeamDirectory } from "./people";
 
 // Each case writes its config to a fresh path (the loader caches by
 // path+mtime) and points OPENSESSION_CONFIG at it.
@@ -74,7 +75,12 @@ describe("config loader", () => {
     expect(paths.worktreesDir).toBe(`${process.env.HOME}/.opensession/worktrees`);
 
     const identity = configuredIdentity();
-    expect(identity).toEqual({ team: [], slackNames: {}, defaultTimezone: "UTC" });
+		expect(identity).toEqual({
+			team: [],
+			reviewTeams: [],
+			slackNames: {},
+			defaultTimezone: "UTC",
+		});
 
     expect(configuredServer().caddyAdmin).toBe("http://localhost:2019");
   });
@@ -92,9 +98,10 @@ describe("config loader", () => {
     expect(configuredPaths().worktreesDir).toBe(`${process.env.HOME}/os1/worktrees`);
     expect(configuredPaths().claudeBin).toBe(Bun.which("claude") || "claude");
     expect(configPath()).toBe(`${process.env.HOME}/os1/config.json`);
-    expect(configuredIdentity()).toEqual({
-      team: [],
-      slackNames: {},
+		expect(configuredIdentity()).toEqual({
+			team: [],
+			reviewTeams: [],
+			slackNames: {},
       defaultTimezone: "UTC",
     });
     expect(() => defaultRepo()).toThrow("No repositories are registered");
@@ -240,18 +247,40 @@ describe("config loader", () => {
     withConfig(
       JSON.stringify({
         identity: {
-          team: [
+			team: [
             { name: "Ada Lovelace", email: "ada@acme.dev", github: "ada", slackId: "U111", aliases: ["ada"] },
             { notAName: true }, // invalid — dropped
-          ],
-          slackNames: { U222: "Bot", U333: 42 }, // non-string values dropped
+			],
+			reviewTeams: [
+				{
+					name: "Platform reviewers",
+					github: "acme/platform-reviewers",
+					members: ["Ada", "Grace"],
+				},
+				{ name: "Invalid", github: "not-a-team", members: ["Ada"] },
+			],
+			slackNames: { U222: "Bot", U333: 42 }, // non-string values dropped
         },
       }),
     );
     const identity = configuredIdentity();
-    expect(identity.team).toEqual([
+		expect(identity.team).toEqual([
       { name: "Ada Lovelace", email: "ada@acme.dev", github: "ada", slackId: "U111", aliases: ["ada"] },
-    ]);
+	]);
+	expect(identity.reviewTeams).toEqual([
+		{
+			name: "Platform reviewers",
+			github: "acme/platform-reviewers",
+			members: ["Ada", "Grace"],
+		},
+	]);
+	expect(reviewTeamDirectory()).toEqual([
+		{
+			name: "Platform reviewers",
+			github: "acme/platform-reviewers",
+			members: ["Ada"],
+		},
+	]);
     expect(identity.slackNames).toEqual({ U222: "Bot" });
   });
 

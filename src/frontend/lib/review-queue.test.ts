@@ -80,6 +80,18 @@ describe("reviewRowMatchesPersonFilter", () => {
 			),
 		).toBe(false);
 	});
+
+	test("shows a configured review-team request to each recipient", () => {
+		const teamRequest = {
+			to: "acme/platform-reviewers",
+			recipients: ["Ada", "Grace"],
+			by: "Louise",
+			at: "2026-07-23T14:10:00Z",
+		};
+		expect(
+			reviewRowMatchesPersonFilter("louise", [teamRequest], "me", "Grace"),
+		).toBe(true);
+	});
 });
 
 describe("prReviewCompletion", () => {
@@ -132,6 +144,25 @@ describe("prReviewCompletion", () => {
 				}),
 			),
 		).toBeNull();
+	});
+
+	test("completes a review-team request when one recipient reviews", () => {
+		expect(
+			prReviewCompletion(
+				{
+					...request,
+					to: "acme/platform-reviewers",
+					recipients: ["Alex", "Grace"],
+				},
+				session({
+					id: "team-reviewed",
+					branch: "team-reviewed",
+					prReviewedBy: ["grace"],
+					prReviewRequested: ["alex"],
+					prUpdatedAt: "2026-07-23T10:23:34Z",
+				}),
+			),
+		).toEqual({ by: "Grace", at: "2026-07-23T10:23:34Z" });
 	});
 });
 

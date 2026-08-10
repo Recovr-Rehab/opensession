@@ -16,6 +16,8 @@ import { OPENSESSION_SESSIONS_DIR } from "./paths";
 export interface ReviewRequest {
 	/** Reviewer's display name (the `backstage-user` value, e.g. "Kent"). */
 	to: string;
+	/** Individual sidebar identities covered by a configured review team. */
+	recipients?: string[];
 	/** Who asked for the review. */
 	by: string;
 	/** ISO timestamp of the request. */

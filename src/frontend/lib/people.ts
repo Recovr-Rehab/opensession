@@ -18,8 +18,15 @@ export interface Person {
 	timezone?: string;
 }
 
+export interface ReviewTeam {
+	name: string;
+	github: string;
+	members: string[];
+}
+
 const CHANGE_EVENT = "opensession-people-changed";
 let people: Person[] = [];
+let reviewTeams: ReviewTeam[] = [];
 let fetched = false;
 
 /** Current roster, synchronously (fallback until the fetch lands). */
@@ -28,16 +35,29 @@ export function getPeople(): Person[] {
 	return people;
 }
 
+export function getReviewTeams(): ReviewTeam[] {
+	void ensurePeople();
+	return reviewTeams;
+}
+
 let inflight: Promise<void> | null = null;
 export function ensurePeople(): Promise<void> {
 	if (fetched) return Promise.resolve();
 	if (inflight) return inflight;
 	inflight = fetch(`${BASE_PATH}/api/people`)
 		.then((r) => (r.ok ? r.json() : null))
-		.then((body: { people?: Person[] } | null) => {
+		.then((body: { people?: Person[]; reviewTeams?: ReviewTeam[] } | null) => {
 			const list =
 				body?.people?.filter((p) => p && typeof p.name === "string") ?? [];
 			people = list;
+			reviewTeams =
+				body?.reviewTeams?.filter(
+					(team) =>
+						team &&
+						typeof team.name === "string" &&
+						typeof team.github === "string" &&
+						Array.isArray(team.members),
+				) ?? [];
 			fetched = true;
 			registerGithubLogins(
 				Object.fromEntries(
@@ -85,6 +105,17 @@ export function usePeople(): Person[] {
 	useEffect(() => {
 		void ensurePeople();
 		const handler = () => setList(people);
+		window.addEventListener(CHANGE_EVENT, handler);
+		return () => window.removeEventListener(CHANGE_EVENT, handler);
+	}, []);
+	return list;
+}
+
+export function useReviewTeams(): ReviewTeam[] {
+	const [list, setList] = useState(reviewTeams);
+	useEffect(() => {
+		void ensurePeople();
+		const handler = () => setList(reviewTeams);
 		window.addEventListener(CHANGE_EVENT, handler);
 		return () => window.removeEventListener(CHANGE_EVENT, handler);
 	}, []);

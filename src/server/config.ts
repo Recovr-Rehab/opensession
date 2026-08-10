@@ -144,8 +144,18 @@ export interface TeamMember {
   directory?: boolean;
 }
 
+export interface ReviewTeam {
+  /** Human label shown in reviewer pickers. */
+  name: string;
+  /** GitHub reviewer spec, e.g. "acme/platform-reviewers". */
+  github: string;
+  /** Team-member names/aliases whose Open Session sidebars receive the request. */
+  members: string[];
+}
+
 export interface IdentitySection {
   team?: TeamMember[];
+  reviewTeams?: ReviewTeam[];
   /** IANA timezone used when a team member has no explicit timezone. */
   defaultTimezone?: string;
   /** Extra Slack id → display name entries (bots, legacy workspace ids) that
@@ -277,6 +287,7 @@ export interface ResolvedCloud {
 
 export interface ResolvedIdentity {
   team: TeamMember[];
+  reviewTeams: ReviewTeam[];
   slackNames: Record<string, string>;
   defaultTimezone: string;
 }
@@ -385,6 +396,16 @@ export function parseTeamMember(v: unknown): TeamMember | undefined {
   };
 }
 
+function parseReviewTeam(v: unknown): ReviewTeam | undefined {
+  const o = obj(v);
+  const name = str(o?.name);
+  const github = str(o?.github);
+  const members = strArray(o?.members)?.map((member) => member.trim()).filter(Boolean);
+  if (!o || !name || !github || !members?.length || !/^[\w.-]+\/[\w.-]+$/.test(github))
+    return undefined;
+  return { name, github, members };
+}
+
 function parseConfig(text: string): OpenSessionConfig {
   try {
     const raw = JSON.parse(text);
@@ -454,6 +475,11 @@ function parseConfig(text: string): OpenSessionConfig {
         section.team = identity.team
           .map(parseTeamMember)
           .filter((m): m is TeamMember => !!m);
+      }
+      if (Array.isArray(identity.reviewTeams)) {
+        section.reviewTeams = identity.reviewTeams
+          .map(parseReviewTeam)
+          .filter((team): team is ReviewTeam => !!team);
       }
       const names = obj(identity.slackNames);
       if (names) {
@@ -721,9 +747,11 @@ export function updateIdentityConfig(patch: IdentityPatch): void {
  */
 export function configuredIdentity(): ResolvedIdentity {
   const id = getConfig().identity;
-  if (!id) return { team: [], slackNames: {}, defaultTimezone: "UTC" };
+  if (!id)
+    return { team: [], reviewTeams: [], slackNames: {}, defaultTimezone: "UTC" };
   return {
     team: id.team ?? [],
+    reviewTeams: id.reviewTeams ?? [],
     slackNames: id.slackNames ?? {},
     defaultTimezone: id.defaultTimezone ?? "UTC",
   };

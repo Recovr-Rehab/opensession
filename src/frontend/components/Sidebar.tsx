@@ -141,7 +141,12 @@ import { pointerCanHover, RowCardPopup } from "./SidebarRowCards";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { PrRow } from "./PrRow";
-import { buildReviewQueue, reviewRowMatchesPersonFilter } from "../lib/review-queue";
+import {
+	buildReviewQueue,
+	prReviewCompletion,
+	reviewRequestTargetsPerson,
+	reviewRowMatchesPersonFilter,
+} from "../lib/review-queue";
 import {
 	readHiddenSidebarTools,
 	setSidebarToolVisible,
@@ -180,7 +185,6 @@ import {
 	stripPrTitlePrefix,
 	wsPrApproved,
 	wsPrMerged,
-	wsPrReviewGivenBy,
 } from "../lib/sidebar-lanes";
 import { sessionHasPr } from "../lib/session-prs";
 import { sessionHasWorkspace } from "../lib/session-workspace";
@@ -1324,11 +1328,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				!wsPrApproved(r) &&
 				// You already reviewed the PR on GitHub (approve/changes/comment,
 				// no re-request since) → your part is done, so hide the row.
-				!wsPrReviewGivenBy(r, me) &&
 				r.sessions.some(
 					(c) =>
-						c.reviewRequest?.to?.toLowerCase() === me &&
-						!c.reviewRequest?.accepted,
+						reviewRequestTargetsPerson(c.reviewRequest, me) &&
+						!c.reviewRequest?.accepted &&
+						!prReviewCompletion(c.reviewRequest!, c),
 				),
 		);
 	}, [reviewScopeRows, currentUser]);
@@ -1352,7 +1356,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						!c.reviewRequest?.accepted &&
 						// The reviewer already gave their review on GitHub → the
 						// request landed, so it leaves the sidebar.
-						!wsPrReviewGivenBy(r, c.reviewRequest.to.toLowerCase()),
+						!prReviewCompletion(c.reviewRequest, c),
 				),
 		);
 	}, [reviewScopeRows, currentUser, needsReviewRows]);
@@ -1362,7 +1366,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// from the info panel's "Mark as reviewed" (`reviewRequest.accepted`), approval
 	// on GitHub (`prReviewDecision === "APPROVED"`, wsPrApproved), or submitted
 	// their review on GitHub in any form (approve/changes/comment, no pending
-	// re-request — wsPrReviewGivenBy). A merged PR skips this hidden set because it
+	// re-request — prReviewCompletion). A merged PR skips this hidden set because it
 	// belongs in the "Done" status lane.
 	const completedReviewRows = useMemo(() => {
 		const me = currentUser.toLowerCase();
@@ -1371,7 +1375,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const mineRequest = r.sessions.some((c) => {
 				const rq = c.reviewRequest;
 				return (
-					rq && (rq.by.toLowerCase() === me || rq.to.toLowerCase() === me)
+					rq &&
+					(rq.by.toLowerCase() === me || reviewRequestTargetsPerson(rq, me))
 				);
 			});
 			if (!mineRequest) return false;
@@ -1381,7 +1386,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				r.sessions.some(
 					(c) =>
 						c.reviewRequest &&
-						wsPrReviewGivenBy(r, c.reviewRequest.to.toLowerCase()),
+						prReviewCompletion(c.reviewRequest, c),
 				)
 			);
 		});

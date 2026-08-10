@@ -451,6 +451,7 @@ export interface UnifiedSession {
 	 */
 	reviewRequest?: {
 		to: string;
+		recipients?: string[];
 		by: string;
 		at: string;
 		accepted?: { by: string; at: string };

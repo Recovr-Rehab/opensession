@@ -11,8 +11,11 @@ export async function handlePeopleRoutes(
 	const { req, path } = ctx;
 
 	if (path === "/api/people" && req.method === "GET") {
-		const { teamDirectory } = await import("../../server/people");
-		return Response.json({ people: teamDirectory() });
+		const { reviewTeamDirectory, teamDirectory } = await import("../../server/people");
+		return Response.json({
+			people: teamDirectory(),
+			reviewTeams: reviewTeamDirectory(),
+		});
 	}
 
 	return undefined;
