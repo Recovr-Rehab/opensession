@@ -9,8 +9,11 @@ import {
 	ARCHIVED_ROW_ACTION,
 	ARCHIVED_ROW_META,
 	ARCHIVED_ROW_OPEN,
+	ARCHIVED_ROW_TRAIL,
 	ARCHIVED_ROW_TIME,
 	ARCHIVED_ROW_TITLE,
+	ARCHIVED_SECTION_LABEL,
+	ARCHIVED_SECTION_ROWS,
 } from "../lib/archived-classes";
 import React, { useState, useMemo, useEffect } from "react";
 import type { UnifiedSession } from "../lib/types";
@@ -19,11 +22,11 @@ import { useCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { PageLayout } from "../ui/page";
 import { Button } from "../ui/button";
-import { Card, CardList } from "../ui/card";
+import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Menu } from "../ui/menu";
 import { EmptyState, ListSkeleton } from "../ui/state";
-import { IconCheck, IconFilter, IconUnarchive } from "./icons";
+import { IconCheck, IconChevronRight, IconFilter, IconUnarchive } from "./icons";
 import { RepoTile } from "./RepoTile";
 
 interface Props {
@@ -48,6 +51,45 @@ const PAGE_SIZE = 200;
 
 type OwnerFilter = "mine" | "everyone";
 type ReasonFilter = "all" | "manual" | "auto";
+
+const ARCHIVE_SECTION_ORDER = ["today", "yesterday", "week", "older"] as const;
+type ArchiveSectionKey = (typeof ARCHIVE_SECTION_ORDER)[number];
+
+const ARCHIVE_SECTION_LABELS: Record<ArchiveSectionKey, string> = {
+	today: "Today",
+	yesterday: "Yesterday",
+	week: "Past 7 days",
+	older: "Older",
+};
+
+function archiveSectionKey(dateString: string, today: Date): ArchiveSectionKey {
+	const date = new Date(dateString);
+	if (!Number.isFinite(date.getTime())) return "older";
+	// Compare local calendar days through UTC ordinals. A raw millisecond
+	// difference misclassifies rows across daylight-saving boundaries.
+	const todayOrdinal = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+	const dateOrdinal = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+	const daysAgo = Math.max(0, Math.round((todayOrdinal - dateOrdinal) / 86_400_000));
+	if (daysAgo === 0) return "today";
+	if (daysAgo === 1) return "yesterday";
+	if (daysAgo < 7) return "week";
+	return "older";
+}
+
+function archiveSections(sessions: UnifiedSession[]) {
+	const groups = new Map<ArchiveSectionKey, UnifiedSession[]>();
+	const today = new Date();
+	for (const session of sessions) {
+		const key = archiveSectionKey(session.lastActivity, today);
+		const group = groups.get(key);
+		if (group) group.push(session);
+		else groups.set(key, [session]);
+	}
+	return ARCHIVE_SECTION_ORDER.flatMap((key) => {
+		const items = groups.get(key);
+		return items ? [{ key, label: ARCHIVE_SECTION_LABELS[key], items }] : [];
+	});
+}
 
 // Manual archiving is the only reason an old registry/file entry can be
 // missing `archivedReason` (it predates the field) — treat unset as manual.
@@ -159,6 +201,8 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 		}
 		return list;
 	}, [allArchived, owner, repo, reason, search, currentUser]);
+	const visibleArchived = archived.slice(0, PAGE_SIZE);
+	const sections = archiveSections(visibleArchived);
 
 	async function handleUnarchive(e: React.MouseEvent, id: string) {
 		e.stopPropagation();
@@ -269,14 +313,15 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 			{archived.length === 0 && !loaded ? (
 				// Not "nothing archived" — nothing YET. Claiming the list is empty
 				// while it is still in flight is what makes a slow load read as data
-				// loss. Same card, same row geometry, so the rows land where these sat.
-				<CardList>
-					<ListSkeleton
-						variant="rows"
-						rows={8}
-						label="Loading archived sessions"
-					/>
-				</CardList>
+				// loss. Match the borderless list geometry so the rows land where
+				// these sat instead of changing surface when loading completes.
+				<ListSkeleton
+					variant="rows"
+					rows={8}
+					label="Loading archived sessions"
+					className={ARCHIVED_LIST}
+					rowClassName="px-3"
+				/>
 			) : archived.length === 0 ? (
 				<Card>
 					<EmptyState>
@@ -285,75 +330,85 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 					</EmptyState>
 				</Card>
 			) : (
-				<ul className={ARCHIVED_LIST}>
-					{archived.slice(0, PAGE_SIZE).map((s) => {
-						const chip = originChip(s);
-						// A field the current filter already fixes is the same word on
-						// every row, so each one only appears when it varies: who,
-						// while looking at everyone's; why, while not filtered by
-						// reason. The repo is the tile, which carries it in a glance.
-						const meta = [
-							chip && (
-								<span key="chip" className={cn(SOURCE_CHIP, chip.tone)}>
-									{chip.label}
-								</span>
-							),
-							owner === "everyone" && s.startedBy && (
-								<span key="by" className="truncate">
-									{s.startedBy}
-								</span>
-							),
-							reason === "all" && isAutoReason(s) && (
-								<span
-									key="auto"
-									className={cn(SOURCE_CHIP, "bg-active text-dim")}
-									title={`Auto-archived (${s.archivedReason})`}
-								>
-									auto
-								</span>
-							),
-							// The phone row has no timestamp column beside it — the
-							// action is always visible there and takes the space.
-							<span key="when" className="hidden shrink-0 phone:inline">
-								{relativeTime(s.lastActivity)}
-							</span>,
-						].filter(Boolean);
-						return (
-							<li key={s.id} className={ARCHIVED_ROW}>
-								<RepoTile name={sessionRepo(s)} />
-								<button
-									type="button"
-									className={ARCHIVED_ROW_OPEN}
-									onClick={() => onSelect(s)}
-								>
-									<span className={ARCHIVED_ROW_TITLE}>{s.title}</span>
-									{meta.length > 0 && (
-										<span className={ARCHIVED_ROW_META}>{meta}</span>
-									)}
-								</button>
-								<span className={ARCHIVED_ROW_TIME}>
-									{relativeTime(s.lastActivity)}
-								</span>
-								<Button
-									size="sm"
-									className={ARCHIVED_ROW_ACTION}
-									icon={<IconUnarchive size={15} className="phone:size-[17px]" />}
-									aria-label="Restore session"
-									disabled={busy === s.id}
-									onClick={(e) => handleUnarchive(e, s.id)}
-								>
-									<span className="phone:hidden">Restore</span>
-								</Button>
-							</li>
-						);
-					})}
+				<div className={ARCHIVED_LIST}>
+					{sections.map((section, sectionIndex) => (
+						<section key={section.key} className={sectionIndex > 0 ? "mt-4" : undefined}>
+							<h2 className={ARCHIVED_SECTION_LABEL}>{section.label}</h2>
+							<ul className={ARCHIVED_SECTION_ROWS}>
+								{section.items.map((s) => {
+									const chip = originChip(s);
+									// A field the current filter already fixes is the same word on
+									// every row, so each one only appears when it varies: who,
+									// while looking at everyone's; why, while not filtered by
+									// reason. The repo is the tile, which carries it in a glance.
+									const meta = [
+										chip && (
+											<span key="chip" className={cn(SOURCE_CHIP, chip.tone)}>
+												{chip.label}
+											</span>
+										),
+										owner === "everyone" && s.startedBy && (
+											<span key="by" className="truncate">
+												{s.startedBy}
+											</span>
+										),
+										reason === "all" && isAutoReason(s) && (
+											<span
+												key="auto"
+												className={cn(SOURCE_CHIP, "bg-active text-dim")}
+												title={`Auto-archived (${s.archivedReason})`}
+											>
+												auto
+											</span>
+										),
+										// The phone row has no timestamp column beside it — the
+										// action is always visible there and takes the space.
+										<span key="when" className="hidden shrink-0 phone:inline">
+											{relativeTime(s.lastActivity)}
+										</span>,
+									].filter(Boolean);
+									return (
+										<li key={s.id} className={ARCHIVED_ROW}>
+											<RepoTile name={sessionRepo(s)} />
+											<button
+												type="button"
+												className={ARCHIVED_ROW_OPEN}
+												onClick={() => onSelect(s)}
+											>
+												<span className={ARCHIVED_ROW_TITLE}>{s.title}</span>
+												{meta.length > 0 && (
+													<span className={ARCHIVED_ROW_META}>{meta}</span>
+												)}
+											</button>
+											<span className={ARCHIVED_ROW_TRAIL}>
+												<span className={ARCHIVED_ROW_TIME}>
+													{relativeTime(s.lastActivity)}
+												</span>
+												<IconChevronRight size={16} className="shrink-0" />
+											</span>
+											<Button
+												size="sm"
+												className={ARCHIVED_ROW_ACTION}
+												icon={<IconUnarchive size={15} className="phone:size-[17px]" />}
+												aria-label="Restore session"
+												disabled={busy === s.id}
+												onClick={(e) => handleUnarchive(e, s.id)}
+											>
+												<span className="phone:hidden">Restore</span>
+											</Button>
+										</li>
+									);
+								})}
+							</ul>
+						</section>
+					))}
 					{archived.length > PAGE_SIZE && (
-						<li className="px-3.5 py-3 text-meta text-faint">
+						<p className="m-0 px-3 pt-4 text-meta text-faint">
 							Showing the first {PAGE_SIZE} of {archived.length}. Search to
 							reach the older ones.
-						</li>
+						</p>
 					)}
-				</ul>
+				</div>
 			)}
 		</PageLayout>
 	);

@@ -2,7 +2,14 @@
  * A plain list rather than a bordered card. At 200 rows an outer border is a
  * box around the page itself; inset row separators carry the useful structure.
  */
-export const ARCHIVED_LIST = "m-0 list-none p-0";
+export const ARCHIVED_LIST = "-mx-3";
+
+/** Section labels and row contents share the page's content edge. The list
+ * itself extends 12px beyond it so the hover wash has room to breathe. */
+export const ARCHIVED_SECTION_LABEL =
+	"m-0 px-3 pb-1.5 text-meta font-semibold text-faint";
+
+export const ARCHIVED_SECTION_ROWS = "m-0 list-none p-0";
 
 /**
  * A row. `relative` positions three things: the separator below it, the
@@ -23,11 +30,11 @@ export const ARCHIVED_LIST = "m-0 list-none p-0";
 export const ARCHIVED_ROW =
 	"group relative flex items-center gap-3 rounded-control px-3 py-2.5 transition-colors " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover focus-within:bg-hover " +
-	"after:pointer-events-none after:absolute after:right-0 after:bottom-0 after:left-[46px] " +
+	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[42px] " +
 	"after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
 	"last:after:opacity-0 hover:after:opacity-0 focus-within:after:opacity-0 " +
 	"[&:has(+li:hover)]:after:opacity-0 [&:has(+li:focus-within)]:after:opacity-0 " +
-	"phone:gap-2.5 phone:py-3 phone:pr-[54px] phone:after:left-[42px]";
+	"phone:gap-2.5 phone:py-3 phone:pr-[54px] phone:after:left-[40px]";
 
 /**
  * The open action, stretched over the whole row by its own `::after` so a click
@@ -48,11 +55,13 @@ export const ARCHIVED_ROW_TITLE =
 export const ARCHIVED_ROW_META =
 	"mt-1 flex min-w-0 items-center gap-2.5 text-meta text-faint phone:text-[12px]";
 
-/** The fixed timestamp column steps aside for the restore action on hover. */
-export const ARCHIVED_ROW_TIME =
-	"w-[62px] shrink-0 text-right text-meta tabular-nums text-faint transition-opacity " +
+/** The timestamp and disclosure affordance step aside for Restore on hover. */
+export const ARCHIVED_ROW_TRAIL =
+	"flex shrink-0 items-center gap-0.5 text-faint transition-opacity " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-0 " +
 	"group-focus-within:opacity-0 phone:hidden";
+
+export const ARCHIVED_ROW_TIME = "w-[62px] text-right text-meta tabular-nums";
 
 /**
  * Restore: absolutely placed over the timestamp it replaces, so a row
@@ -70,7 +79,7 @@ export const ARCHIVED_ROW_TIME =
  * of a 390px row, and the row is mostly title.
  */
 export const ARCHIVED_ROW_ACTION =
-	"absolute right-2.5 top-1/2 z-[1] -translate-y-1/2 opacity-0 transition-opacity " +
+	"absolute right-3 top-1/2 z-[1] -translate-y-1/2 opacity-0 transition-opacity " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
 	"focus-visible:opacity-100 phone:min-h-11 phone:w-11 phone:gap-0 phone:px-0 phone:opacity-100 " +
 	"[@media(hover:none)]:opacity-100";
