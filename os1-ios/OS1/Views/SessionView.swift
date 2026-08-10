@@ -1839,6 +1839,8 @@ private struct SessionInputBar: View {
                 // would quietly drop its routing prefix.
                 QueuedMessageEditor(
                     initial: item.content,
+                    images: item.images,
+                    hasFiles: item.hasFiles,
                     onSave: { viewModel.editQueued(item, content: $0) },
                     onDelete: { viewModel.deleteQueued(item) }
                 )
@@ -2761,23 +2763,87 @@ private struct QueuedMessageEditor: View {
     let onDelete: () -> Void
 
     private let original: String
+    /// What the message carries besides its text, as the `data:` URLs the
+    /// queue holds. Shown, not editable: the server's update takes a new
+    /// content string and nothing else, so the pictures ride along whatever
+    /// the text becomes — and an editor that showed only the words made a
+    /// message sent with a screenshot look like it had lost it.
+    private let images: [String]
+    private let hasFiles: Bool
+    /// Decoded once, in `init`: the sheet's body re-evaluates on every
+    /// keystroke, and base64-decoding six screenshots per character typed is
+    /// not something a text field should be paying for.
+    private let decoded: [Data]
     @State private var text: String
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
 
     init(
         initial: String,
+        images: [String] = [],
+        hasFiles: Bool = false,
         onSave: @escaping (String) -> Void,
         onDelete: @escaping () -> Void
     ) {
         original = initial.trimmingCharacters(in: .whitespacesAndNewlines)
         _text = State(initialValue: initial)
+        self.images = images
+        self.hasFiles = hasFiles
+        decoded = images.compactMap(DataImage.decode(dataURL:))
         self.onSave = onSave
         self.onDelete = onDelete
     }
 
     private var trimmed: String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Says what stays with the message, so the pictures above don't read as
+    /// something the sheet is asking about.
+    private var attachmentNote: String {
+        let pictures = images.count == 1 ? "1 image" : "\(images.count) images"
+        switch (images.isEmpty, hasFiles) {
+        case (true, _): return "Files stay attached."
+        case (false, true): return "\(pictures) and files stay attached."
+        case (false, false): return "\(pictures) stay\(images.count == 1 ? "s" : "") attached."
+        }
+    }
+
+    /// The pictures as a group, so tapping one pages through the rest.
+    private var gallery: [PreviewImage] {
+        decoded.enumerated().map { index, data in
+            PreviewImage(id: "\(index)", source: .data(data))
+        }
+    }
+
+    /// The attachments, above the text the way the composer stacks them over
+    /// the input — square thumbnails that wrap, and tappable, since a 64pt
+    /// screenshot can't answer "is this the right one?" on its own.
+    @ViewBuilder
+    private var attachments: some View {
+        if !images.isEmpty || hasFiles {
+            VStack(alignment: .leading, spacing: 6) {
+                if !decoded.isEmpty {
+                    FlowLayout(spacing: 6) {
+                        ForEach(Array(decoded.enumerated()), id: \.offset) { index, data in
+                            ExpandableDataImage(
+                                data: data, gallery: gallery, galleryIndex: index
+                            )
+                            .frame(width: 64, height: 64)
+                            .clipShape(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                        }
+                    }
+                }
+                Text(attachmentNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+        }
     }
 
     /// A sheet whose whole job is one piece of text: the text gets the whole
@@ -2788,6 +2854,8 @@ private struct QueuedMessageEditor: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                attachments
+
                 TextEditor(text: $text)
                     .font(.body)
                     .scrollContentBackground(.hidden)
