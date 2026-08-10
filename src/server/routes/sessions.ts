@@ -87,7 +87,18 @@ interface SessionsResponseSnapshot {
  * the archived slice settles into a near-permanent 304 while the live slice
  * keeps churning on `isRunning` / `lastActivity`.
  */
-type SessionsVariant = "include" | "exclude" | "only" | "only-slim";
+export type SessionsVariant = "include" | "exclude" | "only" | "only-slim";
+
+/** Read the requested slice off the query. Anything unrecognised means the
+ *  whole list, so a typo degrades to today's behaviour rather than to an
+ *  empty screen. */
+export function sessionsVariant(params: URLSearchParams): SessionsVariant {
+	const archived = params.get("archived");
+	if (archived === "exclude") return "exclude";
+	if (archived !== "only") return "include";
+	return params.get("slim") === "1" ? "only-slim" : "only";
+}
+
 const sessionsResponseSnapshots = new Map<
 	SessionsVariant,
 	SessionsResponseSnapshot
@@ -153,7 +164,7 @@ function enrichSession(s: UnifiedSession) {
  * real session (GET /api/sessions/:id), so nothing downstream has to make do
  * with the subset.
  */
-function archivedIndexRow(s: UnifiedSession) {
+export function archivedIndexRow(s: UnifiedSession) {
 	return {
 		id: s.id,
 		...(s.aliasIds?.length ? { aliasIds: s.aliasIds } : {}),
@@ -303,15 +314,7 @@ export async function handleSessionsRoutes(
 	// screen of every TestFlight build already in the wild. Clients opt in as
 	// they learn to fetch the index and hydrate what they open.
 	if (path === "/api/sessions" && req.method === "GET") {
-		const archivedParam = url.searchParams.get("archived");
-		const variant: SessionsVariant =
-			archivedParam === "exclude"
-				? "exclude"
-				: archivedParam !== "only"
-					? "include"
-					: url.searchParams.get("slim") === "1"
-						? "only-slim"
-						: "only";
+		const variant = sessionsVariant(url.searchParams);
 		const cached = sessionsResponseSnapshots.get(variant);
 		if (cached && cached.expiresAt > Date.now())
 			return sessionsListResponse(req, cached);
@@ -931,6 +934,33 @@ export async function handleSessionsRoutes(
 			})();
 		}
 		return Response.json({ ok: true });
+	}
+
+	// One session, in the shape the list would have given it.
+	//
+	// Until now the list WAS the only source of a session object, which is why
+	// dropping rows from it (the ?archived= slices above) needs somewhere else
+	// to go: a client that no longer carries every archived session can still
+	// open one and get the whole thing. Alias-aware, because a session keeps
+	// its historical ids and a link may name one of those.
+	//
+	// Last in the family on purpose — every more specific /api/sessions/…
+	// route, here and in the modules ahead of this one, has already had its
+	// refusal. On a local profile the cloud proxy claims non-local ids before
+	// dispatch reaches here, so hydrating a cloud session works unchanged.
+	{
+		const m = path.match(/^\/api\/sessions\/([^/]+)$/);
+		if (m && req.method === "GET") {
+			const sessionId = decodeURIComponent(m[1]);
+			const session = getCachedSessions().find(
+				(s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
+			);
+			if (!session)
+				return Response.json({ error: "Session not found" }, { status: 404 });
+			return Response.json(enrichSession(session), {
+				headers: { "Cache-Control": "private, no-cache" },
+			});
+		}
 	}
 
 	// Delete a session (+ optional worktree cleanup)
