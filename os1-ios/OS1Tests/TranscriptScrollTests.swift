@@ -62,6 +62,30 @@ final class TranscriptScrollTests: XCTestCase {
         )
         XCTAssertTrue(TranscriptScroll.isNearBottom(short, tolerance: tolerance))
     }
+
+    func testATranscriptFlooredToOneViewportIsPinned() {
+        // A new session reads from the top because the content stack is never
+        // shorter than the viewport — so a two-message transcript measures as
+        // exactly one screenful and rests a full inset-height from the "end",
+        // which the distance test alone calls scrolled away. It isn't: there
+        // is nowhere to scroll, so the return pill must stay hidden and new
+        // output must keep following.
+        let floored = TranscriptScroll.Geometry(
+            visibleMaxY: 758, contentHeight: 617, insetBottom: 141,
+            containerHeight: 617
+        )
+        XCTAssertEqual(TranscriptScroll.distanceFromBottom(floored), 0)
+        XCTAssertTrue(TranscriptScroll.isNearBottom(floored, tolerance: tolerance))
+    }
+
+    func testTheFloorNeverSwallowsARealScrollPosition() {
+        // The short-circuit reads a HEIGHT, not a position: a long transcript
+        // scrolled up is still scrolled up.
+        var scrolledUp = atRest
+        scrolledUp.containerHeight = 617
+        scrolledUp.visibleMaxY -= 400
+        XCTAssertFalse(TranscriptScroll.isNearBottom(scrolledUp, tolerance: tolerance))
+    }
 }
 
 /// Fold state has to outlive its row: inside a `LazyVStack` a row's `@State`

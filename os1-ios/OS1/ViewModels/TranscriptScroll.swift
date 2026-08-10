@@ -18,6 +18,10 @@ enum TranscriptScroll {
         var visibleMaxY: CGFloat
         var contentHeight: CGFloat
         var insetBottom: CGFloat
+        /// The unobstructed visible height (`containerSize.height`). Only
+        /// needed to recognize a transcript that doesn't scroll at all;
+        /// zero — unknown — simply never claims that.
+        var containerHeight: CGFloat = 0
     }
 
     /// How far the visible bottom edge is from as far down as the view goes.
@@ -34,6 +38,11 @@ enum TranscriptScroll {
     /// so even "as far down as this view ever scrolls itself" sits that far
     /// from the content's end.
     static func isNearBottom(_ geometry: Geometry, tolerance: CGFloat) -> Bool {
-        distanceFromBottom(geometry) <= tolerance
+        // A transcript that fits the screen has no bottom to be away from —
+        // and since the content stack is floored at one viewport, a short one
+        // measures as exactly that, which the distance test alone reads as a
+        // full inset-height short of the end.
+        if geometry.contentHeight <= geometry.containerHeight { return true }
+        return distanceFromBottom(geometry) <= tolerance
     }
 }

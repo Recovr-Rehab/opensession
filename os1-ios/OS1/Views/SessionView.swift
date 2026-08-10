@@ -76,6 +76,12 @@ struct SessionView: View {
     /// read releases the pin so streams don't yank the reader back down.
     @State private var pinnedToBottom = true
 
+    /// Height of the transcript's visible area, from live scroll geometry.
+    /// The content stack is never shorter than this, so a transcript that
+    /// doesn't fill the screen reads from the top instead of hanging off the
+    /// composer.
+    @State private var viewportHeight: CGFloat = 0
+
     /// How close to the bottom (pt) still counts as pinned.
     ///
     /// `scrollToBottom` aligns the LAST BLOCK's bottom edge with the visible
@@ -270,7 +276,21 @@ struct SessionView: View {
                         .padding(.horizontal, contentInset)
                         .padding(.vertical, 8)
                         .frame(maxWidth: contentMaxWidth)
-                        .frame(maxWidth: .infinity)
+                        // At least a screenful, filled from the TOP. A scroll
+                        // anchor also decides where content that is SHORTER
+                        // than the viewport sits, so under `.bottom` a brand
+                        // new session's first message hung off the composer
+                        // with the whole screen empty above it. Giving the
+                        // stack a floor of one viewport makes a short
+                        // transcript start at the top and grow downward, the
+                        // way the web viewer's does; once it outgrows the
+                        // viewport the floor stops binding and the bottom
+                        // anchor takes over again, unchanged.
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: viewportHeight,
+                            alignment: .top
+                        )
                     }
                     // Initial render lands at the bottom and stays pinned while
                     // lazy rows settle. The pin releases when the person scrolls
@@ -307,13 +327,24 @@ struct SessionView: View {
                             TranscriptScroll.Geometry(
                                 visibleMaxY: geometry.visibleRect.maxY,
                                 contentHeight: geometry.contentSize.height,
-                                insetBottom: geometry.contentInsets.bottom
+                                insetBottom: geometry.contentInsets.bottom,
+                                containerHeight: geometry.containerSize.height
                             ),
                             tolerance: pinTolerance
                         )
                     } action: { _, isNearBottom in
                         pinnedToBottom = isNearBottom
                         if isNearBottom { newBelow = false }
+                    }
+                    // One viewport, for the content stack's floor above.
+                    // `containerSize` is the unobstructed visible region (it
+                    // excludes the content insets the composer and the header
+                    // take), which is exactly the height a short transcript
+                    // should fill.
+                    .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.containerSize.height
+                    } action: { _, height in
+                        viewportHeight = height
                     }
                     // A way back down. Without it the only route out of a
                     // scrolled-up transcript is flicking through everything
