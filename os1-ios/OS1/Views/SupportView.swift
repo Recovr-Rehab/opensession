@@ -17,26 +17,32 @@ import AppKit
 /// priority, rename, mark-spam, and the triage hand-off that spawns a session.
 /// Each needs its own picker; spam is customer-wide and destructive enough to
 /// deserve a considered flow rather than a v1 sheet.
-struct SupportSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var model = SupportQueueModel()
-    @State private var path: [SupportThreadSummary] = []
+/// The Plain queue as a panel — pushed on the phone, the detail column on the
+/// Mac. Not a sheet: support is a place in the app, and a modal would cover the
+/// list you came from and refuse to sit beside anything.
+///
+/// Two levels: the Todo queue in Plain's four priority lanes, and one ticket.
+/// The triage loop is the whole point of carrying this in a pocket — read what
+/// the customer said, answer it or leave the team a note, then move it out of
+/// the queue.
+///
+/// What the web has and this deliberately doesn't (yet): assign, labels,
+/// priority, rename, mark-spam, and the triage hand-off that spawns a session.
+/// Each needs its own picker; spam is customer-wide and destructive enough to
+/// deserve a considered flow rather than a v1 sheet.
+struct SupportQueueView: View {
+    /// Shared with the list's own band, so the two never disagree about what
+    /// is in the queue and a ticket finished here leaves both at once.
+    @Bindable var model: SupportQueueModel
+    /// Opening a ticket is the container's call: the phone pushes it onto the
+    /// same stack this view sits on, the Mac swaps the detail column.
+    var onOpen: (SupportThreadSummary) -> Void
 
     var body: some View {
-        NavigationStack(path: $path) {
-            queue
-                .navigationTitle("Support")
-                .inlineTitleBarCompat()
-                .navigationDestination(for: SupportThreadSummary.self) { row in
-                    SupportThreadView(row: row) { model.forget(id: row.id) }
-                }
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                }
-        }
-        .task { await model.load() }
+        queue
+            .navigationTitle("Support")
+            .inlineTitleBarCompat()
+            .task { await model.load() }
     }
 
     @ViewBuilder
@@ -57,7 +63,8 @@ struct SupportSheet: View {
                 ForEach(model.lanes, id: \.priority) { lane in
                     Section {
                         ForEach(lane.threads) { row in
-                            NavigationLink(value: row) { SupportRow(row: row) }
+                            Button { onOpen(row) } label: { SupportRow(row: row) }
+                                .buttonStyle(.plain)
                         }
                     } header: {
                         HStack(spacing: 6) {
@@ -122,7 +129,6 @@ struct SupportThreadView: View {
     var onLeftQueue: () -> Void = {}
 
     @State private var model: SupportThreadModel
-    @Environment(\.dismiss) private var dismiss
 
     init(row: SupportThreadSummary, onLeftQueue: @escaping () -> Void = {}) {
         self.row = row

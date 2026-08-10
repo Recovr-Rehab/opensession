@@ -1030,18 +1030,10 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			case "update_queued_prompt": {
 				const { sessionId, queueId, queueIndex, content } = msg;
 				const next = String(content || "").trim();
-				// Present-but-empty means "this message now carries no images",
-				// which asDataUrlList can't express (it collapses [] to
-				// undefined, the "unchanged" signal) — so read the key itself.
-				const nextImages = Array.isArray(msg.images)
-					? (asDataUrlList(msg.images) ?? [])
-					: undefined;
-				if (!next && !nextImages?.length) {
-					// Nothing left to send: an edit that empties a message is
-					// how the queue is cleared from a text field.
+				if (!next) {
 					deleteQueuedPrompt(sessionId, queueId, queueIndex);
 				} else {
-					updateQueuedPrompt(sessionId, queueId, queueIndex, next, nextImages);
+					updateQueuedPrompt(sessionId, queueId, queueIndex, next);
 				}
 				break;
 			}

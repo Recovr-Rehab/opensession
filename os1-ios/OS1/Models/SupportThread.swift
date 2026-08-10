@@ -54,6 +54,13 @@ struct SupportThreadSummary: Decodable, Identifiable, Hashable, Sendable {
     var displayTitle: String {
         title?.nilIfBlank ?? previewText?.nilIfBlank ?? "Untitled ticket"
     }
+
+    /// What a sidebar row says: the ticket's subject, or the person if it has
+    /// none. Matches the web sidebar's `t.title || customer` — the preview is
+    /// a body, and a body in a one-line row reads as noise.
+    var rowLabel: String {
+        title?.nilIfBlank ?? customerLabel
+    }
 }
 
 enum SupportPriority: Int, CaseIterable, Sendable {

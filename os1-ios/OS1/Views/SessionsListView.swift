@@ -282,7 +282,18 @@ struct SessionsListView: View {
             }
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
         } detail: {
-            if let selectedSessionID,
+            // A ticket takes the detail column the way a session does — the
+            // sidebar's deeper panel, not a window over it.
+            if let openTicket {
+                SupportThreadView(row: openTicket) {
+                    supportQueue.forget(id: openTicket.id)
+                }
+                .id(openTicket.id)
+            } else if showSupport {
+                SupportQueueView(model: supportQueue) { row in
+                    openTicket = row
+                }
+            } else if let selectedSessionID,
                let session = viewModel.sessions.first(where: { $0.id == selectedSessionID }) {
                 SessionView(
                     session: session,
@@ -303,6 +314,15 @@ struct SessionsListView: View {
                     "Select a session",
                     systemImage: "bubble.left.and.bubble.right"
                 )
+            }
+        }
+        // Picking a session in the sidebar means you're done with the ticket —
+        // otherwise the detail column would keep showing it while the sidebar
+        // says something else is selected.
+        .onChange(of: selectedSessionID) { _, id in
+            if id != nil {
+                openTicket = nil
+                showSupport = false
             }
         }
         .sheet(item: $newSessionRequest) { request in
@@ -327,16 +347,6 @@ struct SessionsListView: View {
         .sheet(isPresented: $showDesk) {
             DeskSheet()
                 .frame(minWidth: 520, minHeight: 600)
-        }
-        .sheet(isPresented: $showSupport) {
-            SupportSheet()
-                .frame(minWidth: 520, minHeight: 600)
-        }
-        .sheet(item: $openTicket) { row in
-            NavigationStack {
-                SupportThreadView(row: row) { supportQueue.forget(id: row.id) }
-            }
-            .frame(minWidth: 520, minHeight: 600)
         }
         .safeAreaInset(edge: .bottom) {
             errorBanner
@@ -525,19 +535,20 @@ struct SessionsListView: View {
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
                 }
-                .sheet(isPresented: $showSupport) {
-                    SupportSheet()
-                        .presentationDetents([.large])
-                        .presentationDragIndicator(.visible)
-                }
-                .sheet(item: $openTicket) { row in
-                    NavigationStack {
-                        SupportThreadView(row: row) {
-                            supportQueue.forget(id: row.id)
-                        }
+                .navigationDestination(isPresented: $showSupport) {
+                    SupportQueueView(model: supportQueue) { row in
+                        openTicket = row
                     }
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+                }
+                // Pushed onto this stack, not thrown over it: a ticket is
+                // somewhere you go from the list, the same as a session, and
+                // a sheet would have covered the list you came from. It can't
+                // ride `path` — that is typed `[Session]` on purpose — so it
+                // gets its own item-driven destination.
+                .navigationDestination(item: $openTicket) { row in
+                    SupportThreadView(row: row) {
+                        supportQueue.forget(id: row.id)
+                    }
                 }
                 .onAppear {
                     #if DEBUG
@@ -1935,31 +1946,37 @@ struct SessionsListView: View {
     }
 }
 
-/// A ticket as a list row: who is waiting, and about what. Tighter than the
-/// Support sheet's own row — this one sits among sessions, so it says the two
-/// things that decide whether you open it and nothing else.
+/// A ticket as a sidebar row — shaped like the web's, which is shaped like
+/// every other row in this list: one line, a status dot, a title. The customer
+/// and the preview live inside the ticket; a two-line row made the band read as
+/// a different kind of list than the sessions under it.
+///
+/// The dot is the ticket's priority, in the web's own four colours.
 private struct SupportBandRow: View {
     let row: SupportThreadSummary
 
     var body: some View {
         HStack(spacing: 9) {
             Circle()
-                .fill(row.lane == .urgent ? OS1VisualStyle.red : OS1VisualStyle.textFaint)
-                .frame(width: 6, height: 6)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.customerLabel)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .lineLimit(1)
-                Text(row.displayTitle)
-                    .font(.footnote)
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    .lineLimit(1)
-            }
+                .fill(dot)
+                .frame(width: 7, height: 7)
+            Text(row.rowLabel)
+                .font(.body)
+                .foregroundStyle(OS1VisualStyle.text)
+                .lineLimit(1)
             Spacer(minLength: 6)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
         .contentShape(Rectangle())
+    }
+
+    private var dot: Color {
+        switch row.lane {
+        case .urgent: OS1VisualStyle.red
+        case .high: OS1VisualStyle.yellow
+        case .normal: OS1VisualStyle.blue
+        case .low: OS1VisualStyle.textFaint
+        }
     }
 }
 

@@ -110,43 +110,6 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.id), ["e1"])
     }
 
-    /// A server notice describes something that happened to the SESSION, so
-    /// it joins the transcript in order, wearing its tone — the same place
-    /// the web viewer puts these frames. The composer keeps only what is a
-    /// word to the person who just tapped.
-    func testServerNoticeJoinsTheTranscriptRatherThanTheComposer() {
-        let viewModel = makeViewModel()
-        viewModel.handle(.transcriptInit(
-            sessionId: "bks-1",
-            entries: [entry("e1", "assistant", text: "Had a look")],
-            cursor: .empty
-        ))
-
-        viewModel.handle(.notice("App update paused. No action needed."))
-
-        XCTAssertNil(viewModel.notice)
-        guard case .message(let noticed)? = viewModel.displayBlocks.last else {
-            return XCTFail("expected the notice to render as its own block")
-        }
-        XCTAssertEqual(noticed.notice?.title, "App update paused. No action needed.")
-        XCTAssertEqual(noticed.notice?.tone, NoticeTone.warn.rawValue)
-    }
-
-    /// A socket dropping is not an event in the session's history, and it
-    /// repeats on every reconnect — so it stays off the transcript.
-    func testConnectionChurnStaysOutOfTheTranscript() {
-        let viewModel = makeViewModel()
-        viewModel.handle(.transcriptInit(
-            sessionId: "bks-1",
-            entries: [entry("e1", "assistant", text: "Had a look")],
-            cursor: .empty
-        ))
-
-        viewModel.handle(.notice("Couldn't connect to the server"))
-
-        XCTAssertEqual(viewModel.entries.map(\.id), ["e1"])
-    }
-
     func testResyncDropsCachedPartialPrefixOfOffscreenCompletion() {
         let viewModel = makeViewModel()
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
@@ -646,17 +609,12 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.pendingQuestion)
     }
 
-    /// A server notice used to pin itself over the composer. It joins the
-    /// transcript now, so the composer stays empty — and an empty frame is
-    /// the server clearing rather than an event, so nothing new lands.
-    func testServerNoticeDoesNotPinItselfOverTheComposer() {
+    func testNoticeSetsAndClears() {
         let viewModel = makeViewModel()
         viewModel.handle(.notice("heads up"))
-        XCTAssertNil(viewModel.notice)
-        XCTAssertEqual(viewModel.entries.last?.notice?.title, "heads up")
-
+        XCTAssertEqual(viewModel.notice, "heads up")
         viewModel.handle(.notice(""))
-        XCTAssertEqual(viewModel.entries.count, 1)
+        XCTAssertNil(viewModel.notice)
     }
 }
 
@@ -1078,61 +1036,6 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2"])
     }
 
-    /// A text-only edit names no images, and the server reads that as "leave
-    /// them alone" — sending [] instead would strip the screenshot off a
-    /// message whose words were the only thing being changed.
-    func testTextOnlyEditLeavesAttachmentsAlone() {
-        queueWithImage()
-        viewModel.editQueued(viewModel.queuedItems[0], content: "look again")
-        XCTAssertEqual(socket.updatedQueued.count, 1)
-        XCTAssertNil(socket.updatedQueued[0].images)
-        XCTAssertEqual(viewModel.queuedItems[0].images, [Self.pngURL])
-    }
-
-    func testEditingQueuedMessageReplacesItsAttachments() {
-        queueWithImage()
-        viewModel.editQueued(
-            viewModel.queuedItems[0], content: "this one instead", images: [Self.jpegURL]
-        )
-        XCTAssertEqual(socket.updatedQueued[0].images, [Self.jpegURL])
-        XCTAssertEqual(viewModel.queuedItems[0].images, [Self.jpegURL])
-    }
-
-    /// A picture with no words is a legitimate send, so emptying the text of a
-    /// message that still carries one is an edit, not a discard.
-    func testEditingAwayTheTextOfAnImageMessageKeepsIt() {
-        queueWithImage()
-        viewModel.editQueued(
-            viewModel.queuedItems[0], content: "  ", images: [Self.pngURL]
-        )
-        XCTAssertTrue(socket.deletedQueueIds.isEmpty)
-        XCTAssertEqual(socket.updatedQueued.map(\.content), [""])
-        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1"])
-    }
-
-    /// Removing the last picture AND the text leaves nothing to send.
-    func testEditingAwayBothTextAndImagesDiscardsTheMessage() {
-        queueWithImage()
-        viewModel.editQueued(viewModel.queuedItems[0], content: "", images: [])
-        XCTAssertTrue(socket.updatedQueued.isEmpty)
-        XCTAssertEqual(socket.deletedQueueIds, ["q1"])
-        XCTAssertTrue(viewModel.queuedItems.isEmpty)
-    }
-
-    private static let pngURL = "data:image/png;base64,iVBORw0KGgo="
-    private static let jpegURL = "data:image/jpeg;base64,/9j/4AAQ"
-
-    /// One server-known message waiting behind a run, carrying a screenshot.
-    private func queueWithImage() {
-        let json = """
-        {"type":"queue_update","sessionId":"bks-1",
-         "queued":[{"id":"q1","content":"look at this","user":"ios",
-                    "images":["\(Self.pngURL)"]}],
-         "steered":[]}
-        """
-        viewModel.handle(ServerEvent.parse(Data(json.utf8)))
-    }
-
     /// A chip minted by the composer has an id the server has never seen, so
     /// the id-addressed actions have to wait for the real queue_update.
     func testLocalEchoChipIsNotEditableOrReorderable() async {
@@ -1476,7 +1379,7 @@ private final class MockSocket: SessionSocket {
     private(set) var prompts: [PromptCall] = []
     private(set) var steeredQueueIds: [String] = []
     private(set) var deletedQueueIds: [String] = []
-    private(set) var updatedQueued: [(id: String, content: String, images: [String]?)] = []
+    private(set) var updatedQueued: [(id: String, content: String)] = []
     private(set) var reorders: [[String]] = []
     private(set) var awayFrames: [Bool] = []
 
@@ -1513,10 +1416,8 @@ private final class MockSocket: SessionSocket {
     }
     func steerQueued(sessionId: String, queueId: String) { steeredQueueIds.append(queueId) }
     func deleteQueued(sessionId: String, queueId: String) { deletedQueueIds.append(queueId) }
-    func updateQueued(
-        sessionId: String, queueId: String, content: String, images: [String]?
-    ) {
-        updatedQueued.append((id: queueId, content: content, images: images))
+    func updateQueued(sessionId: String, queueId: String, content: String) {
+        updatedQueued.append((id: queueId, content: content))
     }
     func reorderQueued(sessionId: String, order: [String]) { reorders.append(order) }
     func cancelWatchedRun() {}

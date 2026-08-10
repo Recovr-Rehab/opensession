@@ -207,11 +207,6 @@ export type ProtocolClientMessage =
       queueId?: string;
       queueIndex?: number;
       content: string;
-      /** The message's attachments after the edit, as composer `data:` URLs.
-       *  OMITTED means "leave them alone" — a client that only edits text
-       *  (the web composer) must not clear a queued screenshot; an empty
-       *  array is the explicit "remove them all". */
-      images?: string[];
     }
   | {
       type: "steer_queued_prompt";

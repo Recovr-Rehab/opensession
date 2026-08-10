@@ -134,44 +134,29 @@ const SKELETON_WIDTHS = [
  */
 export function ListSkeleton({
 	rows = 6,
-	variant = "cards",
 	rowClassName,
 	label = "Loading",
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div"> & {
 	rows?: number;
-	/**
-	 * Which list this stands in for. `cards` is a column of separate panels;
-	 * `rows` is the divided list inside one `CardList`, so the caller supplies
-	 * the card and this fills it. Standing in for the wrong one is its own
-	 * kind of lie — the placeholder should be the shape that replaces it.
-	 */
-	variant?: "cards" | "rows";
 	/** Match the geometry of the row this stands in for. */
 	rowClassName?: string;
 	label?: string;
 }) {
-	const cards = variant === "cards";
 	return (
 		<div
 			role="status"
 			aria-live="polite"
 			aria-label={label}
-			className={cn(
-				"flex animate-pulse flex-col",
-				cards ? "gap-1.5" : "[&>*+*]:border-t [&>*+*]:border-line",
-				className,
-			)}
+			className={cn("flex animate-pulse flex-col gap-1.5", className)}
 			{...props}
 		>
 			{Array.from({ length: rows }, (_, i) => (
 				<div
 					key={i}
 					className={cn(
-						cards
-							? "rounded-control border border-line bg-panel px-3.5 py-[11px]"
-							: "px-3.5 py-[13px]",
+						"rounded-control border border-line bg-panel px-3.5 py-[11px]",
 						rowClassName,
 					)}
 				>
@@ -181,7 +166,7 @@ export function ListSkeleton({
 							SKELETON_WIDTHS[i % SKELETON_WIDTHS.length],
 						)}
 					/>
-					{cards && <div className="mt-2 h-2.5 w-[26%] rounded-sm bg-hover" />}
+					<div className="mt-2 h-2.5 w-[26%] rounded-sm bg-hover" />
 				</div>
 			))}
 		</div>
