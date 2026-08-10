@@ -166,7 +166,14 @@ private struct WalkthroughThumbnailStrip: View {
     let stills: [WalkthroughShot]
     let gallery: [PreviewImage]
 
-    private static let tile = CGSize(width: 104, height: 64)
+    /// Big enough to read what the screenshot shows. A thumbnail of a UI is a
+    /// picture of small things, and at the postage-stamp size this strip
+    /// started at, a before and an after of the same screen were
+    /// indistinguishable — which makes the folded card decorative rather than
+    /// the answer to "what changed". A pair now fills the card's width, so
+    /// the two sit side by side at a size worth comparing and the next pair
+    /// peeks in from the edge.
+    private static let tile = CGSize(width: 168, height: 104)
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
