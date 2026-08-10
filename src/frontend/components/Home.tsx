@@ -537,12 +537,10 @@ export function Home({
         <div className="flex items-center justify-between gap-4 px-2">
           <h1 className="m-0 text-page-title font-semibold tracking-[-0.025em] text-fg">Home</h1>
           <div className="flex min-w-0 items-center gap-3">
-            {/* The team, as the app's person lens. The faces are a glance —
-                presence and nothing else (dimmed = away, hollow dot = in the
-                app, filled = a turn in flight) — and the whole pile is one
-                trigger: whose work this page and the sidebar behind it show is
-                a name you pick from the menu, not a face you brush past. What
-                someone is actually doing is their workspaces, from there. */}
+            {/* The team, as the app's person lens. Every face stays visually
+                neutral in the header, and the whole pile is one trigger: whose
+                work this page and the sidebar behind it show is a name you pick
+                from the menu, not a face you brush past. */}
             {team.length > 0 && (
               <TeamLensMenu
                 members={team}

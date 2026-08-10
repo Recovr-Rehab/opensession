@@ -15,12 +15,9 @@ import { UserAvatar } from "./UserAvatar";
  * Your own face isn't in it — the pile answers "who else is around", and the
  * menu behind it is where you appear, as the lens you switch back to.
  *
- * The pile is deliberately as much as we say about anyone: a face is dimmed
- * when the person has OS¹ closed, carries a hollow green dot when they're in
- * the app, and a filled one while a session of theirs has a turn in flight.
- * Presence, not a status feed — nothing here says what someone is working on,
- * and nothing animates to pull you into checking. To find out, you pick their
- * name and read their workspaces like your own.
+ * The pile shows every face normally. Live presence still helps order the team
+ * and describe people inside the menu, but the always-visible chrome does not
+ * dim people or badge them with status dots.
  *
  * The pile itself is never a set of buttons. Faces are a glance; switching
  * whose work you're looking at is a menu behind them, which is one deliberate
@@ -252,7 +249,9 @@ export function TeamFacepile({
 		<div className={cn("flex items-center", className)}>
 			{shown.map((m, i) => {
 				const selected = !!selectedKey && m.key === selectedKey;
-				const label = `${m.person.fullName} · ${presenceLabel(m)}`;
+				const label = status
+					? `${m.person.fullName} · ${presenceLabel(m)}`
+					: m.person.fullName;
 				const besideSelected = i === selectedIndex || i === selectedIndex + 1;
 				const style: React.CSSProperties = {
 					// Tighten both gaps around the picked face. Its higher z-index keeps
@@ -356,7 +355,6 @@ export function TeamLensMenu({
 					size={size}
 					max={max}
 					ring={ring}
-					status
 					// Compact sits in a 20px sidebar row, where an accent ring on one
 					// face reads as a black box rather than a selection — and the
 					// header right below it already names the lens in words.

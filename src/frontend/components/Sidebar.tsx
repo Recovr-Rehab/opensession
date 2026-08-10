@@ -3851,8 +3851,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</ContextMenu.Popup>
 							</ContextMenu.Root>
 						);
-						// Home carries the team at its right edge: who's around, at a
-						// glance, and the way to pick up their sidebar without leaving
+						// Home carries the team at its right edge, with every face shown
+						// neutrally, and lets you pick up their sidebar without leaving
 						// the one you're in — the pile opens the same lens menu Home's
 						// header does. It has to be a sibling of the row, not a child:
 						// a button can't nest one. Phones render the tools as a card
