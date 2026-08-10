@@ -8,6 +8,9 @@ import type {
 import type { SessionSubagentSnapshot } from "../lib/api";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
+import { CardList } from "../ui/card";
+import { EmptyState } from "../ui/state";
+import { IconStack } from "./icons";
 import { formatDuration } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
@@ -345,48 +348,41 @@ function SubagentsCard({
 }
 
 /** The discovery surface: with no runs yet, this tab is the only place that
- *  tells you dynamic workflows exist and how to kick one off. */
+ *  tells you dynamic workflows exist and how to kick one off. Same shape as
+ *  every other empty tab — the EmptyState block, then one card of rows. */
 function WorkflowsEmptyState() {
 	return (
 		<div className="flex flex-col gap-4 p-4 pb-6">
+			<EmptyState
+				icon={<IconStack size={22} />}
+				title="No agent runs yet"
+				className="py-6"
+			>
+				Ask this session to <span className="text-fg">use a workflow</span> and
+				it fans out many small agents at once — one per file, topic or candidate
+				— then combines their results. They show up here live.
+			</EmptyState>
 			<div>
-				<div className="mb-1.5 text-sm font-medium text-fg">
-					No agent runs yet
-				</div>
-				<p className="text-xs leading-relaxed text-dim">
-					Ask this session to <span className="text-fg">use a workflow</span> and
-					it will write a script that fans out many focused agents at once —
-					one per file, per topic, per candidate — then combine their results.
-					Agents read this worktree by default; write agents get their own
-					isolated branch and can be merged back. They&rsquo;ll show up here
-					live, grouped by phase — open one to watch what it&rsquo;s doing.
-				</p>
-			</div>
-			<div>
-				<div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
-					Try
-				</div>
-				<div className="flex flex-col gap-1.5">
+				<div className="mb-1.5 text-meta font-medium text-faint">Try</div>
+				<CardList as="ul" className="bg-surface">
 					{[
 						"Use a workflow to audit every route handler for missing auth checks.",
-						"Use a workflow: one agent per file over src/, each reporting its biggest refactor. Then rank the top 5.",
-						"Use a workflow to compare 3 approaches to this problem in parallel and pick a winner.",
-						"Use a workflow with write agents: one per file, migrate each to the new API, then merge them.",
+						"Use a workflow: one agent per file in src/, each naming its biggest refactor.",
+						"Use a workflow to compare 3 approaches in parallel and pick a winner.",
+						"Use a workflow with write agents: one per file, migrate each, then merge.",
 					].map((s) => (
-						<div
+						<li
 							key={s}
-							className="rounded-sm border border-line bg-surface px-2.5 py-2 text-meta leading-relaxed text-dim"
+							className="px-2.5 py-2 text-supporting leading-snug text-dim"
 						>
 							{s}
-						</div>
+						</li>
 					))}
-				</div>
+				</CardList>
 			</div>
-			<p className="text-xs leading-relaxed text-faint">
-				Write agents each work in their own isolated worktree, so they never
-				collide; merging back into this session&rsquo;s branch is explicit. For
-				heavier, steerable work that opens PRs, ask this session to spawn tasks
-				instead.
+			<p className="text-meta leading-snug text-faint">
+				Agents read this worktree. Write agents each get their own branch, and
+				merging back is explicit.
 			</p>
 		</div>
 	);
