@@ -52,8 +52,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from "fs";
 import { dirname } from "path";
-import { OPENSESSION_SESSIONS_DIR } from "../../paths";
-import { stateDir, } from "../../paths";
+import { OPENSESSION_SESSIONS_DIR, homeDir, stateDir } from "../../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
 import { RESUME_CONTINUATION_PROMPT } from "../../agent-runner";
@@ -64,6 +63,7 @@ import { parseCsRemote } from "../../codestorage/remote";
 import { redactUrl } from "../../shared/redact";
 import { listCodexAccounts } from "../../codex-accounts";
 import { readOpencodeBridgeConfig } from "../../opencode-config";
+import { normalizePiConfig, readPiEngineConfig } from "../../pi-config";
 import {
   buildOpenaiRemoteSeedUpload,
   maskOpenaiAccount,
@@ -122,6 +122,9 @@ const WORKSPACE_BOOTSTRAP_SIGNATURE = "workspace-runtime-v1+bun";
  *  run host via the OPENSESSION_OPENAI_SEED_DIR env (openaiRemoteSeedDir()),
  *  never derived independently on the two sides. */
 export const REMOTE_OPENAI_SEED_DIR = `${REMOTE_HOME}/.opensession-openai-seeds`;
+export const REMOTE_PI_CONFIG = `${REMOTE_HOME}/.opensession-pi.json`;
+export const REMOTE_OPENCODE_CONFIG = `${REMOTE_HOME}/.opensession-opencode.json`;
+export const REMOTE_OPENCODE_NATIVE_AUTH = `${REMOTE_HOME}/.local/share/opencode/auth.json`;
 const REMOTE_PATH = `${REMOTE_HOME}/.bun/bin:${REMOTE_HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
 
 const RUNS_BASE = `${OPENSESSION_SESSIONS_DIR}/sandbox-runs`;
@@ -170,6 +173,136 @@ function envPrefix(env: Record<string, string>): string {
 // Re-exported for the existing importers of this module's URL redaction; the
 // implementation moved to the shared util so non-sandbox code can use it too.
 export { redactUrl };
+
+// ── Per-launch engine config projection ──────────────────────────────────────
+
+type JsonRecord = Record<string, unknown>;
+
+function jsonRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : null;
+}
+
+/** The third-party provider selected by an opencode/<provider>/<model> id.
+ * Anthropic/OpenAI use subscription material, never native auth. */
+export function remoteOpencodeProviderId(model: string | undefined): string | null {
+  const match = String(model || "").match(/^opencode\/([^/]+)\//);
+  const provider = match?.[1];
+  return provider && provider !== "anthropic" && provider !== "openai"
+    ? provider
+    : null;
+}
+
+/** Allowlisted Pi config for a guest. Unknown future host fields must not
+ * silently cross the sandbox trust boundary. */
+export function projectRemotePiConfig(raw: unknown): string | null {
+  const cfg = normalizePiConfig(raw);
+  if (!cfg.enabled) return null;
+  return (
+    JSON.stringify(
+      {
+        enabled: true,
+        pickerModels: cfg.pickerModels,
+        ...(cfg.anthropicTransport === "bridge"
+          ? { anthropicTransport: "bridge" }
+          : {}),
+      },
+      null,
+      2,
+    ) + "\n"
+  );
+}
+
+/**
+ * Project host OpenCode settings into fields consumed by an in-guest runner.
+ * Third-party API keys are included only for an OpenCode-other launch. They
+ * travel as one operator-managed scope because the in-turn fallback walk can
+ * change provider without another launch boundary.
+ */
+export function projectRemoteOpencodeConfig(
+  raw: unknown,
+  model: string | undefined,
+): { content: string; settingsProviderIds: string[] } {
+  const source = jsonRecord(raw);
+  if (!source) throw new Error("OpenCode config must be a JSON object");
+
+  const out: JsonRecord = {};
+  if (typeof source.enabled === "boolean") out.enabled = source.enabled;
+  if (typeof source.port === "number") out.port = source.port;
+  if (typeof source.turnTimeoutMinutes === "number")
+    out.turnTimeoutMinutes = source.turnTimeoutMinutes;
+  if (typeof source.bridgeMaxRequestsPerHour === "number")
+    out.bridgeMaxRequestsPerHour = source.bridgeMaxRequestsPerHour;
+  if (typeof source.orchestrator === "boolean") out.orchestrator = source.orchestrator;
+  if (Array.isArray(source.pickerModels))
+    out.pickerModels = source.pickerModels.filter(
+      (value): value is string => typeof value === "string",
+    );
+  if (Array.isArray(source.bridgeAccountIds))
+    out.bridgeAccountIds = source.bridgeAccountIds.filter(
+      (value): value is string => typeof value === "string",
+    );
+
+  const bridge = jsonRecord(source.bridge);
+  if (bridge) {
+    const projectedBridge: JsonRecord = {};
+    if (["meridian", "native", "off"].includes(String(bridge.mode)))
+      projectedBridge.mode = bridge.mode;
+    if (Array.isArray(bridge.accounts))
+      projectedBridge.accounts = bridge.accounts.filter(
+        (value): value is string => typeof value === "string",
+      );
+    if (Array.isArray(bridge.openaiAccounts))
+      projectedBridge.openaiAccounts = bridge.openaiAccounts.filter(
+        (value): value is string => typeof value === "string",
+      );
+    if (Object.keys(projectedBridge).length) out.bridge = projectedBridge;
+  }
+
+  const settingsProviders: JsonRecord = {};
+  if (remoteOpencodeProviderId(model)) {
+    for (const [id, value] of Object.entries(jsonRecord(source.providers) || {})) {
+      if (id === "anthropic" || id === "openai") continue;
+      const provider = jsonRecord(value);
+      if (!provider) continue;
+      const projected: JsonRecord = {};
+      if (typeof provider.apiKey === "string" && provider.apiKey)
+        projected.apiKey = provider.apiKey;
+      if (typeof provider.baseURL === "string" && provider.baseURL)
+        projected.baseURL = provider.baseURL;
+      if (Object.keys(projected).length) settingsProviders[id] = projected;
+    }
+  }
+  if (Object.keys(settingsProviders).length) out.providers = settingsProviders;
+
+  return {
+    content: JSON.stringify(out, null, 2) + "\n",
+    settingsProviderIds: Object.keys(settingsProviders).sort(),
+  };
+}
+
+/** Selected-provider slice of OpenCode's unmanaged native auth store. */
+export function projectRemoteOpencodeNativeAuth(
+  raw: unknown,
+  model: string | undefined,
+): { content: string; providerId: string } | null {
+  const providerId = remoteOpencodeProviderId(model);
+  if (!providerId) return null;
+  const source = jsonRecord(raw);
+  if (!source || !(providerId in source)) return null;
+  const credential = jsonRecord(source[providerId]);
+  if (!credential) return null;
+  return {
+    content: JSON.stringify({ [providerId]: credential }, null, 2) + "\n",
+    providerId,
+  };
+}
+
+function hostOpencodeNativeAuthPath(): string {
+  const dataHome = process.env.XDG_DATA_HOME || `${homeDir()}/.local/share`;
+  return `${dataHome}/opencode/auth.json`;
+}
 
 // ── Provider state files (mirror docker's, namespaced per provider) ──────────
 
@@ -836,28 +969,97 @@ function makeRemoteLauncher(
         JSON.stringify({ accounts }, null, 2) + "\n",
       );
       await driver.exec(`chmod 600 ${REMOTE_HOME}/.opensession-claude-accounts.json`);
-      // OpenCode bridge config: read IN-SANDBOX by the runner's opencode
-      // dispatch (bridge mode, turn timeout). docker gets it as an ro mount;
-      // without it every opencode/anthropic/* run in a remote sandbox dies
-      // with "bridge disabled" (bks-019f46c8, 2026-07-09). Re-uploaded per
-      // launch so config edits apply, mirroring the mount's read-fresh
-      // semantics. No secrets inside (mode/models/timeouts) — the account
-      // tokens travel via the scoped accounts upload above.
-      // Source honors the compat env seam; the remote DESTINATION stays the
-      // legacy filename — that's the name that exists remotely, which the
-      // (dual-reading) in-sandbox build resolves.
+      // OpenCode policy + provider config, projected at the sandbox boundary.
+      // The source CAN contain third-party API keys under providers.*.apiKey;
+      // never copy it wholesale. Anthropic/OpenAI/Pi launches receive only the
+      // bridge/runtime fields. OpenCode-other receives the configured
+      // third-party provider scope because its fallback walk can switch within
+      // one runner-host launch. Rewritten/removed every launch so stale wider
+      // authority cannot linger on a reused sandbox.
       const ocCfgSrc =
         process.env.OPENSESSION_OPENCODE_CONFIG ||
         // Dual-read the host path (a new-name-only host has no
         // ~/.opensession-opencode.json); the remote destination below stays the
         // legacy name the in-sandbox build dual-reads.
         stateDir("opencode.json");
+      let settingsProviderIds: string[] = [];
       if (existsSync(ocCfgSrc)) {
-        await driver.writeFile(
-          `${REMOTE_HOME}/.opensession-opencode.json`,
-          readFileSync(ocCfgSrc, "utf-8"),
+        let raw: unknown;
+        try {
+          raw = JSON.parse(readFileSync(ocCfgSrc, "utf-8"));
+        } catch (error) {
+          throw new Error(`Cannot project sandbox OpenCode config ${ocCfgSrc}: ${error}`);
+        }
+        const projected = projectRemoteOpencodeConfig(raw, spec.model);
+        settingsProviderIds = projected.settingsProviderIds;
+        await driver.writeFile(REMOTE_OPENCODE_CONFIG, projected.content);
+        await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_OPENCODE_CONFIG)}`);
+      } else {
+        await driver.exec(`rm -f ${shellQuoteWord(REMOTE_OPENCODE_CONFIG)}`);
+      }
+
+      // Pi stays architecturally in-process: the guest runner-host imports the
+      // normal runAgent/runPi path. Materialize only the current Pi gate and
+      // transport policy; its credentials are the scoped Claude/Codex stores
+      // uploaded alongside this file.
+      const piContent = projectRemotePiConfig(readPiEngineConfig());
+      if (piContent) {
+        await driver.writeFile(REMOTE_PI_CONFIG, piContent);
+        await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_PI_CONFIG)}`);
+      } else {
+        await driver.exec(`rm -f ${shellQuoteWord(REMOTE_PI_CONFIG)}`);
+      }
+
+      // OpenCode's unmanaged `auth login` store is a fallback for a selected
+      // third-party provider only. Project exactly that entry to OpenCode's
+      // normal guest path; never upload the Anthropic/OpenAI OAuth entries or
+      // the full host store.
+      const selectedProviderId = remoteOpencodeProviderId(spec.model);
+      let nativeAuth: ReturnType<typeof projectRemoteOpencodeNativeAuth> = null;
+      const nativeAuthSrc = hostOpencodeNativeAuthPath();
+      if (
+        selectedProviderId &&
+        !settingsProviderIds.includes(selectedProviderId) &&
+        existsSync(nativeAuthSrc)
+      ) {
+        try {
+          nativeAuth = projectRemoteOpencodeNativeAuth(
+            JSON.parse(readFileSync(nativeAuthSrc, "utf-8")),
+            spec.model,
+          );
+        } catch (error) {
+          throw new Error(`Cannot project sandbox OpenCode auth ${nativeAuthSrc}: ${error}`);
+        }
+      }
+      if (nativeAuth) {
+        await driver.exec(
+          `mkdir -p ${shellQuoteWord(dirname(REMOTE_OPENCODE_NATIVE_AUTH))} && chmod 700 ${shellQuoteWord(dirname(REMOTE_OPENCODE_NATIVE_AUTH))}`,
         );
-        await driver.exec(`chmod 600 ${REMOTE_HOME}/.opensession-opencode.json`);
+        await driver.writeFile(REMOTE_OPENCODE_NATIVE_AUTH, nativeAuth.content);
+        await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_OPENCODE_NATIVE_AUTH)}`);
+      } else {
+        await driver.exec(`rm -f ${shellQuoteWord(REMOTE_OPENCODE_NATIVE_AUTH)}`);
+      }
+      if (
+        selectedProviderId &&
+        !settingsProviderIds.includes(selectedProviderId) &&
+        !nativeAuth
+      ) {
+        throw new Error(
+          `opencode/${selectedProviderId} cannot launch in a sandbox: configure provider ` +
+            `"${selectedProviderId}" in Settings → Model providers or run ` +
+            `\`opencode auth login\` for that provider on the Open Session host`,
+        );
+      }
+      if (selectedProviderId) {
+        audit({
+          msg: "sandbox_opencode_provider_upload",
+          host_id: spec.hostId,
+          session_id: spec.osSessionId,
+          provider: selectedProviderId,
+          mechanism: nativeAuth ? "native-auth" : "settings",
+          settings_providers: settingsProviderIds,
+        });
       }
       // OpenAI/ChatGPT-subscription material for opencode/openai/* dispatched
       // IN-SANDBOX. The raw CODEX_HOME/auth.json is NEVER uploaded — its
