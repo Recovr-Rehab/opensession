@@ -395,15 +395,15 @@ export function LineStats({
 }
 
 /**
- * The file's language mark, drawn as an icon rather than a plate: the brand
- * glyph where one reads at this size, its letters otherwise.
+ * The file's language mark: the brand glyph where one reads at this size, its
+ * letters otherwise. Its old solid plate is now only a faint tint behind the
+ * coloured ink, enough to hold the mark without turning it back into a badge.
  *
- * The hue is the same linguist-ish colour the old filled badge used, but it
- * now paints the ink instead of the ground, so it has to hold against the page
- * rather than against white. Mixing a quarter of the theme's own text colour
- * into it lifts the dark ones (Ruby's #701516, JSON's #953800) off `--bg` in
- * dark mode and settles the bright ones in light mode, from one expression and
- * without a second palette to keep in sync.
+ * Mixing a quarter of the theme's own text colour into the ink lifts the dark
+ * ones (Ruby's #701516, JSON's #953800) off `--bg` in dark mode and settles the
+ * bright ones in light mode, from one expression and without a second palette
+ * to keep in sync. The ink sits 1px low inside the centred tint: its optical
+ * baseline then meets the 13px filename instead of floating above it.
  */
 function ExtBadge({ name, className }: { name: string; className?: string }) {
   const dot = name.lastIndexOf(".");
@@ -413,12 +413,17 @@ function ExtBadge({ name, className }: { name: string; className?: string }) {
   return (
     <span
       className={cn(
-        "flex h-4 min-w-4 flex-shrink-0 items-center justify-center text-meta font-bold leading-none",
+        "flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-sm px-0.5 text-meta font-bold leading-none",
         className
       )}
-      style={{ color: `color-mix(in oklab, ${color} 75%, var(--text))` }}
+      style={{
+        color: `color-mix(in oklab, ${color} 75%, var(--text))`,
+        backgroundColor: `color-mix(in oklab, ${color} 10%, transparent)`,
+      }}
     >
-      {Glyph ? <Glyph size={14} /> : extLabel(ext)}
+      <span className="flex translate-y-px items-center justify-center">
+        {Glyph ? <Glyph size={12} /> : extLabel(ext)}
+      </span>
     </span>
   );
 }
