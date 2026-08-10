@@ -76,7 +76,7 @@
 	   flush. The composer is deliberately the roundest surface on a session
 	   page — it is the one thing you touch — so it sits a step above the
 	   panels around it instead of matching them. */
-	--composer-radius: calc(24px * var(--rf));
+	--composer-radius: calc(28px * var(--rf));
 	--bg-panel: #262626;
 	--bg-hover: #2e2e2e;
 	--bg-active: #353535;
