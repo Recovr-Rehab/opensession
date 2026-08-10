@@ -56,13 +56,24 @@ type AssetNavigation = {
 	onNext: () => void;
 };
 
-function AssetPager({ navigation }: { navigation: AssetNavigation }) {
+function AssetPager({
+	navigation,
+	floating = false,
+}: {
+	navigation: AssetNavigation;
+	floating?: boolean;
+}) {
 	const { index, count, onPrevious, onNext } = navigation;
 	const positionLabel = `Asset ${index + 1} of ${count}`;
 	return (
 		<nav
 			aria-label="Asset navigation"
-			className="flex min-h-10 shrink-0 items-center justify-center gap-1 border-t border-line px-3 py-1.5"
+			className={cn(
+				"flex shrink-0 items-center justify-center gap-1",
+				floating
+					? "absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-full border border-line-strong bg-raised px-2 py-1 shadow-control"
+					: "min-h-10 border-t border-line px-3 py-1.5",
+			)}
 		>
 			<Tooltip label="Previous asset (Left arrow)">
 				<Button
@@ -485,32 +496,42 @@ export function AssetOverlay({
 			// The default modal is a 30rem confirm box; an artifact needs the
 			// room a page or a chart was drawn for. `max-w-none` first, or the
 			// default clamp wins.
-			modalClassName="h-[min(860px,88vh)] w-[min(1180px,94vw)] max-w-none"
+			modalClassName="h-[min(820px,84vh)] w-[min(1180px,94vw)] max-w-none overflow-visible"
 			sheetClassName="h-[94dvh]"
 		>
-			<AssetActions
-				sessionId={sessionId}
-				file={file}
-				refresh={refresh}
-				onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
-				onClose={onClose}
-				showSize={listed}
-			/>
-			{missingPath === file.path ? (
-				<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
-					This file is no longer available.
-				</div>
-			) : (
-				<AssetPreview
+			<div
+				className={cn(
+					"flex min-h-0 flex-1 flex-col overflow-hidden",
+					!isPhone && "rounded-[inherit]",
+				)}
+			>
+				<AssetActions
 					sessionId={sessionId}
 					file={file}
-					onOpenNewSession={(prefill) => {
-						onClose();
-						onOpenNewSession(prefill);
-					}}
+					refresh={refresh}
+					onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
+					onClose={onClose}
+					showSize={listed}
 				/>
+				{missingPath === file.path ? (
+					<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
+						This file is no longer available.
+					</div>
+				) : (
+					<AssetPreview
+						sessionId={sessionId}
+						file={file}
+						onOpenNewSession={(prefill) => {
+							onClose();
+							onOpenNewSession(prefill);
+						}}
+					/>
+				)}
+				{isPhone && navigation && <AssetPager navigation={navigation} />}
+			</div>
+			{!isPhone && navigation && (
+				<AssetPager navigation={navigation} floating />
 			)}
-			{navigation && <AssetPager navigation={navigation} />}
 		</ResponsiveDialog>
 	);
 }
