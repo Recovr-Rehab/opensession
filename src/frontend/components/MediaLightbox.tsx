@@ -752,8 +752,8 @@ function ZoomableImage({
 // smear of identical targets — the plain counter reads better.
 const MAX_DOTS = 10;
 
-// Download / Open: a pill that lights up under the pointer, sized to sit on
-// the same line as the dots without crowding them.
+// Download / Open: quiet pills in the top action cluster, matching the asset
+// preview's separation between actions above and descriptions below.
 const lightboxAction =
 	"inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border-0 bg-transparent px-2 py-1 text-xs text-white/60 no-underline transition-colors hover:bg-white/15 hover:text-white";
 
@@ -888,18 +888,39 @@ function MediaLightbox({
 				if (e.target === e.currentTarget) requestClose();
 			}}
 		>
-			<button
-				ref={closeRef}
-				type="button"
-				className={`${navBtn} absolute right-3 top-3`}
-				onClick={requestClose}
-				aria-label="Close"
-			>
-				<IconX size={22} />
-			</button>
+			<div className="absolute right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center gap-1">
+				<button
+					type="button"
+					onClick={() => void downloadItem(item)}
+					className={lightboxAction}
+				>
+					<IconArrowDown size={14} />
+					Download
+				</button>
+				{!item.src.startsWith("data:") && (
+					<a
+						href={item.src}
+						target="_blank"
+						rel="noopener noreferrer"
+						className={lightboxAction}
+					>
+						<IconArrowUpRight size={14} />
+						Open
+					</a>
+				)}
+				<button
+					ref={closeRef}
+					type="button"
+					className={navBtn}
+					onClick={requestClose}
+					aria-label="Close"
+				>
+					<IconX size={22} />
+				</button>
+			</div>
 
 			<div
-				className="flex min-h-0 flex-1 items-center justify-center gap-3 px-3 pb-2 pt-14 sm:px-4"
+				className="flex min-h-0 flex-1 items-center justify-center gap-3 px-3 pb-2 pt-[calc(56px+env(safe-area-inset-top))] sm:px-4"
 				onMouseDown={(e) => {
 					if (e.target === e.currentTarget) requestClose();
 				}}
@@ -972,11 +993,13 @@ function MediaLightbox({
 			</div>
 
 			{/* What you are looking at gets its own line directly under the
-			    picture, in plain white — sharing one row with the actions is how
-			    a "Before"/"After" label ends up read as another link. The scrim
-			    keeps it legible when a zoomed photo spreads underneath. */}
+			    picture, in plain white. Actions live above with Close, so a
+			    "Before"/"After" label cannot read as another link. */}
 			<div
-				className="z-10 flex flex-col items-center gap-1 bg-gradient-to-t from-black from-70% to-transparent px-4 pb-4 pt-4"
+				className={cn(
+					"z-10 flex flex-col items-center gap-1 bg-gradient-to-t from-black from-70% to-transparent px-4 pb-4 pt-4",
+					!caption && !description && !many && "hidden",
+				)}
 				onMouseDown={(e) => {
 					if (e.target === e.currentTarget) requestClose();
 				}}
@@ -995,7 +1018,7 @@ function MediaLightbox({
 						)}
 					</div>
 				)}
-				<div className="flex items-center gap-3 text-xs text-white/60">
+				<div className="flex items-center text-xs text-white/60">
 					{many &&
 						(items.length <= MAX_DOTS ? (
 							// Dots instead of "3 / 7": at a glance they say how much
@@ -1026,31 +1049,6 @@ function MediaLightbox({
 								{index + 1} / {items.length}
 							</span>
 						))}
-					{/* Actions read as the buttons they are — a pill that lights up,
-					    the same translucent-white ink as the close and page arrows.
-					    An underline said "link", and the raw "↗" glyph never matched
-					    the icon set's weight. */}
-					<div className="flex items-center gap-1">
-						<button
-							type="button"
-							onClick={() => void downloadItem(item)}
-							className={lightboxAction}
-						>
-							<IconArrowDown size={14} />
-							Download
-						</button>
-						{!item.src.startsWith("data:") && (
-							<a
-								href={item.src}
-								target="_blank"
-								rel="noopener noreferrer"
-								className={lightboxAction}
-							>
-								<IconArrowUpRight size={14} />
-								Open
-							</a>
-						)}
-					</div>
 				</div>
 			</div>
 		</motion.div>
