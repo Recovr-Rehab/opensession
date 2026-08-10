@@ -126,10 +126,6 @@ interface Props {
 	reviewRequestSessionId?: string;
 	/** The request is complete because its reviewer submitted a GitHub review. */
 	reviewAcceptedFromPr?: boolean;
-	/** Person keys GitHub still lists as reviewers on this workspace's PR. */
-	reviewGithubPending?: string[];
-	/** GitHub is waiting on the current user's review of this workspace's PR. */
-	reviewMyReviewNeeded?: boolean;
 	/** Optimistically push a reviewer pick / sign-off into the app-level session
 	    list, so the sidebar's review bands + the other chip instance flip at once
 	    instead of waiting up to a poll (~5s) for the change to round-trip. */
@@ -953,12 +949,6 @@ function AgentReviewCard({
 	);
 }
 
-/** A person key from the PR's GitHub reviewer list ("kent") as the roster spells
-    it ("Kent"), falling back to the raw key for someone off the team list. */
-function displayPerson(person: string): string {
-	return TEAM.find((name) => personKey(name) === person) || person;
-}
-
 /** The reviewer action: pick a teammate to flag this
 		session as "needs review" — it jumps into a Needs-review band at the top of
 		their sidebar and buzzes their registered devices. Re-pick to hand off,
@@ -969,8 +959,6 @@ function ReviewerChip({
 	reviewRequest,
 	requestSessionId,
 	acceptedFromPr,
-	githubPending,
-	myReviewNeeded,
 	onReviewPr,
 	onReviewChange,
 }: {
@@ -982,12 +970,6 @@ function ReviewerChip({
 	    request (none exists) targets the open `sessionId`. */
 	requestSessionId?: string;
 	acceptedFromPr?: boolean;
-	/** Person keys still on the PR's GitHub reviewer list (the author is dropped
-	    server-side). Read-only display input: GitHub owns this set and clears it
-	    when the reviewer submits, so it never folds into `req`. */
-	githubPending?: string[];
-	/** GitHub is waiting on the current user's review. */
-	myReviewNeeded?: boolean;
 	/** Open the PR review canvas — offered when a review is waiting on you. */
 	onReviewPr?: () => void;
 	/** Optimistically mirror a pick / sign-off into the app-level session list so
@@ -1010,14 +992,11 @@ function ReviewerChip({
 	// The session that owns an existing request; a brand-new one anchors to the open session.
 	const owner = (req && requestSessionId) || sessionId;
 	const accepted = req?.accepted ?? null;
-	// An ask pointed at YOU wins over every other state — from GitHub or from
-	// the internal registry, the sidebar files both under "Needs review", so the
-	// chip has to agree. GitHub outranks a stale sign-off: a re-request there
-	// puts the PR back in your queue whatever the registry says.
+	// This chip controls Open Session's sidebar state. GitHub's requested-reviewer
+	// list is deliberately separate: team requests can expand to several people,
+	// but they do not create sidebar requests for those people.
 	const me = personKey(currentUser);
-	const needsMyReview =
-		!!myReviewNeeded || (!!req && !accepted && personKey(req.to) === me);
-	const pendingOthers = (githubPending || []).filter((person) => person !== me);
+	const needsMyReview = !!req && !accepted && personKey(req.to) === me;
 
 	function pick(name: string | null) {
 		const prev = req;
@@ -1064,22 +1043,18 @@ function ReviewerChip({
 							? "border-red/30 bg-red-soft text-red hover:border-red/50 hover:text-red"
 							: accepted
 								? "text-green"
-								: req || pendingOthers.length > 0
+								: req
 									? "text-yellow"
 									: "",
 					)}
 					title={
 						needsMyReview
-							? req
-								? `Review requested by ${req.by}`
-								: "Your review was requested on GitHub"
+							? `Review requested by ${req?.by || "a teammate"}`
 							: accepted
 								? `Reviewed by ${accepted.by}`
 								: req
 									? `Review requested by ${req.by}`
-									: pendingOthers.length > 0
-										? "Requested on GitHub"
-										: "Ask a teammate to review this session"
+									: "Ask a teammate to review this session"
 					}
 				>
 					{needsMyReview ? (
@@ -1094,8 +1069,6 @@ function ReviewerChip({
 						</UserAvatar>
 					) : req ? (
 						<UserAvatar name={req.to} size={20} />
-					) : pendingOthers.length > 0 ? (
-						<UserAvatar name={displayPerson(pendingOthers[0]!)} size={20} />
 					) : (
 						<span className={ACTION_ICON_CLASS}>
 							<IconBell size={20} />
@@ -1108,9 +1081,7 @@ function ReviewerChip({
 								? `Reviewed by ${accepted.by}`
 								: req
 									? `Review: ${req.to}`
-									: pendingOthers.length > 0
-										? `Review: ${pendingOthers.map(displayPerson).join(", ")}`
-										: "Request review"}
+									: "Request review"}
 					</span>
 					{/* Inherit the chip's own tone at low strength — a fixed grey caret
 					    reads as a dead spot next to a red/green/yellow label. */}
@@ -1398,8 +1369,6 @@ export function WorkspaceInfo({
 	reviewRequest,
 	reviewRequestSessionId,
 	reviewAcceptedFromPr,
-	reviewGithubPending,
-	reviewMyReviewNeeded,
 	onReviewChange,
 	onOpenTab,
 	onOpenChecks,
@@ -1618,8 +1587,6 @@ export function WorkspaceInfo({
 					reviewRequest={reviewRequest}
 					requestSessionId={reviewRequestSessionId}
 					acceptedFromPr={reviewAcceptedFromPr}
-					githubPending={reviewGithubPending}
-					myReviewNeeded={reviewMyReviewNeeded}
 					onReviewPr={onOpenTab ? () => onOpenTab("pr") : undefined}
 					onReviewChange={onReviewChange}
 				/>

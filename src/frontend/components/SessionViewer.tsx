@@ -2930,13 +2930,8 @@ export function SessionViewer({
 	// the band while the open session's Reviewer chip read empty. Surface the
 	// workspace's request in the chip: the open session's own if it has one, else a
 	// sibling's, carrying the owner id so clear/re-assign target the right session.
-	// GitHub's own review requests ride alongside: the sidebar's "Needs review"
-	// band lights up for those too (review-queue's `requested` source), so the
-	// chip has to know about them or a PR waiting on you reads as an empty
-	// "Request review". Person keys, workspace-wide, author already dropped
-	// server-side; GitHub clears the set once the reviewer submits. Open PRs
-	// only — the cached reviewer list outlives a close/merge, and the sidebar's
-	// band (built from the open-PR list) drops those rows the moment they land.
+	// GitHub reviews can complete an explicit request, but GitHub's automatically
+	// expanded reviewer list does not create Open Session sidebar state.
 	const effectiveReview = useMemo(() => {
 		const owner = session.reviewRequest
 			? session
@@ -2944,15 +2939,6 @@ export function SessionViewer({
 		const request = owner?.reviewRequest ?? null;
 		const completion =
 			owner && request ? prReviewCompletion(request, owner) : null;
-		const githubPending = [
-			...new Set(
-				[session, ...(workspaceSessions || [])]
-					.filter((c) => c.prState === "OPEN")
-					.flatMap((c) =>
-						(c.prReviewRequested || []).map((person) => person.toLowerCase()),
-					),
-			),
-		];
 		return {
 			req: request
 				? completion
@@ -2961,8 +2947,6 @@ export function SessionViewer({
 				: null,
 			ownerId: owner?.id ?? session.id,
 			acceptedFromPr: !!completion,
-			githubPending,
-			myReviewNeeded: githubPending.includes(personKey(currentUser)),
 		};
 	}, [
 		session.reviewRequest,
@@ -2972,7 +2956,6 @@ export function SessionViewer({
 		session.prUpdatedAt,
 		session.prState,
 		workspaceSessions,
-		currentUser,
 	]);
 
 	// Returns true when the message was consumed, so the (uncontrolled)
@@ -4650,8 +4633,6 @@ export function SessionViewer({
 											reviewRequest={effectiveReview?.req ?? null}
 											reviewRequestSessionId={effectiveReview?.ownerId}
 											reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
-											reviewGithubPending={effectiveReview?.githubPending}
-											reviewMyReviewNeeded={effectiveReview?.myReviewNeeded}
 											onReviewChange={onReviewChange}
 											onOpenChecks={() => {
 												setInfoPageOpen(false);
@@ -5640,8 +5621,6 @@ export function SessionViewer({
 										reviewRequest={effectiveReview?.req ?? null}
 										reviewRequestSessionId={effectiveReview?.ownerId}
 										reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
-										reviewGithubPending={effectiveReview?.githubPending}
-										reviewMyReviewNeeded={effectiveReview?.myReviewNeeded}
 										onReviewChange={onReviewChange}
 										onOpenChecks={() => focusPrInReview(undefined, "checks")}
 										send={connected ? send : undefined}
