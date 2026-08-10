@@ -8,7 +8,6 @@ import { fetchUiPrefs, saveUiPrefsApi } from "./api";
 export const SIDEBAR_SECTION_IDS = [
 	"workspaces",
 	"automations",
-	"people",
 ] as const;
 
 export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
@@ -16,7 +15,6 @@ export type SidebarSectionId = (typeof SIDEBAR_SECTION_IDS)[number];
 export const SIDEBAR_SECTION_LABELS: Record<SidebarSectionId, string> = {
 	workspaces: "Workspaces",
 	automations: "Automations",
-	people: "People",
 };
 
 const LOCAL_KEY_PREFIX = "opensession-sidebar-order:";

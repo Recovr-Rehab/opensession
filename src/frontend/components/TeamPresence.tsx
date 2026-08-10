@@ -1,24 +1,22 @@
 import React from "react";
 import type { UnifiedSession } from "../lib/types";
 import { usePeople, type Person } from "../lib/people";
-import { shortTime } from "../lib/time";
 import { cn } from "../ui/cn";
-import { Popover } from "../ui/popover";
+import { Menu } from "../ui/menu";
 import { UserAvatar } from "./UserAvatar";
 
 /**
  * The team, as a face row. One derivation (`useTeamPresence`) feeds two
- * surfaces: the pile on the sidebar's Home entry — who's around, click to see
- * what they're on — and the pile in the Home header, where a face is the
- * person filter.
+ * surfaces: the pile in the Home header, where a face picks whose work the
+ * whole app is showing, and the decoration on the sidebar's Home entry, which
+ * is just "who's around" on the way to that page.
  *
- * The pile itself carries no status: it's just the team, and your own
- * connection state already lives on the account row. Status appears where
- * there's room to say it in words — the popover's rows, where a face is dimmed
- * when the person has OS¹ closed, gets a hollow green dot when they're in the
- * app, and a filled pulsing one while a session of theirs has a turn in flight.
- * That pulsing green dot is the same "working" language as the viewer's
- * Working pill.
+ * The pile is deliberately as much as we say about anyone: a face is dimmed
+ * when the person has OS¹ closed, carries a hollow green dot when they're in
+ * the app, and a filled one while a session of theirs has a turn in flight.
+ * Presence, not a status feed — nothing here says what someone is working on,
+ * and nothing animates to pull you into checking. To find out, you pick their
+ * face and read their workspaces like your own.
  */
 
 export interface TeamMember {
@@ -130,29 +128,34 @@ export function useTeamPresence({
 
 /**
  * The dot sits inside the face's own box (bottom-right corner), ringed in the
- * popup's own surface so it separates from the picture under it.
+ * surface under it so it separates from the picture. It doesn't pulse: this
+ * sits in a page header all day, and a blinking light is a summons.
  */
-function StatusDot({ state }: { state: PresenceState }) {
+function StatusDot({ state, ring }: { state: PresenceState; ring: string }) {
 	if (state === "away") return null;
 	return (
 		<span
-			className="absolute bottom-0 right-0 size-[7px] rounded-full shadow-[0_0_0_1.5px_var(--bg-panel)]"
+			className="absolute bottom-0 right-0 size-[7px] rounded-full"
+			style={{ boxShadow: `0 0 0 1.5px ${ring}` }}
 			aria-hidden="true"
 		>
 			<span
 				className={cn(
-					"block size-full rounded-full bg-panel",
-					state === "working"
-						? "bg-green motion-safe:animate-pulse"
-						: "border border-green",
+					"block size-full rounded-full",
+					state === "working" ? "bg-green" : "border border-green",
 				)}
+				style={state === "working" ? undefined : { background: ring }}
 			/>
 		</span>
 	);
 }
 
-/** A face. `status` is for the popover's rows, which have room to say what the
- *  dimming and the dot mean; the piles show the person and nothing else. */
+/** The "+N" tail of a capped pile, in both its readings (plain count, menu). */
+const OVERFLOW_COUNT =
+	"ml-1.5 flex items-center text-meta font-semibold tabular-nums text-dim";
+
+/** A face. `status` adds the dim/dot presence reading; the accessible name
+ *  says the same thing in words, so the colour isn't carrying it alone. */
 function Face({
 	member,
 	size,
@@ -167,6 +170,7 @@ function Face({
 	/** Colour of the gap a piled face cuts into the one behind it. */
 	ring?: string;
 }) {
+	const dotRing = ring || "var(--bg-panel)";
 	const state = presenceState(member);
 	return (
 		// `flex`, not `inline-flex`: an inline box sits on its parent's baseline
@@ -191,20 +195,21 @@ function Face({
 						: null),
 				}}
 			/>
-			{status && <StatusDot state={state} />}
+			{status && <StatusDot state={state} ring={dotRing} />}
 		</span>
 	);
 }
 
 /**
  * Overlapping face row. Without `onSelect` it's decoration (safe to nest in a
- * trigger); with it, every face is its own toggle — the Home filter.
+ * trigger); with it, every face is its own toggle — the person lens.
  */
 export function TeamFacepile({
 	members,
 	size = 22,
 	max = 6,
 	ring = "var(--bg)",
+	status,
 	selectedKey,
 	onSelect,
 	className,
@@ -214,6 +219,8 @@ export function TeamFacepile({
 	max?: number;
 	/** What the pile is painted on: each face rings itself in it to separate. */
 	ring?: string;
+	/** Dim the away faces and dot the present ones. */
+	status?: boolean;
 	selectedKey?: string | null;
 	onSelect?: (member: TeamMember) => void;
 	className?: string;
@@ -224,7 +231,9 @@ export function TeamFacepile({
 		const picked = members.find((m) => m.key === selectedKey);
 		if (picked) shown.splice(max - 1, 1, picked);
 	}
-	const overflow = members.length - shown.length;
+	// Whoever didn't make the cut — computed by identity, not by index, because
+	// a selected face may have been swapped into the last visible slot.
+	const rest = members.filter((m) => !shown.some((s) => s.key === m.key));
 	// A shoulder's worth of overlap: enough to read as one group, shallow
 	// enough that every face stays a face rather than a sliver. Two of those
 	// pixels go to the ring, so the tuck reads as a gap, not a collision.
@@ -249,7 +258,7 @@ export function TeamFacepile({
 				if (!onSelect)
 					return (
 						<span key={m.key} className="relative" style={style} title={label}>
-							<Face member={m} size={size} ring={ring} />
+							<Face member={m} size={size} ring={ring} status={status} />
 						</span>
 					);
 				return (
@@ -266,118 +275,48 @@ export function TeamFacepile({
 						aria-label={label}
 						onClick={() => onSelect(m)}
 					>
-						<Face member={m} size={size} ring={ring} selected={selected} />
+						<Face
+							member={m}
+							size={size}
+							ring={ring}
+							status={status}
+							selected={selected}
+						/>
 					</button>
 				);
 			})}
-			{overflow > 0 && (
-				<span
-					// The rest of the team is a count, not another face: no tile, no
-					// border, just the number sitting on the row's centre line.
-					className="ml-1.5 flex items-center text-meta font-semibold tabular-nums text-dim"
-					style={{ height: size }}
-					title={members
-						.slice(shown.length)
-						.map((m) => m.person.fullName)
-						.join(", ")}
-				>
-					+{overflow}
-				</span>
-			)}
-		</div>
-	);
-}
-
-/**
- * The sidebar's pile: a face row that opens the team, each row saying what
- * that person is on. Clicking a row opens their session.
- */
-export function TeamPresencePopover({
-	members,
-	size = 20,
-	max = 4,
-	ring,
-	onOpenSession,
-	className,
-}: {
-	members: TeamMember[];
-	size?: number;
-	max?: number;
-	/** Colour of the row the pile sits on — the faces ring themselves in it. */
-	ring?: string;
-	onOpenSession?: (session: UnifiedSession) => void;
-	className?: string;
-}) {
-	if (members.length === 0) return null;
-	const active = members.filter((m) => m.online || m.working).length;
-	return (
-		<Popover.Root>
-			<Popover.Trigger
-				className={cn(
-					"inline-flex cursor-pointer items-center rounded-full border-0 bg-transparent p-0",
-					className,
-				)}
-				aria-label={
-					active > 0 ? `Team — ${active} here now` : "Team — nobody here now"
-				}
-			>
-				<TeamFacepile members={members} size={size} max={max} ring={ring} />
-			</Popover.Trigger>
-			<Popover.Popup align="end" side="bottom" sideOffset={8} initialFocus className="w-[290px] p-1.5">
-				<div className="flex items-baseline justify-between px-2 pb-1 pt-1.5">
-					<span className="text-label font-semibold text-faint">Team</span>
-					<span className="text-label text-faint">
-						{active > 0 ? `${active} here now` : "Nobody here now"}
-					</span>
-				</div>
-				{members.map((m) => {
-					const session = m.session;
-					const state = presenceState(m);
-					const row = (
-						<>
-							<Face member={m} size={26} status />
-							<span className="flex min-w-0 flex-1 flex-col">
-								<span className="flex min-w-0 items-baseline gap-1.5">
-									<span className="truncate text-body font-medium text-fg">
-										{m.person.name}
-										{m.isYou && <span className="ml-1 text-faint">you</span>}
-									</span>
-									{session?.lastActivity && state === "away" && (
-										<span className="ml-auto shrink-0 text-meta text-faint">
-											{shortTime(session.lastActivity)}
-										</span>
-									)}
-								</span>
-								<span
-									className={cn(
-										"truncate text-meta",
-										state === "working" ? "text-green" : "text-faint",
-									)}
-								>
-									{presenceLabel(m)}
-								</span>
-							</span>
-						</>
-					);
-					const cls =
-						"flex w-full min-w-0 items-center gap-2.5 rounded-lg border-0 bg-transparent px-2 py-1.5 text-left";
-					return session && onOpenSession ? (
-						<button
-							key={m.key}
-							type="button"
-							className={cn(cls, "cursor-pointer hover:bg-hover")}
-							onClick={() => onOpenSession(session)}
-							title={`Open “${session.title || session.id}”`}
+			{rest.length > 0 &&
+				// The rest of the team is a count, not another face: no tile, no
+				// border, just the number sitting on the row's centre line. Where
+				// the faces are pickable it has to be pickable too, or the people
+				// past the cap — everyone but four, on a phone — are unreachable.
+				(onSelect ? (
+					<Menu.Root>
+						<Menu.Trigger
+							className={cn(OVERFLOW_COUNT, "cursor-pointer rounded-md px-1 hover:text-fg")}
+							style={{ height: size }}
+							aria-label={`${rest.length} more ${rest.length === 1 ? "teammate" : "teammates"}`}
 						>
-							{row}
-						</button>
-					) : (
-						<div key={m.key} className={cls}>
-							{row}
-						</div>
-					);
-				})}
-			</Popover.Popup>
-		</Popover.Root>
+							+{rest.length}
+						</Menu.Trigger>
+						<Menu.Popup align="end">
+							{rest.map((m) => (
+								<Menu.Item key={m.key} onClick={() => onSelect(m)}>
+									<Face member={m} size={20} status={status} ring="var(--bg-panel)" />
+									<span className="min-w-0 truncate">{m.person.fullName}</span>
+								</Menu.Item>
+							))}
+						</Menu.Popup>
+					</Menu.Root>
+				) : (
+					<span
+						className={OVERFLOW_COUNT}
+						style={{ height: size }}
+						title={rest.map((m) => m.person.fullName).join(", ")}
+					>
+						+{rest.length}
+					</span>
+				))}
+		</div>
 	);
 }

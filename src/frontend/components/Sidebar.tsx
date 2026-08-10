@@ -90,8 +90,7 @@ import {
 import { Reorder } from "motion/react";
 import { getRecents, onRecentsChanged } from "../lib/recents";
 import { getReads, isUnread, markRead, markUnread, onReadsChanged } from "../lib/reads";
-import { usePeople } from "../lib/people";
-import { TeamPresencePopover, useTeamPresence } from "./TeamPresence";
+import { TeamFacepile, useTeamPresence } from "./TeamPresence";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
 import { getWsTimePref, onWsTimeChanged } from "../lib/workspace-time";
@@ -160,17 +159,15 @@ import {
 	DEFAULT_PROJECT,
 	EXPANDED_KEY,
 	FEED_FILTERS_KEY,
-	FILTER_KEY,
-	FILTER_VERSION,
 	SUPPORT_PRIORITY_GROUPS,
 	dget,
 	readExpanded,
 	readFeedFilters,
-	readFilter,
+	setFilter,
+	useSidebarFilter,
 	sessionPrKeys,
 	sessionRepo,
 	type FeedFilterValues,
-	type FilterState,
 } from "../lib/sidebar-filter";
 import {
 	isClaimed,
@@ -439,36 +436,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// same event the viewer fires when it marks a session read.
 	const [reads, setReads] = useState(getReads);
 	const currentUser = useCurrentUser();
-	// Team directory (GET /api/people) — the always-on People band roster.
-	const roster = usePeople();
-	// The same roster with live status attached, for the Home entry's face pile.
+	// The team with live status attached, for the Home entry's face pile.
 	const team = useTeamPresence({ sessions, teamViewing, currentUser });
-	// Per-person latest session + any-running, keyed by lowercased first name —
-	// what a People row shows when the person isn't live right now.
-	const personActivity = useMemo(() => {
-		const m = new Map<
-			string,
-			{ id: string; title: string; last: string; running: boolean }
-		>();
-		for (const s of sessions) {
-			if (s.archived || s.automation) continue;
-			const key = (s.startedBy || "").toLowerCase();
-			if (!key) continue;
-			const cur = m.get(key);
-			const running = (cur?.running ?? false) || s.isRunning === true;
-			if (!cur || (s.lastActivity || "") > cur.last) {
-				m.set(key, {
-					id: s.id,
-					title: s.title || "",
-					last: s.lastActivity || "",
-					running,
-				});
-			} else if (running !== cur.running) {
-				m.set(key, { ...cur, running });
-			}
-		}
-		return m;
-	}, [sessions]);
 	useEffect(
 		() => onSidebarToolsChanged(() => setHiddenTools(readHiddenSidebarTools())),
 		[],
@@ -539,7 +508,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	}, []);
 
 	// Filter popover (group by / repo / sort) — its choices persist together.
-	const [filter, setFilterState] = useState<FilterState>(readFilter);
+	// The person lens is shared with Home's facepile (lib/sidebar-filter), so
+	// a face picked there is the sidebar you come back to.
+	const filter = useSidebarFilter();
 	const [filterOpen, setFilterOpen] = useState(false);
 	// Any non-default choice in that popover — what puts the dot on the button.
 	const hasFilter =
@@ -551,17 +522,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// The phone stand-in for the header filter button (portaled into the top
 	// bar next to Search). The popover anchors to whichever button is live.
 	const mobileFilterBtnRef = useRef<HTMLButtonElement>(null);
-	function setFilter(patch: Partial<FilterState>) {
-		setFilterState((prev) => {
-			const next = { ...prev, ...patch };
-			localStorage.setItem(
-				FILTER_KEY,
-				JSON.stringify({ ...next, v: FILTER_VERSION }),
-			);
-			return next;
-		});
-	}
-
 	// The active repo-filter chip prefers to sit inline in the "My sessions"
 	// header (right after the title); it drops to its own row only when the
 	// sidebar is too narrow to fit it there. `repoInline` is decided by measuring
@@ -938,6 +898,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			.sort((a, b) => b[1].count - a[1].count || a[1].label.localeCompare(b[1].label))
 			.map(([key, { label }]) => ({ key, label }));
 	}, [sessions, openPrs]);
+
+	// Whose lanes these are, for the header title and its reset button. The
+	// facepile's roster is asked first, so a teammate picked on Home is named
+	// even before anything of theirs has landed in this list.
+	const personLensName =
+		filter.person === "everyone"
+			? "Everyone"
+			: filter.person === "unassigned"
+				? "Unassigned"
+				: team.find((m) => m.key === filter.person)?.person.name ||
+					people.find((p) => p.key === filter.person)?.label ||
+					filter.person;
 
 	// Every non-archived session, narrowed by the repo/person filters and search.
 	// Rows are built per-workspace below; a session matching the filter surfaces its
@@ -4067,21 +4039,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</ContextMenu.Popup>
 							</ContextMenu.Root>
 						);
-						// Home carries the team at its right edge — who's around, who's
-						// working, and one click away, what each of them is on. It has to
-						// be a sibling of the row, not a child: a button can't nest one.
+						// Home carries the team at its right edge: who's around, at a
+						// glance, on the way to the page where the faces are the person
+						// lens. It's decoration — clicks fall through to the row — so
+						// there is no surface here for watching what anyone is doing.
 						// Phones render the tools as a card strip, where there's no room.
 						if (tool.id !== "home" || isPhone || team.length === 0) return row;
 						return (
 							<div key={tool.id} className="relative">
 								{row}
-								<TeamPresencePopover
+								<TeamFacepile
 									members={team}
-									onOpenSession={onSelect}
+									size={20}
+									max={4}
+									status
 									// The faces ring themselves in whatever the row is
 									// painted with, so the pile separates on both states.
 									ring={tool.active ? "var(--bg-active)" : "var(--bg-raised)"}
-									className="absolute right-2.5 top-1/2 -translate-y-1/2"
+									className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
 								/>
 							</div>
 						);
@@ -4132,7 +4107,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									? "Unassigned workspaces"
 									: filter.person === "everyone"
 										? "All workspaces"
-										: `${people.find((p) => p.key === filter.person)?.label || filter.person}'s workspaces`}
+										: `${personLensName}'s workspaces`}
 						</span>
 						<IconChevronDown
 							className={cn(
@@ -4145,6 +4120,26 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							}}
 						/>
 					</button>
+					{/* Someone else's lens — usually picked from Home's facepile, and
+					    on a phone the sidebar isn't even on screen when that happens.
+					    So the way back to your own lives next to the title that says
+					    whose these are; on phones, where that title is hidden, the
+					    button carries the name itself. */}
+					{filter.person !== "me" && (
+						<Tooltip label="Back to your workspaces">
+							<button
+								className={cn(
+									"ml-1 flex shrink-0 items-center gap-1 rounded-full border-0 bg-transparent text-label text-faint hover:bg-hover hover:text-fg",
+									isPhone ? "px-1.5 py-0.5" : "size-[19px] justify-center",
+								)}
+								onClick={() => setFilter({ person: "me" })}
+								aria-label="Back to your workspaces"
+							>
+								{isPhone && <span className="truncate">{personLensName}</span>}
+								<IconX size={14} />
+							</button>
+						</Tooltip>
+					)}
 					{/* Repo filter chip, inline behind the title when it fits. */}
 					{filter.repo !== "all" && repoInline && (
 						<RepoFilterChip
@@ -5145,147 +5140,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						)}
 					</div>
 				)}
-			{/* ── People: the whole team, always on — live viewers first. Click a
-			    person to view their workspace lanes (backlog / in progress). ── */}
-			{(() => {
-				const others = roster.filter(
-					(p) => p.name.toLowerCase() !== currentUser.toLowerCase(),
-				);
-				if (others.length === 0) return null;
-				const open = bandOpen("people");
-				const viewingBy = new Map(
-					teamViewing.map((v) => [v.user.toLowerCase(), v.sessionId]),
-				);
-				const titleFor = (id: string) =>
-					sessions.find((s) => s.id === id)?.title || id;
-				const rows = [...others].sort((a, b) => {
-					const aLive = viewingBy.has(a.name.toLowerCase()) ? 0 : 1;
-					const bLive = viewingBy.has(b.name.toLowerCase()) ? 0 : 1;
-					if (aLive !== bLive) return aLive - bLive;
-					const aAct = personActivity.get(a.name.toLowerCase())?.last || "";
-					const bAct = personActivity.get(b.name.toLowerCase())?.last || "";
-					return bAct.localeCompare(aAct);
-				});
-				return (
-					<div
-						className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2")}
-						style={{ order: sectionOrder("people") }}
-					>
-						<div
-							className={cn(
-								SIDEBAR_BAND_LABEL,
-								"py-0 pl-0 pr-2 desktop:pr-0",
-								SIDEBAR_STICKY_BAND,
-								SIDEBAR_STICKY_BAND_ROW,
-								SIDEBAR_STUCK_BACKING,
-							)}
-							data-sticky-head
-						>
-							<button
-								className={cn(
-									SIDEBAR_BAND_TOGGLE,
-									SIDEBAR_BAND_TOGGLE_INSET,
-									"desktop:pl-[10px]",
-								)}
-								onClick={() => toggleBand("people")}
-								title={open ? "Collapse people" : "Expand people"}
-							>
-								<span className="min-w-0 truncate">People</span>
-								<span className={SIDEBAR_GROUP_COUNT}>
-									{rows.length}
-								</span>
-								<IconChevronDown
-									className={cn(
-										SIDEBAR_BAND_CHEVRON,
-										"group-hover/band:visible group-hover/band:text-dim",
-									)}
-									size={18}
-									style={{ transform: open ? "none" : "rotate(-90deg)" }}
-								/>
-							</button>
-						</div>
-						{open && (
-							<div className={SIDEBAR_INDEPENDENT_SCROLL}>
-								{rows.map((p) => {
-									const key = p.name.toLowerCase();
-									const liveId = viewingBy.get(key);
-									const act = personActivity.get(key);
-									const selected = filter.person === key;
-									const localTime = p.timezone
-										? new Intl.DateTimeFormat([], {
-												hour: "2-digit",
-												minute: "2-digit",
-												timeZone: p.timezone,
-											}).format(new Date())
-										: null;
-									return (
-										<button
-											key={p.name}
-											className={`flex items-center gap-[9px] w-full min-w-0 text-left border-0 cursor-pointer rounded-row px-1 py-2 desktop:pl-3 desktop:pr-2 desktop:py-[5px] ${
-												selected
-													? "bg-active"
-													: "bg-transparent hover:bg-hover"
-											}`}
-											onClick={() => {
-												// First click: filter to their lanes AND open the
-												// session the row shows — going back lands on their
-												// workspaces. Second click (or the row's ✕): undo
-												// the filter, back to your own.
-												if (selected) {
-													setFilter({ person: "me" });
-													return;
-												}
-												setFilter({ person: key });
-												const targetId = liveId || act?.id;
-												const target = targetId
-													? sessions.find((s) => s.id === targetId)
-													: undefined;
-												if (target) onSelect(target);
-											}}
-											title={
-												selected
-													? "Back to your workspaces"
-													: liveId || act?.title
-														? `Open “${liveId ? titleFor(liveId) : act?.title}” · ${p.name}'s workspaces`
-														: `${p.name}'s workspaces`
-											}
-										>
-											{/* The name lives on the avatar (tooltip) — the row's
-											    width belongs to the workspace/session title. */}
-											<Tooltip
-												label={`${p.fullName}${localTime ? ` · ${localTime}` : ""}${liveId ? " · viewing now" : ""}`}
-											>
-												<span className="relative shrink-0">
-													<UserAvatar name={p.name} size={22} />
-												</span>
-											</Tooltip>
-											<span
-												className={cn(
-													SIDEBAR_ROW_TITLE,
-													"flex-1",
-													selected && "font-semibold text-fg",
-												)}
-											>
-												{liveId ? titleFor(liveId) : act?.title || p.name}
-											</span>
-											{selected && (
-												// The undo affordance — the whole row is the target
-												// (second click clears the filter), this just says so.
-												<span
-													className="ml-auto flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-dim"
-													aria-hidden="true"
-												>
-													<IconX size={14} />
-												</span>
-											)}
-										</button>
-									);
-								})}
-							</div>
-						)}
-					</div>
-				);
-			})()}
 			{/* One card for the whole workspace list: the rows come out of a plain
 			    render function, not a component, so they can't each own a popover.
 			    The hovered row is the anchor instead — same shell, same card. */}

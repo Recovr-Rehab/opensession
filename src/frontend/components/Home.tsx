@@ -8,6 +8,12 @@ import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { TeamFacepile, useTeamPresence } from "./TeamPresence";
+import {
+  personFilterFor,
+  personScope,
+  setFilter,
+  useSidebarFilter,
+} from "../lib/sidebar-filter";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import {
@@ -394,9 +400,26 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
   const [query, setQuery] = useState("");
   const [workspaceId, setWorkspaceId] = useState("all");
   const [repo, setRepo] = useState("all");
-  const [person, setPerson] = useState(() =>
-    currentUser === "Anonymous" ? "all" : currentUser.toLowerCase(),
-  );
+  // Whose work this page shows. It is the same lens the sidebar's lanes use,
+  // so picking a face here is also the sidebar you turn back to — one person
+  // filter for the app, not one per surface.
+  const filter = useSidebarFilter();
+  const person = personScope(filter.person, currentUser);
+  const setPerson = (next: string) =>
+    setFilter({
+      person: next === "all" ? "everyone" : personFilterFor(next, currentUser),
+    });
+  // The lens in words. "Unassigned" is a sidebar-only lens — this page has no
+  // backlog rows of its own — but it still says so rather than claiming to be
+  // showing everyone.
+  const lensLabel =
+    person !== "all"
+      ? person === currentUser.toLowerCase()
+        ? "You"
+        : personLabel(person)
+      : filter.person === "unassigned"
+        ? "Unassigned"
+        : "Everyone";
   const [showArchived, setShowArchived] = useState(false);
   const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
   const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
@@ -507,30 +530,37 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
         <div className="flex items-center justify-between gap-4 px-2">
           <h1 className="m-0 text-page-title font-semibold tracking-[-0.025em] text-fg">Home</h1>
           <div className="flex min-w-0 items-center gap-3">
-            {/* The team, as the person filter: a face picks whose worktrees
-                this page shows, and the picked one says so in words next to
-                the pile. Clicking the picked face (or the ✕) goes back to
-                everyone. */}
+            {/* The team, as the app's person lens: a face picks whose work
+                this page — and the sidebar behind it — shows. The faces carry
+                presence (dimmed = away, hollow dot = in the app, filled =
+                a turn in flight) and nothing else; what someone is actually
+                doing is their workspaces, one click away. Clicking the picked
+                face widens back to everyone; the ✕ returns to your own. */}
             {team.length > 0 && (
               <div className="flex min-w-0 items-center gap-2.5">
                 <TeamFacepile
                   members={team}
                   size={isPhone ? 24 : 27}
                   max={isPhone ? 4 : 8}
+                  status
                   selectedKey={person === "all" ? null : person}
                   onSelect={(member) =>
-                    setPerson((current) => (current === member.key ? "all" : member.key))
+                    setPerson(member.key === person ? "all" : member.key)
                   }
                 />
-                {person === "all" ? (
-                  <span className="text-control-label text-faint max-[860px]:hidden">Everyone</span>
+                {/* The lens in words, and — whenever it isn't your own — the
+                    one click back to it. */}
+                {filter.person === "me" ? (
+                  <span className="text-control-label text-faint max-[860px]:hidden">
+                    {lensLabel}
+                  </span>
                 ) : (
                   <button
                     className="flex items-center gap-1 rounded-control border-0 bg-transparent p-1 text-control-label text-dim hover:bg-hover hover:text-fg max-[860px]:hidden"
-                    onClick={() => setPerson("all")}
-                    title="Show everyone"
+                    onClick={() => setFilter({ person: "me" })}
+                    title="Back to your workspaces"
                   >
-                    <span className="truncate">{personLabel(person)}</span>
+                    <span className="truncate">{lensLabel}</span>
                     <IconX size={15} />
                   </button>
                 )}
@@ -650,7 +680,7 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
                 ? "Try another search or workspace."
                 : person === "all"
                   ? "Workspaces with pull requests will appear here."
-                  : "Pick another face, or clear the filter to see everyone."}
+                  : "Pick another face, or clear the filter to go back to yours."}
             </div>
           </div>
         ) : (

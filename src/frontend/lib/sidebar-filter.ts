@@ -1,3 +1,4 @@
+import React from "react";
 import { DEFAULT_REPO_ID } from "./brand";
 import type { Group } from "./sidebar-types";
 import type { UnifiedSession } from "./types";
@@ -118,6 +119,64 @@ export interface FilterState {
 	person: string;
 	sort: SortBy;
 	prs: PrsFilter;
+}
+
+/**
+ * The person lens is shared, not the sidebar's private business: Home's
+ * facepile and the sidebar's lanes read and write this one value, so the face
+ * you pick on Home is the sidebar you land in. Everything else in
+ * `FilterState` still only has one reader (the sidebar's own popover), but it
+ * rides along here because the whole state persists as one blob.
+ */
+const CHANGE_EVENT = "opensession-sidebar-filter-changed";
+let current: FilterState | null = null;
+
+export function getFilter(): FilterState {
+	return (current ||= readFilter());
+}
+
+export function setFilter(patch: Partial<FilterState>) {
+	const next = { ...getFilter(), ...patch };
+	current = next;
+	localStorage.setItem(FILTER_KEY, JSON.stringify({ ...next, v: FILTER_VERSION }));
+	window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+export function onFilterChanged(handler: () => void): () => void {
+	window.addEventListener(CHANGE_EVENT, handler);
+	return () => window.removeEventListener(CHANGE_EVENT, handler);
+}
+
+// Another tab's write: drop the cache so subscribers re-read from storage.
+window.addEventListener("storage", (event) => {
+	if (event.key !== FILTER_KEY) return;
+	current = null;
+	window.dispatchEvent(new Event(CHANGE_EVENT));
+});
+
+export function useSidebarFilter(): FilterState {
+	const [state, setState] = React.useState(getFilter);
+	React.useEffect(() => onFilterChanged(() => setState(getFilter())), []);
+	return state;
+}
+
+/**
+ * The lens as a page that only knows about people reads it — a lowercased
+ * person key, or "all" when the filter is on everyone (or nobody is signed
+ * in, where "me" can't resolve to a name).
+ */
+export function personScope(person: string, currentUser: string): string {
+	if (person === "me") {
+		const me = currentUser.trim().toLowerCase();
+		return !me || me === "anonymous" ? "all" : me;
+	}
+	return person === "everyone" || person === "unassigned" ? "all" : person;
+}
+
+/** The reverse: your own face is stored as the default lens, so the filter
+ *  keeps meaning "mine" if the signed-in user changes. */
+export function personFilterFor(key: string, currentUser: string): string {
+	return key === currentUser.trim().toLowerCase() ? "me" : key;
 }
 
 export function readFilter(): FilterState {
