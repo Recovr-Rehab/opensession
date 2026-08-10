@@ -15,12 +15,10 @@ import UIKit
 /// ADDING a colour is one line in `fills`: a name, and the two hexes it wears
 /// in light and dark.
 ///
-/// What sits ON the accent is deliberately NOT part of that table. It is
-/// derived from the fill's own luminance — whichever of black or white
-/// contrasts more — so a colour can never ship with an illegible glyph, and
-/// nobody adding one has to remember to pick its counterpart. Both appearances
-/// use saturated jewel tones with white glyphs; dark appearance lifts the same
-/// hues just enough to stay distinct from its panel.
+/// What sits ON the accent is deliberately NOT part of that table. Every
+/// chromatic accent takes white ink; `mono` alone inverts with its fill. The
+/// contrast test guards that rule, so replacing either hex remains a one-line
+/// change without allowing an illegible glyph to ship.
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case teal
     case sky
@@ -78,15 +76,14 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         ))
     }
 
-    /// What sits on top of the fill — the glyph in the send disc. Derived, not
-    /// chosen: white, the way a filled primary button reads everywhere, unless
-    /// the fill is pale enough that white drops under the 3:1 that non-text
-    /// contrast asks for (`whiteGlyphCeiling`) — which is exactly the case for
-    /// the lighter value each colour wears in dark mode.
+    /// What sits on top of the fill — the glyph in the send disc and every
+    /// other prominent accent control. Chromatic accents always use white;
+    /// monochrome keeps the app's original black/white inversion.
     var onAccent: Color {
-        Color(platformColor: AccentTheme.dynamic(
-            light: AccentTheme.contrasting(fills.light),
-            dark: AccentTheme.contrasting(fills.dark)
+        guard self == .mono else { return .white }
+        return Color(platformColor: AccentTheme.dynamic(
+            light: .white,
+            dark: .black
         ))
     }
 
@@ -96,12 +93,11 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         Color(platformColor: AccentTheme.platformColor(dark ? fills.dark : fills.light))
     }
 
-    /// Whether the derived glyph on this fill is white. Together with
-    /// `glyphContrast` this is what the test suite holds every case to, so
-    /// adding a colour to `fills` cannot quietly ship a send disc whose arrow
-    /// can't be read, or a light-mode fill so pale the arrow turns dark.
+    /// Whether this accent's fixed glyph is white. Together with
+    /// `glyphContrast` this lets the test suite reject replacement colours too
+    /// pale to carry the palette's white-ink rule.
     func glyphIsWhite(dark: Bool) -> Bool {
-        AccentTheme.luminance(dark ? fills.dark : fills.light) <= AccentTheme.whiteGlyphCeiling
+        self != .mono || !dark
     }
 
     /// How much contrast the derived glyph gets on this fill.
@@ -110,9 +106,6 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         let glyph = glyphIsWhite(dark: dark) ? 1.0 : 0.0
         return (max(fill, glyph) + 0.05) / (min(fill, glyph) + 0.05)
     }
-
-    /// The fill luminance at which a white glyph lands on exactly 3:1.
-    static let whiteGlyphCeiling = 1.05 / 3.0 - 0.05
 
     // ── Colour maths ──────────────────────────────────────────────────────
 
@@ -123,10 +116,6 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
             blue: Double(hex & 0xFF) / 255,
             alpha: 1
         )
-    }
-
-    private static func contrasting(_ hex: UInt32) -> PlatformColor {
-        luminance(hex) <= whiteGlyphCeiling ? .white : .black
     }
 
     /// WCAG relative luminance.

@@ -10,9 +10,9 @@ final class AccentThemeTests: XCTestCase {
         )
     }
 
-    /// The guard that makes adding a colour safe: whatever ends up in `fills`,
-    /// the derived glyph has to be readable on it in both appearances. 3:1 is
-    /// WCAG's non-text contrast, which is what an arrow in a disc is.
+    /// The guard that makes replacing a colour safe: the palette's fixed glyph
+    /// has to be readable on it in both appearances. 3:1 is WCAG's non-text
+    /// contrast, which is what an arrow in a disc is.
     func testEveryAccentCarriesALegibleGlyph() {
         for theme in AccentTheme.allCases {
             for dark in [false, true] {
