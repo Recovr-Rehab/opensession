@@ -105,17 +105,22 @@ enum OS1VisualStyle {
             : NSColor(white: 0.953, alpha: 1)
     })
     #endif
-    /// The brand mark: black on light, white on dark. It is a FILL colour —
-    /// the send disc, the app tint, an active icon — and deliberately not a
-    /// text colour: at label contrast, words wearing it are indistinguishable
-    /// from body copy, so inline affordances (links, fold toggles) take
-    /// `link` instead.
+    /// The brand mark: a teal blue, deeper on light so a white glyph can sit on
+    /// it, lighter on dark so it reads against the black page. It is a FILL
+    /// colour — the send disc, the app tint, an active icon — and deliberately
+    /// not a text colour: at label contrast, words wearing it are
+    /// indistinguishable from body copy, so inline affordances (links, fold
+    /// toggles) take `link` instead. The two values are a pair with `onAccent`:
+    /// light carries white at ~3.8:1, dark carries near-black at ~10:1, which
+    /// is the same split the monochrome accent had before the hue.
     #if os(iOS)
     static let accent = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark ? .white : .black
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.310, green: 0.788, blue: 0.871, alpha: 1)
+            : UIColor(red: 0.078, green: 0.561, blue: 0.639, alpha: 1)
     })
-    /// What sits on top of an `accent` fill — its inverse, so the glyph in the
-    /// send disc stays legible in either appearance.
+    /// What sits on top of an `accent` fill, so the glyph in the send disc
+    /// stays legible in either appearance.
     static let onAccent = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark ? .black : .white
     })
