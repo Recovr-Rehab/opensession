@@ -15,11 +15,15 @@ import AppKit
 /// It reads as a raised card rather than a message, because it summarizes a
 /// stretch of the conversation rather than continuing it.
 ///
-/// It folds, like a work turn does. A walkthrough is a screenful of video and
-/// a screenful per before/after pair, and on a phone that is a long way to
-/// drag past to reach what was said after it — in a session that published
-/// several, the conversation is mostly walkthrough. It opens by default,
-/// because the demo is the point of publishing one; folding is for afterwards.
+/// It folds, like a work turn does, and arrives folded. A walkthrough is a
+/// screenful of video and a screenful per before/after pair, and on a phone
+/// that is a long way to drag past to reach what was said after it — in a
+/// session that published several, the conversation is mostly walkthrough.
+///
+/// Folded is not hidden: the card keeps a sideways strip of its stills, and a
+/// tap on one opens the same full-screen viewer the open card does. Checking
+/// what changed is what most readers came for, and it shouldn't cost them
+/// unfolding a screenful of video to get to it.
 struct WalkthroughCard: View {
     let walkthrough: SessionWalkthrough
     let state: TurnFoldState
@@ -35,7 +39,9 @@ struct WalkthroughCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(accessibilityLabel)
-            .accessibilityHint(state.expanded ? "Hide the walkthrough" : "Show the walkthrough")
+            // Folded, the pictures are already on screen, so what the button
+            // offers is the rest of it.
+            .accessibilityHint(state.expanded ? "Hide the walkthrough" : "Show the demo and writeup")
 
             if state.expanded {
                 if let video = walkthrough.video, let url = OS1API.mediaURL(path: video) {
@@ -47,6 +53,8 @@ struct WalkthroughCard: View {
                 ForEach(walkthrough.stills) { shot in
                     WalkthroughShotView(shot: shot, gallery: gallery)
                 }
+            } else if !gallery.isEmpty {
+                WalkthroughThumbnailStrip(stills: walkthrough.stills, gallery: gallery)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,11 +64,12 @@ struct WalkthroughCard: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(OS1VisualStyle.border, lineWidth: 0.5)
         }
-        // Open, it ends in media where its neighbours end in text, so it needs
-        // more room after it than between ordinary blocks. Folded it ends in a
-        // line of text like everything else, and the extra gap would read as a
-        // break in the conversation.
-        .padding(.bottom, state.expanded ? 6 : 0)
+        // It ends in media where its neighbours end in text, so it needs more
+        // room after it than between ordinary blocks — folded too, now that
+        // folded still ends in a row of pictures. A writeup-only walkthrough
+        // folds down to a line of text like everything else, and there the
+        // extra gap would read as a break in the conversation.
+        .padding(.bottom, state.expanded || !gallery.isEmpty ? 6 : 0)
     }
 
     /// Every still in the card, in reading order, so opening one pages
@@ -143,6 +152,52 @@ struct WalkthroughCard: View {
     }
 }
 
+/// The folded card's pictures: every still, small, in reading order, scrolling
+/// sideways. A tap opens the full-screen viewer at that picture and pages
+/// through the rest — so a before/after can be compared without unfolding the
+/// card at all.
+///
+/// Fixed-size tiles, deliberately. A thumbnail with a flexible width has no
+/// intrinsic size to report, and a horizontal scroll view around content like
+/// that measures its content as exactly its own width: the extra tiles are
+/// then clipped rather than reachable and every drag springs back (measured on
+/// device — it is why `ConversationImageStrip` wraps in a grid instead).
+private struct WalkthroughThumbnailStrip: View {
+    let stills: [WalkthroughShot]
+    let gallery: [PreviewImage]
+
+    private static let tile = CGSize(width: 104, height: 64)
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            // Tight within a pair, loose between them: the gaps are what say
+            // which before belongs to which after, now that the labels are
+            // gone.
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(stills) { shot in
+                    let paths = [shot.before, shot.after].compactMap { $0 }
+                    HStack(spacing: 4) {
+                        ForEach(Array(paths.enumerated()), id: \.offset) { _, path in
+                            MediaImage(
+                                path: path,
+                                gallery: gallery,
+                                galleryIndex: gallery.firstIndex { $0.id == path } ?? 0,
+                                thumbnail: Self.tile
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 1)
+        }
+        // The strip is the card's own width, but scrolls to the card's edges:
+        // a tile cut off by the padding looks like a rendering bug, where one
+        // that runs under the edge reads as "there is more this way".
+        .padding(.horizontal, -14)
+        .contentMargins(.horizontal, 14, for: .scrollContent)
+    }
+}
+
 /// The demo recording. `VideoPlayer` streams it over the same range-enabled
 /// media route the web `<video>` uses, so it seeks without downloading first.
 private struct WalkthroughVideo: View {
@@ -207,6 +262,9 @@ private struct MediaImage: View {
     let path: String
     var gallery: [PreviewImage] = []
     var galleryIndex: Int = 0
+    /// Set to render at a fixed size, cropped to fill — the folded card's
+    /// strip. Unset, the still is shown whole at the card's width.
+    var thumbnail: CGSize?
 
     @State private var data: Data?
     /// The still's own aspect ratio. `DataImage` renders `scaledToFill`, which
@@ -220,17 +278,33 @@ private struct MediaImage: View {
     var body: some View {
         Group {
             if let data {
-                ExpandableDataImage(data: data, gallery: gallery, galleryIndex: galleryIndex)
-                    .aspectRatio(ratio ?? 16 / 9, contentMode: .fit)
-                    // A tall screenshot would otherwise take the whole screen
-                    // and bury the rest of the walkthrough under it.
-                    .frame(maxWidth: .infinity, maxHeight: 420)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                let image = ExpandableDataImage(
+                    data: data, gallery: gallery, galleryIndex: galleryIndex
+                )
+                if let thumbnail {
+                    image
+                        .frame(width: thumbnail.width, height: thumbnail.height)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        // Most of what these show is a screenshot of a light
+                        // UI on a light card, which without an edge dissolves
+                        // into the card instead of reading as a picture.
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(OS1VisualStyle.border, lineWidth: 0.5)
+                        }
+                } else {
+                    image
+                        .aspectRatio(ratio ?? 16 / 9, contentMode: .fit)
+                        // A tall screenshot would otherwise take the whole
+                        // screen and bury the rest of the walkthrough under it.
+                        .frame(maxWidth: .infinity, maxHeight: 420)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
             } else {
                 Button { retryCount += 1 } label: {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(.fill.tertiary)
-                        .frame(height: 120)
+                        .frame(width: thumbnail?.width, height: thumbnail?.height ?? 120)
                         .overlay {
                             if failed {
                                 Image(systemName: "arrow.clockwise")
