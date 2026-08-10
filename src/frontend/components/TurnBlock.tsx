@@ -202,7 +202,7 @@ export const TurnBlock = React.memo(function TurnBlock({
               // Phones keep the rows flush to preserve command width.
               <div
                 key={sec.items[0].id}
-                className="-ml-px desktop:ml-3"
+                className="-ml-px desktop:ml-1"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
                 {sec.items.map((entry) => (
