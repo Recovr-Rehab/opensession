@@ -4,6 +4,7 @@ import { TEAM } from "./UserPicker";
 import { shortModelLabel, splitModelOptions } from "./ModelEffortSelect";
 import { Menu } from "../ui/menu";
 import { Button } from "../ui/button";
+import { DeviceCode } from "../ui/device-code";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import {
 	SettingCard,
@@ -1578,9 +1579,11 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 								and sign in to the ChatGPT account.
 							</div>
 							<div className="mt-1.5">2. Enter this one-time code (expires in 15 min):</div>
-							<div className="my-2 font-mono text-page-title font-bold tracking-[0.12em] text-fg">
-								{login.code}
-							</div>
+							{login.code && (
+								<div className="my-2">
+									<DeviceCode code={login.code} className="text-section-title" />
+								</div>
+							)}
 							<div className="text-dim">
 								Waiting for the sign-in to complete… this panel updates by itself.
 							</div>
