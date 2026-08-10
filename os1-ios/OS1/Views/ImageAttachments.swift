@@ -96,6 +96,11 @@ struct PreviewImage: Identifiable, Equatable {
         case data(Data)
         case conversation(source: String, sessionId: String)
         case media(path: String)
+        /// A file in a session's scratch folder, by path — what a transcript's
+        /// asset chip points at. Its own case rather than a `conversation`
+        /// source: assets are served from their own route, and the path in
+        /// that URL is what makes them resolvable at all.
+        case asset(sessionId: String, path: String)
     }
 
     let id: String
@@ -435,7 +440,7 @@ struct ConversationImageStrip: View {
 /// interruptible tracking; at the fit scale the zoom view hands horizontal
 /// drags straight to it (see `ZoomScrollView.zoomDidChange`), and zoomed in it
 /// keeps them to pan the photo.
-private struct FullScreenImagePreview: View {
+struct FullScreenImagePreview: View {
     let items: [PreviewImage]
 
     @Environment(\.dismiss) private var dismiss
@@ -596,6 +601,11 @@ private struct PreviewPage: View {
                 image = loaded.flatMap(UIImage.init(data:))
             case .media(let path):
                 let loaded = try? await OS1API.media(path: path)
+                image = loaded.flatMap(UIImage.init(data:))
+            case .asset(let sessionId, let path):
+                let loaded = try? await OS1API.assetData(
+                    sessionId: sessionId, path: path
+                )
                 image = loaded.flatMap(UIImage.init(data:))
             }
             failed = image == nil

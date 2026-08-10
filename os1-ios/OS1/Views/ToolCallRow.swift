@@ -14,8 +14,12 @@ struct ToolCallRow: View {
     @State private var detail: ToolDetail?
     /// The worker sheet opened from a Task row.
     @State private var openWorker: WorkerLink?
+    /// The picture an asset chip lifted over the conversation, when the file
+    /// it named was one.
+    @State private var assetPicture: AssetPicture?
     /// Installed by the iOS session screen; absent everywhere else, which is
-    /// what keeps the asset chip from appearing where nothing can open it.
+    /// what keeps a chip for a file that has to PUSH from appearing where
+    /// there is no stack to push onto.
     @Environment(\.openPanel) private var openPanel
 
     private var presentation: ToolPresentation { item.presentation }
@@ -50,6 +54,7 @@ struct ToolCallRow: View {
                 worktreeDir: worktreeDir
             )
         }
+        .assetPicturePreview($assetPicture)
     }
 
     /// Identifies the sheet's subject; `sheet(item:)` needs Identifiable.
@@ -136,11 +141,18 @@ struct ToolCallRow: View {
             }
 
             // Same dead end for a written asset: the row names a file the
-            // conversation itself can't show. The chip opens the file itself,
-            // one level deeper — back is the chevron, or the edge swipe.
-            if let assetPath = item.assetPath, openPanel.isAvailable {
+            // conversation itself can't show. The chip opens the file itself —
+            // a picture over the conversation, anything else one level deeper
+            // (see AssetOpen).
+            if let assetPath = item.assetPath,
+               AssetOpen.canOpen(assetPath, openPanel: openPanel) {
                 RowChip(title: "Open") {
-                    openPanel(.asset(sessionId: sessionId, path: assetPath))
+                    AssetOpen.open(
+                        sessionId: sessionId,
+                        path: assetPath,
+                        openPanel: openPanel,
+                        picture: $assetPicture
+                    )
                 }
                 .accessibilityLabel("Open this file")
             }

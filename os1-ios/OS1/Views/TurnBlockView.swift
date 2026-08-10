@@ -531,17 +531,19 @@ struct FileChipView: View {
 
 /// One scratch file the turn wrote: the kind's glyph and the file's name.
 ///
-/// Tapping opens the file over the conversation, the same push the tool row's
-/// chip makes — so an artifact can be checked where it was announced instead
-/// of hunted for in the Assets tab, and the chevron and the edge swipe bring
-/// the conversation back. Assets live outside every worktree, so unlike a
-/// touched file there is no diff to show and nothing else in the app knows
-/// what the path means.
+/// Tapping opens the file itself, the same way the tool row's chip does — a
+/// picture over the conversation, anything else one level deeper (see
+/// `AssetOpen`) — so an artifact can be checked where it was announced instead
+/// of hunted for in the Assets tab. Assets live outside every worktree, so
+/// unlike a touched file there is no diff to show and nothing else in the app
+/// knows what the path means.
 struct AssetChipView: View {
     let sessionId: String
     let path: String
 
     @Environment(\.openPanel) private var openPanel
+    /// The picture this chip lifted over the conversation, when it named one.
+    @State private var picture: AssetPicture?
 
     private var asset: OS1API.SessionAsset {
         OS1API.SessionAsset(path: path, size: 0, mtime: "")
@@ -549,14 +551,20 @@ struct AssetChipView: View {
 
     var body: some View {
         Button {
-            openPanel(.asset(sessionId: sessionId, path: path))
+            AssetOpen.open(
+                sessionId: sessionId,
+                path: path,
+                openPanel: openPanel,
+                picture: $picture
+            )
         } label: {
             chip
         }
         .buttonStyle(.plain)
-        // The Mac app installs no handler; a chip that does nothing when
+        // The Mac app can open neither kind; a chip that does nothing when
         // tapped is worse than one that plainly can't be.
-        .disabled(!openPanel.isAvailable)
+        .disabled(!AssetOpen.canOpen(path, openPanel: openPanel))
+        .assetPicturePreview($picture)
         .accessibilityLabel(Text(verbatim: asset.name))
         .accessibilityHint("Opens this file")
     }
