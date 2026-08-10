@@ -76,7 +76,6 @@ import { SessionSplit, type SplitSide } from "./components/SessionSplit";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { UpdatePill } from "./components/UpdatePill";
-import { DesktopUpdateToast } from "./components/DesktopUpdateToast";
 import {
 	IconArchive,
 	IconUnarchive,
@@ -3257,7 +3256,6 @@ export function App(
 			<RestartOverlay connected={connected} addHandler={addHandler} />
 			<MediaLightboxHost />
 			<ToastHost />
-			<DesktopUpdateToast />
 			<Modal.Root
 				open={runningCloseConfirmation !== null}
 				onOpenChange={(open) => {

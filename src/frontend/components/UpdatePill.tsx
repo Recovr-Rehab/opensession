@@ -15,15 +15,49 @@ interface Props {
  *  protocol-break deploy converges in under a minute. */
 const FORCE_GRACE_MS = 20_000;
 
+type ShellUpdateState = {
+  state: "idle" | "available" | "downloaded";
+  version?: string | null;
+};
+
+/** The mac shell's updater bridge — absent in a browser. `onState` replays the
+ *  current state on subscribe, so a reload re-surfaces a staged update. */
+function os1Updates():
+  | {
+      onState: (cb: (s: ShellUpdateState) => void) => (() => void) | void;
+      install: () => void;
+    }
+  | undefined {
+  return (
+    window as {
+      os1?: {
+        updates?: {
+          onState: (cb: (s: ShellUpdateState) => void) => (() => void) | void;
+          install: () => void;
+        };
+      };
+    }
+  ).os1?.updates;
+}
+
 /**
- * "A new version is available" nudge. Fired by the server's `frontend_updated`
- * broadcast after an in-process rebuild (no restart, so running sessions are
- * untouched).
+ * The one "a new version is available" nudge, for both kinds of update:
  *
- * Refreshing is normally optional — new page loads already get the new build;
- * this just nudges already-open tabs — so it's non-blocking (it never covers
- * the composer). Desktop shows a toast docked to the sidebar bottom; phones
- * show a compact "Update" pill in the top bar, right after the brand logo.
+ *  - The **web bundle**, from the server's `frontend_updated` broadcast after
+ *    an in-process rebuild (no restart, so running sessions are untouched) —
+ *    a page refresh picks it up.
+ *  - The **mac shell binary**, from the Squirrel updater behind
+ *    `window.os1.updates` (os1-mac/src/preload.js) — a relaunch installs it.
+ *    We stay quiet through its "available" (still downloading) state: there is
+ *    nothing to act on until it reports "downloaded".
+ *
+ * A staged shell update wins, because relaunching also loads the newest
+ * frontend — so there is never more than one update message on screen.
+ *
+ * Acting is normally optional — new page loads already get the new build; this
+ * just nudges already-open tabs — so it's non-blocking (it never covers the
+ * composer). Desktop shows a toast docked to the sidebar bottom; phones show a
+ * compact pill in the top bar, right after the brand logo.
  *
  * `force: true` broadcasts (POST /api/admin/frontend-reload — sent before a
  * server-side protocol change that old bundles can't follow) auto-reload
@@ -36,10 +70,16 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
   const [forceAt, setForceAt] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [shellVersion, setShellVersion] = useState<string | null>(null);
+  const [shellReady, setShellReady] = useState(false);
 
   function refresh() {
     if (refreshing) return;
     setRefreshing(true);
+    if (shellReady) {
+      os1Updates()?.install();
+      return;
+    }
     // Let feedback paint before a potentially slow network-first navigation.
     setTimeout(() => location.reload(), 50);
   }
@@ -68,6 +108,16 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
   useEffect(() => subscribeFrontendVersion(() => setShow(true)), []);
 
   useEffect(() => {
+    const updates = os1Updates();
+    if (!updates?.onState) return;
+    const off = updates.onState((s) => {
+      setShellReady(s.state === "downloaded");
+      setShellVersion(s.version ?? null);
+    });
+    return typeof off === "function" ? off : undefined;
+  }, []);
+
+  useEffect(() => {
     if (forceAt == null) return;
     const tick = () => {
       const left = Math.max(0, Math.ceil((forceAt - Date.now()) / 1000));
@@ -87,9 +137,23 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
     };
   }, [forceAt]);
 
-  if (!show) return null;
+  if (!show && !shellReady) return null;
 
   const forced = secondsLeft != null;
+  // A staged shell update replaces the refresh with a relaunch, which installs
+  // the binary AND loads the newest frontend. Forced reloads still win: they
+  // exist because the open bundle can no longer talk to the server.
+  const restart = shellReady && !forced;
+  const action = refreshing
+    ? restart
+      ? "Restarting…"
+      : "Refreshing…"
+    : forced
+      ? "Refresh now"
+      : restart
+        ? "Restart"
+        : "Refresh";
+  const detail = restart ? shellVersion : by;
 
   if (variant === "pill") {
     return (
@@ -111,10 +175,18 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
         title={
           forced
             ? `Updating in ${secondsLeft}s — tap to refresh now.`
-            : `A new update is available${by ? ` (${by})` : ""}. Tap to refresh.`
+            : restart
+              ? `OS¹ ${shellVersion ?? "update"} is ready. Tap to restart and install it.`
+              : `A new update is available${by ? ` (${by})` : ""}. Tap to refresh.`
         }
       >
-        {refreshing ? "Refreshing…" : forced ? `Update ${secondsLeft}s` : "Update"}
+        {refreshing
+          ? restart
+            ? "Restarting…"
+            : "Refreshing…"
+          : forced
+            ? `Update ${secondsLeft}s`
+            : "Update"}
       </button>
     );
   }
@@ -132,11 +204,15 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
     >
       <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
         <span className="max-w-full truncate text-label font-medium leading-[1.3] text-fg">
-          {forced ? `Updating in ${secondsLeft}s…` : "New update available"}
+          {forced
+            ? `Updating in ${secondsLeft}s…`
+            : restart
+              ? "Update ready"
+              : "New update available"}
         </span>
-        {by && (
-          <Tooltip label={by} side="top" multiline>
-            <span className="max-w-full truncate text-meta font-medium leading-[1.3] text-dim">{by}</span>
+        {detail && (
+          <Tooltip label={detail} side="top" multiline>
+            <span className="max-w-full truncate text-meta font-medium leading-[1.3] text-dim">{detail}</span>
           </Tooltip>
         )}
       </div>
@@ -146,7 +222,7 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
           onClick={refresh}
           disabled={refreshing}
         >
-          {refreshing ? "Refreshing…" : forced ? "Refresh now" : "Refresh"}
+          {action}
         </button>
       </div>
     </div>
