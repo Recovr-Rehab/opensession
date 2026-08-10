@@ -14,7 +14,6 @@ import {
 	SIDEBAR_BAND_TOGGLE,
 	SIDEBAR_BAND_TOGGLE_INSET,
 	SIDEBAR_AUTO_COG,
-	SIDEBAR_FILTER_DOT,
 	SIDEBAR_GROUP,
 	SIDEBAR_GROUP_CHEVRON,
 	SIDEBAR_GROUP_COUNT,
@@ -155,7 +154,6 @@ import {
 	setSidebarFeedVisible,
 } from "../lib/sidebar-feeds";
 import {
-	DEFAULT_GROUP_BY,
 	DEFAULT_PROJECT,
 	EXPANDED_KEY,
 	FEED_FILTERS_KEY,
@@ -514,12 +512,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// a face picked there is the sidebar you come back to.
 	const filter = useSidebarFilter();
 	const [filterOpen, setFilterOpen] = useState(false);
-	// Any non-default choice in that popover — what puts the dot on the button.
-	const hasFilter =
-		filter.groupBy !== DEFAULT_GROUP_BY ||
-		filter.repo !== "all" ||
-		filter.person !== "me" ||
-		filter.prs !== "default";
 	const filterBtnRef = useRef<HTMLButtonElement>(null);
 	// The phone stand-in for the header filter button (portaled into the top
 	// bar next to Search). The popover anchors to whichever button is live.
@@ -4226,16 +4218,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								filterOpen
 									? "border-line-strong bg-pressed"
 									: "hover:bg-hover",
-								// Exactly one resting colour, in the old sheet's precedence:
-								// a set filter tints the glyph and keeps that tint through
-								// hover and through the open state; otherwise the button
-								// lifts to full contrast under the pointer or while open.
-								hasFilter
-									? "text-accent"
-									: filterOpen
-										? "text-fg"
-										: "text-dim hover:text-fg",
-								hasFilter && SIDEBAR_FILTER_DOT,
+								// A set filter is already spelled out in the header (the repo
+								// chip) and in the popover itself, so the button stays a plain
+								// glyph: full contrast under the pointer or while open.
+								filterOpen ? "text-fg" : "text-dim hover:text-fg",
 							)}
 							onClick={() => setFilterOpen((o) => !o)}
 						>
@@ -4289,7 +4275,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<>
 						<button
 							ref={mobileFilterBtnRef}
-							className={mobileFilterBtn(filterOpen || hasFilter)}
+							className={mobileFilterBtn(filterOpen)}
 							onClick={() => setFilterOpen((o) => !o)}
 							aria-label="Group, filter & sort"
 						>
