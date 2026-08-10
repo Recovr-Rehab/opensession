@@ -822,8 +822,8 @@ struct SessionView: View {
         Button {
             showWorktreeInfo = true
         } label: {
-            HStack(spacing: 6) {
-                RepoTile(name: viewModel.session.effectiveRepo, size: 14)
+            HStack(spacing: 5) {
+                RepoTile(name: viewModel.session.effectiveRepo, size: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     // No run dot up here: the bar is identity and navigation,
                     // and the running state now reads where the work is — the
@@ -832,7 +832,7 @@ struct SessionView: View {
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(OS1VisualStyle.text)
                         .fixedSize(horizontal: true, vertical: false)
-                        .frame(width: 170, alignment: .leading)
+                        .frame(width: 169, alignment: .leading)
                         .clipped()
                         .mask(titleTrailingFade)
                     if !dynamicTypeSize.isAccessibilitySize {
@@ -840,7 +840,7 @@ struct SessionView: View {
                             .font(.footnote)
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .fixedSize(horizontal: true, vertical: false)
-                            .frame(width: 170, alignment: .leading)
+                            .frame(width: 169, alignment: .leading)
                             .clipped()
                             .mask(titleTrailingFade)
                     }
@@ -852,7 +852,7 @@ struct SessionView: View {
             // The semantic glass BUTTON style belongs to the control; never
             // put `.glassEffect` on this label. That nested a second surface in
             // the bar's glass group and let menu morphs flatten its controls.
-            .padding(.leading, 6)
+            .padding(.leading, 4)
             .padding(.trailing, 10)
             .padding(.vertical, 1)
             .frame(width: 190, alignment: .leading)
