@@ -71,10 +71,12 @@
 	   expand/collapse morph is driven from Composer.tsx — Motion writes the
 	   radius inline, so it has to be able to READ the resting value rather than
 	   carry a second copy of it. Same corner as the surfaces physically
-	   attached to the composer (the queue flap, the mention popup): the box
-	   used to sit at 64px (32px inline from Motion), the only surface on a
-	   session page rounder than 18.9px. */
-	--composer-radius: calc(18px * var(--rf));
+	   attached to the composer (the queue flap, the agents flap), which read
+	   this token rather than a `rounded-*` step of their own so the seam stays
+	   flush. The composer is deliberately the roundest surface on a session
+	   page — it is the one thing you touch — so it sits a step above the
+	   panels around it instead of matching them. */
+	--composer-radius: calc(24px * var(--rf));
 	--bg-panel: #262626;
 	--bg-hover: #2e2e2e;
 	--bg-active: #353535;

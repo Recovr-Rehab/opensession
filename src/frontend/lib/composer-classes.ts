@@ -184,11 +184,14 @@ export const fileChipSub = "text-meta text-faint";
    composer box. The negative bottom margin is what does the tucking — the
    composer is a later positioned sibling, so it paints over the seam.
 
+   Its top corner reads `--composer-radius` rather than a `rounded-*` step,
+   so the flap keeps matching the box it is flush with when that token moves.
+
    `border-x border-t` rather than `border` + `border-b-0`: the bottom edge has
    to be `border-bottom-style: none`, not a zero-width solid, because the
    composer's own hairline continues it. `border-b-0` leaves the style behind. */
 export const composerQueue =
-	"relative -mb-3.5 flex flex-col gap-2 rounded-t-xl border-x border-t border-[color:var(--composer-border)] bg-[color-mix(in_srgb,var(--bg-panel)_70%,var(--control-surface))] px-3.5 pt-2.5 pb-[26px]";
+	"relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t border-[color:var(--composer-border)] bg-[color-mix(in_srgb,var(--bg-panel)_70%,var(--control-surface))] px-3.5 pt-2.5 pb-[26px]";
 export const composerQueueTitle = "text-[12px] font-semibold text-faint";
 export const composerQueueList = "flex flex-col gap-2";
 /** One queued/steered row. The floor is one line of body text, so a row whose
