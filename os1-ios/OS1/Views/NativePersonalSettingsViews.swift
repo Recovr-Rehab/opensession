@@ -10,10 +10,6 @@ struct NotificationsSettingsView: View {
     @AppStorage("os1.notifications.whenToNotify") private var whenToNotify = "background"
     @AppStorage("os1.notifications.needsInput") private var needsInputAlerts = true
     @AppStorage("os1.notifications.runComplete") private var runCompleteAlerts = true
-    /// Device-local for the same reason the alerts above are: a Taptic Engine
-    /// belongs to this phone, not to the account signed into it — and the web
-    /// has no counterpart to sync with.
-    @AppStorage(Haptics.preferenceKey) private var haptics = true
 
     var body: some View {
         Form {
@@ -38,35 +34,8 @@ struct NotificationsSettingsView: View {
                 Toggle("Session needs input", isOn: $needsInputAlerts)
                 Toggle("Session run completes", isOn: $runCompleteAlerts)
             }
-
-            #if os(iOS)
-            // Its own section rather than a fourth row under Alerts: the taps
-            // below answer something you just did, where an alert tells you
-            // about something that happened while you weren't looking. It
-            // lives on this screen because it is the same KIND of setting as
-            // the completion sound above — an output channel this device
-            // owns — and not in Appearance, which is what the app looks like,
-            // or Preferences, which is the set that follows you to the web.
-            Section {
-                Toggle("Haptic feedback", isOn: $haptics)
-            } header: {
-                Text("Haptics")
-            } footer: {
-                Text(
-                    "A tap when a message sends, a question is answered or a run is stopped. This device only — silent mode doesn't affect it, and the system's own Vibration setting turns it off everywhere."
-                )
-            }
-            #endif
         }
         .navigationTitle("Notifications")
-        #if os(iOS)
-        // Switching it on plays the send cue once, so the control demonstrates
-        // what it does instead of describing it — and proves the engine works
-        // on this device before you go looking for the tap in a composer.
-        .onChange(of: haptics) { _, on in
-            if on { Haptics.play(.send) }
-        }
-        #endif
         .onChange(of: pushAlerts) { _, enabled in
             guard enabled else { return }
             Task {
@@ -80,10 +49,15 @@ struct NotificationsSettingsView: View {
 
 /// Everything about how you work with a session: the message box, what a
 /// follow-up does mid-run, how much of a turn the transcript shows, voice, and
-/// the standing prompt. All server-side per-user prefs, so it matches the web
-/// (Settings → Preferences). Appearance next door is only what this device
-/// looks like. The `os1.*` AppStorage keys stay under their original names —
-/// they are the offline cache, not a user-facing label.
+/// the standing prompt. Appearance next door is only what this device looks
+/// like. The `os1.*` AppStorage keys stay under their original names — they
+/// are the offline cache, not a user-facing label.
+///
+/// Nearly all of it is server-side per-user prefs, so it matches the web
+/// (Settings → Preferences). Haptics is the exception and says so in its own
+/// footer: it belongs with how sending FEELS rather than with what the app
+/// looks like, but a Taptic Engine is this phone's — there is no web control
+/// to keep in step with, and the Mac in the same account has nothing to play.
 struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.defaultModel") private var nativeDefaultModel = ""
     @AppStorage("os1.composer.sendKey") private var nativeSendKey = "enter"
@@ -91,6 +65,10 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.busySendMod") private var nativeBusySendMod = "steer"
     @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "auto"
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
+    /// The one control on this screen that stays on the device — see the type
+    /// note above. It is deliberately not in `seededPrefs`/`commit()`: those
+    /// are the server round-trip, and this value never makes that trip.
+    @AppStorage(Haptics.preferenceKey) private var haptics = true
 
     @State private var models: [SettingsModelOption]
     @State private var defaultModel: String
@@ -204,6 +182,22 @@ struct PreferencesSettingsView: View {
                 #endif
             }
 
+            #if os(iOS)
+            // Directly under Sending, because sending is what it mostly
+            // answers — and its own section rather than a row in there,
+            // because that section's footer is about where a message goes,
+            // which has nothing to do with what the tap feels like.
+            Section {
+                Toggle("Haptic feedback", isOn: $haptics)
+            } header: {
+                Text("Feel")
+            } footer: {
+                Text(
+                    "A tap when a message sends, a question is answered or a run is stopped. Unlike the rest of this screen it stays on this device — silent mode doesn't affect it, and the system's own Vibration setting turns it off everywhere."
+                )
+            }
+            #endif
+
             Section {
                 Picker("Tool calls and messages", selection: $turnActivity) {
                     Text("Fold tool calls").tag("messages")
@@ -231,6 +225,14 @@ struct PreferencesSettingsView: View {
             PersonalPromptSection()
         }
         .navigationTitle("Preferences")
+        #if os(iOS)
+        // Switching it on plays the send cue once, so the control demonstrates
+        // what it does instead of describing it — and proves the engine works
+        // on this device before you go looking for the tap in a composer.
+        .onChange(of: haptics) { _, on in
+            if on { Haptics.play(.send) }
+        }
+        #endif
         .task { await load() }
         .onChange(of: defaultModel) { _, _ in commit() }
         .onChange(of: sendKey) { _, _ in commit() }
