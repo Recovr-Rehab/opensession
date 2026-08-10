@@ -1,10 +1,12 @@
 // How a turn's folded work (tool calls + intermediate assistant messages)
-// displays in the session. "messages" is the default: the turn's in-between
-// notes read as normal transcript and only the tool calls fold away, because
-// the narration is the part worth reading and a Bash invocation almost never
-// is. "collapsed" folds both; "auto" opens the whole fold while it is running
-// and "expanded" keeps it open. Individual tool rows are separate disclosures
-// and remain closed either way.
+// displays in the session. "auto" is the default: the fold opens while the
+// turn runs, so the work is visible as it happens, and closes the moment the
+// turn settles. Closing it takes the notes with it, which is the part
+// "messages" cannot do — there the in-between notes always read as normal
+// transcript and only the tool calls fold away, so the header has nothing to
+// close. "collapsed" folds everything, live included; "expanded" keeps every
+// fold open. Individual tool rows are separate disclosures and remain closed
+// either way.
 // A makeUserPref instance — see lib/user-pref for the server-side ui-prefs
 // hydrate pattern (MacBook, iPhone Safari and the installed PWA all have
 // separate localStorage, which is why "I set it but it's still collapsed
@@ -18,7 +20,7 @@ const pref = makeUserPref<TurnActivityPref>({
 	localKey: "opensession-turn-activity",
 	prefKey: "turn-activity",
 	changeEvent: "opensession-turn-activity-changed",
-	defaultValue: "messages",
+	defaultValue: "auto",
 	decode: (v) =>
 		v === "messages" || v === "auto" || v === "expanded" || v === "collapsed"
 			? v

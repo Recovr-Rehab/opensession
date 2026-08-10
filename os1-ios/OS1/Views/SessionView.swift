@@ -48,7 +48,7 @@ struct SessionView: View {
     /// How work folds start out: messages (folded, but the turn's notes still
     /// read as transcript) / collapsed / expanded / auto (open while the turn
     /// is live). Set in Settings → Preferences, shared with the web.
-    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "messages"
+    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "auto"
 
     /// Output arrived while the reader was scrolled up. Turns the return pill
     /// from a navigation aid into a notification.

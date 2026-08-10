@@ -73,17 +73,21 @@ struct TurnBlockView: View {
                         }
                     }
                 }
-                .padding(.leading, 12)
+                // The rail marks what the header can actually close, so it
+                // appears only when the fold is open. Under the "messages"
+                // preference a folded turn still shows its notes, and those
+                // are NOT collapsible — putting them in a rail would offer a
+                // container the header cannot shut. Folded, the notes sit
+                // flush and read as ordinary transcript, which is the whole
+                // point of that preference.
+                .padding(.leading, state.expanded ? 12 : 0)
                 .padding(.top, 2)
-                // What marks this content as the turn's insides is the rail,
-                // not the text colour. An 8pt inset on its own was too small
-                // to read as structure, which left the dimming to say
-                // "inside the fold" by itself — and that costs legibility on
-                // the one part of a turn worth reading.
                 .overlay(alignment: .leading) {
-                    Rectangle()
-                        .fill(OS1VisualStyle.border)
-                        .frame(width: 1)
+                    if state.expanded {
+                        Rectangle()
+                            .fill(OS1VisualStyle.border)
+                            .frame(width: 1)
+                    }
                 }
                 .transition(.opacity)
             }

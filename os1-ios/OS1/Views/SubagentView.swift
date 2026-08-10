@@ -12,7 +12,7 @@ struct SubagentView: View {
     let worktreeDir: String?
 
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "messages"
+    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "auto"
 
     @State private var transcript: SubagentTranscript?
     @State private var blocks: [TranscriptBlock] = []

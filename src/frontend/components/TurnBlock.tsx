@@ -58,16 +58,16 @@ export const TurnBlock = React.memo(function TurnBlock({
   const messages = items.filter((it) => it.type === "assistant");
 
   // Default fold state follows the preference (Settings → Preferences) and
-  // nothing else. The default ("messages") folds the tool calls and nothing
-  // else; "collapsed" folds the notes away too. Both stay folded even during
-  // a live turn — the work line's tail reports the running tool. "auto"
-  // is the opt-in mode that opens only the turn fold while it is working, and
-  // folds it again the moment the turn settles — a failed step or a screenshot
-  // inside the turn used to pin it open forever, which is the one thing both
-  // "Always folded" and "Expand while running" promise never happens. The fold
-  // line already reports failures ("· 2 failed", in red); media is one click
-  // away. ToolCallBlock owns its own disclosure, so this never expands a Bash
-  // input (including generated comment metadata).
+  // nothing else. The default ("auto") opens only the turn fold while it is
+  // working and folds it again the moment the turn settles — a failed step or
+  // a screenshot inside the turn used to pin it open forever, which is the one
+  // thing both "Always folded" and "Expand while running" promise never
+  // happens. The fold line already reports failures ("· 2 failed", in red);
+  // media is one click away. "messages" folds the tool calls and nothing else,
+  // "collapsed" folds the notes away too, and both stay folded even during a
+  // live turn — the work line's tail reports the running tool. ToolCallBlock
+  // owns its own disclosure, so this never expands a Bash input (including
+  // generated comment metadata).
   const [pref, setPref] = useState(getTurnActivityPref);
   useEffect(
     () => onTurnActivityChanged(() => setPref(getTurnActivityPref())),
@@ -188,11 +188,15 @@ export const TurnBlock = React.memo(function TurnBlock({
       </button>
 
       {(expanded || messagesInline) && (
-        // The rail is what says "these are the turn's insides" — the notes
-        // read as ordinary transcript, so without it a folded turn's
-        // narration is only distinguishable from the answer by being dimmer,
-        // which is the wrong thing to lean on for the prose worth reading.
-        <div className="mt-0.5 ml-1 border-l border-line pl-3">
+        // The rail marks what the header can actually close, so it appears
+        // only when the fold is open. Under the "messages" preference a
+        // folded turn still shows its notes, and those are NOT collapsible —
+        // putting them in a rail would offer a container the header cannot
+        // shut. Folded, the notes sit flush and read as ordinary transcript,
+        // which is the whole point of that preference.
+        <div
+          className={cn("mt-0.5", expanded && "ml-1 border-l border-line pl-3")}
+        >
           {sections.map((sec) =>
             sec.kind === "msg" ? (
               <TurnMessage

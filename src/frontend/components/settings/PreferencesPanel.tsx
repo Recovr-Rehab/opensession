@@ -488,9 +488,10 @@ export function PreferencesPanel() {
 				/>
 			</SettingCard>
 			<SettingsHint>
-				By default a turn's in-between messages read as normal transcript and
-				only its tool calls fold away. Expanding a turn does not open its
-				individual tool inputs.
+				By default a turn is open while it runs and folds away once it
+				settles. "Fold tool calls" instead keeps every turn's in-between
+				messages reading as normal transcript, so only its tool calls ever
+				fold. Expanding a turn does not open its individual tool inputs.
 			</SettingsHint>
 
 			<DeskVoicePanel />

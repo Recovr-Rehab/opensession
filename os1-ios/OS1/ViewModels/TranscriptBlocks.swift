@@ -157,6 +157,9 @@ struct WorkTurn: Identifiable, Equatable {
         if hasMedia || hasFailure, toolCount <= Self.pinOpenStepLimit { return true }
         switch preference {
         case "expanded": return true
+        // "auto" is the default: open while the work is happening, folded the
+        // moment it settles — which is also the only setting where a finished
+        // turn's notes can be put away, since the header then owns them.
         case "auto": return isLive
         // "messages" and "collapsed" both start folded — they differ only in
         // whether the turn's notes render outside the fold (TurnBlockView).

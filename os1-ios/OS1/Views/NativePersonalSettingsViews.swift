@@ -58,7 +58,7 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.sendKey") private var nativeSendKey = "enter"
     @AppStorage("os1.composer.busySend") private var nativeBusySend = "queue"
     @AppStorage("os1.composer.busySendMod") private var nativeBusySendMod = "steer"
-    @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "messages"
+    @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "auto"
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
 
     @State private var models: [SettingsModelOption]
@@ -91,14 +91,14 @@ struct PreferencesSettingsView: View {
             "send-key": defaults.string(forKey: "os1.composer.sendKey") ?? "enter",
             "busy-send": defaults.string(forKey: "os1.composer.busySend") ?? "queue",
             "busy-send-mod": defaults.string(forKey: "os1.composer.busySendMod") ?? "steer",
-            "turn-activity": defaults.string(forKey: "os1.appearance.turnActivity") ?? "messages",
+            "turn-activity": defaults.string(forKey: "os1.appearance.turnActivity") ?? "auto",
         ]
         _seededPrefs = State(initialValue: seeded)
         _defaultModel = State(initialValue: seeded["default-model"] ?? "")
         _sendKey = State(initialValue: seeded["send-key"] ?? "enter")
         _busySend = State(initialValue: seeded["busy-send"] ?? "queue")
         _busySendMod = State(initialValue: seeded["busy-send-mod"] ?? "steer")
-        _turnActivity = State(initialValue: seeded["turn-activity"] ?? "messages")
+        _turnActivity = State(initialValue: seeded["turn-activity"] ?? "auto")
         _models = State(initialValue: SettingsCache.value("model-catalog", as: ModelCatalogSettings.self)?.models ?? [])
     }
 
@@ -183,7 +183,7 @@ struct PreferencesSettingsView: View {
             } header: {
                 Text("Transcript")
             } footer: {
-                Text("How each turn's working folds in a session. By default the turn's in-between messages read as normal transcript and only its tool calls fold away. Expanding a turn does not open its individual tool inputs.")
+                Text("How each turn's working folds in a session. By default a turn is open while it runs and folds away once it settles. \"Fold tool calls\" instead keeps every turn's in-between messages reading as normal transcript, so only its tool calls ever fold. Expanding a turn does not open its individual tool inputs.")
             }
 
             Section {
