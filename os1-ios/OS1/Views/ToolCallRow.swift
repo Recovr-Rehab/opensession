@@ -218,7 +218,10 @@ struct ToolCallRow: View {
                         }
                     case .code, .json:
                         ToolCodeBox(label: detail.inputLabel) {
-                            PlainCodeText(text: detail.inputText)
+                            SyntaxHighlightedCodeText(
+                                text: detail.inputText,
+                                language: detail.inputLanguage ?? "plaintext"
+                            )
                         }
                     case .none:
                         EmptyView()
@@ -234,6 +237,13 @@ struct ToolCallRow: View {
                     ToolCodeBox(label: detail.resultLabel, isError: item.isError) {
                         if detail.resultIsDiff {
                             DiffText(patch: result)
+                        } else if let language = detail.resultLanguage {
+                            SyntaxHighlightedCodeText(
+                                text: result,
+                                language: language,
+                                gutter: detail.resultHasGutter,
+                                requireGutter: detail.resultRequiresGutter
+                            )
                         } else {
                             PlainCodeText(text: result, isError: item.isError)
                         }
@@ -248,9 +258,7 @@ struct ToolCallRow: View {
 
 // MARK: - Code surfaces
 
-/// A labelled code pane. Dark in both appearances, like the web's
-/// `.tool-code-surface`: tool output is machine text and reads better against
-/// a constant surface than against a theme-following one.
+/// A labelled code pane, using the same theme-following GitHub well as the PWA.
 struct ToolCodeBox<Content: View>: View {
     let label: String
     var isError = false
@@ -270,12 +278,12 @@ struct ToolCodeBox<Content: View>: View {
             .frame(maxHeight: 260)
             .padding(8)
             .background(
-                Color(red: 0.051, green: 0.059, blue: 0.075),
+                OS1VisualStyle.codeWell,
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.white.opacity(0.07), lineWidth: 0.5)
+                    .stroke(OS1VisualStyle.codeWellBorder, lineWidth: 0.5)
             }
         }
     }
@@ -293,7 +301,7 @@ struct PlainCodeText: View {
             .foregroundStyle(
                 isError
                     ? OS1VisualStyle.red.opacity(0.85)
-                    : Color.white.opacity(0.72)
+                    : OS1VisualStyle.codeWellText
             )
             .textSelection(.enabled)
     }
@@ -358,9 +366,13 @@ struct ToolDetail: Equatable {
     var inputKind: Kind = .none
     var inputLabel = "Input"
     var inputText = ""
+    var inputLanguage: String?
     var resultLabel = "Output"
     var resultText: String?
     var resultIsDiff = false
+    var resultLanguage: String?
+    var resultHasGutter = false
+    var resultRequiresGutter = false
 
     private static let maxBodyCharacters = 4000
 
@@ -374,6 +386,7 @@ struct ToolDetail: Equatable {
             detail.inputKind = .code
             detail.inputLabel = "Command"
             detail.inputText = bashBody(input)
+            detail.inputLanguage = "bash"
         case "Edit":
             if let patch = diffBody(input) {
                 detail.inputKind = .diff
@@ -382,6 +395,7 @@ struct ToolDetail: Equatable {
             } else {
                 detail.inputKind = .json
                 detail.inputText = clamp(input?.pretty ?? "")
+                detail.inputLanguage = "json"
             }
         case "Write":
             detail.inputKind = .code
@@ -389,6 +403,8 @@ struct ToolDetail: Equatable {
             detail.inputText = clamp(
                 string(input, "content") ?? string(input, "contents") ?? ""
             )
+            detail.inputLanguage = SyntaxHighlighting.language(forPath: filePath(input))
+                ?? "markdown"
         case "Read":
             // The path is already in the summary line; only extra arguments
             // (offset, limit) are worth repeating.
@@ -398,11 +414,13 @@ struct ToolDetail: Equatable {
             if !extras.isEmpty {
                 detail.inputKind = .json
                 detail.inputText = extras
+                detail.inputLanguage = "json"
             }
         default:
             if case .object(let dict)? = input, !dict.isEmpty {
                 detail.inputKind = .json
                 detail.inputText = clamp(input?.pretty ?? "")
+                detail.inputLanguage = "json"
             }
         }
 
@@ -420,6 +438,21 @@ struct ToolDetail: Equatable {
                     ? (hasMedia ? nil : "(empty)")
                     : clamp(text)
                 detail.resultIsDiff = looksLikeDiff(text)
+                if !item.isError, !detail.resultIsDiff {
+                    switch canonical {
+                    case "Read":
+                        detail.resultLanguage = SyntaxHighlighting.language(
+                            forPath: filePath(input)
+                        )
+                        detail.resultHasGutter = detail.resultLanguage != nil
+                    case "Grep":
+                        detail.resultLanguage = grepLanguage(input)
+                        detail.resultHasGutter = detail.resultLanguage != nil
+                        detail.resultRequiresGutter = detail.resultLanguage != nil
+                    default:
+                        break
+                    }
+                }
             }
         }
         return detail
@@ -486,6 +519,29 @@ struct ToolDetail: Equatable {
         return remaining
             .map { "\($0): \(dict[$0]!.pretty.trimmingCharacters(in: .whitespacesAndNewlines))" }
             .joined(separator: "\n")
+    }
+
+    private static func filePath(_ input: JSONValue?) -> String? {
+        for key in ["file_path", "filePath", "path", "notebook_path", "notebookPath"] {
+            if let path = string(input, key) { return path }
+        }
+        return nil
+    }
+
+    private static func grepLanguage(_ input: JSONValue?) -> String? {
+        if let language = SyntaxHighlighting.language(forPath: filePath(input)) {
+            return language
+        }
+        for key in ["glob", "include"] {
+            if let pattern = string(input, key),
+               let ext = pattern.range(
+                   of: #"\.([A-Za-z0-9]+)$"#,
+                   options: .regularExpression
+               ).map({ String(pattern[$0]).dropFirst() }) {
+                return SyntaxHighlighting.language(forExtension: String(ext))
+            }
+        }
+        return SyntaxHighlighting.language(forExtension: string(input, "type"))
     }
 
     private static func string(_ input: JSONValue?, _ key: String) -> String? {

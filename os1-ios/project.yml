@@ -11,6 +11,10 @@ packages:
     # v0.6.0 depends on HighlightSwift by revision, so SwiftPM rejects it
     # under a stable semver rule. Pin the release tag's commit instead.
     revision: c7b12f7b3d77caa188fd1fc056d0f7ce305ef5cd
+  HighlightSwift:
+    url: https://github.com/appstefan/highlightswift
+    # Keep the direct product on the revision SwiftStreamingMarkdown resolves.
+    revision: 99c431b38a1444a5fd6a4978307fbbefe3a7af53
 targets:
   OS1:
     type: application
@@ -20,6 +24,8 @@ targets:
     dependencies:
       - package: SwiftStreamingMarkdown
         product: SwiftStreamingMarkdown
+      - package: HighlightSwift
+        product: HighlightSwift
       # Embedded into the app's PlugIns — Home Screen / Lock Screen widget and
       # the Control Center control, both of which just open "Start an Agent".
       - target: OS1Widgets
@@ -106,6 +112,8 @@ targets:
     dependencies:
       - package: SwiftStreamingMarkdown
         product: SwiftStreamingMarkdown
+      - package: HighlightSwift
+        product: HighlightSwift
     entitlements:
       path: OS1Mac.entitlements
       properties:

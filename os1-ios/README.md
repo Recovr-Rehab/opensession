@@ -64,7 +64,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   to the list) — the same set the sidebar row offers under long press. A
   bounded cache keeps recently visited conversations loaded while their
   off-screen sockets remain disconnected, so returning to a page does not show
-  a loading screen.
+  a loading screen. Fenced Markdown, expanded tool inputs and code assets use
+  the PWA's GitHub light/dark syntax palette. Native-owned code surfaces show
+  plain text immediately while highlighting finishes and keep large files plain.
 - **Workspace details** — tapping the session title opens a native worktree sheet
   with repository and branch metadata, local git status, changed files, pull
   request status, workspace context, and model/reasoning controls, matching

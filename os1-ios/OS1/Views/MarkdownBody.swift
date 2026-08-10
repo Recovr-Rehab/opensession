@@ -237,6 +237,11 @@ private extension MarkdownRenderConfig {
                 codeBackgroundColor: .clear,
                 codeUnderlineColor: .clear
             ),
+            codeBlockConfig: .init(
+                theme: .github,
+                backgroundColor: OS1VisualStyle.markdownCodeWell,
+                foregroundColor: OS1VisualStyle.textDim
+            ),
             blockSpacing: 8,
             thematicBreakColor: OS1VisualStyle.border
         )
@@ -274,6 +279,11 @@ private extension MarkdownRenderConfig {
                 codeTextColor: text,
                 codeBackgroundColor: .clear,
                 codeUnderlineColor: .clear
+            ),
+            codeBlockConfig: .init(
+                theme: .github,
+                backgroundColor: OS1VisualStyle.markdownCodeWell,
+                foregroundColor: OS1VisualStyle.textDim
             ),
             blockSpacing: 12,
             thematicBreakColor: OS1VisualStyle.border

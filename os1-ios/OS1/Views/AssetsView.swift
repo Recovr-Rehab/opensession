@@ -276,11 +276,22 @@ private struct AssetPreview: View {
                 textScroll { MarkdownBody($0) }
             case .text:
                 textScroll { body in
-                    Text(body)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(OS1VisualStyle.text)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let language = SyntaxHighlighting.language(forPath: asset.path) {
+                        ScrollView(.horizontal) {
+                            SyntaxHighlightedCodeText(
+                                text: body,
+                                language: language,
+                                fallbackColor: OS1VisualStyle.text
+                            )
+                            .fixedSize(horizontal: true, vertical: false)
+                        }
+                    } else {
+                        Text(body)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(OS1VisualStyle.text)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             case .opaque:
                 opaquePlaceholder

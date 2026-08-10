@@ -18,6 +18,35 @@ enum OS1VisualStyle {
     static let text = Color(uiColor: .label)
     static let textDim = Color(uiColor: .secondaryLabel)
     static let textFaint = Color(uiColor: .tertiaryLabel)
+    /// Code surfaces mirror the PWA's GitHub-themed wells rather than using a
+    /// permanently dark card in light appearance.
+    static let codeWell = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.051, green: 0.059, blue: 0.075, alpha: 1)
+            : UIColor(red: 0.965, green: 0.973, blue: 0.980, alpha: 1)
+    })
+    static let codeWellBorder = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.06)
+            : UIColor(red: 0.847, green: 0.871, blue: 0.894, alpha: 1)
+    })
+    static let codeWellText = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.714, green: 0.737, blue: 0.784, alpha: 1)
+            : UIColor(red: 0.341, green: 0.376, blue: 0.416, alpha: 1)
+    })
+    static let codeWellGutter = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.337, green: 0.365, blue: 0.420, alpha: 1)
+            : UIColor(red: 0.549, green: 0.584, blue: 0.624, alpha: 1)
+    })
+    /// Markdown fences can sit on the canvas or inside a message bubble. A
+    /// translucent light well stays one step below either surrounding surface.
+    static let markdownCodeWell = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.047, green: 0.047, blue: 0.063, alpha: 1)
+            : UIColor(white: 0, alpha: 0.055)
+    })
     /// Body prose that is subordinate but still meant to be READ — the
     /// narration inside a work fold. Not `textDim`: `.secondaryLabel` is built
     /// for short labels, and at 17pt over the canvas it measures 3.4:1, under
@@ -88,6 +117,31 @@ enum OS1VisualStyle {
     static let text = Color(nsColor: .labelColor)
     static let textDim = Color(nsColor: .secondaryLabelColor)
     static let textFaint = Color(nsColor: .tertiaryLabelColor)
+    static let codeWell = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.051, green: 0.059, blue: 0.075, alpha: 1)
+            : NSColor(red: 0.965, green: 0.973, blue: 0.980, alpha: 1)
+    })
+    static let codeWellBorder = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.06)
+            : NSColor(red: 0.847, green: 0.871, blue: 0.894, alpha: 1)
+    })
+    static let codeWellText = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.714, green: 0.737, blue: 0.784, alpha: 1)
+            : NSColor(red: 0.341, green: 0.376, blue: 0.416, alpha: 1)
+    })
+    static let codeWellGutter = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.337, green: 0.365, blue: 0.420, alpha: 1)
+            : NSColor(red: 0.549, green: 0.584, blue: 0.624, alpha: 1)
+    })
+    static let markdownCodeWell = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.047, green: 0.047, blue: 0.063, alpha: 1)
+            : NSColor(white: 0, alpha: 0.055)
+    })
     /// Subordinate body prose — see the iOS note for why this is its own
     /// neutral rather than `textDim`.
     static let textNarration = Color(nsColor: NSColor(name: nil) { appearance in
