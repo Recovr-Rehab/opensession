@@ -1323,6 +1323,9 @@ final class SessionViewModel {
         // costs nothing and keeps a link and its target in step, since a
         // touched file is a file the diff has.
         FileLinks.register(paths: linkableFilePaths(), for: session.id)
+        // And the scratch files it wrote — the same set the footer chips
+        // offer, so naming one in prose opens exactly what the chip does.
+        AssetLinks.register(paths: linkableAssetPaths(), for: session.id)
     }
 
     /// Repo-relative paths from every turn's touched files. A path outside the
@@ -1340,6 +1343,29 @@ final class SessionViewModel {
             for file in touched
             where !file.path.hasPrefix("/") && !file.path.hasPrefix("~") {
                 paths.insert(file.path)
+            }
+        }
+        return paths
+    }
+
+    /// The scratch files this session's `write_asset` calls produced. A turn
+    /// that has settled names them on its footer; one still running has them
+    /// only on the tool rows inside its fold, and prose written before the
+    /// footer exists should still link.
+    private func linkableAssetPaths() -> Set<String> {
+        var paths: Set<String> = []
+        for block in displayBlocks {
+            switch block {
+            case .footer(let footer):
+                paths.formUnion(footer.assets)
+            case .tool(let item):
+                if let path = item.assetPath { paths.insert(path) }
+            case .work(let turn):
+                for case .tool(let item) in turn.items {
+                    if let path = item.assetPath { paths.insert(path) }
+                }
+            default:
+                break
             }
         }
         return paths

@@ -29,14 +29,19 @@ struct MarkdownBody: View {
 
     var body: some View {
         SwiftStreamingMarkdown.MarkdownView(
-            // Session ids, file paths and bare URLs become links here rather
-            // than in the display pass: the entry's own text stays the raw
-            // markdown, so copying a message still yields what the agent
-            // actually wrote. Autolinking runs first so a session URL is
-            // already a link target by the time `SessionLinks` looks for
-            // loose ids, and `FileLinks` runs last for the same reason.
-            text: FileLinks.linkify(
-                SessionLinks.linkify(MarkdownAutolink.linkify(text)),
+            // Session ids, file paths, scratch files and bare URLs become
+            // links here rather than in the display pass: the entry's own text
+            // stays the raw markdown, so copying a message still yields what
+            // the agent actually wrote. Autolinking runs first so a session URL
+            // is already a link target by the time `SessionLinks` looks for
+            // loose ids, and each rewrite after it leaves the links already
+            // there alone. `AssetLinks` runs last, so a name that is both a
+            // repo path and a scratch file keeps its diff.
+            text: AssetLinks.linkify(
+                FileLinks.linkify(
+                    SessionLinks.linkify(MarkdownAutolink.linkify(text)),
+                    sessionId: openPanel.sessionId
+                ),
                 sessionId: openPanel.sessionId
             ),
             config: dimmed ? .os1Dim : .os1Static
@@ -180,12 +185,6 @@ private extension MarkdownRenderConfig {
     /// the config stops asserting something it does not mean. `quote` is the
     /// one colour already subordinate at full strength, so it cannot simply
     /// follow `text`.
-    ///
-    /// Inline code carries no chip and no dotted underline (both `.clear`):
-    /// the monospace face already says "this is code", and a paragraph naming
-    /// four files or symbols was a line of grey boxes with prose squeezed
-    /// between them. Removing the fill leaves the sentence one texture, and
-    /// the words in it still read as code.
     static func os1Config(text: Color, quote: Color) -> MarkdownRenderConfig {
         #if os(iOS)
         let base = MarkdownRenderConfig.default
@@ -229,8 +228,8 @@ private extension MarkdownRenderConfig {
                 linkTextColor: OS1VisualStyle.link,
                 codeTextFont: base.inlineStyle.codeTextFont,
                 codeTextColor: text,
-                codeBackgroundColor: .clear,
-                codeUnderlineColor: .clear
+                codeBackgroundColor: OS1VisualStyle.panel,
+                codeUnderlineColor: OS1VisualStyle.border
             ),
             blockSpacing: 8,
             thematicBreakColor: OS1VisualStyle.border
@@ -267,8 +266,8 @@ private extension MarkdownRenderConfig {
                 linkTextColor: OS1VisualStyle.link,
                 codeTextFont: .monospacedSystemFont(ofSize: 12, weight: .regular),
                 codeTextColor: text,
-                codeBackgroundColor: .clear,
-                codeUnderlineColor: .clear
+                codeBackgroundColor: OS1VisualStyle.panel,
+                codeUnderlineColor: OS1VisualStyle.border
             ),
             blockSpacing: 12,
             thematicBreakColor: OS1VisualStyle.border

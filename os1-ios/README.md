@@ -101,8 +101,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   over the link's and a tappable thing has to look tappable. This reaches the
   rows that render markdown; a user bubble and a recap are plain `Text`.
 - **Assets** — the session's scratch artifacts (`GET /api/sessions/:id/assets`)
-  reached three ways: the "Open" chip on a `write_asset` tool row (straight to
-  that file), the workspace sheet's assets section, and the overflow menu.
+  reached five ways: the "Open" chip on a `write_asset` tool row (straight to
+  that file), the chips under the turn's answer, the name of the file in the
+  answer's own prose (`AssetLinks`, the same rewrite as `FileLinks` on its own
+  scheme), the workspace sheet's assets section, and the overflow menu.
   HTML and media render in a `WKWebView` pointed at the raw route — the
   session token rides in as a cookie scoped to that session's assets path, so
   relative references between assets resolve — while markdown and code render
@@ -260,6 +262,9 @@ OS1/
     SubagentTranscript.swift A Task call's sub-agent conversation payload
     SessionWalkthrough.swift The published demo carried on the session row
     SessionLinks.swift       `bks-…` ids in output -> in-app links + titles
+    PathLinks.swift          Path -> markdown link rewrite, shared machinery
+    FileLinks.swift          Touched paths in prose -> that file's diff
+    AssetLinks.swift         Written scratch files in prose -> AssetOpen
     PrDetails.swift          PR panel payload
     SettingsModels.swift     Settings payloads (tools/personal/workspace)
     AccentTheme.swift        The app's primary colour: one table of light/dark

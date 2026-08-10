@@ -1255,6 +1255,9 @@ struct SessionTabsView: View {
     /// details OF the conversation, so the chevron and the edge swipe are the
     /// way back, and nothing has to be closed afterwards.
     @State private var panel: SessionPanel?
+    /// A scratch picture opened from a link in the prose. Same viewer a chip
+    /// lifts, held here because this is where those links are caught.
+    @State private var assetPicture: AssetPicture?
     /// A "+" that hasn't answered yet, so a second tap can't mint a second tab.
     @State private var openingTab = false
     /// The link handler INSTALLED ABOVE this view (the sessions list's, which
@@ -1347,6 +1350,21 @@ struct SessionTabsView: View {
                             panel = .changes(sessionId: session.id, path: path)
                             return .handled
                         }
+                        // A scratch file named in the prose (AssetLinks) opens
+                        // where its chip would: through AssetOpen, so the one
+                        // decision about pictures vs. everything else is made
+                        // in one place.
+                        if let path = AssetLinks.path(from: url) {
+                            AssetOpen.open(
+                                sessionId: session.id,
+                                path: path,
+                                openPanel: .pushing(sessionId: session.id) { pushed in
+                                    panel = pushed
+                                },
+                                picture: $assetPicture
+                            )
+                            return .handled
+                        }
                         enclosingOpenURL(url)
                         return .handled
                     })
@@ -1360,6 +1378,9 @@ struct SessionTabsView: View {
         .navigationDestination(item: $panel) { panel in
             panelContent(panel)
         }
+        // Hosted beside the stack rather than on the transcript row that was
+        // tapped: the link is caught here, so this is what owns the state.
+        .assetPicturePreview($assetPicture)
         // No .clipped() here: this container sits within the safe area, so a
         // clip cuts the transcript's edge-to-edge rendering at the safe-area
         // bounds — an opaque-looking nav bar and a dead strip above the home
