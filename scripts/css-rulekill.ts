@@ -47,13 +47,12 @@
  * <file> is one selector per line, `#` for comments, written exactly as the
  * stylesheet spells them (whitespace and `:not( … )` padding are normalized).
  *
- * Needs a headful Chrome on a virtual display with --remote-debugging-port
- * (CDP_PORT, default 9222): this app does not mount under Chrome's current
- * headless mode. See the note above scripts/css-ab.ts.
+ * Starts a private, bounded headful Chrome on a virtual display. CDP_PORT may
+ * explicitly select an externally managed browser when needed.
  */
 import { readFileSync } from "node:fs";
+import { acquireCdpBrowser, closeCdpTarget, releaseCdpBrowser } from "./lib/cdp-browser";
 
-const PORT = Number(process.env.CDP_PORT ?? 9222);
 const APP = process.env.OPENSESSION_URL ?? "http://127.0.0.1:3850";
 
 const argv = process.argv.slice(2);
@@ -97,8 +96,13 @@ const TARGETS: string[] = readFileSync(flag("targets")!, "utf8")
 
 let id = 0;
 const pending = new Map<number, (v: any) => void>();
-const target = await fetch(`http://127.0.0.1:${PORT}/json/new?url=about:blank`, { method: "PUT" }).then((r) => r.json());
-const ws = new WebSocket(target.webSocketDebuggerUrl);
+const lease = await acquireCdpBrowser();
+const PORT = lease.port;
+let target: any;
+let ws!: WebSocket;
+try {
+target = await fetch(`http://127.0.0.1:${PORT}/json/new?url=about:blank`, { method: "PUT" }).then((r) => r.json());
+ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 ws.onmessage = (e) => {
 	const m = JSON.parse(e.data as string);
@@ -239,8 +243,7 @@ const sanity = await evaluate(`(() => {
 console.log(`route=${sanity.path} w=${sanity.w} theme=${sanity.theme} els=${sanity.els}`);
 console.log(`sanity: tailwind p-3=${sanity.tw} (want 12px); global .app flex-direction=${sanity.global} (want column)`);
 if (sanity.tw !== "12px" || sanity.global !== "column") {
-	console.error("STOP: both sheets must be live or every verdict is 'identical' for the wrong reason");
-	process.exit(1);
+	throw new Error("STOP: both sheets must be live or every verdict is 'identical' for the wrong reason");
 }
 
 const snapshot = async (): Promise<any[]> => {
@@ -331,14 +334,14 @@ FLOOR = new Set(floor.map((c) => c.split(" ")[1]));
 /* Control: a rule that provably IS live must show up, or the tool is blind. */
 if (CONTROL) {
 	const r = await kill([CONTROL]);
-	if (!r.killed) { console.error(`STOP: control selector not found in any sheet: ${CONTROL}`); process.exit(1); }
+	if (!r.killed) throw new Error(`STOP: control selector not found in any sheet: ${CONTROL}`);
 	await sleep(300);
 	const after = await snapshot();
 	const d = diffSnaps(before2, after).filter((c) => !FLOOR.has(c.split(" ")[1]));
 	await restore();
 	console.log(`control (${CONTROL}): ${d.length} change(s) ${d.length > 0 ? "PASS — the probe can see a rule" : "FAIL — probe is blind, no verdict below is worth anything"}`);
 	for (const c of d.slice(0, 4)) console.log(`   ${c}`);
-	if (d.length === 0) process.exit(1);
+	if (d.length === 0) throw new Error("STOP: control rule produced no visible difference; the probe is blind");
 	await sleep(300);
 }
 
@@ -377,6 +380,8 @@ if (EACH) {
 	await run(TARGETS, "ALL TARGETS TOGETHER");
 }
 
-await fetch(`http://127.0.0.1:${PORT}/json/close/${target.id}`).catch(() => {});
-ws.close();
-process.exit(0);
+} finally {
+	await closeCdpTarget(PORT, target?.id);
+	ws?.close();
+	await releaseCdpBrowser(lease);
+}

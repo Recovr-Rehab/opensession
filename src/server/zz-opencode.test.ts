@@ -650,6 +650,15 @@ describe("buildRunInstructions", () => {
       expect(s).toContain("```mermaid fenced code blocks render as actual diagrams");
     }
   });
+  test("every run forbids unbounded browser services", () => {
+    for (const isAsk of [true, false]) {
+      const s = buildRunInstructions({ isAsk });
+      expect(s).toContain("## Browser processes must be bounded");
+      expect(s).toContain("Never launch Chrome/Chromium or Xvfb directly");
+      expect(s).toContain("bun scripts/cdp-browser.ts start");
+      expect(s).toContain("Never reuse another session's CDP port or browser profile");
+    }
+  });
   test("every run knows the private-key-backed GitHub checks command", () => {
     for (const isAsk of [true, false]) {
       const s = buildRunInstructions({ isAsk });

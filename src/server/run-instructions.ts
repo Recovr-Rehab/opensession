@@ -170,6 +170,16 @@ export function buildRunInstructions(input: {
       "after the shell exits — the call hangs until it is forcibly cut off, wasting the " +
       "turn. Check the log file afterwards instead of relying on launch output."
   );
+  parts.push(
+    "## Browser processes must be bounded\nNever launch Chrome/Chromium or Xvfb directly " +
+      "with `systemd-run`, `setsid`, `nohup`, or a trailing `&`. Those processes outlive " +
+      "the turn, escape the session resource limits, and have previously consumed tens of " +
+      "gigabytes. For this repository's visual checks, run `bun scripts/css-shots.ts`, " +
+      "`bun scripts/css-ab.ts`, or `bun scripts/css-rulekill.ts`; they acquire a private " +
+      "headful browser with memory/task/CPU/idle/lifetime limits and clean it up. For other " +
+      "CDP work use `bun scripts/cdp-browser.ts start` and stop the returned systemd unit " +
+      "in a `finally`/trap. Never reuse another session's CDP port or browser profile."
+  );
   // Capability note, not a mandate: the UI renders ```mermaid fences as
   // diagrams (MarkdownBody.tsx), but a model that doesn't know that will
   // never emit one — and one told too forcefully draws flowcharts for

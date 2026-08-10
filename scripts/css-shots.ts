@@ -11,15 +11,8 @@
  *
  * Shots land in .frontend-dist/../.css-shots/<name>/ (gitignored).
  *
- * Needs a Chrome with remote debugging on CDP_PORT (default 9222). On a
- * headless box Chrome 146 has no usable headless mode for this app — the page
- * reaches "interactive" with an empty #root — so run headful on a virtual
- * display:
- *
- *   Xvfb :94 -screen 0 1600x1000x24 </dev/null >/tmp/xvfb.log 2>&1 &
- *   DISPLAY=:94 google-chrome --remote-debugging-port=9222 --no-sandbox \
- *     --disable-gpu --user-data-dir=/tmp/css-shots-profile about:blank \
- *     </dev/null >/tmp/chrome.log 2>&1 &
+ * Starts a private, bounded headful Chrome+Xvfb automatically. Set CDP_PORT
+ * only when deliberately connecting to an externally managed browser.
  *
  * Determinism matters more than it looks. Three things made early runs report
  * differences that were not there:
@@ -34,10 +27,10 @@
  */
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { acquireCdpBrowser, closeCdpTarget, releaseCdpBrowser } from "./lib/cdp-browser";
 
 const ROOT = join(import.meta.dir, "..");
 const SHOTS = join(ROOT, ".css-shots");
-const PORT = Number(process.env.CDP_PORT ?? 9222);
 const APP = process.env.OPENSESSION_URL ?? "http://127.0.0.1:3850";
 
 const ROUTES: [string, string][] = [
@@ -99,10 +92,15 @@ mkdirSync(OUT, { recursive: true });
 // ── capture ─────────────────────────────────────────────────────────────────
 let id = 0;
 const pending = new Map<number, (v: any) => void>();
-const target = await fetch(`http://127.0.0.1:${PORT}/json/new?url=about:blank`, {
+const lease = await acquireCdpBrowser();
+const PORT = lease.port;
+let target: any;
+let ws!: WebSocket;
+try {
+target = await fetch(`http://127.0.0.1:${PORT}/json/new?url=about:blank`, {
 	method: "PUT",
 }).then((r) => r.json());
-const ws = new WebSocket(target.webSocketDebuggerUrl);
+ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 ws.onmessage = (e) => {
 	const m = JSON.parse(e.data as string);
@@ -183,4 +181,8 @@ for (const [rname, path] of ROUTES) {
 		}
 	}
 }
-ws.close();
+} finally {
+	await closeCdpTarget(PORT, target?.id);
+	ws?.close();
+	await releaseCdpBrowser(lease);
+}

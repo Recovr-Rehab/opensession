@@ -10,9 +10,8 @@
  *   bun scripts/css-ab.ts after  --root '.sidebar-container'
  *   bun scripts/css-ab.ts --diff before after
  *
- * Snapshots land in .css-ab/ (gitignored). Needs the same headful Chrome on a
- * virtual display that css-shots.ts documents — read its header for the launch
- * lines and why Chrome 146's headless mode cannot serve this app.
+ * Snapshots land in .css-ab/ (gitignored). It starts the same private, bounded
+ * headful browser as css-shots.ts unless CDP_PORT explicitly selects one.
  *
  * ── Read a run honestly ─────────────────────────────────────────────────────
  * Capture the SAME label twice before believing anything: `before` vs
@@ -54,9 +53,9 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { acquireCdpBrowser, closeCdpTarget, releaseCdpBrowser } from "./lib/cdp-browser";
 
 const ROOT = join(import.meta.dir, "..");
-const PORT = Number(process.env.CDP_PORT ?? 9222);
 const APP = process.env.OPENSESSION_URL ?? "http://127.0.0.1:3850";
 
 const argv = process.argv.slice(2);
@@ -419,10 +418,15 @@ const THEMES = ["dark", "light"];
 
 let id = 0;
 const pending = new Map<number, (v: any) => void>();
-const target = await fetch(`http://127.0.0.1:${PORT}/json/new?url=about:blank`, {
+const lease = await acquireCdpBrowser();
+const PORT = lease.port;
+let target: any;
+let ws!: WebSocket;
+try {
+target = await fetch(`http://127.0.0.1:${PORT}/json/new?url=about:blank`, {
 	method: "PUT",
 }).then((r) => r.json());
-const ws = new WebSocket(target.webSocketDebuggerUrl);
+ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 ws.onmessage = (e) => {
 	const m = JSON.parse(e.data as string);
@@ -528,9 +532,9 @@ for (const theme of THEMES) {
 
 mkdirSync(SNAPS, { recursive: true });
 writeFileSync(join(SNAPS, `${label}.json`), JSON.stringify(result));
-// Close the tab, not just the socket. Each run opens one and every one holds a
-// full copy of the app; leaving them behind slows the browser down until a
-// later run hangs with no output at all, which reads as a broken script.
-await fetch(`http://127.0.0.1:${PORT}/json/close/${target.id}`).catch(() => {});
-ws.close();
 console.log(`wrote ${join(SNAPS, `${label}.json`).replace(`${ROOT}/`, "")}`);
+} finally {
+	await closeCdpTarget(PORT, target?.id);
+	ws?.close();
+	await releaseCdpBrowser(lease);
+}
