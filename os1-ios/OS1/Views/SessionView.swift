@@ -1771,24 +1771,12 @@ private struct SessionInputBar: View {
             // chip is left for what's waiting on the composer itself.
             if (viewModel.queuedCount > 0 && viewModel.queuedItems.isEmpty)
                 || visibleNotice != nil {
-                // Compact glass chip floating above the composer.
-                HStack(spacing: 6) {
-                    if viewModel.queuedCount > 0, viewModel.queuedItems.isEmpty {
-                        // Pre-handshake count from the sessions list, before
-                        // the watch delivers the actual items.
-                        Text("\(viewModel.queuedCount) queued")
-                            .foregroundStyle(.secondary)
-                    }
-                    if let notice = visibleNotice {
-                        Text(notice)
-                            .foregroundStyle(.orange)
-                            .lineLimit(1)
-                    }
-                }
-                .font(.caption2)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .glassSurface(in: Capsule())
+                composerChip
+                    // Grows out of the composer it belongs to, rather than
+                    // being cut in above it.
+                    .transition(
+                        .opacity.combined(with: .scale(scale: 0.94, anchor: .bottomLeading))
+                    )
             }
 
             if !viewModel.attachedImages.isEmpty {
@@ -1822,6 +1810,21 @@ private struct SessionInputBar: View {
         .padding(.horizontal, horizontalInset)
         .padding(.top, Self.barTopPadding)
         .padding(.bottom, 8)
+        .animation(.smooth(duration: 0.22), value: visibleNotice)
+        // A notice is a passing remark, not a state: most of them describe
+        // something that has already finished happening ("app update paused",
+        // "switched to code mode"), and one that sits over the composer for
+        // the rest of the session reads as a condition the session is still
+        // in. So it retires itself — except an error, which is the one kind
+        // somebody has to actually read.
+        .task(id: visibleNotice) {
+            guard let notice = visibleNotice,
+                let after = NoticeTone.derived(fromText: notice).autoDismissAfter
+            else { return }
+            try? await Task.sleep(for: after)
+            guard !Task.isCancelled else { return }
+            viewModel.dismissNotice()
+        }
         // A session that has never run has nothing to read, so the only thing
         // to do in it is write — open with the keyboard up. This is the tab
         // strip's "+" landing: the tab appears already waiting for the prompt
@@ -1927,6 +1930,50 @@ private struct SessionInputBar: View {
     private var hasQueueItems: Bool {
         !viewModel.deliveringItems.isEmpty || !viewModel.steeredItems.isEmpty
             || !viewModel.queuedItems.isEmpty || !unsentItems.isEmpty
+    }
+
+    /// The compact chip floating above the composer: what is waiting to be
+    /// sent, and the latest word from the server.
+    ///
+    /// The notice wears its tone rather than a blanket orange — the same
+    /// grey/amber/red the transcript's own notices use, so "run failed" and
+    /// "switched to code mode" stop looking equally alarming. Two lines, not
+    /// one: the wording is the server's, and truncating a sentence mid-word
+    /// to keep a capsule tidy loses the half that says what to do.
+    @ViewBuilder private var composerChip: some View {
+        let notice = visibleNotice
+        let tone = notice.map(NoticeTone.derived(fromText:)) ?? .info
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if viewModel.queuedCount > 0, viewModel.queuedItems.isEmpty {
+                // Pre-handshake count from the sessions list, before the watch
+                // delivers the actual items.
+                Text("\(viewModel.queuedCount) queued")
+                    .foregroundStyle(.secondary)
+            }
+            if let notice {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if let symbol = tone.symbol {
+                        Image(systemName: symbol)
+                    }
+                    Text(notice).lineLimit(2)
+                }
+                .foregroundStyle(tone.color)
+            }
+        }
+        .font(.caption2)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        // A capsule at this height, so the resting one-line chip is unchanged
+        // — but a notice that wraps to two lines gets a rounded rectangle
+        // instead of the lens a capsule turns into.
+        .glassSurface(in: RoundedRectangle(cornerRadius: 12.5, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 12.5, style: .continuous))
+        .onTapGesture {
+            guard notice != nil else { return }
+            viewModel.dismissNotice()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(notice == nil ? "" : "Dismisses the notice")
     }
 
     private var visibleNotice: String? {

@@ -72,11 +72,14 @@ struct TranscriptRow: View {
         case .footer(let footer):
             TurnFooterView(footer: footer, sessionId: sessionId)
         case .walkthrough(let walkthrough):
-            // Open unless the reader folds it: a walkthrough is published to
-            // be watched, and one that arrives closed is one nobody sees.
+            // Folded unless the reader opens it: a walkthrough is a screenful
+            // of video and a screenful per before/after pair, and it sits in
+            // the middle of a conversation that continues after it. Folded is
+            // not hidden here — the card keeps a strip of its pictures, which
+            // is the part a reader usually wants.
             WalkthroughCard(
                 walkthrough: walkthrough,
-                state: expansionState(block.id, true)
+                state: expansionState(block.id, false)
             )
         }
     }
@@ -431,52 +434,8 @@ struct NoticeRow: View {
     }
 }
 
-enum NoticeTone: String, Equatable {
-    case info, warn, error
-
-    /// The pre-classification heuristic, kept for entries from a server that
-    /// doesn't send a tone yet. New code reads `EntryNotice.tone`, which the
-    /// server derives from the same phrasings in one place.
-    static func derived(from entry: TranscriptEntry) -> NoticeTone {
-        if entry.isError == true { return .error }
-        let text = entry.text.lowercased()
-        for marker in ["failed", "failure", "error", "denied", "crashed", "could not"]
-        where text.contains(marker) {
-            return .error
-        }
-        for marker in [
-            "warning", "interrupted", "timed out", "timeout", "stopped",
-            "cancelled", "canceled", "restart", "compacted", "retry",
-        ] where text.contains(marker) {
-            return .warn
-        }
-        return .info
-    }
-
-    var color: Color {
-        switch self {
-        case .info: OS1VisualStyle.textDim
-        case .warn: OS1VisualStyle.yellow
-        case .error: OS1VisualStyle.red
-        }
-    }
-
-    var symbol: String? {
-        switch self {
-        case .info: nil
-        case .warn: "exclamationmark.triangle"
-        case .error: "exclamationmark.octagon"
-        }
-    }
-
-    var background: Color {
-        switch self {
-        case .info: OS1VisualStyle.panel.opacity(0.6)
-        case .warn: OS1VisualStyle.yellow.opacity(0.12)
-        case .error: OS1VisualStyle.red.opacity(0.12)
-        }
-    }
-}
+// `NoticeTone` — the tone this row and the composer's chip both wear — lives
+// in `Models/NoticeTone.swift`.
 
 // MARK: - Streaming
 

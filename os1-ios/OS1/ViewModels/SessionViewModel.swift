@@ -690,6 +690,11 @@ final class SessionViewModel {
         sendSeq += 1
     }
 
+    /// Clear the composer's floating notice. The chip retires an info or warn
+    /// line on its own timer; this is the tap, and the only way an error one
+    /// leaves before another notice replaces it.
+    func dismissNotice() { notice = nil }
+
     /// Record something this app just did as a transcript line of its own.
     /// A client-side action gets no entry from the server, so this is a local
     /// row — and the transcript is where it belongs: it reads in place, in the
