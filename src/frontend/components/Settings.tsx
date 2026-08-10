@@ -855,61 +855,70 @@ function MobileSettings({
 					</div>
 
 					<div className="relative min-h-0 flex-1 overflow-hidden">
-						{/* Root page: grouped section list. Parked slightly left while a
-						    detail page covers it, iOS-style. */}
+						{/* Root page: grouped section list over a bottom search bar.
+						    Parked slightly left while a detail page covers it, iOS-style. */}
 						<div
 							className={cn(
-								"absolute inset-0 overflow-y-auto px-4 pb-10",
+								"absolute inset-0 flex flex-col",
 								pageEase,
 								detail && "-translate-x-1/3",
 							)}
 							aria-hidden={!!detail}
 						>
-							{/* Sticky: 22 sections is more than a phone screen, so the way
-							    out of a long scroll should stay in reach — the strip carries
-							    the page's own background so rows pass under it. */}
+							<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
+								{shown.map((g) => (
+									<div key={g.group}>
+										<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
+											{g.group}
+										</div>
+										<div className="overflow-hidden rounded-2xl bg-raised">
+											{g.hits.map(({ item: s, hint }) => (
+												<button
+													key={s.key}
+													className="flex w-full items-center gap-3 border-x-0 border-b border-t-0 border-solid border-line bg-transparent px-3.5 py-3 text-left last:border-b-0 active:bg-hover"
+													onClick={() => onSelect(s.key)}
+												>
+													<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+														{s.icon}
+													</span>
+												<span className="min-w-0 flex-1 text-item-title font-medium text-fg">
+														{s.label}
+														{hint && (
+															<span className="block truncate text-meta font-normal text-faint">
+																{hint}
+															</span>
+														)}
+													</span>
+													<IconChevronRight size={20} className="shrink-0 text-faint" />
+												</button>
+											))}
+										</div>
+									</div>
+								))}
+								{shown.length === 0 && (
+									<div className="mt-6 px-1 text-supporting text-faint">
+										Nothing matches “{query}”.
+									</div>
+								)}
+								{!query && <SettingsAccountCard />}
+							</div>
+
+							{/* Search sits at the bottom edge, where the thumb is and where
+							    iOS 26 puts it (the native app's sessions list does the same).
+							    It stays put while the list scrolls under it, so the way out
+							    of 22 sections is always in reach; the wash above dissolves
+							    rows into the bar instead of cutting them on a line. */}
 							<NavSearch
 								sheet
 								value={query}
 								onChange={setQuery}
 								onSubmit={() => firstHit && onSelect(firstHit.key)}
-								className="sticky top-0 z-1 -mx-4 bg-surface px-4 pb-2 pt-3"
+								className={cn(
+									"relative shrink-0 bg-surface px-4 pb-2.5 pt-2",
+									"before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full",
+									"before:h-[var(--wash-depth)] before:[background:var(--wash-down)] before:content-['']",
+								)}
 							/>
-							{shown.map((g) => (
-								<div key={g.group}>
-									<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
-										{g.group}
-									</div>
-									<div className="overflow-hidden rounded-2xl bg-raised">
-										{g.hits.map(({ item: s, hint }) => (
-											<button
-												key={s.key}
-												className="flex w-full items-center gap-3 border-x-0 border-b border-t-0 border-solid border-line bg-transparent px-3.5 py-3 text-left last:border-b-0 active:bg-hover"
-												onClick={() => onSelect(s.key)}
-											>
-												<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
-													{s.icon}
-												</span>
-											<span className="min-w-0 flex-1 text-item-title font-medium text-fg">
-													{s.label}
-													{hint && (
-														<span className="block truncate text-meta font-normal text-faint">
-															{hint}
-														</span>
-													)}
-												</span>
-												<IconChevronRight size={20} className="shrink-0 text-faint" />
-											</button>
-										))}
-									</div>
-								</div>
-							))}
-							{shown.length === 0 && (
-								<div className="mt-6 px-1 text-supporting text-faint">
-									Nothing matches “{query}”.
-								</div>
-							)}
-							{!query && <SettingsAccountCard />}
 						</div>
 
 						{/* Detail page: the picked section's panel, slid in from the right. */}
