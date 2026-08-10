@@ -25,6 +25,7 @@ import {
 	SIDEBAR_LANE_COUNT,
 	SIDEBAR_LANE_HEADER,
 	SIDEBAR_LANE_NAME,
+	SIDEBAR_HEADER_ACTIONS_REVEAL,
 	SIDEBAR_HEADER_BTN,
 	SIDEBAR_HEADER_BTN_DESKTOP,
 	SIDEBAR_HEADER_BTN_PHONE,
@@ -4195,11 +4196,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<div className="min-w-0 flex-1" />
 					{/* Grouped so the pair's combined width can be measured when deciding
 					    whether the repo chip fits inline. Gone on phones, where filter
-					    moves to the top bar and the red FAB covers new-session. */}
+					    moves to the top bar and the red FAB covers new-session. The pair
+					    fades in with the header under the pointer; while the popover is
+					    open the reveal is dropped entirely, so the button the popover
+					    anchors to can't fade out from under it. */}
 					<div
 						className={cn(
 							"shrink-0 items-center gap-1.5",
 							isPhone ? "hidden" : "flex",
+							!filterOpen && SIDEBAR_HEADER_ACTIONS_REVEAL,
 						)}
 						ref={actionsRef}
 					>
