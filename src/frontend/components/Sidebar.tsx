@@ -105,6 +105,7 @@ import {
 	setRepoOrder,
 } from "../lib/repo-order";
 import { UserAvatar, githubLoginFor } from "./UserAvatar";
+import { workingViewers } from "../lib/presence";
 import { shortTime } from "../lib/time";
 import {
 	IconChevronDown,
@@ -2584,14 +2585,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						local
 					</span>
 				)}
-				{/* Teammates currently viewing a session in this workspace. */}
+				{/* Teammates with a run of their own in flight in this workspace.
+				    Deliberately not "who has it open": see workingViewers(). */}
 				{!editing &&
 					(() => {
-						const viewers = teamViewing.filter(
-							(v) =>
-								v.user.toLowerCase() !== currentUser.toLowerCase() &&
-								row.sessions.some((c) => c.id === v.sessionId),
-						);
+						const viewers = workingViewers(row.sessions, currentUser);
 						if (!viewers.length) return null;
 						// Faces sit side by side rather than stacked: an overlapped pile
 						// needs an opaque ring the color of what's behind it, and a row's
@@ -2600,14 +2598,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						return (
 							<span
 								className="flex shrink-0 items-center gap-0.5"
-								aria-label={`Viewing: ${viewers.map((v) => v.user).join(", ")}`}
+								aria-label={`Working here: ${viewers.join(", ")}`}
 							>
-								{viewers.slice(0, 3).map((v) => (
+								{viewers.slice(0, 3).map((name) => (
 									<UserAvatar
-										key={v.user}
-										name={v.user}
+										key={name}
+										name={name}
 										size={16}
-										title={`${v.user} is here`}
+										title={`${name} is working on this`}
 									/>
 								))}
 							</span>

@@ -2423,10 +2423,10 @@ struct SessionRow: View {
                 #endif
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            // Teammates on any of this row's sessions, ahead of the clock —
-            // the web sidebar's arrangement.
-            if !rowViewers.isEmpty {
-                PresenceFacepile(viewers: rowViewers, size: faceSize, stacked: false)
+            // Teammates actively driving a run in this workspace. Merely
+            // opening somebody's chat is deliberately invisible in the list.
+            if !workingUsers.isEmpty {
+                PresenceFacepile(viewers: workingUsers, size: faceSize, stacked: false)
             }
             if showsClock {
                 WorkspaceRunElapsedLabel(since: session.runStartedDate)
@@ -2478,11 +2478,11 @@ struct SessionRow: View {
         ReadsStore.shared.isUnread(sessions.isEmpty ? [session] : sessions)
     }
 
-    /// Read here rather than at the call site for the same reason `unread` is:
-    /// `PresenceStore` is `@Observable`, so someone opening a session
-    /// invalidates the rows that show them, not the whole list.
-    private var rowViewers: [String] {
-        PresenceStore.shared.viewers(of: sessions.isEmpty ? [session] : sessions)
+    private var workingUsers: [String] {
+        Session.workingUsers(
+            in: sessions.isEmpty ? [session] : sessions,
+            excluding: ServerConfig.shared.userName
+        )
     }
 
     private var markSize: CGFloat {
@@ -2590,10 +2590,10 @@ struct SessionRow: View {
         if let prState = session.prState?.lowercased() {
             parts.append("pull request \(prState)")
         }
-        // The faces are the only cue that someone else is in here.
-        if !rowViewers.isEmpty {
+        // The faces are the only cue that someone else is working here.
+        if !workingUsers.isEmpty {
             parts.append(
-                "\(ListFormatter.localizedString(byJoining: rowViewers)) viewing"
+                "\(ListFormatter.localizedString(byJoining: workingUsers)) working here"
             )
         }
         if let idleAgo { parts.append("last used \(idleAgo)") }

@@ -298,6 +298,13 @@ export interface UnifiedSession {
 	 * sidebar then falls back to a client-observed start time.
 	 */
 	runStartedAt?: string;
+	/**
+	 * Who prompted the in-flight run (display name, from the run journal). Only
+	 * set while isRunning; absent for automation runs and external CLI/tmux
+	 * runs. This is what a sidebar row's face means — someone WORKING in here,
+	 * not someone who happens to have it open (see lib/presence.ts).
+	 */
+	runBy?: string;
 	transcriptPath: string | null;
 	prUrl?: string;
 	prState?: "OPEN" | "MERGED" | "CLOSED";

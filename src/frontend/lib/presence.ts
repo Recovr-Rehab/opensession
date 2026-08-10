@@ -26,6 +26,39 @@ export function otherViewers(viewers: string[], me?: string | null): string[] {
 	return viewers.filter((v) => personKey(v) !== mine);
 }
 
+/**
+ * Who a SIDEBAR row's face is about — a different question from the one above.
+ *
+ * The header pile inside a session answers "who else is in this room", which
+ * is worth knowing once you're in it. A row in the list is glanced at all day,
+ * and a face there for merely having the session open reads as being watched:
+ * teammates appear and vanish as their attention times out, on rows where
+ * nothing is happening. So a row's face is earned by WORK, not by attention —
+ * a run in flight that this person prompted (`runBy`, stamped server-side from
+ * the run journal). It arrives when they start something, holds steady for as
+ * long as it runs, and leaves when the run does, which is a moment the row
+ * shows anyway. Reading someone's session leaves no trace on their list.
+ */
+export function workingViewers(
+	sessions: Array<{ isRunning?: boolean; runBy?: string | null }>,
+	me?: string | null,
+): string[] {
+	const mine = personKey(me || "");
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const s of sessions) {
+		const by = s.isRunning ? s.runBy?.trim() : undefined;
+		if (!by) continue;
+		const key = personKey(by);
+		// Your own runs never earn a face: you know what you started, and a
+		// face that follows you around is the thing this is meant to remove.
+		if (!key || key === mine || seen.has(key)) continue;
+		seen.add(key);
+		out.push(by);
+	}
+	return out;
+}
+
 /** One entry per person, in first-seen order, with how many devices they have. */
 export function dedupeViewers(
 	viewers: string[],

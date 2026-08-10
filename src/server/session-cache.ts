@@ -46,12 +46,19 @@ export function getCachedSessions(): UnifiedSession[] {
 	// progress" elapsed ticker and survives a page refresh (a session can carry
 	// its bks id and its engine session id across records; key on both).
 	const runStarts = new Map<string, string>();
+	// …and who prompted that run, so a row can say WHO is working in a session
+	// rather than who merely has it open. Tracked alongside the start it
+	// belongs to (automation runs journal no user, so those stay unattributed).
+	const runUsers = new Map<string, string>();
 	for (const r of activeRunRecords()) {
 		if (!r.startedAt) continue;
 		for (const key of [r.osSessionId, r.claudeSessionId]) {
 			if (!key) continue;
 			const prev = runStarts.get(key);
-			if (!prev || r.startedAt < prev) runStarts.set(key, r.startedAt);
+			if (prev && r.startedAt >= prev) continue;
+			runStarts.set(key, r.startedAt);
+			if (r.user) runUsers.set(key, r.user);
+			else runUsers.delete(key);
 		}
 	}
 	// Sessions driven from the web UI run in-process; surface those too
@@ -67,6 +74,10 @@ export function getCachedSessions(): UnifiedSession[] {
 				runStarts.get(s.id) ||
 				(s.claudeSessionId ? runStarts.get(s.claudeSessionId) : undefined) ||
 				(s.codexThreadId ? runStarts.get(s.codexThreadId) : undefined);
+			s.runBy =
+				runUsers.get(s.id) ||
+				(s.claudeSessionId ? runUsers.get(s.claudeSessionId) : undefined) ||
+				(s.codexThreadId ? runUsers.get(s.codexThreadId) : undefined);
 		}
 		const rs = getRunState(s.id);
 		if (rs !== "idle") s.runState = rs;
