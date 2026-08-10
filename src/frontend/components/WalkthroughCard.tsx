@@ -41,17 +41,27 @@ export function WalkthroughCard({
 		() => renderMarkdown(walkthrough.summary, { repo }),
 		[walkthrough.summary, repo],
 	);
-	// Every still in the card, flattened in render order, so clicking one opens
-	// the shared media lightbox (Escape/arrows/pinch-zoom/download) browsing
-	// before→after across all the pairs.
+	// Every piece of media in the card, in render order, so clicking one opens
+	// the shared lightbox (Escape/arrows/pinch-zoom/download) browsing
+	// demo→before→after across all the pairs.
 	const gallery = useMemo(() => {
 		const items: LightboxItem[] = [];
 		const at = new Map<string, number>();
+		if (walkthrough.video) {
+			at.set("video", items.length);
+			items.push({
+				kind: "video",
+				src: mediaUrl(walkthrough.video),
+				sessionTitle: walkthrough.videoTitle || "Demo",
+			});
+		}
+		let stillCount = 0;
 		(walkthrough.shots || []).forEach((shot, i) => {
 			for (const side of ["before", "after"] as const) {
 				const path = shot[side];
 				if (!path) continue;
 				at.set(`${i}:${side}`, items.length);
+				stillCount += 1;
 				items.push({
 					kind: "image",
 					src: mediaUrl(path),
@@ -61,16 +71,16 @@ export function WalkthroughCard({
 				});
 			}
 		});
-		return { items, at };
-	}, [walkthrough.shots]);
+		return { items, at, stillCount };
+	}, [walkthrough.shots, walkthrough.video, walkthrough.videoTitle]);
 
 	// What the card holds, for the folded header — the one thing a reader needs
 	// to decide whether to open it. Open, they can see that for themselves, so
 	// the slot goes back to saying when it was published.
 	const contentsLabel = [
 		walkthrough.video ? "Demo" : "",
-		gallery.items.length
-			? `${gallery.items.length} still${gallery.items.length === 1 ? "" : "s"}`
+		gallery.stillCount
+			? `${gallery.stillCount} still${gallery.stillCount === 1 ? "" : "s"}`
 			: "",
 	]
 		.filter(Boolean)
@@ -87,8 +97,8 @@ export function WalkthroughCard({
 				// screenshot looks like it runs out of the card rather than sitting
 				// in it. The card inherits its surrounding surface; the hairline is
 				// enough to separate it without introducing a darker grey panel.
-				"rounded-lg bg-transparent p-4",
-				session && "border border-line",
+				"rounded-xl bg-transparent p-4",
+				session && "border border-line/60",
 				// In the session the card is a transcript block like any other, so it
 				// takes the same centered reading column the turns and footers use
 				// (mx-auto + --session-col) instead of spanning the whole pane. It
@@ -146,55 +156,51 @@ export function WalkthroughCard({
 				</div>
 			)}
 
-			{!expanded && (walkthrough.video || gallery.items.length > 0) && (
-				// The folded card's pictures: every still, in reading order, sharing
-				// out the card's width instead of sitting at thumbnail size against
-				// a gulf of empty card. Tight within a pair and loose between them;
-				// the labels make each side explicit while the pairing remains the
-				// point of the folded strip,
-				// since a before and its after side by side is checkable at a
-				// glance. Each pair keeps a floor width, so a walkthrough with many
-				// pairs overflows into the same scroll as before rather than
-				// shrinking every still into illegibility. The strip runs to the
+			{!expanded && gallery.items.length > 0 && (
+				// The folded card's media: one fixed tile size for the demo and every
+				// still. Flexing each comparison group independently made an unpaired
+				// image twice as wide as either side of a pair. Tight within a pair and
+				// loose between them keeps the relationship without changing scale.
+				// The strip runs to the
 				// card's edges rather than stopping at its padding — a tile cut off
 				// by the padding looks like a rendering bug, one that runs under the
 				// edge reads as "there is more this way".
 				<div className="-mx-4 mt-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-					<div className="flex w-full items-start gap-6">
+					<div className="flex w-max items-start gap-4">
 						{walkthrough.video && (
-							// The demo leads the strip as its own tile: folded, the
-							// headline artifact was represented only by the word "Demo",
-							// so the strip couldn't sell what opening the card buys.
-							// Clicking it opens the card rather than playing in place —
-							// a 104px-wide video is a thumbnail, not a player.
-							<button
-								type="button"
-								className="relative block aspect-[16/10] max-h-[132px] min-w-[104px] max-w-[200px] flex-1 cursor-pointer overflow-hidden rounded-md border border-line bg-black p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-								aria-label="Open the walkthrough to play the demo"
-								onClick={() => setExpanded(true)}
-							>
-								<video
-									className="h-full w-full object-cover"
-									src={`${mediaUrl(walkthrough.video)}#t=0.1`}
-									preload="metadata"
-									muted
-									tabIndex={-1}
-								/>
-								<span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
-									<IconPlay size={18} />
-								</span>
-							</button>
+							<figure className="m-0 w-40 shrink-0">
+								<figcaption className="mb-1 inline-flex rounded-full bg-blue-soft px-2 py-0.5 text-[11px] font-semibold leading-4 text-blue">
+									Demo
+								</figcaption>
+								<button
+									type="button"
+									className="relative block aspect-[16/10] w-full cursor-zoom-in overflow-hidden rounded-md border border-line bg-black p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+									aria-label="Open demo in media viewer"
+									onClick={(event) => open("video", event.currentTarget)}
+								>
+									<video
+										className="h-full w-full object-cover"
+										src={`${mediaUrl(walkthrough.video)}#t=0.1`}
+										preload="metadata"
+										muted
+										tabIndex={-1}
+									/>
+									<span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
+										<IconPlay size={18} className="ml-0.5" />
+									</span>
+								</button>
+							</figure>
 						)}
 						{(walkthrough.shots || []).map((shot, i) => (
 							<div
-								className="flex min-w-[216px] max-w-[420px] flex-1 gap-1"
+								className="flex shrink-0 gap-1"
 								key={i}
 							>
 								{(["before", "after"] as const).map(
 									(side) =>
 										shot[side] && (
 											<figure
-												className="m-0 min-w-0 flex-1"
+												className="m-0 w-40 shrink-0"
 												key={side}
 											>
 												<figcaption
