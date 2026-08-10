@@ -293,10 +293,10 @@ export function WalkthroughCard({
 										(side) =>
 											shot[side] && (
 												<figure
-													className="m-0 min-w-0 overflow-hidden rounded-md border border-line bg-raised"
+													className="m-0 min-w-0"
 													key={side}
 												>
-													<figcaption className="flex h-8 items-center gap-2 border-b border-line px-2.5 text-[11px] font-semibold leading-4 text-dim">
+													<figcaption className="mb-1.5 flex h-5 items-center gap-2 px-0.5 text-[11px] font-semibold leading-4 text-dim">
 														<span
 															className={cn(
 																"size-1.5 flex-shrink-0 rounded-full",
@@ -307,7 +307,7 @@ export function WalkthroughCard({
 													</figcaption>
 													<button
 														type="button"
-														className="flex w-full cursor-zoom-in items-start justify-center border-0 bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
+														className="flex w-full cursor-zoom-in items-start justify-center overflow-hidden rounded-md border-0 bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
 														onClick={(event) =>
 															open(`${i}:${side}`, event.currentTarget)
 														}
