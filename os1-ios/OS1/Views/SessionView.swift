@@ -1933,7 +1933,10 @@ private struct SessionInputBar: View {
     }
 
     /// The compact chip floating above the composer: what is waiting to be
-    /// sent, and the latest word from the server.
+    /// sent, and a word to the person who just tapped — a refused send, a
+    /// switch that didn't happen. A notice about the SESSION goes to the
+    /// transcript instead (`noteLocally`), where it reads in order and
+    /// doesn't sit over the composer after the thing it describes is over.
     ///
     /// The notice wears its tone rather than a blanket orange — the same
     /// grey/amber/red the transcript's own notices use, so "run failed" and

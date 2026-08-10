@@ -110,6 +110,43 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.id), ["e1"])
     }
 
+    /// A server notice describes something that happened to the SESSION, so
+    /// it joins the transcript in order, wearing its tone — the same place
+    /// the web viewer puts these frames. The composer keeps only what is a
+    /// word to the person who just tapped.
+    func testServerNoticeJoinsTheTranscriptRatherThanTheComposer() {
+        let viewModel = makeViewModel()
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e1", "assistant", text: "Had a look")],
+            cursor: .empty
+        ))
+
+        viewModel.handle(.notice("App update paused. No action needed."))
+
+        XCTAssertNil(viewModel.notice)
+        guard case .message(let noticed)? = viewModel.displayBlocks.last else {
+            return XCTFail("expected the notice to render as its own block")
+        }
+        XCTAssertEqual(noticed.notice?.title, "App update paused. No action needed.")
+        XCTAssertEqual(noticed.notice?.tone, NoticeTone.warn.rawValue)
+    }
+
+    /// A socket dropping is not an event in the session's history, and it
+    /// repeats on every reconnect — so it stays off the transcript.
+    func testConnectionChurnStaysOutOfTheTranscript() {
+        let viewModel = makeViewModel()
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e1", "assistant", text: "Had a look")],
+            cursor: .empty
+        ))
+
+        viewModel.handle(.notice("Couldn't connect to the server"))
+
+        XCTAssertEqual(viewModel.entries.map(\.id), ["e1"])
+    }
+
     func testResyncDropsCachedPartialPrefixOfOffscreenCompletion() {
         let viewModel = makeViewModel()
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
@@ -609,12 +646,17 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.pendingQuestion)
     }
 
-    func testNoticeSetsAndClears() {
+    /// A server notice used to pin itself over the composer. It joins the
+    /// transcript now, so the composer stays empty — and an empty frame is
+    /// the server clearing rather than an event, so nothing new lands.
+    func testServerNoticeDoesNotPinItselfOverTheComposer() {
         let viewModel = makeViewModel()
         viewModel.handle(.notice("heads up"))
-        XCTAssertEqual(viewModel.notice, "heads up")
-        viewModel.handle(.notice(""))
         XCTAssertNil(viewModel.notice)
+        XCTAssertEqual(viewModel.entries.last?.notice?.title, "heads up")
+
+        viewModel.handle(.notice(""))
+        XCTAssertEqual(viewModel.entries.count, 1)
     }
 }
 
