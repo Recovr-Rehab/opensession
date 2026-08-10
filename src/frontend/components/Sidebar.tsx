@@ -39,6 +39,7 @@ import {
 	SIDEBAR_PIN_ENTRY_DRAGGING,
 	SIDEBAR_RAIL,
 	SIDEBAR_REPO_TILE,
+	SIDEBAR_ROW_HOVER,
 	SIDEBAR_STATUS_DOT,
 	SIDEBAR_STATUS_GROUP,
 	SIDEBAR_STICKY_BAND,
@@ -2437,11 +2438,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// row carries the slide. The drag writes --swipe-x straight onto
 						// the node, so the transform reads it rather than a React style.
 						SIDEBAR_WS_ROW,
-						"z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))] hover:bg-hover",
+						"z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))]",
+						SIDEBAR_ROW_HOVER,
 						// "Needs you" is the one row state that is urgent rather than
 						// merely informational, so its wash matches the Needs action
 						// caption above it (--red) instead of reading as a selection.
-						waiting ? "bg-red-soft" : active && "bg-active",
+						waiting ? "bg-red-soft" : active && "bg-pressed",
 						draggingRow
 							? "transition-none"
 							: swipeSide
@@ -3772,8 +3774,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							// desktop gets a compact full-width row.
 							"group flex text-left transition-colors",
 							isPhone &&
-								"relative w-[132px] min-h-[84px] flex-[0_0_auto] flex-col items-start justify-between gap-2.5 rounded-lg border border-line bg-panel p-3 text-[13px] leading-[1.25] font-semibold text-fg hover:bg-hover",
-							isPhone && tool.active && "border-line-strong bg-active",
+								"relative w-[132px] min-h-[84px] flex-[0_0_auto] flex-col items-start justify-between gap-2.5 rounded-lg border border-line bg-panel p-3 text-[13px] leading-[1.25] font-semibold text-fg",
+							// The card owns a real surface (--bg-panel), so its states
+							// ride ON that as layers rather than replacing it — the same
+							// translucent ink the rows use, just stacked over a fill
+							// instead of over the sidebar.
+							isPhone && !tool.active && SIDEBAR_ROW_HOVER,
+							isPhone &&
+								tool.active &&
+								"border-line-strong bg-[image:linear-gradient(var(--hover-strong),var(--hover-strong))]",
 							!isPhone && "items-center",
 							!isPhone &&
 								// Compact rows use control-label type and tight padding, with glyphs
@@ -3783,8 +3792,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// credited a "wayyy too big" complaint, but no such
 								// request exists in the session record — don't treat the
 								// current numbers as a stated preference.
-								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[3px] text-control-label font-medium text-dim hover:bg-hover hover:text-fg",
-							!isPhone && tool.active && "bg-active text-fg",
+								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[3px] text-control-label font-medium text-dim hover:text-fg",
+							!isPhone && SIDEBAR_ROW_HOVER,
+							!isPhone && tool.active && "bg-pressed text-fg",
 						);
 						const rowBody = (
 							<>
@@ -3870,9 +3880,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									members={team}
 									size={20}
 									max={4}
-									// The faces ring themselves in whatever the row is
-									// painted with, so the pile separates on both states.
-									ring={tool.active ? "var(--bg-active)" : "var(--bg-raised)"}
+									// The faces ring themselves so the pile separates. One
+									// colour for both row states: a ring sits over the face
+									// behind it, so it can't be translucent ink the way the
+									// row's own fill now is, and the sidebar's surface reads
+									// as the gap it is meant to be either way.
+									ring="var(--bg-raised)"
 									compact
 									side="right"
 									align="start"

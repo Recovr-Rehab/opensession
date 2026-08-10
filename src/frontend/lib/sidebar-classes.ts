@@ -57,6 +57,20 @@ export const SIDEBAR_INDEPENDENT_SECTION =
 /** The scroll flow inside one of those bands — visible, not a nested pane. */
 export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
 
+/**
+ * A row's hover, painted as a background LAYER rather than a background colour.
+ *
+ * Every row state is translucent ink now — selected is `bg-pressed`, "needs
+ * you" is `bg-blue-soft`/`bg-red-soft` — so each one picks up the sidebar
+ * material (and, on the desktop shell, the wallpaper) underneath instead of
+ * cutting an opaque patch out of it. A colour-based hover would REPLACE that
+ * fill with a weaker one, so pointing at the selected row would dim it and look
+ * like deselecting; as a layer the hover composites over whatever the row
+ * already carries, which is what a hover is. One class covers all three states.
+ */
+export const SIDEBAR_ROW_HOVER =
+	"hover:bg-[image:linear-gradient(var(--hover),var(--hover))]";
+
 /** A top-level group in the workspace list, and the gap after it. */
 export const SIDEBAR_GROUP = "mb-[14px]";
 
@@ -421,21 +435,33 @@ export const SIDEBAR_ATTN_COUNT =
  * A workspace row: {@link SIDEBAR_ROW} laid out as one flex line, so the rail,
  * the title and the trailing cluster sit on the sidebar's shared columns. The
  * gap matches {@link SIDEBAR_GROUP_HEADER} — see {@link SIDEBAR_RAIL}.
+ *
+ * On hover the line gives up its right end to {@link SIDEBAR_WS_ACTIONS}, which
+ * floats over that spot. The reserve lives here, on the row, because it is the
+ * row that has to clear it: it used to be a margin on the time badge, which
+ * left a row without a time (a PR row, a ticket with no status change) with its
+ * title running under the icons — invisible for as long as the actions wore an
+ * opaque plate to cover it, and plainly wrong once they stopped.
+ * Spelled `hover:`, not `group-hover:`: the row IS the `group`, and Tailwind's
+ * group variant only matches a group's DESCENDANTS. Either way it is
+ * hover-device-only, so touch layouts never pay for it.
  */
-export const SIDEBAR_WS_ROW = "flex items-center gap-[9px]";
+export const SIDEBAR_WS_ROW = "flex items-center gap-[9px] hover:pr-20";
 
 /**
  * Pin + archive, floated over the row's right edge so revealing them can never
- * change the row's height. Long titles run under them, so the cluster wears an
- * opaque row-hover plate with a soft left feather, swapped for the selected
- * fill on the selected row.
+ * change the row's height. The cluster used to wear an opaque plate, because a
+ * long title runs under it; it doesn't need one — the row itself now reserves
+ * that space on hover (see {@link SIDEBAR_WS_ROW}), so the title has
+ * re-truncated clear of the actions by the time they appear. A solid chip would
+ * also cut a hole in the translucent row underneath it.
  *
  * Resting `display` is the CALL SITE's, because it is the one thing that
  * differs between a live row (hover only), a row whose swipe action is open
  * (never) and an archived row on touch (always).
  */
 export const SIDEBAR_WS_ACTIONS =
-	"absolute top-1/2 right-[7px] -translate-y-1/2 items-center gap-1 rounded-sm bg-[var(--bg-hover)] shadow-[-6px_0_5px_-2px_var(--bg-hover)] group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]";
+	"absolute top-1/2 right-[7px] -translate-y-1/2 items-center gap-1 rounded-sm";
 
 /**
  * The hover-only reveal. `group-hover` is gated to real hover devices by
@@ -452,8 +478,7 @@ export const SIDEBAR_WS_ACTIONS_HOVER = "hidden group-hover:inline-flex";
  * (which would read as a chip on every row) and the title reserves the space
  * instead.
  */
-export const SIDEBAR_WS_ACTIONS_TOUCH =
-	"[@media(hover:none)]:inline-flex [@media(hover:none)]:bg-transparent [@media(hover:none)]:shadow-none";
+export const SIDEBAR_WS_ACTIONS_TOUCH = "[@media(hover:none)]:inline-flex";
 
 /**
  * One icon button in that cluster. Its colour is the call site's: a pinned

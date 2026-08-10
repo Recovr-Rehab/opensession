@@ -3,6 +3,7 @@ import { hasDraft } from "../../lib/drafts";
 import { markRead, markUnread } from "../../lib/reads";
 import {
 	SIDEBAR_RAIL,
+	SIDEBAR_ROW_HOVER,
 	SIDEBAR_STATUS_DOT,
 	SIDEBAR_SWIPE_ACTION,
 	SIDEBAR_SWIPE_ACTION_ARCHIVE,
@@ -45,12 +46,16 @@ export const SIDEBAR_ROW =
  *  brighten like Slack, a blocked one bolds under its blue wash. */
 /* Pin + archive, hover-revealed on desktop: on hover they take the metadata's
    place at the far right so they don't crowd the title. Long titles run under
-   that spot, so each wears an opaque row-hover plate with a soft left feather
-   — swapped for the selected fill when the row is the selected one. The reveal
-   is `group-hover`, which Tailwind gates to real hover devices for us; on touch
-   these actions live behind the swipe gesture and the long-press sheet. */
+   that spot, and what used to cover them was an opaque plate per button — which
+   only ever worked because the row it sat on was opaque too. Now that a row's
+   states are translucent ink, a solid chip cuts a hole in the material behind
+   it, so the row reserves the space instead (`hover:pr-[68px]` below) and the
+   buttons carry nothing but their own hover wash.
+   The reveal is `group-hover`, which Tailwind gates to real hover devices for
+   us; on touch these actions live behind the swipe gesture and the long-press
+   sheet. */
 const ROW_ACTION =
-	"absolute top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md bg-[var(--bg-hover)] text-[15px] leading-none text-faint shadow-[-6px_0_5px_-2px_var(--bg-hover)] group-hover:flex hover:bg-active hover:text-fg group-data-[selected]:bg-active group-data-[selected]:shadow-[-6px_0_5px_-2px_var(--bg-active)]";
+	"absolute top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:bg-pressed hover:text-fg";
 
 export const SIDEBAR_ROW_TITLE =
 	"min-w-0 truncate text-body font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg phone:text-[16px]";
@@ -350,12 +355,21 @@ export function SidebarItem({
 						SIDEBAR_ROW,
 						// Inside a swipe row: the wrapper owns the gap, the row owns the
 						// slide. Hover paints over selected/waiting here, as it always
-						// has — the swipe row's rules outranked both.
-						"z-1 mt-0 block touch-pan-y hover:bg-hover",
+						// has — as a layer now, so it lifts those states rather than
+						// replacing them (see SIDEBAR_ROW_HOVER).
+						"z-1 mt-0 block touch-pan-y",
+						SIDEBAR_ROW_HOVER,
+						// On hover the row gives up its right end to the pin +
+						// archive pair floating there, the same reserve workspace
+						// rows make (SIDEBAR_WS_ROW). It used to be the buttons'
+						// own opaque plate that kept a long title out of the way;
+						// a solid chip can't sit on a translucent row. `hover:`, not
+						// `group-hover:` — this element is the group itself.
+						"hover:pr-[68px]",
 						// Other people's sessions stack a meta line under the title, so
 						// the row is already two lines tall — trim its padding.
 						!mine && "py-[7px]",
-						waiting ? "bg-blue-soft" : selected && "bg-active",
+						waiting ? "bg-blue-soft" : selected && "bg-pressed",
 						dragging
 							? "transition-none"
 							: swipeOpen
@@ -489,16 +503,11 @@ export function SidebarItem({
 					</span>
 				)}
 			</div>
-			{/* The block meta lives on its own line below the title, so it stays
-			    readable under the hover-revealed buttons — it just reserves room on
-			    the right so it clears them. */}
+			{/* The block meta lives on its own line below the title. The row itself
+			    clears the hover-revealed buttons, so this line needs no reserve of
+			    its own. */}
 			{!mine && (
-				<div
-					className={cn(
-						"mt-[3px] flex items-center gap-1 overflow-hidden pl-7 whitespace-nowrap text-meta text-faint phone:text-label group-data-[unread]:text-dim",
-						!isPhone && "group-hover:pr-[58px]",
-					)}
-				>
+				<div className="mt-[3px] flex items-center gap-1 overflow-hidden pl-7 whitespace-nowrap text-meta text-faint phone:text-label group-data-[unread]:text-dim">
 					{metaParts.map((part, i) => (
 						<React.Fragment key={i}>
 							{i > 0 && <span className="opacity-50">·</span>}
@@ -515,7 +524,7 @@ export function SidebarItem({
 				<span
 					className={cn(
 						ROW_ACTION,
-						"right-[35px] data-[on]:bg-active data-[on]:text-fg",
+						"right-[35px] data-[on]:bg-pressed data-[on]:text-fg",
 					)}
 					data-on={pinned || undefined}
 					role="button"
