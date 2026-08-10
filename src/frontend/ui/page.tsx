@@ -50,7 +50,11 @@ export function PageLayout({
 							<PageDescription>{description}</PageDescription>
 						)}
 					</div>
-					{actions}
+					{actions !== undefined && (
+						<div className="relative phone:w-full after:pointer-events-none after:absolute after:inset-x-1 after:top-full after:h-1.5 after:bg-[linear-gradient(to_bottom,var(--border),transparent)] after:opacity-50 after:content-['']">
+							{actions}
+						</div>
+					)}
 				</PageHeader>
 				{filters !== undefined && (
 					<div className="-mt-1.5 mb-[18px] flex flex-wrap items-center gap-2.5">
