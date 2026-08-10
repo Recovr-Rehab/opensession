@@ -13,9 +13,10 @@ import { peopleMentionMatches } from "../lib/people";
 import {
   IconPaperclip,
   IconChevronDown,
+  IconChevronRight,
   IconCheck,
-  IconSliders,
   IconConnections,
+  IconDotsHorizontal,
   IconReturn,
   IconBox,
   IconFile,
@@ -125,21 +126,6 @@ const MODEL_PILL = cn(
 	palettePill,
 	"shrink min-w-0 max-[560px]:px-[9px] max-[374px]:[&_[data-effort]]:hidden",
 );
-
-const MCP_CONTAINER = "relative shrink-0";
-/** Phone-only full-width sheet; desktop opens the shared Base UI Menu. */
-const MCP_POPOVER =
-	"fixed bottom-[60px] left-3 right-3 z-[1000] max-h-[50vh] overflow-y-auto rounded-lg border border-line-strong bg-panel p-3 shadow-[0_8px_24px_rgba(0,0,0,0.3)]";
-const MCP_HEADER = "mb-2 px-1 text-meta font-semibold tracking-[-0.01em] text-dim";
-const MCP_GRID = "grid grid-cols-1 gap-1";
-const MCP_ROW =
-	"flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-label text-dim transition-colors hover:bg-hover hover:text-fg";
-/** `relative`, not `absolute`: paletteIconBtn pins every child of the button
- *  to `position: relative` (it lifts glyphs above the hover wash), and it wins
- *  the tie on source order — so this badge has always sat in flow, nudged 4px
- *  up and right. Kept as-is; squaring it up is a visual change. */
-const MCP_BADGE =
-	"relative -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent text-meta font-semibold text-panel";
 
 /* Split button: primary Create action + a caret that opens a mode dropdown.
    The two halves' corners are scoped to mutually exclusive media queries, so
@@ -324,16 +310,12 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const [createMore, setCreateMore] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createSplitRef = useRef<HTMLDivElement>(null);
-  // Phones open on just the prompt — repo/base/model/effort have sensible
-  // defaults and hide behind the sliders toggle until you actually need them.
   const isPhone = useIsPhone();
   // "Send messages with" (Settings → Preferences). The session composer honors it,
   // so this field has to as well — otherwise Enter silently does nothing here
   // while the Create button advertises ↩.
   const [sendKey, setSendKey] = useState(getSendKeyPref);
   useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
-  const [showOptions, setShowOptions] = useState(false);
-  const optionsVisible = !isPhone || showOptions;
 
   // Sandbox provider picker (the sandbox rollout plan): isolate this session's
   // workspace in the selected environment. Remote/MicroVM OpenCode sessions
@@ -459,20 +441,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       on ? [...prev, name] : prev.filter((m) => m !== name),
     );
   }
-
-  // Phone-only sheet state (desktop uses a Menu popup instead).
-  const [mcpPickerOpen, setMcpPickerOpen] = useState(false);
-  const mcpPickerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!mcpPickerOpen) return;
-    function onDown(e: MouseEvent) {
-      if (mcpPickerRef.current && !mcpPickerRef.current.contains(e.target as Node)) {
-        setMcpPickerOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [mcpPickerOpen]);
 
   // "@"-mention file autocomplete against the selected repo's repo (no
   // session exists yet, so search by repo).
@@ -826,7 +794,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             <IconChevronDown className={CHEVRON} size={22} />
           </PaletteSelect>
 
-          {optionsVisible && mode !== "scratch" && (
+          {mode !== "scratch" && (
           <PaletteSelect
             className={TRIGGER}
             title="What to create from"
@@ -930,18 +898,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         {/* Footer toolbar */}
         <div className={FOOTER} style={planSurface}>
           <div className={FOOTER_LEFT}>
-            {isPhone && (
-              <button
-                type="button"
-                className={cn(FOOTER_ICON_BTN, showOptions && paletteIconBtnOn)}
-                onClick={() => setShowOptions((v) => !v)}
-                disabled={creating}
-                aria-label="Advanced options — base branch, plan first, run environment"
-                aria-expanded={showOptions}
-              >
-                <IconSliders size={20} />
-              </button>
-            )}
             <Tooltip label="Attach a file">
               <button
                 type="button"
@@ -963,90 +919,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 e.target.value = "";
               }}
             />
-            {/* Connected services: a Menu popup on desktop, a full-width sheet
-                on phones (a positioned popup is too cramped there). */}
-            {!isPhone ? (
-              <Menu.Root>
-                <Tooltip
-                  label={`Connected services${selectedMcpServers.length ? ` (${selectedMcpServers.length})` : ""}`}
-                >
-                  <Menu.Trigger
-                    type="button"
-                    className={cn(FOOTER_ICON_BTN, selectedMcpServers.length > 0 && paletteIconBtnOn)}
-                    disabled={creating}
-                    aria-label="Choose connected services"
-                  >
-                    <IconConnections size={20} />
-                    {selectedMcpServers.length > 0 && (
-                      <span className={MCP_BADGE}>{selectedMcpServers.length}</span>
-                    )}
-                  </Menu.Trigger>
-                </Tooltip>
-                <Menu.Popup align="start" sideOffset={6} className="max-w-[min(360px,calc(100vw-1rem))]">
-                  <Menu.Group>
-                    <Menu.GroupLabel className="pt-1.5">Connected services</Menu.GroupLabel>
-                    {availableMcpServers.map((mcp) => {
-                      const checked = selectedMcpServers.includes(mcp);
-                      return (
-                        <Menu.CheckboxItem
-                          key={mcp}
-                          checked={checked}
-                          closeOnClick={false}
-                          onCheckedChange={(on) => toggleMcpServer(mcp, on)}
-                          className={`justify-between gap-3 ${checked ? "bg-hover" : ""}`}
-                        >
-                          <span className="flex min-w-0 items-center gap-2.5">
-                            <IconTile name={mcp} size={20} />
-                            <span className="min-w-0 truncate">{displayName(mcp)}</span>
-                          </span>
-                          {checked && <IconCheck className="shrink-0 text-dim" size={17} />}
-                        </Menu.CheckboxItem>
-                      );
-                    })}
-                  </Menu.Group>
-                </Menu.Popup>
-              </Menu.Root>
-            ) : (
-            <div className={MCP_CONTAINER} ref={mcpPickerRef}>
-              <button
-                type="button"
-                className={cn(FOOTER_ICON_BTN, selectedMcpServers.length > 0 && paletteIconBtnOn)}
-                onClick={() => setMcpPickerOpen((v) => !v)}
-                disabled={creating}
-                title={`Connected services${selectedMcpServers.length ? ` (${selectedMcpServers.length})` : ""}`}
-                aria-label="Choose connected services"
-                aria-expanded={mcpPickerOpen}
-              >
-                <IconConnections size={20} />
-                {selectedMcpServers.length > 0 && (
-                  <span className={MCP_BADGE}>{selectedMcpServers.length}</span>
-                )}
-              </button>
-              {mcpPickerOpen && (
-                <div className={MCP_POPOVER}>
-                  <div className={MCP_HEADER}>Connected services</div>
-                  <div className={MCP_GRID}>
-                    {availableMcpServers.map((mcp) => (
-                      <label key={mcp} className={MCP_ROW}>
-                        <input
-                          type="checkbox"
-                          className="cursor-pointer accent-accent"
-                          checked={selectedMcpServers.includes(mcp)}
-                          onChange={(e) => toggleMcpServer(mcp, e.target.checked)}
-                          disabled={creating}
-                        />
-                        <IconTile name={mcp} size={20} />
-                        <span>{displayName(mcp)}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            )}
-            {/* Plan mode is an advanced switch, so on phones it rides behind
-                the options toggle with the other advanced controls. */}
-            {mode === "code" && optionsVisible && (
+            {mode === "code" && (
               <Tooltip label={planFirst ? "Exit plan mode" : "Enter plan mode"}>
                 <button
                   type="button"
@@ -1060,115 +933,166 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 </button>
               </Tooltip>
             )}
-            {/* On phones the run-environment picker hides behind the options
-                toggle with the other advanced controls. */}
-            {showSandboxPicker && optionsVisible && (
-              <Menu.Root>
-                <Tooltip
-                  label={`Run environment — ${sandboxLabel(sandboxProvider)}${
-                    sandboxWarmed && shouldPrewarm ? " (warmed)" : ""
-                  }`}
+            {/* Rarely changed execution settings stay one level behind a single
+                overflow button. Their current values remain visible in the
+                submenu rows, while attachment and plan mode stay one tap away. */}
+            <Menu.Root>
+              <Tooltip label="More options">
+                <Menu.Trigger
+                  type="button"
+                  className={cn(
+                    FOOTER_ICON_BTN,
+                    (sandboxProvider || currentEngine === "pi" || selectedMcpServers.length > 0) &&
+                      paletteIconBtnOn,
+                  )}
+                  disabled={creating}
+                  aria-label="More options"
                 >
-                  <Menu.Trigger
-                    type="button"
-                    className={cn(FOOTER_ICON_BTN, sandboxProvider && paletteIconBtnOn)}
-                    disabled={creating}
-                    aria-label="Run environment"
-                  >
-                    <IconBox size={20} />
-                  </Menu.Trigger>
-                </Tooltip>
-                <Menu.Popup align="start" sideOffset={6} className="max-w-[min(340px,calc(100vw-1rem))]">
-                  <Menu.Group>
-                    <Menu.GroupLabel className="pt-1.5">Run environment</Menu.GroupLabel>
-                    {[{ id: "", note: undefined as string | undefined }, ...sandboxChoices].map(
-                      (opt) => {
-                        const selected = sandboxProvider === opt.id;
-                        const hostEngineWorkspace =
-                          !!opt.id &&
-                          opt.id !== "docker" &&
-                          modelFamily?.match.provider === "opencode";
+                  <IconDotsHorizontal size={20} />
+                </Menu.Trigger>
+              </Tooltip>
+              <Menu.Popup
+                align="start"
+                sideOffset={6}
+                className="min-w-[260px] max-w-[min(360px,calc(100vw-1rem))]"
+              >
+                {showSandboxPicker && (
+                  <Menu.SubmenuRoot>
+                    <Menu.SubmenuTrigger className="justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <IconBox className="shrink-0 text-dim" size={20} />
+                        <span className="truncate">Run environment</span>
+                      </span>
+                      <span className="flex flex-none items-center gap-1 text-dim">
+                        {sandboxLabel(sandboxProvider)}
+                        {sandboxWarmed && shouldPrewarm && (
+                          <span className="text-faint">· warm</span>
+                        )}
+                        <IconChevronRight className="shrink-0 text-faint" size={17} />
+                      </span>
+                    </Menu.SubmenuTrigger>
+                    <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                      {[{ id: "", note: undefined as string | undefined }, ...sandboxChoices].map(
+                        (opt) => {
+                          const selected = sandboxProvider === opt.id;
+                          const hostEngineWorkspace =
+                            !!opt.id &&
+                            opt.id !== "docker" &&
+                            modelFamily?.match.provider === "opencode";
+                          return (
+                            <Menu.Item
+                              key={opt.id || "host"}
+                              onClick={() => setSandboxProvider(opt.id)}
+                              className="items-start"
+                            >
+                              <IconCheck
+                                size={17}
+                                className={`mt-0.5 shrink-0 text-dim ${selected ? "" : "invisible"}`}
+                              />
+                              <span className="flex min-w-0 flex-col gap-0.5">
+                                <span>
+                                  {sandboxLabel(opt.id)}
+                                  {opt.id === "" && (
+                                    <span className="text-faint"> — no sandbox</span>
+                                  )}
+                                </span>
+                                {opt.note && (
+                                  <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
+                                    {opt.note}
+                                  </span>
+                                )}
+                                {hostEngineWorkspace && (
+                                  <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
+                                    Model on Host · workspace isolated here
+                                  </span>
+                                )}
+                              </span>
+                            </Menu.Item>
+                          );
+                        },
+                      )}
+                    </Menu.Popup>
+                  </Menu.SubmenuRoot>
+                )}
+                {engineChoices && (
+                  <Menu.SubmenuRoot>
+                    <Menu.SubmenuTrigger className="justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <IconStack className="shrink-0 text-dim" size={20} />
+                        <span className="truncate">Engine</span>
+                      </span>
+                      <span className="flex flex-none items-center gap-1 text-dim">
+                        {engineLabel(currentEngine)}
+                        <IconChevronRight className="shrink-0 text-faint" size={17} />
+                      </span>
+                    </Menu.SubmenuTrigger>
+                    <Menu.Popup className="max-w-[min(300px,calc(100vw-1rem))]">
+                      {engineChoices.map((e) => {
+                        const selected = currentEngine === e;
                         return (
-                          <Menu.Item
-                            key={opt.id || "host"}
-                            onClick={() => setSandboxProvider(opt.id)}
-                            className="items-start"
-                          >
+                          <Menu.Item key={e} onClick={() => switchEngine(e)} className="items-start">
                             <IconCheck
                               size={17}
                               className={`mt-0.5 shrink-0 text-dim ${selected ? "" : "invisible"}`}
                             />
                             <span className="flex min-w-0 flex-col gap-0.5">
-                              <span>
-                                {sandboxLabel(opt.id)}
-                                {opt.id === "" && (
-                                  <span className="text-faint"> — no sandbox</span>
-                                )}
+                              <span>{engineLabel(e)}</span>
+                              <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
+                                {e === "pi"
+                                  ? "pi.dev harness, in-process — native mid-turn steering"
+                                  : "Default engine — server pools, sandboxes, detached runs"}
                               </span>
-                              {opt.note && (
-                                <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
-                                  {opt.note}
-                                </span>
-                              )}
-                              {hostEngineWorkspace && (
-                                <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
-                                  Model on Host · workspace isolated here
-                                </span>
-                              )}
                             </span>
                           </Menu.Item>
                         );
-                      },
+                      })}
+                    </Menu.Popup>
+                  </Menu.SubmenuRoot>
+                )}
+                <Menu.SubmenuRoot>
+                  <Menu.SubmenuTrigger className="justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <IconConnections className="shrink-0 text-dim" size={20} />
+                      <span className="truncate">Connected services</span>
+                    </span>
+                    <span className="flex flex-none items-center gap-1 text-dim">
+                      {selectedMcpServers.length ? `${selectedMcpServers.length} on` : "None"}
+                      <IconChevronRight className="shrink-0 text-faint" size={17} />
+                    </span>
+                  </Menu.SubmenuTrigger>
+                  <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+                    {availableMcpServers.length === 0 && (
+                      <Menu.Item disabled className="text-faint">
+                        No services available
+                      </Menu.Item>
                     )}
-                  </Menu.Group>
-                </Menu.Popup>
-              </Menu.Root>
-            )}
-            {/* Engine switcher rides with the other advanced controls; hidden
-                entirely unless a second engine is configured. */}
-            {engineChoices && optionsVisible && (
-              <Menu.Root>
-                <Tooltip label={`Engine — ${engineLabel(currentEngine)}`}>
-                  <Menu.Trigger
-                    type="button"
-                    className={cn(FOOTER_ICON_BTN, currentEngine === "pi" && paletteIconBtnOn)}
-                    disabled={creating}
-                    aria-label="Engine"
-                  >
-                    <IconStack size={20} />
-                  </Menu.Trigger>
-                </Tooltip>
-                <Menu.Popup align="start" sideOffset={6} className="max-w-[min(300px,calc(100vw-1rem))]">
-                  <Menu.Group>
-                    <Menu.GroupLabel className="pt-1.5">Engine</Menu.GroupLabel>
-                    {engineChoices.map((e) => {
-                      const selected = currentEngine === e;
+                    {availableMcpServers.map((mcp) => {
+                      const checked = selectedMcpServers.includes(mcp);
                       return (
-                        <Menu.Item key={e} onClick={() => switchEngine(e)} className="items-start">
-                          <IconCheck
-                            size={17}
-                            className={`mt-0.5 shrink-0 text-dim ${selected ? "" : "invisible"}`}
-                          />
-                          <span className="flex min-w-0 flex-col gap-0.5">
-                            <span>{engineLabel(e)}</span>
-                            <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
-                              {e === "pi"
-                                ? "pi.dev harness, in-process — native mid-turn steering"
-                                : "Default engine — server pools, sandboxes, detached runs"}
-                            </span>
+                        <Menu.CheckboxItem
+                          key={mcp}
+                          checked={checked}
+                          closeOnClick={false}
+                          onCheckedChange={(on) => toggleMcpServer(mcp, on)}
+                          className={cn("justify-between gap-3", checked && "bg-hover")}
+                        >
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <IconTile name={mcp} size={20} />
+                            <span className="min-w-0 truncate">{displayName(mcp)}</span>
                           </span>
-                        </Menu.Item>
+                          {checked && <IconCheck className="shrink-0 text-dim" size={17} />}
+                        </Menu.CheckboxItem>
                       );
                     })}
-                  </Menu.Group>
-                </Menu.Popup>
-              </Menu.Root>
-            )}
+                  </Menu.Popup>
+                </Menu.SubmenuRoot>
+              </Menu.Popup>
+            </Menu.Root>
           </div>
 
           <div className={FOOTER_RIGHT}>
             {/* Always visible — on phones too, so a non-default (dumber) model
-                is never silently in effect behind the options toggle. */}
+                is never silently in effect. */}
             <ModelEffortSelect
               className={MODEL_PILL}
               title="Model and reasoning effort"
