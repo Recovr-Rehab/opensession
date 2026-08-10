@@ -185,11 +185,16 @@ export function tabClass(state: TabState): string {
 	const { active, waiting, colored } = state;
 	const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
 
-	// Desktop: one — and only one — inset underline.
+	// Desktop: one — and only one — inset underline. 2px, which is the weight
+	// every other tab strip in the app selects with (Reviews writes the same
+	// cue as `border-b-2 border-b-accent`); at 3px the bar was a slab of
+	// full-strength ink next to a hairline band. That leaves active and waiting
+	// on the same weight, so waiting carries the colour instead: blue, the same
+	// "needs you" the tab's own dot and the sidebar row already speak.
 	const underline = active
-		? "desktop:shadow-[inset_0_-3px_0_var(--accent)]"
+		? "desktop:shadow-[inset_0_-2px_0_var(--accent)]"
 		: waiting
-			? "desktop:shadow-[inset_0_-2px_0_var(--accent)]"
+			? "desktop:shadow-[inset_0_-2px_0_var(--blue)]"
 			: colored
 				? "desktop:shadow-[inset_0_-2px_0_color-mix(in_srgb,var(--tab-color)_70%,transparent)]"
 				: "desktop:shadow-[inset_0_-2px_0_transparent]";
