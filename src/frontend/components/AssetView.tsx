@@ -63,11 +63,9 @@ type AssetNavigation = {
 
 function AssetPager({
 	navigation,
-	floating = false,
 	arrows = false,
 }: {
 	navigation: AssetNavigation;
-	floating?: boolean;
 	arrows?: boolean;
 }) {
 	const { index, count, onPrevious, onNext, onSelect } = navigation;
@@ -75,12 +73,7 @@ function AssetPager({
 	return (
 		<nav
 			aria-label="Asset navigation"
-			className={cn(
-				"flex shrink-0 items-center justify-center gap-1",
-				floating
-					? "absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-full border border-line-strong bg-raised px-2 py-1 shadow-control"
-					: "min-h-10 border-t border-line px-3 py-1.5",
-			)}
+			className="flex min-h-7 shrink-0 items-center justify-center gap-1"
 		>
 			{arrows && (
 				<Tooltip label="Previous asset (Left arrow)">
@@ -233,11 +226,13 @@ function AssetMenu({
 	);
 }
 
-function AssetOverlayCaption({
+function AssetOverlayFooter({
 	sessionId,
 	file,
 	refresh,
 	showSize,
+	navigation,
+	phone,
 	onOpenAsTab,
 	onClose,
 }: {
@@ -245,26 +240,34 @@ function AssetOverlayCaption({
 	file: SessionAssetFile;
 	refresh: () => void;
 	showSize: boolean;
+	navigation: AssetNavigation | null;
+	phone: boolean;
 	onOpenAsTab?: () => void;
 	onClose: () => void;
 }) {
-	const name = file.path.split("/").pop() || file.path;
 	return (
-		<div className="flex shrink-0 items-center gap-3 px-3 py-2">
-			<div className="min-w-0 flex-1" title={file.path}>
-				<div className="truncate text-label font-medium text-fg">{name}</div>
-				{file.description && (
-					<div className="line-clamp-2 text-supporting leading-snug text-dim">
-						{file.description}
-					</div>
-				)}
-			</div>
-			{showSize && (
-				<span className="shrink-0 text-[11px] text-faint">
-					{formatAssetSize(file.size)}
-				</span>
+		<div
+			className={cn(
+				"z-20 flex shrink-0 flex-col items-center gap-1 px-3 py-2",
+				phone
+					? "border-t border-line"
+					: "absolute left-0 right-0 top-full mt-2 rounded-lg border border-line-strong bg-raised shadow-control",
 			)}
-			<div className="flex shrink-0 items-center gap-1">
+		>
+			{file.description && (
+				<div className="max-w-full line-clamp-2 text-center text-supporting leading-snug text-dim">
+					{file.description}
+				</div>
+			)}
+			<div className="flex max-w-full items-center justify-center gap-2">
+				{showSize && (
+					<span className="shrink-0 text-[11px] text-faint">
+						{formatAssetSize(file.size)}
+					</span>
+				)}
+				{navigation && (
+					<AssetPager navigation={navigation} arrows={phone} />
+				)}
 				{onOpenAsTab && (
 					<Button
 						variant="ghost"
@@ -634,6 +637,18 @@ export function AssetOverlay({
 					},
 				}
 			: null;
+	const footer = (
+		<AssetOverlayFooter
+			sessionId={sessionId}
+			file={file}
+			refresh={refresh}
+			showSize={listed}
+			navigation={navigation}
+			phone={isPhone}
+			onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
+			onClose={onClose}
+		/>
+	);
 
 	return (
 		<ResponsiveDialog
@@ -644,7 +659,7 @@ export function AssetOverlay({
 			// The default modal is a 30rem confirm box; an artifact needs the
 			// room a page or a chart was drawn for. `max-w-none` first, or the
 			// default clamp wins.
-			modalClassName="h-[min(820px,84vh)] w-[min(1120px,84vw)] max-w-none overflow-visible"
+			modalClassName="h-[min(820px,78vh)] w-[min(1120px,84vw)] max-w-none overflow-visible"
 			sheetClassName="h-[94dvh]"
 		>
 			<div
@@ -653,6 +668,9 @@ export function AssetOverlay({
 					!isPhone && "rounded-[inherit]",
 				)}
 			>
+				<div className="flex min-h-9 shrink-0 items-center px-3 pr-12" title={file.path}>
+					<div className="truncate text-label font-medium text-fg">{name}</div>
+				</div>
 				<div className="relative flex min-h-0 flex-1">
 					{missingPath === file.path ? (
 						<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
@@ -669,20 +687,9 @@ export function AssetOverlay({
 						/>
 					)}
 				</div>
-				<AssetOverlayCaption
-					sessionId={sessionId}
-					file={file}
-					refresh={refresh}
-					showSize={listed}
-					onOpenAsTab={
-						onOpenAsTab ? () => onOpenAsTab(file.path) : undefined
-					}
-					onClose={onClose}
-				/>
-				{isPhone && navigation && (
-					<AssetPager navigation={navigation} arrows />
-				)}
+				{isPhone && footer}
 			</div>
+			{!isPhone && footer}
 			<Tooltip label="Close">
 				<Button
 					variant="ghost"
@@ -697,7 +704,6 @@ export function AssetOverlay({
 				<>
 					<AssetSideButton direction="previous" onClick={navigation.onPrevious} />
 					<AssetSideButton direction="next" onClick={navigation.onNext} />
-					<AssetPager navigation={navigation} floating />
 				</>
 			)}
 		</ResponsiveDialog>
