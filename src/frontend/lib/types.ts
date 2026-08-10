@@ -783,12 +783,22 @@ export interface AnalyticsModel {
 	cacheWriteTokens: number;
 }
 
+export interface AnalyticsPersonRepo {
+	/** Repo id, or "" for activity not attributable to a registered repo. */
+	repo: string;
+	sessions: number;
+	turns: number;
+	outputTokens: number;
+}
+
 export interface AnalyticsPerson {
 	name: string;
 	sessionsCreated: number;
 	sessionsActive: number;
 	turns: number;
 	outputTokens: number;
+	/** Optional: absent from a not-yet-restarted server's payload. */
+	repos?: AnalyticsPersonRepo[];
 }
 
 export interface AnalyticsAutomation {

@@ -646,6 +646,8 @@ export interface AnalyticsSummary {
 		sessionsActive: number;
 		turns: number;
 		outputTokens: number;
+		/** This person's activity split by repo ("" = not attributable). */
+		repos: Array<{ repo: string; sessions: number; turns: number; outputTokens: number }>;
 	}>;
 	automations: Array<{
 		name: string;
@@ -754,12 +756,18 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		activePeople: 0,
 	};
 	const modelAgg = new Map<string, ModelAgg>();
+	interface OwnerRepoAgg {
+		sessions: Set<string>;
+		turns: number;
+		outputTokens: number;
+	}
 	interface OwnerAgg {
 		sessionsCreated: number;
 		sessionsActive: Set<string>;
 		turns: number;
 		outputTokens: number;
 		errors: number;
+		byRepo: Map<string, OwnerRepoAgg>;
 	}
 	const peopleAgg = new Map<string, OwnerAgg>();
 	const automationAgg = new Map<string, OwnerAgg>();
@@ -779,7 +787,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 	};
 	const ownerAgg = (m: Map<string, OwnerAgg>, name: string): OwnerAgg => {
 		let a = m.get(name);
-		if (!a) m.set(name, (a = { sessionsCreated: 0, sessionsActive: new Set(), turns: 0, outputTokens: 0, errors: 0 }));
+		if (!a) m.set(name, (a = { sessionsCreated: 0, sessionsActive: new Set(), turns: 0, outputTokens: 0, errors: 0, byRepo: new Map() }));
 		return a;
 	};
 	const allSessions = new Set<string>();
@@ -837,11 +845,17 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			agg.turns += s.turns;
 			agg.outputTokens += s.output;
 			agg.errors += s.errors;
-			const ra = repoActivityOf(m?.repo || "");
+			const repoKey = m?.repo || "";
+			const ra = repoActivityOf(repoKey);
 			ra.sessions.add(id);
 			ra.turns += s.turns;
 			ra.outputTokens += s.output;
 			ra.errors += s.errors;
+			let orr = agg.byRepo.get(repoKey);
+			if (!orr) agg.byRepo.set(repoKey, (orr = { sessions: new Set(), turns: 0, outputTokens: 0 }));
+			orr.sessions.add(id);
+			orr.turns += s.turns;
+			orr.outputTokens += s.output;
 		}
 		const outputByModel: Record<string, number> = {};
 		const addModel = (model: string, m: ModelAgg) => {
@@ -953,6 +967,9 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			sessionsActive: a.sessionsActive.size,
 			turns: a.turns,
 			outputTokens: a.outputTokens,
+			repos: [...a.byRepo.entries()]
+				.map(([repo, r]) => ({ repo, sessions: r.sessions.size, turns: r.turns, outputTokens: r.outputTokens }))
+				.sort((x, y) => y.outputTokens - x.outputTokens),
 		}))
 		.filter((p) => p.sessionsCreated > 0 || p.sessionsActive > 0)
 		.sort((a, b) => b.sessionsActive - a.sessionsActive || b.sessionsCreated - a.sessionsCreated);

@@ -386,6 +386,27 @@ export function Analytics() {
 
 		const maxModelOutput = Math.max(1, ...data.models.map((m) => m.outputTokens));
 
+		// Per-person repo mix: colors follow the repos table's order (slots 1-8,
+		// tail and the "no repo" bucket fold into neutral gray).
+		const coloredRepos = data.repos.map((r) => r.repo).filter(Boolean);
+		const repoColor = (repo: string) => {
+			const i = coloredRepos.indexOf(repo);
+			return repo && i >= 0 && i < 8 ? slot(i + 1) : OTHER_COLOR;
+		};
+		const segOrder = (repo: string) => (repo ? coloredRepos.indexOf(repo) : coloredRepos.length);
+		const personRepoRows = data.people
+			.filter((p) => p.outputTokens > 0 && (p.repos?.length || 0) > 0)
+			.slice(0, 12)
+			.map((p) => ({
+				name: p.name,
+				outputTokens: p.outputTokens,
+				segments: (p.repos || []).filter((r) => r.outputTokens > 0).sort((a, b) => segOrder(a.repo) - segOrder(b.repo)),
+			}));
+		const maxPersonOutput = Math.max(1, ...personRepoRows.map((p) => p.outputTokens));
+		const personRepoSeries: Series[] = [...coloredRepos, ""]
+			.filter((repo) => personRepoRows.some((p) => p.segments.some((s) => s.repo === repo)))
+			.map((repo) => ({ label: repo ? repoLabel(repo) : "No repo", color: repoColor(repo) }));
+
 		// Review finding outcomes, cohorted by the day the finding was posted.
 		// Guard: the live-rebuilt frontend can briefly run against a not-yet-
 		// restarted server whose payload has no reviewQuality.
@@ -403,7 +424,7 @@ export function Analytics() {
 		});
 		const splitDate = labels[Math.floor(labels.length / 2)] || "";
 
-		return { labels, kindSeries, kindValues, modelSeries, modelValues, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, maxModelOutput, rq, reviewSeries, reviewValues, splitDate };
+		return { labels, kindSeries, kindValues, modelSeries, modelValues, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, maxModelOutput, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
 	}, [data]);
 
 	// Deliberately NOT ui/input's field: these two sit inside the range row
@@ -762,6 +783,45 @@ export function Analytics() {
 								</div>
 							</ChartCard>
 						</div>
+
+						{derived.personRepoRows.length > 0 && (
+							<div className="mt-4">
+								<ChartCard
+									title="Repo activity per person"
+									subtitle="Output tokens by repo — hover a segment for sessions and turns"
+									series={derived.personRepoSeries}
+								>
+									<div className="flex flex-col gap-2">
+										{derived.personRepoRows.map((p) => (
+											<div key={p.name} className="flex items-center gap-3 text-label">
+												<span className="w-[18%] min-w-24 truncate text-fg" title={p.name}>
+													{p.name}
+												</span>
+												<span className="h-3 min-w-0 flex-1">
+													<span
+														className="flex h-3 overflow-hidden rounded-xs"
+														style={{ width: `${Math.max(1.5, (100 * p.outputTokens) / derived.maxPersonOutput)}%` }}
+													>
+														{p.segments.map((s) => (
+															<span
+																key={s.repo || "(none)"}
+																className="block h-3"
+																style={{
+																	width: `${(100 * s.outputTokens) / p.outputTokens}%`,
+																	background: derived.repoColor(s.repo),
+																}}
+																title={`${s.repo ? repoLabel(s.repo) : "No repo"}: ${fmtInt(s.sessions)} sessions · ${fmtInt(s.turns)} turns · ${fmt(s.outputTokens)} output`}
+															/>
+														))}
+													</span>
+												</span>
+												<span className="w-14 shrink-0 text-right tabular-nums text-dim">{fmt(p.outputTokens)}</span>
+											</div>
+										))}
+									</div>
+								</ChartCard>
+							</div>
+						)}
 
 						{data.prs.length > 0 && (
 							<div className="mt-4">
