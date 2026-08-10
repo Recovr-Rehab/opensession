@@ -25,12 +25,11 @@ final class AccentThemeTests: XCTestCase {
         }
     }
 
-    /// The pair's identity: jewel tones with white ink on light surfaces,
-    /// airy tints with dark ink on dark surfaces.
-    func testChromaticFillsSwitchGlyphsBetweenAppearances() {
+    /// The pair's identity: jewel tones with white ink in both appearances.
+    func testChromaticFillsCarryWhiteGlyphsInBothAppearances() {
         for theme in AccentTheme.allCases where theme != .mono {
             XCTAssertTrue(theme.glyphIsWhite(dark: false), "\(theme.rawValue) light fill")
-            XCTAssertFalse(theme.glyphIsWhite(dark: true), "\(theme.rawValue) dark fill")
+            XCTAssertTrue(theme.glyphIsWhite(dark: true), "\(theme.rawValue) dark fill")
         }
     }
 
