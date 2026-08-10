@@ -206,7 +206,7 @@ export function buildScanPrompt(
   const repoLabel = cs ? repo.csRepo || repo.id : repo.ghRepo;
   return `You are ${personaName()} running an on-demand deepsec security scan on ${repo.id} (${repoLabel}). Sweep the repo for vulnerabilities and ${cs ? "push one fix branch" : "open one PR"} per CONFIRMED finding of severity MEDIUM or higher. NEVER merge anything; never push to ${repo.defaultBranch}.
 
-deepsec = vercel-labs/deepsec, an AI vuln scanner driving the \`claude\` CLI. This run's env already carries CLAUDE_CODE_OAUTH_TOKEN from the ${productName()} Claude account pool, so the CLI is pre-authenticated — never run \`claude /login\` and never rely on the host CLI's own login state. Use \`corepack pnpm\` — there is no global pnpm on this host. Node 22 is present.
+deepsec = vercel-labs/deepsec, an AI vuln scanner driving the \`claude\` CLI. This run's env already carries CLAUDE_CODE_OAUTH_TOKEN from the ${productName()} Claude account pool, so the CLI is pre-authenticated — never run \`claude /login\` and never rely on the host CLI's own login state. (\`--agent codex\` is also provisioned — CODEX_HOME/OPENAI_API_KEY from the ChatGPT pool — but default to \`--agent claude\` unless the scan profile or extra instructions say otherwise.) Use \`corepack pnpm\` — there is no global pnpm on this host. Node 22 is present.
 
 ## Setup
 1. You are in a mode:code worktree of ${repo.id}. Run \`git fetch origin ${repo.defaultBranch}\`.
@@ -339,8 +339,10 @@ export async function executeScan(
         mode: "code",
         model: opts?.model,
         mcpServers: [], // deepsec + gh CLI only; findings land as PRs + summary
-        // deepsec's inner `claude` runs on the account pool, not host login.
+        // deepsec's inner `claude`/`codex` agents run on the account pools,
+        // not host logins.
         claudeCliEnv: true,
+        codexCliEnv: true,
         journal: { osSessionId: bksId, kind: "security-scan" },
       })) {
         if (event.type === "init") {

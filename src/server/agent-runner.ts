@@ -161,6 +161,15 @@ export interface RunAgentOpts {
    * same-class token and wins).
    */
   claudeCliEnv?: boolean;
+  /**
+   * Codex sibling of claudeCliEnv: point the run's env at a codex-accounts
+   * pool credential (CODEX_HOME for ChatGPT-subscription accounts,
+   * OPENAI_API_KEY for api-key ones) so run-spawned tooling — deepsec's
+   * `--agent codex` — runs on the ChatGPT pool. Same trust gate and
+   * per-session-server containment as claudeCliEnv; the two flags are
+   * independent so a caller grants only the pools its tooling uses.
+   */
+  codexCliEnv?: boolean;
   /** Git identity for commits this run makes, attributing them to the prompt's author. */
   author?: GitIdentity | null;
   /**
@@ -830,6 +839,7 @@ export function resumeInterruptedRuns(
             confirmTools: run.confirmTools,
             aws: run.aws,
             claudeCliEnv: run.claudeCliEnv,
+            codexCliEnv: run.codexCliEnv,
             fallbackModel: run.fallbackModel,
             accountId: run.accountId,
             accountStrict: run.accountStrict,
@@ -933,6 +943,7 @@ export function resumeInterruptedRuns(
           confirmTools: run.confirmTools,
           aws: run.aws,
           claudeCliEnv: run.claudeCliEnv,
+          codexCliEnv: run.codexCliEnv,
           fallbackModel: run.fallbackModel,
           accountId: run.accountId,
           accountStrict: run.accountStrict,

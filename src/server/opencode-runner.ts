@@ -3688,6 +3688,41 @@ async function* runOpencodeAttempt(
         );
       }
     }
+    // Codex sibling (opts.codexCliEnv — deepsec's `--agent codex`): the codex
+    // CLI reads CODEX_HOME, and a home-kind account's value IS its live host
+    // CODEX_HOME — the same dir native codex runs point at — so there is no
+    // auth copy and no refresh-token rotation hazard (the opencode seeding
+    // dance exists only because opencode keeps its OWN auth store). API-key
+    // accounts ride OPENAI_API_KEY instead. Same containment as the claude
+    // block above: per-session servers only, fill-the-gap only, fail-soft.
+    if (
+      opts.codexCliEnv &&
+      !shared &&
+      !serverExtraEnv?.CODEX_HOME &&
+      !serverExtraEnv?.OPENAI_API_KEY
+    ) {
+      const codexCliCfg = readOpencodeBridgeConfig();
+      const codexPick = pickOpenaiAccount("", codexCliCfg?.openaiAccounts, sessionKey, undefined, user);
+      if ("error" in codexPick) {
+        console.warn(
+          `[opencode-runner] codexCliEnv requested but no usable codex account (${codexPick.error}) — run proceeds without it`
+        );
+      } else {
+        serverExtraEnv = {
+          ...(serverExtraEnv || {}),
+          ...(codexPick.kind === "home"
+            ? { CODEX_HOME: codexPick.value }
+            : { OPENAI_API_KEY: codexPick.value }),
+        };
+        audit({
+          msg: "codex_cli_env_account",
+          run_kind: journal?.kind,
+          session_id: journal?.osSessionId,
+          account: codexPick.name,
+          account_id: codexPick.id.slice(0, 8),
+        });
+      }
+    }
 
     const serverKey = shared
       ? sharedServerKey(bridgeTag, user, githubUserLogin)

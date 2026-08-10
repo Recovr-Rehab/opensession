@@ -149,6 +149,13 @@ export interface Automation {
    */
   claudeCliEnv?: boolean;
   /**
+   * Codex sibling of claudeCliEnv: CODEX_HOME (ChatGPT-subscription account)
+   * or OPENAI_API_KEY (api-key account) from the codex-accounts pool, for
+   * run-spawned tooling using `--agent codex`. Independent flags — grant an
+   * automation only the pools its tooling actually uses.
+   */
+  codexCliEnv?: boolean;
+  /**
    * Self-improving automation (human-set only — e.g. the nightly Dreaming
    * reflection). Runs (and thread-reply resumes) additionally get two scoped
    * in-process servers: opensession-sessions in `automationSelf` shape (the
@@ -385,6 +392,7 @@ export function createAutomation(input: {
   selfImprove?: boolean;
   workflows?: boolean;
   claudeCliEnv?: boolean;
+  codexCliEnv?: boolean;
   model?: string;
   fallbackModel?: string;
   accountId?: string;
@@ -441,6 +449,7 @@ export function createAutomation(input: {
     selfImprove: input.selfImprove === true || undefined,
     workflows: input.workflows === true || undefined,
     claudeCliEnv: input.claudeCliEnv === true || undefined,
+    codexCliEnv: input.codexCliEnv === true || undefined,
     model,
     fallbackModel,
     accountId,
@@ -496,7 +505,7 @@ export function ensureConfiguredAutomations(): void {
 
 export function updateAutomation(
   id: string,
-  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "claudeCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch">>
+  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch">>
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
@@ -527,6 +536,7 @@ export function updateAutomation(
   if ("selfImprove" in patch) next.selfImprove = patch.selfImprove === true || undefined;
   if ("workflows" in patch) next.workflows = patch.workflows === true || undefined;
   if ("claudeCliEnv" in patch) next.claudeCliEnv = patch.claudeCliEnv === true || undefined;
+  if ("codexCliEnv" in patch) next.codexCliEnv = patch.codexCliEnv === true || undefined;
   if ("grafanaPoll" in patch) {
     const grafanaPoll = sanitizeGrafanaPoll(patch.grafanaPoll);
     if (grafanaPoll && "error" in grafanaPoll) return grafanaPoll;
@@ -1181,9 +1191,10 @@ export async function runAutomation(
       // from the tool list with the same post-in-note guidance — opencodeRunPolicy)
       confirmTools: STRIPE_CONFIRM_TOOLS,
       aws: true, // automation runs get short-lived instance-role read creds
-      // Human-set flag (deepsec scans): the run's own `claude` CLI tooling
-      // authenticates on the account pool, never the host login.
+      // Human-set flags (deepsec scans): the run's own `claude`/`codex` CLI
+      // tooling authenticates on the account pools, never the host login.
       claudeCliEnv: !!automation.claudeCliEnv,
+      codexCliEnv: !!automation.codexCliEnv,
       // Cost controls: a pinned account defaults to a HARD pin for automation
       // runs (exhaustion falls to fallbackModel, never the shared pool) unless
       // accountStrict is explicitly false (soft pin: preferred, pool backup);

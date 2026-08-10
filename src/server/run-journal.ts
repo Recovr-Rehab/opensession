@@ -48,6 +48,7 @@ export interface ActiveRunRecord {
   confirmTools?: Record<string, string>; // per-run human-confirmed tools, preserved across resume
   aws?: boolean; // whether to inject AWS creds, preserved across resume
   claudeCliEnv?: boolean; // pool Claude-CLI credential in the run env (deepsec scans), preserved across resume
+  codexCliEnv?: boolean; // codex-pool sibling (CODEX_HOME / OPENAI_API_KEY), preserved across resume
   model?: string; // effective model driving the journaled attempt
   selectedModel?: string; // user selection when model is a transient per-turn fallback
   transientFallback?: boolean; // model must not replace selectedModel in session state
@@ -111,6 +112,7 @@ export function buildRunJournalRecord(
     deniedTools?: Record<string, string>;
     aws?: boolean;
     claudeCliEnv?: boolean;
+    codexCliEnv?: boolean;
     selectedModel?: string;
     transientFallback?: boolean;
     fallbackModel?: string;
@@ -122,6 +124,7 @@ export function buildRunJournalRecord(
     | "deniedTools"
     | "aws"
     | "claudeCliEnv"
+    | "codexCliEnv"
     | "selectedModel"
     | "transientFallback"
     | "fallbackModel"
@@ -132,6 +135,7 @@ export function buildRunJournalRecord(
     deniedTools: opts.deniedTools,
     aws: !!opts.aws,
     claudeCliEnv: opts.claudeCliEnv || undefined,
+    codexCliEnv: opts.codexCliEnv || undefined,
     selectedModel: opts.selectedModel,
     transientFallback: opts.transientFallback,
     fallbackModel: opts.fallbackModel,
