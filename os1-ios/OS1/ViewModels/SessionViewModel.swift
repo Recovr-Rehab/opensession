@@ -688,9 +688,12 @@ final class SessionViewModel {
         sendSeq += 1
     }
 
-    /// Clear the composer's floating notice. The chip retires an info or warn
-    /// line on its own timer; this is the tap, and the only way an error one
-    /// leaves before another notice replaces it.
+    /// Clear the composer's floating notice — which now carries only what is
+    /// a word to the person who just tapped (a refused send, a switch that
+    /// didn't happen); anything that happened to the SESSION goes to
+    /// `noteLocally` instead. The chip retires an info or warn line on its
+    /// own timer; this is the tap, and the only way an error one leaves
+    /// before another notice replaces it.
     func dismissNotice() { notice = nil }
 
     /// Record something this app just did as a transcript line of its own.
@@ -1233,7 +1236,26 @@ final class SessionViewModel {
             }
 
         case .notice(let message), .serverError(let message):
-            notice = message.isEmpty ? nil : message
+            // A server notice is something that happened to the SESSION — a
+            // run that failed, a sandbox that wasn't there, a rebuild that
+            // paused — so it joins the transcript in order, which is where
+            // the web viewer puts these same frames and where the session's
+            // own notices already render. Pinning it over the composer put a
+            // fact about the work on the field you type in, and left it
+            // sitting there long after the thing it described was over.
+            //
+            // Connection churn is the exception: a socket dropping is not an
+            // event in the session's history, and re-reporting it on every
+            // reconnect would write the transcript full of it.
+            // An empty frame is the server clearing, not an event.
+            guard !message.isEmpty else { notice = nil; break }
+            let normalized = message.lowercased()
+            let isConnectionChurn =
+                normalized.contains("connect") || normalized.contains("socket")
+            if isConnectionChurn {
+                if case .connected = connectionState {} else { break }
+            }
+            noteLocally(message, tone: NoticeTone.derived(fromText: message))
 
         default:
             break
