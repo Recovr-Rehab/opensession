@@ -908,7 +908,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		filter.person === "me"
 			? "You"
 			: filter.person === "everyone"
-				? "Everyone"
+				? "All workspaces"
 				: filter.person === "unassigned"
 					? "Unassigned"
 					: team.find((m) => m.key === filter.person)?.person.name ||
@@ -3841,6 +3841,37 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					stopRepoAutoScroll();
 			}}
 		>
+			{/* Someone else's lens is easy to forget you're in — the lanes look
+			    exactly like yours, just with unfamiliar work in them. So when the
+			    sidebar isn't yours it says so at the very top, and stays there
+			    while the list scrolls under it. The whole strip is the way back. */}
+			{filter.person !== "me" && (
+				<Tooltip label="Back to your workspaces">
+					<button
+						// Not sticky on purpose: the workspaces heading below is
+						// already pinned and carries the same name once this scrolls
+						// away, and a second sticky layer would land on top of it.
+						className="mx-2 mt-2 flex items-center gap-2 rounded-md border-0 bg-blue-soft px-2.5 py-2 text-left text-label text-fg"
+						onClick={() => setFilter({ person: "me" })}
+					>
+						{filter.person !== "everyone" && filter.person !== "unassigned" && (
+							<UserAvatar name={personLensName} size={18} className="shrink-0" />
+						)}
+						{/* Says whose sidebar you're in, which is the thing the pinned
+						    "…'s workspaces" heading below can't say twice without
+						    stuttering — and it's short enough to survive a narrow
+						    sidebar, where the face and the colour carry the rest. */}
+						<span className="min-w-0 flex-1 truncate">
+							{filter.person === "everyone"
+								? "Everyone's sidebar"
+								: filter.person === "unassigned"
+									? "Unassigned work"
+									: `${personLensName}'s sidebar`}
+						</span>
+						<IconX size={15} className="shrink-0 text-dim" aria-hidden="true" />
+					</button>
+				</Tooltip>
+			)}
 			{localMode && cloudUnreachable && (
 				<div
 					className="mx-2 mt-2 flex items-center gap-2 rounded-md border border-line bg-panel px-2.5 py-2 text-[11px] text-dim"
@@ -4108,7 +4139,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						    there. */}
 						<span
 							className={cn(
-								"shrink-0 pl-1 text-label font-semibold tracking-[-0.01em] text-faint group-hover/wshead:text-dim",
+								"shrink-0 pl-1 text-label font-semibold tracking-[-0.01em] group-hover/wshead:text-dim",
+								// Full-strength ink when the lanes aren't yours: this is
+								// the one row that stays pinned while the list scrolls,
+								// so it's what stops a borrowed sidebar reading as your
+								// own from halfway down. (No face here — the row is
+								// narrow, and adding one truncates the name that does
+								// the actual telling; the strip at the top has it.)
+								filter.person === "me" ? "text-faint" : "text-fg",
 								isPhone && "hidden",
 							)}
 							ref={titleRef}

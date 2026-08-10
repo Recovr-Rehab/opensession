@@ -417,7 +417,7 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
         : personLabel(person)
       : filter.person === "unassigned"
         ? "Unassigned"
-        : "Everyone";
+        : "All workspaces";
   const [showArchived, setShowArchived] = useState(false);
   const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
   const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);

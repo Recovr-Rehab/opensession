@@ -363,7 +363,12 @@ export function TeamLensMenu({
 				)}
 			</Menu.Trigger>
 			<Menu.Popup side={side} align={align} className="min-w-[210px]">
-				<Menu.RadioGroup value={value} onValueChange={(next) => onPick(String(next))}>
+				{/* Says what the menu changes: these are lanes and rows to read, not
+				    people to open. The label has to sit inside a Group — Base UI
+				    wires it to the group it names. */}
+				<Menu.Group>
+					<Menu.GroupLabel>Whose workspaces</Menu.GroupLabel>
+					<Menu.RadioGroup value={value} onValueChange={(next) => onPick(String(next))}>
 					{rows.map((m) => (
 						<Menu.RadioItem
 							key={m.key}
@@ -386,12 +391,15 @@ export function TeamLensMenu({
 					>
 						{/* Sized to the faces above so every label shares one edge. */}
 						<span className="size-[22px] shrink-0" />
-						<span className="min-w-0 flex-1 truncate">Everyone</span>
+						{/* Not a person: it drops the filter entirely. Named for what
+						    you get, in the same words the sidebar header uses for it. */}
+						<span className="min-w-0 flex-1 truncate">All workspaces</span>
 						{value === "everyone" && (
 							<IconCheck className="shrink-0 text-accent" size={17} />
 						)}
-					</Menu.RadioItem>
-				</Menu.RadioGroup>
+						</Menu.RadioItem>
+					</Menu.RadioGroup>
+				</Menu.Group>
 			</Menu.Popup>
 		</Menu.Root>
 	);
