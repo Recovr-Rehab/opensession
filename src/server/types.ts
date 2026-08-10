@@ -114,6 +114,13 @@ export interface UnifiedSession {
   workspaceId?: string | null;
   /** Parent/orchestrator session when spawned as a worker sub-session. */
   parentSessionId?: string;
+  /** The session whose agent created this one through `create_session` — set
+   *  even for a standalone create, which carries no parentSessionId. An
+   *  agent's own helper session is an implementation detail of the session
+   *  that spawned it, so the sidebar keeps it out of the human's rows (see
+   *  Sidebar.tsx). Never set when the spawner is the Desk: the Desk delegates
+   *  on the user's behalf, so its workers are the user's own work. */
+  spawnedBy?: string;
   /** The user's standing Desk (concierge) session — hidden from lists. */
   desk?: boolean;
   /** How many spawn_task hops away from a human-created session this is
@@ -439,6 +446,10 @@ export interface NativeSessionFile {
   stackedOn?: StackedOn;
   /** Parent/orchestrator session when this session was spawned as a visible worker sub-session. */
   parentSessionId?: string;
+  /** The session whose agent created this one (see UnifiedSession.spawnedBy):
+   *  set for every `create_session` from a session, standalone or not, and
+   *  never for a Desk spawner. */
+  spawnedBy?: string;
   /** The user's standing Desk (concierge) session — fixed title, suppressed
    *  from the session lists, opened via the Desk overlay. */
   desk?: boolean;

@@ -229,6 +229,7 @@ registerSessionControl({
 		mcpServers,
 		workspaceId,
 		parentSessionId,
+		spawnedBy: spawnedByInput,
 		reportBack,
 		user,
 		sandbox,
@@ -271,6 +272,15 @@ registerSessionControl({
 			: resolvePinnedAccountId(model, accountIdInput, user);
 		const images = parseImageDataUrls(imageUrls);
 		const parentSession = parentSessionId ? findSession(parentSessionId) : null;
+		// Attribution only (CreateSessionInput.spawnedBy): the session whose agent
+		// asked for this one, recorded even when the create was standalone and
+		// carries no parent link. It is what lets the sidebar keep an agent's own
+		// helper sessions — a scratch session spun up mid-run — out of the human's
+		// rows. The Desk is deliberately exempt: it delegates on the user's behalf,
+		// so the work it spawns is the user's own and stays visible.
+		const spawnerSession = spawnedByInput ? findSession(spawnedByInput) : null;
+		const spawnedBy =
+			spawnerSession && !spawnerSession.desk ? spawnerSession.id : undefined;
 		// Explicit workspace join (the native apps' "new session in this workspace" —
 		// this path's equivalent of the web tab strip's "+"). An unknown id is a
 		// hard error: falling back to a standalone create would silently mint the
@@ -564,6 +574,7 @@ registerSessionControl({
 			announceWorkspaceId: resolvedWorkspaceId || undefined,
 			autoNameWorkspace: autoNamedWorkspace,
 			parentSessionId,
+			spawnedBy,
 			reportBack,
 			planFirst: planFirst === true,
 			model,

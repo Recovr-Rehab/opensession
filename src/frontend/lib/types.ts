@@ -340,6 +340,11 @@ export interface UnifiedSession {
 	workspaceId?: string | null;
 	/** Parent/orchestrator session when spawned as a worker sub-session. */
 	parentSessionId?: string;
+	/** The session whose agent created this one through `create_session`, set
+	 *  even for a standalone create (which has no parentSessionId). An agent's
+	 *  own helper session belongs to that agent's run, so the sidebar leaves it
+	 *  out of your rows until it needs you. Never set for Desk-spawned work. */
+	spawnedBy?: string;
 	/** Legacy removed side-chat record. Kept hidden until its parent is deleted. */
 	/** The user's standing Desk (concierge) session — fixed title, hidden from
 	 *  the session lists, opened via the Desk overlay (⌘J). */

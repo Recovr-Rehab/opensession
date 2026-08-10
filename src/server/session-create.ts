@@ -197,6 +197,8 @@ export interface ResolvedCreate {
 	/** Workspace to rename once the generated title lands (minted by THIS create). */
 	autoNameWorkspace?: Workspace | null;
 	parentSessionId?: string;
+	/** Agent that created this session (SessionData.spawnedBy). */
+	spawnedBy?: string;
 	reportBack?: boolean;
 	planFirst?: boolean;
 	/** Undefined only for forks of sessions with no recorded model (historic). */
@@ -329,6 +331,7 @@ export async function openCreatedSession(
 				...(spec.parentSessionId
 					? { parentSessionId: spec.parentSessionId }
 					: {}),
+				...(spec.spawnedBy ? { spawnedBy: spec.spawnedBy } : {}),
 				// Persisted so the failure beacon (handoff-evidence.ts) can tell
 				// a worker that owes its parent a report from a child session
 				// that was explicitly told not to report (e.g. the PR session).

@@ -879,6 +879,7 @@ function scanNativeSessions(): UnifiedSession[] {
       repo: data.repo ?? (data as { project?: string }).project,
       workspaceId: data.workspaceId ?? null,
       parentSessionId: data.parentSessionId,
+      spawnedBy: data.spawnedBy,
       desk: data.desk,
       spawnDepth: data.spawnDepth,
       attachedRepos: data.attachedRepos,

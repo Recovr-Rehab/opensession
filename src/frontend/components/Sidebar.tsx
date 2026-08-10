@@ -1009,6 +1009,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// claimed it (legacy global overrides still count for all).
 			if (s.automation && !isClaimed(s)) continue;
 			if (s.desk) continue; // the Desk session lives in the ⌘J overlay, not the sidebar
+			// A session an agent started for its own purposes (create_session
+			// from inside a run — a throwaway fixture, a probe) belongs to that
+			// run, not to you: it gets a workspace like anything else, but not a
+			// row here. It surfaces the moment it needs a human — a blocked
+			// question — and while you have it open, so nothing can get stuck out
+			// of sight; a lane you set on it yourself claims it for good, exactly
+			// like claiming an automation run above. Work the Desk delegates on
+			// your behalf is never marked this way (server: session-control-wiring).
+			if (
+				s.spawnedBy &&
+				s.id !== selectedId &&
+				mineStatus(s) !== "needsinput" &&
+				!pinnedLane(s)
+			)
+				continue;
 			if (s.workspaceId) {
 				const list = byWs.get(s.workspaceId) || [];
 				list.push(s);
@@ -3264,7 +3279,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 							{/* The differently sized name and count share a baseline, while the
 							    pair stays vertically centred against the tile. */}
-							<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5">
+							<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5 desktop:gap-[9px]">
 								<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
 								<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
 									{rows.length + snoozedRows.length + prs.length}
@@ -3562,7 +3577,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span className={SIDEBAR_RAIL}>
 							<RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />
 						</span>
-						<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5">
+						<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5 desktop:gap-[9px]">
 							<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{feed.title}</span>
 							<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>{count}</span>
 						</span>

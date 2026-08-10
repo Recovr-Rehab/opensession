@@ -742,6 +742,11 @@ export function createSessionsMcpServer(
             model: args.model,
             mcpServers: args.mcpServers,
             parentSessionId,
+            // Recorded even for a standalone create (which drops the parent
+            // link on purpose): a session an agent spins up for its own
+            // purposes is that agent's business, not a row in the human's
+            // sidebar. Attribution only — it never makes the child report back.
+            spawnedBy: ctx.currentSessionId,
             reportBack: shouldReportBack,
             user: ctx.createdBy,
             sandbox: args.sandbox,
