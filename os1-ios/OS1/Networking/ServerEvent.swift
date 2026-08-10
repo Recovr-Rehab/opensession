@@ -170,10 +170,17 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         self.hasFiles = hasFiles
     }
 
-    /// The same entry with new text, for the optimistic half of an edit.
-    func withContent(_ content: String) -> QueueItem {
+    /// The same entry with new text — and, when the edit touched them, new
+    /// attachments — for the optimistic half of an edit. `images: nil` keeps
+    /// the ones it already carries, matching what the server does with an
+    /// update that names no images.
+    func withContent(_ content: String, images: [String]? = nil) -> QueueItem {
         QueueItem(
-            id: id, content: content, user: user, images: images, hasFiles: hasFiles
+            id: id,
+            content: content,
+            user: user,
+            images: images ?? self.images,
+            hasFiles: hasFiles
         )
     }
 }

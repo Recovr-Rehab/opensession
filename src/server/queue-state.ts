@@ -273,11 +273,20 @@ export function deleteQueuedPrompt(
 	return false;
 }
 
+/**
+ * Rewrite a queued message in place, keeping its position in the queue.
+ *
+ * `images` is the message's attachments AFTER the edit: undefined leaves them
+ * untouched (what a text-only editor sends), an array replaces them wholesale,
+ * and an empty array clears them. Non-image `files` are never editable this
+ * way — they're staged references, not something a composer can hand back.
+ */
 export function updateQueuedPrompt(
 	sessionId: string,
 	queueId: string | undefined,
 	queueIndex: number | undefined,
 	content: string,
+	images?: string[],
 ): boolean {
 	const queue = promptQueues.get(sessionId);
 	if (!queue) return false;
@@ -287,6 +296,10 @@ export function updateQueuedPrompt(
 	if (!item) return false;
 	if (isGitHubQueueItem(item)) return false;
 	item.content = content;
+	if (images) {
+		if (images.length > 0) item.images = images;
+		else delete item.images;
+	}
 	persistQueues();
 	broadcastQueue(sessionId);
 	return true;

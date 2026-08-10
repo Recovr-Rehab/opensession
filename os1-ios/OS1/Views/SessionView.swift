@@ -1886,7 +1886,9 @@ private struct SessionInputBar: View {
                     initial: item.content,
                     images: item.images,
                     hasFiles: item.hasFiles,
-                    onSave: { viewModel.editQueued(item, content: $0) },
+                    onSave: { content, images in
+                        viewModel.editQueued(item, content: content, images: images)
+                    },
                     onDelete: { viewModel.deleteQueued(item) }
                 )
             }
@@ -2865,37 +2867,45 @@ private struct SessionInputBar: View {
 /// and leave a window — one backgrounded app away — where it exists nowhere
 /// but a text field.
 private struct QueuedMessageEditor: View {
-    let onSave: (String) -> Void
+    /// The message as it should be after the edit: its text, and the pictures
+    /// it carries as `data:` URLs.
+    let onSave: (String, [String]) -> Void
     let onDelete: () -> Void
 
     private let original: String
-    /// What the message carries besides its text, as the `data:` URLs the
-    /// queue holds. Shown, not editable: the server's update takes a new
-    /// content string and nothing else, so the pictures ride along whatever
-    /// the text becomes — and an editor that showed only the words made a
-    /// message sent with a screenshot look like it had lost it.
-    private let images: [String]
+    /// The pictures the message arrived with, by id, so "did anything change"
+    /// is a comparison of two small arrays rather than of six base64 blobs on
+    /// every keystroke.
+    private let originalImageIDs: [String]
+    /// Non-image attachments. Shown but not editable: they're staged
+    /// server-side references (a PDF already on disk), not something a
+    /// composer can hand back — removing one means discarding the message.
     private let hasFiles: Bool
-    /// Decoded once, in `init`: the sheet's body re-evaluates on every
+    /// Decoded once, when the sheet opens: the body re-evaluates on every
     /// keystroke, and base64-decoding six screenshots per character typed is
     /// not something a text field should be paying for.
-    private let decoded: [Data]
+    @State private var attached: [AttachedImage]
     @State private var text: String
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
+
+    /// Same ceiling as the composer, so a message can't grow attachments here
+    /// that it couldn't have been sent with.
+    private static let maxImages = 6
 
     init(
         initial: String,
         images: [String] = [],
         hasFiles: Bool = false,
-        onSave: @escaping (String) -> Void,
+        onSave: @escaping (String, [String]) -> Void,
         onDelete: @escaping () -> Void
     ) {
         original = initial.trimmingCharacters(in: .whitespacesAndNewlines)
         _text = State(initialValue: initial)
-        self.images = images
+        let staged = images.compactMap(AttachedImage.init(dataURL:))
+        _attached = State(initialValue: staged)
+        originalImageIDs = staged.map(\.id)
         self.hasFiles = hasFiles
-        decoded = images.compactMap(DataImage.decode(dataURL:))
         self.onSave = onSave
         self.onDelete = onDelete
     }
@@ -2904,52 +2914,73 @@ private struct QueuedMessageEditor: View {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Says what stays with the message, so the pictures above don't read as
-    /// something the sheet is asking about.
+    private var changed: Bool {
+        trimmed != original || attached.map(\.id) != originalImageIDs
+    }
+
+    /// Names what the paperclip beside it does, and owns up to the one
+    /// attachment this sheet can't touch.
     private var attachmentNote: String {
-        let pictures = images.count == 1 ? "1 image" : "\(images.count) images"
-        switch (images.isEmpty, hasFiles) {
-        case (true, _): return "Files stay attached."
-        case (false, true): return "\(pictures) and files stay attached."
-        case (false, false): return "\(pictures) stay\(images.count == 1 ? "s" : "") attached."
+        let pictures = attached.count == 1 ? "1 image" : "\(attached.count) images"
+        switch (attached.isEmpty, hasFiles) {
+        case (true, true): return "Add images. Files stay attached."
+        case (true, false): return "Add images"
+        case (false, true): return "\(pictures); files stay attached."
+        case (false, false): return "\(pictures) attached"
         }
     }
 
     /// The pictures as a group, so tapping one pages through the rest.
     private var gallery: [PreviewImage] {
-        decoded.enumerated().map { index, data in
-            PreviewImage(id: "\(index)", source: .data(data))
-        }
+        attached.map { PreviewImage(id: $0.id, source: .data($0.jpegData)) }
     }
 
     /// The attachments, above the text the way the composer stacks them over
-    /// the input — square thumbnails that wrap, and tappable, since a 64pt
-    /// screenshot can't answer "is this the right one?" on its own.
-    @ViewBuilder
+    /// the input — square thumbnails that wrap, tappable (a 64pt screenshot
+    /// can't answer "is this the right one?" on its own), and removable, with
+    /// the composer's own paperclip for adding more.
     private var attachments: some View {
-        if !images.isEmpty || hasFiles {
-            VStack(alignment: .leading, spacing: 6) {
-                if !decoded.isEmpty {
-                    FlowLayout(spacing: 6) {
-                        ForEach(Array(decoded.enumerated()), id: \.offset) { index, data in
+        VStack(alignment: .leading, spacing: 8) {
+            if !attached.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(Array(attached.enumerated()), id: \.element.id) { index, image in
+                        ZStack(alignment: .topTrailing) {
                             ExpandableDataImage(
-                                data: data, gallery: gallery, galleryIndex: index
+                                data: image.jpegData,
+                                gallery: gallery,
+                                galleryIndex: index
                             )
                             .frame(width: 64, height: 64)
                             .clipShape(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                             )
+                            Button {
+                                attached.removeAll { $0.id == image.id }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 16))
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.white, .black.opacity(0.6))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(2)
+                            .accessibilityLabel("Remove image")
                         }
                     }
                 }
+            }
+            HStack(spacing: 6) {
+                AttachImagesButton(images: $attached, maxCount: Self.maxImages)
                 Text(attachmentNote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
         }
+        .animation(.smooth(duration: 0.22), value: attached.map(\.id))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
     }
 
     /// A sheet whose whole job is one piece of text: the text gets the whole
@@ -3002,10 +3033,14 @@ private struct QueuedMessageEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(trimmed)
+                        onSave(trimmed, attached.map(\.dataURL))
                         dismiss()
                     }
-                    .disabled(trimmed.isEmpty || trimmed == original)
+                    // A message that still carries a picture is worth
+                    // sending without a word of text — what can't be saved
+                    // is one edited down to nothing at all, which is what
+                    // Discard is for.
+                    .disabled(!changed || (trimmed.isEmpty && attached.isEmpty))
                 }
             }
         }
