@@ -944,18 +944,19 @@ export function SessionViewer({
 		cachedTranscript?.historyTruncated ?? false,
 	);
 	const [loadingHistory, setLoadingHistory] = useState(false);
-	// "Jump to the start" — the second segment of the load-earlier control, for
-	// readers who'd otherwise click their way back through a hundred pages. The
-	// walk is driven from the transcript_history handler (each page schedules
-	// the next), so its state lives in a ref; `loaded` enforces the ceiling and
+	// The whole-history actions walk backward a page at a time. The walk is
+	// driven from the transcript_history handler (each page schedules the next),
+	// so its state lives in a ref; `loaded` enforces the ceiling and
 	// `cursor` catches a backlog that stops receding (a transcript whose
 	// earliest surviving entry isn't seq 1 reports "truncated" forever).
-	const jumpRef = useRef<{
+	const historyWalkRef = useRef<{
 		sessionId: string;
 		loaded: number;
 		cursor: number | null;
+		scrollToStart: boolean;
 	} | null>(null);
 	const [jumpingToStart, setJumpingToStart] = useState(false);
+	const [loadingAllHistory, setLoadingAllHistory] = useState(false);
 	// Set when the walk lands: the final page's entries render with the commit
 	// that follows, so the scroll itself happens in a layout effect below.
 	const scrollToTopRef = useRef(false);
@@ -1412,14 +1413,15 @@ export function SessionViewer({
 		if (h) h.until = Math.max(h.until, performance.now() + 2500);
 	}, [loadingHistory]);
 	useEffect(() => stopHistoryHold, [session.id, stopHistoryHold]);
-	// Switching sessions abandons an in-flight jump-to-start walk (its pages are
+	// Switching sessions abandons an in-flight whole-history walk (its pages are
 	// session-guarded anyway) — without this the flag would outlive it and keep
 	// the control stuck in its loading state.
 	useEffect(() => {
 		return () => {
-			jumpRef.current = null;
+			historyWalkRef.current = null;
 			scrollToTopRef.current = false;
 			setJumpingToStart(false);
+			setLoadingAllHistory(false);
 		};
 	}, [session.id]);
 
@@ -2027,18 +2029,19 @@ export function SessionViewer({
 					setHistoryTruncated(!!msg.truncated);
 					setLoadingHistory(false);
 					setLoading(false);
-					// A jump-to-start walk ends here when the server answers with the
+					// A whole-history walk ends here when the server answers with the
 					// whole transcript — the legacy path's only way to serve a backlog,
 					// and the seq path's fallback when a store read fails. A TRUNCATED
 					// init is a re-snapshot of the tail instead (a reconnect landing
 					// mid-walk), so cancel that quietly rather than parking the reader
 					// at the top of a tail they didn't ask for.
-					if (jumpRef.current?.sessionId === session.id) {
+					if (historyWalkRef.current?.sessionId === session.id) {
 						if (msg.truncated) {
-							jumpRef.current = null;
+							historyWalkRef.current = null;
 							setJumpingToStart(false);
+							setLoadingAllHistory(false);
 						} else {
-							finishJumpToStart();
+							finishHistoryWalk();
 						}
 					}
 					if (!shellTimingRef.current.recorded) {
@@ -2082,11 +2085,11 @@ export function SessionViewer({
 								? msg.startOffset
 								: Math.min(historyStartRef.current, msg.startOffset);
 					}
-					// Jump to the start: this page's cursor is now in place, so ask
+					// Whole-history walk: this page's cursor is now in place, so ask
 					// for the next one straight from here — leaving loadingHistory
 					// true across the gap. Stop on a whole transcript, an empty page,
 					// a cursor that stopped receding, or the ceiling.
-					const jump = jumpRef.current;
+					const jump = historyWalkRef.current;
 					if (jump && jump.sessionId === session.id) {
 						jump.loaded += msg.entries.length;
 						const cursor = inSeqMode
@@ -2103,7 +2106,7 @@ export function SessionViewer({
 							requestHistoryPage(true);
 							break;
 						}
-						finishJumpToStart();
+						finishHistoryWalk();
 					}
 					setLoadingHistory(false);
 					break;
@@ -2662,7 +2665,7 @@ export function SessionViewer({
 	);
 	// Shared preamble: stop tracking the live edge, and pin the reader to the
 	// content they're on while the page prepends above it.
-	const beginHistoryLoad = useCallback(() => {
+	const beginHistoryLoad = useCallback((holdMs = 8000) => {
 		leaveLatest();
 		const el = messagesRef.current;
 		if (el) {
@@ -2671,7 +2674,7 @@ export function SessionViewer({
 			// exactly the added height (what native scroll anchoring would pick).
 			const node = pickScrollAnchor(el);
 			if (node)
-				startHistoryHold(node, 8000, {
+				startHistoryHold(node, holdMs, {
 					height: el.scrollHeight,
 					top: el.scrollTop,
 				});
@@ -2684,6 +2687,19 @@ export function SessionViewer({
 		beginHistoryLoad();
 		requestHistoryPage();
 	}, [beginHistoryLoad, historyTruncated, requestHistoryPage]);
+	const loadAllHistory = useCallback(() => {
+		if (!historyTruncated || loadingHistoryRef.current) return;
+		loadingHistoryRef.current = true;
+		historyWalkRef.current = {
+			sessionId: session.id,
+			loaded: 0,
+			cursor: null,
+			scrollToStart: false,
+		};
+		setLoadingAllHistory(true);
+		beginHistoryLoad(60_000);
+		requestHistoryPage(true);
+	}, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
 	// The whole backlog, one click: each page's arrival schedules the next (see
 	// the transcript_history handler). `loadingHistory` deliberately stays true
 	// across the gaps, which is what keeps the auto-load sentinel and a second
@@ -2691,23 +2707,31 @@ export function SessionViewer({
 	const jumpToStart = useCallback(() => {
 		if (!historyTruncated || loadingHistoryRef.current) return;
 		loadingHistoryRef.current = true;
-		jumpRef.current = { sessionId: session.id, loaded: 0, cursor: null };
+		historyWalkRef.current = {
+			sessionId: session.id,
+			loaded: 0,
+			cursor: null,
+			scrollToStart: true,
+		};
 		setJumpingToStart(true);
-		beginHistoryLoad();
+		beginHistoryLoad(60_000);
 		requestHistoryPage(true);
 	}, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
-	// Landing. The hold's whole job is keeping the reader where they were, which
-	// is precisely what we're overriding, so drop it first. scrollTop 0 is the
-	// one position that survives the fresh bubbles' content-visibility estimates
-	// settling — everything that resizes does so below it.
-	const finishJumpToStart = useCallback(() => {
-		if (!jumpRef.current) return;
-		jumpRef.current = null;
+	// Finish either whole-history walk. Loading all drops the temporary anchor
+	// hold only after the last prepend has landed; jumping additionally moves to
+	// scrollTop 0, the one position unaffected by rows settling below it.
+	const finishHistoryWalk = useCallback(() => {
+		const walk = historyWalkRef.current;
+		if (!walk) return;
+		historyWalkRef.current = null;
 		setJumpingToStart(false);
+		setLoadingAllHistory(false);
 		stopHistoryHold();
-		scrollToTopRef.current = true;
-		const el = messagesRef.current;
-		if (el) el.scrollTop = 0;
+		if (walk.scrollToStart) {
+			scrollToTopRef.current = true;
+			const el = messagesRef.current;
+			if (el) el.scrollTop = 0;
+		}
 	}, [messagesRef, stopHistoryHold]);
 
 	// Auto-load is driven by upward reader intent, never by viewport geometry
@@ -5145,42 +5169,39 @@ export function SessionViewer({
 												<div className="flex min-h-10 items-center gap-2 px-3 text-label font-medium text-dim phone:min-h-11">
 													<PixelSpinner className="text-faint" />
 													<span>
-														{jumpingToStart
+														{loadingAllHistory
+															? "Loading all messages…"
+															: jumpingToStart
 															? "Finding first message…"
 															: "Loading older messages…"}
 													</span>
 												</div>
 											) : (
-												<Menu.Root>
-													<Menu.Trigger
-														type="button"
-														className="group flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[999px] px-3 text-label font-medium text-dim transition-[background-color,color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg phone:min-h-11"
+												<div
+													role="group"
+													aria-label="Earlier messages"
+													className="inline-flex items-center overflow-hidden rounded-[14px] [corner-shape:squircle] border border-line bg-control p-0.5 shadow-control"
+												>
+													<Button
+														variant="ghost"
+														size="md"
+														icon={<IconArrowUp size={20} />}
+														onClick={loadAllHistory}
+														className="border-0 phone:min-h-11"
 													>
-														<span>Earlier messages</span>
-														<IconChevronDown size={14} className="text-faint" />
-													</Menu.Trigger>
-													<Menu.Popup
-														side="bottom"
-														align="center"
-														sideOffset={6}
-														className="min-w-[230px] rounded-[18px]"
+														Load all
+													</Button>
+													<span className="h-5 w-px shrink-0 bg-line" aria-hidden />
+													<Button
+														variant="ghost"
+														size="md"
+														icon={<IconArrowUpToLine size={20} />}
+														onClick={jumpToStart}
+														className="border-0 phone:min-h-11"
 													>
-														<Menu.Item
-															onClick={loadEarlierHistory}
-															className="gap-3 rounded-[12px] px-3 py-2.5 text-label"
-														>
-															<IconArrowUp size={20} className="shrink-0 text-dim" />
-															<span>Load older messages</span>
-														</Menu.Item>
-														<Menu.Item
-															onClick={jumpToStart}
-															className="gap-3 rounded-[12px] px-3 py-2.5 text-label"
-														>
-															<IconArrowUpToLine size={20} className="shrink-0 text-dim" />
-															<span>Go to first message</span>
-														</Menu.Item>
-													</Menu.Popup>
-												</Menu.Root>
+														First message
+													</Button>
+												</div>
 											)}
 										</div>
 									)}
