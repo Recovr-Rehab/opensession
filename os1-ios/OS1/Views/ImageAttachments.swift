@@ -442,13 +442,15 @@ struct ConversationImageStrip: View {
 /// keeps them to pan the photo.
 struct FullScreenImagePreview: View {
     let items: [PreviewImage]
+    private let topLeading: AnyView?
 
     @Environment(\.dismiss) private var dismiss
     @State private var index: Int
     @State private var dragOffset: CGSize = .zero
 
-    init(items: [PreviewImage], index: Int) {
+    init(items: [PreviewImage], index: Int, topLeading: AnyView? = nil) {
         self.items = items
+        self.topLeading = topLeading
         _index = State(initialValue: min(max(index, 0), max(items.count - 1, 0)))
     }
 
@@ -463,7 +465,7 @@ struct FullScreenImagePreview: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .top) {
             Color.black
                 .opacity(1 - dismissalProgress * 0.55)
                 .ignoresSafeArea()
@@ -492,17 +494,21 @@ struct FullScreenImagePreview: View {
             .scaleEffect(1 - dismissalProgress * 0.08)
             .ignoresSafeArea()
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.black.opacity(0.55), in: Circle())
+            HStack {
+                if let topLeading { topLeading }
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.black.opacity(0.55), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close image")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close image")
             .padding(16)
         }
         .overlay(alignment: .bottom) { caption }

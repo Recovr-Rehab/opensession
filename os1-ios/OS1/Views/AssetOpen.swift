@@ -3,9 +3,9 @@ import SwiftUI
 /// The scratch file a transcript chip is about to open over the conversation.
 ///
 /// Identifiable so the viewer is presented with `fullScreenCover(item:)`: the
-/// picture it opens with is the one that was tapped, even if the turn's chips
+/// file it opens with is the one that was tapped, even if the turn's chips
 /// change underneath it while it is up.
-struct AssetPicture: Identifiable, Equatable {
+struct AssetOverlayItem: Identifiable, Equatable {
     let sessionId: String
     let path: String
 
@@ -21,15 +21,10 @@ struct AssetPicture: Identifiable, Equatable {
 ///
 /// The transcript names an asset in two places — the tool row that wrote it
 /// and the chip in that turn's footer — and both come through here, so the two
-/// ways into one file can't drift apart. Same split the web viewer makes:
-///
-/// A picture opens OVER the conversation, in the viewer every other image in
-/// a transcript already opens: a picture is a glance, and a swipe down puts
-/// the conversation back with nothing left to navigate. Everything else — a
-/// report, a page, a log — is something you read, and pushes one level
-/// deeper, where an HTML artifact's relative references resolve and the folder
-/// is there to browse. A clip pushes too: the pushed preview is a player
-/// already, and the picture viewer isn't.
+/// ways into one file can't drift apart.
+/// Every file opens over the conversation. Pictures keep the zoomable viewer
+/// every other transcript image uses; documents get their existing renderer in
+/// a full-screen cover. Both can be promoted into the Assets view from there.
 enum AssetOpen {
     /// Extensions the picture viewer can render. SVG is deliberately absent:
     /// an animated or scripted one needs the web view the push gives it.
@@ -46,10 +41,8 @@ enum AssetOpen {
         )
     }
 
-    /// Whether this app can lift a picture over what it is showing. The Mac
-    /// app has no such viewer, and no panel stack either — so there a chip of
-    /// either kind stays a plain, disabled label.
-    static var canShowPicture: Bool {
+    /// The Mac app has no asset cover, so its chips stay disabled labels.
+    static var canShowOverlay: Bool {
         #if os(iOS)
         true
         #else
@@ -60,36 +53,54 @@ enum AssetOpen {
     /// Whether a chip for this file leads anywhere — what a caller checks
     /// before drawing one, since a button that does nothing is worse than no
     /// button.
-    ///
-    /// A picture needs nothing but the view holding the chip, so it stays
-    /// openable on the surfaces with no stack to push onto (the sub-agent
-    /// sheet). Everything else needs a panel to push onto.
-    static func canOpen(_ path: String, openPanel: OpenPanelAction) -> Bool {
-        isPicture(path) ? canShowPicture : openPanel.isAvailable
+    static func canOpen(_ _: String) -> Bool {
+        canShowOverlay
     }
 
     static func open(
         sessionId: String,
         path: String,
-        openPanel: OpenPanelAction,
-        picture: Binding<AssetPicture?>
+        overlay: Binding<AssetOverlayItem?>
     ) {
-        if isPicture(path), canShowPicture {
-            picture.wrappedValue = AssetPicture(sessionId: sessionId, path: path)
-            return
-        }
-        openPanel(.asset(sessionId: sessionId, path: path))
+        guard canShowOverlay else { return }
+        overlay.wrappedValue = AssetOverlayItem(sessionId: sessionId, path: path)
     }
 }
 
 extension View {
-    /// Hosts the viewer `AssetOpen.open` lifts a picture into. Put it on the
+    /// Hosts the viewer `AssetOpen.open` lifts a file into. Put it on the
     /// same view that owns the state — a chip inside a lazily-built transcript
     /// row can present perfectly well, and presenting from higher up would
     /// mean threading the tapped file back down again.
-    func assetPicturePreview(_ picture: Binding<AssetPicture?>) -> some View {
+    func assetOverlayPreview(
+        _ asset: Binding<AssetOverlayItem?>,
+        openPanel: OpenPanelAction
+    ) -> some View {
         #if os(iOS)
-        return fullScreenCover(item: picture) { item in
+        return fullScreenCover(item: asset) { item in
+            AssetOverlayView(item: item, openPanel: openPanel)
+        }
+        #else
+        return self
+        #endif
+    }
+}
+
+#if os(iOS)
+private struct AssetOverlayView: View {
+    let item: AssetOverlayItem
+    let openPanel: OpenPanelAction
+
+    private var asset: OS1API.SessionAsset {
+        OS1API.SessionAsset(path: item.path, size: 0, mtime: "")
+    }
+
+    private func openAssets() {
+        openPanel(.assets(sessionId: item.sessionId))
+    }
+
+    var body: some View {
+        if AssetOpen.isPicture(item.path) {
             FullScreenImagePreview(
                 items: [
                     PreviewImage(
@@ -98,11 +109,26 @@ extension View {
                         label: item.name
                     )
                 ],
-                index: 0
+                index: 0,
+                topLeading: AnyView(
+                    AssetActionsMenu(
+                        sessionId: item.sessionId,
+                        asset: asset,
+                        onOpenAssets: openPanel.isAvailable ? openAssets : nil,
+                        onDarkBackground: true
+                    )
+                )
             )
+        } else {
+            NavigationStack {
+                AssetDetailView(
+                    sessionId: item.sessionId,
+                    asset: asset,
+                    showsDone: true,
+                    onOpenAssets: openPanel.isAvailable ? openAssets : nil
+                )
+            }
         }
-        #else
-        return self
-        #endif
     }
 }
+#endif

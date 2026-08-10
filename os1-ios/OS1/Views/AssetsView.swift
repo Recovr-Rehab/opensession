@@ -1,5 +1,6 @@
 import SwiftUI
 #if os(iOS)
+import UIKit
 import WebKit
 #endif
 
@@ -46,7 +47,11 @@ struct AssetsListView: View {
             }
         }
         .navigationDestination(item: $openFile) { asset in
-            AssetDetailView(sessionId: sessionId, asset: asset)
+            AssetDetailView(
+                sessionId: sessionId,
+                asset: asset,
+                onDeleted: { files.removeAll { $0.id == asset.id } }
+            )
         }
         .task(id: sessionId) { await load() }
     }
@@ -119,8 +124,8 @@ struct AssetsListView: View {
     }
 }
 
-/// One asset on its own, one level below the list — or straight below the
-/// conversation, when a chat row's chip pointed at it.
+/// One asset on its own, pushed from the list or hosted in a cover over the
+/// conversation when a chat row's chip pointed at it.
 ///
 /// It takes the path rather than the file's listing row: a chip in the
 /// transcript knows what was written, not how big it ended up, and waiting
@@ -129,10 +134,24 @@ struct AssetsListView: View {
 struct AssetDetailView: View {
     let sessionId: String
     let asset: OS1API.SessionAsset
+    var showsDone = false
+    var onOpenAssets: (() -> Void)?
+    var onDeleted: (() -> Void)?
 
-    init(sessionId: String, asset: OS1API.SessionAsset) {
+    @Environment(\.dismiss) private var dismiss
+
+    init(
+        sessionId: String,
+        asset: OS1API.SessionAsset,
+        showsDone: Bool = false,
+        onOpenAssets: (() -> Void)? = nil,
+        onDeleted: (() -> Void)? = nil
+    ) {
         self.sessionId = sessionId
         self.asset = asset
+        self.showsDone = showsDone
+        self.onOpenAssets = onOpenAssets
+        self.onDeleted = onDeleted
     }
 
     init(sessionId: String, path: String) {
@@ -148,7 +167,172 @@ struct AssetDetailView: View {
             .background(OS1VisualStyle.background)
             .navigationTitle(asset.name)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if showsDone {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    AssetActionsMenu(
+                        sessionId: sessionId,
+                        asset: asset,
+                        onOpenAssets: onOpenAssets,
+                        onDeleted: onDeleted
+                    )
+                }
+            }
     }
+}
+
+/// The file operations stay in one predictable place on pushed details and
+/// covers. The cover adds "Show in Assets"; inside the Assets view it would
+/// only point back to the place already on screen, so it is omitted.
+struct AssetActionsMenu: View {
+    let sessionId: String
+    let asset: OS1API.SessionAsset
+    var onOpenAssets: (() -> Void)?
+    var onDeleted: (() -> Void)?
+    var onDarkBackground = false
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDelete = false
+    @State private var preparingShare = false
+    @State private var sharedFile: SharedAssetFile?
+    @State private var sharedDirectory: URL?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Menu {
+            if let onOpenAssets {
+                Button {
+                    onOpenAssets()
+                    dismiss()
+                } label: {
+                    Label("Show in Assets", systemImage: "folder")
+                }
+                Divider()
+            }
+            Button {
+                prepareShare()
+            } label: {
+                Label("Share file", systemImage: "square.and.arrow.up")
+            }
+            .disabled(preparingShare)
+            Divider()
+            Button(role: .destructive) {
+                confirmingDelete = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        } label: {
+            Group {
+                if preparingShare {
+                    ProgressView()
+                } else {
+                    Image(systemName: "ellipsis")
+                }
+            }
+            .frame(width: 36, height: 36)
+            .foregroundStyle(onDarkBackground ? .white : OS1VisualStyle.text)
+            .background(onDarkBackground ? .black.opacity(0.55) : .clear, in: Circle())
+        }
+        .accessibilityLabel("Asset actions")
+        .confirmationDialog(
+            "Delete \(asset.name)?",
+            isPresented: $confirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) { deleteAsset() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the file from this session's Assets folder.")
+        }
+        .sheet(item: $sharedFile, onDismiss: removeSharedFile) { file in
+            AssetActivityView(items: [file.url])
+        }
+        .alert(
+            "Couldn't complete that action",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "Please try again.")
+        }
+    }
+
+    private func prepareShare() {
+        guard !preparingShare else { return }
+        preparingShare = true
+        Task {
+            defer { preparingShare = false }
+            var temporaryDirectory: URL?
+            do {
+                let data = try await OS1API.assetData(
+                    sessionId: sessionId,
+                    path: asset.path
+                )
+                let directory = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("os1-shared-assets", isDirectory: true)
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                temporaryDirectory = directory
+                try FileManager.default.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true
+                )
+                let url = directory.appendingPathComponent(asset.name)
+                try data.write(to: url, options: .atomic)
+                sharedDirectory = directory
+                sharedFile = SharedAssetFile(url: url)
+            } catch {
+                if let temporaryDirectory {
+                    try? FileManager.default.removeItem(at: temporaryDirectory)
+                }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func deleteAsset() {
+        Task {
+            do {
+                try await OS1API.deleteAsset(sessionId: sessionId, path: asset.path)
+                onDeleted?()
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func removeSharedFile() {
+        if let sharedDirectory {
+            try? FileManager.default.removeItem(at: sharedDirectory)
+        }
+        sharedDirectory = nil
+        sharedFile = nil
+    }
+}
+
+private struct SharedAssetFile: Identifiable {
+    let url: URL
+    var id: URL { url }
+}
+
+private struct AssetActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(
+        _ uiViewController: UIActivityViewController,
+        context: Context
+    ) {}
 }
 
 /// One file in the list: what it's called, where it sits, how big and how old.

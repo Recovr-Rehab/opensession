@@ -542,8 +542,8 @@ struct AssetChipView: View {
     let path: String
 
     @Environment(\.openPanel) private var openPanel
-    /// The picture this chip lifted over the conversation, when it named one.
-    @State private var picture: AssetPicture?
+    /// The file this chip lifted over the conversation.
+    @State private var assetOverlay: AssetOverlayItem?
 
     private var asset: OS1API.SessionAsset {
         OS1API.SessionAsset(path: path, size: 0, mtime: "")
@@ -554,8 +554,7 @@ struct AssetChipView: View {
             AssetOpen.open(
                 sessionId: sessionId,
                 path: path,
-                openPanel: openPanel,
-                picture: $picture
+                overlay: $assetOverlay
             )
         } label: {
             chip
@@ -563,8 +562,8 @@ struct AssetChipView: View {
         .buttonStyle(.plain)
         // The Mac app can open neither kind; a chip that does nothing when
         // tapped is worse than one that plainly can't be.
-        .disabled(!AssetOpen.canOpen(path, openPanel: openPanel))
-        .assetPicturePreview($picture)
+        .disabled(!AssetOpen.canOpen(path))
+        .assetOverlayPreview($assetOverlay, openPanel: openPanel)
         .accessibilityLabel(Text(verbatim: asset.name))
         .accessibilityHint("Opens this file")
     }

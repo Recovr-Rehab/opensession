@@ -14,12 +14,10 @@ struct ToolCallRow: View {
     @State private var detail: ToolDetail?
     /// The worker sheet opened from a Task row.
     @State private var openWorker: WorkerLink?
-    /// The picture an asset chip lifted over the conversation, when the file
-    /// it named was one.
-    @State private var assetPicture: AssetPicture?
+    /// The file an asset chip lifted over the conversation.
+    @State private var assetOverlay: AssetOverlayItem?
     /// Installed by the iOS session screen; absent everywhere else, which is
-    /// what keeps a chip for a file that has to PUSH from appearing where
-    /// there is no stack to push onto.
+    /// what lets the cover offer "Show in Assets" when a stack is available.
     @Environment(\.openPanel) private var openPanel
 
     private var presentation: ToolPresentation { item.presentation }
@@ -54,7 +52,7 @@ struct ToolCallRow: View {
                 worktreeDir: worktreeDir
             )
         }
-        .assetPicturePreview($assetPicture)
+        .assetOverlayPreview($assetOverlay, openPanel: openPanel)
     }
 
     /// Identifies the sheet's subject; `sheet(item:)` needs Identifiable.
@@ -145,13 +143,12 @@ struct ToolCallRow: View {
             // a picture over the conversation, anything else one level deeper
             // (see AssetOpen).
             if let assetPath = item.assetPath,
-               AssetOpen.canOpen(assetPath, openPanel: openPanel) {
+               AssetOpen.canOpen(assetPath) {
                 RowChip(title: "Open") {
                     AssetOpen.open(
                         sessionId: sessionId,
                         path: assetPath,
-                        openPanel: openPanel,
-                        picture: $assetPicture
+                        overlay: $assetOverlay
                     )
                 }
                 .accessibilityLabel("Open this file")
