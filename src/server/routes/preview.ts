@@ -7,7 +7,7 @@
  */
 
 import type { RouteContext } from "./context";
-import { getPreviewStatus, getSandboxPreviewStatus, startPreview, startSandboxPreview, stopPreview, stopSandboxPreview } from "../preview";
+import { getPreviewStatus, getSandboxPreviewStatus, portalRouteAuthorized, startPreview, startSandboxPreview, stopPreview, stopSandboxPreview } from "../preview";
 import { findSession } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
 import { existsSync } from "fs";
@@ -22,6 +22,13 @@ export async function handlePreviewRoutes(
 	// already verified the Open Session cookie/Bearer token; returning 204 lets
 	// Caddy continue, while an unauthenticated request never reaches here.
 	if (/^\/api\/portal-auth\/\d+$/.test(path) && req.method === "GET") {
+		const httpsPort = Number(path.slice(path.lastIndexOf("/") + 1));
+		if (!portalRouteAuthorized(httpsPort)) {
+			return Response.json(
+				{ error: "Portal route is not active" },
+				{ status: 404, headers: { "Cache-Control": "no-store" } },
+			);
+		}
 		return new Response(null, {
 			status: 204,
 			headers: { "Cache-Control": "no-store" },

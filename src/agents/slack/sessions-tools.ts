@@ -218,7 +218,13 @@ export async function workerReportPayload(
   },
 ): Promise<{ content: string; user: string }> {
   const me = ctx.currentSessionId;
-  const fallback = { content: message, user: ctx.createdBy };
+  // Provenance is part of the transport contract: a message emitted by an
+  // agent must never arrive looking like a human instruction merely because
+  // the session inherited that human's display name.
+  const fallback = {
+    content: message,
+    user: me && me !== targetId ? `agent ${me}` : ctx.createdBy,
+  };
   if (!me || me === targetId) return fallback;
   try {
     const parentOf =
@@ -614,8 +620,13 @@ export function createSessionsMcpServer(
         {
           id: z.string().describe("The target session's id."),
           message: z.string().describe("The message to deliver."),
+          delivery_id: z
+            .string()
+            .max(128)
+            .optional()
+            .describe("Optional caller-generated correlation id. Omit to receive a generated delivery receipt."),
         },
-        async (args: { id: string; message: string }) => {
+        async (args: { id: string; message: string; delivery_id?: string }) => {
           if (!args.message?.trim()) return text("Nothing to send (empty message).");
           // Reporting to my own parent → prose + server-computed evidence,
           // attributed as a worker. Explicit heads-ups get a UI-only notice
@@ -624,8 +635,24 @@ export function createSessionsMcpServer(
           const content = payload.user.startsWith("worker ")
             ? payload.content
             : sessionNoticePayload(payload.content);
-          const res = await getSessionControl().deliverToSession(args.id, content, payload.user);
-          return text(res.message);
+          const deliveryId = args.delivery_id?.trim() || crypto.randomUUID();
+          const res = await getSessionControl().deliverToSession(
+            args.id,
+            content,
+            payload.user,
+            { deliveryId },
+          );
+          audit({
+            kind: "agent_message_delivery",
+            delivery_id: res.deliveryId || deliveryId,
+            source_session_id: ctx.currentSessionId,
+            target_session_id: args.id,
+            outcome: res.status,
+            user: ctx.createdBy,
+          });
+          return text(
+            `Delivery \`${res.deliveryId || deliveryId}\` status=${res.status}: ${res.message}`,
+          );
         }
       ),
       tool(
@@ -680,10 +707,12 @@ export function createSessionsMcpServer(
               args.message?.trim() || `Session ${fromId} sent you a file.`,
               `Received asset: \`${file.path}\` (${file.size} bytes). Read it with the opensession-assets tools or open ${download}.`,
             ].join("\n\n");
+            const deliveryId = crypto.randomUUID();
             const delivered = await ctrl.deliverToSession(
               to.id,
               notification,
               `worker ${fromId}`,
+              { deliveryId },
             );
             audit({
               msg: "session_file_sent",
@@ -694,9 +723,10 @@ export function createSessionsMcpServer(
               bytes: file.size,
               user: ctx.createdBy,
               delivery: delivered.status,
+              delivery_id: delivered.deliveryId || deliveryId,
             });
             return text(
-              `Sent \`${file.path}\` (${file.size} bytes) to \`${to.id}\`; ${delivered.message}`,
+              `Sent \`${file.path}\` (${file.size} bytes) to \`${to.id}\` as delivery \`${delivered.deliveryId || deliveryId}\`; ${delivered.message}`,
             );
           } catch (error) {
             return text(

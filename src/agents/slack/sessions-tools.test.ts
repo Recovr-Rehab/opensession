@@ -89,6 +89,12 @@ interface Harness {
 	sessions: Map<string, Partial<SessionSummary>>;
 	stamped: Array<{ id: string; depth: number }>;
 	cancelled: string[];
+	deliveries: Array<{
+		id: string;
+		content: string;
+		user?: string;
+		opts?: Parameters<SessionControl["deliverToSession"]>[3];
+	}>;
 }
 
 let uniq = 0;
@@ -102,13 +108,21 @@ function makeHarness(childId?: string): Harness {
 	const sessions = new Map<string, Partial<SessionSummary>>();
 	const stamped: Harness["stamped"] = [];
 	const cancelled: string[] = [];
+	const deliveries: Harness["deliveries"] = [];
 	const id = childId ?? `bks-test-child-${++uniq}`;
 	const control = {
 		listSessions: () => [...sessions.values()] as SessionSummary[],
 		getSession: (sid: string) => sessions.get(sid) as SessionSummary | undefined,
 		transcriptTail: () => [],
 		answerQuestion: () => false,
-		deliverToSession: async () => ({ status: "started" as const, message: "" }),
+		deliverToSession: async (sid, content, user, opts) => {
+			deliveries.push({ id: sid, content, user, opts });
+			return {
+				status: "started" as const,
+				message: "Started.",
+				deliveryId: opts?.deliveryId,
+			};
+		},
 		cancelSession: (sid: string) => {
 			cancelled.push(sid);
 			return true;
@@ -135,6 +149,7 @@ function makeHarness(childId?: string): Harness {
 		sessions,
 		stamped,
 		cancelled,
+		deliveries,
 	};
 }
 
@@ -454,6 +469,40 @@ describe("session creator metadata", () => {
 			await server.instance.close();
 		}
 	});
+
+	it("gives cross-session messages agent provenance and a stable receipt", async () => {
+		const h = makeHarness();
+		registerSessionControl(h.deps.control);
+		const server = createSessionsMcpServer(ctx("bks-sender"));
+		const client = new Client({ name: "sessions-tools-test", version: "1.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await server.instance.connect(serverTransport);
+		await client.connect(clientTransport);
+		try {
+			const result = await client.callTool({
+				name: "send_to_session",
+				arguments: {
+					id: "bks-target",
+					message: "Please inspect the failing test.",
+					delivery_id: "delivery-test-1",
+				},
+			});
+			const output = (
+				result as { content: Array<{ type: string; text: string }> }
+			).content[0].text;
+			expect(output).toContain("delivery-test-1");
+			expect(output).toContain("status=started");
+			expect(h.deliveries).toHaveLength(1);
+			expect(h.deliveries[0]).toMatchObject({
+				id: "bks-target",
+				user: "agent bks-sender",
+				opts: { deliveryId: "delivery-test-1" },
+			});
+		} finally {
+			await client.close();
+			await server.instance.close();
+		}
+	});
 });
 
 describe("task_status / cancel_task", () => {
@@ -534,17 +583,17 @@ describe("workerReportPayload", () => {
 
 	it("leaves messages to any other session untouched", async () => {
 		const out = await workerReportPayload("bks-someone-else", "ping", ctx, deps);
-		expect(out).toEqual({ content: "ping", user: "Alex" });
+		expect(out).toEqual({ content: "ping", user: "agent bks-child" });
 	});
 
-	it("leaves a non-worker session's messages untouched", async () => {
+	it("preserves provenance for a non-worker agent's messages", async () => {
 		const out = await workerReportPayload(
 			"bks-parent",
 			"ping",
 			{ createdBy: "Alex", currentSessionId: "bks-root" },
 			deps,
 		);
-		expect(out).toEqual({ content: "ping", user: "Alex" });
+		expect(out).toEqual({ content: "ping", user: "agent bks-root" });
 	});
 
 	it("still delivers the prose when evidence can't be computed", async () => {
@@ -555,7 +604,7 @@ describe("workerReportPayload", () => {
 			},
 		});
 		expect(out.content).toBe("Done.");
-		expect(out.user).toBe("Alex");
+		expect(out.user).toBe("agent bks-child");
 	});
 
 	it("caps the appended block so a handoff can't refill the parent's context", async () => {

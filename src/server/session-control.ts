@@ -48,6 +48,8 @@ export interface SessionSummary extends UnifiedSession {
 export interface DeliverResult {
   status: "steered" | "queued" | "started" | "handled" | "error";
   message: string;
+  /** Stable acceptance receipt for cross-session delivery observability. */
+  deliveryId?: string;
 }
 
 export interface CreateSessionOpts {
@@ -166,6 +168,8 @@ export interface SessionControl {
        * native composers' "queue" semantics.
        */
       hold?: boolean;
+      /** Caller-supplied receipt id (agent-to-agent tools); generated otherwise. */
+      deliveryId?: string;
     },
   ): Promise<DeliverResult>;
   /** Cancel a session's in-flight run (only runs this process owns). */

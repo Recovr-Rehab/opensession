@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { previewServerConfig } from "./preview";
+import { portalRouteAuthorized, previewServerConfig } from "./preview";
 
 describe("permission-coupled preview portals", () => {
+	test("fails closed when Caddy retained a route the restarted server has not rediscovered", () => {
+		expect(portalRouteAuthorized(29999)).toBe(false);
+	});
 	test("authenticates before proxying to the service", () => {
 		const config = previewServerConfig(
 			22001,

@@ -105,13 +105,15 @@ registerSessionControl({
 	},
 
 	deliverToSession: async (id, content, user, opts) => {
+		const deliveryId = opts?.deliveryId || randomUUIDv7();
 		const session = findSession(id);
 		if (!session)
-			return { status: "error" as const, message: "No session with that id." };
+			return { status: "error" as const, message: "No session with that id.", deliveryId };
 		if (session.upgradedTo || isLocalSessionUpgradeInProgress(id)) {
 			return {
 				status: "error" as const,
 				message: "This session is being upgraded to the cloud. Retry there after the upgrade completes.",
+				deliveryId,
 			};
 		}
 
@@ -124,7 +126,7 @@ registerSessionControl({
 		const notice = handleSlashCommand(session, String(content || "").trim(), user);
 		if (notice !== null) {
 			invalidateSessionsCache();
-			return { status: "handled" as const, message: notice };
+			return { status: "handled" as const, message: notice, deliveryId };
 		}
 
 		const attributed = user ? `[${user}] ${content}` : content;
@@ -151,13 +153,15 @@ registerSessionControl({
 					opts?.images,
 				)
 			) {
-				recordSteer(id, { content, user, images: opts?.imageUrls });
+				recordSteer(id, { id: deliveryId, content, user, images: opts?.imageUrls });
 				return {
 					status: "steered" as const,
 					message: "Folded into the running turn.",
+					deliveryId,
 				};
 			}
 			enqueuePrompt(id, {
+				id: deliveryId,
 				content,
 				user,
 				images: opts?.imageUrls,
@@ -168,6 +172,7 @@ registerSessionControl({
 			return {
 				status: "queued" as const,
 				message: "Queued behind the current run.",
+				deliveryId,
 			};
 		}
 		// Open Session sessions with no engine id are fresh sessions — the first prompt
@@ -180,6 +185,7 @@ registerSessionControl({
 			return {
 				status: "error" as const,
 				message: "Session has no Claude session to resume yet.",
+				deliveryId,
 			};
 		}
 
@@ -197,6 +203,7 @@ registerSessionControl({
 		return {
 			status: "started" as const,
 			message: "Started a new turn on the session.",
+			deliveryId,
 		};
 	},
 

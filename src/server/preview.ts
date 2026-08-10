@@ -32,7 +32,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "fs";
-import { basename, dirname, join } from "path";
+import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { audit } from "./audit";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
@@ -307,6 +307,13 @@ const g = globalThis as unknown as {
 // httpsPort -> webappPort we've already configured (survives --hot reloads).
 const previewRoutes: Map<number, string> = (g.__previewRoutes ??= new Map());
 
+/** Caddy may outlive Open Session. Auth must fail closed for a route the
+ * current process has not rediscovered and registered, or a stale Caddy
+ * upstream could survive a restart and later point at an unrelated listener. */
+export function portalRouteAuthorized(httpsPort: number): boolean {
+  return Number.isInteger(httpsPort) && previewRoutes.has(httpsPort);
+}
+
 /** This machine's tailnet hostname (e.g. example-host.your-tailnet.ts.net). */
 export async function previewHost(): Promise<string> {
   if (g.__previewHost) return g.__previewHost;
@@ -327,6 +334,14 @@ export async function previewHost(): Promise<string> {
 // container host ports come from the same range so this scheme covers them.)
 export function httpsPortFor(webappPort: number): number {
   return webappPort + 6000;
+}
+
+/** Host services occupy globally unique TCP ports, so the translated HTTPS
+ * port is collision-free too. Keep it below the sandbox allocation namespace
+ * ([20000, 28000)); unusually-high service ports remain visible but unlinked. */
+function hostServiceHttpsPort(port: number): number | null {
+  const httpsPort = httpsPortFor(port);
+  return httpsPort > 0 && httpsPort < 20_000 ? httpsPort : null;
 }
 
 /** Caddy JSON for one permission-coupled portal. The first reverse proxy is
@@ -474,7 +489,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
     };
   }
   const ports = readPorts(worktreeDir);
-  const services: PreviewService[] = await Promise.all(
+  const observedServices: PreviewService[] = await Promise.all(
     ports.map(async ({ key, port }) => {
       const pids = await listenersOnPort(port);
       // Root-owned listeners (docker-proxy fronting a preview-pool container)
@@ -487,20 +502,30 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
       return { name: friendly(key), key, port, running, pids };
     }),
   );
-  const webapp = services.find((s) => s.key === "WEBAPP_PORT");
-
-  // Keep the Caddy HTTPS exposure in sync with the webapp's state: add the
-  // route while it's up (so the preview URL is live and the button opens it
-  // directly), drop it once it's gone.
-  let previewUrl: string | null = null;
-  if (webapp?.running) {
-    const httpsPort = httpsPortFor(webapp.port);
-    const host = await previewHost();
-    if (await ensurePreviewRoute(httpsPort, `127.0.0.1:${webapp.port}`, host)) {
-      previewUrl = `https://${host}:${httpsPort}`;
+  const host = await previewHost();
+  // Every listening .ports.conf service is a Portal, not just WEBAPP_PORT.
+  // Routes share the same authenticated Caddy wrapper; high source ports that
+  // would overlap the sandbox namespace stay visible without a link.
+  const services: PreviewService[] = [];
+  for (const service of observedServices) {
+    const httpsPort = hostServiceHttpsPort(service.port);
+    let previewUrl: string | null = null;
+    if (service.running && httpsPort != null) {
+      if (await ensurePreviewRoute(httpsPort, `127.0.0.1:${service.port}`, host)) {
+        previewUrl = `https://${host}:${httpsPort}`;
+      }
+    } else if (httpsPort != null) {
+      await removePreviewRoute(httpsPort);
     }
-  } else if (webapp) {
-    await removePreviewRoute(httpsPortFor(webapp.port));
+    services.push({ ...service, previewUrl });
+  }
+  const webapp = services.find((s) => s.key === "WEBAPP_PORT");
+  const previewUrl = webapp?.previewUrl || null;
+
+  if (services.some((service) => service.previewUrl)) {
+    writeHostTunnelsEnv(worktreeDir, services);
+  } else {
+    try { unlinkSync(join(worktreeDir, ".tunnels.env")); } catch {}
   }
 
   // Once the webapp is listening, the bring-up is done — clear any "starting".
@@ -525,6 +550,37 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
       (await resolvePreviewBoot(worktreeDir, repoForPath(worktreeDir), hostExists)) != null,
     services,
   };
+}
+
+function writeHostTunnelsEnv(worktreeDir: string, services: PreviewService[]): void {
+  const values: string[] = [];
+  const webapp = services.find(
+    (service) => service.key === "WEBAPP_PORT" && service.previewUrl,
+  );
+  if (webapp?.previewUrl) values.push(`PREVIEW_URL=${webapp.previewUrl}`);
+  for (const service of services) {
+    if (!service.previewUrl) continue;
+    values.push(`PREVIEW_URL_${service.port}=${service.previewUrl}`);
+    values.push(`PORTAL_${service.key.replace(/_PORT$/, "")}_URL=${service.previewUrl}`);
+  }
+  try {
+    writeFileSync(join(worktreeDir, ".tunnels.env"), values.join("\n") + "\n");
+    const dotGit = join(worktreeDir, ".git");
+    let gitDir = dotGit;
+    if (existsSync(dotGit)) {
+      try {
+        const marker = readFileSync(dotGit, "utf8").match(/^gitdir:\s*(.+)$/m)?.[1];
+        if (marker) gitDir = resolve(worktreeDir, marker.trim());
+      } catch {}
+    }
+    const exclude = join(gitDir, "info", "exclude");
+    if (existsSync(dirname(exclude))) {
+      const prior = existsSync(exclude) ? readFileSync(exclude, "utf8") : "";
+      if (!prior.split("\n").includes(".tunnels.env")) {
+        writeFileSync(exclude, `${prior}${prior && !prior.endsWith("\n") ? "\n" : ""}.tunnels.env\n`);
+      }
+    }
+  } catch {}
 }
 
 /**
@@ -916,6 +972,17 @@ export async function getSandboxPreviewStatus(
   }
   const webapp = services.find((s) => s.key === "WEBAPP_PORT");
 
+  const tunnelValues: Record<string, string> = {};
+  if (webapp?.previewUrl) tunnelValues.PREVIEW_URL = webapp.previewUrl;
+  for (const service of services) {
+    if (!service.previewUrl) continue;
+    tunnelValues[`PREVIEW_URL_${service.port}`] = service.previewUrl;
+    tunnelValues[`PORTAL_${service.key.replace(/_PORT$/, "")}_URL`] = service.previewUrl;
+  }
+  if (Object.keys(tunnelValues).length) {
+    await writeSandboxTunnelsEnv(sandbox, worktreeDir, tunnelValues);
+  }
+
   const previewUrl = webapp?.previewUrl || null;
   if (webapp?.running && !previewUrl) {
       console.warn(
@@ -1124,9 +1191,8 @@ export async function stopSandboxPreview(
   starting.delete(worktreeDir);
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
-  const webapp = ports.find((p) => p.key === "WEBAPP_PORT");
-  if (webapp) {
-    const allocated = lookupSandboxHttpsPort(sandbox.id, webapp.port);
+  for (const service of ports) {
+    const allocated = lookupSandboxHttpsPort(sandbox.id, service.port);
     if (allocated != null) await removePreviewRoute(allocated);
   }
   await sandbox.exec([
