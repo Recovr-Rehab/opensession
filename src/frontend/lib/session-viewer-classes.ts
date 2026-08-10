@@ -215,11 +215,11 @@ export const VIEWER_MESSAGES_REGION =
  * and in a flex container auto cross-axis margins disable `align-items:
  * stretch`, so they would size to their content and overflow sideways.
  *
- * The bottom inset is the bottom WASH's depth, not the composer's overlap:
- * clearing the whole ramp is what makes a soft edge affordable, and it is what
- * the native app's bar does too. That ramp is its own token
- * (--wash-depth-down, shallower than the top's) because reserving it costs
- * resting space in a way the scroll-driven top edge does not — see base.css.
+ * The bottom inset is the clear resting space, not the composer's overlap or
+ * the wash's visual depth. --wash-depth-down owns that layout clearance; the
+ * full ramp still hangs from the composer so rows dissolve gradually as
+ * they pass underneath. Separating those values keeps the last row close at
+ * rest without shortening the scroll-under effect.
  */
 export const VIEWER_MESSAGES =
 	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
@@ -257,7 +257,7 @@ export const VIEWER_MESSAGES =
  */
 export const VIEWER_INPUT =
 	"relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 bg-surface px-5 pt-1 pb-3.5 " +
-	"before:absolute before:inset-x-0 before:bottom-full before:h-[var(--wash-depth-down)] " +
+	"before:absolute before:inset-x-0 before:bottom-full before:h-[var(--wash-depth)] " +
 	"before:pointer-events-none before:[background:var(--wash-down)] before:content-[''] " +
 	// Phone: clear the home indicator rather than jamming the composer against
 	// the very bottom edge — that gap is also all the room the composer's

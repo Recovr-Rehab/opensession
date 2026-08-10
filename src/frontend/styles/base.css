@@ -124,17 +124,12 @@
 	   colour instead; the shape, which is what sells it, is unchanged.
 	   Derived from --bg, so both themes get the right wash from one definition. */
 	--wash-depth: 56px;
-	/* The BOTTOM edge is shallower than the top, because the two ramps are not
-	   paid for the same way. The top one costs nothing at rest: it is driven by
-	   a scroll timeline and sits at opacity 0 until there IS content above, so
-	   the first row still starts right under the header. The bottom one is
-	   reserved as the transcript's padding, so every pixel of it is dead space
-	   between the last row and the composer whether or not anything is
-	   scrolling — at 56px that band read as a hole in the column. 32px is still
-	   a dissolve rather than a cut (~1.5 lines), and it keeps the last row clear
-	   of the ramp at rest: the row's own 18px bottom margin plus the composer's
-	   4px top padding is what the box is allowed to overlap (--session-under),
-	   so text never sits inside the veil while the session is at the bottom. */
+	/* The bottom edge reserves less space than its 56px visual ramp. Reserving
+	   the full wash made a hole between the final row and the composer, while
+	   shortening the ramp made rows stop abruptly as they scrolled underneath.
+	   Keep the full dissolve and pay only 32px in the resting layout; the row's
+	   own bottom margin plus the composer's overlap keeps text out of the veil
+	   while the session is pinned to the bottom. */
 	--wash-depth-down: 32px;
 	--wash-down: linear-gradient(
 		to bottom,
