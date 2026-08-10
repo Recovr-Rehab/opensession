@@ -3,7 +3,9 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
+import { DeviceCode } from "../ui/device-code";
 import { InlineAlert, LoadingState } from "../ui/state";
+import { PulseDot } from "../ui/status";
 import {
   SettingCard,
   SettingRow,
@@ -24,7 +26,14 @@ import {
   settingsInputClass,
   settingsSelectClass,
 } from "../ui/settings";
-import { IconDotsHorizontal, IconTrash, IconSliders, IconHistory, IconPlus } from "./icons";
+import {
+  IconArrowUpRight,
+  IconDotsHorizontal,
+  IconTrash,
+  IconSliders,
+  IconHistory,
+  IconPlus,
+} from "./icons";
 import { IconTile, displayName } from "./BrandTile";
 import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { ProjectsSection } from "./ProjectsSection";
@@ -620,29 +629,48 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         </SettingRow>
 
         {flow && (
-          <div className="px-4 py-3 text-body">
-            Enter code{" "}
-            <span className="rounded bg-active px-2 py-0.5 font-mono text-item-title font-bold tracking-[0.12em] text-fg">
-              {flow.userCode}
-            </span>{" "}
-            at{" "}
-            <a href={flow.verificationUri} target="_blank" rel="noreferrer" className="text-link underline">
-              {flow.verificationUri}
-            </a>
-            <span className="ml-2 text-label text-dim">
-              Sign in as the account you want to connect — waiting for GitHub…
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-2"
-              onClick={() => {
-                setFlow(null);
-                setFlowState("idle");
-              }}
-            >
-              Cancel
-            </Button>
+          // A well, not a sentence: the code, the link and the status used to
+          // run together on one line that overflowed the card on anything
+          // narrower than a desktop. Three short stacked lines — what to do,
+          // the two controls, what we're waiting for — never wrap badly and
+          // let the code be the thing the eye lands on.
+          <div className="flex flex-col gap-2.5 px-4 py-3.5">
+            <div className="text-supporting text-dim">
+              Enter this code at{" "}
+              <span className="font-medium text-fg">
+                {flow.verificationUri.replace(/^https:\/\//, "")}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <DeviceCode code={flow.userCode} />
+              <a href={flow.verificationUri} target="_blank" rel="noreferrer">
+                <Button variant="primary" icon={<IconArrowUpRight size={20} />}>
+                  Open GitHub
+                </Button>
+              </a>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-supporting text-dim">
+              {/* Dot and status are one item: as two siblings of a wrapping
+                  row, a phone breaks between them and leaves the dot orphaned
+                  on its own line. */}
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <PulseDot size={7} />
+                <span className="min-w-0">
+                  Waiting for GitHub — sign in as the account you want to connect.
+                </span>
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto"
+                onClick={() => {
+                  setFlow(null);
+                  setFlowState("idle");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
         )}
 

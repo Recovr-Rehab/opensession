@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { UserAvatar } from "./UserAvatar";
+import { IconArrowUpRight } from "./icons";
 import { BASE_PATH } from "../lib/base";
 import { usePeople } from "../lib/people";
+import { Button } from "../ui/button";
+import { DeviceCode } from "../ui/device-code";
+import { PulseDot } from "../ui/status";
 
 /**
  * Mutable compatibility view for older consumers. `usePeople()` owns the
@@ -310,18 +314,24 @@ function GithubSignIn({
             )}
           </>
         ) : (
-          <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.7 }}>
-            Enter code{" "}
-            <strong style={{ fontFamily: "var(--mono, monospace)", letterSpacing: "0.12em" }}>
-              {flow.userCode}
-            </strong>{" "}
-            at{" "}
+          <div className="mt-2.5 flex flex-col items-center gap-3">
+            <p className="m-0 text-body text-dim">
+              Enter this code at{" "}
+              <span className="font-medium text-fg">
+                {flow.verificationUri.replace(/^https:\/\//, "")}
+              </span>
+            </p>
+            <DeviceCode code={flow.userCode} className="text-section-title" />
             <a href={flow.verificationUri} target="_blank" rel="noreferrer">
-              {flow.verificationUri.replace(/^https:\/\//, "")}
+              <Button variant="primary" icon={<IconArrowUpRight size={20} />}>
+                Open GitHub
+              </Button>
             </a>
-            <br />
-            <span style={{ fontSize: 13, opacity: 0.7 }}>Waiting for GitHub…</span>
-          </p>
+            <span className="flex items-center gap-2 text-label text-dim">
+              <PulseDot size={7} />
+              Waiting for GitHub…
+            </span>
+          </div>
         )}
         {error && (
           <p style={{ marginTop: 10, fontSize: 13, color: "var(--red)" }}>{error}</p>
