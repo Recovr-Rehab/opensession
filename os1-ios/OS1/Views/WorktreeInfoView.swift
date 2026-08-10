@@ -257,11 +257,11 @@ struct WorktreeInfoView: View {
                                 .truncationMode(.middle)
                             Spacer(minLength: 8)
                             if file.additions > 0 {
-                                Text("+\(file.additions)")
+                                Text(verbatim: "+\(file.additions)")
                                     .foregroundStyle(OS1VisualStyle.green)
                             }
                             if file.deletions > 0 {
-                                Text("−\(file.deletions)")
+                                Text(verbatim: "−\(file.deletions)")
                                     .foregroundStyle(OS1VisualStyle.red)
                             }
                             Image(systemName: "chevron.right")
@@ -628,13 +628,16 @@ struct WorktreeInfoView: View {
         ].joined(separator: "|")
     }
 
+    /// `verbatim:` on every count here and in the file rows: `Text("+\(n)")`
+    /// goes through LocalizedStringKey, which formats the number for the
+    /// device's locale — a 1174-line diff read "+1.174" on a Dutch phone.
     private func diffTotals(_ diff: OS1API.SessionDiff) -> some View {
         HStack(spacing: 6) {
             if diff.totalAdditions > 0 {
-                Text("+\(diff.totalAdditions)").foregroundStyle(OS1VisualStyle.green)
+                Text(verbatim: "+\(diff.totalAdditions)").foregroundStyle(OS1VisualStyle.green)
             }
             if diff.totalDeletions > 0 {
-                Text("−\(diff.totalDeletions)").foregroundStyle(OS1VisualStyle.red)
+                Text(verbatim: "−\(diff.totalDeletions)").foregroundStyle(OS1VisualStyle.red)
             }
         }
         .font(.caption.weight(.semibold).monospacedDigit())
@@ -769,13 +772,37 @@ private struct SummaryBlock: View {
             Text(label)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(OS1VisualStyle.textDim)
-            Text(content)
+            Text(Self.inline(content))
                 .font(.subheadline)
                 .foregroundStyle(OS1VisualStyle.text)
                 .lineLimit(lines)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
+    }
+
+    /// Agent messages are markdown, and a preview that prints the syntax —
+    /// `**The rail was wrong**`, backticked shas — reads worse than no
+    /// formatting at all. Inline-only: this is a few lines of a message, so
+    /// headings and list markers have nowhere to go, and stripping their
+    /// leading punctuation keeps the first line from starting on a "#".
+    private static func inline(_ content: String) -> AttributedString {
+        let stripped = content
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line -> Substring in
+                var line = line
+                while let first = line.first, first == "#" || first == ">" {
+                    line = line.dropFirst()
+                    if line.first == " " { line = line.dropFirst() }
+                }
+                return line
+            }
+            .joined(separator: "\n")
+        let parsed = try? AttributedString(
+            markdown: stripped,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )
+        return parsed ?? AttributedString(stripped)
     }
 }
 
