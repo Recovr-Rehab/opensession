@@ -54,16 +54,19 @@ type AssetNavigation = {
 	count: number;
 	onPrevious: () => void;
 	onNext: () => void;
+	onSelect: (index: number) => void;
 };
 
 function AssetPager({
 	navigation,
 	floating = false,
+	arrows = false,
 }: {
 	navigation: AssetNavigation;
 	floating?: boolean;
+	arrows?: boolean;
 }) {
-	const { index, count, onPrevious, onNext } = navigation;
+	const { index, count, onPrevious, onNext, onSelect } = navigation;
 	const positionLabel = `Asset ${index + 1} of ${count}`;
 	return (
 		<nav
@@ -75,50 +78,90 @@ function AssetPager({
 					: "min-h-10 border-t border-line px-3 py-1.5",
 			)}
 		>
-			<Tooltip label="Previous asset (Left arrow)">
-				<Button
-					variant="ghost"
-					size="xs"
-					icon={<IconChevronLeft size={16} />}
-					aria-label="Previous asset"
-					className="size-7 phone:size-9"
-					onClick={onPrevious}
-				/>
-			</Tooltip>
-			<div
-				role="status"
-				aria-label={positionLabel}
-				title={positionLabel}
-				className="flex min-w-10 items-center justify-center gap-1 px-1"
-			>
-				{count <= 7 ? (
+			{arrows && (
+				<Tooltip label="Previous asset (Left arrow)">
+					<Button
+						variant="ghost"
+						size="xs"
+						icon={<IconChevronLeft size={16} />}
+						aria-label="Previous asset"
+						className="size-9"
+						onClick={onPrevious}
+					/>
+				</Tooltip>
+			)}
+			<div aria-label={positionLabel} title={positionLabel} className="flex min-w-10 items-center justify-center px-1">
+				{count <= 10 ? (
 					Array.from({ length: count }, (_, dot) => (
-						<span
+						<button
 							key={dot}
-							aria-hidden="true"
-							className={cn(
-								"size-1.5 rounded-full",
-								dot === index ? "bg-fg" : "bg-line-strong",
-							)}
-						/>
+							type="button"
+							onClick={() => onSelect(dot)}
+							aria-label={`Show ${dot + 1} of ${count}`}
+							aria-current={dot === index ? "true" : undefined}
+							className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
+						>
+							<span
+								className={cn(
+									"block size-1.5 rounded-full transition-colors",
+									dot === index
+										? "bg-fg"
+										: "bg-line-strong group-hover:bg-dim",
+								)}
+							/>
+						</button>
 					))
 				) : (
-					<span className="text-[11px] tabular-nums text-faint">
+					<span role="status" className="px-1 text-[11px] tabular-nums text-faint">
 						{index + 1} / {count}
 					</span>
 				)}
 			</div>
-			<Tooltip label="Next asset (Right arrow)">
-				<Button
-					variant="ghost"
-					size="xs"
-					icon={<IconChevronRight size={16} />}
-					aria-label="Next asset"
-					className="size-7 phone:size-9"
-					onClick={onNext}
-				/>
-			</Tooltip>
+			{arrows && (
+				<Tooltip label="Next asset (Right arrow)">
+					<Button
+						variant="ghost"
+						size="xs"
+						icon={<IconChevronRight size={16} />}
+						aria-label="Next asset"
+						className="size-9"
+						onClick={onNext}
+					/>
+				</Tooltip>
+			)}
 		</nav>
+	);
+}
+
+function AssetSideButton({
+	direction,
+	onClick,
+}: {
+	direction: "previous" | "next";
+	onClick: () => void;
+}) {
+	const previous = direction === "previous";
+	const label = previous ? "Previous asset" : "Next asset";
+	return (
+		<Tooltip label={`${label} (${previous ? "Left" : "Right"} arrow)`}>
+			<Button
+				variant="default"
+				size="lg"
+				icon={
+					previous ? (
+						<IconChevronLeft size={22} />
+					) : (
+						<IconChevronRight size={22} />
+					)
+				}
+				aria-label={label}
+				className={cn(
+					"absolute top-1/2 z-20 size-10 -translate-y-1/2 rounded-full bg-raised shadow-control",
+					previous ? "right-full mr-3" : "left-full ml-3",
+				)}
+				onClick={onClick}
+			/>
+		</Tooltip>
 	);
 }
 
@@ -484,6 +527,10 @@ export function AssetOverlay({
 					count: files.length,
 					onPrevious: () => navigate(-1),
 					onNext: () => navigate(1),
+					onSelect: (index) => {
+						const selected = files[index]?.path;
+						if (selected) onSelectPath(selected);
+					},
 				}
 			: null;
 
@@ -496,7 +543,7 @@ export function AssetOverlay({
 			// The default modal is a 30rem confirm box; an artifact needs the
 			// room a page or a chart was drawn for. `max-w-none` first, or the
 			// default clamp wins.
-			modalClassName="h-[min(820px,84vh)] w-[min(1180px,94vw)] max-w-none overflow-visible"
+			modalClassName="h-[min(820px,84vh)] w-[min(1120px,84vw)] max-w-none overflow-visible"
 			sheetClassName="h-[94dvh]"
 		>
 			<div
@@ -510,8 +557,9 @@ export function AssetOverlay({
 					file={file}
 					refresh={refresh}
 					onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
-					onClose={onClose}
+					onClose={isPhone ? onClose : undefined}
 					showSize={listed}
+					className={!isPhone ? "pr-12" : undefined}
 				/>
 				{missingPath === file.path ? (
 					<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
@@ -527,10 +575,28 @@ export function AssetOverlay({
 						}}
 					/>
 				)}
-				{isPhone && navigation && <AssetPager navigation={navigation} />}
+				{isPhone && navigation && (
+					<AssetPager navigation={navigation} arrows />
+				)}
 			</div>
+			{!isPhone && (
+				<Tooltip label="Close">
+					<Button
+						variant="ghost"
+						size="md"
+						icon={<IconX size={18} />}
+						aria-label="Close"
+						className="absolute right-2 top-2 z-20 size-8"
+						onClick={onClose}
+					/>
+				</Tooltip>
+			)}
 			{!isPhone && navigation && (
-				<AssetPager navigation={navigation} floating />
+				<>
+					<AssetSideButton direction="previous" onClick={navigation.onPrevious} />
+					<AssetSideButton direction="next" onClick={navigation.onNext} />
+					<AssetPager navigation={navigation} floating />
+				</>
 			)}
 		</ResponsiveDialog>
 	);
