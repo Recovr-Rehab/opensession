@@ -195,7 +195,17 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
     <div
       className={
         "absolute right-2 bottom-2 left-2 z-[9500] flex items-center justify-between gap-3 " +
-        "rounded-row border border-line bg-panel py-2.5 pr-2.5 pl-4 " +
+        // A card that FLOATS over the sidebar, so it lifts with an edge and a
+        // shadow rather than a fill. An L2 panel fill assumes the surface
+        // behind it is L1 chrome — but under the mac shell's vibrancy
+        // (html.material-backdrop) the sidebar is translucent, and #f0f0f0
+        // over a wallpaper-tinted material reads as a grey patch cut out of
+        // it, not as a card on top. These are the tokens the composer already
+        // uses for exactly that reason (see base.css's light block): white in
+        // light where a darker box would read as a well, --control-surface in
+        // dark where lighter already means lifted.
+        "rounded-row border border-[color:var(--composer-border)] bg-[var(--composer-surface)] " +
+        "shadow-[var(--composer-shadow)] py-2.5 pr-2.5 pl-4 " +
         "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none " +
         "phone:bottom-[max(8px,env(safe-area-inset-bottom))]"
       }
