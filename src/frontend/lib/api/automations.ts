@@ -171,6 +171,8 @@ export interface SandboxStatusInfo {
 	providers: Array<{
 		id: "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm";
 		configured: boolean;
+		certified: boolean;
+		lastPassedAt?: string;
 		note?: string;
 	}>;
 	killSwitch: boolean;

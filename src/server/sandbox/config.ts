@@ -577,6 +577,29 @@ export const RUNNABLE_SANDBOX_PROVIDERS = [
 ] as const;
 export type RunnableSandboxProviderId = (typeof RUNNABLE_SANDBOX_PROVIDERS)[number];
 
+/** Providers whose complete live behavioral matrix has passed. Adapters that
+ *  have only compiled or mocked coverage remain in-tree for conformance work,
+ *  but are not offered for new sessions and cannot become the default. */
+export const SANDBOX_PROVIDER_CERTIFICATIONS: Record<
+  RunnableSandboxProviderId,
+  { certified: boolean; lastPassedAt?: string; note?: string }
+> = {
+  docker: { certified: true, note: "live socket and WebSocket matrices passed" },
+  daytona: { certified: true, lastPassedAt: "2026-07-09" },
+  e2b: { certified: false, note: "live matrix has not run on a funded E2B account" },
+  box: { certified: false, note: "live matrix has not run on a Box account" },
+  modal: { certified: true, lastPassedAt: "2026-07-17" },
+  microvm: { certified: true, lastPassedAt: "2026-08-10" },
+  "lambda-microvm": {
+    certified: false,
+    note: "live matrix has not run against a provisioned Lambda MicroVM image",
+  },
+};
+
+export function sandboxProviderCertified(id: RunnableSandboxProviderId): boolean {
+  return SANDBOX_PROVIDER_CERTIFICATIONS[id].certified;
+}
+
 export function isRunnableSandboxProvider(v: unknown): v is RunnableSandboxProviderId {
   return (
     typeof v === "string" &&
@@ -615,6 +638,9 @@ function sandboxConfigPresent(): boolean {
 export interface SandboxProviderStatusEntry {
   id: RunnableSandboxProviderId;
   configured: boolean;
+  /** Only live-certified providers are selectable for new sessions. */
+  certified: boolean;
+  lastPassedAt?: string;
   /** Human caveat shown ONLY when something is actually missing (e.g. a remote
    *  provider with no dial-back URL configured). Healthy providers carry no
    *  note — the UI renders it as a dim hint line under the picker row. */
@@ -779,7 +805,7 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
     : {
         note: "no dial-back URL configured — set publicIngress.publicBaseUrl (or callbackBaseUrl) so sandboxes can reach this server; see docs/self-hosting-sandboxes.md",
       };
-  const providers: SandboxProviderStatusEntry[] = [
+  const providersWithoutCertification: Array<Omit<SandboxProviderStatusEntry, "certified" | "lastPassedAt">> = [
     { id: "docker", configured: enabled },
     {
       id: "daytona",
@@ -811,9 +837,31 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
       ...(lambdaMicrovmConfigured ? remoteNote : {}),
     },
   ];
+  const providers = providersWithoutCertification.map((provider): SandboxProviderStatusEntry => {
+    const certification = SANDBOX_PROVIDER_CERTIFICATIONS[provider.id];
+    const notes = [
+      provider.note,
+      !certification.certified && provider.configured
+        ? `not available for new sessions — ${certification.note || "live matrix has not passed"}`
+        : undefined,
+    ].filter((note): note is string => Boolean(note));
+    return {
+      ...provider,
+      certified: certification.certified,
+      ...(certification.lastPassedAt ? { lastPassedAt: certification.lastPassedAt } : {}),
+      ...(notes.length ? { note: notes.join("; ") } : {}),
+    };
+  });
+  const configuredDefault = cfg.provider || "local";
+  const defaultProvider =
+    configuredDefault !== "local" &&
+    isRunnableSandboxProvider(configuredDefault) &&
+    sandboxProviderCertified(configuredDefault)
+      ? configuredDefault
+      : "local";
   return {
     enabled,
-    defaultProvider: cfg.provider || "local",
+    defaultProvider,
     providers,
     killSwitch: !sandboxesEnabled(),
     modelFamilies: SANDBOX_MODEL_FAMILIES,
@@ -840,6 +888,13 @@ export function resolveRequestedSandbox(
     provider: SandboxProviderId | null,
   ): { ok: true; provider: SandboxProviderId | null } | { ok: false; error: string } => {
     if (!provider || provider === "local") return { ok: true, provider };
+    if (isRunnableSandboxProvider(provider) && !sandboxProviderCertified(provider)) {
+      const certification = SANDBOX_PROVIDER_CERTIFICATIONS[provider];
+      return {
+        ok: false,
+        error: `Sandbox provider "${provider}" is not live-certified and is unavailable for new sessions — ${certification.note || "run its complete live conformance matrix first"}.`,
+      };
+    }
     const support = sandboxableModelFamily(model);
     return support.ok ? { ok: true, provider } : support;
   };

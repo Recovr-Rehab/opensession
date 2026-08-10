@@ -59,6 +59,7 @@ import {
   sandboxesEnabled,
   sandboxPrewarmConfig,
   sandboxProviderConfigured,
+  sandboxProviderCertified,
   isRemoteSandboxProvider,
 } from "./config";
 import {
@@ -248,7 +249,11 @@ export async function requestPrewarm(
   }
   if (!sandboxesEnabled()) return { state: "disabled" };
   const cfg = sandboxPrewarmConfig();
-  if (!cfg.enabled || !sandboxProviderConfigured(provider)) return { state: "disabled" };
+  if (
+    !cfg.enabled ||
+    !sandboxProviderConfigured(provider) ||
+    !sandboxProviderCertified(provider)
+  ) return { state: "disabled" };
   ensurePrewarmSweep();
 
   const key = `${provider}:${repoId}`;

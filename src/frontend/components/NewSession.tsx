@@ -329,7 +329,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   useEffect(() => {
     fetchSandboxStatus().then(setSandboxStatus).catch(() => {});
   }, []);
-  const sandboxChoices = (sandboxStatus?.providers || []).filter((p) => p.configured);
+  const sandboxChoices = (sandboxStatus?.providers || []).filter(
+    (p) => p.configured && p.certified,
+  );
   const showSandboxPicker =
     !!sandboxStatus?.enabled && !sandboxStatus.killSwitch && sandboxChoices.length > 0;
   const sandboxLabel = (id: string) =>

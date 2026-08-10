@@ -87,6 +87,12 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
       "lambda-microvm",
     ]);
     expect(s.providers.every((p) => !p.configured)).toBe(true);
+    expect(s.providers.filter((p) => p.certified).map((p) => p.id)).toEqual([
+      "docker",
+      "daytona",
+      "modal",
+      "microvm",
+    ]);
     expect(s.killSwitch).toBe(!sandboxesEnabled());
   });
 
@@ -147,7 +153,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     expect(sandboxProviderConfigured("lambda-microvm")).toBe(true);
     expect(
       sandboxCapabilityStatus().providers.find((p) => p.id === "lambda-microvm")?.note,
-    ).toBeUndefined();
+    ).toContain("not available for new sessions");
   });
 
   test("lambda microvm lifecycle values are bounded", () => {
@@ -184,7 +190,8 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     });
     const e = sandboxCapabilityStatus().providers.find((p) => p.id === "e2b")!;
     expect(e.configured).toBe(true);
-    expect(e.note).toBeUndefined();
+    expect(e.certified).toBe(false);
+    expect(e.note).toContain("not available for new sessions");
   });
 
   test("a disabled publicIngress block does not count as dial-back configured", () => {
@@ -261,7 +268,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     if (r.ok) expect(r.provider).toBe(sandboxesEnabled() ? "docker" : "local");
   });
 
-  test("explicit configured provider is accepted", () => {
+  test("explicit configured and certified provider is accepted", () => {
     write({
       provider: "docker",
       daytona: { apiKey: "dtn_x" },
@@ -271,11 +278,32 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     expect(resolveRequestedSandbox("docker")).toEqual({ ok: true, provider: "docker" });
     expect(resolveRequestedSandbox("daytona")).toEqual({ ok: true, provider: "daytona" });
     expect(resolveRequestedSandbox("modal")).toEqual({ ok: true, provider: "modal" });
-    expect(resolveRequestedSandbox("lambda-microvm")).toEqual({
-      ok: true,
-      provider: "lambda-microvm",
-    });
+    const lambda = resolveRequestedSandbox("lambda-microvm");
+    expect(lambda.ok).toBe(false);
+    if (!lambda.ok) expect(lambda.error).toContain("not live-certified");
     expect(resolveRequestedSandbox("DOCKER")).toEqual({ ok: true, provider: "docker" });
+  });
+
+  test("configured adapters without a live certification are cut from new sessions", () => {
+    write({
+      provider: "e2b",
+      e2b: { apiKey: "e2b_x" },
+      box: { apiKey: "box_x" },
+      awsLambdaMicrovm: { imageIdentifier: "image-x" },
+    });
+    expect(sandboxCapabilityStatus().defaultProvider).toBe("local");
+    for (const provider of ["e2b", "box", "lambda-microvm"] as const) {
+      const status = sandboxCapabilityStatus().providers.find((p) => p.id === provider)!;
+      expect(status.configured).toBe(true);
+      expect(status.certified).toBe(false);
+      expect(status.note).toContain("not available for new sessions");
+      const resolved = resolveRequestedSandbox(provider);
+      expect(resolved.ok).toBe(false);
+      if (!resolved.ok) expect(resolved.error).toContain("not live-certified");
+    }
+    const defaultResolved = resolveRequestedSandbox(true);
+    expect(defaultResolved.ok).toBe(false);
+    if (!defaultResolved.ok) expect(defaultResolved.error).toContain("not live-certified");
   });
 
   test("explicit unconfigured provider fails with a pointed error", () => {
