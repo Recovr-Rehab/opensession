@@ -3243,6 +3243,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			.map((b) => {
 				const gkey = `${ns}inbox:${b.key}`;
 				const open = isOpen(gkey);
+				// Needs action is the one band that is *blocked on you*, so its
+				// caption wears the urgent hue the Plain queue already spells
+				// "Urgent" with (lib/sidebar-filter.ts). The date bands stay
+				// neutral — colouring them all would say nothing.
+				const urgent = b.key === "needsaction" && "text-red";
 				return (
 					<div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
 						<button
@@ -3258,8 +3263,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							data-sticky-head
 							onClick={() => toggleGroup(gkey)}
 						>
-							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>{b.label}</span>
-							<span className={SIDEBAR_LANE_COUNT}>{b.rows.length + b.prs.length}</span>
+							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME, urgent)}>
+								{b.label}
+							</span>
+							<span className={cn(SIDEBAR_LANE_COUNT, urgent)}>
+								{b.rows.length + b.prs.length}
+							</span>
 							<IconChevronDown
 								className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
 								size={22}
