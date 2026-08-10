@@ -83,6 +83,36 @@ describe("remote engine credential projection", () => {
     });
   });
 
+  test("automation projection pins subscription accounts and one selected API provider", () => {
+    const projected = projectRemoteOpencodeConfig(
+      {
+        enabled: true,
+        bridgeAccountIds: ["wide-claude"],
+        bridge: {
+          accounts: ["wide-claude"],
+          openaiAccounts: ["wide-openai"],
+        },
+        providers: {
+          cerebras: { apiKey: "selected" },
+          xai: { apiKey: "must-not-cross" },
+        },
+      },
+      "opencode/cerebras/gpt-oss-120b",
+      "automation",
+      "pinned-account",
+    );
+    expect(projected.settingsProviderIds).toEqual(["cerebras"]);
+    expect(JSON.parse(projected.content)).toEqual({
+      enabled: true,
+      bridgeAccountIds: ["pinned-account"],
+      bridge: {
+        accounts: ["pinned-account"],
+        openaiAccounts: ["pinned-account"],
+      },
+      providers: { cerebras: { apiKey: "selected" } },
+    });
+  });
+
   test("native auth projection contains exactly the selected provider", () => {
     const projected = projectRemoteOpencodeNativeAuth(
       {

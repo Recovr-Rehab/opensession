@@ -57,7 +57,47 @@ destroy() {
   rm -rf --one-file-system "$JAIL"
 }
 
+restrict_egress() {
+  systemctl is-active --quiet "os-fc-clone$IDX" || {
+    echo "clone $IDX is not running" >&2; exit 4;
+  }
+  local chain="OS_EGRESS_$IDX" target address port
+  ip netns exec "$NS" iptables -N "$chain" 2>/dev/null || true
+  ip netns exec "$NS" iptables -F "$chain"
+  # Install the deny before any allow rules: a malformed target or interrupted
+  # policy update leaves the clone closed, never temporarily unrestricted.
+  ip netns exec "$NS" iptables -A "$chain" -j REJECT --reject-with icmp-admin-prohibited
+  # DNS is the sole infrastructure exception. Destination traffic is still
+  # limited to the IPs resolved by the host when this policy is installed, so
+  # a DNS answer cannot widen the firewall.
+  # Return traffic for host→guest control/preview flows traverses FORWARD in
+  # this namespace too; admit only conntrack-established packets, never new
+  # guest-initiated connections to arbitrary destinations.
+  ip netns exec "$NS" iptables -I "$chain" 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  ip netns exec "$NS" iptables -I "$chain" 1 -p udp --dport 53 -j ACCEPT
+  ip netns exec "$NS" iptables -I "$chain" 1 -p tcp --dport 53 -j ACCEPT
+  for target in "${@:4}"; do
+    [[ "$target" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?(:[0-9]{1,5})?$ ]] || {
+      echo "invalid resolved egress target: $target" >&2; exit 2;
+    }
+    address="${target%:*}"
+    if [ "$address" = "$target" ]; then
+      ip netns exec "$NS" iptables -I "$chain" 1 -d "$address" -p tcp -j ACCEPT
+    else
+      port="${target##*:}"
+      [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || {
+        echo "invalid egress port: $port" >&2; exit 2;
+      }
+      ip netns exec "$NS" iptables -I "$chain" 1 -d "$address" -p tcp --dport "$port" -j ACCEPT
+    fi
+  done
+  ip netns exec "$NS" iptables -C FORWARD -i bkstap0 -j "$chain" 2>/dev/null || \
+    ip netns exec "$NS" iptables -I FORWARD 1 -i bkstap0 -j "$chain"
+  echo "restricted clone $IDX egress to $((${#@} - 3)) resolved target(s)"
+}
+
 if [ "$CMD" = "destroy" ]; then destroy; echo "destroyed clone $IDX"; exit 0; fi
+if [ "$CMD" = "restrict-egress" ]; then restrict_egress "$@"; exit 0; fi
 if [ "$CMD" = "pause" ]; then
   [ -f "$DISK" ] || { echo "clone $IDX has no disk to pause" >&2; exit 4; }
   # Firecracker is terminated below, so flush the guest page cache first.
@@ -76,7 +116,7 @@ if [ "$CMD" = "pause" ]; then
   exit 0
 fi
 [ "$CMD" = "create" ] || [ "$CMD" = "resume" ] || [ "$CMD" = "publish-template" ] || {
-  echo "usage: clone.sh create|pause|resume|destroy|publish-template <idx> [pool-dir] [template-key]" >&2
+  echo "usage: clone.sh create|pause|resume|destroy|publish-template|restrict-egress <idx> [pool-dir] [args…]" >&2
   exit 2
 }
 

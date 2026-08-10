@@ -46,8 +46,8 @@
  * provider's ro mount of the full store, because this is third-party compute;
  * a self-hoster who doesn't accept even the scoped upload runs these adapters
  * against their OWN Daytona/E2B deployment (both are self-hostable).
- * Automations are refused sandboxing elsewhere in the stack, so only
- * interactive-trust runs get here.
+ * Automation launches use `trustProfile: "automation"`: one hard-pinned model
+ * account, an explicit projected MCP allowlist, and no instance-wide config.
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from "fs";
@@ -70,6 +70,7 @@ import {
   openaiSeedAuthPath,
 } from "../../opencode-openai-auth";
 import { providerFor } from "../../models";
+import { filterMcpServers } from "../../runner-shared";
 import {
   appendOpencodeTranscript,
   ensureOpencodeTranscriptFile,
@@ -110,6 +111,7 @@ export const REMOTE_HOME = "/home/ubuntu";
 const REMOTE_BUN = `${REMOTE_HOME}/.bun/bin/bun`;
 const REMOTE_CLAUDE = `${REMOTE_HOME}/.local/bin/claude`;
 const REMOTE_OPENCODE = `${REMOTE_HOME}/.bun/bin/opencode`;
+const REMOTE_MCP_CONFIG = `${REMOTE_HOME}/.opensession-mcp-config.json`;
 /** Same pin as deploy/sandbox/Dockerfile's OPENCODE_VERSION (host runs this
  *  too) — bump BOTH together. Part of bootstrapSignature, so a bump
  *  invalidates existing sandboxes/prewarms and re-bootstraps them. */
@@ -221,6 +223,8 @@ export function projectRemotePiConfig(raw: unknown): string | null {
 export function projectRemoteOpencodeConfig(
   raw: unknown,
   model: string | undefined,
+  trustProfile: "interactive" | "automation" = "interactive",
+  pinnedAccountId?: string,
 ): { content: string; settingsProviderIds: string[] } {
   const source = jsonRecord(raw);
   if (!source) throw new Error("OpenCode config must be a JSON object");
@@ -237,31 +241,41 @@ export function projectRemoteOpencodeConfig(
     out.pickerModels = source.pickerModels.filter(
       (value): value is string => typeof value === "string",
     );
-  if (Array.isArray(source.bridgeAccountIds))
+  if (trustProfile === "automation" && pinnedAccountId) {
+    out.bridgeAccountIds = [pinnedAccountId];
+  } else if (Array.isArray(source.bridgeAccountIds)) {
     out.bridgeAccountIds = source.bridgeAccountIds.filter(
       (value): value is string => typeof value === "string",
     );
+  }
 
   const bridge = jsonRecord(source.bridge);
   if (bridge) {
     const projectedBridge: JsonRecord = {};
     if (["meridian", "native", "off"].includes(String(bridge.mode)))
       projectedBridge.mode = bridge.mode;
-    if (Array.isArray(bridge.accounts))
-      projectedBridge.accounts = bridge.accounts.filter(
-        (value): value is string => typeof value === "string",
-      );
-    if (Array.isArray(bridge.openaiAccounts))
-      projectedBridge.openaiAccounts = bridge.openaiAccounts.filter(
-        (value): value is string => typeof value === "string",
-      );
+    if (trustProfile === "automation" && pinnedAccountId) {
+      projectedBridge.accounts = [pinnedAccountId];
+      projectedBridge.openaiAccounts = [pinnedAccountId];
+    } else {
+      if (Array.isArray(bridge.accounts))
+        projectedBridge.accounts = bridge.accounts.filter(
+          (value): value is string => typeof value === "string",
+        );
+      if (Array.isArray(bridge.openaiAccounts))
+        projectedBridge.openaiAccounts = bridge.openaiAccounts.filter(
+          (value): value is string => typeof value === "string",
+        );
+    }
     if (Object.keys(projectedBridge).length) out.bridge = projectedBridge;
   }
 
   const settingsProviders: JsonRecord = {};
-  if (remoteOpencodeProviderId(model)) {
+  const selectedSettingsProvider = remoteOpencodeProviderId(model);
+  if (selectedSettingsProvider) {
     for (const [id, value] of Object.entries(jsonRecord(source.providers) || {})) {
       if (id === "anthropic" || id === "openai") continue;
+      if (trustProfile === "automation" && id !== selectedSettingsProvider) continue;
       const provider = jsonRecord(value);
       if (!provider) continue;
       const projected: JsonRecord = {};
@@ -312,6 +326,8 @@ export interface RemoteSandboxState {
   sessionId: string;
   cwd: string;
   repoId?: string;
+  trustProfile?: "interactive" | "automation";
+  egressAllowlist?: string[];
   branch?: string;
   createdAt: string;
   lastActivityAt: string;
@@ -1003,16 +1019,43 @@ function makeRemoteLauncher(
         console.log(`[sandbox-remote] launch ${hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`);
       await driver.ensureStarted();
       mark("sandbox started");
+      const automationProfile = spec.trustProfile === "automation";
+      if (automationProfile && !spec.accountId) {
+        throw new Error("automation sandbox runs require a pinned model account");
+      }
       // Scoped Claude account upload — only what THIS run may use (pinned
       // account, else pool + the run user's own personal accounts; see the
       // module header). Rewritten every launch so pin/user changes apply and
       // a previously-uploaded wider file never lingers.
       const accounts = accountsForRemoteUpload(spec.user, spec.accountId);
+      if (automationProfile && !accounts.some((account) => account.id === spec.accountId)) {
+        const model = String(spec.model || "");
+        if (/^(?:claude-|opencode\/anthropic\/|pi\/anthropic\/)/.test(model)) {
+          throw new Error("the pinned automation account is not an eligible Claude account");
+        }
+      }
       await driver.writeFile(
         `${REMOTE_HOME}/.opensession-claude-accounts.json`,
         JSON.stringify({ accounts }, null, 2) + "\n",
       );
       await driver.exec(`chmod 600 ${REMOTE_HOME}/.opensession-claude-accounts.json`);
+      // Resolve the run's MCP allowlist and dynamic credentials on the trusted
+      // host, then project only those entries. Remote guests never receive the
+      // instance-wide mcp-config.json. Automation specs are required to carry
+      // an explicit array (including [] for no external connectors).
+      if (automationProfile && spec.mcpServers === "all") {
+        throw new Error("automation sandbox runs require an explicit MCP allowlist");
+      }
+      const projectedMcp = filterMcpServers(
+        spec.mcpServers ?? "all",
+        spec.user,
+        [spec.mcpGrantUser, spec.user],
+      );
+      await driver.writeFile(
+        REMOTE_MCP_CONFIG,
+        JSON.stringify({ mcpServers: projectedMcp }, null, 2) + "\n",
+      );
+      await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_MCP_CONFIG)}`);
       // OpenCode policy + provider config, projected at the sandbox boundary.
       // The source CAN contain third-party API keys under providers.*.apiKey;
       // never copy it wholesale. Anthropic/OpenAI/Pi launches receive only the
@@ -1034,7 +1077,12 @@ function makeRemoteLauncher(
         } catch (error) {
           throw new Error(`Cannot project sandbox OpenCode config ${ocCfgSrc}: ${error}`);
         }
-        const projected = projectRemoteOpencodeConfig(raw, spec.model);
+        const projected = projectRemoteOpencodeConfig(
+          raw,
+          spec.model,
+          spec.trustProfile,
+          spec.accountId,
+        );
         settingsProviderIds = projected.settingsProviderIds;
         await driver.writeFile(REMOTE_OPENCODE_CONFIG, projected.content);
         await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_OPENCODE_CONFIG)}`);
@@ -1121,9 +1169,18 @@ function makeRemoteLauncher(
       // build resolves — same convention as the bridge config above.
       const openaiUpload = buildOpenaiRemoteSeedUpload(
         listCodexAccounts(),
-        readOpencodeBridgeConfig()?.openaiAccounts,
+        automationProfile && spec.accountId
+          ? [spec.accountId]
+          : readOpencodeBridgeConfig()?.openaiAccounts,
         spec.user,
       );
+      if (
+        automationProfile &&
+        /^(?:opencode\/openai\/|pi\/openai\/)/.test(String(spec.model || "")) &&
+        !openaiUpload.accounts.some((account) => account.id === spec.accountId)
+      ) {
+        throw new Error("the pinned automation account is not an eligible OpenAI account");
+      }
       for (const { account, reason } of openaiUpload.skipped) {
         console.warn(
           `[sandbox-remote] openai seed for ${maskOpenaiAccount(account)} skipped: ${reason}`,
@@ -1177,6 +1234,7 @@ function makeRemoteLauncher(
           // Deterministic opencode resolution (bootstrap installed it here) —
           // don't depend on PATH probing inside the run host.
           OPENSESSION_OPENCODE_BIN: REMOTE_OPENCODE,
+          OPENSESSION_MCP_CONFIG: REMOTE_MCP_CONFIG,
           OPENSESSION_RUN_JOURNAL: `${dir}/journal.json`,
           // Where bindOpenaiAccount finds the uploaded rotation-proof openai
           // seeds (only set when something was uploaded this launch).
@@ -1256,6 +1314,7 @@ function recordForSpec(
     fallbackModel: spec.fallbackModel,
     sandboxId,
     sandboxProvider: provider,
+    trustProfile: spec.trustProfile,
     kind: spec.journalKind || "prompt",
     startedAt: new Date().toISOString(),
   };
@@ -1637,6 +1696,7 @@ export async function resumeRemoteSandboxRun(
     accountId: run.accountId,
     accountStrict: run.accountStrict,
     usageCredits: run.usageCredits,
+    trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
     journalKind: `${run.kind || "prompt"}-resume`,
   };
   try {

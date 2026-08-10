@@ -26,6 +26,7 @@ import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
+import { Switch } from "../ui/switch";
 import { formatDuration } from "../lib/time";
 
 /* The old .automation-form family, as utilities. Two of its rules reached in
@@ -116,6 +117,7 @@ interface Automation {
   accountId?: string;
   accountStrict?: boolean;
   usageCredits?: boolean;
+  sandbox?: boolean;
   lastRunAt?: string;
   lastRunSessionId?: string;
   lastRunStatus?: "running" | "ok" | "error";
@@ -531,8 +533,19 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     <DetailKey>Mode</DetailKey>
                     <span className="text-dim">
                       {sel.mode === "ask"
-                        ? "Ask — read-only on the main checkout"
-                        : "Code — isolated worktree, can open PRs"}
+                        ? sel.sandbox
+                          ? "Ask — isolated MicroVM workspace"
+                          : "Ask — read-only on the main checkout"
+                        : sel.sandbox
+                          ? "Code — isolated MicroVM workspace, can open PRs"
+                          : "Code — isolated worktree, can open PRs"}
+                    </span>
+
+                    <DetailKey>Environment</DetailKey>
+                    <span className="text-dim">
+                      {sel.sandbox
+                        ? "MicroVM — pinned credentials and restricted egress"
+                        : "Host worktree"}
                     </span>
 
                     <DetailKey>Model</DetailKey>
@@ -1615,6 +1628,7 @@ function AutomationForm({
   const [accountId, setAccountId] = useState(initial?.accountId || "");
   const [accountStrict, setAccountStrict] = useState(initial?.accountStrict !== false);
   const [usageCredits, setUsageCredits] = useState(!!initial?.usageCredits);
+  const [sandbox, setSandbox] = useState(!!initial?.sandbox);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const providerAccounts = useProviderAccounts();
@@ -1663,6 +1677,7 @@ function AutomationForm({
           accountId,
           accountStrict,
           usageCredits,
+          sandbox,
           mcpServers: mcpServers ?? null,
           slackWatch,
           webhookEnabled: isWatch ? false : webhookEnabled,
@@ -1681,6 +1696,7 @@ function AutomationForm({
           accountId: accountId || undefined,
           accountStrict: accountId && !accountStrict ? false : undefined,
           usageCredits: usageCredits || undefined,
+          sandbox: sandbox || undefined,
           mcpServers,
           slackWatch,
           webhookEnabled: isWatch ? false : webhookEnabled,
@@ -1844,6 +1860,27 @@ function AutomationForm({
             </Select>
           </label>
 
+          <label className="flex min-h-10 flex-1 items-center justify-between gap-3 text-label font-medium text-dim">
+            <span className="flex flex-col gap-1">
+              <span>Run in a MicroVM</span>
+              <span className="font-normal text-faint">
+                Pinned credentials, explicit MCP access, restricted network
+              </span>
+            </span>
+            <Switch
+              checked={sandbox}
+              onCheckedChange={(checked) => {
+                setSandbox(checked);
+                if (checked) {
+                  setAccountStrict(true);
+                  setFallbackModel("");
+                  setMcpServers((current) => current ?? []);
+                }
+              }}
+              aria-label="Run this automation in a MicroVM"
+            />
+          </label>
+
           <label className={FIELD_LABEL}>
             Model
             <Select value={model} onChange={(e) => setModel(e.target.value)}>
@@ -1859,7 +1896,11 @@ function AutomationForm({
 
           <label className={FIELD_LABEL}>
             Fallback (when all accounts hit usage limits)
-            <Select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
+            <Select
+              value={fallbackModel}
+              onChange={(e) => setFallbackModel(e.target.value)}
+              disabled={sandbox}
+            >
               <option value="">None — fail instead of falling back</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -1889,6 +1930,7 @@ function AutomationForm({
               <Select
                 value={accountStrict ? "strict" : "pool"}
                 onChange={(e) => setAccountStrict(e.target.value === "strict")}
+                disabled={sandbox}
               >
                 <option value="strict">This account only — fall back by model (cost cap)</option>
                 <option value="pool">Prefer it — fall back to the shared pool</option>
@@ -1920,7 +1962,14 @@ function AutomationForm({
           size="md"
           className="px-[22px] py-2"
           onClick={handleSave}
-          disabled={saving || !name.trim() || !prompt.trim() || !scheduleValid || !watchValid}
+          disabled={
+            saving ||
+            !name.trim() ||
+            !prompt.trim() ||
+            !scheduleValid ||
+            !watchValid ||
+            (sandbox && !accountId)
+          }
         >
           {saving ? "Saving…" : initial ? "Save changes" : "Create automation"}
         </Button>

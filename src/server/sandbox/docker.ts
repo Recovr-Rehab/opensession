@@ -998,6 +998,7 @@ function recordForSpec(spec: RunHostSpec, sandboxId: string): ActiveRunRecord {
     fallbackModel: spec.fallbackModel,
     sandboxId,
     sandboxProvider: "docker",
+    trustProfile: spec.trustProfile,
     kind: spec.journalKind || "prompt",
     startedAt: new Date().toISOString(),
   };
@@ -1647,6 +1648,7 @@ export async function resumeDockerSandboxRun(
     accountId: run.accountId,
     accountStrict: run.accountStrict,
     usageCredits: run.usageCredits,
+    trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
     journalKind: `${run.kind || "prompt"}-resume`,
   };
   try {

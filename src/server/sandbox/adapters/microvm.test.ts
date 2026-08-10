@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { assertDialbackReachable, type RemoteDriver } from "./bootstrap";
-import { microvmBootstrapDriver } from "./microvm";
+import {
+  microvmBootstrapDriver,
+  parseMicrovmEgressDestination,
+} from "./microvm";
 
 function driverWith(
   exec: RemoteDriver["exec"],
@@ -65,5 +68,31 @@ describe("microvmBootstrapDriver", () => {
 
     expect(command).toContain("https://microvm.internal.example/");
     expect(command).not.toContain("publicIngress");
+  });
+});
+
+describe("MicroVM automation egress", () => {
+  test("accepts URLs, host ports, IPv4 addresses, and CIDRs", () => {
+    expect(parseMicrovmEgressDestination("https://api.example.com/path?secret=x")).toEqual({
+      host: "api.example.com",
+      port: 443,
+    });
+    expect(parseMicrovmEgressDestination("callback.example.com:8443")).toEqual({
+      host: "callback.example.com",
+      port: 8443,
+    });
+    expect(parseMicrovmEgressDestination("203.0.113.8")).toEqual({
+      host: "203.0.113.8",
+    });
+    expect(parseMicrovmEgressDestination("10.0.0.0/24")).toEqual({
+      host: "10.0.0.0/24",
+    });
+  });
+
+  test("rejects wildcard and non-network destinations", () => {
+    expect(() => parseMicrovmEgressDestination("*.example.com")).toThrow("wildcards");
+    expect(() => parseMicrovmEgressDestination("file:///etc/passwd")).toThrow(
+      "unsupported",
+    );
   });
 });

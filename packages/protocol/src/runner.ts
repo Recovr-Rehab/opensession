@@ -65,7 +65,8 @@ export interface RunHostSpec {
   /**
    * opensession-* in-process servers to expose via the RPC proxy (mcp-proxy.ts →
    * opensession-rpc.sock). Names must match what the server-side builder
-   * produces for this session. Empty/omitted for automation-owned sessions.
+   * produces for this session. Automation-owned sessions may name only their
+   * deliberately registered report/workflow/self-improvement tools.
    */
   proxyMcpServers?: string[];
   /** Per-run bearer for the RPC socket; maps to {sessionId, user} on the server side. */
@@ -98,6 +99,9 @@ export interface RunHostSpec {
   /** Allow accounts spending usage-credits past their subscription limits. */
   usageCredits?: boolean;
   journalKind?: string;
+  /** Trust boundary selected by the caller. Automation hosts receive only
+   *  their pinned model credential and explicitly proxied MCP servers. */
+  trustProfile?: "interactive" | "automation";
 }
 
 /** Mutable host state, persisted to meta.json in the host dir. This is what a

@@ -214,6 +214,7 @@ export async function createAutomationApi(input: {
 	accountId?: string;
 	accountStrict?: boolean;
 	usageCredits?: boolean;
+	sandbox?: boolean;
 	mcpServers?: string[];
 	slackWatch?: { channel: string };
 	webhookEnabled?: boolean;

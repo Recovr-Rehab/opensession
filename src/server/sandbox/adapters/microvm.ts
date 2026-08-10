@@ -12,6 +12,8 @@ import { homeDir } from "../../paths";
 import { audit } from "../../audit";
 import { hostRunBusy } from "../../host-registry";
 import { createHash } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { existsSync } from "node:fs";
 import { getRepo } from "../../worktree";
 import {
@@ -59,6 +61,16 @@ const CONTROL_PORT = 8080;
 const ROOT_CONTROL_PORT = 8081;
 const DEFAULT_IDLE_STOP_MINUTES = 5;
 const IDLE_SWEEP_MS = 60_000;
+const AUTOMATION_BASELINE_EGRESS = [
+  "https://github.com",
+  "https://api.github.com",
+  "https://codeload.github.com",
+  "https://objects.githubusercontent.com",
+  "https://raw.githubusercontent.com",
+  "https://api.openai.com",
+  "https://chatgpt.com",
+  "https://api.anthropic.com",
+] as const;
 
 function config() {
   const cfg = sandboxConfig().firecrackerMicrovm;
@@ -104,6 +116,105 @@ async function run(
   ]);
   clearTimeout(timer);
   return { exitCode, stdout, stderr };
+}
+
+interface EgressDestination {
+  host: string;
+  port?: number;
+}
+
+/** Parse an operator-facing egress entry without ever passing hostnames or
+ * shell fragments to the privileged clone helper. Resolution happens here;
+ * clone.sh accepts resolved IPv4/CIDR targets only. */
+export function parseMicrovmEgressDestination(value: string): EgressDestination {
+  const raw = value.trim();
+  if (!raw) throw new Error("empty automation egress destination");
+  if (/^[0-9.]+\/([0-9]|[12][0-9]|3[0-2])$/.test(raw)) return { host: raw };
+  if (/^[0-9.]+:\d+$/.test(raw)) {
+    const split = raw.lastIndexOf(":");
+    const host = raw.slice(0, split);
+    const port = Number(raw.slice(split + 1));
+    if (isIP(host) !== 4 || port < 1 || port > 65_535)
+      throw new Error(`invalid automation egress destination: ${value}`);
+    return { host, port };
+  }
+  if (isIP(raw) === 4) return { host: raw };
+  let url: URL;
+  try {
+    url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+  } catch {
+    throw new Error(`invalid automation egress destination: ${value}`);
+  }
+  if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol) || !url.hostname)
+    throw new Error(`unsupported automation egress destination: ${value}`);
+  if (url.hostname.includes("*"))
+    throw new Error(`wildcards are not allowed in automation egress: ${value}`);
+  const port = url.port
+    ? Number(url.port)
+    : url.protocol === "http:" || url.protocol === "ws:"
+      ? 80
+      : 443;
+  if (!Number.isInteger(port) || port < 1 || port > 65_535)
+    throw new Error(`invalid automation egress port: ${value}`);
+  return { host: url.hostname, port };
+}
+
+export async function resolveMicrovmEgressTargets(values: string[]): Promise<string[]> {
+  const targets = new Set<string>();
+  for (const value of values) {
+    const destination = parseMicrovmEgressDestination(value);
+    if (destination.host.includes("/")) {
+      targets.add(destination.host);
+      continue;
+    }
+    const addresses = isIP(destination.host)
+      ? [{ address: destination.host }]
+      : await lookup(destination.host, { all: true, family: 4 });
+    if (!addresses.length)
+      throw new Error(`automation egress host did not resolve: ${destination.host}`);
+    for (const { address } of addresses) {
+      targets.add(`${address}${destination.port ? `:${destination.port}` : ""}`);
+    }
+  }
+  return [...targets].sort();
+}
+
+async function restrictAutomationEgress(
+  idx: number,
+  storeDir: string,
+  values: string[],
+): Promise<string[]> {
+  let targets: string[] = [];
+  try {
+    targets = await resolveMicrovmEgressTargets(values);
+  } catch (error) {
+    // The zero-target policy is DNS + deny. Install it before surfacing the
+    // resolution error so a reused VM never remains broadly connected.
+    await run(
+      ["sudo", "-n", "bash", `${SCRIPTS}/clone.sh`, "restrict-egress", String(idx), storeDir],
+      30_000,
+    ).catch(() => undefined);
+    throw error;
+  }
+  const result = await run(
+    [
+      "sudo",
+      "-n",
+      "bash",
+      `${SCRIPTS}/clone.sh`,
+      "restrict-egress",
+      String(idx),
+      storeDir,
+      ...targets,
+    ],
+    30_000,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `installing automation egress policy failed: ${(result.stderr || result.stdout).trim().slice(-500)}`,
+    );
+  }
+  return targets;
 }
 
 async function unitRunning(idx: number): Promise<boolean> {
@@ -360,6 +471,8 @@ export class MicrovmProvider implements SandboxProvider {
     }
     const cfg = config();
     let previous = findRemoteStateBySession(this.id, spec.sessionId);
+    const trustProfile = spec.trustProfile || previous?.trustProfile || "interactive";
+    const egressAllowlist = spec.egressAllowlist || previous?.egressAllowlist || [];
     const repo = getRepo(spec.repo || previous?.repoId);
     const branch = spec.branch || previous?.branch || repo.defaultBranch;
     // Keep workspaces in a guest-only namespace. The runner checkout is baked
@@ -438,6 +551,8 @@ export class MicrovmProvider implements SandboxProvider {
         branch,
         createdAt: new Date().toISOString(),
         lastActivityAt: new Date().toISOString(),
+        trustProfile,
+        egressAllowlist,
       });
     }
 
@@ -455,10 +570,11 @@ export class MicrovmProvider implements SandboxProvider {
         callbackBaseUrl,
       );
       await bootstrapRemoteSandbox(bootstrapDriver, "microvm");
+      const cloneUrl = await remoteCloneUrl(repo);
       await setupRemoteWorkspace(
         driver,
         cwd,
-        await remoteCloneUrl(repo),
+        cloneUrl,
         branch,
         repo.defaultBranch,
         repo.id,
@@ -471,6 +587,22 @@ export class MicrovmProvider implements SandboxProvider {
           provider: this.id,
           sandbox_id: sandboxId(idx),
           resume_ms: resumeStartedAt ? Date.now() - resumeStartedAt : undefined,
+          outcome: "ok",
+        });
+      }
+      if (trustProfile === "automation") {
+        const resolved = await restrictAutomationEgress(idx, cfg.storeDir, [
+          callbackBaseUrl,
+          cloneUrl,
+          ...AUTOMATION_BASELINE_EGRESS,
+          ...egressAllowlist,
+        ]);
+        audit({
+          kind: "sandbox_automation_egress",
+          session_id: spec.sessionId,
+          provider: this.id,
+          sandbox_id: sandboxId(idx),
+          resolved_targets: resolved,
           outcome: "ok",
         });
       }
@@ -490,6 +622,8 @@ export class MicrovmProvider implements SandboxProvider {
       branch,
       createdAt: previous?.createdAt || new Date().toISOString(),
       lastActivityAt: new Date().toISOString(),
+      trustProfile,
+      egressAllowlist,
     });
     return this.makeHandle(idx, spec.sessionId, cwd);
   }
@@ -579,6 +713,8 @@ export class MicrovmProvider implements SandboxProvider {
       repo: state.repoId,
       branch: state.branch,
       cwd: state.cwd,
+      trustProfile: state.trustProfile,
+      egressAllowlist: state.egressAllowlist,
     });
   }
 }

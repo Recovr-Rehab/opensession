@@ -61,6 +61,11 @@ export interface SandboxSessionSpec {
    * container on the next ensure. Volume-mode workspaces reject attachments.
    */
   attachedDirs?: string[];
+  /** Automation sandboxes fail closed unless the provider can install its
+   *  credential-minimal profile and outbound network policy. */
+  trustProfile?: "interactive" | "automation";
+  /** Hostnames, IPs, CIDRs, or URLs permitted for automation egress. */
+  egressAllowlist?: string[];
 }
 
 export interface ExecOpts {

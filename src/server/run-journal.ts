@@ -70,6 +70,8 @@ export interface ActiveRunRecord {
   sandboxId?: string;
   /** Provider owning sandboxId, so resume-after-restart can reattach via provider.get() */
   sandboxProvider?: string;
+  /** Credential/network boundary for a sandbox run, preserved on relaunch. */
+  trustProfile?: "interactive" | "automation";
   kind?: string;
   startedAt: string;
   /** Stamped when a boot sweep hands the record to resumeInterruptedRuns. The

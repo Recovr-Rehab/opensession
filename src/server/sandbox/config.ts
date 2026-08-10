@@ -208,6 +208,16 @@ export interface SandboxFirecrackerMicrovmConfig {
   indexEnd: number;
 }
 
+export interface SandboxAutomationConfig {
+  /** Automation isolation currently requires the locally enforceable network
+   *  boundary of Firecracker. Other providers are admitted only after their
+   *  native egress controls pass the same conformance case. */
+  provider: "microvm";
+  /** Additional HTTPS endpoints/CIDRs an automation may contact. Model, git,
+   *  and the Open Session callback endpoints are added by the launcher. */
+  egressAllowlist?: string[];
+}
+
 export interface SandboxConfig {
   provider: SandboxProviderId;
   /** Container image for the docker provider (Phase 1). */
@@ -258,6 +268,8 @@ export interface SandboxConfig {
   awsLambdaMicrovm?: SandboxAwsLambdaMicrovmConfig;
   /** Local Firecracker adapter (provider "microvm"). */
   firecrackerMicrovm?: SandboxFirecrackerMicrovmConfig;
+  /** Credential-minimal unattended-run profile. */
+  automation?: SandboxAutomationConfig;
   /** Clone auth for remote-provider workspaces + runner bootstrap. On hosted
    *  GitHub clones, the live GITHUB_API_TOKEN takes precedence so an expiring
    *  GitHub App user token is never treated as durable sandbox config. */
@@ -454,6 +466,23 @@ export function sandboxConfig(): SandboxConfig {
                     : 127,
               }
             : undefined,
+        automation:
+          raw?.automation && typeof raw.automation === "object"
+            ? {
+                provider: "microvm",
+                egressAllowlist: Array.isArray(raw.automation.egressAllowlist)
+                  ? raw.automation.egressAllowlist
+                      .filter(
+                        (value: unknown): value is string =>
+                          typeof value === "string" &&
+                          value.trim().length > 0 &&
+                          value.trim().length <= 512,
+                      )
+                      .map((value: string) => value.trim())
+                      .slice(0, 128)
+                  : undefined,
+              }
+            : undefined,
         cloneCredential:
           raw?.cloneCredential?.type === "https-token" ||
           raw?.cloneCredential?.type === "none"
@@ -525,6 +554,13 @@ export function sandboxPrewarmConfig(): SandboxPrewarmConfig {
  *  their own "ws" regardless). */
 export function sandboxTransport(): SandboxTransport {
   return sandboxConfig().transport === "ws" ? "ws" : "socket";
+}
+
+/** Effective unattended-run policy. The provider is deliberately not a
+ *  generic selector yet: MicroVM is the only backend whose outbound policy is
+ *  enforced by Open Session rather than asserted by an external control plane. */
+export function sandboxAutomationConfig(): SandboxAutomationConfig {
+  return sandboxConfig().automation || { provider: "microvm" };
 }
 
 // ── Provider capability status (per-session provider picker) ────────────────

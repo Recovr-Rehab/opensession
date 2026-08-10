@@ -8,8 +8,13 @@ import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { parseCron, cronMatches, nextRun } from "./cron";
-import { STRIPE_CONFIRM_TOOLS, declaredRunFailure } from "./runner-shared";
+import {
+  STRIPE_CONFIRM_TOOLS,
+  declaredRunFailure,
+  filterMcpServers,
+} from "./runner-shared";
 import { getAccountById } from "./claude-accounts";
+import { getCodexAccountById } from "./codex-accounts";
 import { runAgent } from "./agent-runner";
 import { providerFor, resolveModel, DEFAULT_FALLBACK_MODEL, modelLabel } from "./models";
 import { readOpencodeBridgeConfig } from "./opencode-config";
@@ -25,12 +30,23 @@ import { createReportMcpServer } from "../agents/slack/report-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
 import { papercutsEnabledForRepo } from "./papercuts";
-import { registerSessionMcpServers, unregisterSessionMcpServers } from "./run-rpc";
+import {
+  registerRunToken,
+  registerSessionMcpServers,
+  unregisterRunToken,
+  unregisterSessionMcpServers,
+} from "./run-rpc";
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
 import { createSelfImproveMcpServer } from "../agents/slack/self-improve-tools";
 import { audit } from "./audit";
+import { getSandboxProvider, type Sandbox } from "./sandbox";
+import {
+  sandboxAutomationConfig,
+  sandboxProviderConfigured,
+} from "./sandbox/config";
+import type { RunHostSpec } from "../runner-host/protocol";
 import { configuredIntegration, personaName } from "./config";
-import { shouldPersistModelSwitch } from "./run-events";
+import { shouldPersistModelSwitch, type StreamEvent } from "./run-events";
 import {
   deleteAutomationInputState,
   prepareAutomationInputs,
@@ -221,11 +237,9 @@ export interface Automation {
   /** false = soft pin (pool fallback); unset/true = hard pin (cost cap). */
   accountStrict?: boolean;
   /**
-   * Run this automation's sessions inside a sandbox (the sandbox rollout plan).
-   * Schema-only for now: create/update REJECT `sandbox: true` — automation
-   * sandboxing lands in a later phase (interactive sessions dogfood first,
-   * and the Phase 1 mount set carries interactive-level ambient trust that
-   * untrusted automation prompts must not get).
+   * Run this automation's sessions in the credential-minimal MicroVM profile.
+   * Creation requires a hard-pinned model account, an explicit MCP allowlist,
+   * no cross-model fallback, and a provider-enforced egress policy.
    */
   sandbox?: boolean;
   /**
@@ -342,14 +356,75 @@ function generateSecret(): string {
   ).join("");
 }
 
-/** Validate a pinned claude-accounts id; ""/nullish clears the pin. */
+/** Validate a pinned model-account id; ""/nullish clears the pin. */
 function sanitizeAccountId(v?: unknown): string | { error: string } | undefined {
   if (v === undefined || v === null || v === "") return undefined;
   if (typeof v !== "string") return { error: "accountId must be a string" };
   const id = v.trim();
   if (!id) return undefined;
-  if (!getAccountById(id)) return { error: `Unknown Claude account id "${id}"` };
+  if (!getAccountById(id) && !getCodexAccountById(id))
+    return { error: `Unknown model account id "${id}"` };
   return id;
+}
+
+function validateSandboxAutomation(
+  automation: Pick<
+    Automation,
+    | "sandbox"
+    | "model"
+    | "accountId"
+    | "accountStrict"
+    | "fallbackModel"
+    | "mcpServers"
+    | "claudeCliEnv"
+    | "codexCliEnv"
+  >,
+): { error: string } | null {
+  if (!automation.sandbox) return null;
+  if (!sandboxProviderConfigured("microvm")) {
+    return {
+      error:
+        "sandbox automations require the credential-free Firecracker MicroVM provider",
+    };
+  }
+  if (!automation.accountId) {
+    return { error: "sandbox automations require a pinned model account" };
+  }
+  const runModel = opencodeAutomationModel(automation.model) || "";
+  if (
+    /^(?:claude-|opencode\/anthropic\/|pi\/anthropic\/)/.test(runModel) &&
+    !getAccountById(automation.accountId)
+  ) {
+    return { error: "the pinned account does not belong to the selected Claude model" };
+  }
+  if (
+    /^(?:opencode\/openai\/|pi\/openai\/)/.test(runModel) &&
+    !getCodexAccountById(automation.accountId)
+  ) {
+    return { error: "the pinned account does not belong to the selected OpenAI model" };
+  }
+  if (automation.accountStrict === false) {
+    return { error: "sandbox automation account pins must be strict" };
+  }
+  if (automation.fallbackModel && automation.fallbackModel !== "none") {
+    return {
+      error:
+        "sandbox automations cannot widen credentials through a fallback model; set fallbackModel to none",
+    };
+  }
+  if (!Array.isArray(automation.mcpServers)) {
+    return {
+      error:
+        "sandbox automations require an explicit mcpServers allowlist (use [] for none)",
+    };
+  }
+  if (automation.claudeCliEnv || automation.codexCliEnv) {
+    return {
+      error:
+        "sandbox automations cannot provision nested Claude/Codex CLI credentials",
+    };
+  }
+  return null;
 }
 
 function sanitizeModel(model?: unknown, allowNone = false): string | { error: string } | undefined {
@@ -426,9 +501,6 @@ export function createAutomation(input: {
 }): Automation | { error: string } {
   if (!input.name.trim()) return { error: "Name is required" };
   if (!input.prompt.trim()) return { error: "Prompt is required" };
-  if (input.sandbox === true) {
-    return { error: "automation sandboxing lands in a later phase — remove `sandbox` (interactive sessions only for now)" };
-  }
   const runOnceAt = sanitizeRunOnceAt(input.runOnceAt);
   if (runOnceAt && typeof runOnceAt === "object") return runOnceAt;
   // A one-off and a recurring cron are mutually exclusive — the one-off wins.
@@ -454,6 +526,18 @@ export function createAutomation(input: {
   if (inputs && "error" in inputs) return inputs;
   const outputs = sanitizeAutomationOutputs(input.outputs);
   if (outputs && "error" in outputs) return outputs;
+
+  const sandboxValidation = validateSandboxAutomation({
+    sandbox: input.sandbox,
+    model,
+    accountId,
+    accountStrict: input.accountStrict,
+    fallbackModel,
+    mcpServers: input.mcpServers,
+    claudeCliEnv: input.claudeCliEnv,
+    codexCliEnv: input.codexCliEnv,
+  });
+  if (sandboxValidation) return sandboxValidation;
 
   const a: Automation = {
     id: `auto-${randomUUIDv7()}`,
@@ -483,6 +567,7 @@ export function createAutomation(input: {
     // Only false is worth storing — unset/true both mean the hard-pin default.
     accountStrict: input.accountStrict === false ? false : undefined,
     usageCredits: input.usageCredits === true || undefined,
+    sandbox: input.sandbox === true || undefined,
     grafanaPoll,
     slackWatch,
     inputs,
@@ -538,9 +623,6 @@ export function updateAutomation(
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
-  if (patch.sandbox === true) {
-    return { error: "automation sandboxing lands in a later phase — remove `sandbox` (interactive sessions only for now)" };
-  }
   if (patch.schedule !== undefined && patch.schedule.trim() && !parseCron(patch.schedule)) {
     return { error: `Invalid cron expression: "${patch.schedule}"` };
   }
@@ -610,6 +692,9 @@ export function updateAutomation(
   if ("usageCredits" in patch) {
     next.usageCredits = patch.usageCredits === true || undefined;
   }
+  if ("sandbox" in patch) next.sandbox = patch.sandbox === true || undefined;
+  const sandboxValidation = validateSandboxAutomation(next);
+  if (sandboxValidation) return sandboxValidation;
   // Backfill secrets for automations created before webhook support
   if (!next.webhookSecret) next.webhookSecret = generateSecret();
   saveAutomation(next);
@@ -989,6 +1074,23 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "automation";
 }
 
+function sandboxAutomationMcpEgress(mcpServers: string[]): string[] {
+  const destinations = new Set<string>();
+  const projected = filterMcpServers(mcpServers, undefined, []);
+  for (const config of Object.values(projected)) {
+    if (!config || typeof config !== "object") continue;
+    const entry = config as Record<string, unknown>;
+    if (typeof entry.url === "string") destinations.add(entry.url);
+    if (entry.env && typeof entry.env === "object") {
+      for (const value of Object.values(entry.env as Record<string, unknown>)) {
+        if (typeof value === "string" && /^(?:https?|wss?):\/\//i.test(value))
+          destinations.add(value);
+      }
+    }
+  }
+  return [...destinations];
+}
+
 export function isAutomationRunning(id: string): boolean {
   return (runningCounts.get(id) || 0) > 0;
 }
@@ -1025,8 +1127,11 @@ export async function runAutomation(
   const startedAt = new Date();
   const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
   const bksId = options?.osSessionId || newSessionId();
+  let sandboxRpcToken: string | undefined;
 
   try {
+    const runtimeSandboxValidation = validateSandboxAutomation(automation);
+    if (runtimeSandboxValidation) throw new Error(runtimeSandboxValidation.error);
     // The automation's repo (instance default when omitted). Ask mode reads the repo's
     // pinned ask checkout (default branch — never the mutable main checkout);
     // code mode gets an isolated worktree — `isolated` matters for
@@ -1035,17 +1140,37 @@ export async function runAutomation(
     const repo = getRepo(automation.repo);
     let cwd = "";
     let branch = "";
+    let sandbox: Sandbox | undefined;
     if (automation.mode === "code") {
       branch = `auto-${slugify(automation.name)}-${startedAt
         .toISOString()
         .slice(0, 16)
         .replace(/[-T:]/g, "")}`;
-      const worktrees = await listWorktrees(repo.id);
-      cwd =
-        worktrees.find((w) => w.branch === branch)?.path ||
-        (await createWorktree(branch, repo.id, { isolated: true }));
+      if (!automation.sandbox) {
+        const worktrees = await listWorktrees(repo.id);
+        cwd =
+          worktrees.find((w) => w.branch === branch)?.path ||
+          (await createWorktree(branch, repo.id, { isolated: true }));
+      }
     } else {
-      cwd = await ensureAskCheckout(repo.id);
+      branch = repo.defaultBranch;
+      if (!automation.sandbox) cwd = await ensureAskCheckout(repo.id);
+    }
+    if (automation.sandbox) {
+      const automationSandbox = sandboxAutomationConfig();
+      const provider = getSandboxProvider(automationSandbox.provider);
+      sandbox = await provider.ensure({
+        sessionId: bksId,
+        repo: repo.id,
+        branch,
+        mode: automation.mode,
+        trustProfile: "automation",
+        egressAllowlist: [
+          ...(automationSandbox.egressAllowlist || []),
+          ...sandboxAutomationMcpEgress(automation.mcpServers || []),
+        ],
+      });
+      cwd = sandbox.cwd;
     }
 
     recordRunStart(automation.id, {
@@ -1203,6 +1328,15 @@ export async function runAutomation(
           mode: automation.mode,
           automation: automation.name,
           automationId: automation.id,
+          ...(sandbox
+            ? {
+                sandbox: {
+                  provider: sandbox.provider,
+                  sandboxId: sandbox.id,
+                  workspace: sandbox.workspace,
+                },
+              }
+            : {}),
           // Keep the automation's account pin on the session so interactive
           // resumes of this session run on the same subscription.
           ...(automation.accountId ? { accountId: automation.accountId } : {}),
@@ -1224,7 +1358,7 @@ export async function runAutomation(
           // Code-mode runs can rename their auto-generated branch before opening
           // a PR — record the worktree's actual HEAD so PR lookups and the
           // review handoff keep resolving this session.
-          branch: (branch && worktreeHeadBranch(cwd)) || branch,
+          branch: sandbox ? branch : (branch && worktreeHeadBranch(cwd)) || branch,
           ...(slackThreads.length ? { slackThreads: [...slackThreads] } : {}),
           lastActivity: new Date().toISOString(),
         };
@@ -1257,42 +1391,65 @@ export async function runAutomation(
     // ⇒ ok" (the deepsec scans recorded ok for days of zero-batch runs).
     // Opt-in by emission — automations that never declare are unaffected.
     let textTail = "";
-    for await (const event of runAgent({
-      prompt,
-      cwd,
-      mode: automation.mode,
-      model: runModel,
-      mcpServers: automation.mcpServers ?? "all",
-      inProcessMcp,
-      deniedTools: AUTOMATION_DENIED_TOOLS,
-      // No onAskUser here, so confirm tools deny with "propose it for a human"
-      // (codex disables them outright — codex-runner.ts; opencode strips them
-      // from the tool list with the same post-in-note guidance — opencodeRunPolicy)
-      confirmTools: STRIPE_CONFIRM_TOOLS,
-      aws: true, // automation runs get short-lived instance-role read creds
-      // Human-set flags (deepsec scans): the run's own `claude`/`codex` CLI
-      // tooling authenticates on the account pools, never the host login.
-      claudeCliEnv: !!automation.claudeCliEnv,
-      codexCliEnv: !!automation.codexCliEnv,
-      // Cost controls: a pinned account defaults to a HARD pin for automation
-      // runs (exhaustion falls to fallbackModel, never the shared pool) unless
-      // accountStrict is explicitly false (soft pin: preferred, pool backup);
-      // usage-credits spend is only allowed when explicitly enabled.
-      accountId: automation.accountId,
-      accountStrict: !!automation.accountId && automation.accountStrict !== false,
-      usageCredits: automation.usageCredits,
-      // Fallback also runs on opencode (tier-preserving, same mapping as the
-      // primary): a usage-limit fallback must not drop back onto the native
-      // Codex/Claude SDK. "none" disables fallback; unset with no global
-      // default = no fallback (never inject the automation default here).
-      fallbackModel: (() => {
-        if (automation.fallbackModel === "none") return undefined;
-        const fb = automation.fallbackModel || DEFAULT_FALLBACK_MODEL;
-        return fb ? opencodeAutomationModel(fb) : undefined;
-      })(),
-      prReviewer: automation.prReviewer,
-      journal: { osSessionId: bksId, kind: "automation" },
-    })) {
+    const fallbackModel = (() => {
+      if (automation.fallbackModel === "none" || automation.sandbox) return undefined;
+      const fb = automation.fallbackModel || DEFAULT_FALLBACK_MODEL;
+      return fb ? opencodeAutomationModel(fb) : undefined;
+    })();
+    let events: AsyncGenerator<StreamEvent>;
+    if (sandbox) {
+      sandboxRpcToken = crypto.randomUUID();
+      registerRunToken(sandboxRpcToken, { sessionId: bksId });
+      const spec: RunHostSpec = {
+        hostId: `rh-${randomUUIDv7()}`,
+        osSessionId: bksId,
+        prompt,
+        cwd,
+        mode: automation.mode,
+        model: runModel,
+        selectedModel: runModel,
+        mcpServers: automation.mcpServers || [],
+        proxyMcpServers: Object.keys(inProcessMcp),
+        rpcToken: sandboxRpcToken,
+        deniedTools: AUTOMATION_DENIED_TOOLS,
+        confirmTools: STRIPE_CONFIRM_TOOLS,
+        aws: false,
+        fallbackModel,
+        accountId: automation.accountId,
+        accountStrict: true,
+        usageCredits: automation.usageCredits,
+        journalKind: "automation",
+        trustProfile: "automation",
+      };
+      const handle = sandbox.launchRunEager
+        ? await sandbox.launchRunEager(spec)
+        : sandbox.launchRun(spec);
+      events = handle.events();
+    } else {
+      events = runAgent({
+        prompt,
+        cwd,
+        mode: automation.mode,
+        model: runModel,
+        mcpServers: automation.mcpServers ?? "all",
+        inProcessMcp,
+        deniedTools: AUTOMATION_DENIED_TOOLS,
+        // No onAskUser here, so confirm tools deny with "propose it for a human"
+        // (codex disables them outright — codex-runner.ts; opencode strips them
+        // from the tool list with the same post-in-note guidance — opencodeRunPolicy)
+        confirmTools: STRIPE_CONFIRM_TOOLS,
+        aws: true, // host automations keep short-lived instance-role read creds
+        claudeCliEnv: !!automation.claudeCliEnv,
+        codexCliEnv: !!automation.codexCliEnv,
+        accountId: automation.accountId,
+        accountStrict: !!automation.accountId && automation.accountStrict !== false,
+        usageCredits: automation.usageCredits,
+        fallbackModel,
+        prReviewer: automation.prReviewer,
+        journal: { osSessionId: bksId, kind: "automation" },
+      });
+    }
+    for await (const event of events) {
       if (event.type === "init") {
         engineSessionId = event.sessionId || "";
         if (event.provider) effectiveProvider = event.provider;
@@ -1364,6 +1521,7 @@ export async function runAutomation(
       durationMs: Date.now() - startedAt.getTime(),
     });
   } finally {
+    unregisterRunToken(sandboxRpcToken);
     unregisterSessionMcpServers(bksId);
     const left = (runningCounts.get(automation.id) || 1) - 1;
     if (left <= 0) runningCounts.delete(automation.id);
