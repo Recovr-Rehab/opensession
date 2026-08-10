@@ -62,7 +62,7 @@ function AssetPager({ navigation }: { navigation: AssetNavigation }) {
 	return (
 		<nav
 			aria-label="Asset navigation"
-			className="flex shrink-0 items-center gap-1 phone:order-last phone:basis-full phone:justify-center phone:pt-1"
+			className="flex min-h-10 shrink-0 items-center justify-center gap-1 border-t border-line px-3 py-1.5"
 		>
 			<Tooltip label="Previous asset (Left arrow)">
 				<Button
@@ -125,7 +125,6 @@ export function AssetActions({
 	refresh,
 	onOpenAsTab,
 	onClose,
-	navigation,
 	showSize = false,
 	className,
 }: {
@@ -138,8 +137,6 @@ export function AssetActions({
 	/** Dismiss the surface — the overlay's ✕. Also called after a delete, since
 	 *  there is nothing left to show. */
 	onClose?: () => void;
-	/** Previous/next controls for the overlay. Omitted in the Assets tab. */
-	navigation?: AssetNavigation;
 	/** False for a chip path whose folder listing has not caught up yet. */
 	showSize?: boolean;
 	className?: string;
@@ -165,7 +162,7 @@ export function AssetActions({
 	return (
 		<div
 			className={cn(
-				"flex shrink-0 items-center gap-2 border-b border-line px-3 py-2 phone:flex-wrap phone:gap-y-1",
+				"flex shrink-0 items-center gap-2 border-b border-line px-3 py-2",
 				className,
 			)}
 		>
@@ -175,9 +172,8 @@ export function AssetActions({
 					<div className="truncate text-[11px] text-faint">{folder}</div>
 				)}
 			</div>
-			{navigation && <AssetPager navigation={navigation} />}
 			{showSize && (
-				<span className="shrink-0 text-[11px] text-faint phone:hidden">
+				<span className="shrink-0 text-[11px] text-faint">
 					{formatAssetSize(file.size)}
 				</span>
 			)}
@@ -470,6 +466,15 @@ export function AssetOverlay({
 		);
 		if (next) onSelectPath(next);
 	};
+	const navigation: AssetNavigation | null =
+		listedIndex >= 0 && files.length > 1
+			? {
+					index: listedIndex,
+					count: files.length,
+					onPrevious: () => navigate(-1),
+					onNext: () => navigate(1),
+				}
+			: null;
 
 	return (
 		<ResponsiveDialog
@@ -489,16 +494,6 @@ export function AssetOverlay({
 				refresh={refresh}
 				onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
 				onClose={onClose}
-				navigation={
-					listedIndex >= 0 && files.length > 1
-						? {
-								index: listedIndex,
-								count: files.length,
-								onPrevious: () => navigate(-1),
-								onNext: () => navigate(1),
-							}
-						: undefined
-				}
 				showSize={listed}
 			/>
 			{missingPath === file.path ? (
@@ -515,6 +510,7 @@ export function AssetOverlay({
 					}}
 				/>
 			)}
+			{navigation && <AssetPager navigation={navigation} />}
 		</ResponsiveDialog>
 	);
 }
