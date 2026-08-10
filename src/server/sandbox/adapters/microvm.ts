@@ -115,7 +115,14 @@ async function request(
     `http://${ipFor(idx)}:${root ? ROOT_CONTROL_PORT : CONTROL_PORT}${path}`,
     {
       method: body === undefined ? "GET" : "POST",
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      // Firecracker snapshots freeze the guest TCP state. Never let Bun reuse
+      // a control connection that predates a restore/clock repair: a stale
+      // keep-alive can close before the request receives a response, and POST
+      // /exec is not safe to retry blindly after that point.
+      headers: {
+        Connection: "close",
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     },
