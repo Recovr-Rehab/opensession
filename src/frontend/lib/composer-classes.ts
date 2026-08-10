@@ -42,7 +42,8 @@ export const composerBoxExpanded =
  *  precisely the one spelling that opts OUT of the squircle. The pill is a
  *  squircle — `.composer` used to say so with `corner-shape: var(--cs)` — and
  *  `rounded-full` silently flattened it to a plain capsule. Same radius either
- *  way; only the corner curve differs. */
+ *  way; only the corner curve differs. Installed phone PWAs override that
+ *  curve to `round` in base.css, while keeping this same capsule geometry. */
 export const composerBoxMinimized =
 	"mx-1.5 flex items-center gap-1 rounded-[999px] p-1 [--composer-inset-left:5px]";
 

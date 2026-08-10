@@ -740,6 +740,15 @@ a {
 	}
 }
 
+/* The installed phone composer is a native-feeling capsule rather than the
+   desktop squircle. Safari already falls back to circular corners because it
+   does not support corner-shape; this keeps Chromium PWAs consistent. */
+@media (display-mode: standalone) and (max-width: 720px) {
+	.composer {
+		corner-shape: round;
+	}
+}
+
 /* A drag in progress owns the cursor for the whole document, not just the
    handle under the pointer — the pointer routinely leaves the 4px handle
    mid-drag, and without this the cursor flickers back to a caret over the
