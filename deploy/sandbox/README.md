@@ -283,15 +283,31 @@ needed after changing it.
   dial-back entirely — launchRun there needs a Tier 3 org or self-hosted
   Daytona.
 - **Local Firecracker adapter** (`provider: "microvm"`): restores a
-  credential-free control-only golden from `/opt/firecracker/sandbox-store`
-  and runs the engine on the host through `opensession-workspace`. Build it
-  with `deploy/sandbox/microvm/refresh-sandbox-golden.sh`; by default that
-  builds the dedicated minimal `Dockerfile.workspace` image (Git, Bun, Node,
-  ripgrep, jq, sqlite3, iproute2, Python, and native-build basics, but no model
-  CLI or Open Session runner payload). Golden publication is locked against
-  concurrent clone creation and rolls back as one disk/memory/vmstate
-  generation on failure. Never reuse the preview-pool golden in
-  `/opt/firecracker/store`.
+  credential-free golden from `/opt/firecracker/sandbox-store`; today the
+  engine still runs on the host through `opensession-workspace` (the
+  brain-inside conversion is docs/sandboxes-phase1-brain-inside.md). Build the
+  golden with `deploy/sandbox/microvm/refresh-sandbox-golden.sh`; by default
+  that builds `Dockerfile.workspace` (the minimal guest tool baseline: Git,
+  Bun, Node, ripgrep, jq, sqlite3, iproute2, Python, native-build basics) and
+  then `Dockerfile.runner` on top — the full runner payload in the BOOTSTRAP
+  layout (`~/.bun/bin/bun`, `~/.local/bin/claude`, `~/.bun/bin/opencode`, a
+  shallow git clone of the runner repo at the pinned `runnerSha` +
+  `bun install`, and the exact `~/.bks-bootstrapped` /
+  `~/.bks-workspace-runtime` marker strings), so `bootstrapRemoteSandbox` at
+  ensure() is a marker no-op instead of a minutes-cold install. The payload
+  pins are computed from the live sandbox config by importing bootstrap.ts;
+  the clone URL (which may carry a token) rides into the build as a BuildKit
+  secret and the baked origin is scrubbed back to plain https — the golden
+  stays credential-free (all credentials arrive per launch). The refresh also
+  writes `<store>/golden.json` (`{ signature, builtAt, opencode, runnerSha }`)
+  as build metadata for staleness reporting; the in-VM marker remains the
+  runtime source of truth, and a pin bump between refreshes just re-runs the
+  incremental in-VM bootstrap (private runner repos: the scrubbed origin can't
+  fetch a new pin — refresh the golden instead). Golden publication is locked
+  against concurrent clone creation and rolls back as one
+  disk/memory/vmstate/metadata generation on failure. Passing an explicit
+  image argument still skips both builds for controlled experiments. Never
+  reuse the preview-pool golden in `/opt/firecracker/store`.
 - `deploy/sandbox/conformance.ts` — the provider conformance matrix
   (`bun run deploy/sandbox/conformance.ts [docker-socket|docker-ws|daytona|e2b|box|modal|lambda-microvm]`):
   verify.ts's checks parameterized over providers. Docker entries always run
