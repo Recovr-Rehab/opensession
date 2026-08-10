@@ -154,15 +154,12 @@ export async function fetchConnections(): Promise<{
 	return res.json();
 }
 
-/** One row of the model-family × environment support matrix — a verbatim
- *  mirror of SANDBOX_MODEL_FAMILIES (src/server/sandbox/config.ts, the single
- *  source of truth). The client only APPLIES the first-match-wins rules; it
- *  never hardcodes a model/environment combo of its own. */
+/** Provider-independent model-family sandboxability from the server. */
 export interface SandboxModelFamilyInfo {
 	id: string;
 	label: string;
-	match: { provider: "claude" | "codex" | "opencode" | "pi"; idPrefix?: string };
-	environments: Record<"local" | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm", boolean>;
+	match: { provider: "claude" | "codex" | "opencode" | "pi" };
+	sandboxable: boolean;
 	hint?: string;
 }
 

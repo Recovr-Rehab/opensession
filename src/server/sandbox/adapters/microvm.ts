@@ -25,7 +25,6 @@ import type {
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
-  bootstrapRemoteWorkspaceRuntime,
   findRemoteStateBySession,
   listRemoteStates,
   makeRemoteSandbox,
@@ -463,7 +462,7 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
 
   async prepare(driver, repo, label) {
     await driver.ensureStarted();
-    await bootstrapRemoteWorkspaceRuntime(microvmBootstrapDriver(driver), label);
+    await bootstrapRemoteSandbox(microvmBootstrapDriver(driver), label);
     if (!(await warmRemoteWorkspace(driver, repo, label, { installDeps: false }))) {
       throw new Error(`MicroVM prewarm could not clone ${repo.id}`);
     }

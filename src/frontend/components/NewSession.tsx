@@ -317,9 +317,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const [sendKey, setSendKey] = useState(getSendKeyPref);
   useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
 
-  // Sandbox provider picker (the sandbox rollout plan): isolate this session's
-  // workspace in the selected environment. Remote/MicroVM OpenCode sessions
-  // keep the model engine on Host and expose only explicit workspace methods.
+  // Sandbox provider picker: the complete model engine + workspace run in the
+  // selected environment; native Codex is the sole host-only family.
   // "" = Host (no sandbox, the default); otherwise an explicit provider id
   // sent as the create's `sandbox` string. Options come from
   // /api/sandbox/status (fetched once when the palette opens) — only
@@ -336,18 +335,13 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const sandboxLabel = (id: string) =>
     id === "" ? "Host" : id === "docker" ? "Docker" : id === "daytona" ? "Daytona" : id === "e2b" ? "E2B" : id === "box" ? "Box" : id === "modal" ? "Modal" : id === "microvm" ? "Local Firecracker MicroVM" : id === "lambda-microvm" ? "AWS Lambda MicroVM" : id;
 
-  // Model × environment capability check, driven entirely by the server's
-  // matrix (status.modelFamilies — the same source resolveRequestedSandbox
-  // enforces at create, so this warning is a preview of the server's answer,
-  // never a second opinion). First matching family rule wins, mirroring
-  // sandboxModelFamilyFor (sandbox/config.ts).
+  // Provider-independent family check, driven by the same server list the
+  // create path enforces.
   const effectiveModelId = model || defaultModel;
   const effectiveModelProvider =
     models.find((m) => m.id === effectiveModelId)?.provider ?? "claude";
   const modelFamily = (sandboxStatus?.modelFamilies || []).find(
-    (f) =>
-      f.match.provider === effectiveModelProvider &&
-      (!f.match.idPrefix || effectiveModelId.startsWith(f.match.idPrefix)),
+    (f) => f.match.provider === effectiveModelProvider,
   );
   // Engine switcher (advanced): flips the selected model between execution
   // engines while keeping the same underlying model when both serve it
@@ -376,40 +370,18 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 
   const sandboxModelWarning = (() => {
     if (!sandboxProvider || !modelFamily) return null;
-    if (modelFamily.environments[sandboxProvider as "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm"]) return null;
-    const supported = (Object.keys(modelFamily.environments) as Array<
-      "local" | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm"
-    >)
-      .filter(
-        (e) =>
-          modelFamily.environments[e] &&
-          // Only steer toward environments that exist here: Host always, a
-          // sandbox provider only when it's configured.
-          (e === "local" || sandboxChoices.some((p) => p.id === e)),
-      )
-      .map((e) => (e === "local" ? "Host" : sandboxLabel(e)));
-    const pick =
-      supported.length > 1
-        ? `${supported.slice(0, -1).join(", ")} or ${supported[supported.length - 1]}`
-        : supported[0] || "Host";
+    if (modelFamily.sandboxable) return null;
     return (
-      `${modelFamily.label} models can't run in ${sandboxLabel(sandboxProvider)} yet — pick ${pick}` +
-      (modelFamily.hint ? ` (${modelFamily.hint})` : "") +
+      `${modelFamily.label} models can't run in a sandbox` +
+      (modelFamily.hint ? ` — ${modelFamily.hint}` : "") +
       "."
     );
   })();
 
-  // Remote sandbox-engine models adopt a full-runner prewarm. MicroVM OpenCode
-  // sessions adopt a workspace-only prewarm (restore + repo clone); other
-  // host-engine providers deliberately skip the full-runner pool. Strictly
-  // fire-and-forget: a failure must never surface or block typing.
+  // Brain-inside remote/MicroVM sessions all adopt a full-runner prewarm.
+  // Strictly fire-and-forget: failure must never surface or block typing.
   const isRemoteSandbox = sandboxProvider === "daytona" || sandboxProvider === "e2b" || sandboxProvider === "box" || sandboxProvider === "modal" || sandboxProvider === "lambda-microvm";
-  const usesRemoteHostEngine =
-    isRemoteSandbox && modelFamily?.match.provider === "opencode";
-  const usesMicrovmWorkspacePrewarm =
-    sandboxProvider === "microvm" && modelFamily?.match.provider === "opencode";
-  const shouldPrewarm =
-    (isRemoteSandbox && !usesRemoteHostEngine) || usesMicrovmWorkspacePrewarm;
+  const shouldPrewarm = isRemoteSandbox || sandboxProvider === "microvm";
   const [sandboxWarmed, setSandboxWarmed] = useState(false);
   const lastPrewarmAtRef = useRef(0);
   useEffect(() => {
@@ -975,10 +947,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                       {[{ id: "", note: undefined as string | undefined }, ...sandboxChoices].map(
                         (opt) => {
                           const selected = sandboxProvider === opt.id;
-                          const hostEngineWorkspace =
-                            !!opt.id &&
-                            opt.id !== "docker" &&
-                            modelFamily?.match.provider === "opencode";
                           return (
                             <Menu.Item
                               key={opt.id || "host"}
@@ -999,11 +967,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                                 {opt.note && (
                                   <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
                                     {opt.note}
-                                  </span>
-                                )}
-                                {hostEngineWorkspace && (
-                                  <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
-                                    Model on Host · workspace isolated here
                                   </span>
                                 )}
                               </span>

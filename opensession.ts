@@ -45,9 +45,6 @@ import { startPublicIngress } from "./src/server/public-ingress";
 import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions } from "./src/server/run-session";
 import { handleSandboxWsUpgrade, timerPoisonRequestCheck } from "./src/server/run-ws";
 import { handleNodeWsUpgrade } from "./src/server/node-ws";
-import { getSandboxProvider, type Sandbox } from "./src/server/sandbox";
-import { isRunnableSandboxProvider } from "./src/server/sandbox/config";
-import { createRemoteWorkspaceMcpServer } from "./src/server/sandbox/workspace-mcp";
 import { findSession, invalidateSessionsCache, recordRunOutcome } from "./src/server/session-cache";
 import { getSessionControl } from "./src/server/session-control";
 import { buildReposNote } from "./src/server/session-repos";
@@ -743,36 +740,6 @@ if (!g.__opensessionBooted) {
 								"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
 							}
 						: interactiveMcpServers(user, bksSessionId);
-					// Engine-on-host sandbox sessions get their workspace tools back
-					// (mirrors the run-rpc fallback in interactive-mcp.ts). The lazy
-					// source re-resolves the sandbox per tool call, so a dead sandbox
-					// fails the call — not the boot.
-					if (session.sandbox?.engine === "host") {
-						servers["opensession-workspace"] = createRemoteWorkspaceMcpServer(
-							async () => {
-								const current = findSession(bksSessionId);
-								const info = current?.sandbox;
-								if (
-									info?.engine !== "host" ||
-									!info.sandboxId ||
-									!isRunnableSandboxProvider(info.provider)
-								) {
-									throw new Error(
-										`Remote workspace for ${bksSessionId} is not materialized.`,
-									);
-								}
-								const sandbox = await getSandboxProvider(info.provider).get(
-									info.sandboxId,
-								);
-								if (!sandbox) {
-									throw new Error(
-										`${info.provider} sandbox ${info.sandboxId} is unavailable; retry the session after the sandbox has restarted.`,
-									);
-								}
-								return sandbox;
-							},
-						);
-					}
 					return servers;
 				} catch (e) {
 					console.error(

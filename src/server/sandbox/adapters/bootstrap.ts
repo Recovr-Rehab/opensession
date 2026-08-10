@@ -116,8 +116,6 @@ const REMOTE_OPENCODE = `${REMOTE_HOME}/.bun/bin/opencode`;
 const REMOTE_OPENCODE_VERSION = "1.17.15";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
-const WORKSPACE_BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-workspace-runtime`;
-const WORKSPACE_BOOTSTRAP_SIGNATURE = "workspace-runtime-v1+bun";
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
  *  run host via the OPENSESSION_OPENAI_SEED_DIR env (openaiRemoteSeedDir()),
  *  never derived independently on the two sides. */
@@ -552,25 +550,13 @@ export function bootstrapSignature(): string {
   return `${base}+opencode@${REMOTE_OPENCODE_VERSION}`;
 }
 
-/**
- * Provision only the command/filesystem contract used by
- * opensession-workspace. This is the lightweight half of the external-engine
- * architecture: no runner checkout, runner dependencies, model CLI, account
- * material, or dial-back transport enters the sandbox.
- */
-export async function bootstrapRemoteWorkspaceRuntime(
+/** Install the portable base tools needed before the full runner payload. */
+async function bootstrapRemoteBaseRuntime(
   driver: RemoteDriver,
   label: string,
 ): Promise<void> {
-  const marker = await driver.exec(`cat ${WORKSPACE_BOOTSTRAP_MARKER} 2>/dev/null`);
-  if (
-    marker.exitCode === 0 &&
-    marker.stdout.trim() === WORKSPACE_BOOTSTRAP_SIGNATURE
-  ) {
-    return;
-  }
   const log = (msg: string) =>
-    console.log(`[sandbox:${label}] workspace runtime: ${msg}`);
+    console.log(`[sandbox:${label}] base runtime: ${msg}`);
 
   need(
     await driver.exec(
@@ -619,12 +605,6 @@ export async function bootstrapRemoteWorkspaceRuntime(
     ),
     "bun install",
   );
-  need(
-    await driver.exec(
-      `printf '%s' ${shellQuoteWord(WORKSPACE_BOOTSTRAP_SIGNATURE)} > ${WORKSPACE_BOOTSTRAP_MARKER}`,
-    ),
-    "workspace runtime marker",
-  );
   log("ready");
 }
 
@@ -643,7 +623,7 @@ export async function bootstrapRemoteSandbox(
   if (marker.exitCode === 0 && marker.stdout.trim() === signature) return;
   const log = (msg: string) => console.log(`[sandbox:${label}] bootstrap: ${msg}`);
 
-  await bootstrapRemoteWorkspaceRuntime(driver, label);
+  await bootstrapRemoteBaseRuntime(driver, label);
 
   // Runner bundle: tarball if configured, else git clone at the pinned sha.
   const hasRepo = await driver.exec(`test -f ${REMOTE_REPO}/package.json`);

@@ -41,9 +41,6 @@ import { automationRunMcpForSession, selfImproveMcpForSession } from "./automati
 import { findSession, touchNativeSession } from "./session-cache";
 import { attachRepo, linkPr, resolveSessionRepoContext, sessionRepoIds, switchPrimaryRepo } from "./session-repos";
 import { makeAskHandler } from "./asks";
-import { getSandboxProvider } from "./sandbox";
-import { isRunnableSandboxProvider } from "./sandbox/config";
-import { createRemoteWorkspaceMcpServer } from "./sandbox/workspace-mcp";
 
 /** The session's primary repo id, for the papercuts toggle (undefined =
  *  session-only session, which logs under no repo and is always enabled). */
@@ -311,29 +308,6 @@ registerInteractiveMcpBuilder((sessionId, user) => {
 	if (goalId)
 		(servers as Record<string, unknown>)["opensession-goal-self"] =
 			createGoalSelfMcpServer(goalId);
-	if (session?.sandbox?.engine === "host") {
-		(servers as Record<string, unknown>)["opensession-workspace"] =
-			createRemoteWorkspaceMcpServer(async () => {
-				const current = findSession(sessionId);
-				const info = current?.sandbox;
-				if (
-					info?.engine !== "host" ||
-					!info.sandboxId ||
-					!isRunnableSandboxProvider(info.provider)
-				) {
-					throw new Error(
-						`Remote workspace for ${sessionId} is not materialized.`,
-					);
-				}
-				const sandbox = await getSandboxProvider(info.provider).get(info.sandboxId);
-				if (!sandbox) {
-					throw new Error(
-						`${info.provider} sandbox ${info.sandboxId} is unavailable; retry the session after the sandbox has restarted.`,
-					);
-				}
-				return sandbox;
-			});
-	}
 	return servers;
 });
 startRunRpcServer();

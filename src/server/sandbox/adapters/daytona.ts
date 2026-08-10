@@ -46,7 +46,6 @@ import type {
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
-  bootstrapRemoteWorkspaceRuntime,
   findRemoteStateBySession,
   makeRemoteSandbox,
   readRemoteState,
@@ -251,7 +250,7 @@ export class DaytonaProvider implements SandboxProvider {
       } catch {}
     }
     if (sbx && stateOf(sbx) === "gone") sbx = null;
-    if (!sbx && spec.runtime !== "workspace") {
+    if (!sbx) {
       // Warm-on-typing adoption (src/server/sandbox/prewarm.ts): a ready
       // prewarm for (daytona, repo) whose runner pin + snapshot still match
       // is claimed atomically and relabeled to this session — the expensive
@@ -308,12 +307,8 @@ export class DaytonaProvider implements SandboxProvider {
     // Cheap dial-back probe BEFORE the expensive bootstrap: a sandbox that
     // can't reach our callback URL can never run anything — fail fast with
     // the documented error instead of 30s+ of doomed bootstrap.
-    if (spec.runtime === "workspace") {
-      await bootstrapRemoteWorkspaceRuntime(driver, "daytona");
-    } else {
-      await assertDialbackReachable(driver, "daytona");
-      await bootstrapRemoteSandbox(driver, "daytona");
-    }
+    await assertDialbackReachable(driver, "daytona");
+    await bootstrapRemoteSandbox(driver, "daytona");
     await setupRemoteWorkspace(
       driver,
       cwd,

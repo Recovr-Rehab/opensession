@@ -20,7 +20,6 @@ import type {
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
-  bootstrapRemoteWorkspaceRuntime,
   findRemoteStateBySession,
   makeRemoteSandbox,
   readRemoteState,
@@ -230,12 +229,8 @@ export class ModalProvider implements SandboxProvider {
     const driver = modalDriver(sandbox);
     try {
       await driver.ensureStarted();
-      if (spec.runtime === "workspace") {
-        await bootstrapRemoteWorkspaceRuntime(driver, "modal");
-      } else {
-        await assertDialbackReachable(driver, "modal");
-        await bootstrapRemoteSandbox(driver, "modal");
-      }
+      await assertDialbackReachable(driver, "modal");
+      await bootstrapRemoteSandbox(driver, "modal");
       await setupRemoteWorkspace(
         driver,
         cwd,

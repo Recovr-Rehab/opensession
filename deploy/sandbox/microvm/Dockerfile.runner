@@ -16,10 +16,9 @@
 #                                       (bootstrap.ts:549-584) can fetch and
 #                                       check out a bumped pin instead of
 #                                       silently freezing old code
-#   ~/.bks-workspace-runtime            exact WORKSPACE_BOOTSTRAP_SIGNATURE
 #   ~/.bks-bootstrapped                 exact bootstrapSignature() string
 #
-# With both markers baked, ensure()-time bootstrap short-circuits to a marker
+# With the marker baked, ensure()-time bootstrap short-circuits to a marker
 # read (fast path); a pin bump between golden refreshes mismatches the marker
 # and the normal in-VM bootstrap reconciles incrementally.
 #
@@ -95,12 +94,9 @@ RUN BUN_INSTALL=/home/ubuntu/.bun /home/ubuntu/.bun/bin/bun add -g "opencode-ai@
 # ~/.claude seed (bootstrap parity).
 RUN mkdir -p /home/ubuntu/.claude && printf '{}' > /home/ubuntu/.claude/settings.json
 
-# Markers LAST, byte-identical to what bootstrap.ts writes:
-# WORKSPACE_BOOTSTRAP_SIGNATURE (a bootstrap.ts constant — keep in sync) and
-# the computed bootstrapSignature().
+# Marker LAST, byte-identical to the computed bootstrapSignature().
 RUN set -eu; \
     test -n "${BOOTSTRAP_SIGNATURE}" || { echo "BOOTSTRAP_SIGNATURE build-arg is required" >&2; exit 1; }; \
-    printf '%s' 'workspace-runtime-v1+bun' > /home/ubuntu/.bks-workspace-runtime; \
     printf '%s' "${BOOTSTRAP_SIGNATURE}" > /home/ubuntu/.bks-bootstrapped
 
 ENV PATH=/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/bun/bin:/usr/local/bin:/usr/bin:/bin

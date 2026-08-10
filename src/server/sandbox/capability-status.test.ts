@@ -15,14 +15,12 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
-  RUNNABLE_SANDBOX_PROVIDERS,
   SANDBOX_MODEL_FAMILIES,
   resolveRequestedSandbox,
+  sandboxableModelFamily,
   sandboxConfig,
-  sandboxEnginePlacement,
   sandboxCapabilityStatus,
   sandboxModelFamilyFor,
-  sandboxModelSupport,
   sandboxProviderConfigured,
   sandboxesEnabled,
 } from "./config";
@@ -205,94 +203,45 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     expect(sandboxProviderConfigured("docker")).toBe(false);
   });
 
-  test("status carries the model-family matrix verbatim (UI's source of truth)", () => {
+  test("status carries model-family sandboxability verbatim (UI's source of truth)", () => {
     expect(sandboxCapabilityStatus().modelFamilies).toBe(SANDBOX_MODEL_FAMILIES);
   });
 });
 
-describe("model-family × environment capability matrix", () => {
-  test("family derivation: provider + opencode/<provider>/ prefix, first match wins", () => {
+describe("provider-independent model-family sandboxability", () => {
+  test("family derivation follows the resolved engine provider", () => {
     expect(sandboxModelFamilyFor("claude-fable-5").id).toBe("claude");
     expect(sandboxModelFamilyFor("gpt-5.5").id).toBe("codex");
     expect(sandboxModelFamilyFor("codex").id).toBe("codex"); // alias resolves
-    expect(sandboxModelFamilyFor("opencode/openai/gpt-5.4-mini").id).toBe("opencode-openai");
-    expect(sandboxModelFamilyFor("opencode/anthropic/claude-sonnet-5").id).toBe(
-      "opencode-anthropic",
-    );
-    expect(sandboxModelFamilyFor("opencode/google/gemini-3").id).toBe("opencode-other");
-    // Both pi provider splits land on the ONE pi row (match is provider-only).
+    expect(sandboxModelFamilyFor("opencode/openai/gpt-5.4-mini").id).toBe("opencode");
+    expect(sandboxModelFamilyFor("opencode/anthropic/claude-sonnet-5").id).toBe("opencode");
+    expect(sandboxModelFamilyFor("opencode/google/gemini-3").id).toBe("opencode");
     expect(sandboxModelFamilyFor("pi/anthropic/claude-sonnet-5").id).toBe("pi");
     expect(sandboxModelFamilyFor("pi/openai/gpt-5.5").id).toBe("pi");
   });
 
-  test("pi is enabled in every environment, engine always placed on host", () => {
-    const pi = SANDBOX_MODEL_FAMILIES.find((f) => f.id === "pi")!;
-    for (const [env, enabled] of Object.entries(pi.environments)) {
-      expect(`${env}:${enabled}`).toBe(`${env}:true`);
-    }
-    for (const provider of RUNNABLE_SANDBOX_PROVIDERS) {
-      // The matrix admits the combo…
-      expect(sandboxModelSupport("pi/anthropic/claude-sonnet-5", provider)).toEqual({
-        ok: true,
-      });
-      // …and placement forces variant A (engine-on-host) everywhere — the
-      // in-sandbox runner-host can never run pi (host-only bridge auth,
-      // in-memory MCP, host session state).
-      expect(sandboxEnginePlacement("pi/anthropic/claude-sonnet-5", provider)).toBe("host");
-      expect(sandboxEnginePlacement("pi/openai/gpt-5.5", provider)).toBe("host");
+  test("Claude, Pi, and every OpenCode provider are sandboxable", () => {
+    for (const model of [
+      "claude-fable-5",
+      "pi/anthropic/claude-sonnet-5",
+      "pi/openai/gpt-5.5",
+      "opencode/openai/gpt-5.6-sol",
+      "opencode/anthropic/claude-sonnet-5",
+      "opencode/google/gemini-3",
+      "opencode/xai/grok-4.5",
+    ]) {
+      expect(sandboxableModelFamily(model)).toEqual({ ok: true });
     }
   });
 
-  test("host is always fine; sandboxes gate by family", () => {
-    expect(sandboxModelSupport("gpt-5.5", null)).toEqual({ ok: true });
-    expect(sandboxModelSupport("gpt-5.5", "local")).toEqual({ ok: true });
-    expect(sandboxModelSupport("claude-fable-5", "daytona")).toEqual({ ok: true });
-    expect(sandboxModelSupport("claude-fable-5", "modal")).toEqual({ ok: true });
-    expect(sandboxModelSupport("claude-fable-5", "lambda-microvm")).toEqual({ ok: true });
-    expect(
-      sandboxModelSupport("opencode/openai/gpt-5.6-sol", "microvm"),
-    ).toEqual({ ok: true });
-    expect(
-      sandboxModelSupport("opencode/anthropic/claude-sonnet-5", "microvm").ok,
-    ).toBe(true);
-    // OpenCode OpenAI/Anthropic run everywhere. Docker mounts its runner auth;
-    // remote providers and MicroVMs keep it on the host.
-    expect(sandboxModelSupport("opencode/openai/gpt-5.4-mini", "daytona")).toEqual({ ok: true });
-    expect(sandboxModelSupport("opencode/openai/gpt-5.5", "e2b")).toEqual({ ok: true });
-    expect(sandboxModelSupport("opencode/anthropic/claude-sonnet-5", "docker")).toEqual({
-      ok: true,
-    });
-  });
-
-  test("remote OpenAI/Claude engines stay on host; Docker and microvm run inside", () => {
-    expect(sandboxEnginePlacement("opencode/openai/gpt-5.6-sol", "daytona")).toBe("host");
-    expect(
-      sandboxEnginePlacement("opencode/anthropic/claude-sonnet-5", "modal"),
-    ).toBe("host");
-    expect(sandboxEnginePlacement("opencode/openai/gpt-5.6-sol", "microvm")).toBe("sandbox");
-    expect(
-      sandboxEnginePlacement("opencode/anthropic/claude-sonnet-5", "microvm"),
-    ).toBe("sandbox");
-    expect(sandboxEnginePlacement("opencode/openai/gpt-5.6-sol", "docker")).toBe("sandbox");
-    expect(
-      sandboxEnginePlacement("opencode/anthropic/claude-sonnet-5", "docker"),
-    ).toBe("sandbox");
-    expect(sandboxEnginePlacement("opencode/google/gemini-3", "docker")).toBe("host");
-  });
-
-  test("native codex stays host-only; other-provider OpenCode uses an external engine", () => {
-    const codex = sandboxModelSupport("gpt-5.5", "docker");
+  test("native Codex is the sole host-only family", () => {
+    const codex = sandboxableModelFamily("gpt-5.5");
     expect(codex.ok).toBe(false);
     if (!codex.ok) {
-      expect(codex.error).toContain("GPT (Codex) models can't run in Docker");
-      expect(codex.error).toContain("pick Host");
+      expect(codex.error).toContain("GPT (Codex) models can't run in a sandbox");
       expect(codex.error).toContain("opencode/openai");
+      expect(codex.error).toContain("pi/openai");
     }
-    const other = sandboxModelSupport("opencode/google/gemini-3", "daytona");
-    expect(other).toEqual({ ok: true });
-    expect(sandboxModelSupport("opencode/xai/grok-4.5", "modal")).toEqual({
-      ok: true,
-    });
   });
 });
 
@@ -353,7 +302,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     expect(resolveRequestedSandbox("local")).toEqual({ ok: true, provider: null });
   });
 
-  test("model × environment combos are enforced at create, not just in the UI", () => {
+  test("model-family sandboxability is enforced at create, not just in the UI", () => {
     write({ provider: "docker", daytona: { apiKey: "dtn_x" } });
     // Supported combos pass through.
     expect(resolveRequestedSandbox("daytona", undefined, "claude-fable-5")).toEqual({
@@ -363,15 +312,15 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     expect(
       resolveRequestedSandbox("daytona", undefined, "opencode/openai/gpt-5.4-mini"),
     ).toEqual({ ok: true, provider: "daytona" });
-    // Unsupported combos fail with the matrix's message — including via the
+    // Native Codex fails with the family gate's message — including via the
     // boolean `sandbox: true` path (config default provider).
     const explicit = resolveRequestedSandbox("docker", undefined, "gpt-5.5");
     expect(explicit.ok).toBe(false);
-    if (!explicit.ok) expect(explicit.error).toContain("GPT (Codex) models can't run in Docker");
+    if (!explicit.ok) expect(explicit.error).toContain("GPT (Codex) models can't run in a sandbox");
     const viaDefault = resolveRequestedSandbox(true, undefined, "gpt-5.5");
     if (sandboxesEnabled()) {
       expect(viaDefault.ok).toBe(false);
-      if (!viaDefault.ok) expect(viaDefault.error).toContain("can't run in Docker");
+      if (!viaDefault.ok) expect(viaDefault.error).toContain("can't run in a sandbox");
     }
     // Host is always fine, whatever the model.
     expect(resolveRequestedSandbox("local", undefined, "gpt-5.5")).toEqual({

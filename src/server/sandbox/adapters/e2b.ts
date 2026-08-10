@@ -44,7 +44,6 @@ import type {
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
-  bootstrapRemoteWorkspaceRuntime,
   findRemoteStateBySession,
   makeRemoteSandbox,
   readRemoteState,
@@ -175,12 +174,8 @@ export class E2bProvider implements SandboxProvider {
     // remote adapters): a sandbox that can't reach our callback URL can never
     // run anything — fail fast with the documented error instead of 30s+ of
     // doomed bootstrap.
-    if (spec.runtime === "workspace") {
-      await bootstrapRemoteWorkspaceRuntime(driver, "e2b");
-    } else {
-      await assertDialbackReachable(driver, "e2b");
-      await bootstrapRemoteSandbox(driver, "e2b");
-    }
+    await assertDialbackReachable(driver, "e2b");
+    await bootstrapRemoteSandbox(driver, "e2b");
     await setupRemoteWorkspace(
       driver,
       cwd,

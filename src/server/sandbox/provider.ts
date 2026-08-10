@@ -61,13 +61,6 @@ export interface SandboxSessionSpec {
    * container on the next ensure. Volume-mode workspaces reject attachments.
    */
   attachedDirs?: string[];
-  /**
-   * What must run inside the sandbox. "runner" (the default) provisions the
-   * full agent harness; "workspace" keeps the model loop/auth on the host and
-   * provisions only the filesystem command runtime used by
-   * opensession-workspace.
-   */
-  runtime?: "runner" | "workspace";
 }
 
 export interface ExecOpts {

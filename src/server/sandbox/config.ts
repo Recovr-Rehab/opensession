@@ -583,76 +583,34 @@ export interface SandboxProviderStatusEntry {
   note?: string;
 }
 
-// ── Model-family × environment capability matrix ─────────────────────────────
+// ── Model-family sandboxability ───────────────────────────────────────────────
 //
-// THE single source of truth for "can this model run in that environment":
-// served verbatim in /api/sandbox/status.modelFamilies (the NewSession picker
-// warns/blocks from it) and enforced server-side by resolveRequestedSandbox on
-// every create path — never hardcode a combo in either place. An environment
-// is `"local" | RunnableSandboxProviderId` ("local" = host, no sandbox).
-
-export type SandboxEnvironmentId = "local" | RunnableSandboxProviderId;
+// Every certified provider runs the same brain-inside payload. Capability is
+// therefore a model-family property, never a provider matrix: native Codex is
+// the sole exception because its writable rotating CODEX_HOME cannot safely be
+// copied. The picker consumes this same list and create paths enforce it.
 
 export interface SandboxModelFamily {
   id: string;
-  /** Human name for warnings ("GPT (Codex) models can't run in …"). */
+  /** Human name for warnings. */
   label: string;
-  /** First-match-wins rules (applied in SANDBOX_MODEL_FAMILIES order):
-   *  the model's runner provider, plus an optional canonical-id prefix for
-   *  the opencode/<provider>/ split. */
-  match: { provider: "claude" | "codex" | "opencode" | "pi"; idPrefix?: string };
-  environments: Record<SandboxEnvironmentId, boolean>;
-  /** Why the unsupported environments are unsupported (warning suffix). */
+  match: { provider: "claude" | "codex" | "opencode" | "pi" };
+  sandboxable: boolean;
   hint?: string;
 }
 
-const ALL_ENVIRONMENTS: Record<SandboxEnvironmentId, boolean> = {
-  local: true,
-  docker: true,
-  daytona: true,
-  e2b: true,
-  box: true,
-  modal: true,
-  microvm: true,
-  "lambda-microvm": true,
-};
-
 export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
   {
-    // Docker and local Firecracker run the OpenCode engine inside. Other remote
-    // providers keep the engine/auth on the host until the matrix is retired.
-    id: "opencode-openai",
-    label: "GPT (OpenCode)",
-    match: { provider: "opencode", idPrefix: "opencode/openai/" },
-    environments: { ...ALL_ENVIRONMENTS },
-  },
-  {
-    // Docker and local Firecracker run the OpenCode engine inside. Other remote
-    // providers keep the engine/auth on the host until the matrix is retired.
-    id: "opencode-anthropic",
-    label: "Claude (OpenCode)",
-    match: { provider: "opencode", idPrefix: "opencode/anthropic/" },
-    environments: { ...ALL_ENVIRONMENTS },
-  },
-  {
-    // Other OpenCode providers keep their auth + model loop on the host and
-    // operate on sandbox workspaces through opensession-workspace. Local
-    // filesystem/bash tools are stripped on those runs (opencodeRunPolicy).
-    id: "opencode-other",
-    label: "OpenCode (other providers)",
+    id: "opencode",
+    label: "OpenCode",
     match: { provider: "opencode" },
-    environments: { ...ALL_ENVIRONMENTS },
+    sandboxable: true,
   },
   {
-    // The pi engine always stays in-process on this host (per-turn SDK session
-    // with host-side bridge auth, pi-runner.ts), so every environment runs it
-    // engine-on-host with only the workspace inside the sandbox
-    // (sandboxEnginePlacement forces "host" for this family).
     id: "pi",
     label: "Pi",
     match: { provider: "pi" },
-    environments: { ...ALL_ENVIRONMENTS },
-    hint: "engine runs on the host; the sandbox isolates the workspace",
+    sandboxable: true,
   },
   {
     // Native Codex runs need a writable CODEX_HOME (refresh-token rotation) —
@@ -661,94 +619,39 @@ export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
     id: "codex",
     label: "GPT (Codex)",
     match: { provider: "codex" },
-    environments: { local: true, docker: false, daytona: false, e2b: false, box: false, modal: false, microvm: false, "lambda-microvm": false },
-    hint: "Codex account state stays on the host; use an opencode/openai/* model to run GPT in a sandbox",
+    sandboxable: false,
+    hint: "Codex account state stays on the host; use an opencode/openai/* or pi/openai/* model for GPT in a sandbox",
   },
   {
     id: "claude",
     label: "Claude",
     match: { provider: "claude" },
-    environments: { ...ALL_ENVIRONMENTS },
+    sandboxable: true,
   },
 ];
 
-const ENVIRONMENT_LABELS: Record<SandboxEnvironmentId, string> = {
-  local: "Host",
-  docker: "Docker",
-  daytona: "Daytona",
-  e2b: "E2B",
-  box: "Box",
-  modal: "Modal",
-  microvm: "Local Firecracker MicroVM",
-  "lambda-microvm": "AWS Lambda MicroVM",
-};
-
-/** The matrix row a model (or the current default, for ""/undefined) falls
- *  into. Unknown model strings resolve like providerFor does (→ claude). */
+/** The family a model (or the current default) falls into. */
 export function sandboxModelFamilyFor(model?: string | null): SandboxModelFamily {
   const raw = (model || "").trim() || getDefaultModel();
   const canonical = resolveModel(raw)?.id ?? raw;
   const provider = providerFor(canonical);
   return (
-    SANDBOX_MODEL_FAMILIES.find(
-      (f) =>
-        f.match.provider === provider &&
-        (!f.match.idPrefix || canonical.startsWith(f.match.idPrefix)),
-    ) ?? SANDBOX_MODEL_FAMILIES[SANDBOX_MODEL_FAMILIES.length - 1]
+    SANDBOX_MODEL_FAMILIES.find((family) => family.match.provider === provider) ??
+    SANDBOX_MODEL_FAMILIES[SANDBOX_MODEL_FAMILIES.length - 1]
   );
 }
 
-/**
- * Decide where the model loop runs for a sandboxed session.
- *
- * Remote providers remain workspace sandboxes for every OpenCode family.
- * Docker and local Firecracker run OpenAI/Anthropic OpenCode inside because
- * their scoped auth is mounted/uploaded. OpenCode-other remains host-only
- * until its provider-auth upload design lands. Pi is host-only on EVERY provider:
- * its bridge auth, session state and in-memory MCP servers exist only in this
- * process, so the in-sandbox runner-host can never run it.
- */
-export function sandboxEnginePlacement(
+/** Provider-independent sandbox gate. */
+export function sandboxableModelFamily(
   model: string | undefined | null,
-  provider: RunnableSandboxProviderId,
-): "host" | "sandbox" {
-  const family = sandboxModelFamilyFor(model).id;
-  if (family === "pi") return "host";
-  if (family === "opencode-other") return "host";
-  if (
-    provider !== "docker" &&
-    provider !== "microvm" &&
-    (family === "opencode-openai" || family === "opencode-anthropic")
-  ) {
-    return "host";
-  }
-  return "sandbox";
-}
-
-/**
- * Can `model` run in sandbox `provider`? (null/"local" = host = always ok.)
- * The create paths enforce this server-side; NewSession pre-warns from the
- * same matrix. The error names the family and the environments that DO work.
- */
-export function sandboxModelSupport(
-  model: string | undefined | null,
-  provider: SandboxProviderId | null,
 ): { ok: true } | { ok: false; error: string } {
-  if (!provider || provider === "local") return { ok: true };
   const family = sandboxModelFamilyFor(model);
-  if (family.environments[provider]) return { ok: true };
-  const supported = (Object.keys(family.environments) as SandboxEnvironmentId[])
-    .filter((e) => family.environments[e])
-    .map((e) => ENVIRONMENT_LABELS[e]);
-  const pick =
-    supported.length > 1
-      ? `${supported.slice(0, -1).join(", ")} or ${supported[supported.length - 1]}`
-      : supported[0] || "Host";
+  if (family.sandboxable) return { ok: true };
   return {
     ok: false,
     error:
-      `${family.label} models can't run in ${ENVIRONMENT_LABELS[provider]} yet — pick ${pick}` +
-      (family.hint ? ` (${family.hint})` : "") +
+      `${family.label} models can't run in a sandbox` +
+      (family.hint ? ` — ${family.hint}` : "") +
       ".",
   };
 }
@@ -762,9 +665,7 @@ export interface SandboxCapabilityStatus {
   providers: SandboxProviderStatusEntry[];
   /** disable-sandboxes kill-switch file present — runs stay on the host. */
   killSwitch: boolean;
-  /** Model-family × environment support (SANDBOX_MODEL_FAMILIES verbatim) —
-   *  the NewSession picker derives its "can't run in X" warning from this,
-   *  never from strings of its own. */
+  /** Provider-independent family sandboxability for the NewSession picker. */
   modelFamilies: SandboxModelFamily[];
 }
 
@@ -889,9 +790,8 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
  * error. Returns `provider: null` for "no sandbox".
  *
  * `model` (the create's model pick; ""/undefined = the current default) is
- * checked against the capability matrix so an unsupported model × environment
- * combo fails AT CREATE with the same message the UI pre-warns with — never
- * trust just the picker (sandboxModelSupport).
+ * checked against the provider-independent family gate so native Codex fails
+ * AT CREATE with the same message the UI pre-warns with.
  */
 export function resolveRequestedSandbox(
   requested: boolean | string | undefined | null,
@@ -901,7 +801,8 @@ export function resolveRequestedSandbox(
   const withModelCheck = (
     provider: SandboxProviderId | null,
   ): { ok: true; provider: SandboxProviderId | null } | { ok: false; error: string } => {
-    const support = sandboxModelSupport(model, provider);
+    if (!provider || provider === "local") return { ok: true, provider };
+    const support = sandboxableModelFamily(model);
     return support.ok ? { ok: true, provider } : support;
   };
   if (!requested) return { ok: true, provider: null };

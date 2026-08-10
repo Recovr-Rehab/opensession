@@ -263,8 +263,6 @@ export interface UnifiedSession {
     provider: string;
     sandboxId?: string;
     workspace?: "bind" | "volume";
-    /** Where the model loop lives for this session's current engine. */
-    engine?: "host" | "sandbox";
   };
 }
 
@@ -513,7 +511,6 @@ export interface NativeSessionFile {
     provider: string;
     sandboxId?: string;
     workspace?: "bind" | "volume";
-    engine?: "host" | "sandbox";
   };
 }
 

@@ -78,13 +78,8 @@ import {
 	isRemoteSandboxProvider,
 	isRunnableSandboxProvider,
 	sandboxesEnabled,
-	sandboxEnginePlacement,
 	sandboxProviderConfigured,
 } from "./sandbox/config";
-import {
-	createRemoteWorkspaceMcpServer,
-	remoteWorkspaceInstructions,
-} from "./sandbox/workspace-mcp";
 import { getTitleOverride } from "./title-overrides";
 import { ensureGeneratedTitle } from "./generated-titles";
 import { gitIdentityFor } from "./shared/user-mappings";
@@ -1078,13 +1073,6 @@ export async function maybeLaunchSandboxedRun(
 	// leak the run token (spawnHostRun's error path does the same cleanup).
 	let rpcToken: string | undefined;
 	try {
-		// Remote providers can still use the transitional "brain outside, hands
-		// inside" path. Local Firecracker is brain-inside now; deliberately ignore
-		// its pre-conversion sticky `engine: host` value and recompute placement.
-		const desiredPlacement = sandboxEnginePlacement(session.model, sbProvider);
-		const engineOutsideSandbox =
-			desiredPlacement === "host" ||
-			(sbProvider !== "microvm" && session.sandbox?.engine === "host");
 		const provider = getSandboxProvider(sbProvider);
 		const sandbox = await provider.ensure({
 			sessionId: session.id,
@@ -1097,19 +1085,18 @@ export async function maybeLaunchSandboxedRun(
 			attachedDirs: (session.attachedRepos || [])
 				.map((r) => r.dir)
 				.filter(Boolean),
-			runtime: engineOutsideSandbox ? "workspace" : "runner",
 		});
 		// Remote engine databases live inside the sandbox. A replacement VM cannot
 		// resume the old engine id, even when its git workspace was safely pushed.
 		const remoteSandboxReplaced =
 			isRemoteSandboxProvider(sbProvider) &&
 			session.sandbox?.sandboxId !== sandbox.id;
+		const legacyEngine = (session.sandbox as { engine?: unknown } | undefined)?.engine;
 		if (
 			session.source === "opensession" &&
 			(session.sandbox?.sandboxId !== sandbox.id ||
 				session.sandbox?.workspace !== sandbox.workspace ||
-				session.sandbox?.engine !==
-					(engineOutsideSandbox ? "host" : "sandbox"))
+				legacyEngine !== undefined)
 		) {
 			touchNativeSession(session.id, {
 				sandbox: {
@@ -1118,9 +1105,8 @@ export async function maybeLaunchSandboxedRun(
 					// Record how the workspace materialized ("volume" = it lives only
 					// inside the sandbox; host existsSync guards must not gate it).
 					workspace: sandbox.workspace,
-					engine: engineOutsideSandbox ? "host" : "sandbox",
 				},
-				...(remoteSandboxReplaced && !engineOutsideSandbox
+				...(remoteSandboxReplaced
 					? {
 							claudeSessionId: undefined,
 							codexThreadId: undefined,
@@ -1166,58 +1152,6 @@ export async function maybeLaunchSandboxedRun(
 			accountId: session.accountId,
 			journalKind: "prompt",
 		};
-		if (engineOutsideSandbox) {
-			// The in-sandbox run-host proxy token above is not used on this path;
-			// runOpencode mints its own host-local MCP token.
-			unregisterRunToken(rpcToken);
-			rpcToken = undefined;
-			const engineCwd = `${SESSIONS_DIR}/opencode/remote-cwd/${session.id}`;
-			mkdirSync(engineCwd, { recursive: true });
-			const inProcessMcp = {
-				...interactiveMcpServers(opts.user, session.id),
-				...(session.goalId
-					? {
-							"opensession-goal-self": createGoalSelfMcpServer(
-								session.goalId,
-							),
-						}
-					: {}),
-				"opensession-workspace": createRemoteWorkspaceMcpServer(sandbox),
-			};
-			const reposNote = [
-				spec.reposNote,
-				remoteWorkspaceInstructions(sandbox),
-			]
-				.filter(Boolean)
-				.join("\n\n");
-			console.log(
-				`[sandbox] ${session.id}: engine on host, workspace in ${sandbox.id} (${sandbox.cwd})`,
-			);
-			return runAgent({
-				prompt: opts.prompt,
-				promptEntryId: opts.promptEntryId,
-				sessionId: opts.engineSessionId,
-				cwd: engineCwd,
-				mode: session.mode,
-				model: session.model,
-				effort: session.effort,
-				fastMode: session.fastMode,
-				images: opts.images,
-				mcpServers: opts.mcpServers ?? "all",
-				inProcessMcp,
-				disableLocalWorkspaceTools: true,
-				reposNote,
-				confirmTools: STRIPE_CONFIRM_TOOLS,
-				aws: true,
-				author: gitIdentityFor(opts.user),
-				user: opts.user,
-				mcpGrantUser: session.startedBy || undefined,
-				fallbackModel: interactiveFallbackModel(session.model),
-				accountId: session.accountId,
-				journal: { osSessionId: session.id, kind: "prompt" },
-				onAskUser: makeAskHandler(session.id),
-			});
-		}
 		const runCallbacks = {
 			onAskUser: makeAskHandler(session.id),
 			// A steer that reached the in-container run too late must not
