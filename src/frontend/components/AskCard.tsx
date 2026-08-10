@@ -57,6 +57,8 @@ export function AskCard({ questions, onAnswer }: Props) {
   }
 
   const complete = questions.every((q) => answerFor(q) !== null);
+  // A card asking one thing: its header belongs on the status row (below).
+  const lone = questions.length === 1 ? questions[0] : undefined;
 
   function submit() {
     if (!complete || submitted) return;
@@ -68,7 +70,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 
   return (
     <div className="mx-auto mb-6 mt-2 flex w-full max-w-[var(--session-col)] flex-col gap-5 rounded-xl bg-raised p-4 [corner-shape:var(--cs)]">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <span
           aria-hidden="true"
           className="h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-[0_0_0_3px_var(--green-soft)]"
@@ -76,13 +78,27 @@ export function AskCard({ questions, onAnswer }: Props) {
         <span className="text-label font-semibold text-dim">
           {AGENT_NAME} needs input
         </span>
+        {/* One question's header rides this row instead of claiming a line of
+            its own: it is a two-word topic tag, so stacked under the status it
+            made a three-deep ladder of labels before the question itself. Slack
+            joins them the same way (`*header* — question`, see asks.ts). With
+            several questions each section keeps its own header, since there it
+            says which of them you are looking at. */}
+        {lone?.header && (
+          <>
+            <span aria-hidden="true" className="text-label text-faint">
+              ·
+            </span>
+            <span className="text-label font-semibold text-faint">{lone.header}</span>
+          </>
+        )}
       </div>
 
       {questions.map((q) => (
         <section key={q.question} className="flex flex-col gap-3">
-          {(q.header || q.multiSelect) && (
+          {((q.header && !lone) || q.multiSelect) && (
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              {q.header && (
+              {q.header && !lone && (
                 <span className="text-label font-semibold text-faint">{q.header}</span>
               )}
               {q.multiSelect && (

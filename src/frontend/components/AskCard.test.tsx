@@ -38,3 +38,33 @@ test("renders question markdown and selectable options accessibly", () => {
   expect(html).toContain('aria-pressed="false"');
   expect(html).toContain('aria-label="Custom answer"');
 });
+
+test("a lone question's header rides the status row instead of stacking", () => {
+  const html = renderToStaticMarkup(
+    <AskCard
+      questions={[{ header: "repo tile", question: "Branch or PR state?" }]}
+      onAnswer={() => {}}
+    />,
+  );
+
+  // Rendered once, and on the same row as the status label rather than under it.
+  expect(html.split("repo tile").length - 1).toBe(1);
+  expect(html).toMatch(/needs input<\/span>.*repo tile/s);
+});
+
+test("with several questions each section keeps its own header", () => {
+  const html = renderToStaticMarkup(
+    <AskCard
+      questions={[
+        { header: "repo tile", question: "Branch or PR state?" },
+        { header: "sort order", question: "Newest first?" },
+      ]}
+      onAnswer={() => {}}
+    />,
+  );
+
+  expect(html).toContain("repo tile");
+  expect(html).toContain("sort order");
+  // Neither is pulled up into the status row when there is more than one.
+  expect(html).not.toMatch(/needs input<\/span>[^<]*<span[^>]*>·/);
+});
