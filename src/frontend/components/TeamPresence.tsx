@@ -3,20 +3,26 @@ import type { UnifiedSession } from "../lib/types";
 import { usePeople, type Person } from "../lib/people";
 import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
+import { IconCheck, IconChevronDown } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 
 /**
  * The team, as a face row. One derivation (`useTeamPresence`) feeds two
- * surfaces: the pile in the Home header, where a face picks whose work the
- * whole app is showing, and the decoration on the sidebar's Home entry, which
- * is just "who's around" on the way to that page.
+ * surfaces: the pile in the Home header, which opens the app's person lens
+ * (`TeamLensMenu`), and the decoration on the sidebar's Home entry, which is
+ * just "who's around" on the way to that page.
  *
  * The pile is deliberately as much as we say about anyone: a face is dimmed
  * when the person has OS¹ closed, carries a hollow green dot when they're in
  * the app, and a filled one while a session of theirs has a turn in flight.
  * Presence, not a status feed — nothing here says what someone is working on,
  * and nothing animates to pull you into checking. To find out, you pick their
- * face and read their workspaces like your own.
+ * name and read their workspaces like your own.
+ *
+ * The pile itself is never a set of buttons. Faces are a glance; switching
+ * whose work you're looking at is a menu behind them, which is one deliberate
+ * step rather than a hair-trigger — you shouldn't be able to flick between
+ * teammates without meaning to.
  */
 
 export interface TeamMember {
@@ -201,8 +207,8 @@ function Face({
 }
 
 /**
- * Overlapping face row. Without `onSelect` it's decoration (safe to nest in a
- * trigger); with it, every face is its own toggle — the person lens.
+ * Overlapping face row. Always decoration — no face is a control, so the pile
+ * is safe to nest inside a trigger (which is how the lens menu uses it).
  */
 export function TeamFacepile({
 	members,
@@ -211,7 +217,6 @@ export function TeamFacepile({
 	ring = "var(--bg)",
 	status,
 	selectedKey,
-	onSelect,
 	className,
 }: {
 	members: TeamMember[];
@@ -221,8 +226,8 @@ export function TeamFacepile({
 	ring?: string;
 	/** Dim the away faces and dot the present ones. */
 	status?: boolean;
+	/** Ring the face whose work the app is currently showing. */
 	selectedKey?: string | null;
-	onSelect?: (member: TeamMember) => void;
 	className?: string;
 }) {
 	// A selected face must stay in the pile even when it would fall off the end.
@@ -255,26 +260,8 @@ export function TeamFacepile({
 					// first. The picked face clears them all.
 					zIndex: selected ? shown.length + 1 : shown.length - i,
 				};
-				if (!onSelect)
-					return (
-						<span key={m.key} className="relative" style={style} title={label}>
-							<Face member={m} size={size} ring={ring} status={status} />
-						</span>
-					);
 				return (
-					<button
-						key={m.key}
-						type="button"
-						className={cn(
-							"relative cursor-pointer rounded-full border-0 bg-transparent p-0 transition-transform duration-100 hover:z-20 hover:-translate-y-px focus-visible:z-20 focus-visible:outline-none",
-							selected && "scale-[1.1]",
-						)}
-						style={style}
-						title={label}
-						aria-pressed={selected}
-						aria-label={label}
-						onClick={() => onSelect(m)}
-					>
+					<span key={m.key} className="relative" style={style} title={label}>
 						<Face
 							member={m}
 							size={size}
@@ -282,41 +269,110 @@ export function TeamFacepile({
 							status={status}
 							selected={selected}
 						/>
-					</button>
+					</span>
 				);
 			})}
-			{rest.length > 0 &&
+			{rest.length > 0 && (
 				// The rest of the team is a count, not another face: no tile, no
-				// border, just the number sitting on the row's centre line. Where
-				// the faces are pickable it has to be pickable too, or the people
-				// past the cap — everyone but four, on a phone — are unreachable.
-				(onSelect ? (
-					<Menu.Root>
-						<Menu.Trigger
-							className={cn(OVERFLOW_COUNT, "cursor-pointer rounded-md px-1 hover:text-fg")}
-							style={{ height: size }}
-							aria-label={`${rest.length} more ${rest.length === 1 ? "teammate" : "teammates"}`}
-						>
-							+{rest.length}
-						</Menu.Trigger>
-						<Menu.Popup align="end">
-							{rest.map((m) => (
-								<Menu.Item key={m.key} onClick={() => onSelect(m)}>
-									<Face member={m} size={20} status={status} ring="var(--bg-panel)" />
-									<span className="min-w-0 truncate">{m.person.fullName}</span>
-								</Menu.Item>
-							))}
-						</Menu.Popup>
-					</Menu.Root>
-				) : (
-					<span
-						className={OVERFLOW_COUNT}
-						style={{ height: size }}
-						title={rest.map((m) => m.person.fullName).join(", ")}
-					>
-						+{rest.length}
-					</span>
-				))}
+				// border, just the number sitting on the row's centre line. It
+				// doesn't need to be reachable — the menu this pile opens lists
+				// everyone, capped or not.
+				<span
+					className={OVERFLOW_COUNT}
+					style={{ height: size }}
+					title={rest.map((m) => m.person.fullName).join(", ")}
+				>
+					+{rest.length}
+				</span>
+			)}
 		</div>
+	);
+}
+
+/**
+ * The person lens: the pile, as one control that opens the whole team.
+ *
+ * A face is a glance, not a button — you switch whose work the app is showing
+ * by opening this and picking a name, which is a step you have to mean. The
+ * menu also has room for everyone regardless of how many faces the pile fits,
+ * so nobody is stranded behind the cap on a narrow window.
+ */
+export function TeamLensMenu({
+	members,
+	value,
+	label,
+	onPick,
+	size,
+	max,
+	ring,
+	className,
+}: {
+	members: TeamMember[];
+	/** The lens: a person key, or "everyone" / "unassigned". */
+	value: string;
+	/** That lens in words — the trigger says it, so the ring isn't alone. */
+	label: string;
+	onPick: (value: string) => void;
+	size?: number;
+	max?: number;
+	ring?: string;
+	className?: string;
+}) {
+	// You first — it's the lens you return to — then the team in presence
+	// order. The pile behind the trigger keeps its own order, where whoever is
+	// working leads.
+	const rows = [...members].sort((a, b) => Number(b.isYou) - Number(a.isYou));
+	return (
+		<Menu.Root>
+			<Menu.Trigger
+				className={cn(
+					"flex min-w-0 items-center gap-2.5 rounded-control border-0 bg-transparent p-1 text-control-label text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+					className,
+				)}
+				aria-label={`Whose work this shows: ${label}`}
+			>
+				<TeamFacepile
+					members={members}
+					size={size}
+					max={max}
+					ring={ring}
+					status
+					selectedKey={members.some((m) => m.key === value) ? value : null}
+				/>
+				<span className="truncate max-[860px]:hidden">{label}</span>
+				<IconChevronDown className="shrink-0" size={17} />
+			</Menu.Trigger>
+			<Menu.Popup align="end" className="min-w-[210px]">
+				<Menu.RadioGroup value={value} onValueChange={(next) => onPick(String(next))}>
+					{rows.map((m) => (
+						<Menu.RadioItem
+							key={m.key}
+							value={m.key}
+							closeOnClick
+							className="gap-[9px] rounded-sm px-2 py-1.5"
+						>
+							<Face member={m} size={22} status ring="var(--bg-panel)" />
+							<span className="min-w-0 flex-1 truncate">
+								{m.isYou ? `${m.person.fullName} (you)` : m.person.fullName}
+							</span>
+							{m.key === value && <IconCheck className="shrink-0 text-accent" size={17} />}
+						</Menu.RadioItem>
+					))}
+					<Menu.Separator />
+					<Menu.RadioItem
+						value="everyone"
+						closeOnClick
+						className="gap-[9px] rounded-sm px-2 py-1.5"
+					>
+						{/* Sized to the faces above so every label shares one edge. */}
+						<span className="size-[22px] shrink-0" />
+						<span className="min-w-0 flex-1 truncate">Everyone</span>
+						{value === "everyone" && (
+							<IconCheck className="shrink-0 text-accent" size={17} />
+						)}
+					</Menu.RadioItem>
+				</Menu.RadioGroup>
+			</Menu.Popup>
+		</Menu.Root>
 	);
 }

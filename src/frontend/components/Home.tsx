@@ -7,7 +7,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { RepoTile, repoLabel } from "./RepoTile";
-import { TeamFacepile, useTeamPresence } from "./TeamPresence";
+import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
 import {
   personFilterFor,
   personScope,
@@ -26,7 +26,6 @@ import {
   IconPullRequest,
   IconRepo,
   IconSearch,
-  IconX,
 } from "./icons";
 
 interface Props {
@@ -405,9 +404,14 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
   // filter for the app, not one per surface.
   const filter = useSidebarFilter();
   const person = personScope(filter.person, currentUser);
+  // Takes a person key, or "all"/"everyone" for the whole team. Your own key
+  // stores as "me", so the lens keeps meaning "mine" across sign-ins.
   const setPerson = (next: string) =>
     setFilter({
-      person: next === "all" ? "everyone" : personFilterFor(next, currentUser),
+      person:
+        next === "all" || next === "everyone"
+          ? "everyone"
+          : personFilterFor(next, currentUser),
     });
   // The lens in words. "Unassigned" is a sidebar-only lens — this page has no
   // backlog rows of its own — but it still says so rather than claiming to be
@@ -530,41 +534,28 @@ export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnaly
         <div className="flex items-center justify-between gap-4 px-2">
           <h1 className="m-0 text-page-title font-semibold tracking-[-0.025em] text-fg">Home</h1>
           <div className="flex min-w-0 items-center gap-3">
-            {/* The team, as the app's person lens: a face picks whose work
-                this page — and the sidebar behind it — shows. The faces carry
-                presence (dimmed = away, hollow dot = in the app, filled =
-                a turn in flight) and nothing else; what someone is actually
-                doing is their workspaces, one click away. Clicking the picked
-                face widens back to everyone; the ✕ returns to your own. */}
+            {/* The team, as the app's person lens. The faces are a glance —
+                presence and nothing else (dimmed = away, hollow dot = in the
+                app, filled = a turn in flight) — and the whole pile is one
+                trigger: whose work this page and the sidebar behind it show is
+                a name you pick from the menu, not a face you brush past. What
+                someone is actually doing is their workspaces, from there. */}
             {team.length > 0 && (
-              <div className="flex min-w-0 items-center gap-2.5">
-                <TeamFacepile
-                  members={team}
-                  size={isPhone ? 24 : 27}
-                  max={isPhone ? 4 : 8}
-                  status
-                  selectedKey={person === "all" ? null : person}
-                  onSelect={(member) =>
-                    setPerson(member.key === person ? "all" : member.key)
-                  }
-                />
-                {/* The lens in words, and — whenever it isn't your own — the
-                    one click back to it. */}
-                {filter.person === "me" ? (
-                  <span className="text-control-label text-faint max-[860px]:hidden">
-                    {lensLabel}
-                  </span>
-                ) : (
-                  <button
-                    className="flex items-center gap-1 rounded-control border-0 bg-transparent p-1 text-control-label text-dim hover:bg-hover hover:text-fg max-[860px]:hidden"
-                    onClick={() => setFilter({ person: "me" })}
-                    title="Back to your workspaces"
-                  >
-                    <span className="truncate">{lensLabel}</span>
-                    <IconX size={15} />
-                  </button>
-                )}
-              </div>
+              <TeamLensMenu
+                members={team}
+                size={isPhone ? 24 : 27}
+                max={isPhone ? 4 : 8}
+                ring="var(--bg-surface)"
+                value={
+                  filter.person === "unassigned"
+                    ? "unassigned"
+                    : person === "all"
+                      ? "everyone"
+                      : person
+                }
+                label={lensLabel}
+                onPick={setPerson}
+              />
             )}
             <Button
               variant="ink"
