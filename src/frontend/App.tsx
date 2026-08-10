@@ -3771,7 +3771,9 @@ export function App(
 						    on session routes, a plain title otherwise. Sits above the tab
 						    strip so the session identity reads first, tabs below it. */}
 						<div className={DETAIL_TOPBAR} ref={setTopbarEl}>
-							{route.view !== "session" && topbarTitle && (
+							{route.view !== "session" &&
+								route.view !== "archived" &&
+								topbarTitle && (
 								<span className={DETAIL_TOPBAR_TITLE}>{topbarTitle}</span>
 							)}
 						</div>
