@@ -850,9 +850,9 @@ struct SessionView: View {
             // The semantic glass BUTTON style belongs to the control; never
             // put `.glassEffect` on this label. That nested a second surface in
             // the bar's glass group and let menu morphs flatten its controls.
-            .padding(.leading, 8)
-            .padding(.trailing, 14)
-            .padding(.vertical, 6)
+            .padding(.leading, 6)
+            .padding(.trailing, 10)
+            .padding(.vertical, 1)
             .frame(maxWidth: 220, alignment: .leading)
             .contentShape(Capsule())
         }
