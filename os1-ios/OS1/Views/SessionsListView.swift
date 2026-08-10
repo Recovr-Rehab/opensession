@@ -559,6 +559,9 @@ struct SessionsListView: View {
                     if env["OS1_OPEN_SUPPORT"] != nil {
                         showSupport = true
                     }
+                    if env["OS1_OPEN_SETTINGS"] != nil {
+                        showSettings = true
+                    }
                     #endif
                 }
                 .sheet(item: $newSessionRequest) { request in

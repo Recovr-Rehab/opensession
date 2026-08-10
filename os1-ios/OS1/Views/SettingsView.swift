@@ -142,6 +142,42 @@ struct SettingsView: View {
                 .padding(.vertical, 2)
                 .accessibilityElement(children: .combine)
 
+                // The connection form used to hang off a toolbar button in the
+                // top-left corner, which read as navigation rather than as a
+                // setting. It is one: a row, next to the identity it belongs to.
+                Button {
+                    showingConnection = true
+                } label: {
+                    HStack {
+                        Label {
+                            Text("Server")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        } icon: {
+                            Image(systemName: "server.rack")
+                                .symbolRenderingMode(.monochrome)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(OS1VisualStyle.iconTint)
+                                .frame(width: 28, height: 28)
+                        }
+                        Spacer(minLength: 12)
+                        // Explicit colours, not `.secondary`: inside a button
+                        // the hierarchical styles resolve against the tint,
+                        // and the value would read as a teal link rather than
+                        // as the detail text every other settings app uses.
+                        Text(serverHost)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                        // A plain button gets no disclosure of its own, and
+                        // without one the row doesn't look like it goes
+                        // anywhere — the rest of this list does.
+                        Image(systemName: "chevron.forward")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.55))
+                    }
+                }
+
                 Button(role: .destructive) {
                     confirmingSignOut = true
                 } label: {
@@ -171,6 +207,14 @@ struct SettingsView: View {
             return "Signed in with GitHub · @\(signedInLogin)"
         }
         return "Signed in with a session token"
+    }
+
+    /// The host alone: the row is narrow, and the scheme is the least
+    /// interesting part of "which server am I talking to".
+    private var serverHost: String {
+        let raw = config.baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let host = URL(string: raw)?.host, !host.isEmpty { return host }
+        return raw.isEmpty ? "Not set" : raw
     }
 
     private func settingsLink<Destination: View>(
@@ -341,15 +385,22 @@ struct SettingsView: View {
                 }
             }
         } else {
-            ToolbarItem(placement: .topLeadingCompat) {
-                Button {
-                    showingConnection = true
-                } label: {
-                    Label("Connection", systemImage: "server.rack")
-                }
-            }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
+                #if os(iOS)
+                    // A glyph, not the word: the sheet's only exit reads faster
+                    // as a checkmark, and the accent tint is what marks it as
+                    // the confirming action.
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Done", systemImage: "checkmark")
+                            .labelStyle(.iconOnly)
+                            .font(.body.weight(.semibold))
+                    }
+                    .tint(OS1VisualStyle.accent)
+                #else
+                    Button("Done") { dismiss() }
+                #endif
             }
         }
     }
