@@ -286,7 +286,7 @@ export function RepoBar({
       <Modal.Root open={confirmOpen} onOpenChange={setConfirmOpen} disablePointerDismissal>
         <Modal.Content widthClassName="max-w-[26rem]">
           <Modal.Header
-            title={`Switch this workspace to ${confirmTarget ? repoLabel(confirmTarget) : ""}?`}
+            title="Switch repository?"
             description={
               <>
                 Your current changes stay in the {repoLabel(primary)} worktree
