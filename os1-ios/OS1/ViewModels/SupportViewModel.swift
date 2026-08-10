@@ -23,6 +23,13 @@ final class SupportQueueModel {
         }
     }
 
+    /// The queue in lane order, flattened — what a band shows when it only has
+    /// room for the top of it. Plain's own ordering (most recently moved to
+    /// Todo first) survives within each lane.
+    var prioritised: [SupportThreadSummary] {
+        lanes.flatMap(\.threads)
+    }
+
     func load() async {
         if threads.isEmpty { isLoading = true }
         do {

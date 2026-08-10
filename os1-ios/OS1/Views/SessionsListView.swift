@@ -54,8 +54,14 @@ struct SessionsListView: View {
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
     @State private var showDesk = false
-    /// The Plain support queue. A place you go, like the Desk.
+    /// The Plain support queue. A place you go, like the Desk — and, since
+    /// tickets are work waiting on a person the same way sessions are, a band
+    /// at the top of this list too.
     @State private var showSupport = false
+    @State private var supportQueue = SupportQueueModel()
+    /// The ticket a band row opened. A sheet rather than a push: this screen's
+    /// navigation path is typed `[Session]`, and a ticket is not one.
+    @State private var openTicket: SupportThreadSummary?
     /// The push stack, typed rather than a `NavigationPath`, so a create that
     /// resolves after the person has navigated elsewhere can find its own
     /// pending entry instead of assuming it is still on top.
@@ -194,6 +200,16 @@ struct SessionsListView: View {
                 // hash, which is exactly where two repos can collide.
                 _ = try? await OS1API.repos()
             }
+            // The support band's own loop, in its own task so it can't hold up
+            // the one above it. A minute, like the web sidebar's: the queue
+            // changes on someone else's schedule and the server caches it for
+            // 30s anyway. SwiftUI cancels it when the view goes away.
+            .task {
+                while !Task.isCancelled {
+                    await supportQueue.load()
+                    try? await Task.sleep(for: .seconds(60))
+                }
+            }
             .onDisappear {
                 viewModel.stopPolling()
             }
@@ -313,6 +329,12 @@ struct SessionsListView: View {
         .sheet(isPresented: $showSupport) {
             SupportSheet()
                 .frame(minWidth: 520, minHeight: 600)
+        }
+        .sheet(item: $openTicket) { row in
+            NavigationStack {
+                SupportThreadView(row: row) { supportQueue.forget(id: row.id) }
+            }
+            .frame(minWidth: 520, minHeight: 600)
         }
         .safeAreaInset(edge: .bottom) {
             errorBanner
@@ -505,6 +527,15 @@ struct SessionsListView: View {
                     SupportSheet()
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
+                }
+                .sheet(item: $openTicket) { row in
+                    NavigationStack {
+                        SupportThreadView(row: row) {
+                            supportQueue.forget(id: row.id)
+                        }
+                    }
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
                 }
                 .onAppear {
                     #if DEBUG
@@ -1452,6 +1483,8 @@ struct SessionsListView: View {
             }
             #endif
 
+            supportBand
+
             if groupBy == .repoStatus || groupBy == .repoInbox {
                 ForEach(groupBy == .repoInbox ? repoInboxGroups : repoSessionGroups) { repoGroup in
                     // Folding a repo band takes its lane headings with it —
@@ -1592,6 +1625,61 @@ struct SessionsListView: View {
     // web sidebar, they're dividers, and the rows under them already wear the
     // status marks. What they do carry is the fold control: the heading is a
     // button, and its chevron says which way the section sits.
+    /// Support in the list, not only behind a button.
+    ///
+    /// A ticket is work waiting on a person, which is what every other row
+    /// here is, so the queue reads as another band of the inbox — the web
+    /// sidebar carries the same one. It leads, because a customer waiting
+    /// outranks your own sessions, and it folds shut like any other band for
+    /// anyone who doesn't work the queue.
+    ///
+    /// Only the top of the queue is inline. The band is a prompt, not the
+    /// queue itself: 50 tickets above your sessions would bury them, so the
+    /// urgent end shows and the rest stays one tap away in the sheet.
+    @ViewBuilder
+    private var supportBand: some View {
+        if !supportQueue.threads.isEmpty {
+            let inline = Array(supportQueue.prioritised.prefix(supportBandLimit))
+            Section {
+                if !isCollapsed("support") {
+                    ForEach(inline) { row in
+                        Button {
+                            openTicket = row
+                        } label: {
+                            SupportBandRow(row: row)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if supportQueue.threads.count > inline.count {
+                        Button {
+                            showSupport = true
+                        } label: {
+                            Text("All \(supportQueue.threads.count) tickets")
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(OS1VisualStyle.textDim)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } header: {
+                groupHeader(
+                    title: "Support",
+                    count: supportQueue.threads.count,
+                    collapseKey: "support"
+                )
+            }
+        }
+    }
+
+    /// Enough to see what's waiting, few enough that the list is still yours.
+    private var supportBandLimit: Int {
+        #if os(macOS)
+        8
+        #else
+        5
+        #endif
+    }
+
     private func groupHeader(
         title: String,
         count: Int,
@@ -1824,6 +1912,34 @@ struct SessionsListView: View {
             await viewModel.refresh()
             isRetrying = false
         }
+    }
+}
+
+/// A ticket as a list row: who is waiting, and about what. Tighter than the
+/// Support sheet's own row — this one sits among sessions, so it says the two
+/// things that decide whether you open it and nothing else.
+private struct SupportBandRow: View {
+    let row: SupportThreadSummary
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Circle()
+                .fill(row.lane == .urgent ? OS1VisualStyle.red : OS1VisualStyle.textFaint)
+                .frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.customerLabel)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .lineLimit(1)
+                Text(row.displayTitle)
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 6)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 }
 
