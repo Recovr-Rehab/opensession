@@ -544,11 +544,19 @@ function metadataModelLabel(effectiveModel: string, models: ModelOption[]): stri
 	if (opencodeModelParts(effectiveModel)) return prettyModel(effectiveModel);
 	return models.find((m) => m.id === effectiveModel)?.label || prettyModel(effectiveModel);
 }
+// An automatic fallback arrives as by = "auto-switch — <from label> <reason>",
+// which repeats the model the divider already names. Keep only the reason, and
+// take the from-model's name from it: a dial preset id ("dial/opus-fable") has
+// no friendly name of its own here, so prettyModel would print the raw slug.
+const AUTO_SWITCH_BY = /^auto-switch — (.+) (out of credits|hit a transient engine error)$/;
 function switchDividerText(model: string, from?: string, by?: string): string {
-	const head = from
-		? `Switched ${prettyModel(from)} → ${prettyModel(model)}`
+	const auto = by ? AUTO_SWITCH_BY.exec(by) : null;
+	const fromName = from ? (auto ? auto[1] : prettyModel(from)) : "";
+	const head = fromName
+		? `Switched ${fromName} → ${prettyModel(model)}`
 		: `Switched to ${prettyModel(model)}`;
-	return by ? `${head} · ${by}` : head;
+	const suffix = auto ? auto[2] : by;
+	return suffix ? `${head} · ${suffix}` : head;
 }
 
 type CachedTranscriptView = {
