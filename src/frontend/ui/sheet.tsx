@@ -80,6 +80,7 @@ export function ResponsiveDialog({
 	desktopTransition = "pop",
 	sheetClassName,
 	modalClassName,
+	backdropClassName,
 	children,
 }: {
 	open: boolean;
@@ -101,6 +102,8 @@ export function ResponsiveDialog({
 	sheetClassName?: string;
 	/** Extra classes for the desktop modal panel (e.g. a fixed size). */
 	modalClassName?: string;
+	/** Override the shared backdrop when a surface needs stronger separation. */
+	backdropClassName?: string;
 	children: React.ReactNode | ((dismiss: () => void) => React.ReactNode);
 }) {
 	// The sheet always animates: its drag-to-dismiss needs something to follow.
@@ -229,6 +232,7 @@ export function ResponsiveDialog({
 			<div
 				className={cn(
 					"absolute inset-0 bg-black/45",
+					backdropClassName,
 					animated && [
 						"transition-opacity",
 						phone ? "duration-[var(--dur-lg)]" : "duration-[var(--dur)]",

@@ -259,7 +259,7 @@ function AssetOverlayFooter({
 				"z-20 flex shrink-0 flex-col items-center gap-1 px-3 py-2",
 				phone
 					? "border-t border-line"
-					: "absolute left-0 right-0 top-full mt-2 rounded-lg bg-gradient-to-r from-black/35 via-black/55 to-black/35",
+					: "absolute left-0 right-0 top-full mt-2",
 			)}
 		>
 			{file.description && (
@@ -655,6 +655,7 @@ export function AssetOverlay({
 			// default clamp wins.
 			modalClassName="h-[min(820px,78vh)] w-[min(1120px,84vw)] max-w-none overflow-visible"
 			sheetClassName="h-[94dvh]"
+			backdropClassName={!isPhone ? "bg-black/65" : undefined}
 		>
 			<div
 				className={cn(
