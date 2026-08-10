@@ -85,6 +85,31 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertTrue(reopened.fastMode)
     }
 
+    /// A client-side action (promoting to code mode) reads as a transcript
+    /// line where it happened, not as a chip over the composer — and it goes
+    /// away with the next resync rather than pretending to be durable.
+    func testLocalNoticeReadsAsATranscriptLineAndClearsOnResync() {
+        let viewModel = makeViewModel()
+        let landed = [entry("e1", "assistant", text: "Had a look")]
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1", entries: landed, cursor: .empty
+        ))
+
+        viewModel.noteLocally("Switched to code mode")
+
+        XCTAssertNil(viewModel.notice)
+        guard case .message(let noticed)? = viewModel.displayBlocks.last else {
+            return XCTFail("expected the notice to render as its own block")
+        }
+        XCTAssertEqual(noticed.notice?.title, "Switched to code mode")
+        XCTAssertEqual(noticed.notice?.tone, NoticeTone.info.rawValue)
+
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1", entries: landed, cursor: .empty
+        ))
+        XCTAssertEqual(viewModel.entries.map(\.id), ["e1"])
+    }
+
     func testResyncDropsCachedPartialPrefixOfOffscreenCompletion() {
         let viewModel = makeViewModel()
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))

@@ -148,6 +148,8 @@ final class SessionViewModel {
     private var streamEnded = true
     /// Optimistic local user messages, removed once the server echoes them back.
     private var localEchoIds: Set<String> = []
+    /// Ids for client-side transcript notices (see `noteLocally`).
+    private var localNoticeSeq = 0
     /// Chip ids whose message text landed in a user entry that arrived AFTER
     /// the chip was known — marked by `upsert` echoes and by resync entries
     /// under previously-unknown ids. `messageLanded` reads this instead of
@@ -688,17 +690,44 @@ final class SessionViewModel {
         sendSeq += 1
     }
 
+    /// Record something this app just did as a transcript line of its own.
+    /// A client-side action gets no entry from the server, so this is a local
+    /// row — and the transcript is where it belongs: it reads in place, in the
+    /// order it happened, instead of as a chip pinned over the composer that
+    /// says something about the session while covering the thing it changed.
+    /// A resync drops it, which is the right lifetime for a line nothing
+    /// durable backs. Internal so tests can drive it without a live server.
+    func noteLocally(_ title: String, tone: NoticeTone = .info) {
+        localNoticeSeq += 1
+        entries.append(TranscriptEntry(
+            id: "local-notice-\(localNoticeSeq)",
+            type: "system",
+            content: title,
+            timestamp: ISO8601DateFormatter().string(from: .now),
+            notice: EntryNotice(
+                kind: "system", title: title, tone: tone.rawValue, body: nil, link: nil
+            )
+        ))
+        rebuildDisplayItems()
+    }
+
     /// Promote an ask-mode session to code mode. One-way: the server cuts a
     /// worktree, and the local snapshot follows so the row disappears without
     /// waiting for the next sessions refresh. The branch it returns is for
-    /// callers that want to say so; the notice covers the rest.
+    /// callers that want to say so; the transcript line covers the rest.
+    ///
+    /// The two outcomes land in different places on purpose: the switch is
+    /// something that happened TO the session, so it joins its transcript,
+    /// while a failure means nothing happened to the session at all — that is
+    /// a word to the person who just tapped, and it stays on the composer
+    /// where an error waits to be read instead of scrolling away.
     @discardableResult
     func promoteToCode() async -> String? {
         do {
             let branch = try await OS1API.promoteToCode(sessionId: session.id)
             session.mode = "code"
             if let branch { session.branch = branch }
-            notice = "Switched to code mode"
+            noteLocally("Switched to code mode")
             return branch
         } catch {
             notice = "Couldn't switch to code mode"
