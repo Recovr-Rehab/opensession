@@ -1251,20 +1251,26 @@ a.asset-ref {
 	display: inline-flex;
 	max-width: 100%;
 	align-items: center;
-	gap: 3px;
+	gap: 4px;
 	vertical-align: -0.25em;
-	padding: 2px 7px 2px 4px;
-	border: 0;
-	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
-	background: color-mix(in srgb, var(--text) 3%, transparent);
+	padding: 1px 6px 1px 3px;
+	border: 1px solid var(--border);
+	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
+	background: color-mix(in srgb, var(--bg-panel) 58%, transparent);
 	color: var(--text);
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.06);
 	cursor: pointer;
 	text-decoration: none;
 	white-space: nowrap;
-	transition: background var(--dur-micro) var(--ease);
+	transition:
+		background var(--dur-micro) var(--ease),
+		border-color var(--dur-micro) var(--ease),
+		box-shadow var(--dur-micro) var(--ease);
 }
 a.asset-ref:hover {
 	background: var(--hover);
+	border-color: var(--border-strong);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 	text-decoration: none;
 }
 a.asset-ref:active {
@@ -1280,10 +1286,15 @@ a.asset-ref:focus-visible {
 	height: 20px;
 	flex: none;
 	place-items: center;
+	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
+	background: var(--hover);
 	color: var(--text-dim);
-	transition: color var(--dur-micro) var(--ease);
+	transition:
+		background var(--dur-micro) var(--ease),
+		color var(--dur-micro) var(--ease);
 }
 a.asset-ref:hover .asset-ref-icon {
+	background: var(--hover-strong);
 	color: var(--text);
 }
 .asset-ref-icon svg {
@@ -1298,12 +1309,6 @@ a.asset-ref:hover .asset-ref-icon {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
-}
-.markdown a.asset-ref code {
-	padding: 0;
-	border-radius: 0;
-	background: transparent;
-	color: inherit;
 }
 
 /* A session reference rendered by markdown.ts as a clickable link into that

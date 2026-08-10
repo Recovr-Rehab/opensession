@@ -3279,7 +3279,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 							{/* The differently sized name and count share a baseline, while the
 							    pair stays vertically centred against the tile. */}
-							<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5 desktop:gap-[9px]">
+							<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5">
 								<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
 								<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
 									{rows.length + snoozedRows.length + prs.length}
@@ -3577,7 +3577,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span className={SIDEBAR_RAIL}>
 							<RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />
 						</span>
-						<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5 desktop:gap-[9px]">
+						<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5">
 							<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{feed.title}</span>
 							<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>{count}</span>
 						</span>
