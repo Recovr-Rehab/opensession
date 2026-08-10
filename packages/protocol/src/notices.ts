@@ -134,12 +134,16 @@ const HUMAN_REPLY_HEADER = new RegExp("^" + HEAD + "[^\\n]*\\n+");
 
 export function parseHumanReply(
   content?: string,
-): { name: string; body: string } | null {
+): { name: string; body: string; viaSlack: boolean } | null {
   if (!content) return null;
   const m = content.match(HUMAN_REPLY_RE);
   if (!m) return null;
   const body = content.replace(HUMAN_REPLY_HEADER, "").trim();
-  return { name: m[1].trim(), body };
+  return {
+    name: m[1].trim(),
+    body,
+    viaSlack: /\(via Slack\)/i.test(content.split("\n", 1)[0]),
+  };
 }
 
 /**
@@ -413,7 +417,7 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
       ...entry,
       content: human.body,
       sender: human.name,
-      senderVia: "slack",
+      ...(human.viaSlack ? { senderVia: "slack" as const } : {}),
     };
 
   const attribution = parseAttribution(entry.content);

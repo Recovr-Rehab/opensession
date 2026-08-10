@@ -271,16 +271,25 @@ describe("classifyEntry", () => {
 		).toMatchObject({ kind: "recovery", body: "collapsed" });
 	});
 
-	it("credits a steered turn and a routed-back answer instead of noticing them", () => {
+	it("credits steered turns and routed-back answers with their real origin", () => {
 		const steer = classifyEntry(entry({ content: "[Kent] check the logs" }));
 		expect(steer.notice).toBeUndefined();
 		expect(steer).toMatchObject({ sender: "Kent", content: "check the logs" });
 
-		const answer = classifyEntry(
+		const inAppAnswer = classifyEntry(
 			entry({ content: "💬 **Michiel** answered:\n\nShip it." }),
 		);
-		expect(answer.notice).toBeUndefined();
-		expect(answer).toMatchObject({
+		expect(inAppAnswer.notice).toBeUndefined();
+		expect(inAppAnswer).toMatchObject({
+			sender: "Michiel",
+			content: "Ship it.",
+		});
+		expect(inAppAnswer.senderVia).toBeUndefined();
+
+		const slackAnswer = classifyEntry(
+			entry({ content: "💬 **Michiel** answered (via Slack):\n\nShip it." }),
+		);
+		expect(slackAnswer).toMatchObject({
 			sender: "Michiel",
 			senderVia: "slack",
 			content: "Ship it.",
