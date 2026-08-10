@@ -49,6 +49,16 @@ the repository and what belongs in your instance config. Short version: if a
 stranger could run it on their own repository and get a sensible result, it can
 ship; if it needs a paragraph of your company's context, it is instance config.
 
+Scheduled automations can also declare `inputs`: independently collected source
+windows that are flattened by a tool-less one-shot model before the main run.
+The built-in providers are Slack channels and structured report history; their
+small per-input cursor files are checkpoints, not agent memory, and never retain
+raw source data. `outputs` currently supports durable Reports plus an optional
+server-side Slack notification derived from a report's structured urgency and
+confidence. Keep Slack disabled while evaluating a new analysis routine: the
+main model does not need the Slack MCP merely because Slack is an input or a
+future output.
+
 ## 3. Integrations — react to an external system
 
 An integration is an agent module that owns webhook routes and a background

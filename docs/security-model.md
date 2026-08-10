@@ -21,6 +21,13 @@ configuration for the run.
   support-triage automation might name only its support-inbox, identity,
   analytics, issue-tracker, error-tracker, and billing servers so it can look
   up the customer, related issues, and errors while investigating.
+- Scheduled automation `inputs` are a separate read path from the primary
+  run's MCP allowlist. Built-in input providers fetch a bounded time window,
+  pass it through a tool-less one-shot reducer as explicitly untrusted data,
+  and persist only a cursor after the primary run succeeds. Raw Slack text and
+  reductions are not stored in the checkpoint. A Slack input never grants the
+  primary model Slack tools; optional Slack output is likewise server-side,
+  disabled independently, and derived from the final structured report.
 - Automation runs hard-deny *customer-facing and identity-mutating* tools
   (enforced for direct runs and interactive resumes of automation sessions):
   Plain thread writes (reply_to_thread, mark_thread_done/todo, snooze_thread)

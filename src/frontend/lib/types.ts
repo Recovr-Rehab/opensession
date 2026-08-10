@@ -237,6 +237,15 @@ export interface ReportMeta {
 	sessionId?: string;
 	createdAt: string;
 	summary?: string;
+	urgency?: "low" | "medium" | "high" | "critical";
+	confidence?: "low" | "medium" | "high";
+	highlights?: Array<{
+		title: string;
+		summary: string;
+		urgency: "low" | "medium" | "high" | "critical";
+		confidence: "low" | "medium" | "high";
+		sourceRefs?: string[];
+	}>;
 }
 
 export interface ReportGroup {

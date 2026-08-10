@@ -77,6 +77,20 @@ interface Automation {
   eventKey?: string;
   mcpServers?: string[];
   slackWatch?: { channel: string };
+  inputs?: Array<{
+    id: string;
+    label?: string;
+    source: { type: "slack_channel" | "reports"; channel?: string; automationId?: string };
+  }>;
+  outputs?: Array<{
+    id: string;
+    type: "report" | "slack";
+    enabled?: boolean;
+    channel?: string;
+    publish?: "always" | "on_findings";
+    minUrgency?: string;
+    minConfidence?: string;
+  }>;
   model?: string;
   fallbackModel?: string;
   accountId?: string;
@@ -537,6 +551,35 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                           ? "none"
                           : sel.mcpServers.join(", ")}
                     </span>
+
+                    {sel.inputs?.length ? (
+                      <>
+                        <DetailKey>Inputs</DetailKey>
+                        <span className="text-dim min-w-0">
+                          {sel.inputs.map((input) =>
+                            input.label ||
+                            (input.source.type === "slack_channel"
+                              ? `Slack ${input.source.channel}`
+                              : input.source.automationId === "self"
+                                ? "previous reports"
+                                : `reports ${input.source.automationId}`),
+                          ).join(", ")}
+                        </span>
+                      </>
+                    ) : null}
+
+                    {sel.outputs?.length ? (
+                      <>
+                        <DetailKey>Outputs</DetailKey>
+                        <span className="text-dim min-w-0">
+                          {sel.outputs.map((output) => {
+                            if (output.type === "report")
+                              return `Reports · ${output.publish || "always"}`;
+                            return `Slack ${output.channel} · ${output.enabled === false ? "disabled" : `${output.minUrgency || "high"}/${output.minConfidence || "high"}`}`;
+                          }).join(", ")}
+                        </span>
+                      </>
+                    ) : null}
 
                     {sel.webhookSecret && (
                       <>

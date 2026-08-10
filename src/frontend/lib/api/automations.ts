@@ -219,6 +219,8 @@ export async function createAutomationApi(input: {
 	usageCredits?: boolean;
 	mcpServers?: string[];
 	slackWatch?: { channel: string };
+	inputs?: unknown[];
+	outputs?: unknown[];
 }) {
 	return request<any>("/automations", { method: "POST", body: input });
 }

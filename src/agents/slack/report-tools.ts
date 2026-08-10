@@ -15,6 +15,8 @@ import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
 import {
 	publishReport,
+	REPORT_CONFIDENCES,
+	REPORT_URGENCIES,
 	MAX_REPORT_ASSETS,
 	MAX_REPORT_ASSET_BYTES,
 	MAX_REPORT_BYTES,
@@ -60,12 +62,48 @@ export function createReportMcpServer(ctx: {
 					.describe(
 						"Short plain-text gist (1-3 sentences) shown in report lists.",
 					),
+				urgency: z
+					.enum(REPORT_URGENCIES)
+					.optional()
+					.describe(
+						"Overall time-to-action: low, medium, high, or critical. This is urgency, not certainty.",
+					),
+				confidence: z
+					.enum(REPORT_CONFIDENCES)
+					.optional()
+					.describe(
+						"Overall epistemic confidence: low, medium, or high. This is certainty in the assessment, not importance.",
+					),
+				highlights: z
+					.array(
+						z.object({
+							title: z.string(),
+							summary: z.string(),
+							urgency: z.enum(REPORT_URGENCIES),
+							confidence: z.enum(REPORT_CONFIDENCES),
+							sourceRefs: z.array(z.string()).max(20).optional(),
+						}),
+					)
+					.max(20)
+					.optional()
+					.describe(
+						"Machine-readable findings used by report history and optional notification outputs. Every finding needs its own urgency, confidence, and evidence references when available.",
+					),
 			},
 			async (args: {
 				title: string;
 				html: string;
 				assets?: string[];
 				summary?: string;
+				urgency?: (typeof REPORT_URGENCIES)[number];
+				confidence?: (typeof REPORT_CONFIDENCES)[number];
+				highlights?: Array<{
+					title: string;
+					summary: string;
+					urgency: (typeof REPORT_URGENCIES)[number];
+					confidence: (typeof REPORT_CONFIDENCES)[number];
+					sourceRefs?: string[];
+				}>;
 			}) => {
 				try {
 					if (args.assets?.length && !ctx.sessionId)
@@ -103,6 +141,9 @@ export function createReportMcpServer(ctx: {
 						title: args.title,
 						html: args.html,
 						summary: args.summary,
+						urgency: args.urgency,
+						confidence: args.confidence,
+						highlights: args.highlights,
 						assets,
 					});
 					return text(

@@ -36,6 +36,29 @@ function formatDate(value: string, detailed = false): string {
 	}).format(date);
 }
 
+function ReportSignal({ report }: { report: ReportMeta }) {
+	if (!report.urgency && !report.confidence) return null;
+	const tone =
+		report.urgency === "critical"
+			? "bg-red-soft text-red"
+			: report.urgency === "high"
+				? "bg-yellow-soft text-yellow"
+				: report.urgency === "medium"
+					? "bg-active text-accent"
+					: "bg-surface text-dim";
+	const label = [
+		report.urgency ? `${report.urgency} urgency` : "",
+		report.confidence ? `${report.confidence} confidence` : "",
+	]
+		.filter(Boolean)
+		.join(" · ");
+	return (
+		<span className={`inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-meta font-medium ${tone}`}>
+			{label}
+		</span>
+	);
+}
+
 function supportIdFromHref(href: string | undefined): string | null {
 	if (!href) return null;
 	try {
@@ -89,7 +112,11 @@ export function Reports({
 		document.title = docTitle("Reports");
 		loadGroups();
 		return addHandler((message) => {
-			if (message.type === "reports_changed") loadGroups();
+			if (message.type !== "reports_changed") return;
+			loadGroups();
+			const selectedId = selectionRef.current;
+			if (selectedId && message.automationId === selectedId)
+				fetchReports(selectedId).then(setHistory).catch(() => {});
 		});
 	}, [addHandler]);
 
@@ -166,7 +193,10 @@ export function Reports({
 								<span className="min-w-0 flex-1">
 									<span className="block truncate text-sm font-medium text-fg">{group.automationName}</span>
 									<span className="mt-1 block truncate text-xs text-dim">{group.latest.title}</span>
-									<span className="mt-1.5 block text-meta text-faint">{formatDate(group.latest.createdAt)} · {group.count} {group.count === 1 ? "report" : "reports"}</span>
+									<span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-meta text-faint">
+										<span className="truncate">{formatDate(group.latest.createdAt)} · {group.count} {group.count === 1 ? "report" : "reports"}</span>
+										<ReportSignal report={group.latest} />
+									</span>
 								</span>
 								<IconChevronRight size={16} className="mt-2 shrink-0 text-faint" />
 							</button>
@@ -191,6 +221,7 @@ export function Reports({
 								<>
 									<h2 className="m-0 mt-1 px-1 text-base font-semibold leading-snug text-fg">{selected.title}</h2>
 									<p className="m-0 mt-1 px-1 text-xs leading-5 text-dim line-clamp-2">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
+									<div className="mt-1.5 px-1"><ReportSignal report={selected} /></div>
 									<div className="mt-2.5 flex items-center gap-2 px-1">
 										<Select
 											size="sm"
@@ -212,7 +243,10 @@ export function Reports({
 							<header className="flex shrink-0 items-start gap-4 border-b border-line px-5 py-3">
 								<div className="min-w-0 flex-1">
 									<h2 className="m-0 truncate text-base font-semibold text-fg">{selected.title}</h2>
-									<p className="m-0 mt-1 text-xs text-dim">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
+									<div className="mt-1 flex min-w-0 items-center gap-2">
+										<p className="m-0 min-w-0 truncate text-xs text-dim">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
+										<ReportSignal report={selected} />
+									</div>
 								</div>
 								<Button size="sm" className="min-h-[30px] w-[30px] shrink-0" icon={<CopyCheck copied={copied} size={15} idle={<IconLink size={15} />} />} aria-label="Share report" title="Share report" onClick={shareSelected} />
 								{selected.sessionId && <Button size="sm" className="min-h-[30px] shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}

@@ -9,6 +9,8 @@ import {
 } from "fs";
 import { join } from "path";
 import {
+	__resetReportIndexForTest,
+	listReports,
 	listReportsForSession,
 	publishReport,
 	readReportAsset,
@@ -25,6 +27,7 @@ const dirs = [
 
 afterEach(() => {
 	for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+	__resetReportIndexForTest();
 });
 
 describe("listReportsForSession", () => {
@@ -141,5 +144,61 @@ describe("report assets", () => {
 				],
 			}),
 		).toThrow("Duplicate report asset");
+	});
+});
+
+describe("report signals", () => {
+	test("persists urgency, confidence, and bounded structured highlights", () => {
+		const report = publishReport({
+			automationId,
+			automationName: "Test",
+			title: "Signal report",
+			html: "<p>signal</p>",
+			urgency: "high",
+			confidence: "medium",
+			highlights: [
+				{
+					title: " Assumption changed ",
+					summary: " Evidence no longer supports it. ",
+					urgency: "high",
+					confidence: "medium",
+					sourceRefs: [" slack://C123456/1 "],
+				},
+			],
+		});
+
+		expect(report.urgency).toBe("high");
+		expect(report.confidence).toBe("medium");
+		expect(report.highlights?.[0]).toEqual({
+			title: "Assumption changed",
+			summary: "Evidence no longer supports it.",
+			urgency: "high",
+			confidence: "medium",
+			sourceRefs: ["slack://C123456/1"],
+		});
+		expect(listReports(automationId)[0]?.highlights).toEqual(report.highlights);
+	});
+
+	test("rejects invalid and oversized signal metadata", () => {
+		const base = {
+			automationId,
+			automationName: "Test",
+			title: "Invalid signal report",
+			html: "<p>signal</p>",
+		};
+		expect(() =>
+			publishReport({ ...base, urgency: "soon" as any }),
+		).toThrow("Invalid report urgency");
+		expect(() =>
+			publishReport({
+				...base,
+				highlights: Array.from({ length: 21 }, () => ({
+					title: "Finding",
+					summary: "Summary",
+					urgency: "low" as const,
+					confidence: "low" as const,
+				})),
+			}),
+		).toThrow("Too many report highlights");
 	});
 });

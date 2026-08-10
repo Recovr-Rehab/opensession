@@ -31,6 +31,19 @@ import { createSelfImproveMcpServer } from "../agents/slack/self-improve-tools";
 import { audit } from "./audit";
 import { configuredIntegration, personaName } from "./config";
 import { shouldPersistModelSwitch } from "./run-events";
+import {
+  deleteAutomationInputState,
+  prepareAutomationInputs,
+  sanitizeAutomationInputs,
+  type AutomationInput,
+} from "./automation-inputs";
+import {
+  automationOutputInstructions,
+  deleteAutomationOutputState,
+  deliverAutomationOutputs,
+  sanitizeAutomationOutputs,
+  type AutomationOutput,
+} from "./automation-outputs";
 
 const AUTOMATIONS_DIR = stateDir("automations");
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
@@ -176,6 +189,10 @@ export interface Automation {
    * message (see SlackWatchConfig). Fired from the Slack agent's event intake.
    */
   slackWatch?: SlackWatchConfig;
+  /** Scheduled/pulled source material collected and reduced before the run. */
+  inputs?: AutomationInput[];
+  /** Durable report plus optional downstream sinks fed from that report. */
+  outputs?: AutomationOutput[];
   /**
    * Model TIER for new runs (claude-* / gpt-* / opencode/…; see models.ts).
    * Omitted = the automation default. Dispatch maps tiers onto the opencode
@@ -401,6 +418,8 @@ export function createAutomation(input: {
   sandbox?: boolean;
   grafanaPoll?: GrafanaPollConfig;
   slackWatch?: SlackWatchConfig;
+  inputs?: AutomationInput[];
+  outputs?: AutomationOutput[];
 }): Automation | { error: string } {
   if (!input.name.trim()) return { error: "Name is required" };
   if (!input.prompt.trim()) return { error: "Prompt is required" };
@@ -428,6 +447,10 @@ export function createAutomation(input: {
   if (grafanaPoll && "error" in grafanaPoll) return grafanaPoll;
   const slackWatch = sanitizeSlackWatch(input.slackWatch);
   if (slackWatch && "error" in slackWatch) return slackWatch;
+  const inputs = sanitizeAutomationInputs(input.inputs);
+  if (inputs && "error" in inputs) return inputs;
+  const outputs = sanitizeAutomationOutputs(input.outputs);
+  if (outputs && "error" in outputs) return outputs;
 
   const a: Automation = {
     id: `auto-${randomUUIDv7()}`,
@@ -458,6 +481,8 @@ export function createAutomation(input: {
     usageCredits: input.usageCredits === true || undefined,
     grafanaPoll,
     slackWatch,
+    inputs,
+    outputs,
   };
   saveAutomation(a);
   return a;
@@ -505,7 +530,7 @@ export function ensureConfiguredAutomations(): void {
 
 export function updateAutomation(
   id: string,
-  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch">>
+  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch" | "inputs" | "outputs">>
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
@@ -546,6 +571,16 @@ export function updateAutomation(
     const slackWatch = sanitizeSlackWatch(patch.slackWatch);
     if (slackWatch && "error" in slackWatch) return slackWatch;
     next.slackWatch = slackWatch;
+  }
+  if ("inputs" in patch) {
+    const inputs = sanitizeAutomationInputs(patch.inputs);
+    if (inputs && "error" in inputs) return inputs;
+    next.inputs = inputs;
+  }
+  if ("outputs" in patch) {
+    const outputs = sanitizeAutomationOutputs(patch.outputs);
+    if (outputs && "error" in outputs) return outputs;
+    next.outputs = outputs;
   }
   if ("model" in patch) {
     const model = sanitizeModel(patch.model);
@@ -785,6 +820,8 @@ export function deleteAutomation(id: string): boolean {
   const path = `${AUTOMATIONS_DIR}/${id}.json`;
   if (!existsSync(path)) return false;
   unlinkSync(path);
+  deleteAutomationInputState(id);
+  deleteAutomationOutputState(id);
   return true;
 }
 
@@ -1011,6 +1048,11 @@ export async function runAutomation(
       status: "running",
     });
 
+    const preparedInputs = await prepareAutomationInputs({
+      automationId: automation.id,
+      inputs: automation.inputs,
+      startedAt,
+    });
     let prompt = automation.prompt;
     // Tell the run which model it's executing as, so a prompt that wants to
     // record it (e.g. Plain triage stamps the model on its note) can quote an
@@ -1028,6 +1070,9 @@ export async function runAutomation(
       if (displayModel)
         prompt += `\n\n## Model\n\nThis run started on the \`${displayModel}\` model.`;
     }
+    if (preparedInputs.note) prompt += `\n\n${preparedInputs.note}`;
+    const outputInstructions = automationOutputInstructions(automation.outputs);
+    if (outputInstructions) prompt += `\n\n${outputInstructions}`;
     if (options?.eventContext) {
       const source =
         trigger !== "event"
@@ -1285,6 +1330,16 @@ export async function runAutomation(
     if (!errorMsg) errorMsg = declaredRunFailure(textTail) || "";
 
     await persistSession(engineSessionId);
+
+    if (!errorMsg) {
+      await deliverAutomationOutputs({
+        automationId: automation.id,
+        outputs: automation.outputs,
+        sessionId: bksId,
+        startedAt,
+      });
+      preparedInputs.commit();
+    }
 
     settleRun(automation.id, bksId, {
       status: errorMsg ? "error" : "ok",

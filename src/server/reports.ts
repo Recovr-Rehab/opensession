@@ -43,6 +43,19 @@ export interface ReportAsset {
 	data: Uint8Array;
 }
 
+export const REPORT_URGENCIES = ["low", "medium", "high", "critical"] as const;
+export type ReportUrgency = (typeof REPORT_URGENCIES)[number];
+export const REPORT_CONFIDENCES = ["low", "medium", "high"] as const;
+export type ReportConfidence = (typeof REPORT_CONFIDENCES)[number];
+
+export interface ReportHighlight {
+	title: string;
+	summary: string;
+	urgency: ReportUrgency;
+	confidence: ReportConfidence;
+	sourceRefs?: string[];
+}
+
 export interface ReportMeta {
 	/** Timestamp-prefixed id, unique within the group (= the filename stem). */
 	id: string;
@@ -56,6 +69,12 @@ export interface ReportMeta {
 	createdAt: string;
 	/** Short plain-text gist for list rows / notifications. */
 	summary?: string;
+	/** Time-to-action for the report's most urgent finding. */
+	urgency?: ReportUrgency;
+	/** Epistemic confidence in the overall assessment. */
+	confidence?: ReportConfidence;
+	/** Structured findings for history inputs and optional notification sinks. */
+	highlights?: ReportHighlight[];
 }
 
 export interface ReportGroup {
@@ -66,6 +85,11 @@ export interface ReportGroup {
 }
 
 let sessionReportIndex: Map<string, ReportMeta[]> | null = null;
+
+/** Test seam for suites that create sidecars directly instead of publishReport. */
+export function __resetReportIndexForTest(): void {
+	if (process.env.NODE_ENV === "test") sessionReportIndex = null;
+}
 
 /** Path-segment guard for ids that travel through URLs. */
 function safeSegment(s: string): boolean {
@@ -164,6 +188,9 @@ export function publishReport(input: {
 	title: string;
 	html: string;
 	summary?: string;
+	urgency?: ReportUrgency;
+	confidence?: ReportConfidence;
+	highlights?: ReportHighlight[];
 	assets?: ReportAsset[];
 }): ReportMeta {
 	if (!safeSegment(input.automationId)) {
@@ -195,6 +222,42 @@ export function publishReport(input: {
 			`Report assets too large (${assetBytes} bytes > ${MAX_REPORT_ASSET_BYTES})`,
 		);
 	const now = new Date();
+	if (
+		input.urgency !== undefined &&
+		!REPORT_URGENCIES.includes(input.urgency)
+	)
+		throw new Error(`Invalid report urgency "${input.urgency}"`);
+	if (
+		input.confidence !== undefined &&
+		!REPORT_CONFIDENCES.includes(input.confidence)
+	)
+		throw new Error(`Invalid report confidence "${input.confidence}"`);
+	if ((input.highlights?.length || 0) > 20)
+		throw new Error("Too many report highlights (20 max)");
+	const highlights = input.highlights?.map((highlight, index) => {
+		if (!highlight || typeof highlight !== "object")
+			throw new Error(`Invalid report highlight ${index + 1}`);
+		const title = String(highlight.title || "").trim().slice(0, 200);
+		const summary = String(highlight.summary || "").trim().slice(0, 2000);
+		if (!title || !summary)
+			throw new Error(`Report highlight ${index + 1} needs a title and summary`);
+		if (!REPORT_URGENCIES.includes(highlight.urgency))
+			throw new Error(`Invalid urgency on report highlight ${index + 1}`);
+		if (!REPORT_CONFIDENCES.includes(highlight.confidence))
+			throw new Error(`Invalid confidence on report highlight ${index + 1}`);
+		if ((highlight.sourceRefs?.length || 0) > 20)
+			throw new Error(`Too many source references on report highlight ${index + 1}`);
+		const sourceRefs = highlight.sourceRefs
+			?.map((ref) => String(ref || "").trim().slice(0, 500))
+			.filter(Boolean);
+		return {
+			title,
+			summary,
+			urgency: highlight.urgency,
+			confidence: highlight.confidence,
+			...(sourceRefs?.length ? { sourceRefs } : {}),
+		};
+	});
 	// 2026-07-12-060002-4f3a: lexicographic = chronological, readable on disk.
 	const stamp = now
 		.toISOString()
@@ -212,6 +275,9 @@ export function publishReport(input: {
 		...(input.summary
 			? { summary: input.summary.trim().slice(0, 2000) }
 			: {}),
+		...(input.urgency ? { urgency: input.urgency } : {}),
+		...(input.confidence ? { confidence: input.confidence } : {}),
+		...(highlights?.length ? { highlights } : {}),
 	};
 	const dir = groupDir(input.automationId);
 	mkdirSync(dir, { recursive: true });
