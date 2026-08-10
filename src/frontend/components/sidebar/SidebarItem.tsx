@@ -2,8 +2,9 @@ import { useIsPhone } from "../../hooks/useIsPhone";
 import { hasDraft } from "../../lib/drafts";
 import { markRead, markUnread } from "../../lib/reads";
 import {
+	SIDEBAR_HOVER_LAYER,
 	SIDEBAR_RAIL,
-	SIDEBAR_ROW_HOVER,
+	SIDEBAR_ROW_CHIP,
 	SIDEBAR_STATUS_DOT,
 	SIDEBAR_SWIPE_ACTION,
 	SIDEBAR_SWIPE_ACTION_ARCHIVE,
@@ -54,8 +55,11 @@ export const SIDEBAR_ROW =
    The reveal is `group-hover`, which Tailwind gates to real hover devices for
    us; on touch these actions live behind the swipe gesture and the long-press
    sheet. */
-const ROW_ACTION =
-	"absolute top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:bg-pressed hover:text-fg";
+const ROW_ACTION = cn(
+	"absolute top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:text-fg",
+	// Not a wash — a lid. See SIDEBAR_ROW_CHIP.
+	SIDEBAR_ROW_CHIP,
+);
 
 export const SIDEBAR_ROW_TITLE =
 	"min-w-0 truncate text-body font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg phone:text-[16px]";
@@ -356,9 +360,9 @@ export function SidebarItem({
 						// Inside a swipe row: the wrapper owns the gap, the row owns the
 						// slide. Hover paints over selected/waiting here, as it always
 						// has — as a layer now, so it lifts those states rather than
-						// replacing them (see SIDEBAR_ROW_HOVER).
+						// replacing them (see SIDEBAR_HOVER_LAYER).
 						"z-1 mt-0 block touch-pan-y",
-						SIDEBAR_ROW_HOVER,
+						SIDEBAR_HOVER_LAYER,
 						// On hover the row gives up its right end to the pin +
 						// archive pair floating there, the same reserve workspace
 						// rows make (SIDEBAR_WS_ROW). It used to be the buttons'

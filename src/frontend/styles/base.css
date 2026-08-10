@@ -91,6 +91,16 @@
 	   opaque colour to hide what slides under them. */
 	--hover: rgba(255, 255, 255, 0.07);
 	--hover-strong: rgba(255, 255, 255, 0.11);
+	/* The one interaction fill that is NOT a wash: an action chip floating over
+	   a row (the pin/archive cluster). A chip is a LID, not a tint — what is
+	   behind it is the row it covers, so a translucent one shows that row's own
+	   wash, and whatever the row still has under that spot, through the glyph.
+	   So it is opaque, and the background bleeds into its COLOUR instead of
+	   through its alpha: the hover wash pre-composited onto the sidebar's own
+	   surface, which is the same value the wash resolves to there. One surface
+	   it cannot follow is the vibrancy sidebar — see the material block for
+	   what was measured there and why it still takes this. */
+	--row-chip: color-mix(in srgb, #ffffff 11%, var(--bg-raised));
 	--border: #333333;
 	--border-strong: #464646;
 	--top-divider: color-mix(in srgb, var(--border) 68%, transparent);
@@ -309,6 +319,7 @@ html[data-theme="light"] {
 	   reads heavier than the same alpha of white on charcoal. */
 	--hover: rgba(0, 0, 0, 0.055);
 	--hover-strong: rgba(0, 0, 0, 0.095);
+	--row-chip: color-mix(in srgb, #000000 9.5%, var(--bg-raised));
 	--border: #e2e2e2;
 	--border-strong: #d0d0d0;
 	--text: #1a1a1a;
@@ -815,6 +826,19 @@ html.wco .app {
 	html.material-backdrop .sidebar-container {
 		background: transparent;
 	}
+
+	/* --row-chip is deliberately NOT re-derived here, and the vibrancy sidebar
+	   is the surface where the chip cannot have everything. Measured, in light,
+	   against a mid-green wallpaper: sidebar L222, hovered row L209. A chip
+	   that keeps the material's alpha and steps its colour lands at L214 — it
+	   re-paints a slab of the light material over the row's ink and comes out
+	   LIGHTER than the row it is pressed into. An opaque chip cannot track an
+	   unknown wallpaper either: the same #dedede reads as a lid on a light
+	   backdrop and as a bright tile on a dark one. Only a translucent ink wash
+	   steps reliably, and a wash is what a chip must not be — it shows the
+	   row's own wash and its title through the glyph. So the chip stays the
+	   opaque lid, and on this one surface it reads as a neutral tile rather
+	   than picking the wallpaper up. */
 }
 
 @media (min-width: 721px) and (prefers-reduced-transparency: reduce) {

@@ -29,6 +29,7 @@ import {
 	SIDEBAR_HEADER_BTN,
 	SIDEBAR_HEADER_BTN_DESKTOP,
 	SIDEBAR_HEADER_BTN_PHONE,
+	SIDEBAR_HOVER_LAYER,
 	SIDEBAR_INDEPENDENT_SCROLL,
 	SIDEBAR_INDEPENDENT_SECTION,
 	SIDEBAR_LANE_DROP_HOVER,
@@ -39,7 +40,6 @@ import {
 	SIDEBAR_PIN_ENTRY_DRAGGING,
 	SIDEBAR_RAIL,
 	SIDEBAR_REPO_TILE,
-	SIDEBAR_ROW_HOVER,
 	SIDEBAR_STATUS_DOT,
 	SIDEBAR_STATUS_GROUP,
 	SIDEBAR_STICKY_BAND,
@@ -2439,7 +2439,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// the node, so the transform reads it rather than a React style.
 						SIDEBAR_WS_ROW,
 						"z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))]",
-						SIDEBAR_ROW_HOVER,
+						SIDEBAR_HOVER_LAYER,
 						// "Needs you" is the one row state that is urgent rather than
 						// merely informational, so its wash matches the Needs action
 						// caption above it (--red) instead of reading as a selection.
@@ -3781,7 +3781,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							// ride ON that as layers rather than replacing it — the same
 							// translucent ink the rows use, just stacked over a fill
 							// instead of over the sidebar.
-							isPhone && !tool.active && SIDEBAR_ROW_HOVER,
+							isPhone && !tool.active && SIDEBAR_HOVER_LAYER,
 							isPhone &&
 								tool.active &&
 								"border-line-strong bg-[image:linear-gradient(var(--hover-strong),var(--hover-strong))]",
@@ -3795,7 +3795,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// request exists in the session record — don't treat the
 								// current numbers as a stated preference.
 								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[3px] text-control-label font-medium text-dim hover:text-fg",
-							!isPhone && SIDEBAR_ROW_HOVER,
+							!isPhone && SIDEBAR_HOVER_LAYER,
 							!isPhone && tool.active && "bg-pressed text-fg",
 						);
 						const rowBody = (
@@ -4021,12 +4021,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									? cn(SIDEBAR_HEADER_BTN_PHONE, "min-h-[38px] min-w-[38px]")
 									: SIDEBAR_HEADER_BTN_DESKTOP,
 								"inline-flex items-center justify-center",
-								// The open state paints the stronger wash, and hovering must
-								// not wash it back out — so the hover pair is withheld while
-								// it is on rather than layered under it.
-								filterOpen
-									? "border-line-strong bg-pressed"
-									: "hover:bg-hover",
+								// The open state paints the stronger wash and the hover now
+								// layers OVER it (SIDEBAR_HOVER_LAYER), so the button no
+								// longer has to withhold its hover to keep from washing
+								// itself back out while open.
+								SIDEBAR_HOVER_LAYER,
+								filterOpen && "border-line-strong bg-pressed",
 								// A set filter is already spelled out in the header (the repo
 								// chip) and in the popover itself, so the button stays a plain
 								// glyph: full contrast under the pointer or while open.
@@ -4553,7 +4553,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									className={cn(
 										SIDEBAR_ROW,
 										"block",
-										n.id === activeNoteId ? "bg-pressed" : "hover:bg-hover",
+										SIDEBAR_HOVER_LAYER,
+										n.id === activeNoteId && "bg-pressed",
 									)}
 									data-sidebar-row=""
 									data-selected={n.id === activeNoteId || undefined}

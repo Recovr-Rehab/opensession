@@ -58,18 +58,42 @@ export const SIDEBAR_INDEPENDENT_SECTION =
 export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
 
 /**
- * A row's hover, painted as a background LAYER rather than a background colour.
+ * A hover painted as a background LAYER rather than a background colour — the
+ * sidebar's hover, for anything that also carries a state fill of its own.
  *
- * Every row state is translucent ink now — selected is `bg-pressed`, "needs
- * you" is `bg-blue-soft`/`bg-red-soft` — so each one picks up the sidebar
- * material (and, on the desktop shell, the wallpaper) underneath instead of
- * cutting an opaque patch out of it. A colour-based hover would REPLACE that
- * fill with a weaker one, so pointing at the selected row would dim it and look
- * like deselecting; as a layer the hover composites over whatever the row
- * already carries, which is what a hover is. One class covers all three states.
+ * Every state in here is translucent ink: selected is `bg-pressed`, "needs
+ * you" is `bg-blue-soft`/`bg-red-soft`, a pinned action is `bg-pressed`. That
+ * is what lets each of them pick up the sidebar material (and, on the desktop
+ * shell, the wallpaper) underneath instead of cutting an opaque patch out of
+ * it — but it also means a colour-based hover REPLACES that fill instead of
+ * adding to it. Pointing at a selected row would then swap 0.095 of ink for
+ * 0.055 and the row would go QUIETER under the pointer, which reads as
+ * deselecting; on an element whose two states are the same token (a pinned
+ * pin) it does nothing at all. Both were worked around by withholding the
+ * hover while the other state was on — see the filter button — which just
+ * moves the missing feedback somewhere else.
+ *
+ * As a layer the hover composites over whatever the element already carries,
+ * which is what a hover is, so one class covers every state including none.
+ *
+ * The one thing this is NOT for is an action chip floating over a row — see
+ * {@link SIDEBAR_ROW_CHIP}.
  */
-export const SIDEBAR_ROW_HOVER =
+export const SIDEBAR_HOVER_LAYER =
 	"hover:bg-[image:linear-gradient(var(--hover),var(--hover))]";
+
+/**
+ * The pin/archive chip's hover — the deliberate exception to the wash.
+ *
+ * These float ON a row that is itself already hovered, and they are lids
+ * rather than tints: a translucent one shows the row's wash, and anything the
+ * row still has under that spot, through the glyph. So it takes `--row-chip`,
+ * which is the hover wash pre-composited onto whatever surface the sidebar is
+ * painted with (see base.css) — the background bleeds into its COLOUR instead
+ * of through its alpha, and it is never more see-through than the sidebar it
+ * sits on.
+ */
+export const SIDEBAR_ROW_CHIP = "hover:bg-[var(--row-chip)]";
 
 /** A top-level group in the workspace list, and the gap after it. */
 export const SIDEBAR_GROUP = "mb-[14px]";
@@ -141,7 +165,7 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-[11px]";
  * to Tailwind's internal ordering rather than to the call site.
  */
 export const SIDEBAR_GROUP_HEADER =
-	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-[14px] hover:bg-hover hover:text-fg";
+	`group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-[14px] hover:text-fg ${SIDEBAR_HOVER_LAYER}`;
 
 /** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
 export const SIDEBAR_GROUP_HEADER_INSET =
@@ -487,7 +511,7 @@ export const SIDEBAR_WS_ACTIONS_TOUCH = "[@media(hover:none)]:inline-flex";
  * settled by where their rules sat in the sheet relative to each other.
  */
 export const SIDEBAR_WS_ACTION =
-	"inline-flex size-8 cursor-pointer items-center justify-center rounded-md hover:bg-hover";
+	`inline-flex size-8 cursor-pointer items-center justify-center rounded-md ${SIDEBAR_ROW_CHIP}`;
 
 /**
  * Compact last-activity time. It has no `display` of its own on purpose: as a
@@ -500,8 +524,9 @@ export const SIDEBAR_WS_ACTION =
 export const SIDEBAR_WS_TIME =
 	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint desktop:min-w-[34px] desktop:pr-0";
 
-/** Revealed on row hover, clearing the absolutely-positioned action cluster. */
-export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex group-hover:mr-20";
+/** Revealed on row hover. The room for the action cluster is the row's own —
+ *  see {@link SIDEBAR_WS_ROW} — so this no longer carries a margin of its own. */
+export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex";
 
 /**
  * Live "in progress" elapsed ticker — it sits where the time badge would, in

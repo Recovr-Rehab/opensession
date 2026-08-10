@@ -1,4 +1,5 @@
 import type { FilterState, GroupBy, PrsFilter, SortBy } from "../../lib/sidebar-filter";
+import { SIDEBAR_HOVER_LAYER } from "../../lib/sidebar-classes";
 import type { Group } from "../../lib/sidebar-types";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
@@ -155,16 +156,14 @@ export function FilterPopover({
 const MINI_MENU =
 	"fixed z-[321] max-h-[60vh] overflow-y-auto rounded-control border border-line-strong bg-panel p-[5px] shadow-[0_12px_34px_rgba(0,0,0,0.4)] animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
 
-/** One row of that menu. Selected keeps the stronger wash under the pointer,
- *  so hover has to be spelled out for both states rather than layered. */
+/** One row of that menu. The hover is a layer (SIDEBAR_HOVER_LAYER), so it
+ *  adds to the selected row's wash instead of replacing it — which is what the
+ *  old `hover:bg-pressed` on the selected branch was standing in for. */
 const MINI_MENU_ITEM =
 	"flex w-full items-center gap-[9px] rounded-md px-[9px] py-2 text-left text-body text-fg";
 
 function miniMenuItem(selected: boolean) {
-	return cn(
-		MINI_MENU_ITEM,
-		selected ? "bg-pressed hover:bg-pressed" : "hover:bg-hover",
-	);
+	return cn(MINI_MENU_ITEM, SIDEBAR_HOVER_LAYER, selected && "bg-pressed");
 }
 
 // A styled dropdown used by the filter popover. Its menu is portaled so it can

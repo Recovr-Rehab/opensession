@@ -3,6 +3,7 @@ import { fetchFeedFilterOptions, relativeTime } from "../../lib/api";
 import {
 	SIDEBAR_BAND_ACTION,
 	SIDEBAR_FILTER_DOT,
+	SIDEBAR_HOVER_LAYER,
 	SIDEBAR_RAIL,
 	SIDEBAR_WS_ACTION,
 	SIDEBAR_WS_ACTIONS,
@@ -74,7 +75,8 @@ export function SupportRow({
 						className={cn(
 							SIDEBAR_ROW,
 							SIDEBAR_WS_ROW,
-							active ? "bg-pressed" : "hover:bg-hover",
+							SIDEBAR_HOVER_LAYER,
+							active && "bg-pressed",
 						)}
 						data-sidebar-row=""
 						data-ws-row=""
@@ -231,7 +233,8 @@ export function FeedRow({
 						className={cn(
 							SIDEBAR_ROW,
 							SIDEBAR_WS_ROW,
-							active ? "bg-pressed" : "hover:bg-hover",
+							SIDEBAR_HOVER_LAYER,
+							active && "bg-pressed",
 						)}
 						data-sidebar-row=""
 						data-ws-row=""

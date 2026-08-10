@@ -2,6 +2,7 @@ import React from "react";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { prStatusMark } from "../lib/pr-status";
 import {
+	SIDEBAR_HOVER_LAYER,
 	SIDEBAR_RAIL,
 	SIDEBAR_WS_ACTION,
 	SIDEBAR_WS_ACTIONS,
@@ -94,7 +95,8 @@ export function PrRow({
 								className={cn(
 									SIDEBAR_ROW,
 									SIDEBAR_WS_ROW,
-									selected ? "bg-pressed" : "hover:bg-hover",
+									SIDEBAR_HOVER_LAYER,
+									selected && "bg-pressed",
 								)}
 								data-sidebar-row=""
 								data-ws-row=""
