@@ -2,7 +2,7 @@ import React from "react";
 import type { SessionWalkthrough, TranscriptEntry } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
 import { TurnBlock } from "./TurnBlock";
-import { TurnFooter, collectTouchedFiles, type TouchedFile } from "./TurnFooter";
+import { TurnFooter } from "./TurnFooter";
 import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
@@ -16,7 +16,6 @@ type RenderBlock =
 			kind: "footer";
 			entry: TranscriptEntry;
 			durationMs: number;
-			files: TouchedFile[];
 			assets: string[];
 	  }
 	| { kind: "walkthrough"; walkthrough: SessionWalkthrough };
@@ -88,10 +87,9 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			if (folded.length > 0) blocks.push({ kind: "turn", items: folded });
 			if (final) blocks.push({ kind: "entry", entry: final });
 		}
-		// Meta row under the settled turn's final answer: duration, copy / ⋯
-		// actions, per-file edit chips and the scratch files the turn wrote.
-		// The live trailing turn skips it — its footer appears when the run
-		// finishes.
+		// Quiet actions under the settled answer, plus scratch files that have no
+		// other direct route from the transcript. Work/file detail stays in the
+		// disclosure above instead of becoming a second toolbar below the answer.
 		if (final && !(live && trailing)) {
 			blocks.push({
 				kind: "footer",
@@ -99,7 +97,6 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 				durationMs:
 					new Date(final.timestamp).getTime() -
 					new Date(turn[0].timestamp).getTime(),
-				files: collectTouchedFiles(turn),
 				assets: collectWrittenAssets(turn),
 			});
 		}
@@ -162,9 +159,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 					<TurnFooter
 						entry={block.entry}
 						durationMs={block.durationMs}
-						files={block.files}
 						assets={block.assets}
-						sessionId={sessionId}
 						onFork={onFork}
 					/>
 				) : (

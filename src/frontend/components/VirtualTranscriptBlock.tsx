@@ -59,8 +59,8 @@ export const VirtualTranscriptBlock = React.memo(function VirtualTranscriptBlock
 				enabled
 					? // Settled turns get skipped during layout/paint while off-screen,
 					  // at their measured height. `transcript-window` stays as a bare
-					  // hook: it carries no rules, but TurnFooter's timestamp reveal
-					  // keys off hovering this element or the one before it.
+					  // hook: it carries no rules, but TurnFooter's quiet actions key
+					  // off hovering this element or the answer window before it.
 					  "transcript-window [content-visibility:auto] [contain-intrinsic-size:auto_96px]"
 					: "transcript-window"
 			}

@@ -32,13 +32,12 @@ interface Props {
 
 /**
  * One assistant turn's work, folded into a single calm line — "Worked · 12m 4s
- * · 51 steps · +461 -70" — closed by default so the session reads as question →
- * answer. Expanding shows the full flat run: intermediate assistant notes
- * interleaved with the tool calls on the timeline rail.
+ * · 51 steps" — closed by default so the session reads as question → answer.
+ * Expanding shows the full flat run: intermediate assistant notes interleaved
+ * with the tool calls, followed by failures and a compact change summary.
  *
- * The line stays short enough for a phone at every width: how long, how many
- * steps, and how much code moved. Which files moved is the footer's job (it
- * chips each one with its diff), and which tools ran is the expanded run's.
+ * The collapsed line stays short enough for a phone at every width: duration
+ * and step count only. Tools, failures and code movement stay one click away.
  */
 // Memoized with a custom comparator: TranscriptBlocks rebuilds the `items`
 // arrays and the `toolResults` Map on every render, so plain shallow-prop memo
@@ -97,10 +96,8 @@ export const TurnBlock = React.memo(function TurnBlock({
   const lastTool = tools[tools.length - 1];
 
   const editedFiles = collectTouchedFiles(tools);
-  // Whether the turn actually wrote code, at a glance: the ± totals across
-  // every file it touched, in the same green/red as the footer's file chips.
-  // The file *names* stay out of this line — the footer under the answer
-  // already chips them, with diffs on tap.
+  // Change detail stays behind this disclosure. The Changes tab remains the
+  // place for per-file diffs; this is only a compact turn-level summary.
   const additions = editedFiles.reduce((n, f) => n + f.additions, 0);
   const deletions = editedFiles.reduce((n, f) => n + f.deletions, 0);
 
@@ -166,14 +163,6 @@ export const TurnBlock = React.memo(function TurnBlock({
             {metaLabel}
           </span>
         )}
-        {failures > 0 && !live && (
-          <span className="flex-shrink-0 text-label leading-4 text-red/80">
-            · {failures} failed
-          </span>
-        )}
-        {additions + deletions > 0 && (
-          <LineStats additions={additions} deletions={deletions} />
-        )}
         {live && !expanded && lastTool && (
           <span className="min-w-0 truncate text-label leading-4 text-faint">
             {toolDisplayName(lastTool.toolName)}:{" "}
@@ -222,6 +211,26 @@ export const TurnBlock = React.memo(function TurnBlock({
                 ))}
               </div>
             )
+          )}
+          {expanded && (failures > 0 || editedFiles.length > 0) && (
+            <div className="ml-7 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-label leading-4 text-faint">
+              {failures > 0 && (
+                <span className="text-red/80">
+                  {failures} failed {failures === 1 ? "step" : "steps"}
+                </span>
+              )}
+              {editedFiles.length > 0 && (
+                <>
+                  <span>
+                    {editedFiles.length}{" "}
+                    {editedFiles.length === 1 ? "file" : "files"} changed
+                  </span>
+                  {additions + deletions > 0 && (
+                    <LineStats additions={additions} deletions={deletions} />
+                  )}
+                </>
+              )}
+            </div>
           )}
         </div>
       )}

@@ -176,6 +176,7 @@ function NoticeRow({
 	const [open, setOpen] = useState(false);
 	const collapsible = notice.body === "collapsed";
 	const toned = notice.tone !== "info";
+	const isError = notice.tone === "error";
 
 	// An inline body is a catch-up line, not a card: title, colon, prose, all
 	// on one left-aligned run so a returning reader takes it in without a tap.
@@ -196,10 +197,13 @@ function NoticeRow({
 				className={cn(
 					msgSystemText,
 					toned && msgSystemToned,
-					toned && msgSystemTone(notice.tone),
+					isError && msgSystemTone(notice.tone),
+					!isError &&
+						"data-[tone]:rounded-none data-[tone]:bg-transparent data-[tone]:px-1 data-[tone]:py-0",
+					notice.tone === "warn" && "data-[tone=warn]:text-yellow",
 				)}
-				data-tone={toned ? notice.tone : undefined}
-				role={notice.tone === "error" ? "alert" : undefined}
+				data-tone={notice.tone}
+				role={isError ? "alert" : undefined}
 			>
 				{toned && <NoticeGlyph />}
 				{collapsible ? (

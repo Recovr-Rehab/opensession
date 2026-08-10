@@ -1,10 +1,8 @@
-import React, { useState, Suspense, lazy } from "react";
+import React, { useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
-import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
-import { TOOL_CODE_WELL, TOOL_PRE } from "../lib/tool-classes";
 import {
   IconArrowUpRight,
   IconBranches,
@@ -18,53 +16,31 @@ import { useOpenAsset } from "../lib/open-asset";
 import { formatDuration, fullTime } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { canonicalToolName } from "./ToolCallBlock";
-import { tidyPath } from "../lib/tidy-path";
 import { LANG_MARKS } from "./lang-marks";
-
-/** One change a tool made to a file: old text removed, new text added.
- * Writes have old: "" (the whole content is an addition). */
-export interface FileEdit {
-  old: string;
-  new: string;
-}
 
 export interface TouchedFile {
   path: string;
   additions: number;
   deletions: number;
-  edits: FileEdit[];
 }
-
-// Same lazy split as ToolCallBlock: Shiki is multi-MB, load it only when a
-// diff preview actually opens. Until then the diff shows as a plain pre.
-const CodeHighlightLazy = lazy(() =>
-  import("./CodeHighlight").then((m) => ({ default: m.CodeHighlight }))
-);
 
 interface Props {
   /** The turn's final answer entry — copy copies its markdown, fork forks from it. */
   entry: TranscriptEntry;
   durationMs: number;
-  files: TouchedFile[];
   /** Scratch files the turn wrote (`opensession-assets`), in first-write order. */
   assets: string[];
-  /** Whose scratch folder those assets open into. */
-  sessionId?: string;
   onFork?: (entryId: string) => void;
 }
 
 /**
- * Conductor-style meta row under a turn's final answer: how long the turn
- * took, copy / more-options actions, and one chip per file the turn edited
- * with its ±line counts. Always visible (no hover reveal — hover-only
- * affordances are unreachable on iOS).
+ * Quiet answer actions plus produced assets. Work duration, model and exact
+ * time stay one click away; touched files live in the work disclosure/Changes.
  */
 export const TurnFooter = React.memo(function TurnFooter({
   entry,
   durationMs,
-  files,
   assets,
-  sessionId,
   onFork,
 }: Props) {
   const [copied, setCopied] = useState(false);
@@ -76,72 +52,54 @@ export const TurnFooter = React.memo(function TurnFooter({
   };
 
   const duration = formatDuration(durationMs);
-  // Assets come first and are never cut. An edited file is named in the
-  // Changes tab too, so its chip is a shortcut; a scratch file the turn wrote
-  // is named nowhere else outside the work fold — which is shut by default —
-  // so its chip is the only way to it without going looking.
-  const shown = files.slice(0, Math.max(0, MAX_CHIPS - assets.length));
-  const rest = files.slice(shown.length);
-
   return (
     <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
-      {duration && (
-        <span className={cn("mr-1.5 text-faint", FOOTER_TEXT)}>{duration}</span>
-      )}
-      <Tooltip label={copied ? "Copied" : "Copy message"}>
-        <button type="button" onClick={doCopy} className={BTN}>
-          {copied ? (
-            <IconCheck size={20} className="text-green" />
-          ) : (
-            <IconCopy size={20} />
-          )}
-        </button>
-      </Tooltip>
-      <Menu.Root>
-        <Menu.Trigger className={BTN + " data-[popup-open]:bg-hover data-[popup-open]:text-dim"}>
-          <IconDotsHorizontal size={20} />
-        </Menu.Trigger>
-        <Menu.Popup side="bottom" align="start" sideOffset={4}>
-          {onFork && (
-            <Menu.Item onClick={() => onFork(entry.id)}>
-              <IconBranches size={20} className="text-faint" />
-              Fork from here
-            </Menu.Item>
-          )}
-          <Menu.Item onClick={doCopy}>
-            <IconCopy size={20} className="text-faint" />
-            Copy message
-          </Menu.Item>
-          <Menu.Separator className="my-1" />
-          {/* Touch has no hover, so the time also lives here — menus open on tap. */}
-          <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
-            <IconClock size={20} />
-            {fullTime(entry.timestamp)}
-          </div>
-          {entry.model && (
-            <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
-              <IconSparkle size={20} />
-              Written by {messageModelLabel(entry.model)}
-            </div>
-          )}
-        </Menu.Popup>
-      </Menu.Root>
       {assets.map((path) => (
         <AssetChip key={path} path={path} />
       ))}
-      {shown.map((f) => (
-        <FileChip key={f.path} file={f} />
-      ))}
-      {rest.length > 0 && <MoreChip files={rest} />}
-      {/* When the turn actually happened, last in the row: it trails the file
-          chips on the right when there's room and wraps to the line below when
-          there isn't, rather than painting over a chip. It's opacity-toggled
-          rather than mounted on hover (see FOOTER_TIME), so its space is
-          always reserved and revealing it never shifts the buttons out from
-          under the cursor. */}
-      <span className={cn(FOOTER_TIME, "ml-auto pl-3 text-faint", FOOTER_TEXT)}>
-        {fullTime(entry.timestamp)}
-      </span>
+      <div className={ACTIONS}>
+        <Tooltip label={copied ? "Copied" : "Copy message"}>
+          <button
+            type="button"
+            onClick={doCopy}
+            className={BTN}
+            aria-label={copied ? "Copied" : "Copy message"}
+          >
+            {copied ? (
+              <IconCheck size={20} className="text-green" />
+            ) : (
+              <IconCopy size={20} />
+            )}
+          </button>
+        </Tooltip>
+        <Menu.Root>
+          <Menu.Trigger
+            className={BTN + " data-[popup-open]:bg-hover data-[popup-open]:text-dim"}
+            aria-label="More message actions"
+          >
+            <IconDotsHorizontal size={20} />
+          </Menu.Trigger>
+          <Menu.Popup side="bottom" align="start" sideOffset={4}>
+            {onFork && (
+              <Menu.Item onClick={() => onFork(entry.id)}>
+                <IconBranches size={20} className="text-faint" />
+                Fork from here
+              </Menu.Item>
+            )}
+            {onFork && <Menu.Separator className="my-1" />}
+            <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+              <IconClock size={20} />
+              {[duration, fullTime(entry.timestamp)].filter(Boolean).join(" · ")}
+            </div>
+            {entry.model && (
+              <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+                <IconSparkle size={20} />
+                Written by {messageModelLabel(entry.model)}
+              </div>
+            )}
+          </Menu.Popup>
+        </Menu.Root>
+      </div>
     </div>
   );
 }, turnFooterPropsEqual);
@@ -151,24 +109,22 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
     prev.entry !== next.entry ||
     prev.durationMs !== next.durationMs ||
     prev.onFork !== next.onFork ||
-    prev.sessionId !== next.sessionId ||
-    prev.files.length !== next.files.length ||
     prev.assets.length !== next.assets.length
   )
     return false;
   for (let i = 0; i < next.assets.length; i++)
     if (prev.assets[i] !== next.assets[i]) return false;
-  for (let i = 0; i < next.files.length; i++) {
-    const a = prev.files[i];
-    const b = next.files[i];
-    if (a.path !== b.path || a.additions !== b.additions || a.deletions !== b.deletions)
-      return false;
-  }
   return true;
 }
 
 const BTN =
   "flex size-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
+
+const ACTIONS =
+  "flex items-center gap-0.5 [@media(hover:hover)]:opacity-0 " +
+  "[@media(hover:hover)]:transition-opacity [@media(hover:hover)]:focus-within:opacity-100 " +
+  "[@media(hover:hover)]:[.transcript-window:hover_&]:opacity-100 " +
+  "[@media(hover:hover)]:[.transcript-window:hover+.transcript-window_&]:opacity-100";
 
 /** Friendly name for a per-message model id: opencode ids take their model
  * part, raw API ids drop the date suffix — "opencode/anthropic/claude-sonnet-5"
@@ -178,52 +134,8 @@ function messageModelLabel(id: string): string {
   return friendlyModelSlug(slug.replace(/-\d{8}$/, ""));
 }
 
-const MAX_CHIPS = 4;
-
-/**
- * One size and one line box for every text run in the footer — the duration,
- * the file names, the ± counts, the timestamp. Flex centring aligns *boxes*,
- * not text, so a run set a size apart lands its baseline a fraction off its
- * neighbours': the ± counts at 11px sat 0.67px below the 13px file name they
- * ride beside. With identical line boxes, centring and baseline alignment are
- * the same thing — inside a chip and bare in the row alike, since the chip is
- * itself centred in that row. Same 13px/16px pair the fold line above uses.
- */
+/** Shared line box for asset names and the expanded work summary's stats. */
 const FOOTER_TEXT = "text-label font-medium leading-4";
-
-/**
- * The hover-revealed real timestamp. A message's time is a detail you go
- * looking for, not something to read past on every turn, so it fades in while
- * the message is hovered and costs nothing the rest of the time.
- *
- * Three things this may not do. It may not change a block's height — the
- * reveal is opacity-only over a box whose space is always reserved, or
- * VirtualTranscriptBlock's measured placeholders would mis-size and jump the
- * scroll. It may not leave a dead element on touch, where there is no hover
- * and the time lives in the ⋯ menu instead: hence `hidden` as the base and
- * `block` only inside `@media (hover: hover)`, which is also why those three
- * utilities carry the media query themselves rather than riding Tailwind's
- * `hover:` (that one adds `:hover` on this element, and the hover that matters
- * is the message's). And it may not paint a phantom highlight when a
- * drag-select sweeps past an unselectable label — the same 1% mask
- * `msg-label` uses, because a fully transparent selection background is
- * ignored.
- *
- * `.transcript-window` is named here as a hook rather than styled: the answer
- * and its footer are adjacent windows (see TranscriptBlocks), so hovering
- * either one reveals the time. It carries no rules of its own.
- *
- * Deliberately NO font-size. The old `.turn-footer-time` rule asked for 11px
- * and had not been getting it since FOOTER_TEXT arrived: `text-label` is 13px,
- * a utility, and utilities win source-order ties against legacy.css. Spelling
- * the 11px back in would have been a change, not a migration.
- */
-const FOOTER_TIME =
-  "hidden select-none whitespace-nowrap selection:bg-[rgba(0,0,0,0.01)] " +
-  "[@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 " +
-  "[@media(hover:hover)]:transition-opacity " +
-  "[@media(hover:hover)]:[.transcript-window:hover_&]:opacity-100 " +
-  "[@media(hover:hover)]:[.transcript-window:hover+.transcript-window_&]:opacity-100";
 
 /**
  * One scratch file the turn wrote. Clicking lifts it over the conversation;
@@ -267,110 +179,9 @@ function AssetChip({ path }: { path: string }) {
   );
 }
 
-/** The shared chip shell: the footer's file and asset chips are the same
- * object with different tails (± counts, or a way in). */
+/** A quiet produced-asset shortcut beneath the answer. */
 const CHIP =
   "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-fg/[0.03] py-0 pl-1 text-left";
-
-function FileChip({ file }: { file: TouchedFile }) {
-  const name = file.path.split("/").pop() || file.path;
-  return (
-    <Popover.Root>
-      <Popover.Trigger
-        openOnHover
-        delay={250}
-        closeDelay={100}
-        className={cn(CHIP, "cursor-pointer pr-1.5 hover:bg-hover")}
-      >
-        <ExtBadge name={name} />
-        <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
-          {name}
-        </span>
-        <LineStats additions={file.additions} deletions={file.deletions} />
-      </Popover.Trigger>
-      <Popover.Popup
-        side="top"
-        align="start"
-        className="w-[min(520px,calc(100vw-24px))] overflow-hidden"
-      >
-        {/* Baseline rather than centre: the path is mono and the counts are
-            sans, and two fonts at one size still centre to different baselines
-            (1px apart here) because their ascents differ. */}
-        <div className="flex items-baseline gap-2 border-b border-line px-2.5 py-2">
-          <ExtBadge name={name} className="self-center" />
-          <span className="min-w-0 flex-1 truncate text-meta text-dim">
-            {tidyPath(file.path)}
-          </span>
-          <LineStats
-            additions={file.additions}
-            deletions={file.deletions}
-            className="text-meta"
-          />
-        </div>
-        <div className="max-h-[min(360px,55vh)] overflow-y-auto p-1.5">
-          {file.edits.length === 0 ? (
-            <div className="px-1.5 py-2 text-xs text-faint">
-              No captured changes for this file.
-            </div>
-          ) : (
-            file.edits.map((e, i) => (
-              <div
-                key={i}
-                className={cn(
-                  TOOL_CODE_WELL,
-                  "overflow-hidden",
-                  i > 0 && "mt-1.5"
-                )}
-              >
-                <DiffHighlight code={truncateDiff(editDiffText(e))} />
-              </div>
-            ))
-          )}
-        </div>
-      </Popover.Popup>
-    </Popover.Root>
-  );
-}
-
-/** Hunk-style text for one edit: removed lines then added lines. */
-function editDiffText(e: FileEdit): string {
-  const lines: string[] = [];
-  if (e.old) for (const l of e.old.split("\n")) lines.push(`-${l}`);
-  if (e.new) for (const l of e.new.split("\n")) lines.push(`+${l}`);
-  return lines.join("\n");
-}
-
-function truncateDiff(s: string): string {
-  return s.length <= 3000 ? s : s.slice(0, 3000) + "\n…";
-}
-
-function DiffHighlight({ code }: { code: string }) {
-  return (
-    <Suspense fallback={<pre className={TOOL_PRE}>{code}</pre>}>
-      <CodeHighlightLazy code={code} lang="diff" />
-    </Suspense>
-  );
-}
-
-function MoreChip({ files }: { files: TouchedFile[] }) {
-  const additions = files.reduce((n, f) => n + f.additions, 0);
-  const deletions = files.reduce((n, f) => n + f.deletions, 0);
-  return (
-    <Tooltip
-      label={files
-        .slice(0, 12)
-        .map((f) => f.path.split("/").pop())
-        .join(", ") + (files.length > 12 ? ", …" : "")}
-    >
-      <span className="ml-1 flex h-6 items-center gap-1.5 rounded-md px-1.5">
-        <span className={cn("text-faint", FOOTER_TEXT)}>
-          +{files.length} more
-        </span>
-        <LineStats additions={additions} deletions={deletions} />
-      </span>
-    </Tooltip>
-  );
-}
 
 export function LineStats({
   additions,
@@ -480,7 +291,6 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
   const inp = input as Record<string, unknown>;
   const lines = (v: unknown) =>
     typeof v === "string" && v.length > 0 ? v.split("\n").length : 0;
-  const str = (v: unknown) => (typeof v === "string" ? v : "");
   // Engines disagree on casing: opencode writes `filePath`/`oldString`, the
   // Claude SDK `file_path`/`old_string`.
   const key = (...names: string[]) => {
@@ -494,17 +304,13 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
       if (filePath && Array.isArray(inp.edits)) {
         let additions = 0;
         let deletions = 0;
-        const edits: FileEdit[] = [];
         for (const e of inp.edits) {
           if (!e || typeof e !== "object") continue;
           const ee = e as Record<string, unknown>;
-          const oldStr = str(ee.old_string ?? ee.oldString);
-          const newStr = str(ee.new_string ?? ee.newString);
-          additions += lines(newStr);
-          deletions += lines(oldStr);
-          edits.push({ old: oldStr, new: newStr });
+          additions += lines(ee.new_string ?? ee.newString);
+          deletions += lines(ee.old_string ?? ee.oldString);
         }
-        return [{ path: filePath, additions, deletions, edits }];
+        return [{ path: filePath, additions, deletions }];
       }
       if (filePath) {
         const oldStr = key("old_string", "oldString");
@@ -513,7 +319,6 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
           path: filePath,
           additions: lines(newStr),
           deletions: lines(oldStr),
-          edits: [{ old: oldStr, new: newStr }],
         }];
       }
       // codex's apply_patch names its files inside the patch body.
@@ -525,7 +330,6 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
         path: filePath,
         additions: lines(inp.content),
         deletions: 0,
-        edits: [{ old: "", new: str(inp.content) }],
       }];
     case "NotebookEdit":
       if (typeof inp.notebook_path !== "string") return [];
@@ -533,7 +337,6 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
         path: inp.notebook_path,
         additions: lines(inp.new_source),
         deletions: 0,
-        edits: [{ old: "", new: str(inp.new_source) }],
       }];
     case "FileChange": {
       if (!Array.isArray(inp.changes)) return [];
@@ -541,7 +344,7 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
       for (const change of inp.changes) {
         const path = fileChangePath(change);
         if (!path) continue;
-        files.push({ path, additions: 0, deletions: 0, edits: [] });
+        files.push({ path, additions: 0, deletions: 0 });
       }
       return mergeTouchedFiles(files);
     }
@@ -571,7 +374,7 @@ function patchTouchedFiles(patch: string): TouchedFile[] {
   for (const line of patch.split("\n")) {
     const header = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/);
     if (header) {
-      current = { path: header[1].trim(), additions: 0, deletions: 0, edits: [] };
+      current = { path: header[1].trim(), additions: 0, deletions: 0 };
       files.push(current);
       continue;
     }
@@ -589,9 +392,8 @@ function mergeTouchedFiles(files: TouchedFile[]): TouchedFile[] {
     if (prev) {
       prev.additions += f.additions;
       prev.deletions += f.deletions;
-      prev.edits.push(...f.edits);
     } else {
-      byPath.set(f.path, { ...f, edits: [...f.edits] });
+      byPath.set(f.path, { ...f });
     }
   }
   return [...byPath.values()];
