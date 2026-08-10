@@ -32,27 +32,33 @@ export function PageLayout({
 	return (
 		<div
 			className={cn(
-				"mx-auto min-h-0 w-full flex-1 overflow-y-auto px-6 pb-[60px] pt-7 max-[560px]:px-3.5 max-[560px]:pb-12 max-[560px]:pt-[18px]",
-				contentWidths[contentWidth],
+				"min-h-0 w-full flex-1 overflow-y-auto",
 				className,
 			)}
 			{...props}
 		>
-			<PageHeader>
-				<div>
-					<PageTitle>{title}</PageTitle>
-					{description !== undefined && (
-						<PageDescription>{description}</PageDescription>
-					)}
-				</div>
-				{actions}
-			</PageHeader>
-			{filters !== undefined && (
-				<div className="-mt-1.5 mb-[18px] flex flex-wrap items-center gap-2.5">
-					{filters}
-				</div>
-			)}
-			{children}
+			<div
+				className={cn(
+					"mx-auto w-full px-6 pb-[60px] pt-7 max-[560px]:px-3.5 max-[560px]:pb-12 max-[560px]:pt-[18px]",
+					contentWidths[contentWidth],
+				)}
+			>
+				<PageHeader>
+					<div>
+						<PageTitle>{title}</PageTitle>
+						{description !== undefined && (
+							<PageDescription>{description}</PageDescription>
+						)}
+					</div>
+					{actions}
+				</PageHeader>
+				{filters !== undefined && (
+					<div className="-mt-1.5 mb-[18px] flex flex-wrap items-center gap-2.5">
+						{filters}
+					</div>
+				)}
+				{children}
+			</div>
 		</div>
 	);
 }
