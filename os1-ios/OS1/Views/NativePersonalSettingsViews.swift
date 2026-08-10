@@ -431,8 +431,6 @@ struct AppearanceSettingsView: View {
                 .accessibilityLabel("Accent colour")
             } header: {
                 Text("Accent")
-            } footer: {
-                Text(accentFooter)
             }
 
             Section {
@@ -459,10 +457,6 @@ struct AppearanceSettingsView: View {
         }
         .navigationTitle("Appearance")
         .task { await loadRepos() }
-    }
-
-    private var accentFooter: String {
-        "\(AccentStore.shared.theme.title), on this device."
     }
 
     private var themeFooter: String {
