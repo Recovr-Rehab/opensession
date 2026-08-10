@@ -788,6 +788,18 @@ function AgentReviewCard({
 						<span className="text-meta font-semibold text-faint">Stale</span>
 					) : null}
 					{actionable && (
+						<Button
+							variant="ghost"
+							size="xs"
+							className="shrink-0 text-meta"
+							disabled={busy !== null || active}
+							onClick={() => run(reviewAction)}
+							title={reviewAction.hint}
+						>
+							{busy === "review" ? "Starting..." : review ? "Review again" : "Run review"}
+						</Button>
+					)}
+					{actionable && (
 						<Menu.Root>
 							<Menu.Trigger
 								className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-50"
@@ -895,18 +907,6 @@ function AgentReviewCard({
 						</Popover.Popup>
 					)}
 				</Popover.Root>
-				{actionable && (
-					<Button
-						variant="ghost"
-						size="xs"
-						className="shrink-0 text-meta"
-						disabled={busy !== null || active}
-						onClick={() => run(reviewAction)}
-						title={reviewAction.hint}
-					>
-						{busy === "review" ? "Starting..." : review ? "Review again" : "Run review"}
-					</Button>
-				)}
 				{canFix && (
 					<button
 						type="button"
