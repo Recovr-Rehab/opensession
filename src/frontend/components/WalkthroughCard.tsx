@@ -244,11 +244,11 @@ export function WalkthroughCard({
 			{expanded && (
 				<div
 					className={cn(
-						"space-y-4",
+						"space-y-5",
 						session ? "mt-3 border-t border-line/60 pt-4" : "mt-3",
 					)}
 				>
-					<section className="rounded-lg border border-line bg-panel px-4 py-3.5">
+					<section className="px-0.5">
 						<h3 className="m-0 mb-1.5 text-[11px] font-semibold leading-4 text-faint">
 							Summary
 						</h3>
@@ -259,8 +259,8 @@ export function WalkthroughCard({
 					</section>
 
 					{walkthrough.video && (
-						<figure className="m-0 overflow-hidden rounded-lg border border-line bg-panel">
-							<figcaption className="flex min-h-9 items-center gap-2 border-b border-line px-3 text-xs font-medium text-fg">
+						<figure className="m-0">
+							<figcaption className="mb-2 flex min-h-5 items-center gap-2 px-0.5 text-xs font-medium text-fg">
 								<span className="size-1.5 flex-shrink-0 rounded-full bg-blue" />
 								<span className="flex-shrink-0">Demo</span>
 								{walkthrough.videoTitle && (
@@ -269,30 +269,25 @@ export function WalkthroughCard({
 									</span>
 								)}
 							</figcaption>
-							<div className="p-2.5">
-								<video
-									className={cn(
-										"w-full rounded-md bg-black shadow-[0_0_0_1px_var(--border)]",
-										session && "max-h-[60vh] object-contain",
-									)}
-									src={mediaUrl(walkthrough.video)}
-									controls
-									preload="metadata"
-									title={walkthrough.videoTitle || "Demo video"}
-								/>
-							</div>
+							<video
+								className={cn(
+									"w-full rounded-md bg-black shadow-[0_0_0_1px_var(--border)]",
+									session && "max-h-[60vh] object-contain",
+								)}
+								src={mediaUrl(walkthrough.video)}
+								controls
+								preload="metadata"
+								title={walkthrough.videoTitle || "Demo video"}
+							/>
 						</figure>
 					)}
 
 					{(walkthrough.shots || []).map((shot, i) => {
 						const paired = Boolean(shot.before && shot.after);
 						return (
-							<section
-								className="rounded-lg border border-line bg-panel p-2.5"
-								key={i}
-							>
+							<section key={i}>
 								{shot.caption && (
-									<h3 className="m-0 px-0.5 pb-2.5 text-xs font-medium leading-5 text-fg">
+									<h3 className="m-0 px-0.5 pb-2 text-xs font-medium leading-5 text-fg">
 										{shot.caption}
 									</h3>
 								)}
