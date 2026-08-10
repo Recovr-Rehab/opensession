@@ -37,6 +37,7 @@ import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { userMatchesAny } from "../../server/shared/user-mappings";
 import { migrateSessionEngine } from "../../server/migrate-engine";
 import { resolveSessionRepoContext } from "../../server/session-repos";
+import { transferSessionFile } from "../../server/session-file-transfer";
 import { branchNameFromPrompt } from "../../server/suggest-branch";
 import type { NativeSessionFile, TranscriptEntry } from "../../server/types";
 
@@ -625,6 +626,83 @@ export function createSessionsMcpServer(
             : sessionNoticePayload(payload.content);
           const res = await getSessionControl().deliverToSession(args.id, content, payload.user);
           return text(res.message);
+        }
+      ),
+      tool(
+        "send_file_to_session",
+        "Copy one file from this session to another session and notify that agent. The source may be a relative path in this session's workspace (including a sandbox-only workspace) or in this session's Assets folder. The binary-safe copy lands in the recipient's Assets inbox, where its agent can read it with opensession-assets and humans can open/download it from the Assets tab. Paths are relative; host paths and traversal are refused; maximum size is 4 MiB.",
+        {
+          id: z.string().describe("The recipient session id."),
+          path: z
+            .string()
+            .describe("Relative source path in this session's workspace or Assets folder."),
+          source: z
+            .enum(["workspace", "assets"])
+            .optional()
+            .describe("Source area; defaults to workspace."),
+          destination: z
+            .string()
+            .optional()
+            .describe("Optional relative path in the recipient's Assets folder. Defaults to inbox/<sender-session>/<filename>."),
+          message: z
+            .string()
+            .optional()
+            .describe("Optional context for the recipient. The file location is appended automatically."),
+        },
+        async (args: {
+          id: string;
+          path: string;
+          source?: "workspace" | "assets";
+          destination?: string;
+          message?: string;
+        }) => {
+          const fromId = ctx.currentSessionId;
+          if (!fromId)
+            return text("File sending needs a current Open Session session id.");
+          const ctrl = getSessionControl();
+          const from = ctrl.getSession(fromId);
+          if (!from) return text(`The sending session \`${fromId}\` no longer exists.`);
+          const to = ctrl.getSession(args.id);
+          if (!to) return text(`No session with id \`${args.id}\`.`);
+          try {
+            const file = await transferSessionFile({
+              fromSession: from,
+              toSession: to,
+              path: args.path,
+              source: args.source,
+              destination: args.destination,
+              description: args.message,
+            });
+            const download =
+              `/api/sessions/${encodeURIComponent(to.id)}/assets/raw/` +
+              `${file.path.split("/").map(encodeURIComponent).join("/")}?download=1`;
+            const notification = [
+              args.message?.trim() || `Session ${fromId} sent you a file.`,
+              `Received asset: \`${file.path}\` (${file.size} bytes). Read it with the opensession-assets tools or open ${download}.`,
+            ].join("\n\n");
+            const delivered = await ctrl.deliverToSession(
+              to.id,
+              notification,
+              `worker ${fromId}`,
+            );
+            audit({
+              msg: "session_file_sent",
+              session_id: fromId,
+              target_session_id: to.id,
+              source: file.source,
+              asset_path: file.path,
+              bytes: file.size,
+              user: ctx.createdBy,
+              delivery: delivered.status,
+            });
+            return text(
+              `Sent \`${file.path}\` (${file.size} bytes) to \`${to.id}\`; ${delivered.message}`,
+            );
+          } catch (error) {
+            return text(
+              `Could not send the file: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
       ),
       tool(
