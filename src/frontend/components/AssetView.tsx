@@ -245,16 +245,14 @@ function AssetMenu({
 
 function AssetOverlayFooter({
 	file,
-	showSize,
 	navigation,
 	phone,
 }: {
 	file: SessionAssetFile;
-	showSize: boolean;
 	navigation: AssetNavigation | null;
 	phone: boolean;
 }) {
-	if (!file.description && !showSize && !navigation) return null;
+	if (!file.description && !navigation) return null;
 	return (
 		<div
 			className={cn(
@@ -275,16 +273,6 @@ function AssetOverlayFooter({
 				</div>
 			)}
 			<div className="flex max-w-full items-center justify-center gap-2">
-				{showSize && (
-					<span
-						className={cn(
-							"shrink-0 text-[11px]",
-							phone ? "text-faint" : "text-white/60",
-						)}
-					>
-						{formatAssetSize(file.size)}
-					</span>
-				)}
 				{navigation && (
 					<AssetPager navigation={navigation} arrows={phone} onDark={!phone} />
 				)}
@@ -651,7 +639,6 @@ export function AssetOverlay({
 	const footer = (
 		<AssetOverlayFooter
 			file={file}
-			showSize={listed}
 			navigation={navigation}
 			phone={isPhone}
 		/>
@@ -684,6 +671,11 @@ export function AssetOverlay({
 					>
 						{name}
 					</div>
+					{listed && (
+						<span className="shrink-0 text-[11px] text-faint">
+							{formatAssetSize(file.size)}
+						</span>
+					)}
 					{onOpenAsTab && (
 						<Button
 							variant="ghost"
