@@ -207,6 +207,18 @@
 	   app's legacy radii universally and --cs selects the corner shape. */
 	--rf: 0.85;
 	--cs: round;
+	/* Large overlay surfaces — the phone bottom sheet, the centered modal, the
+	   palette — opt out of that fallback and keep the squircle-era factor in
+	   every browser. `corner-shape` is Chromium-only (WebKit has not shipped
+	   it), so on iOS Safari, and therefore in the installed PWA, --rf stays
+	   0.85 and every corner in the app comes out at 63% of the radius Chrome
+	   draws. On a 28px button that reads as a hairline difference; on a
+	   full-width sheet it is the difference between a 14px corner and a 22px
+	   one, and the sheet reads square. A circular arc at a given radius cuts
+	   MORE off the corner than a squircle at the same radius does (it meets
+	   the diagonal at 0.41r against 0.23r), so matching the radius outright is
+	   the conservative match here rather than an over-correction. */
+	--rf-lg: 1.35;
 	/* Session column width — messages, work blocks, composer, ask cards all share
 	   it so the conversation reads as one column. */
 	--session-col: 780px;
