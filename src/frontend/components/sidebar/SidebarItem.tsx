@@ -42,8 +42,8 @@ import React, { useEffect, useRef, useState } from "react";
 export const SIDEBAR_ROW =
 	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg phone:px-1 phone:py-[13px]";
 
-/** A row's title: one ellipsized line that brightens and emboldens for the
- *  states the row advertises. Read conversations stay quiet; unread ones
+/** A row's title: one line that fades smoothly at the available edge instead
+ *  of ending in an ellipsis. Read conversations stay quiet; unread ones
  *  brighten like Slack, a blocked one bolds under its blue wash. */
 /* Pin + archive, hover-revealed on desktop: on hover they take the metadata's
    place at the far right so they don't crowd the title. Long titles run under
@@ -62,7 +62,7 @@ const ROW_ACTION = cn(
 );
 
 export const SIDEBAR_ROW_TITLE =
-	"min-w-0 truncate text-body font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg phone:text-[16px]";
+	"min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] text-body font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg phone:text-[16px]";
 
 export function SidebarItem({
 	session,
