@@ -100,7 +100,7 @@ export interface TerminalOpts {
   send: (msg: object) => void;
 }
 
-type TermTargetKind = "host" | "docker" | "daytona";
+type TermTargetKind = "host" | "docker" | "daytona" | "microvm";
 
 /** A shell realized as a host process wrapped in a Bun PTY (host + docker). */
 interface SpawnTarget {
@@ -231,6 +231,17 @@ async function resolveTarget(
         target: "daytona",
         displayCwd: cwd,
         connect: (io) => daytonaPtySession(sandboxId, cwd, io),
+      };
+    }
+
+    if (sb.provider === "microvm" && sandboxProviderConfigured("microvm")) {
+      const { microvmPtySession } = await import("./sandbox/adapters/microvm");
+      const sandboxId = sb.sandboxId;
+      return {
+        kind: "remote",
+        target: "microvm",
+        displayCwd: cwd,
+        connect: (io) => microvmPtySession(sandboxId, cwd, io),
       };
     }
   } catch (e: any) {

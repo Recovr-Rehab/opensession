@@ -5,8 +5,10 @@
 # them at once. Host reaches the guest via the veth: 10.200.<idx>.2 with
 # ports DNAT'd into the guest (3300 dev, 8080 agent, 8081 root agent).
 #
-#   clone.sh create <idx> <pool-dir>   # prints CLONE_IP=10.200.<idx>.1 lines
-#   clone.sh destroy <idx> <pool-dir>
+#   clone.sh create <idx> <pool-dir>   # restore the clean golden
+#   clone.sh pause <idx> <pool-dir>    # stop compute/network, preserve COW disk
+#   clone.sh resume <idx> <pool-dir>   # cold-boot the preserved COW disk
+#   clone.sh destroy <idx> <pool-dir>  # remove compute/network/disk
 #
 # Layout per clone (under <pool-dir>): clone<idx>.ext4 (COW/sparse copy of
 # golden.ext4), fc-clone<idx>.sock|log. The firecracker process runs inside
@@ -22,18 +24,43 @@ GUEST_IP="172.16.100.2"; TAP_HOST_IP="172.16.100.1"
 API="$POOL/fc-clone$IDX.sock"; DISK="$POOL/clone$IDX.ext4"; LOG="$POOL/fc-clone$IDX.log"
 FC=/opt/firecracker/firecracker
 
-destroy() {
+stop_runtime() {
   # The scope is the process handle — no pkill patterns (a -f pattern once
   # matched the INVOKER's own command text and killed the calling shell).
   systemctl stop "os-fc-clone$IDX" 2>/dev/null || true
   sleep 0.3
   ip netns del "$NS" 2>/dev/null || true
   ip link del "$VETH_H" 2>/dev/null || true
-  rm -f "$DISK" "$API" "$LOG"
+  rm -f "$API"
+}
+
+destroy() {
+  stop_runtime
+  rm -f "$DISK" "$LOG" "$POOL/clone$IDX.paused"
 }
 
 if [ "$CMD" = "destroy" ]; then destroy; echo "destroyed clone $IDX"; exit 0; fi
-[ "$CMD" = "create" ] || { echo "usage: clone.sh create|destroy <idx> [pool-dir]"; exit 2; }
+if [ "$CMD" = "pause" ]; then
+  [ -f "$DISK" ] || { echo "clone $IDX has no disk to pause" >&2; exit 4; }
+  # Firecracker is terminated below, so flush the guest page cache first.
+  # The root control lane is separate from user/agent exec and remains usable
+  # even while the workspace lane is busy.
+  SYNCED=$(curl -s -m 10 -X POST "http://$NS_IP:8081/exec" \
+    -H 'Content-Type: application/json' \
+    -d '{"command":"sync && echo synced","timeoutMs":8000}' 2>/dev/null || true)
+  echo "$SYNCED" | grep -q synced || {
+    echo "clone $IDX could not flush its disk; refusing to pause" >&2
+    exit 5
+  }
+  stop_runtime
+  touch "$POOL/clone$IDX.paused"
+  echo "paused clone $IDX"
+  exit 0
+fi
+[ "$CMD" = "create" ] || [ "$CMD" = "resume" ] || {
+  echo "usage: clone.sh create|pause|resume|destroy <idx> [pool-dir]" >&2
+  exit 2
+}
 
 # A golden refresh temporarily swaps the canonical disk before producing its
 # matching memory/vmstate. Never let a clone observe a mixed generation.
@@ -47,10 +74,14 @@ if systemctl is-active --quiet "os-fc-clone$IDX" 2>/dev/null; then
   echo "index $IDX already has a live VM — pick another" >&2
   exit 3
 fi
-destroy 2>/dev/null || true
-
-# COW disk: reflink when the store supports it (XFS), sparse copy otherwise.
-cp --reflink=auto --sparse=always "$POOL/golden.ext4" "$DISK"
+if [ "$CMD" = "create" ]; then
+  destroy 2>/dev/null || true
+  # COW disk: reflink when the store supports it (XFS), sparse copy otherwise.
+  cp --reflink=auto --sparse=always "$POOL/golden.ext4" "$DISK"
+else
+  [ -f "$DISK" ] || { echo "clone $IDX has no preserved disk to resume" >&2; exit 4; }
+  stop_runtime 2>/dev/null || true
+fi
 
 # netns + veth + in-ns tap with the exact name/subnet the snapshot expects.
 ip netns add "$NS"
@@ -96,12 +127,35 @@ systemd-run --collect --unit "os-fc-clone$IDX" \
 for i in $(seq 1 80); do [ -S "$API" ] && break; sleep 0.1; done
 [ -S "$API" ] || { echo "firecracker api socket never appeared" >&2; destroy; exit 1; }
 
-LOAD=$(curl -s --unix-socket "$API" -X PUT http://x/snapshot/load -H 'Content-Type: application/json' \
-  -d "{\"snapshot_path\":\"$POOL/golden.vmstate\",\"mem_backend\":{\"backend_type\":\"File\",\"backend_path\":\"$POOL/golden.mem\"},\"resume_vm\":true}")
-if echo "$LOAD" | grep -q fault_message; then
-  echo "SNAPSHOT LOAD FAILED: $LOAD" >&2
-  destroy
-  exit 1
+fc() {
+  curl -s --unix-socket "$API" -X "$1" "http://x$2" \
+    -H 'Content-Type: application/json' -d "$3"
+}
+if [ "$CMD" = "create" ]; then
+  LOAD=$(fc PUT /snapshot/load \
+    "{\"snapshot_path\":\"$POOL/golden.vmstate\",\"mem_backend\":{\"backend_type\":\"File\",\"backend_path\":\"$POOL/golden.mem\"},\"resume_vm\":true}")
+  if echo "$LOAD" | grep -q fault_message; then
+    echo "SNAPSHOT LOAD FAILED: $LOAD" >&2
+    destroy
+    exit 1
+  fi
+else
+  # A paused session keeps its COW root disk, not a 12GB RAM image. Cold boot
+  # that disk with the same kernel/network contract; repo state survives and
+  # `.agents/resume` repairs processes that intentionally do not.
+  fc PUT /boot-source \
+    "{\"kernel_image_path\":\"/opt/firecracker/vmlinux\",\"boot_args\":\"console=ttyS0 reboot=k panic=1 pci=off init=/sbin/bks-init ip=$GUEST_IP::$TAP_HOST_IP:255.255.255.252::eth0:off\"}" >/dev/null
+  fc PUT /drives/rootfs \
+    "{\"drive_id\":\"rootfs\",\"path_on_host\":\"$POOL/golden.ext4\",\"is_root_device\":true,\"is_read_only\":false}" >/dev/null
+  fc PUT /network-interfaces/eth0 \
+    '{"iface_id":"eth0","guest_mac":"06:00:AC:10:64:02","host_dev_name":"bkstap0"}' >/dev/null
+  fc PUT /machine-config '{"vcpu_count":4,"mem_size_mib":12288}' >/dev/null
+  START=$(fc PUT /actions '{"action_type":"InstanceStart"}')
+  if echo "$START" | grep -q fault_message; then
+    echo "COLD BOOT FAILED: $START" >&2
+    stop_runtime
+    exit 1
+  fi
 fi
 
 # clock resync + boot-log truncate via the root agent (SigV4 needs <5min skew)
@@ -115,3 +169,5 @@ done
 echo "CLONE_IDX=$IDX"
 echo "CLONE_IP=$NS_IP"
 echo "CLONE_API=$API"
+echo "CLONE_BOOT=$CMD"
+rm -f "$POOL/clone$IDX.paused"

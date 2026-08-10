@@ -45,11 +45,10 @@ export function destroySessionSandbox(
 }
 
 /**
- * The session's docker sandbox when it is ACTIVE right now — materialized,
- * config + kill-switch still allow docker, and the container actually running
- * (never started here; same gating as workspace-exec). Null = treat the
- * session as host-local. Used by the preview routes to decide whether the dev
- * server lives in-container.
+ * Resolve the live sandbox for an explicit user action. Durable remote
+ * providers wake here when stopped, so opening/statusing a Portal is itself a
+ * wake signal. Null never means "fall back to host" for a volume workspace;
+ * callers keep their existing unavailable response when wake fails.
  */
 export async function activeSandboxFor(session: UnifiedSession): Promise<Sandbox | null> {
 	const sb = session.sandbox;
@@ -58,7 +57,11 @@ export async function activeSandboxFor(session: UnifiedSession): Promise<Sandbox
 	if (isRemoteSandboxProvider(sb.provider)) {
 		if (!sandboxProviderConfigured(sb.provider)) return null;
 		try {
-			const sandbox = await getSandboxProvider(sb.provider).get(sb.sandboxId);
+			const provider = getSandboxProvider(sb.provider);
+			let sandbox = await provider.get(sb.sandboxId);
+			if (sandbox && (await sandbox.status()) === "stopped" && provider.resume) {
+				sandbox = await provider.resume(sb.sandboxId);
+			}
 			return sandbox && (await sandbox.status()) === "running" ? sandbox : null;
 		} catch {
 			return null;

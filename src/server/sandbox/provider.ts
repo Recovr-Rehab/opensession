@@ -176,6 +176,11 @@ export interface SandboxProvider {
   ensure(spec: SandboxSessionSpec): Promise<Sandbox>;
   /** Reattach to a known sandbox after a restart; null when it's gone. */
   get(sandboxId: string): Promise<Sandbox | null>;
+  /** Release compute while retaining the durable workspace. Optional only for
+   *  providers whose own idle policy cannot expose this directly. */
+  pause?(sandboxId: string): Promise<void>;
+  /** Wake a paused sandbox and return its live handle. */
+  resume?(sandboxId: string): Promise<Sandbox | null>;
   /** Tear the sandbox down (session delete/archive). Workspace data outlives
    *  it where the provider stores it on the host (local worktrees always do). */
   destroy(sandboxId: string): Promise<void>;

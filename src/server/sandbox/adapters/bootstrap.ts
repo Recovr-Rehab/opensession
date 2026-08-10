@@ -863,21 +863,69 @@ export async function setupRemoteWorkspace(
     }
   }
   const cur = await driver.exec("git branch --show-current", { cwd });
-  if (cur.exitCode === 0 && cur.stdout.trim() === branch) return;
-  const hasRemote = await driver.exec(
-    `git rev-parse --verify --quiet origin/${shellQuoteWord(branch)}`,
-    { cwd },
+  if (cur.exitCode !== 0 || cur.stdout.trim() !== branch) {
+    const hasRemote = await driver.exec(
+      `git rev-parse --verify --quiet origin/${shellQuoteWord(branch)}`,
+      { cwd },
+    );
+    const startPoint = hasRemote.exitCode === 0 ? `origin/${branch}` : `origin/${defaultBranch}`;
+    const co = await driver.exec(
+      `git checkout -B ${shellQuoteWord(branch)} ${shellQuoteWord(startPoint)}`,
+      { cwd },
+    );
+    if (co.exitCode !== 0) {
+      throw new Error(
+        `remote workspace checkout -B ${branch} ${startPoint} failed: ${co.stderr.trim().slice(0, 300)}`,
+      );
+    }
+  }
+  await runRemoteLifecycleHook(driver, cwd, "setup", "fresh");
+}
+
+const REMOTE_LIFECYCLE_DIR = `${REMOTE_HOME}/.opensession/lifecycle`;
+
+function remoteLifecycleKey(cwd: string): string {
+  return cwd.replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(-120);
+}
+
+/** Run repo-owned lifecycle hooks inside a volume-only remote workspace.
+ * `setup` is one-shot per durable sandbox disk; `resume` runs on every real
+ * wake. Logs stay outside the repo so they never pollute git status. */
+export async function runRemoteLifecycleHook(
+  driver: RemoteDriver,
+  cwd: string,
+  hook: "setup" | "resume",
+  bootMode: "fresh" | "resume",
+): Promise<{ ran: boolean; log: string }> {
+  const script = `${cwd}/.agents/${hook}`;
+  const key = remoteLifecycleKey(cwd) || "workspace";
+  const log = `${REMOTE_LIFECYCLE_DIR}/${key}-${hook}.log`;
+  const stamp = `${REMOTE_LIFECYCLE_DIR}/${key}-setup.done`;
+  const probe = await driver.exec(
+    hook === "setup"
+      ? `if [ -f ${shellQuoteWord(stamp)} ]; then echo stamped; elif [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`
+      : `if [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`,
   );
-  const startPoint = hasRemote.exitCode === 0 ? `origin/${branch}` : `origin/${defaultBranch}`;
-  const co = await driver.exec(
-    `git checkout -B ${shellQuoteWord(branch)} ${shellQuoteWord(startPoint)}`,
-    { cwd },
-  );
-  if (co.exitCode !== 0) {
+  if (probe.exitCode !== 0)
+    throw new Error(`could not inspect .agents/${hook}: ${probe.stderr.trim()}`);
+  const state = probe.stdout.trim();
+  if (state === "stamped" || state === "absent") return { ran: false, log };
+  const executable = await driver.exec(`test -x ${shellQuoteWord(script)}`);
+  if (executable.exitCode !== 0)
+    throw new Error(`.agents/${hook} exists but is not executable`);
+  const command =
+    `mkdir -p ${shellQuoteWord(REMOTE_LIFECYCLE_DIR)} && ` +
+    `: > ${shellQuoteWord(log)} && ` +
+    `env OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ${shellQuoteWord(script)} ` +
+    `>> ${shellQuoteWord(log)} 2>&1` +
+    (hook === "setup" ? ` && touch ${shellQuoteWord(stamp)}` : "");
+  const result = await driver.exec(command, { cwd, timeoutMs: 20 * 60_000 });
+  if (result.exitCode !== 0) {
     throw new Error(
-      `remote workspace checkout -B ${branch} ${startPoint} failed: ${co.stderr.trim().slice(0, 300)}`,
+      `.agents/${hook} failed with exit ${result.exitCode}; see ${log}`,
     );
   }
+  return { ran: true, log };
 }
 
 // ── Run launching (WS transport only — there is no socket option remotely) ───
@@ -1374,7 +1422,10 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
 
     async exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult> {
       await parts.driver.ensureStarted();
-      return parts.driver.exec(shellQuote(cmd), { cwd: parts.cwd, env: opts?.env });
+      touch();
+      const result = await parts.driver.exec(shellQuote(cmd), { cwd: parts.cwd, env: opts?.env });
+      touch();
+      return result;
     },
 
     async launchRunEager(spec: RunHostSpec, cb?: RunHandleCallbacks): Promise<RunHandle> {

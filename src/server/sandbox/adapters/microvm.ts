@@ -9,6 +9,8 @@
  */
 
 import { homeDir } from "../../paths";
+import { hostRunBusy } from "../../host-registry";
+import { existsSync } from "node:fs";
 import { getRepo } from "../../worktree";
 import {
   DEFAULT_SANDBOX_PREVIEW_PORTS,
@@ -23,6 +25,7 @@ import type {
   SandboxSessionSpec,
   SandboxStatus,
 } from "../provider";
+import type { RemotePtyHandle, RemotePtyIo } from "./daytona";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
@@ -32,6 +35,7 @@ import {
   readRemoteState,
   remoteCloneUrl,
   removeRemoteState,
+  runRemoteLifecycleHook,
   setupRemoteWorkspace,
   touchRemoteState,
   warmRemoteWorkspace,
@@ -49,6 +53,8 @@ import {
 const SCRIPTS = `${process.cwd()}/deploy/sandbox/microvm`;
 const CONTROL_PORT = 8080;
 const ROOT_CONTROL_PORT = 8081;
+const DEFAULT_IDLE_STOP_MINUTES = 5;
+const IDLE_SWEEP_MS = 60_000;
 
 function config() {
   const cfg = sandboxConfig().firecrackerMicrovm;
@@ -232,6 +238,34 @@ async function destroyClone(idx: number, storeDir: string): Promise<void> {
   }
 }
 
+async function pauseClone(idx: number, storeDir: string): Promise<void> {
+  const result = await run(
+    ["sudo", "-n", "bash", `${SCRIPTS}/clone.sh`, "pause", String(idx), storeDir],
+    60_000,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `pausing Firecracker MicroVM ${idx} failed: ${(result.stderr || result.stdout).trim().slice(0, 500)}`,
+    );
+  }
+}
+
+async function resumeClone(idx: number, storeDir: string): Promise<void> {
+  const result = await run(
+    ["sudo", "-n", "bash", `${SCRIPTS}/clone.sh`, "resume", String(idx), storeDir],
+    180_000,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `resuming Firecracker MicroVM ${idx} failed: ${(result.stderr || result.stdout).trim().slice(-1000)}`,
+    );
+  }
+}
+
+function cloneDiskExists(idx: number, storeDir: string): boolean {
+  return existsSync(`${storeDir}/clone${idx}.ext4`);
+}
+
 async function allocateClone(
   storeDir: string,
   indexStart: number,
@@ -278,6 +312,7 @@ export class MicrovmProvider implements SandboxProvider {
   }
 
   private async ensureInner(spec: SandboxSessionSpec): Promise<Sandbox> {
+    ensureIdleSweep();
     if (spec.attachedDirs?.length) {
       throw new Error(
         "attached repos are not supported in MicroVM sandboxes — detach them or use docker/local",
@@ -292,9 +327,19 @@ export class MicrovmProvider implements SandboxProvider {
     const cwd = previous?.cwd || workspacePath(spec.sessionId);
 
     let idx = previous ? indexFromId(previous.sandboxId) : null;
+    let resumed = false;
     if (idx != null) {
       try {
-        await driverFor(idx).ensureStarted();
+        if (await unitRunning(idx)) {
+          await driverFor(idx).ensureStarted();
+        } else if (cloneDiskExists(idx, cfg.storeDir)) {
+          await resumeClone(idx, cfg.storeDir);
+          await driverFor(idx).ensureStarted();
+          resumed = true;
+          console.log(`[sandbox:microvm] woke ${sandboxId(idx)} for ${spec.sessionId}`);
+        } else {
+          throw new Error("durable clone disk is gone");
+        }
       } catch {
         await destroyClone(idx, cfg.storeDir).catch(() => {});
         removeRemoteState(this.id, previous!.sandboxId);
@@ -367,6 +412,9 @@ export class MicrovmProvider implements SandboxProvider {
         repo.defaultBranch,
         repo.id,
       );
+      if (resumed) {
+        await runRemoteLifecycleHook(driver, cwd, "resume", "resume");
+      }
     } catch (error) {
       if (created) {
         await destroyClone(idx, cfg.storeDir).catch(() => {});
@@ -409,7 +457,12 @@ export class MicrovmProvider implements SandboxProvider {
         );
       },
       async status(): Promise<SandboxStatus> {
-        if (!(await unitRunning(idx))) return "gone";
+        if (!(await unitRunning(idx))) {
+          const storeDir =
+            sandboxConfig().firecrackerMicrovm?.storeDir ||
+            "/opt/firecracker/sandbox-store";
+          return cloneDiskExists(idx, storeDir) ? "stopped" : "gone";
+        }
         try {
           await request(idx, "/health", undefined, false, 3_000);
           return "running";
@@ -424,7 +477,12 @@ export class MicrovmProvider implements SandboxProvider {
   async get(id: string): Promise<Sandbox | null> {
     const state = readRemoteState(this.id, id);
     const idx = indexFromId(id);
-    if (!state || idx == null || !(await unitRunning(idx))) return null;
+    if (!state || idx == null) return null;
+    if (!(await unitRunning(idx))) {
+      return cloneDiskExists(idx, config().storeDir)
+        ? this.makeHandle(idx, state.sessionId, state.cwd)
+        : null;
+    }
     try {
       await driverFor(idx).ensureStarted();
       return this.makeHandle(idx, state.sessionId, state.cwd);
@@ -443,6 +501,128 @@ export class MicrovmProvider implements SandboxProvider {
     await destroyClone(idx, cfg?.storeDir || "/opt/firecracker/sandbox-store");
     removeRemoteState(this.id, id);
   }
+
+  async pause(id: string): Promise<void> {
+    const state = readRemoteState(this.id, id);
+    const idx = indexFromId(id);
+    if (!state || idx == null || !(await unitRunning(idx))) return;
+    if (hostRunBusy(state.sessionId))
+      throw new Error(`cannot pause ${id} while its agent run is active`);
+    await pauseClone(idx, config().storeDir);
+    touchRemoteState(this.id, id);
+  }
+
+  async resume(id: string): Promise<Sandbox | null> {
+    const state = readRemoteState(this.id, id);
+    if (!state) return null;
+    return this.ensure({
+      sessionId: state.sessionId,
+      repo: state.repoId,
+      branch: state.branch,
+      cwd: state.cwd,
+    });
+  }
+}
+
+/** Real interactive PTY inside a local Firecracker guest. The private control
+ * lane exposes bounded start/read/write/resize/close calls; the browser still
+ * talks only to Open Session's authenticated UI WebSocket. */
+export async function microvmPtySession(
+  sandboxIdValue: string,
+  cwd: string,
+  io: RemotePtyIo,
+): Promise<RemotePtyHandle> {
+  const idx = indexFromId(sandboxIdValue);
+  if (idx == null) throw new Error(`invalid microvm sandbox id ${sandboxIdValue}`);
+  const provider = new MicrovmProvider();
+  let sandbox = await provider.get(sandboxIdValue);
+  if (sandbox && (await sandbox.status()) === "stopped")
+    sandbox = await provider.resume(sandboxIdValue);
+  if (!sandbox || (await sandbox.status()) !== "running")
+    throw new Error(`microvm sandbox ${sandboxIdValue} is unavailable`);
+  const started = (await (
+    await request(idx, "/pty/start", {
+      cwd,
+      cols: io.cols,
+      rows: io.rows,
+    })
+  ).json()) as { id?: string };
+  if (!started.id) throw new Error("microvm pty did not return an id");
+  const id = started.id;
+  let closed = false;
+  void (async () => {
+    try {
+      while (!closed) {
+        const response = await request(
+          idx,
+          `/pty/read?id=${encodeURIComponent(id)}&timeoutMs=1000`,
+          undefined,
+          false,
+          5_000,
+        );
+        const frame = (await response.json()) as {
+          data?: string;
+          exited?: boolean;
+          exitCode?: number | null;
+        };
+        if (frame.data) io.onData(Buffer.from(frame.data, "base64"));
+        if (frame.exited) {
+          closed = true;
+          io.onExit(frame.exitCode ?? undefined);
+        }
+      }
+    } catch {
+      if (!closed) {
+        closed = true;
+        io.onExit(undefined);
+      }
+    }
+  })();
+  const post = (path: string, body: object) =>
+    request(idx, path, { id, ...body }).catch(() => undefined);
+  return {
+    write: (data) => void post("/pty/write", { data: Buffer.from(data).toString("base64") }),
+    resize: (cols, rows) => void post("/pty/resize", { cols, rows }),
+    close: () => {
+      if (closed) return;
+      closed = true;
+      void post("/pty/close", {});
+    },
+  };
+}
+
+/** Pause idle local MicroVMs while retaining their COW workspace disks. */
+export async function sweepIdleMicrovms(onlySandboxId?: string): Promise<void> {
+  const cfg = sandboxConfig().firecrackerMicrovm;
+  if (!cfg?.enabled) return;
+  const idleMs =
+    (sandboxConfig().idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000;
+  const provider = new MicrovmProvider();
+  for (const state of listRemoteStates("microvm")) {
+    if (state.sessionId.startsWith("__prewarm__:")) continue;
+    if (onlySandboxId && state.sandboxId !== onlySandboxId) continue;
+    const idx = indexFromId(state.sandboxId);
+    if (idx == null || !(await unitRunning(idx))) continue;
+    if (hostRunBusy(state.sessionId)) continue;
+    const last = Date.parse(state.lastActivityAt || state.createdAt) || 0;
+    if (Date.now() - last < idleMs) continue;
+    try {
+      console.log(
+        `[sandbox:microvm] pausing ${state.sandboxId} after ${Math.round((Date.now() - last) / 60_000)}m idle`,
+      );
+      await provider.pause(state.sandboxId);
+    } catch (error) {
+      console.warn(`[sandbox:microvm] idle pause failed for ${state.sandboxId}:`, error);
+    }
+  }
+}
+
+function ensureIdleSweep(): void {
+  const globalState = globalThis as any;
+  if (globalState.__microvmIdleSweepTimer) return;
+  globalState.__microvmIdleSweepTimer = setInterval(() => {
+    void sweepIdleMicrovms();
+  }, IDLE_SWEEP_MS);
 }
 
 // ── Warm-on-typing workspace prewarm hooks ──────────────────────────────────

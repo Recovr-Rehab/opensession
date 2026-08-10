@@ -12,12 +12,11 @@
  *    still says docker, kill-switch absent, container ACTUALLY running): a
  *    `docker exec -w <dir>` in the session's container.
  *
- * A stopped container is deliberately NOT started for a read — that would
- * defeat the idle-stop policy. Bind-mode workspaces lose nothing (the host
- * sees the same files through the bind mount, so the host fallback is
- * equivalent); volume-mode workspaces have no host copy, so their read
- * surfaces fail closed until the next turn wakes the container. Falling back
- * to a stale/nonexistent host path could commit or push the wrong workspace.
+ * A stopped durable remote sandbox is transparently resumed for a read. That
+ * is the orb-style contract: diff/status/@-mentions are user intent and must
+ * wake the workspace rather than fail because the idle policy worked. A
+ * provider without an explicit resume capability still fails closed; falling
+ * back to a stale/nonexistent host path could inspect or mutate the wrong tree.
  *
  * With Phase 1 bind mounts this routing is functionally redundant — host git
  * sees the same files. The POINT is the seam: volume-only workspaces (below)
@@ -109,7 +108,11 @@ export async function workspaceExecFor(
     if (isRemoteSandboxProvider(sb.provider)) {
       if (!sandboxProviderConfigured(sb.provider)) return unavailableRemote;
       const { getSandboxProvider } = await import("./index");
-      const sandbox = await getSandboxProvider(sb.provider).get(sb.sandboxId);
+      const provider = getSandboxProvider(sb.provider);
+      let sandbox = await provider.get(sb.sandboxId);
+      if (sandbox && (await sandbox.status()) === "stopped" && provider.resume) {
+        sandbox = await provider.resume(sb.sandboxId);
+      }
       if (!sandbox || (await sandbox.status()) !== "running") return unavailableRemote;
       return Object.assign(
         (cmd: string[], opts?: ExecOpts) => sandbox.exec(cmd, opts),
