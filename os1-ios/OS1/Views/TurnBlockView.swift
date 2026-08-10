@@ -57,8 +57,8 @@ struct TurnBlockView: View {
                             // Narration between tool calls reads a step below
                             // a final answer — context, not conclusion — but
                             // it is still prose to read, so the step is small
-                            // (see `textNarration`) and the rail carries the
-                            // rest of the distinction.
+                            // (see `textNarration`) and the fold's indent
+                            // carries the rest of the distinction.
                             MarkdownBody(entry.text, dimmed: true)
                                 .padding(.trailing, 16)
                         case .tool(let call):
@@ -73,22 +73,15 @@ struct TurnBlockView: View {
                         }
                     }
                 }
-                // The rail marks what the header can actually close, so it
+                // The indent marks what the header can actually close, so it
                 // appears only when the fold is open. Under the "messages"
                 // preference a folded turn still shows its notes, and those
-                // are NOT collapsible — putting them in a rail would offer a
+                // are NOT collapsible — indenting them would offer a
                 // container the header cannot shut. Folded, the notes sit
                 // flush and read as ordinary transcript, which is the whole
                 // point of that preference.
                 .padding(.leading, state.expanded ? 12 : 0)
                 .padding(.top, 2)
-                .overlay(alignment: .leading) {
-                    if state.expanded {
-                        Rectangle()
-                            .fill(OS1VisualStyle.border)
-                            .frame(width: 1)
-                    }
-                }
                 .transition(.opacity)
             }
         }
