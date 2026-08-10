@@ -5166,7 +5166,7 @@ export function SessionViewer({
 									{historyTruncated && (
 										<div className="flex justify-center [overflow-anchor:none] px-0 pt-1 pb-3.5">
 											{loadingHistory ? (
-												<div className="flex min-h-10 items-center gap-2 px-3 text-label font-medium text-dim phone:min-h-11">
+												<div className="inline-flex items-center gap-1.5 rounded-full bg-control px-3.5 py-2 text-label font-semibold text-dim shadow-[0_1px_6px_rgba(0,0,0,0.12)]">
 													<PixelSpinner className="text-faint" />
 													<span>
 														{loadingAllHistory
@@ -5180,27 +5180,33 @@ export function SessionViewer({
 												<div
 													role="group"
 													aria-label="Earlier messages"
-													className="inline-flex items-center overflow-hidden rounded-[14px] [corner-shape:squircle] border border-line bg-control p-0.5 shadow-control"
+													className="inline-flex items-stretch overflow-hidden rounded-full bg-control text-dim shadow-[0_1px_6px_rgba(0,0,0,0.12)]"
 												>
-													<Button
-														variant="ghost"
-														size="md"
-														icon={<IconArrowUp size={20} />}
+													<button
+														type="button"
 														onClick={loadAllHistory}
-														className="border-0 phone:min-h-11"
+														className="group inline-flex cursor-pointer items-center gap-1.5 px-3.5 py-2 text-label font-semibold transition-[background-color,color] hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
 													>
+														<IconArrowUp
+															size={13}
+															className="transition-transform group-hover:-translate-y-px"
+															aria-hidden
+														/>
 														Load all
-													</Button>
-													<span className="h-5 w-px shrink-0 bg-line" aria-hidden />
-													<Button
-														variant="ghost"
-														size="md"
-														icon={<IconArrowUpToLine size={20} />}
+													</button>
+													<span className="my-2 w-px shrink-0 bg-line" aria-hidden />
+													<button
+														type="button"
 														onClick={jumpToStart}
-														className="border-0 phone:min-h-11"
+														className="group flex w-9 cursor-pointer items-center justify-center transition-[background-color,color] hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+														title="Go to first message"
+														aria-label="Go to first message"
 													>
-														First message
-													</Button>
+														<IconArrowUpToLine
+															size={13}
+															className="transition-transform group-hover:-translate-y-px"
+														/>
+													</button>
 												</div>
 											)}
 										</div>
