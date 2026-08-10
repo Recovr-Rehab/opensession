@@ -1,4 +1,11 @@
-import { createContext, useContext } from "react";
+import {
+	createContext,
+	createElement,
+	type ReactNode,
+	useContext,
+	useMemo,
+	useRef,
+} from "react";
 import {
 	assetToolPath,
 	parseMcpTool,
@@ -19,6 +26,33 @@ import type { TranscriptEntry } from "./types";
 const OpenAssetContext = createContext<((path: string) => void) | null>(null);
 export const OpenAssetProvider = OpenAssetContext.Provider;
 
+const EMPTY_ASSET_PATHS: readonly string[] = [];
+type OpenAssetPathsValue = { paths: { current: readonly string[] } };
+const OpenAssetPathsContext = createContext<OpenAssetPathsValue>({
+	paths: { current: EMPTY_ASSET_PATHS },
+});
+
+/**
+ * Keep the context identity stable while a non-empty folder changes. New
+ * transcript rows still read the latest ref, without forcing every existing
+ * markdown bubble to reparse whenever an agent writes another asset. Crossing
+ * the empty boundary does notify consumers: that is the initial list load and
+ * the moment the first/last asset appears or disappears.
+ */
+export function OpenAssetPathsProvider({
+	value,
+	children,
+}: {
+	value: readonly string[];
+	children: ReactNode;
+}) {
+	const paths = useRef(value);
+	paths.current = value;
+	const empty = value.length === 0;
+	const context = useMemo(() => ({ paths }), [empty]);
+	return createElement(OpenAssetPathsContext.Provider, { value: context }, children);
+}
+
 /**
  * How a transcript surface opens a scratch file. `available` is false where
  * there is no session overlay to host it, so the surface can leave the
@@ -35,6 +69,12 @@ export function useOpenAsset(): {
 			openInOverlay?.(path);
 		},
 	};
+}
+
+/** Current files in this session's scratch folder. Markdown uses this exact
+ * set to link names in prose without guessing that file-looking text exists. */
+export function useOpenAssetPaths(): readonly string[] {
+	return useContext(OpenAssetPathsContext).paths.current;
 }
 
 /**

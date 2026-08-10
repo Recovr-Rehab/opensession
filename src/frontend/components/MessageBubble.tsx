@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { BASE_PATH } from "../lib/base";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { extBadge } from "../lib/images";
+import { useOpenAssetPaths } from "../lib/open-asset";
 import { fullTime, shortTime } from "../lib/time";
 
 import {
@@ -89,9 +90,13 @@ export function ClampedBody({
 	// Giant expanded payloads skip markdown entirely — see FULL_MD_CHARS.
 	const asMarkdown = shown.length <= FULL_MD_CHARS;
 	const repo = useMarkdownRepo();
+	const assetPaths = useOpenAssetPaths();
 	const html = useMemo(
-		() => (asMarkdown ? renderMarkdown(shown, { repo }) : ""),
-		[asMarkdown, shown, repo],
+		() =>
+			asMarkdown
+				? renderMarkdown(shown, { repo, sessionId, assetPaths })
+				: "",
+		[asMarkdown, shown, repo, sessionId, assetPaths],
 	);
 
 	const expand = async () => {

@@ -45,7 +45,7 @@ export function createAssetsMcpServer(ctx: { sessionId: string }) {
   const tools = [
     tool(
       "write_asset",
-      "Save a file into this session's assets folder — scratch space for helper artifacts the human can preview in the session's Assets tab: interactive HTML/JS visualizations, generated reports, diagrams, sample data. Assets are NOT part of any repo and are never committed (if something turns out PR-worthy, copy it into the worktree explicitly). HTML previews live in the UI and relative references between assets resolve, so multi-file pages (index.html + style.css + data.json) work. Overwrites silently — iterating on the same file is the normal flow. Works in read-only Ask sessions too: the assets folder is session scratch, not the checkout.",
+      "Save a file into this session's assets folder — scratch space for helper artifacts the human can preview in the session's Assets tab or open directly from its path in chat: interactive HTML/JS visualizations, generated reports, diagrams, sample data. Assets are NOT part of any repo and are never committed (if something turns out PR-worthy, copy it into the worktree explicitly). HTML previews live in the UI and relative references between assets resolve, so multi-file pages (index.html + style.css + data.json) work. Overwrites silently — iterating on the same file is the normal flow. Works in read-only Ask sessions too: the assets folder is session scratch, not the checkout.",
       {
         path: z
           .string()
@@ -68,6 +68,7 @@ export function createAssetsMcpServer(ctx: { sessionId: string }) {
           const f = writeAsset(sessionId, args.path, data);
           return text(
             `Saved ${f.path} (${fmtSize(f.size)}). It's visible in this session's Assets tab now.\n` +
+              `Reference \`${f.path}\` in chat to give the reader a direct open link.\n` +
               `On disk: ${assetsDirFor(sessionId)}/${f.path}`
           );
         } catch (e: any) {

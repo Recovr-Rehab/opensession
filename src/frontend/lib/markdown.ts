@@ -2,6 +2,7 @@ import { Marked } from "marked";
 import { BASE_PATH } from "./base";
 import { PUBLIC_BASE_URL } from "./brand";
 import { repoLabel } from "./repo-label";
+import { sessionAssetRawUrl } from "./api/sessions";
 
 // Dedicated marked instance for session messages so this config doesn't leak
 // into other markdown (wiki, etc.). Two customisations:
@@ -18,6 +19,102 @@ function attr(v: string | null | undefined): string {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+type AssetReferenceRegistry = {
+  key: string;
+  targets: Map<string, string>;
+  start: RegExp;
+  exact: RegExp;
+};
+
+const assetReferenceCache = new Map<string, AssetReferenceRegistry>();
+const ASSET_REFERENCE_MAX_SHORT_ALIASES = 600;
+let renderAssetReferences: AssetReferenceRegistry | null = null;
+let renderAssetSessionId: string | undefined;
+
+function regexEscape(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Build the names a session's scratch files may be called in prose. A nested
+ * `shots/before.png` may be named by its full path or `before.png`; when two
+ * files share that suffix, the ambiguous short form links neither.
+ */
+function assetReferenceRegistry(
+  paths: readonly string[] | undefined,
+): AssetReferenceRegistry | null {
+  const unique = [...new Set((paths ?? []).filter(Boolean))].sort();
+  if (unique.length === 0) return null;
+  const key = unique.join("\u0000");
+  const cached = assetReferenceCache.get(key);
+  if (cached) return cached;
+
+  const targets = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  for (const path of unique) {
+    const segments = path.split("/").filter(Boolean);
+    for (let start = 0; start < segments.length; start++) {
+      const name = segments.slice(start).join("/");
+      const existing = targets.get(name);
+      if (existing && existing !== path) ambiguous.add(name);
+      else targets.set(name, path);
+    }
+  }
+  for (const name of ambiguous) targets.delete(name);
+
+  // Every unambiguous full path remains linkable. Cap only shorthand suffixes:
+  // one deeply nested 2,000-file artifact can otherwise create tens of
+  // thousands of regex alternatives for every markdown parser invocation.
+  const fullPaths = unique.filter((path) => targets.has(path));
+  const fullPathSet = new Set(unique);
+  const shortAliases = [...targets.keys()]
+    .filter((name) => !fullPathSet.has(name))
+    .sort((a, b) => b.length - a.length || a.localeCompare(b))
+    .slice(0, ASSET_REFERENCE_MAX_SHORT_ALIASES);
+  const aliases = [...fullPaths, ...shortAliases].sort(
+    (a, b) => b.length - a.length || a.localeCompare(b),
+  );
+  const selected = new Set(aliases);
+  for (const name of targets.keys()) {
+    if (!selected.has(name)) targets.delete(name);
+  }
+  if (aliases.length === 0) return null;
+  const group = aliases.map(regexEscape).join("|");
+  // Either the whole code span (`report.html`) or a bare path. The trailing
+  // guard stops a registered directory from linking the first half of a
+  // longer path; sentence punctuation remains allowed.
+  const candidate = "(?:`(" + group + ")`|(" + group + ")(?![\\w/-]))";
+  const registry = {
+    key,
+    targets,
+    exact: new RegExp(`^${candidate}`),
+    // `start` is only marked's fast-forward hint. Return the position after
+    // the guard character so tokenizer sees the complete candidate.
+    start: new RegExp("(?:^|[^\\w./~`@-])(?=" + candidate + ")"),
+  };
+  assetReferenceCache.set(key, registry);
+  if (assetReferenceCache.size > 32) {
+    const oldest = assetReferenceCache.keys().next().value;
+    if (oldest !== undefined) assetReferenceCache.delete(oldest);
+  }
+  return registry;
+}
+
+function assetReferenceLink(
+  path: string,
+  label: string,
+  coded: boolean,
+): string {
+  if (!renderAssetSessionId)
+    return coded ? `<code>${attr(label)}</code>` : attr(label);
+  const href = sessionAssetRawUrl(renderAssetSessionId, path);
+  const text = coded ? `<code>${attr(label)}</code>` : attr(label);
+  return (
+    `<a href="${attr(href)}" class="asset-ref" data-asset-path="${attr(path)}"` +
+    ` title="${attr(`Open ${path}`)}" target="_blank" rel="noopener noreferrer">${text}</a>`
+  );
 }
 
 // Open Session session ids (`os-<uuidv7>`, and the pre-rename `bks-<uuidv7>` +
@@ -207,12 +304,17 @@ const INTERNAL_HOSTS = new Set(
 /**
  * Turn chip tokens back into the literal text they were written as, in place.
  * Only used inside an explicit link, where a chip would nest an anchor; the
- * raw text of both chip kinds is plain (ids, digits, `#`, `/`, `.`, `-`), so
+ * raw text of all chip kinds is plain (ids, digits, `#`, `/`, `.`, `-`), so
  * it needs no escaping the text renderer wouldn't already skip.
  */
 function flattenChips(tokens: any[] | undefined): void {
   for (const token of tokens ?? []) {
-    if (token.type === "prMention" || token.type === "sessionId") {
+    if (token.type === "assetPath") {
+      token.type = token.coded ? "codespan" : "text";
+      token.text = token.label;
+      token.raw = token.coded ? `\`${token.label}\`` : token.label;
+      token.tokens = undefined;
+    } else if (token.type === "prMention" || token.type === "sessionId") {
       token.type = "text";
       token.text = token.raw;
       token.tokens = undefined;
@@ -337,6 +439,32 @@ md.use({
   // uuidv7 shape so it only fires on real ids.
   extensions: [
     {
+      name: "assetPath",
+      level: "inline",
+      start(src: string) {
+        const match = renderAssetReferences?.start.exec(src);
+        return match ? match.index + match[0].length : undefined;
+      },
+      tokenizer(src: string) {
+        const registry = renderAssetReferences;
+        const match = registry?.exact.exec(src);
+        if (!registry || !match) return undefined;
+        const label = match[1] ?? match[2];
+        const path = registry.targets.get(label);
+        if (!path) return undefined;
+        return {
+          type: "assetPath",
+          raw: match[0],
+          label,
+          path,
+          coded: match[1] !== undefined,
+        };
+      },
+      renderer(token: any) {
+        return assetReferenceLink(token.path, token.label, token.coded);
+      },
+    },
+    {
       name: "sessionId",
       level: "inline",
       start(src: string) {
@@ -396,14 +524,24 @@ export interface MarkdownContext {
    * text rather than guessing a destination.
    */
   repo?: string;
+  /** Session whose prose this is, used to build safe raw-file fallbacks for
+   * asset links when the transcript's delegated preview handler is absent. */
+  sessionId?: string;
+  /** Files that currently exist in this session's scratch folder. Only these
+   * names become links; file-looking prose is otherwise left untouched. */
+  assetPaths?: readonly string[];
 }
 
 /** Render session markdown to HTML (links open in a new tab, images inline). */
 export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
   const cacheable = src.length <= MD_CACHE_INPUT_MAX;
-  // Same source, different repo, different chips — so the repo is part of the
-  // key. `\u0000` can't occur in a repo id, so the two halves can't collide.
-  const cacheKey = ctx?.repo ? `${ctx.repo}\u0000${src}` : src;
+  const assets = assetReferenceRegistry(ctx?.assetPaths);
+  // Same source, different repo/session/assets, different links. Null bytes
+  // cannot occur in a repo id, session id or filesystem path.
+  const contextKey = [ctx?.repo ?? "", ctx?.sessionId ?? "", assets?.key ?? ""].join(
+    "\u0000",
+  );
+  const cacheKey = contextKey === "\u0000\u0000" ? src : `${contextKey}\u0000${src}`;
   if (cacheable) {
     const hit = mdCache.get(cacheKey);
     if (hit !== undefined) {
@@ -414,13 +552,20 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
     }
   }
   let out: string;
+  const previousRepo = renderRepo;
+  const previousAssets = renderAssetReferences;
+  const previousAssetSessionId = renderAssetSessionId;
   renderRepo = ctx?.repo;
+  renderAssetReferences = assets;
+  renderAssetSessionId = ctx?.sessionId;
   try {
     out = md.parse(src) as string;
   } catch {
     out = src;
   } finally {
-    renderRepo = undefined;
+    renderRepo = previousRepo;
+    renderAssetReferences = previousAssets;
+    renderAssetSessionId = previousAssetSessionId;
   }
   if (cacheable) {
     mdCache.set(cacheKey, out);

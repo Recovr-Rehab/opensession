@@ -292,7 +292,9 @@ export function buildRunInstructions(input: {
         "live preview; relative references between assets resolve, so multi-file pages " +
         "(index.html + style.css + data.json) work. Reach for it when a visual or document " +
         "explains something better than plain text — a chart of results, an interactive demo, a " +
-        "formatted report. It also works in read-only Ask sessions: the assets folder is " +
+        "formatted report. Mention an asset's relative path in your final response so it becomes " +
+        "a direct open link in the conversation. It also works in read-only Ask sessions: the " +
+        "assets folder is " +
         "session scratch space, not the checkout. If an artifact turns out repo-worthy, copy " +
         "it into the worktree explicitly and commit it like any other change."
     );

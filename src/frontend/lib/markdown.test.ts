@@ -193,6 +193,89 @@ describe("session chip labels", () => {
   });
 });
 
+describe("renderMarkdown asset references", () => {
+  const assets = {
+    sessionId: "os-assets-test",
+    assetPaths: ["report.html", "viz/index.html", "shots/before.png"],
+  };
+
+  it("links a current asset named directly in prose", () => {
+    const html = renderMarkdown("Open `report.html` to inspect it.", assets);
+    expect(html).toContain('class="asset-ref"');
+    expect(html).toContain('data-asset-path="report.html"');
+    expect(html).toContain("<code>report.html</code>");
+    expect(html).toContain(
+      'href="/api/sessions/os-assets-test/assets/raw/report.html"',
+    );
+  });
+
+  it("resolves an unambiguous trailing filename to its nested asset", () => {
+    const html = renderMarkdown("Compare before.png with the result.", assets);
+    expect(html).toContain('data-asset-path="shots/before.png"');
+    expect(html).toContain(">before.png</a>");
+  });
+
+  it("leaves unknown and ambiguous names as plain text", () => {
+    const ambiguous = {
+      sessionId: "os-assets-test",
+      assetPaths: ["first/index.html", "second/index.html"],
+    };
+    expect(renderMarkdown("Open summary.html.", assets)).not.toContain(
+      "asset-ref",
+    );
+    expect(renderMarkdown("Open index.html.", ambiguous)).not.toContain(
+      "asset-ref",
+    );
+    expect(renderMarkdown("Open first/index.html.", ambiguous)).toContain(
+      'data-asset-path="first/index.html"',
+    );
+  });
+
+  it("keeps an explicit markdown link as the destination", () => {
+    const html = renderMarkdown(
+      "Read [`report.html`](https://example.com/report.html).",
+      assets,
+    );
+    expect(html).toContain('href="https://example.com/report.html"');
+    expect(html).toContain("<code>report.html</code>");
+    expect(html).not.toContain("asset-ref");
+  });
+
+  it("does not link a matching filename inside a larger path or address", () => {
+    const html = renderMarkdown(
+      "See https://example.com/report.html or mail@report.html.",
+      assets,
+    );
+    expect(html).not.toContain("asset-ref");
+  });
+
+  it("does not treat an @-prefixed unknown name as an asset", () => {
+    expect(renderMarkdown("Ask @report.html for details.", assets)).not.toContain(
+      "asset-ref",
+    );
+  });
+
+  it("keeps exact asset names linkable past the former alias cap", () => {
+    const paths = Array.from(
+      { length: 601 },
+      (_, index) => `asset-${String(index).padStart(4, "0")}.txt`,
+    );
+    const html = renderMarkdown("Open asset-0600.txt.", {
+      sessionId: "os-many-assets",
+      assetPaths: paths,
+    });
+    expect(html).toContain('data-asset-path="asset-0600.txt"');
+  });
+
+  it("does not reuse cached plain markdown once asset context is available", () => {
+    const source = "Open report.html.";
+    expect(renderMarkdown(source)).not.toContain("asset-ref");
+    expect(renderMarkdown(source, assets)).toContain(
+      'data-asset-path="report.html"',
+    );
+  });
+});
+
 describe("renderMarkdown PR mentions", () => {
   const fusion = { repo: "tella-fusion" };
 

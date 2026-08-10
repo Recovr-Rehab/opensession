@@ -44,6 +44,10 @@ import {
 } from "./ToolCallBlock";
 import { parsePlanItems, type PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
+import {
+	OpenAssetPathsProvider,
+	useOpenAssetPaths,
+} from "../lib/open-asset";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
 import { getCurrentUser, useCurrentUser } from "./UserPicker";
@@ -1240,6 +1244,10 @@ export function SessionViewer({
 	const { files: assetFiles, refresh: refreshAssets } = useSessionAssets(
 		session.id,
 		addHandler,
+	);
+	const assetPaths = useMemo(
+		() => assetFiles.map((file) => file.path),
+		[assetFiles],
 	);
 	// Which asset the main-area Assets view-tab previews. Controlled here so a
 	// tree selection and a later overlay promotion never drift apart.
@@ -2874,14 +2882,27 @@ export function SessionViewer({
 		setForkFrom(messageId);
 	}, []);
 
-	// Session-id links navigate on a delegated click — e.g. jump from an
-	// orchestrator into the worker it spawned. Delegated because markdown.ts
-	// renders its session chips into message/tool HTML via
-	// dangerouslySetInnerHTML, where they can't carry React handlers; anything
-	// else in the transcript opts in the same way, by carrying data-session-id.
+	// Session and asset links navigate on a delegated click. markdown.ts renders
+	// them into dangerouslySetInnerHTML, where they cannot carry React handlers;
+	// data attributes identify which in-app surface should open.
 	const handleMessagesClick = useCallback(
 		(e: React.MouseEvent) => {
-			const el = (e.target as HTMLElement).closest?.(
+			const target = e.target as HTMLElement;
+			const assetEl = target.closest?.("[data-asset-path]") as HTMLElement | null;
+			const assetPath = assetEl?.dataset.assetPath;
+			if (assetPath) {
+				// Modified clicks keep the anchor's raw-file fallback and native new-tab
+				// behaviour. A normal click stays in context, in the asset preview.
+				if (
+					(e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) &&
+					assetEl?.getAttribute("href")
+				)
+					return;
+				e.preventDefault();
+				openAssetFromTranscript(assetPath);
+				return;
+			}
+			const el = target.closest?.(
 				"[data-session-id]",
 			) as HTMLElement | null;
 			const id = el?.dataset.sessionId;
@@ -2893,7 +2914,7 @@ export function SessionViewer({
 			e.preventDefault();
 			onOpenSession(id);
 		},
-		[onOpenSession],
+		[onOpenSession, openAssetFromTranscript],
 	);
 
 	// "Add session transcripts" chips on a fresh session's blank canvas: sibling
@@ -5196,39 +5217,44 @@ export function SessionViewer({
 											</div>
 										</div>
 									)}
-									<React.Profiler
-										id="transcript"
-										onRender={onTranscriptRender}
-									>
-									<ToolPathRootsProvider value={toolPathRoots}>
-									<LiveSubagentsProvider value={liveSubagents}>
-									<OpenAssetProvider value={openAssetFromTranscript}>
-										<TranscriptBlocks
-											entries={entries}
-											live={isBusy}
+									<OpenAssetPathsProvider value={assetPaths}>
+										<React.Profiler
+											id="transcript"
+											onRender={onTranscriptRender}
+										>
+											<ToolPathRootsProvider value={toolPathRoots}>
+												<LiveSubagentsProvider value={liveSubagents}>
+													<OpenAssetProvider value={openAssetFromTranscript}>
+														<TranscriptBlocks
+															entries={entries}
+															live={isBusy}
+															sessionId={session.id}
+															walkthrough={sessionWalkthrough}
+															onFork={canForkSession ? handleFork : undefined}
+															onOpenSubagent={openSubagent}
+															// For automation-owned sessions (e.g. a GitHub PR run), the
+															// automation never *types* a user turn — humans steer them.
+															// So don't credit un-attributed turns to the automation
+															// ("GitHub (automation)"); leave the owner unset so they read
+															// as "You" (explicit [Name] steers still show the teammate).
+															owner={
+																session.automation
+																	? undefined
+																	: session.startedBy || undefined
+															}
+														/>
+													</OpenAssetProvider>
+												</LiveSubagentsProvider>
+											</ToolPathRootsProvider>
+										</React.Profiler>
+
+										<StreamingMessage
+											store={liveTurnStore}
 											sessionId={session.id}
-											walkthrough={sessionWalkthrough}
-											onFork={canForkSession ? handleFork : undefined}
-											onOpenSubagent={openSubagent}
-											// For automation-owned sessions (e.g. a GitHub PR run), the
-											// automation never *types* a user turn — humans steer them.
-											// So don't credit un-attributed turns to the automation
-											// ("GitHub (automation)"); leave the owner unset so they read
-											// as "You" (explicit [Name] steers still show the teammate).
-											owner={
-												session.automation
-													? undefined
-													: session.startedBy || undefined
-											}
 										/>
-									</OpenAssetProvider>
-									</LiveSubagentsProvider>
-									</ToolPathRootsProvider>
-									</React.Profiler>
+									</OpenAssetPathsProvider>
 								</>
 							)}
-
-							<StreamingMessage store={liveTurnStore} />
 
 							{isBusy && !waitingForWorkspace && (
 								<BusyInline
@@ -5791,7 +5817,13 @@ function BusyInline({
 	);
 }
 
-function StreamingMessage({ store }: { store: LiveTurnStore }) {
+function StreamingMessage({
+	store,
+	sessionId,
+}: {
+	store: LiveTurnStore;
+	sessionId: string;
+}) {
 	const snapshot = useSyncExternalStore(
 		store.subscribe,
 		store.getSnapshot,
@@ -5799,9 +5831,13 @@ function StreamingMessage({ store }: { store: LiveTurnStore }) {
 	);
 	const markdownText = snapshot.rapid ? "" : snapshot.text;
 	const repo = useMarkdownRepo();
+	const assetPaths = useOpenAssetPaths();
 	const html = React.useMemo(
-		() => (markdownText ? renderMarkdown(markdownText, { repo }) : ""),
-		[markdownText, repo],
+		() =>
+			markdownText
+				? renderMarkdown(markdownText, { repo, sessionId, assetPaths })
+				: "",
+		[markdownText, repo, sessionId, assetPaths],
 	);
 	if (!snapshot.text) return null;
 
