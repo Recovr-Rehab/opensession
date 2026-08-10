@@ -3289,11 +3289,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								style={{ transform: open ? "none" : "rotate(-90deg)" }}
 							/>
 							{/* Hover action at the far end: start a new session with this
-							    repo already selected. role=button (not a nested <button>). */}
+							    repo already selected. role=button (not a nested <button>).
+							    The 28px box is the pointer target; the wash is a ::before
+							    inset by 4px, since filling all 28px in a 30px row read as a
+							    slab the height of the header for a 12px glyph (same rule as
+							    `paletteIconBtn`, and `corner-shape` has to be restated
+							    because it does not inherit into a pseudo-element). */}
 							<span
 								role="button"
 								tabIndex={0}
-								className="ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color,background] duration-150 hover:bg-hover hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+								className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-1 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-[1]"
 								title={`New session in ${repoLabel(repo)}`}
 								onClick={(e) => {
 									e.stopPropagation();
