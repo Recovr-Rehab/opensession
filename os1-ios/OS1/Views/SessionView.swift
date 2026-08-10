@@ -866,7 +866,7 @@ struct SessionView: View {
         Button {
             showWorktreeInfo = true
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 7) {
                 RepoTile(name: viewModel.session.effectiveRepo, size: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     // No run dot up here: the bar is identity and navigation,
@@ -876,7 +876,7 @@ struct SessionView: View {
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(OS1VisualStyle.text)
                         .fixedSize(horizontal: true, vertical: false)
-                        .frame(width: 169, alignment: .leading)
+                        .frame(width: 167, alignment: .leading)
                         .clipped()
                         .mask(titleTrailingFade)
                     if !dynamicTypeSize.isAccessibilitySize {
@@ -884,7 +884,7 @@ struct SessionView: View {
                             .font(.footnote)
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .fixedSize(horizontal: true, vertical: false)
-                            .frame(width: 169, alignment: .leading)
+                            .frame(width: 167, alignment: .leading)
                             .clipped()
                             .mask(titleTrailingFade)
                     }
