@@ -80,7 +80,7 @@ struct TurnBlockView: View {
                 // container the header cannot shut. Folded, the notes sit
                 // flush and read as ordinary transcript, which is the whole
                 // point of that preference.
-                .padding(.leading, state.expanded ? 12 : 0)
+                .padding(.leading, state.expanded ? 6 : 0)
                 .padding(.top, 2)
                 .transition(.opacity)
             }
