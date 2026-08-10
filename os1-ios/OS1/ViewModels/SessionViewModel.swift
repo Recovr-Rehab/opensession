@@ -114,6 +114,20 @@ final class SessionViewModel {
     private var historyStartOffset: Int?
     private var historyRev: String?
     private var historyFirstSeq: Int?
+    /// Walking the whole backlog to the first message, a page at a time.
+    /// Separate from `loadingEarlier` (which stays true across the gaps) so
+    /// the view can say which of the two is running.
+    private(set) var jumpingToStart = false
+    /// Bumped when a jump lands, so the view can scroll to the first message.
+    private(set) var jumpLandedSeq = 0
+    private var jumpLoaded = 0
+    private var jumpCursor: Int?
+    /// Fat pages keep the round trips — and the whole-transcript rebuilds one
+    /// per page costs — in single digits. The ceiling stops a runaway walk on
+    /// a transcript nobody should be rendering whole; when it trips the
+    /// control stays put so the reader can keep going deliberately.
+    private static let jumpPageEntries = 400
+    private static let jumpMaxEntries = 4_000
 
     private var socket: (any SessionSocket)?
     /// Injection seam for tests; production always builds a real OS1Socket.
@@ -719,19 +733,66 @@ final class SessionViewModel {
 
     /// Ask the server for one page of history older than what we hold.
     func loadEarlier() {
+        requestHistoryPage(whole: false)
+    }
+
+    /// Walk the backlog all the way to the first message: each page's arrival
+    /// asks for the next (see `continueJump`). A long session is otherwise a
+    /// hundred "load earlier" taps away from its start.
+    func jumpToStart() {
+        guard canLoadEarlier, !loadingEarlier, connectionState == .connected else { return }
+        jumpingToStart = true
+        jumpLoaded = 0
+        jumpCursor = nil
+        requestHistoryPage(whole: true)
+    }
+
+    private func requestHistoryPage(whole: Bool) {
         guard canLoadEarlier, !loadingEarlier, connectionState == .connected,
-              let socket else { return }
+              let socket else { endJump(); return }
         if let seq = historyFirstSeq, seq > 1 {
             loadingEarlier = true
-            socket.loadHistory(sessionId: session.id, beforeSeq: seq)
+            socket.loadHistory(
+                sessionId: session.id, beforeSeq: seq,
+                limit: whole ? Self.jumpPageEntries : nil
+            )
         } else if let offset = historyStartOffset, offset > 0 {
             loadingEarlier = true
-            socket.loadHistory(
-                sessionId: session.id, beforeOffset: offset, beforeRev: historyRev
-            )
+            if whole {
+                // Byte-window paging can't walk a backlog cheaply; the
+                // cursor-less request is answered with the whole transcript
+                // in one transcript_init, which lands the jump in one hop.
+                socket.loadWholeHistory(sessionId: session.id)
+            } else {
+                socket.loadHistory(
+                    sessionId: session.id, beforeOffset: offset, beforeRev: historyRev
+                )
+            }
         } else {
             canLoadEarlier = false
+            endJump()
         }
+    }
+
+    /// One page of a jump landed: ask for the next unless the walk is done.
+    /// Stops on a whole transcript, an empty page, a cursor that stopped
+    /// receding (nothing more is coming), or the ceiling.
+    private func continueJump(added: Int) {
+        guard jumpingToStart else { return }
+        jumpLoaded += added
+        let cursor = historyFirstSeq ?? historyStartOffset
+        guard canLoadEarlier, added > 0, let cursor, cursor != jumpCursor,
+              jumpLoaded < Self.jumpMaxEntries else { endJump(); return }
+        jumpCursor = cursor
+        requestHistoryPage(whole: true)
+    }
+
+    /// `landed: false` for a walk the socket cut short — the reader keeps the
+    /// position they had rather than being taken to a start we never reached.
+    private func endJump(landed: Bool = true) {
+        guard jumpingToStart else { return }
+        jumpingToStart = false
+        if landed { jumpLandedSeq += 1 }
     }
 
     private func applyHistoryCursor(_ cursor: HistoryCursor) {
@@ -837,6 +898,11 @@ final class SessionViewModel {
     private func scheduleReconnect(_ reason: String?) {
         guard !stopped else { return }
         connectionState = .reconnecting(reason)
+        // A history page died with the socket; the watch's fresh
+        // transcript_init is what unblocks paging again, so don't leave the
+        // control spinning on a request nobody will answer.
+        loadingEarlier = false
+        endJump(landed: false)
         // Presence is only true while the socket that reported it is up; the
         // rejoin brings a fresh frame.
         otherViewers = []
@@ -875,6 +941,7 @@ final class SessionViewModel {
                 isLoadingConversation = false
                 applyHistoryCursor(cursor)
                 loadingEarlier = false
+                endJump()
                 break
             }
             awaitingCreation = false
@@ -923,6 +990,10 @@ final class SessionViewModel {
             applyHistoryCursor(cursor)
             // A rev-mismatch reply to load_history comes back as a fresh init.
             loadingEarlier = false
+            // Also how a legacy jump lands (the whole transcript at once), and
+            // how a resync during a walk stops it — either way the reader is
+            // taken to the oldest entry now on screen.
+            endJump()
             rebuildDisplayItems()
             // A reconnect can include the durable form of a cached live
             // response. Reconcile only once that stream is known finished.
@@ -930,11 +1001,13 @@ final class SessionViewModel {
 
         case .transcriptHistory(let id, let older, let cursor) where id == session.id:
             let known = Set(entries.map(\.id))
-            entries.insert(contentsOf: older.filter { !known.contains($0.id) }, at: 0)
+            let added = older.filter { !known.contains($0.id) }
+            entries.insert(contentsOf: added, at: 0)
             applyHistoryCursor(cursor)
             loadingEarlier = false
             historyPrependSeq += 1
             rebuildDisplayItems()
+            continueJump(added: added.count)
 
         case .transcriptAppend(let id, let appended) where id == session.id:
             upsert(appended)

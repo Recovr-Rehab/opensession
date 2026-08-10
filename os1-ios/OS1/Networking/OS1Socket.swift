@@ -11,7 +11,8 @@ protocol SessionSocket: AnyObject {
     func watch(sessionId: String)
     func setAway(_ away: Bool)
     func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?)
-    func loadHistory(sessionId: String, beforeSeq: Int)
+    func loadHistory(sessionId: String, beforeSeq: Int, limit: Int?)
+    func loadWholeHistory(sessionId: String)
     func prompt(
         sessionId: String, content: String, user: String,
         images: [String]?, effort: String?, fastMode: Bool?, busyMode: String?
@@ -109,8 +110,22 @@ final class OS1Socket: SessionSocket {
     }
 
     /// Seq-mode paging for sessions served from the transcript v2 store.
-    func loadHistory(sessionId: String, beforeSeq: Int) {
-        send(["type": "load_history", "sessionId": sessionId, "beforeSeq": beforeSeq])
+    /// `limit` asks for a fatter page than the server's default — what the
+    /// backlog walk behind "jump to the start" uses to keep its round trips
+    /// (and whole-transcript reconciliations) in single digits.
+    func loadHistory(sessionId: String, beforeSeq: Int, limit: Int?) {
+        var frame: [String: Any] = [
+            "type": "load_history", "sessionId": sessionId, "beforeSeq": beforeSeq,
+        ]
+        if let limit { frame["limit"] = limit }
+        send(frame)
+    }
+
+    /// The deliberately cursor-less request: byte-window (legacy) sessions
+    /// have no cheap way to walk a backlog, and the server answers this with
+    /// the entire transcript in one transcript_init.
+    func loadWholeHistory(sessionId: String) {
+        send(["type": "load_history", "sessionId": sessionId])
     }
 
     func prompt(

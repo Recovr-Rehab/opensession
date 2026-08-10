@@ -45,6 +45,11 @@ struct SessionView: View {
     /// block-keyed anchor pointing at nothing.
     @State private var prependAnchorEntryId: String?
 
+    /// Set when a "jump to the start" walk lands with more history still
+    /// behind it, so the loader it puts back on screen doesn't immediately
+    /// page again under the reader.
+    @State private var suppressAutoEarlier = false
+
     /// How work folds start out: messages (folded, but the turn's notes still
     /// read as transcript) / collapsed / expanded / auto (open while the turn
     /// is live). Set in Settings → Preferences, shared with the web.
@@ -403,6 +408,17 @@ struct SessionView: View {
                         }
                         prependAnchorEntryId = nil
                     }
+                    // A landed "jump to the start": the walk's last page is in
+                    // the transcript now, so take the reader to the oldest
+                    // block it reached — the first message, unless the walk
+                    // stopped at its ceiling.
+                    .onChange(of: viewModel.jumpLandedSeq) {
+                        prependAnchorEntryId = nil
+                        suppressAutoEarlier = viewModel.canLoadEarlier
+                        if let first = viewModel.displayBlocks.first?.id {
+                            proxy.scrollTo(first, anchor: .top)
+                        }
+                    }
                 }
             }
             // Web links from the transcript open on top of it, not instead of
@@ -649,26 +665,56 @@ struct SessionView: View {
     /// the previous window of history (with a button as the manual fallback).
     private var historyLoader: some View {
         HStack(spacing: 6) {
-            if viewModel.loadingEarlier {
+            if viewModel.jumpingToStart {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Loading full history…")
+            } else if viewModel.loadingEarlier {
                 ProgressView()
                     .controlSize(.small)
                 Text("Loading earlier…")
             } else {
                 Button("Load earlier history") { requestEarlier() }
                     .buttonStyle(.borderless)
+                Divider()
+                    .frame(height: 14)
+                // The whole backlog in one tap, for readers who'd otherwise
+                // page a hundred times to reach the first message.
+                Button { requestJumpToStart() } label: {
+                    Image(systemName: "arrow.up.to.line")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Jump to the start of the session")
             }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
-        .onAppear { requestEarlier() }
+        .onAppear {
+            // A jump that stopped at its ceiling leaves this control on screen
+            // right under the reader; auto-paging there would yank the view
+            // they were just placed in. The next appearance loads as usual.
+            if suppressAutoEarlier {
+                suppressAutoEarlier = false
+            } else {
+                requestEarlier()
+            }
+        }
     }
 
     private func requestEarlier() {
         guard viewModel.canLoadEarlier, !viewModel.loadingEarlier else { return }
         prependAnchorEntryId = viewModel.topmostEntryId
         viewModel.loadEarlier()
+    }
+
+    private func requestJumpToStart() {
+        guard viewModel.canLoadEarlier, !viewModel.loadingEarlier else { return }
+        // The walk ends with an explicit scroll to the first message, so the
+        // per-page anchor restore has nothing to keep in place.
+        prependAnchorEntryId = nil
+        viewModel.jumpToStart()
     }
 
     @ViewBuilder

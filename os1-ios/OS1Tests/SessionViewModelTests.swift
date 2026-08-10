@@ -313,6 +313,142 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.id), ["e1", "e2"])
     }
 
+    // MARK: - Jump to the start
+
+    /// One tap has to reach the first message: each page's arrival asks for
+    /// the next, with fat pages so a long backlog is a handful of round trips.
+    func testJumpToStartWalksSeqPagesUntilTheFirstMessage() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"), socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e900", "user", text: "recent")],
+            cursor: HistoryCursor(
+                truncated: true, startOffset: nil, rev: nil, firstSeq: 900
+            )
+        ))
+
+        viewModel.jumpToStart()
+        XCTAssertTrue(viewModel.jumpingToStart)
+        viewModel.handle(.transcriptHistory(
+            sessionId: "bks-1",
+            entries: [entry("e500", "user", text: "middle")],
+            cursor: HistoryCursor(
+                truncated: true, startOffset: nil, rev: nil, firstSeq: 500
+            )
+        ))
+        XCTAssertTrue(viewModel.jumpingToStart, "walk stops short of the start")
+        viewModel.handle(.transcriptHistory(
+            sessionId: "bks-1",
+            entries: [entry("e1", "user", text: "first")],
+            cursor: HistoryCursor(
+                truncated: false, startOffset: nil, rev: nil, firstSeq: 1
+            )
+        ))
+
+        XCTAssertEqual(socket.historyRequests, [
+            .seq(900, limit: 400), .seq(500, limit: 400),
+        ])
+        XCTAssertFalse(viewModel.jumpingToStart)
+        XCTAssertFalse(viewModel.canLoadEarlier)
+        XCTAssertEqual(viewModel.jumpLandedSeq, 1, "the view scrolls to the start once")
+        XCTAssertEqual(viewModel.entries.map(\.id), ["e1", "e500", "e900"])
+    }
+
+    /// A page that doesn't move the cursor means nothing more is coming —
+    /// keep asking and the walk never ends.
+    func testJumpToStartStopsWhenTheCursorStopsReceding() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"), socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e900", "user", text: "recent")],
+            cursor: HistoryCursor(
+                truncated: true, startOffset: nil, rev: nil, firstSeq: 900
+            )
+        ))
+
+        viewModel.jumpToStart()
+        for id in ["e500", "e499"] {
+            viewModel.handle(.transcriptHistory(
+                sessionId: "bks-1",
+                entries: [entry(id, "user", text: "page")],
+                cursor: HistoryCursor(
+                    truncated: true, startOffset: nil, rev: nil, firstSeq: 500
+                )
+            ))
+        }
+
+        XCTAssertEqual(socket.historyRequests, [
+            .seq(900, limit: 400), .seq(500, limit: 400),
+        ])
+        XCTAssertFalse(viewModel.jumpingToStart)
+        XCTAssertTrue(viewModel.canLoadEarlier, "the control stays for a manual page")
+    }
+
+    /// Byte-window sessions can't walk a backlog; the cursor-less request is
+    /// answered with the whole transcript in one init.
+    func testJumpToStartAsksLegacySessionsForTheWholeTranscript() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"), socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e9", "user", text: "recent")],
+            cursor: HistoryCursor(
+                truncated: true, startOffset: 4096, rev: "rev-1", firstSeq: nil
+            )
+        ))
+
+        viewModel.jumpToStart()
+        XCTAssertEqual(socket.historyRequests, [.whole])
+
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e1", "user", text: "first"), entry("e9", "user", text: "recent")],
+            cursor: .empty
+        ))
+        XCTAssertFalse(viewModel.jumpingToStart)
+        XCTAssertEqual(viewModel.jumpLandedSeq, 1)
+    }
+
+    /// A socket that dies mid-walk must not leave the control spinning on a
+    /// request nobody will answer — nor scroll the reader to a start we never
+    /// reached.
+    func testDisconnectMidJumpClearsTheWalkWithoutLanding() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"), socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e900", "user", text: "recent")],
+            cursor: HistoryCursor(
+                truncated: true, startOffset: nil, rev: nil, firstSeq: 900
+            )
+        ))
+        viewModel.jumpToStart()
+
+        socket.onClose?("Connection lost")
+
+        XCTAssertFalse(viewModel.jumpingToStart)
+        XCTAssertFalse(viewModel.loadingEarlier)
+        XCTAssertEqual(viewModel.jumpLandedSeq, 0)
+    }
+
     func testAppendUpsertsById() {
         let viewModel = makeViewModel()
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [entry("e1", "assistant", text: "draft")]))
@@ -1222,12 +1358,28 @@ private final class MockSocket: SessionSocket {
     private(set) var reorders: [[String]] = []
     private(set) var awayFrames: [Bool] = []
 
+    /// Every earlier-history request, in order — the backlog walk behind
+    /// "jump to the start" is a sequence of these.
+    enum HistoryRequest: Equatable {
+        case seq(Int, limit: Int?)
+        case offset(Int)
+        case whole
+    }
+    private(set) var historyRequests: [HistoryRequest] = []
+
     func connect() { connectCount += 1 }
     func disconnect() { disconnectCount += 1 }
     func watch(sessionId: String) { watched.append(sessionId) }
     func setAway(_ away: Bool) { awayFrames.append(away) }
-    func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?) {}
-    func loadHistory(sessionId: String, beforeSeq: Int) {}
+    func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?) {
+        historyRequests.append(.offset(beforeOffset))
+    }
+    func loadHistory(sessionId: String, beforeSeq: Int, limit: Int?) {
+        historyRequests.append(.seq(beforeSeq, limit: limit))
+    }
+    func loadWholeHistory(sessionId: String) {
+        historyRequests.append(.whole)
+    }
     func prompt(
         sessionId: String, content: String, user: String,
         images: [String]?, effort: String?, fastMode: Bool?, busyMode: String?
