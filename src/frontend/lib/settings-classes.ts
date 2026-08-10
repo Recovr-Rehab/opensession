@@ -46,3 +46,32 @@ export const SETTINGS_CONTENT_SHEET =
 /** The reading column a settings panel sits in, and its bottom air. */
 export const SETTINGS_PANEL_FRAME = "w-full max-w-[720px] self-start pb-22";
 export const SETTINGS_PANEL_FRAME_SHEET = "w-full max-w-[720px] self-start pb-12";
+
+/**
+ * The phone sheet's section list and the search bar floating over its bottom
+ * edge, where iOS 26 puts a list's search.
+ *
+ * The bar is glass, in the same terms the phone app header uses (APP_HEADER):
+ * a `before:` layer that blurs what passes behind it, tinted with a gradient
+ * of the page colour and masked so the blur ends softly instead of on a line.
+ * That only reads as glass if there IS something behind it, so the list scrolls
+ * the full height of the page and reserves the bar's height as bottom padding —
+ * the last row can still be scrolled clear of it.
+ *
+ * The `before:z-[-1]` needs the bar's own `z-1`: without a stacking context of
+ * its own, a negative-z pseudo drops behind the list rather than sitting under
+ * its parent's content.
+ */
+export const SETTINGS_SHEET_LIST = "h-full overflow-y-auto px-4 pb-[72px]";
+
+export const SETTINGS_SHEET_SEARCH_BAR =
+	"absolute inset-x-0 bottom-0 z-1 px-4 pb-2.5 pt-2 " +
+	"before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 " +
+	"before:top-auto before:z-[-1] before:h-[calc(100%+30px)] before:content-[''] " +
+	// Translucent all the way down, not opaque at the base: glass that admits
+	// nothing is just a panel. It only firms up (88%) at the very bottom edge,
+	// where a row would otherwise read THROUGH the field rather than behind it.
+	"before:[background:linear-gradient(to_top,color-mix(in_srgb,var(--bg)_88%,transparent)_0%,color-mix(in_srgb,var(--bg)_76%,transparent)_55%,color-mix(in_srgb,var(--bg)_45%,transparent)_78%,transparent_100%)] " +
+	"before:backdrop-blur-[16px] before:backdrop-saturate-[1.35] " +
+	"before:[-webkit-mask-image:linear-gradient(to_top,#000_0%,#000_62%,transparent_100%)] " +
+	"before:[mask-image:linear-gradient(to_top,#000_0%,#000_62%,transparent_100%)]";

@@ -9,6 +9,8 @@ import {
 	SETTINGS_PAGE,
 	SETTINGS_PANEL_FRAME,
 	SETTINGS_PANEL_FRAME_SHEET,
+	SETTINGS_SHEET_LIST,
+	SETTINGS_SHEET_SEARCH_BAR,
 } from "../lib/settings-classes";
 import { matchSections, type SectionHit } from "../lib/settings-search";
 import { Input } from "../ui/input";
@@ -858,14 +860,10 @@ function MobileSettings({
 						{/* Root page: grouped section list over a bottom search bar.
 						    Parked slightly left while a detail page covers it, iOS-style. */}
 						<div
-							className={cn(
-								"absolute inset-0 flex flex-col",
-								pageEase,
-								detail && "-translate-x-1/3",
-							)}
+							className={cn("absolute inset-0", pageEase, detail && "-translate-x-1/3")}
 							aria-hidden={!!detail}
 						>
-							<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
+							<div className={SETTINGS_SHEET_LIST}>
 								{shown.map((g) => (
 									<div key={g.group}>
 										<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
@@ -904,20 +902,15 @@ function MobileSettings({
 							</div>
 
 							{/* Search sits at the bottom edge, where the thumb is and where
-							    iOS 26 puts it (the native app's sessions list does the same).
-							    It stays put while the list scrolls under it, so the way out
-							    of 22 sections is always in reach; the wash above dissolves
-							    rows into the bar instead of cutting them on a line. */}
+							    iOS 26 puts it (the native app's sessions list does the same),
+							    on glass — so the list stays legible passing behind it and the
+							    way out of 22 sections is always in reach. */}
 							<NavSearch
 								sheet
 								value={query}
 								onChange={setQuery}
 								onSubmit={() => firstHit && onSelect(firstHit.key)}
-								className={cn(
-									"relative shrink-0 bg-surface px-4 pb-2.5 pt-2",
-									"before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full",
-									"before:h-[var(--wash-depth)] before:[background:var(--wash-down)] before:content-['']",
-								)}
+								className={SETTINGS_SHEET_SEARCH_BAR}
 							/>
 						</div>
 
