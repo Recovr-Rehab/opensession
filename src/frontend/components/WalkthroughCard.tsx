@@ -85,10 +85,9 @@ export function WalkthroughCard({
 				// p-4 deliberately exceeds the mt-3 rhythm between the blocks
 				// inside, so the card edge reads as an edge — at 12px a trailing
 				// screenshot looks like it runs out of the card rather than sitting
-				// in it. The hairline is what makes it read as a card at all: on
-				// the transcript's own background --bg-raised is nearly the same
-				// paint, so without an edge the writeup looks like a long message.
-				"rounded-lg bg-raised p-4",
+				// in it. The card inherits its surrounding surface; the hairline is
+				// enough to separate it without introducing a darker grey panel.
+				"rounded-lg bg-transparent p-4",
 				session && "border border-line",
 				// In the session the card is a transcript block like any other, so it
 				// takes the same centered reading column the turns and footers use
@@ -150,9 +149,9 @@ export function WalkthroughCard({
 			{!expanded && (walkthrough.video || gallery.items.length > 0) && (
 				// The folded card's pictures: every still, in reading order, sharing
 				// out the card's width instead of sitting at thumbnail size against
-				// a gulf of empty card. Tight within a pair and loose between them,
-				// so the gaps say which before belongs to which after now that the
-				// labels are gone — the pairing is the point of the folded strip,
+				// a gulf of empty card. Tight within a pair and loose between them;
+				// the labels make each side explicit while the pairing remains the
+				// point of the folded strip,
 				// since a before and its after side by side is checkable at a
 				// glance. Each pair keeps a floor width, so a walkthrough with many
 				// pairs overflows into the same scroll as before rather than
@@ -194,24 +193,38 @@ export function WalkthroughCard({
 								{(["before", "after"] as const).map(
 									(side) =>
 										shot[side] && (
-											<button
-												type="button"
+											<figure
+												className="m-0 min-w-0 flex-1"
 												key={side}
-												className="block aspect-[16/10] max-h-[132px] min-w-0 flex-1 cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-												onClick={(e) =>
-													open(`${i}:${side}`, e.currentTarget)
-												}
 											>
-												{/* The alt names the button — an aria-label here
-												    would replace the caption with six identical
-												    "Open before image preview"s. */}
-												<img
-													className="h-full w-full object-cover object-top"
-													src={mediaUrl(shot[side]!)}
-													alt={`${shot.caption || "Change"} — ${side}`}
-													loading="lazy"
-												/>
-											</button>
+												<figcaption
+													className={cn(
+														"mb-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4",
+														side === "before"
+															? "bg-red-soft text-red"
+															: "bg-green-soft text-green",
+													)}
+												>
+													{side === "before" ? "Before" : "After"}
+												</figcaption>
+												<button
+													type="button"
+													className="block aspect-[16/10] max-h-[132px] w-full cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+													onClick={(e) =>
+														open(`${i}:${side}`, e.currentTarget)
+													}
+												>
+													{/* The alt names the button — an aria-label here
+													    would replace the caption with six identical
+													    "Open before image preview"s. */}
+													<img
+														className="h-full w-full object-cover object-top"
+														src={mediaUrl(shot[side]!)}
+														alt={`${shot.caption || "Change"} — ${side}`}
+														loading="lazy"
+													/>
+												</button>
+											</figure>
 										),
 								)}
 							</div>
@@ -257,7 +270,14 @@ export function WalkthroughCard({
 									(side) =>
 										shot[side] && (
 											<figure className="m-0 min-w-0 flex-1" key={side}>
-												<figcaption className="mb-1 text-[11px] font-medium text-dim">
+												<figcaption
+													className={cn(
+														"mb-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4",
+														side === "before"
+															? "bg-red-soft text-red"
+															: "bg-green-soft text-green",
+													)}
+												>
 													{side === "before" ? "Before" : "After"}
 												</figcaption>
 												<button

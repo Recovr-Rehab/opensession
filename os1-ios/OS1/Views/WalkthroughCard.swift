@@ -245,8 +245,14 @@ private struct WalkthroughShotView: View {
     private func labelled(_ label: String, path: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(OS1VisualStyle.textFaint)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(label == "Before" ? OS1VisualStyle.red : OS1VisualStyle.green)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    (label == "Before" ? OS1VisualStyle.red : OS1VisualStyle.green).opacity(0.14),
+                    in: Capsule()
+                )
             MediaImage(
                 path: path,
                 gallery: gallery,
