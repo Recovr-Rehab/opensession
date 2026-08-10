@@ -46,7 +46,6 @@ import {
 	SIDEBAR_STICKY_BAND_ROW,
 	SIDEBAR_STICKY_LANE,
 	SIDEBAR_STICKY_LANE_NESTED,
-	SIDEBAR_STUCK_BACKING,
 	SIDEBAR_SWIPE_ACTION,
 	SIDEBAR_SWIPE_ACTION_ARCHIVE,
 	SIDEBAR_SWIPE_ACTION_OPEN,
@@ -452,65 +451,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		[],
 	);
 	const sidebarScrollRef = useRef<HTMLDivElement>(null);
-
-	// CSS has no interoperable :stuck selector. Track the shared sidebar
-	// scrollport instead so section/lane labels can stay transparent in-flow and
-	// gain an opaque surface only while position:sticky is actively pinning them.
-	useLayoutEffect(() => {
-		const root = sidebarScrollRef.current;
-		if (!root) return;
-		let frame = 0;
-		// Every heading that can pin marks itself with `data-sticky-head`, so
-		// this listener never has to know which family it belongs to (band,
-		// lane, repo, status) — or survive the class names being restyled.
-		const selector = "[data-sticky-head]";
-
-		const update = () => {
-			frame = 0;
-			const rootTop = root.getBoundingClientRect().top;
-			root.querySelectorAll<HTMLElement>(selector).forEach((header) => {
-				const style = getComputedStyle(header);
-				const parent = header.parentElement;
-				if (style.position !== "sticky" || !parent) {
-					header.classList.remove("is-stuck");
-					return;
-				}
-				const stickyTop = Number.parseFloat(style.top) || 0;
-				const rect = header.getBoundingClientRect();
-				const pinned = rect.top <= rootTop + stickyTop + 0.5;
-				// Pin-line position alone also matches a header that naturally
-				// RESTS at its sticky offset (the first section at scrollTop 0 —
-				// the solid-pill-while-unscrolled bug), so additionally require
-				// real displacement from the parent. All of these headers sit
-				// flush with their parent's top in static layout, so a positive
-				// delta means sticky is actively holding the header back. (Don't
-				// try offsetTop for this: Chromium reports the displaced sticky
-				// position there, not static layout.)
-				const displaced =
-					rect.top - parent.getBoundingClientRect().top > 1.5;
-				header.classList.toggle("is-stuck", pinned && displaced);
-			});
-		};
-		const schedule = () => {
-			if (!frame) frame = requestAnimationFrame(update);
-		};
-
-		update();
-		root.addEventListener("scroll", schedule, { passive: true });
-		window.addEventListener("resize", schedule);
-		const resizeObserver = new ResizeObserver(schedule);
-		resizeObserver.observe(root);
-		const mutationObserver = new MutationObserver(schedule);
-		mutationObserver.observe(root, { childList: true, subtree: true });
-
-		return () => {
-			root.removeEventListener("scroll", schedule);
-			window.removeEventListener("resize", schedule);
-			resizeObserver.disconnect();
-			mutationObserver.disconnect();
-			if (frame) cancelAnimationFrame(frame);
-		};
-	}, []);
 
 	// Filter popover (group by / repo / sort) — its choices persist together.
 	// The person lens is shared with Home's facepile (lib/sidebar-filter), so
@@ -2853,7 +2793,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						"transition-colors",
 						SIDEBAR_STICKY_LANE,
 						ns && SIDEBAR_STICKY_LANE_NESTED,
-						SIDEBAR_STUCK_BACKING,
 					)}
 					data-sticky-head
 					onClick={() => toggleGroup(gkey)}
@@ -2924,7 +2863,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							"transition-colors",
 							SIDEBAR_STICKY_LANE,
 							ns && SIDEBAR_STICKY_LANE_NESTED,
-							SIDEBAR_STUCK_BACKING,
 						)}
 						data-sticky-head
 						onClick={() => toggleGroup(gkey)}
@@ -3039,7 +2977,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								"transition-colors",
 								SIDEBAR_STICKY_LANE,
 								ns && SIDEBAR_STICKY_LANE_NESTED,
-								SIDEBAR_STUCK_BACKING,
 							)}
 							data-sticky-head
 							onClick={() => toggleGroup(gkey)}
@@ -3254,7 +3191,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								SIDEBAR_GROUP_HEADER_INSET,
 								"group transition-colors",
 								SIDEBAR_STICKY_LANE,
-								SIDEBAR_STUCK_BACKING,
 							)}
 							data-sticky-head
 							draggable={canReorder}
@@ -3404,7 +3340,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							SIDEBAR_LANE_HEADER,
 							SIDEBAR_STICKY_LANE,
 							nested && SIDEBAR_STICKY_LANE_NESTED,
-							SIDEBAR_STUCK_BACKING,
 						)}
 						data-sticky-head
 						onClick={() => toggleGroup(gkey)}
@@ -3566,7 +3501,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								SIDEBAR_GROUP_HEADER_INSET,
 								"group transition-colors",
 									SIDEBAR_STICKY_LANE,
-									SIDEBAR_STUCK_BACKING,
 								)}
 								data-sticky-head
 								onClick={() => toggleGroup(gkey)}
@@ -3691,7 +3625,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						"px-1.5 pt-3 pb-0.5",
 						SIDEBAR_STICKY_BAND,
 						SIDEBAR_STICKY_BAND_ROW,
-						SIDEBAR_STUCK_BACKING,
 					)}
 					data-sticky-head
 				>
@@ -3923,7 +3856,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					"mt-1 px-[16px] pb-0.5 pr-[7px] pt-3",
 					SIDEBAR_STICKY_BAND,
 					SIDEBAR_STICKY_BAND_ROW,
-					SIDEBAR_STUCK_BACKING,
 				)}
 				data-sticky-head
 			>
@@ -4340,7 +4272,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										SIDEBAR_GROUP_HEADER,
 										SIDEBAR_GROUP_HEADER_INSET,
 										SIDEBAR_STICKY_LANE,
-										SIDEBAR_STUCK_BACKING,
 									)}
 									data-sticky-head
 									onClick={() => toggleGroup("needsreview")}
@@ -4384,7 +4315,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										SIDEBAR_GROUP_HEADER,
 										SIDEBAR_GROUP_HEADER_INSET,
 										SIDEBAR_STICKY_LANE,
-										SIDEBAR_STUCK_BACKING,
 									)}
 									data-sticky-head
 									onClick={() => toggleGroup("awaitingreview")}
@@ -4701,7 +4631,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									SIDEBAR_GROUP_HEADER,
 									SIDEBAR_GROUP_HEADER_INSET,
 									SIDEBAR_STICKY_LANE,
-									SIDEBAR_STUCK_BACKING,
 								)}
 								data-sticky-head
 								onClick={() => toggleGroup("pinned")}
@@ -4872,7 +4801,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								"py-0 pl-0 pr-2 desktop:pr-0",
 								SIDEBAR_STICKY_BAND,
 								SIDEBAR_STICKY_BAND_ROW,
-								SIDEBAR_STUCK_BACKING,
 							)}
 							data-sticky-head
 						>

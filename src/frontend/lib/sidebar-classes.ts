@@ -248,9 +248,8 @@ export const SIDEBAR_AUTO_COG =
  * The desktop sidebar is ONE scroll rail, and two tiers of heading pin inside
  * it: a band heading (Tools / Workspaces / Automations / People) holds the top
  * slot, and the lane, repo and status headers under it pin one row lower.
- * Every pinning element also carries `data-sticky-head`, which is what
- * Sidebar's scroll listener queries — CSS has no interoperable `:stuck`, so
- * `is-stuck` is toggled from JS and only then does a header paint its backing.
+ * Every pinning element also carries `data-sticky-head`, which repo drag uses
+ * to find the band header without coupling to its visual class names.
  *
  * Everything here is gated on `min-[721px]`: on phones the whole sidebar is a
  * page that scrolls as one, and nothing pins.
@@ -329,20 +328,6 @@ export const SIDEBAR_BAND_TOGGLE_INSET =
  * space at the row's right edge, which is invisible.
  */
 export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
-
-/**
- * The compact surface a header paints once it is actually pinned. It is inset
- * from every edge and rounded, so the heading reads as floating chrome while
- * rows continue beneath and remain visible around it — the native list model,
- * rather than another full-width bar.
- *
- * This deliberately avoids backdrop-filter. Toggling blur from the scroll
- * listener re-rasterized the whole sidebar mid-scroll on loaded machines. The
- * exact sidebar material keeps the label legible; a tight contact shadow and a
- * short ambient shadow supply the separation instead.
- */
-export const SIDEBAR_STUCK_BACKING =
-	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-1/2 desktop:[&.is-stuck::before]:inset-x-2 desktop:[&.is-stuck::before]:h-[34px] desktop:[&.is-stuck::before]:[transform:translateY(-50%)] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:rounded-[calc(9px*var(--rf))] desktop:[&.is-stuck::before]:shadow-[0_1px_2px_rgba(0,0,0,0.06),0_2px_7px_rgba(0,0,0,0.035)] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]";
 
 /**
  * The live-state dot a row, group header or hover card carries, minus the
