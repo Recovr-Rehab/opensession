@@ -6,8 +6,10 @@
 # ports DNAT'd into the guest (3300 dev, 8080 agent, 8081 root agent).
 #
 #   clone.sh create <idx> <pool-dir>   # restore the clean golden
+#   clone.sh create <idx> <pool-dir> <template-key> # cold-boot repo template when fresh
 #   clone.sh pause <idx> <pool-dir>    # stop compute/network, preserve COW disk
 #   clone.sh resume <idx> <pool-dir>   # cold-boot the preserved COW disk
+#   clone.sh publish-template <idx> <pool-dir> <template-key>
 #   clone.sh destroy <idx> <pool-dir>  # remove compute/network/disk
 #
 # Layout per clone (under <pool-dir>): clone<idx>.ext4 (COW/sparse copy of
@@ -17,6 +19,7 @@
 # Run as root.
 set -euo pipefail
 CMD="$1"; IDX="$2"; POOL="${3:-/opt/firecracker/store}"
+TEMPLATE_KEY="${4:-}"
 NS="bksns$IDX"
 VETH_H="bksveth${IDX}h"; VETH_N="bksveth${IDX}n"
 HOST_IP="10.200.$IDX.1"; NS_IP="10.200.$IDX.2"
@@ -57,8 +60,8 @@ if [ "$CMD" = "pause" ]; then
   echo "paused clone $IDX"
   exit 0
 fi
-[ "$CMD" = "create" ] || [ "$CMD" = "resume" ] || {
-  echo "usage: clone.sh create|pause|resume|destroy <idx> [pool-dir]" >&2
+[ "$CMD" = "create" ] || [ "$CMD" = "resume" ] || [ "$CMD" = "publish-template" ] || {
+  echo "usage: clone.sh create|pause|resume|destroy|publish-template <idx> [pool-dir] [template-key]" >&2
   exit 2
 }
 
@@ -66,6 +69,24 @@ fi
 # matching memory/vmstate. Never let a clone observe a mixed generation.
 exec 9>"$POOL/.refresh.lock"
 flock -s 9
+
+if [ "$CMD" = "publish-template" ]; then
+  [[ "$TEMPLATE_KEY" =~ ^[A-Za-z0-9_.-]+$ ]] || {
+    echo "invalid repo template key" >&2; exit 2;
+  }
+  [ -f "$DISK" ] && [ -f "$POOL/clone$IDX.paused" ] || {
+    echo "clone $IDX must be paused before publishing a repo template" >&2; exit 4;
+  }
+  mkdir -p "$POOL/repo-templates"
+  NEXT="$POOL/repo-templates/$TEMPLATE_KEY.next.ext4"
+  TARGET="$POOL/repo-templates/$TEMPLATE_KEY.ext4"
+  rm -f "$NEXT"
+  cp --reflink=auto --sparse=always "$DISK" "$NEXT"
+  mv -f "$NEXT" "$TARGET"
+  find "$POOL/repo-templates" -maxdepth 1 -type f -name '*.ext4' -mmin +1440 -delete
+  echo "published repo template $TEMPLATE_KEY"
+  exit 0
+fi
 
 # Never destroy-first: a concurrent caller re-using a live index must FAIL,
 # not silently kill the running VM (a claim's VM died mid-converge to a
@@ -76,8 +97,16 @@ if systemctl is-active --quiet "os-fc-clone$IDX" 2>/dev/null; then
 fi
 if [ "$CMD" = "create" ]; then
   destroy 2>/dev/null || true
+  SOURCE="$POOL/golden.ext4"
+  LOAD_MEMORY_SNAPSHOT=1
+  if [[ "$TEMPLATE_KEY" =~ ^[A-Za-z0-9_.-]+$ ]] && \
+     [ -f "$POOL/repo-templates/$TEMPLATE_KEY.ext4" ] && \
+     find "$POOL/repo-templates/$TEMPLATE_KEY.ext4" -mmin -1440 -print -quit | grep -q .; then
+    SOURCE="$POOL/repo-templates/$TEMPLATE_KEY.ext4"
+    LOAD_MEMORY_SNAPSHOT=0
+  fi
   # COW disk: reflink when the store supports it (XFS), sparse copy otherwise.
-  cp --reflink=auto --sparse=always "$POOL/golden.ext4" "$DISK"
+  cp --reflink=auto --sparse=always "$SOURCE" "$DISK"
 else
   [ -f "$DISK" ] || { echo "clone $IDX has no preserved disk to resume" >&2; exit 4; }
   stop_runtime 2>/dev/null || true
@@ -131,7 +160,7 @@ fc() {
   curl -s --unix-socket "$API" -X "$1" "http://x$2" \
     -H 'Content-Type: application/json' -d "$3"
 }
-if [ "$CMD" = "create" ]; then
+if [ "$CMD" = "create" ] && [ "$LOAD_MEMORY_SNAPSHOT" = "1" ]; then
   LOAD=$(fc PUT /snapshot/load \
     "{\"snapshot_path\":\"$POOL/golden.vmstate\",\"mem_backend\":{\"backend_type\":\"File\",\"backend_path\":\"$POOL/golden.mem\"},\"resume_vm\":true}")
   if echo "$LOAD" | grep -q fault_message; then

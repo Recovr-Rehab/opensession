@@ -1054,7 +1054,14 @@ export async function maybeLaunchSandboxedRun(
 		mcpServers?: McpScope;
 		isAutomationSession: boolean;
 	},
-): Promise<(AsyncGenerator<StreamEvent> & { freshEngine?: boolean }) | null> {
+): Promise<(
+	AsyncGenerator<StreamEvent> & {
+		freshEngine?: boolean;
+		sandboxProvider?: string;
+		sandboxId?: string;
+		sandboxReadyMs?: number;
+	}
+) | null> {
 	const sbProvider = session.sandbox?.provider;
 	if (!isRunnableSandboxProvider(sbProvider)) return null; // "local"/absent/unknown = host
 	if (!sandboxesEnabled()) return null; // kill-switch file — instant revert
@@ -1072,6 +1079,7 @@ export async function maybeLaunchSandboxedRun(
 	// Hoisted so the catch below can unregister it — a failed launch must not
 	// leak the run token (spawnHostRun's error path does the same cleanup).
 	let rpcToken: string | undefined;
+	const sandboxStartedAt = Date.now();
 	try {
 		const provider = getSandboxProvider(sbProvider);
 		const sandbox = await provider.ensure({
@@ -1171,11 +1179,23 @@ export async function maybeLaunchSandboxedRun(
 		console.log(`[sandbox] ${session.id}: running in ${sandbox.id} (${sandbox.cwd})`);
 		return Object.assign(handle.events(), {
 			freshEngine: remoteSandboxReplaced || undefined,
+			sandboxProvider: sbProvider,
+			sandboxId: sandbox.id,
+			sandboxReadyMs: Date.now() - sandboxStartedAt,
 		});
 	} catch (e: any) {
 		// The token was registered mid-try; the failed run will never consume it.
 		unregisterRunToken(rpcToken);
 		const reason = String(e?.message || e).slice(0, 200);
+		audit({
+			kind: "sandbox_turn_metric",
+			session_id: session.id,
+			environment: "sandbox",
+			provider: sbProvider,
+			outcome: "launch_failed",
+			sandbox_ready_ms: Date.now() - sandboxStartedAt,
+			error: reason,
+		});
 		// Daytona's WS dial-back is the launch step that fails when egress is
 		// blocked (lower org tiers) or callbackBaseUrl isn't sandbox-reachable.
 		const dialBackHint =
@@ -1839,6 +1859,7 @@ async function runSessionPromptInner(
 	// per-session sandbox; null (the default for every session without the
 	// opt-in field, plus every failure/kill-switch case) = the unchanged
 	// in-process path below.
+	const turnMetricStartedAt = Date.now();
 	const sandboxRun = await maybeLaunchSandboxedRun(session, {
 		prompt,
 		promptEntryId,
@@ -1887,6 +1908,8 @@ async function runSessionPromptInner(
 	// the session posted to (slackReplyTo — e.g. a reply under an automation's
 	// summary message lands here via deliverToSession).
 	let assistantText = "";
+	let firstEventMs: number | undefined;
+	let firstTokenMs: number | undefined;
 	// Tool calls seen this run — used to replenish the continuation budget only
 	// while human messages are queued behind ongoing work.
 	let toolUseCount = 0;
@@ -1956,6 +1979,7 @@ async function runSessionPromptInner(
 		journal: { osSessionId: session.id, kind: "prompt" },
 		onAskUser: makeAskHandler(sessionId),
 	})) {
+		firstEventMs ??= Date.now() - turnMetricStartedAt;
 		switch (event.type) {
 			case "init":
 				if (event.provider) effectiveProvider = event.provider;
@@ -2004,6 +2028,7 @@ async function runSessionPromptInner(
 				}
 				break;
 			case "text_chunk":
+				firstTokenMs ??= Date.now() - turnMetricStartedAt;
 				assistantText += event.text;
 				broadcastToSession(sessionId, {
 					type: "stream_text",
@@ -2184,6 +2209,19 @@ async function runSessionPromptInner(
 				break;
 		}
 	}
+
+	audit({
+		kind: "session_turn_metric",
+		session_id: session.id,
+		environment: sandboxRun ? "sandbox" : "worktree",
+		provider: sandboxRun?.sandboxProvider || "host",
+		sandbox_id: sandboxRun?.sandboxId,
+		sandbox_ready_ms: sandboxRun?.sandboxReadyMs,
+		start_to_first_event_ms: firstEventMs,
+		start_to_first_token_ms: firstTokenMs,
+		duration_ms: Date.now() - turnMetricStartedAt,
+		outcome: endedWithError || runFailure ? "failed" : "ok",
+	});
 
 	// Persist activity on our own session store. Slack/linear stores stay the
 	// owning agent's property, with one surgical exception: engine-id/model

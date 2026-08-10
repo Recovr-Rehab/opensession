@@ -169,12 +169,17 @@ describe("requestPrewarm", () => {
   test.skipIf(killSwitch)("uses a provider-specific preparation hook", async () => {
     const fake = makeFakeAdapter();
     const prepared: string[] = [];
+    const parked: string[] = [];
     fake.adapter.prepare = async (_driver, repo, label) => {
       prepared.push(`${repo.id}:${label}`);
+    };
+    fake.adapter.park = async (id) => {
+      parked.push(id);
     };
     await requestPrewarm("daytona", "tella-fusion");
     await until(() => readyEntry()?.state === "ready");
     expect(prepared).toEqual(["tella-fusion:daytona-prewarm"]);
+    expect(parked).toEqual([fake.created[0]]);
   });
 
   test.skipIf(killSwitch)("prewarm disabled by config → disabled", async () => {

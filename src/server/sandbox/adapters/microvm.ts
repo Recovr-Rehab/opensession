@@ -9,7 +9,9 @@
  */
 
 import { homeDir } from "../../paths";
+import { audit } from "../../audit";
 import { hostRunBusy } from "../../host-registry";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { getRepo } from "../../worktree";
 import {
@@ -29,11 +31,13 @@ import type { RemotePtyHandle, RemotePtyIo } from "./daytona";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
+  bootstrapSignature,
   findRemoteStateBySession,
   listRemoteStates,
   makeRemoteSandbox,
   readRemoteState,
   remoteCloneUrl,
+  remoteWarmWorkspaceDir,
   removeRemoteState,
   runRemoteLifecycleHook,
   setupRemoteWorkspace,
@@ -266,10 +270,45 @@ function cloneDiskExists(idx: number, storeDir: string): boolean {
   return existsSync(`${storeDir}/clone${idx}.ext4`);
 }
 
+function repoTemplateKey(repoId: string): string {
+  const repo = repoId.replace(/[^A-Za-z0-9_.-]+/g, "-").slice(0, 80);
+  const signature = createHash("sha256")
+    .update(bootstrapSignature())
+    .digest("hex")
+    .slice(0, 16);
+  return `repo-${repo}-${signature}`;
+}
+
+async function publishRepoTemplate(
+  idx: number,
+  storeDir: string,
+  repoId: string,
+): Promise<void> {
+  const result = await run(
+    [
+      "sudo",
+      "-n",
+      "bash",
+      `${SCRIPTS}/clone.sh`,
+      "publish-template",
+      String(idx),
+      storeDir,
+      repoTemplateKey(repoId),
+    ],
+    300_000,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `publishing Firecracker repo template failed: ${(result.stderr || result.stdout).trim().slice(-1000)}`,
+    );
+  }
+}
+
 async function allocateClone(
   storeDir: string,
   indexStart: number,
   indexEnd: number,
+  repoId?: string,
 ): Promise<number> {
   return withRemoteEnsureLock("microvm", "__allocate__", async () => {
     for (let candidate = indexStart; candidate <= indexEnd; candidate++) {
@@ -282,6 +321,7 @@ async function allocateClone(
           "create",
           String(candidate),
           storeDir,
+          ...(repoId ? [repoTemplateKey(repoId)] : []),
         ],
         300_000,
       );
@@ -328,11 +368,13 @@ export class MicrovmProvider implements SandboxProvider {
 
     let idx = previous ? indexFromId(previous.sandboxId) : null;
     let resumed = false;
+    let resumeStartedAt: number | undefined;
     if (idx != null) {
       try {
         if (await unitRunning(idx)) {
           await driverFor(idx).ensureStarted();
         } else if (cloneDiskExists(idx, cfg.storeDir)) {
+          resumeStartedAt = Date.now();
           await resumeClone(idx, cfg.storeDir);
           await driverFor(idx).ensureStarted();
           resumed = true;
@@ -355,7 +397,16 @@ export class MicrovmProvider implements SandboxProvider {
         const candidate = indexFromId(claim.sandboxId);
         if (candidate != null) {
           try {
-            await driverFor(candidate).ensureStarted();
+            if (await unitRunning(candidate)) {
+              await driverFor(candidate).ensureStarted();
+            } else if (cloneDiskExists(candidate, cfg.storeDir)) {
+              resumeStartedAt = Date.now();
+              await resumeClone(candidate, cfg.storeDir);
+              await driverFor(candidate).ensureStarted();
+              resumed = true;
+            } else {
+              throw new Error("prewarmed clone disk is gone");
+            }
             idx = candidate;
             created = true;
             console.log(
@@ -374,7 +425,7 @@ export class MicrovmProvider implements SandboxProvider {
       }
     }
     if (idx == null) {
-      idx = await allocateClone(cfg.storeDir, cfg.indexStart, cfg.indexEnd);
+      idx = await allocateClone(cfg.storeDir, cfg.indexStart, cfg.indexEnd, repo.id);
       created = true;
     }
     if (created) {
@@ -414,6 +465,14 @@ export class MicrovmProvider implements SandboxProvider {
       );
       if (resumed) {
         await runRemoteLifecycleHook(driver, cwd, "resume", "resume");
+        audit({
+          kind: "sandbox_resume_metric",
+          session_id: spec.sessionId,
+          provider: this.id,
+          sandbox_id: sandboxId(idx),
+          resume_ms: resumeStartedAt ? Date.now() - resumeStartedAt : undefined,
+          outcome: "ok",
+        });
       }
     } catch (error) {
       if (created) {
@@ -635,7 +694,7 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
       throw new Error(`invalid MicroVM prewarm key: ${key || "(missing)"}`);
     }
     const repoId = key.slice("microvm:".length);
-    const idx = await allocateClone(cfg.storeDir, cfg.indexStart, cfg.indexEnd);
+    const idx = await allocateClone(cfg.storeDir, cfg.indexStart, cfg.indexEnd, repoId);
     const id = sandboxId(idx);
     try {
       writeRemoteState({
@@ -658,9 +717,32 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
   async prepare(driver, repo, label) {
     await driver.ensureStarted();
     await bootstrapRemoteSandbox(microvmBootstrapDriver(driver), label);
-    if (!(await warmRemoteWorkspace(driver, repo, label, { installDeps: false }))) {
+    if (!(await warmRemoteWorkspace(driver, repo, label, {
+      installDeps: false,
+      runSetup: true,
+    }))) {
       throw new Error(`MicroVM prewarm could not clone ${repo.id}`);
     }
+    // Never persist the clone token in a repo-shared template. Adoption puts
+    // fresh scoped authority back on the session-owned disk before fetching.
+    if (repo.ghRepo) {
+      const safeOrigin = `https://github.com/${repo.ghRepo}.git`;
+      const scrubbed = await driver.exec(
+        `git -C ${JSON.stringify(remoteWarmWorkspaceDir(repo.id))} remote set-url origin ${JSON.stringify(safeOrigin)}`,
+      );
+      if (scrubbed.exitCode !== 0)
+        throw new Error(`MicroVM prewarm could not scrub clone authority for ${repo.id}`);
+    }
+  },
+
+  async park(id) {
+    const idx = indexFromId(id);
+    if (idx == null) throw new Error(`invalid MicroVM prewarm id ${id}`);
+    const cfg = config();
+    const state = readRemoteState("microvm", id);
+    if (!state?.repoId) throw new Error(`MicroVM prewarm ${id} has no repo identity`);
+    await pauseClone(idx, cfg.storeDir);
+    await publishRepoTemplate(idx, cfg.storeDir, state.repoId);
   },
 
   async destroy(id) {
@@ -676,7 +758,10 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
     for (const state of listRemoteStates("microvm")) {
       if (!state.sessionId.startsWith("__prewarm__:")) continue;
       const idx = indexFromId(state.sandboxId);
-      if (idx == null || !(await unitRunning(idx))) continue;
+      if (
+        idx == null ||
+        (!(await unitRunning(idx)) && !cloneDiskExists(idx, config().storeDir))
+      ) continue;
       out.push({
         id: state.sandboxId,
         key: state.sessionId.slice("__prewarm__:".length),

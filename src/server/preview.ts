@@ -34,6 +34,7 @@ import {
 } from "fs";
 import { basename, dirname, join } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
+import { audit } from "./audit";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { sandboxConfig } from "./sandbox/config";
 import {
@@ -218,6 +219,22 @@ function isStarting(worktreeDir: string): boolean {
   return true;
 }
 
+function recordPreviewReady(
+  worktreeDir: string,
+  environment: "worktree" | "sandbox",
+  provider?: string,
+): void {
+  const startedAt = starting.get(worktreeDir);
+  if (startedAt == null) return;
+  audit({
+    kind: "preview_ready_metric",
+    environment,
+    provider: provider || "host",
+    ready_ms: Date.now() - startedAt,
+    workspace: basename(worktreeDir),
+  });
+}
+
 const SERVICE_NAMES: Record<string, string> = {
   WEBAPP_PORT: "Webapp",
   INSTANT_PORT: "Instant API",
@@ -322,6 +339,30 @@ export function previewServerConfig(
   host: string,
 ) {
   const authPort = configuredServer().port;
+  const remote = /^https?:\/\//.test(upstream) ? new URL(upstream) : null;
+  const serviceProxy = remote
+    ? {
+        handler: "reverse_proxy",
+        upstreams: [
+          {
+            dial: `${remote.hostname}:${remote.port || (remote.protocol === "https:" ? "443" : "80")}`,
+          },
+        ],
+        ...(remote.protocol === "https:"
+          ? {
+              transport: {
+                protocol: "http",
+                tls: {},
+                tls_server_name: remote.hostname,
+              },
+            }
+          : {}),
+        headers: { request: { set: { Host: [remote.host] } } },
+      }
+    : {
+        handler: "reverse_proxy",
+        upstreams: [{ dial: upstream }],
+      };
   return {
     listen: [`:${httpsPort}`],
     routes: [
@@ -355,10 +396,7 @@ export function previewServerConfig(
                       },
                     ],
                   },
-                  {
-                    handler: "reverse_proxy",
-                    upstreams: [{ dial: upstream }],
-                  },
+                  serviceProxy,
                 ],
               },
             ],
@@ -466,7 +504,10 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
   }
 
   // Once the webapp is listening, the bring-up is done — clear any "starting".
-  if (webapp?.running) starting.delete(worktreeDir);
+  if (webapp?.running) {
+    recordPreviewReady(worktreeDir, "worktree");
+    starting.delete(worktreeDir);
+  }
 
   return {
     hasPortsConf: ports.length > 0,
@@ -853,11 +894,9 @@ export async function getSandboxPreviewStatus(
       const published = typeof entry === "number" ? entry : entry?.hostPort;
       const privateUpstream = typeof entry === "object" ? entry?.upstream : undefined;
       const directUrl = typeof entry === "object" ? entry?.url : undefined;
-      if (directUrl) {
-        previewUrl = directUrl;
-      } else if (published || privateUpstream) {
+      if (directUrl || published || privateUpstream) {
         const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
-        const upstream = privateUpstream || `127.0.0.1:${published}`;
+        const upstream = directUrl || privateUpstream || `127.0.0.1:${published}`;
         if (await ensurePreviewRoute(httpsPort, upstream, host))
           previewUrl = `https://${host}:${httpsPort}`;
       }
@@ -884,7 +923,10 @@ export async function getSandboxPreviewStatus(
       );
   }
 
-  if (webapp?.running) starting.delete(worktreeDir);
+  if (webapp?.running) {
+    recordPreviewReady(worktreeDir, "sandbox", sandbox.provider);
+    starting.delete(worktreeDir);
+  }
 
   return {
     hasPortsConf: ports.length > 0,

@@ -116,6 +116,9 @@ export interface PrewarmAdapter {
     repo: (typeof REPOS)[string],
     label: string,
   ): Promise<void>;
+  /** Release compute after preparation while retaining the prepared disk.
+   * Providers without a durable stopped state simply omit this. */
+  park?(sandboxId: string): Promise<void>;
 }
 
 const SWEEP_INTERVAL_MS = 60_000;
@@ -341,7 +344,9 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
         const { warmTemplateConfig } = await import("../warm-template");
         if (warmTemplateConfig(entry.repoId).enabled) {
           const { warmRemoteWorkspace } = await import("./adapters/bootstrap");
-          await warmRemoteWorkspace(driver, repo, `${entry.provider}-prewarm`);
+          await warmRemoteWorkspace(driver, repo, `${entry.provider}-prewarm`, {
+            runSetup: true,
+          });
         }
       } catch (e) {
         console.warn(`[sandbox-prewarm] ${entry.key} warm workspace failed (non-fatal):`, e);
@@ -349,6 +354,11 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
     }
     if (!current()) {
       destroyLater(entry.provider, sandboxId, "superseded mid-warm");
+      return;
+    }
+    if (adapter.park) await adapter.park(sandboxId);
+    if (!current()) {
+      destroyLater(entry.provider, sandboxId, "superseded mid-park");
       return;
     }
     entry.state = "ready";

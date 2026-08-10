@@ -507,6 +507,28 @@ async function runEntry(entry: Entry): Promise<void> {
       ok("no host dir was created (volume-style workspace)", !existsSync(sandbox.cwd), sandbox.cwd);
     }
 
+    // Durable lifecycle parity where the provider exposes it: releasing
+    // compute must report stopped, wake transparently, and preserve bytes.
+    if (provider.pause && provider.resume) {
+      await sandbox.exec(["sh", "-c", "printf durable > .sbx-conf-durable"]);
+      const tPause = Date.now();
+      await provider.pause(sandbox.id);
+      ok("pause releases compute", (await sandbox.status()) === "stopped");
+      const resumed = await provider.resume(sandbox.id);
+      ok(
+        "resume returns a running sandbox",
+        !!resumed && (await resumed.status()) === "running",
+        `${Date.now() - tPause}ms pause+wake`,
+      );
+      if (resumed) sandbox = resumed;
+      const durable = await sandbox.exec(["cat", ".sbx-conf-durable"]);
+      ok(
+        "workspace survives pause/resume",
+        durable.exitCode === 0 && durable.stdout === "durable",
+        durable.stderr.trim().slice(0, 120),
+      );
+    }
+
     // 4. ports() shape
     const ports: PortMap = await sandbox.ports();
     const portEntry = ports[entry.expectPort === "url" ? 8080 : PREVIEW_PORT];
@@ -684,6 +706,18 @@ async function runEntry(entry: Entry): Promise<void> {
       while (!cInit && Date.now() < cDeadline) await new Promise((r) => setTimeout(r, 500));
       ok("second run started (for steer/cancel)", cInit);
 
+      // A provider/account-capacity failure to initialize the second model
+      // run is one failure, not four misleading transport failures. The first
+      // run above still certifies launch + streaming; reconnect/steer/cancel
+      // need a live run to exercise.
+      if (!cInit) {
+        cHandle.cancel();
+        await Promise.race([
+          cConsume,
+          new Promise<void>((r) => setTimeout(r, 5_000)),
+        ]);
+      } else {
+
       // WS transport resilience: kill the dialed-in connection server-side
       // mid-run. The host must redial (≤5s backoff), replay the disconnect
       // window (seq/ack — ws-buffer.ts), and the handle must reattach so
@@ -717,6 +751,7 @@ async function runEntry(entry: Entry): Promise<void> {
       ]);
       ok("cancelled run's stream terminated", cEnded === true);
       ok("session not busy after cancel", !hostRunBusy(sessionId));
+      }
     }
 
     // 7. get() reattach

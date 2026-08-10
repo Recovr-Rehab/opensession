@@ -760,6 +760,10 @@ export async function bootstrapRemoteSandbox(
  *  them (warmRemoteWorkspace → setupRemoteWorkspace's mv). */
 const REMOTE_WARM_BASE = `${REMOTE_HOME}/.bks-warm`;
 
+export function remoteWarmWorkspaceDir(repoId: string): string {
+  return `${REMOTE_WARM_BASE}/${sanitizeName(repoId)}`;
+}
+
 /**
  * Pre-clone a repo at its default branch (+ deps install) inside a PREWARM
  * sandbox, so the session that later adopts it skips the clone and most of
@@ -772,9 +776,9 @@ export async function warmRemoteWorkspace(
   driver: RemoteDriver,
   repo: { id: string; repo: string; ghRepo?: string; defaultBranch: string; depsInstall?: string },
   label: string,
-  opts?: { installDeps?: boolean },
+  opts?: { installDeps?: boolean; runSetup?: boolean },
 ): Promise<boolean> {
-  const dir = `${REMOTE_WARM_BASE}/${sanitizeName(repo.id)}`;
+  const dir = remoteWarmWorkspaceDir(repo.id);
   const log = (msg: string) => console.log(`[sandbox:${label}] warm workspace: ${msg}`);
   const has = await driver.exec(`test -d ${shellQuoteWord(dir)}/.git`);
   if (has.exitCode !== 0) {
@@ -789,8 +793,11 @@ export async function warmRemoteWorkspace(
       return false;
     }
   }
+  if (opts?.runSetup) {
+    await runRemoteLifecycleHook(driver, dir, "setup", "fresh", repo.id);
+  }
   if (opts?.installDeps === false) {
-    log("ready (clone only)");
+    log(opts.runSetup ? "ready (post-setup)" : "ready (clone only)");
     return true;
   }
   // Deps: same convention as worktree.ts's installWorktreeDeps, expressed
@@ -821,12 +828,18 @@ export async function setupRemoteWorkspace(
   if (cloned.exitCode !== 0 && repoId) {
     // Adopt a prewarmed clone (warmRemoteWorkspace) when one is waiting —
     // the mv is instant and carries node_modules with it.
-    const warmDir = `${REMOTE_WARM_BASE}/${sanitizeName(repoId)}`;
+    const warmDir = remoteWarmWorkspaceDir(repoId);
     const adopted = await driver.exec(
       `test -d ${shellQuoteWord(warmDir)}/.git && mkdir -p ${shellQuoteWord(dirname(cwd))} && mv ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}`,
     );
     if (adopted.exitCode === 0) {
       console.log(`[sandbox-remote] adopted warm workspace clone for ${repoId} → ${cwd}`);
+      // Repo templates are credential-free at rest. Restore the current
+      // short-lived clone authority only on the session-owned copy.
+      await driver.exec(
+        `git remote set-url origin ${shellQuoteWord(cloneUrl)}`,
+        { cwd },
+      );
       // The warm clone's refs may be hours old and the session branches off
       // the default branch — freshen before the checkout below.
       await driver.exec(`git fetch origin --quiet`, { cwd, timeoutMs: 180_000 });
@@ -879,7 +892,7 @@ export async function setupRemoteWorkspace(
       );
     }
   }
-  await runRemoteLifecycleHook(driver, cwd, "setup", "fresh");
+  await runRemoteLifecycleHook(driver, cwd, "setup", "fresh", repoId);
 }
 
 const REMOTE_LIFECYCLE_DIR = `${REMOTE_HOME}/.opensession/lifecycle`;
@@ -896,9 +909,12 @@ export async function runRemoteLifecycleHook(
   cwd: string,
   hook: "setup" | "resume",
   bootMode: "fresh" | "resume",
+  /** Stable repo identity lets a prewarmed workspace keep its one-shot setup
+   * stamp after it is moved into the adopting session's final cwd. */
+  scopeKey?: string,
 ): Promise<{ ran: boolean; log: string }> {
   const script = `${cwd}/.agents/${hook}`;
-  const key = remoteLifecycleKey(cwd) || "workspace";
+  const key = remoteLifecycleKey(scopeKey || cwd) || "workspace";
   const log = `${REMOTE_LIFECYCLE_DIR}/${key}-${hook}.log`;
   const stamp = `${REMOTE_LIFECYCLE_DIR}/${key}-setup.done`;
   const probe = await driver.exec(

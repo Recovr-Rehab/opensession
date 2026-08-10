@@ -47,6 +47,23 @@ describe("remote repo lifecycle", () => {
 		expect(d.commands[2]!.opts.timeoutMs).toBe(20 * 60_000);
 	});
 
+	test("uses a stable repo stamp across prewarm adoption paths", async () => {
+		const d = driver([
+			{ exitCode: 0, stdout: "present\n" },
+			{ exitCode: 0 },
+			{ exitCode: 0 },
+		]);
+		await runRemoteLifecycleHook(
+			d.value,
+			"/home/ubuntu/.bks-warm/opensession",
+			"setup",
+			"fresh",
+			"opensession",
+		);
+		expect(d.commands[0]!.command).toContain("opensession-setup.done");
+		expect(d.commands[2]!.command).toContain("opensession-setup.done");
+	});
+
 	test("resume runs every wake and fails loudly", async () => {
 		const d = driver([
 			{ exitCode: 0, stdout: "present\n" },
