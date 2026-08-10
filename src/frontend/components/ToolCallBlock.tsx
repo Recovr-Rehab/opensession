@@ -314,7 +314,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   const failed = Boolean(shownResult?.isError);
   const inputNode = expanded ? toolInputNode(canonical, shownInput) : null;
   const resultContent = visibleResultContent(shownResult?.content, hasMedia, failed);
-  const mediaOnly = hasMedia && !resultContent && !inputNode;
+  const inputNeedsPanel = canonical === "TodoWrite";
 
   // A scratch file this call named: openable straight from the row, because
   // assets live outside every worktree and nothing else in the transcript can
@@ -481,76 +481,77 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
       </button>
 
       {expanded && (
-        <div
-          className={cn(
-            "relative z-[1] mb-1.5 ml-[30px] mt-0.5",
-            mediaOnly ? "overflow-visible" : "overflow-hidden rounded-lg bg-panel"
+        <div className="relative z-[1] mb-1.5 ml-[30px] mt-1 space-y-1.5">
+          {inputNode && (
+            <div
+              className={cn(
+                inputNeedsPanel && "overflow-hidden rounded-lg bg-panel p-1.5"
+              )}
+            >
+              {inputNode}
+            </div>
           )}
-        >
-          {inputNode && <div className="p-1.5">{inputNode}</div>}
           {shownResult &&
             (resultContent || shownResult.images?.length || shownResult.videos?.length) && (
             <>
               {resultContent && (
-                <div
-                  className={cn(
-                    "px-2.5 pb-1 pt-1.5 text-meta font-bold tracking-[-0.01em]",
-                    failed ? "text-red" : "text-faint"
-                  )}
-                >
-                  {failed ? "Error" : "Output"}
-                </div>
-              )}
-              <div
-                className={cn(
-                  resultContent && "px-1.5 pb-1.5",
-                  failed && "[&_.tool-pre]:text-red/75"
-                )}
-              >
-                {resultContent && (
-                  <div className={TOOL_CODE_WELL}>
+                <div className="space-y-1">
+                  <div
+                    className={cn(
+                      "px-1 text-meta font-medium leading-4",
+                      failed ? "text-red" : "text-faint"
+                    )}
+                  >
+                    {failed ? "Error" : "Output"}
+                  </div>
+                  <div
+                    className={cn(
+                      TOOL_CODE_WELL,
+                      failed && "border-red/25"
+                    )}
+                  >
                     {renderResultContent(canonical, shownInput, resultContent)}
                   </div>
-                )}
-                {shownResult.images && shownResult.images.length > 0 && (
-                  <div className={cn(TOOL_RESULT_MEDIA, !resultContent && "!mt-0")}>
-                    {shownResult.images.map((raw, i) => {
-                      const src = resolveEntryImageSrc(raw, sessionId);
-                      return (
-                        <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="md-image-link">
-                          <img
-                            className={cn("md-image", !resultContent && "!my-0")}
-                            src={src}
-                            alt=""
-                            loading="lazy"
-                          />
-                        </a>
-                      );
-                    })}
-                  </div>
-                )}
-                {shownResult.videos && shownResult.videos.length > 0 && (
-                  <div className={TOOL_RESULT_MEDIA}>
-                    {shownResult.videos.map((src, i) => (
-                      <div key={i} className="md-video-wrap">
-                        <video className="md-video" src={src} controls playsInline preload="metadata" />
-                        <button
-                          type="button"
-                          className="md-video-expand"
-                          aria-label="Expand"
-                          title="Expand"
-                          onClick={(e) => {
-                            const vid = e.currentTarget.parentElement?.querySelector("video");
-                            if (vid) openGalleryFrom(vid);
-                          }}
-                        >
-                          <IconExpand size={20} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
+              {shownResult.images && shownResult.images.length > 0 && (
+                <div className={cn(TOOL_RESULT_MEDIA, !resultContent && "!mt-0")}>
+                  {shownResult.images.map((raw, i) => {
+                    const src = resolveEntryImageSrc(raw, sessionId);
+                    return (
+                      <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="md-image-link">
+                        <img
+                          className={cn("md-image", !resultContent && "!my-0")}
+                          src={src}
+                          alt=""
+                          loading="lazy"
+                        />
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+              {shownResult.videos && shownResult.videos.length > 0 && (
+                <div className={TOOL_RESULT_MEDIA}>
+                  {shownResult.videos.map((src, i) => (
+                    <div key={i} className="md-video-wrap">
+                      <video className="md-video" src={src} controls playsInline preload="metadata" />
+                      <button
+                        type="button"
+                        className="md-video-expand"
+                        aria-label="Expand"
+                        title="Expand"
+                        onClick={(e) => {
+                          const vid = e.currentTarget.parentElement?.querySelector("video");
+                          if (vid) openGalleryFrom(vid);
+                        }}
+                      >
+                        <IconExpand size={20} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>
