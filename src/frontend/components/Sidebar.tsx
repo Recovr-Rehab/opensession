@@ -3498,10 +3498,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<span className={SIDEBAR_RAIL}>
 								<RepoTile name={repo} className={SIDEBAR_REPO_TILE} />
 							</span>
-							<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
-							{/* Count rides directly behind the repo name, not pinned right. */}
-							<span className={SIDEBAR_GROUP_COUNT}>
-								{rows.length + snoozedRows.length + prs.length}
+							{/* The differently sized name and count share a baseline, while the
+							    pair stays vertically centred against the tile. */}
+							<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-[9px]">
+								<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
+								<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
+									{rows.length + snoozedRows.length + prs.length}
+								</span>
 							</span>
 							{/* Urgent rows must not vanish into a closed band — a collapsed
 							    header wears the count of rows waiting for input. */}
@@ -3788,8 +3791,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span className={SIDEBAR_RAIL}>
 							<RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />
 						</span>
-						<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{feed.title}</span>
-						<span className={SIDEBAR_GROUP_COUNT}>{count}</span>
+						<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-[9px]">
+							<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{feed.title}</span>
+							<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>{count}</span>
+						</span>
 						{!open && attentionCount > 0 && (
 							<span
 								className={SIDEBAR_ATTN_COUNT}
