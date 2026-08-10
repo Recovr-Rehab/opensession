@@ -373,13 +373,13 @@ function WsOverviewInfo({
 				// crop of a 1440px screenshot is a grey band of text, not a
 				// picture of anything. Whole frames, scrolled sideways — and
 				// everything is reachable instead of hidden behind a "+3".
-				<div className="mt-2 flex snap-x snap-mandatory gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+				<div className="mt-2 flex snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 					{media.slice(0, MAX_HOVERCARD_MEDIA).map((m, i) => (
 						<button
 							key={`${m.sessionId}:${m.at}:${i}`}
 							type="button"
 							onClick={() => openLightbox(media, i)}
-							className="relative block aspect-video w-[124px] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
+							className="relative block aspect-video w-[calc((100%-12px)/2)] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
 							title={[m.sessionTitle, new Date(m.at).toLocaleString()]
 								.filter(Boolean)
 								.join(" · ")}
