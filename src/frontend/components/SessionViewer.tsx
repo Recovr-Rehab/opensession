@@ -5093,6 +5093,7 @@ export function SessionViewer({
 												return (
 													<Button
 														key={c.id}
+														variant="ghost"
 														icon={
 															<ChipIcon
 																size={16}
@@ -5113,8 +5114,8 @@ export function SessionViewer({
 														}
 														className={
 															selected
-																? "border-line-strong bg-active text-fg"
-																: undefined
+																? "bg-pressed text-fg hover:bg-pressed"
+																: "bg-hover/50"
 														}
 													>
 														<span className="max-w-[200px] truncate">
