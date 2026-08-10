@@ -149,6 +149,18 @@ export interface RunAgentOpts {
   deniedTools?: Record<string, string>;
   confirmTools?: Record<string, string>;
   aws?: boolean;
+  /**
+   * Provision the run's env with a Claude-CLI credential from the
+   * claude-accounts pool (CLAUDE_CODE_OAUTH_TOKEN + CLAUDE_CONFIG_DIR), so
+   * tooling the agent itself spawns — deepsec's `--agent claude` Agent-SDK
+   * subprocess — runs on Open Session's account pool instead of the host
+   * CLI's own login (which scans must never depend on; it logged out
+   * 2026-08-08 and every scan silently analyzed zero batches). Set by
+   * security scans and pool-cli-flagged automations only; opencode engine,
+   * per-session servers only (a meridian-backed run already carries the
+   * same-class token and wins).
+   */
+  claudeCliEnv?: boolean;
   /** Git identity for commits this run makes, attributing them to the prompt's author. */
   author?: GitIdentity | null;
   /**
@@ -817,6 +829,7 @@ export function resumeInterruptedRuns(
             deniedTools: run.deniedTools,
             confirmTools: run.confirmTools,
             aws: run.aws,
+            claudeCliEnv: run.claudeCliEnv,
             fallbackModel: run.fallbackModel,
             accountId: run.accountId,
             accountStrict: run.accountStrict,
@@ -919,6 +932,7 @@ export function resumeInterruptedRuns(
           deniedTools: run.deniedTools,
           confirmTools: run.confirmTools,
           aws: run.aws,
+          claudeCliEnv: run.claudeCliEnv,
           fallbackModel: run.fallbackModel,
           accountId: run.accountId,
           accountStrict: run.accountStrict,

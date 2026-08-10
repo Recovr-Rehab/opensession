@@ -8,7 +8,7 @@ import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { parseCron, cronMatches, nextRun } from "./cron";
-import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
+import { STRIPE_CONFIRM_TOOLS, declaredRunFailure } from "./runner-shared";
 import { getAccountById } from "./claude-accounts";
 import { runAgent } from "./agent-runner";
 import { providerFor, resolveModel, DEFAULT_FALLBACK_MODEL, modelLabel } from "./models";
@@ -138,6 +138,16 @@ export interface Automation {
    * from a ticket. See workflow-tools.ts's module doc.
    */
   workflows?: boolean;
+  /**
+   * Provision the run's env with a Claude-CLI credential from the
+   * claude-accounts pool (CLAUDE_CODE_OAUTH_TOKEN, via the opencode runner —
+   * see RunAgentOpts.claudeCliEnv). For automations whose tooling spawns its
+   * own `claude` CLI (the deepsec scans): the scan must run on Open Session's
+   * account pool, never on the host CLI's own login (which logged out
+   * 2026-08-08 and left every scan analyzing zero batches while recording
+   * ok). Same env-exposure class as a meridian-backed run.
+   */
+  claudeCliEnv?: boolean;
   /**
    * Self-improving automation (human-set only — e.g. the nightly Dreaming
    * reflection). Runs (and thread-reply resumes) additionally get two scoped
@@ -374,6 +384,7 @@ export function createAutomation(input: {
   prReviewer?: string;
   selfImprove?: boolean;
   workflows?: boolean;
+  claudeCliEnv?: boolean;
   model?: string;
   fallbackModel?: string;
   accountId?: string;
@@ -429,6 +440,7 @@ export function createAutomation(input: {
     prReviewer,
     selfImprove: input.selfImprove === true || undefined,
     workflows: input.workflows === true || undefined,
+    claudeCliEnv: input.claudeCliEnv === true || undefined,
     model,
     fallbackModel,
     accountId,
@@ -484,7 +496,7 @@ export function ensureConfiguredAutomations(): void {
 
 export function updateAutomation(
   id: string,
-  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch">>
+  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "claudeCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch">>
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
@@ -514,6 +526,7 @@ export function updateAutomation(
   }
   if ("selfImprove" in patch) next.selfImprove = patch.selfImprove === true || undefined;
   if ("workflows" in patch) next.workflows = patch.workflows === true || undefined;
+  if ("claudeCliEnv" in patch) next.claudeCliEnv = patch.claudeCliEnv === true || undefined;
   if ("grafanaPoll" in patch) {
     const grafanaPoll = sanitizeGrafanaPoll(patch.grafanaPoll);
     if (grafanaPoll && "error" in grafanaPoll) return grafanaPoll;
@@ -1149,6 +1162,12 @@ export async function runAutomation(
 
     let engineSessionId = "";
     let errorMsg = "";
+    // Tail of the assistant's text: an automation whose prompt declares
+    // failure (`RUN STATUS: failed — …` / `SCAN STATUS: failed — …` as the
+    // final line) settles the ledger as error instead of "the turn finished
+    // ⇒ ok" (the deepsec scans recorded ok for days of zero-batch runs).
+    // Opt-in by emission — automations that never declare are unaffected.
+    let textTail = "";
     for await (const event of runAgent({
       prompt,
       cwd,
@@ -1162,6 +1181,9 @@ export async function runAutomation(
       // from the tool list with the same post-in-note guidance — opencodeRunPolicy)
       confirmTools: STRIPE_CONFIRM_TOOLS,
       aws: true, // automation runs get short-lived instance-role read creds
+      // Human-set flag (deepsec scans): the run's own `claude` CLI tooling
+      // authenticates on the account pool, never the host login.
+      claudeCliEnv: !!automation.claudeCliEnv,
       // Cost controls: a pinned account defaults to a HARD pin for automation
       // runs (exhaustion falls to fallbackModel, never the shared pool) unless
       // accountStrict is explicitly false (soft pin: preferred, pool backup);
@@ -1215,10 +1237,14 @@ export async function runAutomation(
         if (event.provider) effectiveProvider = event.provider;
         if (event.model) effectiveModel = event.model;
       }
+      if (event.type === "text_chunk" && event.text) {
+        textTail = (textTail + event.text).slice(-16384);
+      }
       if (event.type === "error") {
         errorMsg = event.content || "Unknown error";
       }
     }
+    if (!errorMsg) errorMsg = declaredRunFailure(textTail) || "";
 
     await persistSession(engineSessionId);
 

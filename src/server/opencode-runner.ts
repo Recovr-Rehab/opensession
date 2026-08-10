@@ -3654,6 +3654,40 @@ async function* runOpencodeAttempt(
     if (githubUserLogin) {
       serverExtraEnv = { ...(serverExtraEnv || {}), ...githubAuthEnv(user || author?.name) };
     }
+    // Pool Claude-CLI credential (opts.claudeCliEnv — deepsec security scans):
+    // the scan tooling spawns its own `claude` Agent-SDK subprocess inside the
+    // run, which must authenticate on the account pool EXPLICITLY — never on
+    // the host CLI's login (logged out 2026-08-08 → every scan analyzed zero
+    // batches while recording ok), and never only when the orchestrator model
+    // happens to be meridian-backed. A meridian run's env already carries the
+    // same-class token (see meridianAccountEnv's exposure note), so only fill
+    // the gap; per-session servers only — flagged kinds never share, and a
+    // shared server's env must not carry a run-specific credential.
+    if (opts.claudeCliEnv && !shared && !serverExtraEnv?.CLAUDE_CODE_OAUTH_TOKEN) {
+      const cliAccount = pickAccount(undefined, user, undefined, opts.usageCredits);
+      if (cliAccount) {
+        const cliCfgDir = `${MERIDIAN_CFG_ROOT}/${cliAccount.id}`;
+        mkdirSync(cliCfgDir, { recursive: true, mode: 0o700 });
+        serverExtraEnv = {
+          ...(serverExtraEnv || {}),
+          CLAUDE_CODE_OAUTH_TOKEN: cliAccount.token,
+          CLAUDE_CONFIG_DIR: cliCfgDir,
+        };
+        audit({
+          msg: "claude_cli_env_account",
+          run_kind: journal?.kind,
+          session_id: journal?.osSessionId,
+          account: cliAccount.name,
+          account_id: cliAccount.id.slice(0, 8),
+        });
+      } else {
+        // Don't fail the run — the orchestrator can still report the dry pool
+        // as a scan failure instead of silently half-running.
+        console.warn(
+          "[opencode-runner] claudeCliEnv requested but no usable Claude account in the pool — run proceeds without it"
+        );
+      }
+    }
 
     const serverKey = shared
       ? sharedServerKey(bridgeTag, user, githubUserLogin)

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { isClaudeBridgeLaunchError, isUpstreamIdleStallError } from "./runner-shared";
+import {
+  declaredRunFailure,
+  hasRunStatusDeclaration,
+  isClaudeBridgeLaunchError,
+  isUpstreamIdleStallError,
+} from "./runner-shared";
 
 describe("isClaudeBridgeLaunchError", () => {
   test("matches the two shapes the agent SDK emits", () => {
@@ -43,5 +48,34 @@ describe("isUpstreamIdleStallError", () => {
     expect(isUpstreamIdleStallError("upstream timeout while connecting")).toBe(false);
     expect(isUpstreamIdleStallError("no data received")).toBe(false);
     expect(isUpstreamIdleStallError("")).toBe(false);
+  });
+});
+
+describe("declaredRunFailure", () => {
+  test("a failed declaration is returned with its reason, last line wins", () => {
+    expect(declaredRunFailure("summary…\nSCAN STATUS: failed — claude CLI auth failure")).toBe(
+      "SCAN STATUS: failed — claude CLI auth failure",
+    );
+    expect(declaredRunFailure("RUN STATUS: failed — dry pool")).toBe("RUN STATUS: failed — dry pool");
+    // A closing ok clears an earlier quoted/failed line.
+    expect(
+      declaredRunFailure("SCAN STATUS: failed — transient\nretried fine\nSCAN STATUS: ok"),
+    ).toBeNull();
+  });
+
+  test("ok, absent, and mid-line mentions do not declare failure", () => {
+    expect(declaredRunFailure("all good\nSCAN STATUS: ok")).toBeNull();
+    expect(declaredRunFailure("no status here")).toBeNull();
+    // Not line-anchored ⇒ not a declaration (e.g. quoting the instruction).
+    expect(declaredRunFailure("end with `SCAN STATUS: failed — <reason>` on errors")).toBeNull();
+  });
+});
+
+describe("hasRunStatusDeclaration", () => {
+  test("line-anchored status lines only", () => {
+    expect(hasRunStatusDeclaration("done\nSCAN STATUS: ok")).toBe(true);
+    expect(hasRunStatusDeclaration("done\nRUN STATUS: failed — x")).toBe(true);
+    expect(hasRunStatusDeclaration("mentions SCAN STATUS: ok inline")).toBe(false);
+    expect(hasRunStatusDeclaration("")).toBe(false);
   });
 });

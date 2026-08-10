@@ -296,3 +296,26 @@ export function looksLikeFabricatedToolTranscript(text: string): boolean {
     text.includes("Todos have been modified successfully")
   );
 }
+
+/**
+ * Agent-declared run failure: prompts that end their final message with a
+ * `SCAN STATUS:` / `RUN STATUS:` line let the ledger record what actually
+ * happened instead of "the turn finished" (2026-08-09: deepsec scans analyzed
+ * zero batches for days while every run recorded ok). Returns the declared
+ * failure line (reason included) or null. Matching is line-anchored and takes
+ * the LAST status line, so an early quote of the instruction can't win over
+ * the closing declaration; a trailing `ok` clears an earlier `failed`.
+ */
+export function declaredRunFailure(text: string): string | null {
+  const lines = text.match(/^(?:SCAN|RUN) STATUS:[^\n]*$/gm);
+  const last = lines?.[lines.length - 1]?.trim();
+  if (!last) return null;
+  return /^(?:SCAN|RUN) STATUS:\s*failed\b/i.test(last) ? last : null;
+}
+
+/** True when the text carries any (last-wins) status declaration at all —
+ *  callers that REQUIRE a declaration (security scans) treat absence as its
+ *  own failure. */
+export function hasRunStatusDeclaration(text: string): boolean {
+  return /^(?:SCAN|RUN) STATUS:[^\n]*$/m.test(text);
+}
