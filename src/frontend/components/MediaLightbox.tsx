@@ -997,7 +997,7 @@ function MediaLightbox({
 			    "Before"/"After" label cannot read as another link. */}
 			<div
 				className={cn(
-					"z-10 flex flex-col items-center gap-1 bg-gradient-to-t from-black from-70% to-transparent px-4 pb-4 pt-4",
+					"z-10 flex flex-col items-center gap-1 px-4 pb-4 pt-4",
 					!caption && !description && !many && "hidden",
 				)}
 				onMouseDown={(e) => {
