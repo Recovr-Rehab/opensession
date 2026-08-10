@@ -749,7 +749,7 @@ function MobileActionSheet({
 											size="xs"
 											key={m.key}
 											type="button"
-											className="gap-1.5 whitespace-normal px-2 text-control-label"
+											className="gap-1.5 whitespace-normal px-2 text-control-label leading-normal"
 											style={{
 												borderColor: on ? m.dotColor : "var(--border)",
 												color: on ? "var(--text)" : "var(--text-dim)",
@@ -776,7 +776,7 @@ function MobileActionSheet({
 									variant="ghost"
 									size="xs"
 									type="button"
-									className="whitespace-normal px-2 text-control-label"
+									className="whitespace-normal px-2 text-control-label leading-normal"
 									style={{
 										borderColor: !pinnedLane(session)
 											? "var(--text-dim)"

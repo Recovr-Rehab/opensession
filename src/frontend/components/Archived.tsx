@@ -361,11 +361,6 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 												auto
 											</span>
 										),
-										// The phone row has no timestamp column beside it — the
-										// action is always visible there and takes the space.
-										<span key="when" className="hidden shrink-0 phone:inline">
-											{relativeTime(s.lastActivity)}
-										</span>,
 									].filter(Boolean);
 									return (
 										<li key={s.id} className={ARCHIVED_ROW}>
@@ -376,8 +371,17 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 												onClick={() => onSelect(s)}
 											>
 												<span className={ARCHIVED_ROW_TITLE}>{s.title}</span>
-												{meta.length > 0 && (
-													<span className={ARCHIVED_ROW_META}>{meta}</span>
+												{meta.length > 0 ? (
+													<span className={ARCHIVED_ROW_META}>
+														{meta}
+														<span className="hidden shrink-0 phone:inline">
+															{relativeTime(s.lastActivity)}
+														</span>
+													</span>
+												) : (
+													<span className="mt-1 hidden text-meta text-faint phone:block">
+														{relativeTime(s.lastActivity)}
+													</span>
 												)}
 											</button>
 											<span className={ARCHIVED_ROW_TRAIL}>

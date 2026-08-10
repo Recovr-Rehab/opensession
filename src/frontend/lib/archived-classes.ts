@@ -28,7 +28,7 @@ export const ARCHIVED_SECTION_ROWS = "m-0 list-none p-0";
  * — the same tidying an iOS list does around a highlighted cell.
  */
 export const ARCHIVED_ROW =
-	"group relative flex items-center gap-3 rounded-control px-3 py-2.5 transition-colors " +
+	"group relative flex items-start gap-3 rounded-control px-3 py-2.5 transition-colors " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover focus-within:bg-hover " +
 	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[42px] " +
 	"after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
@@ -61,7 +61,8 @@ export const ARCHIVED_ROW_TRAIL =
 	"duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-0 " +
 	"group-focus-within:opacity-0 phone:hidden";
 
-export const ARCHIVED_ROW_TIME = "w-[62px] text-right text-meta tabular-nums";
+export const ARCHIVED_ROW_TIME =
+	"w-[62px] text-right text-meta leading-none tabular-nums";
 
 /**
  * Restore: absolutely placed over the timestamp it replaces, so a row
@@ -79,7 +80,7 @@ export const ARCHIVED_ROW_TIME = "w-[62px] text-right text-meta tabular-nums";
  * of a 390px row, and the row is mostly title.
  */
 export const ARCHIVED_ROW_ACTION =
-	"absolute right-3 top-1/2 z-[1] -translate-y-1/2 opacity-0 transition-opacity " +
+	"absolute right-3 top-1.5 z-[1] opacity-0 transition-opacity " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
-	"focus-visible:opacity-100 phone:min-h-11 phone:w-11 phone:gap-0 phone:px-0 phone:opacity-100 " +
+	"focus-visible:opacity-100 phone:top-0 phone:min-h-11 phone:w-11 phone:gap-0 phone:px-0 phone:opacity-100 " +
 	"[@media(hover:none)]:opacity-100";

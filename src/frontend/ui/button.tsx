@@ -142,6 +142,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 				ref={ref}
 				className={cn(
 					"inline-flex items-center justify-center gap-1 border whitespace-nowrap select-none",
+					// Text utilities carry different stock line heights even though this
+					// button scale pins its own heights. A single tight line box gives
+					// labels the same optical centre as fixed-size icons and chevrons.
+					"leading-none",
 					"font-medium transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
 					// One keyboard focus treatment for every variant. Without it a
 					// Button falls back to the browser's default outline, which

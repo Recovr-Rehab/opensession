@@ -25,11 +25,14 @@ final class AccentThemeTests: XCTestCase {
         }
     }
 
-    /// Dark ink is what releases the chromatic palette from the muddy end of
-    /// each hue. Keep both appearances bright; Mono owns the white-glyph case.
-    func testChromaticFillsCarryDarkGlyphsInBothAppearances() {
-        for theme in AccentTheme.allCases where theme != .mono {
-            XCTAssertFalse(theme.glyphIsWhite(dark: false), "\(theme.rawValue) light fill")
+    /// The shape every pair has to keep: the light-mode fill is the deeper end
+    /// of the hue and carries a white glyph the way a filled primary button
+    /// does; the dark-mode fill is the lighter end and carries a dark one. A
+    /// light-mode fill pale enough to flip its glyph would put a near-black
+    /// arrow on a pale disc on a white page, which reads as disabled.
+    func testLightFillsCarryWhiteAndDarkFillsCarryBlack() {
+        for theme in AccentTheme.allCases {
+            XCTAssertTrue(theme.glyphIsWhite(dark: false), "\(theme.rawValue) light fill")
             XCTAssertFalse(theme.glyphIsWhite(dark: true), "\(theme.rawValue) dark fill")
         }
     }
