@@ -35,8 +35,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   means "new since you read it", not "never seen".
 - **Catch up** (`CatchUpView`, `CatchUpDeckView`, `CatchUpCardView`,
   `CatchUpQueue`, `CatchUpViewModel`) — a card deck over everything unread,
-  opened from the second card in the sessions list's Home, Catch Up, Support,
-  and Desk tools strip; Filter and New Session remain top-right controls. Its
+  opened from the first card in the sessions list's Catch Up, Support, and
+  Desk tools strip; Filter and New Session remain top-right controls. Its
   unread count is pinned to the card's corner. One card per unread
   *workspace* (the same grouping the list shows,
   built by `CatchUpQueue` from the shared `/api/reads` marks with the web

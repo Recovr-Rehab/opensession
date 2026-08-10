@@ -1665,15 +1665,6 @@ struct SessionsListView: View {
         Section {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    mobileToolCardLabel(title: "Home", active: true) {
-                        Image(systemName: "house")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(OS1VisualStyle.text)
-                    }
-                    .accessibilityElement()
-                    .accessibilityLabel("Home")
-                    .accessibilityAddTraits(.isSelected)
-
                     Button {
                         showCatchUp = true
                     } label: {
@@ -1730,7 +1721,6 @@ struct SessionsListView: View {
     private func mobileToolCardLabel<Icon: View>(
         title: String,
         count: Int? = nil,
-        active: Bool = false,
         @ViewBuilder icon: () -> Icon
     ) -> some View {
         ZStack(alignment: .topTrailing) {
@@ -1759,14 +1749,11 @@ struct SessionsListView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(active ? OS1VisualStyle.hover : OS1VisualStyle.raised)
+                .fill(OS1VisualStyle.raised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(
-                    OS1VisualStyle.border.opacity(active ? 1 : 0.65),
-                    lineWidth: active ? 1 : 0.5
-                )
+                .strokeBorder(OS1VisualStyle.border.opacity(0.65), lineWidth: 0.5)
         )
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
