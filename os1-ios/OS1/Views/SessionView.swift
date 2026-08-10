@@ -830,7 +830,8 @@ struct SessionView: View {
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(OS1VisualStyle.text)
                     .fixedSize(horizontal: true, vertical: false)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(width: 190, alignment: .leading)
+                    .clipped()
                     .mask(titleTrailingFade)
                 if !dynamicTypeSize.isAccessibilitySize {
                     HStack(spacing: 4) {
@@ -842,7 +843,8 @@ struct SessionView: View {
                             .foregroundStyle(OS1VisualStyle.textDim)
                     }
                     .fixedSize(horizontal: true, vertical: false)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(width: 190, alignment: .leading)
+                    .clipped()
                     .mask(titleTrailingFade)
                 }
             }
@@ -855,7 +857,7 @@ struct SessionView: View {
             .padding(.leading, 6)
             .padding(.trailing, 10)
             .padding(.vertical, 1)
-            .frame(maxWidth: 190, alignment: .leading)
+            .frame(width: 190, alignment: .leading)
             .contentShape(Capsule())
         }
         .buttonStyle(.glass)
