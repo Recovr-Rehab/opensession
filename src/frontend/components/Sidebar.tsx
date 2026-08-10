@@ -38,6 +38,7 @@ import {
 	SIDEBAR_PIN_ENTRY,
 	SIDEBAR_PIN_ENTRY_DRAGGING,
 	SIDEBAR_RAIL,
+	SIDEBAR_REPO_BAND_TEXT,
 	SIDEBAR_REPO_TILE,
 	SIDEBAR_STATUS_DOT,
 	SIDEBAR_STATUS_GROUP,
@@ -3494,13 +3495,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onClick={() => toggleGroup(gkey)}
 						>
 							{/* The rail holds the tile on the same column (and text rail)
-							    as every other header's mark; the tile fills it. */}
+							    as every other header's mark; the tile rides centred in it. */}
 							<span className={SIDEBAR_RAIL}>
 								<RepoTile name={repo} className={SIDEBAR_REPO_TILE} />
 							</span>
-							<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
+							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_REPO_BAND_TEXT, "flex-[0_1_auto] font-semibold")}>
+								{repoLabel(repo)}
+							</span>
 							{/* Count rides directly behind the repo name, not pinned right. */}
-							<span className={SIDEBAR_GROUP_COUNT}>
+							<span className={cn(SIDEBAR_GROUP_COUNT, SIDEBAR_REPO_BAND_TEXT)}>
 								{rows.length + snoozedRows.length + prs.length}
 							</span>
 							{/* Urgent rows must not vanish into a closed band — a collapsed
@@ -3788,8 +3791,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span className={SIDEBAR_RAIL}>
 							<RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />
 						</span>
-						<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{feed.title}</span>
-						<span className={SIDEBAR_GROUP_COUNT}>{count}</span>
+						<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_REPO_BAND_TEXT, "flex-[0_1_auto] font-semibold")}>
+							{feed.title}
+						</span>
+						<span className={cn(SIDEBAR_GROUP_COUNT, SIDEBAR_REPO_BAND_TEXT)}>{count}</span>
 						{!open && attentionCount > 0 && (
 							<span
 								className={SIDEBAR_ATTN_COUNT}
