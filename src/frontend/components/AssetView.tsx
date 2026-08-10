@@ -64,9 +64,12 @@ type AssetNavigation = {
 function AssetPager({
 	navigation,
 	arrows = false,
+	onDark = false,
 }: {
 	navigation: AssetNavigation;
 	arrows?: boolean;
+	/** Desktop overlays sit directly on the dimmed backdrop, like the media lightbox. */
+	onDark?: boolean;
 }) {
 	const { index, count, onPrevious, onNext, onSelect } = navigation;
 	const positionLabel = `Asset ${index + 1} of ${count}`;
@@ -87,7 +90,11 @@ function AssetPager({
 					/>
 				</Tooltip>
 			)}
-			<div aria-label={positionLabel} title={positionLabel} className="flex min-w-10 items-center justify-center px-1">
+			<div
+				aria-label={positionLabel}
+				title={positionLabel}
+				className="flex min-w-10 items-center justify-center px-1"
+			>
 				{count <= 10 ? (
 					Array.from({ length: count }, (_, dot) => (
 						<button
@@ -102,14 +109,24 @@ function AssetPager({
 								className={cn(
 									"block size-1.5 rounded-full transition-colors",
 									dot === index
-										? "bg-fg"
-										: "bg-line-strong group-hover:bg-dim",
+										? onDark
+											? "bg-white"
+											: "bg-fg"
+										: onDark
+											? "bg-white/35 group-hover:bg-white/70"
+											: "bg-line-strong group-hover:bg-dim",
 								)}
 							/>
 						</button>
 					))
 				) : (
-					<span role="status" className="px-1 text-[11px] tabular-nums text-faint">
+					<span
+						role="status"
+						className={cn(
+							"px-1 text-[11px] tabular-nums",
+							onDark ? "text-white/60" : "text-faint",
+						)}
+					>
 						{index + 1} / {count}
 					</span>
 				)}
@@ -167,13 +184,11 @@ function AssetMenu({
 	file,
 	refresh,
 	onClose,
-	triggerClassName,
 }: {
 	sessionId: string;
 	file: SessionAssetFile;
 	refresh?: () => void;
 	onClose?: () => void;
-	triggerClassName?: string;
 }) {
 	const rawUrl = sessionAssetPreviewUrl(sessionId, file);
 	const stableUrl = sessionAssetRawUrl(sessionId, file.path);
@@ -193,10 +208,7 @@ function AssetMenu({
 		<Menu.Root>
 			<Menu.Trigger
 				aria-label="Asset actions"
-				className={cn(
-					"flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
-					triggerClassName,
-				)}
+				className="flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
 			>
 				<IconDotsHorizontal size={16} />
 			</Menu.Trigger>
@@ -232,24 +244,17 @@ function AssetMenu({
 }
 
 function AssetOverlayFooter({
-	sessionId,
 	file,
-	refresh,
 	showSize,
 	navigation,
 	phone,
-	onOpenAsTab,
-	onClose,
 }: {
-	sessionId: string;
 	file: SessionAssetFile;
-	refresh: () => void;
 	showSize: boolean;
 	navigation: AssetNavigation | null;
 	phone: boolean;
-	onOpenAsTab?: () => void;
-	onClose: () => void;
 }) {
+	if (!file.description && !showSize && !navigation) return null;
 	return (
 		<div
 			className={cn(
@@ -260,37 +265,29 @@ function AssetOverlayFooter({
 			)}
 		>
 			{file.description && (
-				<div className="max-w-full line-clamp-2 text-center text-supporting leading-snug text-fg">
+				<div
+					className={cn(
+						"max-w-[min(720px,90vw)] line-clamp-2 text-center leading-snug",
+						phone ? "text-supporting text-dim" : "text-sm text-white",
+					)}
+				>
 					{file.description}
 				</div>
 			)}
 			<div className="flex max-w-full items-center justify-center gap-2">
 				{showSize && (
-					<span className={cn("shrink-0 text-[11px]", phone ? "text-faint" : "text-fg")}>
+					<span
+						className={cn(
+							"shrink-0 text-[11px]",
+							phone ? "text-faint" : "text-white/60",
+						)}
+					>
 						{formatAssetSize(file.size)}
 					</span>
 				)}
 				{navigation && (
-					<AssetPager navigation={navigation} arrows={phone} />
+					<AssetPager navigation={navigation} arrows={phone} onDark={!phone} />
 				)}
-				{onOpenAsTab && (
-					<Button
-						variant="ghost"
-						size="xs"
-						icon={<IconArrowUpRight size={15} />}
-						className={!phone ? "text-fg" : undefined}
-						onClick={onOpenAsTab}
-					>
-						Open
-					</Button>
-				)}
-				<AssetMenu
-					sessionId={sessionId}
-					file={file}
-					refresh={refresh}
-					onClose={onClose}
-					triggerClassName={!phone ? "text-fg" : undefined}
-				/>
 			</div>
 		</div>
 	);
@@ -653,14 +650,10 @@ export function AssetOverlay({
 			: null;
 	const footer = (
 		<AssetOverlayFooter
-			sessionId={sessionId}
 			file={file}
-			refresh={refresh}
 			showSize={listed}
 			navigation={navigation}
 			phone={isPhone}
-			onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
-			onClose={onClose}
 		/>
 	);
 
@@ -682,8 +675,32 @@ export function AssetOverlay({
 					!isPhone && "rounded-[inherit]",
 				)}
 			>
-				<div className="flex min-h-9 shrink-0 items-center px-3 pr-12" title={file.path}>
-					<div className="truncate text-label font-medium text-fg">{name}</div>
+				<div
+					className="flex min-h-10 shrink-0 items-center gap-1 px-3 pr-12"
+				>
+					<div
+						className="min-w-0 flex-1 truncate text-label font-medium text-fg"
+						title={file.path}
+					>
+						{name}
+					</div>
+					{onOpenAsTab && (
+						<Button
+							variant="ghost"
+							size="xs"
+							icon={<IconArrowUpRight size={15} />}
+							className="shrink-0"
+							onClick={() => onOpenAsTab(file.path)}
+						>
+							Open
+						</Button>
+					)}
+					<AssetMenu
+						sessionId={sessionId}
+						file={file}
+						refresh={refresh}
+						onClose={onClose}
+					/>
 				</div>
 				<div className="relative flex min-h-0 flex-1">
 					{missingPath === file.path ? (
