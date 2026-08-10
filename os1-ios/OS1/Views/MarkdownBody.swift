@@ -185,6 +185,13 @@ private extension MarkdownRenderConfig {
     /// the config stops asserting something it does not mean. `quote` is the
     /// one colour already subordinate at full strength, so it cannot simply
     /// follow `text`.
+    ///
+    /// Inline code is the web's treatment: a 6% ink tint and nothing else.
+    /// The library also draws a dotted underline under every code run, which
+    /// on top of a fill boxes the same word twice — a sentence naming four
+    /// files came out as four underlined boxes. The tint alone is enough to
+    /// separate a name from the prose around it, so the underline is
+    /// `.clear`.
     static func os1Config(text: Color, quote: Color) -> MarkdownRenderConfig {
         #if os(iOS)
         let base = MarkdownRenderConfig.default
@@ -228,8 +235,8 @@ private extension MarkdownRenderConfig {
                 linkTextColor: OS1VisualStyle.link,
                 codeTextFont: base.inlineStyle.codeTextFont,
                 codeTextColor: text,
-                codeBackgroundColor: OS1VisualStyle.panel,
-                codeUnderlineColor: OS1VisualStyle.border
+                codeBackgroundColor: OS1VisualStyle.markdownInlineCode,
+                codeUnderlineColor: .clear
             ),
             codeBlockConfig: .init(
                 theme: .github,
@@ -271,8 +278,8 @@ private extension MarkdownRenderConfig {
                 linkTextColor: OS1VisualStyle.link,
                 codeTextFont: .monospacedSystemFont(ofSize: 12, weight: .regular),
                 codeTextColor: text,
-                codeBackgroundColor: OS1VisualStyle.panel,
-                codeUnderlineColor: OS1VisualStyle.border
+                codeBackgroundColor: OS1VisualStyle.markdownInlineCode,
+                codeUnderlineColor: .clear
             ),
             codeBlockConfig: .init(
                 theme: .github,

@@ -47,6 +47,18 @@ enum OS1VisualStyle {
             ? UIColor(red: 0.047, green: 0.047, blue: 0.063, alpha: 1)
             : UIColor(white: 0, alpha: 0.055)
     })
+    /// A run of inline code inside a sentence — the same 6% ink the web's
+    /// `.markdown code` paints. Translucent rather than a surface from the
+    /// ramp: a code run lands on the canvas, on a message bubble and inside a
+    /// work fold, and one wash sits a fixed step below all three. `panel` was
+    /// the surface here, and `.tertiarySystemBackground` is WHITE in light
+    /// appearance — so the chip read as a lighter box punched into the prose
+    /// instead of a tint on it.
+    static let markdownInlineCode = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.06)
+            : UIColor(white: 0, alpha: 0.06)
+    })
     /// Body prose that is subordinate but still meant to be READ — the
     /// narration inside a work fold. Not `textDim`: `.secondaryLabel` is built
     /// for short labels, and at 17pt over the canvas it measures 3.4:1, under
@@ -141,6 +153,13 @@ enum OS1VisualStyle {
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             ? NSColor(red: 0.047, green: 0.047, blue: 0.063, alpha: 1)
             : NSColor(white: 0, alpha: 0.055)
+    })
+    /// Inline code's tint — see the iOS note for why it is translucent ink
+    /// rather than a surface.
+    static let markdownInlineCode = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.06)
+            : NSColor(white: 0, alpha: 0.06)
     })
     /// Subordinate body prose — see the iOS note for why this is its own
     /// neutral rather than `textDim`.
