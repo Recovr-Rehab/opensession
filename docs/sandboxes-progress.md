@@ -157,3 +157,40 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
 - Slice B is complete. Slice C remains intentionally blocked on the missing Pi
   + OpenCode-other design addendum; do not delete the host-engine bridge until
   that design exists.
+
+## 2026-08-10 — all-engines addendum recovered; Slice C unblocked
+
+- The missing Pi/OpenCode-other investigation is now folded into
+  `sandboxes-phase1-brain-inside.md` under the Slice C deletion plan. The key
+  finding: `runner-host` already calls the same `runAgent` inside the guest,
+  which embeds Pi in-process, launches normal OpenCode, and turns every trusted
+  opensession-* MCP into an rpc-ws stdio proxy. No Pi service extraction,
+  dispatch redesign, or engine auth-flow change is needed.
+- Pi needs only an allowlisted per-launch `~/.opensession-pi.json`. Its
+  Anthropic and OpenAI credentials are already covered by the scoped Claude
+  account and rotation-proof OpenAI seed uploads; its native session jsonl
+  persists on the VM COW disk, and its runner-host survives/reconnects across
+  Open Session restarts.
+- OpenCode-other already receives Settings provider keys because the launcher
+  copies `.opensession-opencode.json`; that also exposed a misleading
+  "no secrets" comment and over-broad copying. Slice C must project that config
+  at the adapter boundary, optionally project only the selected entry from
+  OpenCode's native `auth.json`, chmod/rewrite-or-remove both per launch, and
+  never upload Anthropic/OpenAI native auth.
+- Resulting flat sandboxability rule: every Claude, Pi, and OpenCode model can
+  run brain-inside on every certified provider. Only native Codex remains
+  host-only because its writable refresh-token family cannot safely cross the
+  boundary; GPT sandboxes use `opencode/openai/*` or `pi/openai/*`.
+- The tella-fusion follow-up is not lost: private PR #5604 is open from
+  `michael/agents-lifecycle-hooks` at d1c4c79a9f. It moves the hooks into
+  `.agents/` and makes the canonical setup hook `.agents/setup` (no `.sh`),
+  matching Open Session's new contract.
+
+## Next steps (current)
+
+1. Implement Slice C's scoped launch projections first, with stale-authority
+   removal tests and real Pi + OpenCode-other microvm smokes.
+2. Delete the placement matrix and workspace-MCP host-engine path only after
+   those smokes pass; leave `workspace-exec.ts` intact for UI git/file reads.
+3. Continue with Slice D prewarm/docs, optional Slice E, wake-on-demand, and
+   snapshot-after-setup.

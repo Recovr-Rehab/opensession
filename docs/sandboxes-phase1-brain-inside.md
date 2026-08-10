@@ -192,6 +192,75 @@ Brain-inside changes what *uses* the egress, not the rules:
 
 ## 5. Deletion plan
 
+### All-engines addendum: Pi and OpenCode-other run inside too
+
+The original version of this design left Pi and third-party OpenCode providers
+on the host. That exception was based on their host implementation details,
+not on a missing guest capability. The in-guest `runner-host` imports the same
+`runAgent` entry point as a host run, so it already:
+
+- embeds `runPi` in-process for `pi/*`, including the native Anthropic provider
+  and the OpenAI Codex-account provider;
+- launches the normal OpenCode subprocess and its per-run Anthropic/OpenAI
+  bridges for every `opencode/*` model; and
+- converts the trusted opensession-* in-process MCP list into stdio proxies
+  over `/rpc-ws` (`runner-host/host.ts:368-425`). Pi's MCP bridge and OpenCode's
+  prebuilt-proxy path both consume those configs unchanged.
+
+The constraint is therefore strict: **do not extract Pi into a service, add a
+new dispatch layer, or change either engine's auth flow.** The sandbox adapter
+must materialize the same files each engine already reads in its guest home.
+
+**Pi launch material:**
+
+- Upload a normalized, allowlisted `~/.opensession-pi.json` on every launch
+  (`enabled`, `pickerModels`, and the optional `anthropicTransport` only), or
+  remove it when Pi is disabled. Do not blindly copy unknown future fields.
+- The existing scoped Claude-account upload is the credential source for
+  `pi/anthropic/*`. Both the default in-process provider and the rollback
+  loopback bridge start inside the guest and read that store normally.
+- The existing scoped Codex-account store plus access-token-only OpenAI seed
+  artifacts are the credential source for `pi/openai/*`; raw writable
+  `CODEX_HOME/auth.json` remains forbidden.
+- Pi's `stateDir("pi")/sessions/<unified-id>` stays on the per-session COW disk.
+  Successive guest runner-host processes can resume the pi-native jsonl there,
+  and an in-flight Pi turn survives an Open Session restart because the
+  runner-host process itself remains alive in the VM and redials. VM loss uses
+  the existing journal/transcript continuation path; no new Pi persistence
+  protocol is introduced.
+
+**OpenCode-other launch material:**
+
+- Settings-managed third-party credentials already live in
+  `~/.opensession-opencode.json`, which the remote launcher currently uploads
+  wholesale and OpenCode consumes through `opencodeProviderOptions()`. The
+  existing comment claiming that file contains no secrets is wrong once
+  `providers.*.apiKey` is configured and must be corrected.
+- Replace the wholesale copy with an adapter-owned projection. Always preserve
+  the non-provider bridge/runtime fields needed by Anthropic, OpenAI, and Pi;
+  include third-party `providers` entries only for an OpenCode-other launch.
+  That launch may receive all Settings-configured third-party providers: they
+  are one operator-managed trust scope and the in-process fallback walk may
+  switch providers without crossing another launch boundary. Never include
+  `anthropic` or `openai` raw-key entries (the config layer already rejects
+  them).
+- For installations that used OpenCode's native `auth login` instead of the
+  Settings provider map, project `~/.local/share/opencode/auth.json` to the
+  guest's normal path with only the selected non-Anthropic/non-OpenAI provider
+  entry. Do not upload the whole native auth store. If neither Settings config
+  nor a matching native-auth entry exists, fail before launch with the provider
+  id and remediation, never a credential value.
+- Every projected config/auth file is rewritten with mode 0600 or removed on
+  every launch so a prior wider launch cannot leave stale authority behind.
+  Audit only provider ids and the mechanism (`settings` or `native-auth`), not
+  values.
+
+This preserves all non-sandboxed behavior: host runs keep reading their normal
+files and starting the same Pi/OpenCode implementations. It also leaves exactly
+one unsandboxable family: native Codex, whose writable rotating refresh-token
+family still cannot be copied safely. GPT inside a sandbox continues through
+`opencode/openai/*` or `pi/openai/*`.
+
 Dies with this conversion:
 
 | Item | Location |
@@ -211,8 +280,8 @@ Dies with this conversion:
 
 - `workspace-exec.ts` in full (contradiction #3).
 - A **family-level** residue of the matrix: codex-native (rotating
-  `CODEX_HOME` refresh token) and pi (in-process engine) genuinely cannot run
-  in *any* sandbox. Replace the environment matrix with a flat
+  `CODEX_HOME` refresh token) genuinely cannot run in any sandbox. Replace
+  the environment matrix with a flat
   `sandboxableModelFamily(model): { ok } | { ok: false, error }`
   (provider-independent), enforced at the same create-path call sites and
   served in a simplified `/api/sandbox/status` shape for `NewSession.tsx`.
@@ -309,16 +378,22 @@ whose marker check ignores it).
   reattaches).
 
 **Slice C — delete the placement matrix + workspace-MCP path.** Server +
-frontend surgery per §5; introduce `sandboxableModelFamily`.
+frontend surgery per §5; introduce `sandboxableModelFamily`. Before removing
+the host path, land the adapter-owned Pi config and scoped OpenCode-other auth
+projection described in the all-engines addendum; Pi and every OpenCode family
+then use the already-existing in-guest `runAgent` path on every provider.
 - Touches: `config.ts`, `run-session.ts`, `interactive-mcp.ts`,
   `provider.ts`, `bootstrap.ts`, `workspace-mcp.ts`/tests (rm),
   `session-create.ts`, `session-control-wiring.ts`, `routes/workspace.ts`,
   `types.ts`, `frontend/components/NewSession.tsx`,
   `frontend/lib/api/automations.ts`, `capability-status.test.ts`, all
-  adapters, `verify-external-engine.ts` (rm).
+  adapters, `verify-external-engine.ts` (rm), plus scoped-upload tests for Pi
+  config, Settings provider keys, native OpenCode auth, and stale-file removal.
 - Verify: `bun test`, `conformance.ts docker-socket docker-ws microvm`, live
-  smoke: Claude-model microvm session, one turn, diff/status/@-mention
-  through workspace-exec, push.
+  smoke on microvm for native Claude, Pi Anthropic or OpenAI, and one configured
+  OpenCode-other provider; exercise an opensession-* MCP tool from Pi, restart
+  Open Session during a Pi turn and observe WS reattach, then verify
+  diff/status/@-mention through workspace-exec and push.
 
 **Slice D — prewarm + docs + trust-note cleanup.**
 - Touches: `microvm.ts` prewarm adapter, `docs/self-hosting-sandboxes.md`
