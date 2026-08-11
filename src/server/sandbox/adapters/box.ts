@@ -307,6 +307,14 @@ function composeShell(cmd: string, opts?: RemoteExecOpts): string {
   return s;
 }
 
+export function boxNativeFilePath(path: string): string {
+  if (path === "/home/ubuntu") return "/home/user";
+  if (path.startsWith("/home/ubuntu/")) {
+    return `/home/user/${path.slice("/home/ubuntu/".length)}`;
+  }
+  return path;
+}
+
 export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
   let runtimeHomeReady = false;
   const result = (response: BoxCommandResponse) => ({
@@ -427,17 +435,18 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     },
 
     async writeFile(path: string, content: string) {
-      // Box's file API deliberately restricts paths to /home/user and /tmp,
-      // while the cross-provider runtime uses /home/ubuntu. Write through the
-      // command surface so Box preserves the same filesystem contract.
-      const encoded = Buffer.from(content, "utf-8").toString("base64");
-      const write = await this.exec(
-        `mkdir -p ${shellQuoteWord(path.slice(0, path.lastIndexOf("/")))} && printf %s ${shellQuoteWord(encoded)} | base64 -d > ${shellQuoteWord(path)}`,
-        { timeoutMs: 60_000 },
+      // Box canonicalizes file paths and permits only /home/user or /tmp.
+      // /home/ubuntu is our symlink to that persistent home, so translate the
+      // prefix explicitly and use the native file API instead of serializing
+      // every launch-time credential write through a shell command.
+      const nativePath = boxNativeFilePath(path);
+      await boxApi(
+        cfg,
+        "PUT",
+        `/boxes/${boxId}/files`,
+        { path: nativePath, content, encoding: "utf8" },
+        60_000,
       );
-      if (write.exitCode !== 0) {
-        throw new Error(`Box file write failed: ${(write.stderr || write.stdout).slice(0, 300)}`);
-      }
     },
 
     async ensureStarted() {

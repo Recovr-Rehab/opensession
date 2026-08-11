@@ -118,7 +118,6 @@ import type {
 export const REMOTE_HOME = "/home/ubuntu";
 const REMOTE_BUN = `${REMOTE_HOME}/.bun/bin/bun`;
 const REMOTE_BUNX = `${REMOTE_HOME}/.bun/bin/bunx`;
-const REMOTE_CLAUDE = `${REMOTE_HOME}/.local/bin/claude`;
 const REMOTE_OPENCODE = `${REMOTE_HOME}/.bun/bin/opencode`;
 const REMOTE_MCP_CONFIG = `${REMOTE_HOME}/.opensession-mcp-config.json`;
 /** Same pin as deploy/sandbox/Dockerfile's OPENCODE_VERSION (host runs this
@@ -810,10 +809,11 @@ export async function bootstrapRemoteSandbox(
     "bun install of the runner bundle",
   );
 
-  log("installing claude CLI…");
+  log("ensuring claude CLI…");
   need(
     await driver.exec(
-      `test -x ${REMOTE_CLAUDE} || curl -fsSL https://claude.ai/install.sh | HOME=${REMOTE_HOME} bash`,
+      `env PATH=${shellQuoteWord(REMOTE_PATH)} sh -c 'command -v claude >/dev/null 2>&1' || ` +
+        `HOME=${REMOTE_HOME} BUN_INSTALL=${REMOTE_HOME}/.bun ${REMOTE_BUN} add -g @anthropic-ai/claude-code`,
       { timeoutMs: 300_000 },
     ),
     "claude CLI install",

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { boxMachineType } from "./box";
+import { boxMachineType, boxNativeFilePath } from "./box";
 
 describe("Box machine profiles", () => {
   test("maps the three provider-supported resource combinations", () => {
@@ -13,5 +13,15 @@ describe("Box machine profiles", () => {
     expect(() => boxMachineType({ cpu: 4, memoryMb: 4_096, diskGb: 80 })).toThrow(
       "Choose one of Box's Small, Default, or Large machine sizes",
     );
+  });
+});
+
+describe("Box persistent file paths", () => {
+  test("maps the cross-provider home to Box's native durable home", () => {
+    expect(boxNativeFilePath("/home/ubuntu")).toBe("/home/user");
+    expect(boxNativeFilePath("/home/ubuntu/.opensession/spec.json")).toBe(
+      "/home/user/.opensession/spec.json",
+    );
+    expect(boxNativeFilePath("/tmp/output")).toBe("/tmp/output");
   });
 });
