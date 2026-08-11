@@ -156,6 +156,39 @@ export function daytonaCreateSource(
   return {};
 }
 
+export function daytonaSnapshotIsRecoverable(snapshot: {
+  state?: unknown;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}, now = Date.now()): boolean {
+  const completedAt = Date.parse(String(snapshot.updatedAt || snapshot.createdAt || ""));
+  const age = now - completedAt;
+  return (
+    String(snapshot.state || "").toLowerCase() === "active" &&
+    Number.isFinite(completedAt) &&
+    age >= 0 &&
+    age < 60 * 60_000
+  );
+}
+
+async function recoverDaytonaRepoTemplate(
+  client: Daytona,
+  repoId: string,
+) {
+  const stored = readRemoteRepoTemplate("daytona", repoId);
+  if (stored) return stored;
+  const name = remoteRepoTemplateName("daytona", repoId);
+  try {
+    const snapshot = await client.snapshot.get(name);
+    if (!daytonaSnapshotIsRecoverable(snapshot as any)) return null;
+    writeRemoteRepoTemplate("daytona", repoId, name);
+    console.log(`[sandbox:daytona] recovered completed repo template ${name}`);
+    return readRemoteRepoTemplate("daytona", repoId);
+  } catch {
+    return null;
+  }
+}
+
 async function daytonaClient(): Promise<Daytona> {
   const cfg = daytonaConfig().daytona || {};
   const apiKey = (sandboxProviderCredential("daytona") as { apiKey: string } | undefined)?.apiKey;
@@ -370,7 +403,7 @@ export class DaytonaProvider implements SandboxProvider {
       // 2026-07). Unset = Daytona's default snapshot (1 vCPU/1GB/3GiB disk),
       // too small for real repo workspaces: the runner payload alone is ~2GB
       // and a tella-fusion clone died on ENOSPC. See SandboxDaytonaConfig.
-      const template = readRemoteRepoTemplate("daytona", repo.id);
+      const template = await recoverDaytonaRepoTemplate(client, repo.id);
       const create = (snapshot?: string) => {
         const resources = daytonaCreateResources(cfg);
         return client.create(
@@ -502,7 +535,7 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     const repoId = key.startsWith("daytona:") ? key.slice("daytona:".length) : "";
     if (!repoId) throw new Error(`invalid Daytona prewarm key: ${key || "(missing)"}`);
     const client = await daytonaClient();
-    const template = readRemoteRepoTemplate("daytona", repoId);
+    const template = await recoverDaytonaRepoTemplate(client, repoId);
     const create = (snapshot?: string) => {
       const resources = daytonaCreateResources(cfg, opts.resources);
       return client.create(
@@ -539,18 +572,11 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     await sealRemoteRepoTemplate(daytonaDriver(sbx), "daytona", repo);
     try {
       const existing = await client.snapshot.get(name);
-      const completedAt = Date.parse(
-        String((existing as any).updatedAt || (existing as any).createdAt || ""),
-      );
       // Daytona can finish a large snapshot just after the SDK's wait timed
       // out. Recover that provider-side success on the next request instead
       // of deleting and rebuilding the same 10+ GiB artifact. The narrow
       // window does not defeat the template TTL's deliberate daily refresh.
-      if (
-        String((existing as any).state || "").toLowerCase() === "active" &&
-        Number.isFinite(completedAt) &&
-        Date.now() - completedAt < 60 * 60_000
-      ) {
+      if (daytonaSnapshotIsRecoverable(existing as any)) {
         writeRemoteRepoTemplate("daytona", repo.id, name);
         console.log(`[sandbox:daytona] recovered completed post-setup repo template ${name}`);
         return;

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { daytonaCreateSource, parseDaytonaExecResult } from "./daytona";
+import {
+  daytonaCreateSource,
+  daytonaSnapshotIsRecoverable,
+  parseDaytonaExecResult,
+} from "./daytona";
 
 describe("Daytona create source", () => {
   test("uses an explicit image whenever custom resources are requested", () => {
@@ -17,6 +21,28 @@ describe("Daytona create source", () => {
         disk: 8,
       }),
     ).toEqual({ snapshot: "opensession-tella-fusion" });
+  });
+
+  test("recovers only fresh, completed provider snapshots", () => {
+    const now = Date.parse("2026-08-11T13:00:00.000Z");
+    expect(
+      daytonaSnapshotIsRecoverable(
+        { state: "active", updatedAt: "2026-08-11T12:55:00.000Z" },
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      daytonaSnapshotIsRecoverable(
+        { state: "snapshotting", updatedAt: "2026-08-11T12:55:00.000Z" },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      daytonaSnapshotIsRecoverable(
+        { state: "active", updatedAt: "2026-08-11T11:55:00.000Z" },
+        now,
+      ),
+    ).toBe(false);
   });
 });
 
