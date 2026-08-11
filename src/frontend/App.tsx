@@ -1,7 +1,11 @@
 import "./lib/storage-migrate"; // must run before any lib reads its pref keys
 import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
-import { setKnownRepos, setSessionTitles } from "./lib/markdown";
+import {
+	setKnownRepos,
+	setKnownPrStates,
+	setSessionTitles,
+} from "./lib/markdown";
 import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -620,6 +624,21 @@ export function App(
 	// we already poll. No-ops unless a title actually changed.
 	useEffect(() => {
 		setSessionTitles(sessions.map((s) => [s.id, s.title] as const));
+		setKnownPrStates(
+			sessions.flatMap((session) => [
+				...(session.repo && session.prNumber
+					? [
+							{
+								repo: session.repo,
+								number: session.prNumber,
+								state: session.prState,
+								isDraft: session.prIsDraft,
+							},
+						]
+					: []),
+				...(session.prs ?? []),
+			]),
+		);
 	}, [sessions]);
 	// Same deal for PR-mention chips (`opensession#128`): markdown.ts only links
 	// a qualified mention it can place, so it needs the repos this instance

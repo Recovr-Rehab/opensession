@@ -3,12 +3,14 @@ import {
   renderMarkdown,
   renderPrCommentMarkdown,
   setKnownRepos,
+  setKnownPrStates,
   setSessionTitles,
 } from "./markdown";
 
 afterEach(() => {
   setSessionTitles([]);
   setKnownRepos([]);
+  setKnownPrStates([]);
 });
 
 describe("renderMarkdown session links", () => {
@@ -342,6 +344,44 @@ describe("renderMarkdown PR mentions", () => {
     const local = renderMarkdown("Fixed in #5528.", fusion);
     expect(local).toContain('href="/pr/tella-fusion/5528"');
     expect(local).not.toContain("data-pr-gh");
+  });
+
+  it("shows live open, draft, merged, and closed state", () => {
+    for (const [state, isDraft, label, tone] of [
+      ["OPEN", false, "Open", "open"],
+      ["OPEN", true, "Draft", "draft"],
+      ["MERGED", false, "Merged", "merged"],
+      ["CLOSED", false, "Closed", "closed"],
+    ] as const) {
+      setKnownPrStates([
+        { repo: "tella-fusion", number: 5528, state, isDraft },
+      ]);
+      const html = renderMarkdown("Fixed in #5528.", fusion);
+      expect(html).toContain(`data-pr-state="${tone}"`);
+      expect(html).toContain(`<span class="pr-ref-state">${label}</span>`);
+      expect(html).toContain(`· ${label}`);
+    }
+  });
+
+  it("drops stale state when the PR cache no longer contains the reference", () => {
+    setKnownPrStates([
+      { repo: "tella-fusion", number: 5528, state: "OPEN" },
+    ]);
+    expect(renderMarkdown("Fixed in #5528.", fusion)).toContain(">Open</span>");
+    setKnownPrStates([]);
+    expect(renderMarkdown("Fixed in #5528.", fusion)).not.toContain(
+      "pr-ref-state",
+    );
+  });
+
+  it("keeps the newest state when several sessions reference the same PR", () => {
+    setKnownPrStates([
+      { repo: "tella-fusion", number: 5528, state: "MERGED" },
+      { repo: "tella-fusion", number: 5528, state: "OPEN" },
+    ]);
+    expect(renderMarkdown("Fixed in #5528.", fusion)).toContain(
+      '<span class="pr-ref-state">Merged</span>',
+    );
   });
 
   it("leaves a mention plain when the caller renders without a repo", () => {

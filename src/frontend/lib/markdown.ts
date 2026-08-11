@@ -296,6 +296,90 @@ const PR_MENTION_START = new RegExp(`(?:^|[^\\w#&/])(?=${PR_MENTION_SRC})`);
  */
 let knownRepos = new Map<string, string | undefined>();
 
+type PrStateInput = {
+  repo?: string;
+  number?: number;
+  state?: "OPEN" | "MERGED" | "CLOSED";
+  isDraft?: boolean;
+};
+
+type PrDisplayState = {
+  label: "Open" | "Draft" | "Merged" | "Closed";
+  tone: "open" | "draft" | "merged" | "closed";
+};
+
+let knownPrStates = new Map<string, PrDisplayState>();
+
+function prStateKey(repo: string, number: string | number): string {
+  return `${repo}\u0000${number}`;
+}
+
+function displayPrState(pr: PrStateInput): PrDisplayState | null {
+  if (pr.state === "MERGED") return { label: "Merged", tone: "merged" };
+  if (pr.state === "CLOSED") return { label: "Closed", tone: "closed" };
+  if (pr.state === "OPEN" && pr.isDraft)
+    return { label: "Draft", tone: "draft" };
+  if (pr.state === "OPEN") return { label: "Open", tone: "open" };
+  return null;
+}
+
+function prRefTitle(repo: string, number: string, state?: PrDisplayState): string {
+  return `Open the review for ${repoLabel(repo)} #${number}${
+    state ? ` · ${state.label}` : ""
+  }`;
+}
+
+/** Keep already-rendered transcript chips in sync with the bulk PR cache. */
+function syncRenderedPrStates(): void {
+  if (typeof document === "undefined") return;
+  for (const anchor of document.querySelectorAll<HTMLAnchorElement>(
+    "a.pr-ref[data-pr-repo][data-pr-number]",
+  )) {
+    const repo = anchor.dataset.prRepo;
+    const number = anchor.dataset.prNumber;
+    if (!repo || !number) continue;
+    const state = knownPrStates.get(prStateKey(repo, number));
+    let label = anchor.querySelector<HTMLElement>(".pr-ref-state");
+    if (!state) {
+      delete anchor.dataset.prState;
+      label?.remove();
+      anchor.title = prRefTitle(repo, number);
+      continue;
+    }
+    anchor.dataset.prState = state.tone;
+    if (!label) {
+      label = document.createElement("span");
+      label.className = "pr-ref-state";
+      anchor.append(label);
+    }
+    label.textContent = state.label;
+    anchor.title = prRefTitle(repo, number, state);
+  }
+}
+
+/** Register live PR state from the session list for transcript references. */
+export function setKnownPrStates(prs: Iterable<PrStateInput>): void {
+  const next = new Map<string, PrDisplayState>();
+  for (const pr of prs) {
+    if (!pr.repo || !pr.number) continue;
+    const state = displayPrState(pr);
+    const key = prStateKey(pr.repo, pr.number);
+    if (state && !next.has(key)) next.set(key, state);
+  }
+  if (
+    next.size === knownPrStates.size &&
+    [...next].every(
+      ([key, state]) =>
+        knownPrStates.get(key)?.label === state.label &&
+        knownPrStates.get(key)?.tone === state.tone,
+    )
+  )
+    return;
+  knownPrStates = next;
+  mdCache.clear();
+  syncRenderedPrStates();
+}
+
 /** Register the repos, so `<repo>#123` mentions link and chips know GitHub. */
 export function setKnownRepos(
   repos: Iterable<{ id: string; ghRepo?: string }>,
@@ -332,17 +416,21 @@ function prMentionLink(repo: string, number: string, label: string): string {
   // `data-pr-gh` is the escape hatch, not the destination: a plain click
   // stays in the review here, cmd/ctrl-click leaves for github.com.
   const ghRepo = knownRepos.get(repo);
+  const state = knownPrStates.get(prStateKey(repo, number));
   return (
     `<a href="${attr(href)}" class="pr-ref" data-pr-repo="${attr(repo)}"` +
     ` data-pr-number="${attr(number)}"` +
     (ghRepo ? ` data-pr-gh="${attr(ghRepo)}"` : "") +
-    ` title="${attr(`Open the review for ${repoLabel(repo)} #${number}`)}">` +
+    (state ? ` data-pr-state="${state.tone}"` : "") +
+    ` title="${attr(prRefTitle(repo, number, state))}">` +
     `<span class="pr-ref-icon" aria-hidden="true">` +
     `<svg viewBox="0 0 24 24" fill="none">` +
     `<circle cx="7" cy="6.5" r="1.75"/><circle cx="7" cy="17.5" r="1.75"/>` +
     `<circle cx="17" cy="17.5" r="1.75"/><path d="M7 8.25V15.75"/>` +
     `<path d="M12.25 6.5H15C16.1046 6.5 17 7.39543 17 8.5V15.75"/>` +
-    `</svg></span><span class="pr-ref-label">${attr(label)}</span></a>`
+    `</svg></span><span class="pr-ref-label">${attr(label)}</span>` +
+    (state ? `<span class="pr-ref-state">${state.label}</span>` : "") +
+    `</a>`
   );
 }
 
