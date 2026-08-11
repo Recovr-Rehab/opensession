@@ -8,6 +8,7 @@ import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
 import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
+import { Button } from "../ui/button";
 
 type RenderBlock =
 	| { kind: "entry"; entry: TranscriptEntry }
@@ -37,9 +38,33 @@ interface Props {
 	 *  Pass a referentially stable object (see SessionViewer) so the memo holds. */
 	walkthrough?: SessionWalkthrough;
 	slackShare?: {
+		prNumber: number;
 		status: "idle" | "sharing" | "shared";
 		onShare: () => void;
 	};
+}
+
+function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
+	if (entry.notice?.kind !== "system") return null;
+	const match = entry.content.match(/^PR #(\d+).*\bwas merged into\b/i);
+	return match ? Number(match[1]) : null;
+}
+
+function ShippedChangeAction({
+	status,
+	onShare,
+}: NonNullable<Props["slackShare"]>) {
+	return (
+		<div className="mx-auto mb-6 -mt-2 flex w-full max-w-[var(--session-col)]">
+			<Button size="sm" disabled={status !== "idle"} onClick={onShare}>
+				{status === "sharing"
+					? "Sharing…"
+					: status === "shared"
+						? "Shared to Slack"
+						: "Share to Slack"}
+			</Button>
+		</div>
+	);
 }
 
 /**
@@ -67,6 +92,19 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	slackShare,
 }: Props) {
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
+	const shareAfterEntryIds = new Set<string>();
+	if (slackShare) {
+		for (let i = 0; i < renderedEntries.length; i++) {
+			if (mergedNoticePrNumber(renderedEntries[i]) !== slackShare.prNumber) continue;
+			let targetId = renderedEntries[i].id;
+			for (let j = i + 1; j < renderedEntries.length; j++) {
+				const candidate = renderedEntries[j];
+				if (candidate.type === "user" || candidate.type === "system") break;
+				if (candidate.type === "assistant") targetId = candidate.id;
+			}
+			shareAfterEntryIds.add(targetId);
+		}
+	}
 	// Build tool_use → tool_result map
 	const toolResults = new Map<string, TranscriptEntry>();
 	for (const e of renderedEntries) {
@@ -180,14 +218,20 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						sessionId={sessionId}
 					/>
 				);
+				const showShareAction =
+					block.kind === "entry" && shareAfterEntryIds.has(block.entry.id);
 				return (
-					<VirtualTranscriptBlock
-						key={key}
-						anchorId={anchorId}
-						enabled={!isLiveTail && i < blocks.length - 24}
-					>
-						{content}
-					</VirtualTranscriptBlock>
+					<React.Fragment key={key}>
+						<VirtualTranscriptBlock
+							anchorId={anchorId}
+							enabled={!isLiveTail && i < blocks.length - 24}
+						>
+							{content}
+						</VirtualTranscriptBlock>
+						{showShareAction && slackShare && (
+							<ShippedChangeAction {...slackShare} />
+						)}
+					</React.Fragment>
 				);
 			})}
 		</>

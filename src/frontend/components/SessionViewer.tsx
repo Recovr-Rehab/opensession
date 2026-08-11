@@ -803,6 +803,7 @@ export function SessionViewer({
 		() =>
 			mergedWalkthroughPr
 				? {
+						prNumber: mergedWalkthroughPr.number!,
 						status: walkthroughSlackShareStatus,
 						onShare: shareWalkthroughToSlack,
 					}
