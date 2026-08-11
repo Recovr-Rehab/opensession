@@ -67,6 +67,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
 import { composerMorph, composerChipMotion } from "../ui/motion";
 import { ModelEffortSelect, shortModelLabel } from "./ModelEffortSelect";
+import type { SessionUsage } from "../lib/types";
 
 interface Props {
   /**
@@ -127,6 +128,8 @@ interface Props {
    */
   goal?: string | null;
   onSetGoal?: (goal: string | null) => void;
+  /** Conversation usage shown inside the model menu. */
+  usage?: SessionUsage;
   /** Extra row for the "+" menu, below the built-in ones. Same shape as
    *  `sendMenu`: render a `composerMenuItem` button and call `close()`
    *  when it's picked. */
@@ -328,6 +331,7 @@ export function Composer({
   onAccountChange,
   goal,
   onSetGoal,
+  usage,
   menuExtra,
   attached,
   prefill,
@@ -1070,6 +1074,7 @@ export function Composer({
                   accounts={accounts}
                   accountId={accountId}
                   onAccountChange={onAccountChange}
+                  usage={usage}
                   disabled={disabled}
                   onOpenChange={setModelMenuOpen}
                 />

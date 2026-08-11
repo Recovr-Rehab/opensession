@@ -5512,6 +5512,7 @@ export function SessionViewer({
 									onSetGoal={
 										session.source === "opensession" ? handleSetGoal : undefined
 									}
+									usage={usage}
 									mentionFetch={async (q) => [
 										...peopleMentionMatches(q),
 										...(await fetchFileMentions(q, session.id)),

@@ -96,6 +96,69 @@ function Row({
 	);
 }
 
+export function UsageCost({
+	usage,
+	className,
+}: {
+	usage: SessionUsage;
+	className?: string;
+}) {
+	return <span className={cn("tabular-nums", className)}>{fmtUsd(usage.costUsd)}</span>;
+}
+
+export function UsageDetails({
+	usage,
+	className,
+}: {
+	usage: SessionUsage | undefined;
+	className?: string;
+}) {
+	if (!usage || usage.turns === 0) return null;
+
+	const window = usage.contextWindow || 0;
+	const ctx = usage.contextTokens || 0;
+	const frac = window > 0 ? Math.min(ctx / window, 1) : 0;
+	const tone = fillTone(frac);
+	const totalIn =
+		usage.inputTokens + usage.cacheReadTokens + usage.cacheCreationTokens;
+	const cacheHit =
+		totalIn > 0 ? Math.round((usage.cacheReadTokens / totalIn) * 100) : 0;
+
+	return (
+		<div className={cn("text-xs", className)}>
+			<div className="mb-2 flex items-baseline justify-between">
+				<span className="font-medium text-fg">This conversation</span>
+				<span className="text-dim">
+					{usage.turns} turn{usage.turns === 1 ? "" : "s"}
+				</span>
+			</div>
+			<div className="space-y-1.5">
+				<Row label="Cost" value={<UsageCost usage={usage} />} strong />
+				{window > 0 && (
+					<Row
+						label="Context"
+						value={
+							<span className={tone.text}>
+								{fmtTokens(ctx)} / {fmtTokens(window)} ({Math.round(frac * 100)}%)
+							</span>
+						}
+					/>
+				)}
+			</div>
+			<div className="my-2 h-px bg-line" />
+			<div className="space-y-1.5">
+				<Row label="Input" value={fmtTokens(usage.inputTokens)} />
+				<Row label="Output" value={fmtTokens(usage.outputTokens)} />
+				<Row
+					label="Cache read"
+					value={`${fmtTokens(usage.cacheReadTokens)} (${cacheHit}%)`}
+				/>
+				<Row label="Cache write" value={fmtTokens(usage.cacheCreationTokens)} />
+			</div>
+		</div>
+	);
+}
+
 export function UsageMeter({
 	usage,
 	className,
@@ -132,9 +195,7 @@ export function UsageMeter({
 				)}
 				aria-label="Conversation cost & context"
 			>
-				<span className="tabular-nums text-fg">
-					{fmtUsd(usage.costUsd)}
-				</span>
+				<UsageCost usage={usage} className="text-fg" />
 				{window > 0 && <ContextRing frac={frac} tone={tone.stroke} />}
 				{showCacheRate && (
 					// Off by default, and the phone header's meter leaves it off: there
@@ -148,43 +209,7 @@ export function UsageMeter({
 				)}
 			</Popover.Trigger>
 			<Popover.Popup side="top" align="end" className="w-64 p-3 text-xs">
-				<div className="mb-2 flex items-baseline justify-between">
-					<span className="font-medium text-fg">This conversation</span>
-					<span className="text-dim">
-						{usage.turns} turn{usage.turns === 1 ? "" : "s"}
-					</span>
-				</div>
-				<div className="space-y-1.5">
-					<Row
-						label="Cost"
-						value={fmtUsd(usage.costUsd)}
-						strong
-					/>
-					{window > 0 && (
-						<Row
-							label="Context"
-							value={
-								<span className={tone.text}>
-									{fmtTokens(ctx)} / {fmtTokens(window)} (
-									{Math.round(frac * 100)}%)
-								</span>
-							}
-						/>
-					)}
-				</div>
-				<div className="my-2 h-px bg-line" />
-				<div className="space-y-1.5">
-					<Row label="Input" value={fmtTokens(usage.inputTokens)} />
-					<Row label="Output" value={fmtTokens(usage.outputTokens)} />
-					<Row
-						label="Cache read"
-						value={`${fmtTokens(usage.cacheReadTokens)} (${cacheHit}%)`}
-					/>
-					<Row
-						label="Cache write"
-						value={fmtTokens(usage.cacheCreationTokens)}
-					/>
-				</div>
+				<UsageDetails usage={usage} />
 			</Popover.Popup>
 		</Popover.Root>
 	);

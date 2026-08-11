@@ -5,6 +5,8 @@ import { cn } from "../ui/cn";
 import { Switch } from "../ui/switch";
 import { Tooltip } from "../ui/tooltip";
 import { IconBolt, IconCheck, IconChevronRight } from "./icons";
+import type { SessionUsage } from "../lib/types";
+import { UsageCost, UsageDetails } from "./UsageMeter";
 
 export const EFFORTS = [
 	{ id: "none", label: "None" },
@@ -37,6 +39,8 @@ type Props = {
 	/** Pinned account id; "" / undefined = auto. */
 	accountId?: string;
 	onAccountChange?: (accountId: string) => void;
+	/** Conversation usage shown inside this menu; omitted in new-session pickers. */
+	usage?: SessionUsage;
 	disabled?: boolean;
 	title?: string;
 	className?: string;
@@ -236,6 +240,7 @@ export function ModelEffortSelect({
 	accounts,
 	accountId,
 	onAccountChange,
+	usage,
 	disabled,
 	title,
 	className,
@@ -438,6 +443,23 @@ export function ModelEffortSelect({
 				)}
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={6} className="max-w-[min(360px,calc(100vw-1rem))]">
+				{usage && usage.turns > 0 && (
+					<>
+						<Menu.SubmenuRoot>
+							<Menu.SubmenuTrigger className="justify-between gap-3">
+								<span className="min-w-0 truncate">Conversation usage</span>
+								<span className="flex flex-none items-center gap-1 text-dim">
+									<UsageCost usage={usage} />
+									<IconChevronRight className="shrink-0" size={17} />
+								</span>
+							</Menu.SubmenuTrigger>
+							<Menu.Popup className="w-64 max-w-[min(360px,calc(100vw-1rem))]">
+								<UsageDetails usage={usage} className="p-1.5" />
+							</Menu.Popup>
+						</Menu.SubmenuRoot>
+						<Menu.Separator className="my-1" />
+					</>
+				)}
 				{groupedPrimary
 					? providerGroups.map((g, i) => (
 							<React.Fragment key={g.provider}>
