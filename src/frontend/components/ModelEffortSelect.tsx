@@ -41,6 +41,8 @@ type Props = {
 	onAccountChange?: (accountId: string) => void;
 	/** Conversation usage shown inside this menu; omitted in new-session pickers. */
 	usage?: SessionUsage;
+	/** Keep the row visible as $0.00 before the first usage update arrives. */
+	showUsage?: boolean;
 	disabled?: boolean;
 	title?: string;
 	className?: string;
@@ -241,6 +243,7 @@ export function ModelEffortSelect({
 	accountId,
 	onAccountChange,
 	usage,
+	showUsage = false,
 	disabled,
 	title,
 	className,
@@ -443,7 +446,7 @@ export function ModelEffortSelect({
 				)}
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={6} className="max-w-[min(360px,calc(100vw-1rem))]">
-				{usage && usage.turns > 0 && (
+				{showUsage && (
 					<>
 						<Menu.SubmenuRoot>
 							<Menu.SubmenuTrigger className="justify-between gap-3">

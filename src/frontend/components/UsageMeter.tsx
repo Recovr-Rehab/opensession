@@ -100,10 +100,14 @@ export function UsageCost({
 	usage,
 	className,
 }: {
-	usage: SessionUsage;
+	usage: SessionUsage | undefined;
 	className?: string;
 }) {
-	return <span className={cn("tabular-nums", className)}>{fmtUsd(usage.costUsd)}</span>;
+	return (
+		<span className={cn("tabular-nums", className)}>
+			{fmtUsd(usage?.costUsd ?? 0)}
+		</span>
+	);
 }
 
 export function UsageDetails({
@@ -113,23 +117,24 @@ export function UsageDetails({
 	usage: SessionUsage | undefined;
 	className?: string;
 }) {
-	if (!usage || usage.turns === 0) return null;
-
-	const window = usage.contextWindow || 0;
-	const ctx = usage.contextTokens || 0;
+	const window = usage?.contextWindow || 0;
+	const ctx = usage?.contextTokens || 0;
 	const frac = window > 0 ? Math.min(ctx / window, 1) : 0;
 	const tone = fillTone(frac);
 	const totalIn =
-		usage.inputTokens + usage.cacheReadTokens + usage.cacheCreationTokens;
+		(usage?.inputTokens ?? 0) +
+		(usage?.cacheReadTokens ?? 0) +
+		(usage?.cacheCreationTokens ?? 0);
 	const cacheHit =
-		totalIn > 0 ? Math.round((usage.cacheReadTokens / totalIn) * 100) : 0;
+		totalIn > 0 ? Math.round(((usage?.cacheReadTokens ?? 0) / totalIn) * 100) : 0;
+	const turns = usage?.turns ?? 0;
 
 	return (
 		<div className={cn("text-xs", className)}>
 			<div className="mb-2 flex items-baseline justify-between">
 				<span className="font-medium text-fg">This conversation</span>
 				<span className="text-dim">
-					{usage.turns} turn{usage.turns === 1 ? "" : "s"}
+					{turns} turn{turns === 1 ? "" : "s"}
 				</span>
 			</div>
 			<div className="space-y-1.5">
@@ -147,13 +152,13 @@ export function UsageDetails({
 			</div>
 			<div className="my-2 h-px bg-line" />
 			<div className="space-y-1.5">
-				<Row label="Input" value={fmtTokens(usage.inputTokens)} />
-				<Row label="Output" value={fmtTokens(usage.outputTokens)} />
+				<Row label="Input" value={fmtTokens(usage?.inputTokens ?? 0)} />
+				<Row label="Output" value={fmtTokens(usage?.outputTokens ?? 0)} />
 				<Row
 					label="Cache read"
-					value={`${fmtTokens(usage.cacheReadTokens)} (${cacheHit}%)`}
+					value={`${fmtTokens(usage?.cacheReadTokens ?? 0)} (${cacheHit}%)`}
 				/>
-				<Row label="Cache write" value={fmtTokens(usage.cacheCreationTokens)} />
+				<Row label="Cache write" value={fmtTokens(usage?.cacheCreationTokens ?? 0)} />
 			</div>
 		</div>
 	);

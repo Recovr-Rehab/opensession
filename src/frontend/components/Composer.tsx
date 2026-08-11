@@ -1075,6 +1075,7 @@ export function Composer({
                   accountId={accountId}
                   onAccountChange={onAccountChange}
                   usage={usage}
+                  showUsage
                   disabled={disabled}
                   onOpenChange={setModelMenuOpen}
                 />
