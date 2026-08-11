@@ -5785,10 +5785,12 @@ function BusyInline({
 		<div
 			className={cn(
 				msgRow,
-				"mt-0.5 flex-row items-center gap-2.25 py-1.25 text-dim",
+				"mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
 			)}
 		>
-			<PulseDot size={7} />
+			<span className="grid size-5 shrink-0 place-items-center">
+				<PulseDot size={7} />
+			</span>
 			{since != null && <BusyElapsed since={since} />}
 		</div>
 	);
