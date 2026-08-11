@@ -7,7 +7,6 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "path";
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { broadcastToAll } from "./ws-hub";
@@ -399,27 +398,13 @@ export const spaEntry = frontend
 			})
 	: homepage ?? (() => new Response("Hosted frontend unavailable", { status: 503 }));
 
-function sessionTitle(id: string | undefined): string | undefined {
-	if (!id) return undefined;
-	try {
-		const raw = readFileSync(join(OPENSESSION_SESSIONS_DIR, `${id}.json`), "utf8");
-		const title = JSON.parse(raw)?.title;
-		return typeof title === "string" && title.trim()
-			? title.trim().slice(0, 60)
-			: undefined;
-	} catch {
-		return undefined;
-	}
-}
-
 /**
- * Best-effort "who caused this" label for update/restart notices. Open Session
- * sessions all work in THIS shared checkout, so when the file-watch fires (or
- * a session runs `systemctl restart`), the culprit is an in-flight run whose
- * cwd is this checkout — the run journal knows those, with user + session id.
- * Edits from a CLI/tmux Claude or a human editor aren't journaled here, so no
- * candidates → undefined, never a guess. `writeCapableOnly` skips ask-mode
- * runs (they have no Write/Edit, so they can't have fired the file-watch).
+ * Best-effort "who caused this" label for update/restart notices. These
+ * notices are broadcast globally, so attribution is limited to user names and
+ * never includes private session titles. Edits from a CLI/tmux Claude or a
+ * human editor aren't journaled here, so no candidates means undefined, never
+ * a guess. `writeCapableOnly` skips ask-mode runs (they have no Write/Edit, so
+ * they can't have fired the file-watch).
  */
 export function sharedCheckoutEditors(writeCapableOnly = false): string | undefined {
 	try {
@@ -430,11 +415,9 @@ export function sharedCheckoutEditors(writeCapableOnly = false): string | undefi
 			if (!run.cwd || resolve(run.cwd) !== checkout) continue;
 			if (writeCapableOnly && run.mode === "ask") continue;
 			const user = (run.user || "").trim();
-			const title = sessionTitle(run.osSessionId);
-			const label = user && title ? `${user} · ${title}` : user || title || "";
-			if (!label || seen.has(label)) continue;
-			seen.add(label);
-			labels.push(label);
+			if (!user || seen.has(user)) continue;
+			seen.add(user);
+			labels.push(user);
 		}
 		if (!labels.length) return undefined;
 		const shown = labels.slice(0, 2).join(", ");
