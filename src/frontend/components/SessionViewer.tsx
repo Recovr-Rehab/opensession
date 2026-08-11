@@ -119,6 +119,7 @@ import { PreviewButton } from "./PreviewButton";
 import { PreviewPane } from "./PreviewPane";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceInfo } from "./WorkspaceInfo";
+import { WorkspacePeek } from "./WorkspacePeek";
 import { SpinOffMenu } from "./SpinOffMenu";
 import {
 	IconSidebarRight,
@@ -4513,6 +4514,23 @@ export function SessionViewer({
 							onArchive={handleArchive}
 							variant="header"
 							running={isRunningLive}
+							refreshTick={gitRefreshTick}
+						/>
+					)}
+					{/* …and the rest of what a one-line strip can't say: changes,
+					    branch, conflicts, sources. One floating card, so the panel can
+					    stay shut without going blind (see WorkspacePeek's module doc). */}
+					{!isPhone && hasWorkspace && !panelOpen && (
+						<WorkspacePeek
+							session={session}
+							onOpenPanelTab={(tab) => {
+								selectPanelTab(tab);
+								setPanelOpen(true);
+							}}
+							onOpenPr={() => focusPrInReview()}
+							onOpenChecks={() => focusPrInReview(undefined, "checks")}
+							onOpenAssets={onOpenAssets}
+							send={connected ? send : undefined}
 							refreshTick={gitRefreshTick}
 						/>
 					)}
