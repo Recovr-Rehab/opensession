@@ -39,10 +39,10 @@
 
 /**
  * Fixed height so the bar lines up with the sidebar's brand row instead of
- * growing with its tallest button. When tabs follow, the row trims one spacing
- * step to pull the title and tab labels closer together. The session body's
- * colour rather than the lifted topbar tint keeps the whole top region reading
- * as one surface the transcript dissolves into under the floating pills.
+ * growing with its tallest button — including when a tab strip follows, where
+ * trimming the row to pull the labels together cost that alignment. The session
+ * body's colour rather than the lifted topbar tint keeps the whole top region
+ * reading as one surface the transcript dissolves into under the floating pills.
  *
  * There is deliberately no hairline: at the top of a transcript nothing passes
  * under the bar and there is nothing to divide, and once there IS content up
@@ -56,7 +56,6 @@ export const VIEWER_HEADER =
 	"bg-surface px-4 " +
 	"[@supports_not_(animation-timeline:scroll())]:border-b " +
 	"[@supports_not_(animation-timeline:scroll())]:border-b-[var(--top-divider)] " +
-	"desktop:[.detail-topbar:has(+_.session-tabs)_&]:h-11 " +
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
 	// Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
 	// pane's left edge, so the row's text starts past it.
