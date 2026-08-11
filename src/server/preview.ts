@@ -315,17 +315,11 @@ export function portalRouteAuthorized(httpsPort: number): boolean {
   return Number.isInteger(httpsPort) && previewRoutes.has(httpsPort);
 }
 
-/** This machine's tailnet hostname (e.g. example-host.your-tailnet.ts.net). */
+/** Hostname shared with the OpenSession UI so its auth cookie rides across
+ * preview ports. Operators can override it explicitly with PREVIEW_HOST. */
 export async function previewHost(): Promise<string> {
   if (g.__previewHost) return g.__previewHost;
-  let host = process.env.PREVIEW_HOST || "";
-  if (!host) {
-    try {
-      const raw = await $`tailscale status --json`.quiet().nothrow().text();
-      host = (JSON.parse(raw)?.Self?.DNSName || "").replace(/\.$/, "");
-    } catch {}
-  }
-  if (!host) host = configuredServer().previewHost;
+  const host = configuredServer().previewHost;
   g.__previewHost = host;
   return host;
 }
