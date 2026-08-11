@@ -380,6 +380,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("os1.appearance") private var appearance = "system"
     @AppStorage("os1.list.lastUsed") private var lastUsed = "off"
     @AppStorage("os1.sidebar.repoOrder") private var repoOrderJSON = "[]"
+    @AppStorage(SidebarFeeds.storageKey) private var hiddenFeeds = "[]"
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
@@ -482,6 +483,24 @@ struct AppearanceSettingsView: View {
                     "Repo order is your account's — the web sidebar follows it too. The last-used time is this device's, and a running session always shows its own clock."
                 )
             }
+
+            #if os(iOS)
+            // The way back from a long press on the row. iOS only: the Mac
+            // sidebar reaches Plain from its header, so there is no row there
+            // to hide and nothing this switch would do.
+            Section {
+                Toggle("Plain", isOn: Binding(
+                    get: { !SidebarFeeds.isHidden(SidebarFeeds.plain, in: hiddenFeeds) },
+                    set: { SidebarFeeds.setVisible(SidebarFeeds.plain, $0) }
+                ))
+            } header: {
+                Text("Sources")
+            } footer: {
+                Text(
+                    "Show the Plain support queue in the session list. Hidden sources stop refreshing until you show them again, and the setting is your account's — the web sidebar follows it too."
+                )
+            }
+            #endif
         }
         .navigationTitle("Appearance")
         .task { await loadRepos() }

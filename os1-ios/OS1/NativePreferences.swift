@@ -101,9 +101,19 @@ enum NativePreferences {
             in: defaults
         )
         set(
-            validatedRepoOrder(prefs["repo-order"]),
+            validatedIdList(prefs["repo-order"]),
             default: "[]",
             key: "os1.sidebar.repoOrder",
+            resetMissing: true,
+            in: defaults
+        )
+        // Sidebar sources the person hid, here or in the browser. Reset when
+        // the pref is missing, like repo order: both are the account's, so an
+        // absent value means "nothing hidden", not "keep what this device has".
+        set(
+            validatedIdList(prefs[SidebarFeeds.prefKey]),
+            default: "[]",
+            key: SidebarFeeds.storageKey,
             resetMissing: true,
             in: defaults
         )
@@ -132,16 +142,18 @@ enum NativePreferences {
         return value
     }
 
-    private static func validatedRepoOrder(_ value: String?) -> String? {
+    /// The shape both list-valued prefs share (repo order, hidden sources): a
+    /// JSON array of ids, trimmed, blanks and duplicates dropped, order kept.
+    private static func validatedIdList(_ value: String?) -> String? {
         guard let value,
               let data = value.data(using: .utf8),
-              let repos = try? JSONDecoder().decode([String].self, from: data)
+              let ids = try? JSONDecoder().decode([String].self, from: data)
         else { return nil }
         var seen = Set<String>()
-        let normalized = repos.compactMap { repo -> String? in
-            let repo = repo.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !repo.isEmpty, seen.insert(repo).inserted else { return nil }
-            return repo
+        let normalized = ids.compactMap { id -> String? in
+            let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !id.isEmpty, seen.insert(id).inserted else { return nil }
+            return id
         }
         guard let encoded = try? JSONEncoder().encode(normalized) else { return nil }
         return String(decoding: encoded, as: UTF8.self)

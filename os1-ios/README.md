@@ -212,7 +212,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   app leaves the foreground.
 - **Support** (`SupportView.swift`, `SupportViewModel.swift`) — the Plain
   queue (iOS: a `Plain` project row below worktrees and above Archived, with
-  total and red urgent counts refreshed every minute;
+  total and red urgent counts refreshed every minute; long-press it to hide
+  the row, which also stops the poll — the account's `sidebar-hidden-feeds`
+  ui-pref, written by the web sidebar's own band menu too (`SidebarFeeds`),
+  and switched back on under Appearance → Sources.
   macOS: the sidebar header). Two screens: the Todo queue in Plain's four
   priority lanes (`GET /api/plain/threads`), and one ticket's timeline
   (`GET /api/plain/threads/:id`) with the customer on the left, us on the

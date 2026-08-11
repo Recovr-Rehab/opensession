@@ -129,6 +129,9 @@ struct SessionsListView: View {
     /// and inbox bands, keyed like the web sidebar's collapse state and stored
     /// as a JSON array so the choice survives relaunches.
     @AppStorage("os1.list.collapsed") private var collapsedGroupsRaw = "[]"
+    /// Source rows the person has hidden — the account's, shared with the web
+    /// sidebar's own band menu. See `SidebarFeeds`.
+    @AppStorage(SidebarFeeds.storageKey) private var hiddenFeedsRaw = "[]"
 
     private var groupBy: GroupBy { GroupBy(rawValue: groupByRaw) ?? .repoStatus }
     private var sortBy: SortBy { SortBy(rawValue: sortByRaw) ?? .updated }
@@ -211,7 +214,11 @@ struct SessionsListView: View {
                 _ = try? await OS1API.repos()
             }
             #if os(iOS)
-            .task {
+            // Keyed on the row's visibility so hiding Plain stops the poll and
+            // showing it again starts one: a source you asked not to see
+            // shouldn't keep spending the radio in the background.
+            .task(id: isPlainHidden) {
+                guard !isPlainHidden else { return }
                 while !Task.isCancelled {
                     await supportQueue.load()
                     try? await Task.sleep(for: .seconds(60))
@@ -1634,7 +1641,7 @@ struct SessionsListView: View {
             }
 
             #if os(iOS)
-            mobilePlainRow
+            if !isPlainHidden { mobilePlainRow }
             #endif
 
             // The archived entry is a destination, not a proof that its index
@@ -1759,6 +1766,20 @@ struct SessionsListView: View {
                     ? "Open Plain, \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
                     : "Open Plain, \(supportQueue.threads.count) tickets"
             )
+            // The long press the web sidebar answers with a right-click on the
+            // same band. One item, like that menu: this row leads somewhere
+            // rather than holding state, so there is nothing else to offer.
+            // Not destructive-styled — the queue keeps running for everyone
+            // else, and Settings → Appearance brings the row back.
+            .contextMenu {
+                Button {
+                    withAnimation(.snappy(duration: 0.28)) {
+                        SidebarFeeds.setVisible(SidebarFeeds.plain, false)
+                    }
+                } label: {
+                    Label("Hide from sidebar", systemImage: "eye.slash")
+                }
+            }
         }
         .listRowInsets(EdgeInsets(
             top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
@@ -1769,6 +1790,12 @@ struct SessionsListView: View {
 
     private var urgentPlainTicketCount: Int {
         supportQueue.threads.lazy.filter { $0.lane == .urgent }.count
+    }
+
+    /// Read off `@AppStorage` rather than `UserDefaults` so hiding the row
+    /// redraws the list — the same value either way.
+    private var isPlainHidden: Bool {
+        SidebarFeeds.isHidden(SidebarFeeds.plain, in: hiddenFeedsRaw)
     }
     #endif
 
