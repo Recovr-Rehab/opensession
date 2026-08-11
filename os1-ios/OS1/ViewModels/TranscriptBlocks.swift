@@ -67,6 +67,18 @@ struct ToolCallItem: Identifiable, Equatable {
 
     var isError: Bool { use?.isError == true || result?.isError == true }
     var isPending: Bool { result == nil && use != nil }
+
+    /// How long the call took, for the row's trailing meta. Under a second and
+    /// a half it says nothing worth a slot on the row — the same floor the web
+    /// viewer applies before it prints one.
+    var durationLabel: String? {
+        guard let start = use?.timestampDate, let end = result?.timestampDate else {
+            return nil
+        }
+        let elapsed = end.timeIntervalSince(start)
+        guard elapsed >= 1.5 else { return nil }
+        return TranscriptFormat.duration(elapsed)
+    }
     var mediaSources: [String] { result?.images ?? [] }
     var hasMedia: Bool { !mediaSources.isEmpty }
 

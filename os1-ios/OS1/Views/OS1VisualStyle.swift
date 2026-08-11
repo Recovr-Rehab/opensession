@@ -20,10 +20,17 @@ enum OS1VisualStyle {
     static let textFaint = Color(uiColor: .tertiaryLabel)
     /// Code surfaces mirror the PWA's GitHub-themed wells rather than using a
     /// permanently dark card in light appearance.
+    ///
+    /// The light value is NOT the web's #f6f8fa: that one is calibrated to sit
+    /// nine steps under a WHITE page, and the transcript here runs on
+    /// `chatCanvas` (#fafafa), where it landed four steps away and every
+    /// expanded tool call read as a white slab with a hairline round it. This
+    /// keeps the web's step, measured from the canvas the well actually sits
+    /// on, so the well reads sunk in both clients.
     static let codeWell = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 0.051, green: 0.059, blue: 0.075, alpha: 1)
-            : UIColor(red: 0.965, green: 0.973, blue: 0.980, alpha: 1)
+            : UIColor(red: 0.945, green: 0.953, blue: 0.961, alpha: 1)
     })
     static let codeWellBorder = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
@@ -39,6 +46,27 @@ enum OS1VisualStyle {
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 0.337, green: 0.365, blue: 0.420, alpha: 1)
             : UIColor(red: 0.549, green: 0.584, blue: 0.624, alpha: 1)
+    })
+    /// A diff's added and removed lines, and its hunk headers, ON the well.
+    /// The status palette below is one pair of values for both appearances,
+    /// which is right for a dot on the chrome and wrong here: those are the
+    /// web's DARK theme greens and blues, and on a light well they measure
+    /// around 2:1. These are the light theme's own (--green/--red/--blue in
+    /// base.css), so a diff reads the same in either appearance.
+    static let codeWellAdd = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.247, green: 0.729, blue: 0.314, alpha: 1)
+            : UIColor(red: 0.102, green: 0.498, blue: 0.216, alpha: 1)
+    })
+    static let codeWellRemove = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.973, green: 0.318, blue: 0.286, alpha: 1)
+            : UIColor(red: 0.812, green: 0.133, blue: 0.180, alpha: 1)
+    })
+    static let codeWellHunk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.345, green: 0.651, blue: 1.0, alpha: 1)
+            : UIColor(red: 0.035, green: 0.412, blue: 0.855, alpha: 1)
     })
     /// Markdown fences can sit on the canvas or inside a message bubble. A
     /// translucent light well stays one step below either surrounding surface.
@@ -148,6 +176,23 @@ enum OS1VisualStyle {
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             ? NSColor(red: 0.337, green: 0.365, blue: 0.420, alpha: 1)
             : NSColor(red: 0.549, green: 0.584, blue: 0.624, alpha: 1)
+    })
+    /// Diff ink on the well — see the iOS note for why these are their own
+    /// per-appearance values rather than the status palette.
+    static let codeWellAdd = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.247, green: 0.729, blue: 0.314, alpha: 1)
+            : NSColor(red: 0.102, green: 0.498, blue: 0.216, alpha: 1)
+    })
+    static let codeWellRemove = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.973, green: 0.318, blue: 0.286, alpha: 1)
+            : NSColor(red: 0.812, green: 0.133, blue: 0.180, alpha: 1)
+    })
+    static let codeWellHunk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.345, green: 0.651, blue: 1.0, alpha: 1)
+            : NSColor(red: 0.035, green: 0.412, blue: 0.855, alpha: 1)
     })
     static let markdownCodeWell = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

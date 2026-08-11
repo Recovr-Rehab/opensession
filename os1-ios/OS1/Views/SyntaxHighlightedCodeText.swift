@@ -212,19 +212,10 @@ struct SyntaxHighlightedCodeText: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            if let split {
-                Text(split.labels)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(OS1VisualStyle.codeWellGutter)
-                    .multilineTextAlignment(.trailing)
-                    .textSelection(.enabled)
-            }
-            Text(highlighted ?? fallback)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-        }
-        .task(
+        Text(numbered)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .task(
             id: Request(
                 text: renderedText,
                 language: language,
@@ -249,6 +240,47 @@ struct SyntaxHighlightedCodeText: View {
         var value = AttributedString(renderedText)
         value.foregroundColor = fallbackColor
         return value
+    }
+
+    /// The highlighted body with its line numbers put back INSIDE it, one per
+    /// line, rather than beside it in a second `Text`.
+    ///
+    /// A parallel column only lines up while nothing wraps, and this body
+    /// wraps — it is read at phone width, where a column of numbers would
+    /// drift a line further out of step with every line that folds. The web
+    /// solves it the same way: its highlighter prepends a `.shiki-gutter`
+    /// span to each line inside the same `pre`, so a wrapped continuation
+    /// simply starts under its own number.
+    private var numbered: AttributedString {
+        let body = highlighted ?? fallback
+        guard let split else { return body }
+        let labels = split.labels.components(separatedBy: "\n")
+        let characters = body.characters
+        var output = AttributedString()
+        var lineIndex = 0
+        var lineStart = characters.startIndex
+
+        func appendLine(_ range: Range<AttributedString.Index>) {
+            var label = AttributedString(
+                (lineIndex < labels.count ? labels[lineIndex] : "") + "  "
+            )
+            label.foregroundColor = OS1VisualStyle.codeWellGutter
+            output.append(label)
+            output.append(AttributedString(body[range]))
+        }
+
+        var index = characters.startIndex
+        while index < characters.endIndex {
+            if characters[index] == "\n" {
+                appendLine(lineStart..<index)
+                output.append(AttributedString("\n"))
+                lineIndex += 1
+                lineStart = characters.index(after: index)
+            }
+            index = characters.index(after: index)
+        }
+        appendLine(lineStart..<characters.endIndex)
+        return output
     }
 
     /// HighlightSwift trims the input before converting its HTML. Put those

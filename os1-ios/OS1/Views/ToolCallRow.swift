@@ -105,22 +105,12 @@ struct ToolCallRow: View {
                 )
                 .frame(width: 15)
 
-            if let server = presentation.mcpServer {
-                Text(server)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(
-                        OS1VisualStyle.panel,
-                        in: RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    )
-                    .fixedSize()
-            }
-
-            Text(presentation.name)
+            // "server · tool", the way the web writes it. The server used to
+            // wear a filled pill, but `panel` is `.tertiarySystemBackground` —
+            // pure white in light appearance — so it read as a white box
+            // punched into the row rather than as part of the call's name.
+            nameText
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.textDim)
                 .fixedSize()
 
             if !presentation.summary.isEmpty {
@@ -158,12 +148,32 @@ struct ToolCallRow: View {
                 LineStatsView(stats: stats)
             }
 
+            // What the call cost, in the trailing meta the web puts it in.
+            // Anything under a second and a half is noise rather than
+            // information, so it stays off the row (same floor as the viewer).
+            if let label = item.durationLabel {
+                Text(label)
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .fixedSize()
+            }
+
             statusGlyph
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(presentation.displayName). \(presentation.summary)")
+    }
+
+    private var nameText: Text {
+        guard let server = presentation.mcpServer else {
+            return Text(presentation.name).foregroundStyle(OS1VisualStyle.textDim)
+        }
+        return Text(server).foregroundStyle(OS1VisualStyle.textDim)
+            + Text(verbatim: " · ").foregroundStyle(OS1VisualStyle.textFaint)
+            + Text(presentation.name).foregroundStyle(OS1VisualStyle.textDim)
     }
 
     /// A path's directory dims so the filename — the part that identifies the
@@ -208,13 +218,14 @@ struct ToolCallRow: View {
         VStack(alignment: .leading, spacing: 8) {
             if let detail {
                 if !detail.inputText.isEmpty {
+                    let inputLines = ToolCodeMetrics.lines(detail.inputText)
                     switch detail.inputKind {
                     case .diff:
-                        ToolCodeBox(label: detail.inputLabel) {
+                        ToolCodeBox(label: detail.inputLabel, lines: inputLines) {
                             DiffText(patch: detail.inputText)
                         }
                     case .code, .json:
-                        ToolCodeBox(label: detail.inputLabel) {
+                        ToolCodeBox(label: detail.inputLabel, lines: inputLines) {
                             SyntaxHighlightedCodeText(
                                 text: detail.inputText,
                                 language: detail.inputLanguage ?? "plaintext"
@@ -231,7 +242,11 @@ struct ToolCallRow: View {
                     cornerRadius: 10
                 )
                 if let result = detail.resultText {
-                    ToolCodeBox(label: detail.resultLabel, isError: item.isError) {
+                    ToolCodeBox(
+                        label: detail.resultLabel,
+                        isError: item.isError,
+                        lines: ToolCodeMetrics.lines(result)
+                    ) {
                         if detail.resultIsDiff {
                             DiffText(patch: result)
                         } else if let language = detail.resultLanguage {
@@ -256,10 +271,27 @@ struct ToolCallRow: View {
 // MARK: - Code surfaces
 
 /// A labelled code pane, using the same theme-following GitHub well as the PWA.
+///
+/// The body WRAPS, as the web's does. It used to sit in a horizontal scroll
+/// view, which on a phone put the tail of every command and every output line
+/// off the right edge behind a gesture nobody makes — and the fixed 260pt
+/// height it carried clipped the rest outright, with no way to reach it. A
+/// long body is clamped to a readable stub with a disclosure instead, so
+/// nothing is unreachable and one call still can't swallow the screen.
 struct ToolCodeBox<Content: View>: View {
     let label: String
     var isError = false
+    /// Roughly how many rendered lines the body needs — the caller has the
+    /// text, this view only has an opaque `Content`. See `ToolCodeMetrics`.
+    var lines = 0
     @ViewBuilder var content: Content
+
+    @State private var showingAll = false
+
+    /// About what the web's 320px cap holds at this type size.
+    private static var collapsedLines: Int { 18 }
+
+    private var clamped: Bool { lines > Self.collapsedLines }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -268,11 +300,21 @@ struct ToolCodeBox<Content: View>: View {
                 .foregroundStyle(
                     isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
                 )
-            ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 6) {
                 content
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(clamped && !showingAll ? Self.collapsedLines : nil)
+                if clamped {
+                    Button(showingAll ? "Show less" : "Show more") {
+                        withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                            showingAll.toggle()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                }
             }
-            .frame(maxHeight: 260)
             .padding(8)
             .background(
                 OS1VisualStyle.codeWell,
@@ -280,8 +322,25 @@ struct ToolCodeBox<Content: View>: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(OS1VisualStyle.codeWellBorder, lineWidth: 0.5)
+                    .stroke(
+                        isError
+                            ? OS1VisualStyle.red.opacity(0.35)
+                            : OS1VisualStyle.codeWellBorder,
+                        lineWidth: 0.5
+                    )
             }
+        }
+    }
+}
+
+enum ToolCodeMetrics {
+    /// Roughly how many lines a monospaced body occupies once it wraps. The
+    /// column count is deliberately narrower than a phone actually fits, so
+    /// the estimate errs toward offering the disclosure on a body that didn't
+    /// need it rather than clamping one that did with no way to open it.
+    static func lines(_ text: String, columns: Int = 40) -> Int {
+        text.components(separatedBy: .newlines).reduce(0) { total, line in
+            total + max(1, (line.count + columns - 1) / columns)
         }
     }
 }
@@ -335,22 +394,26 @@ struct DiffText: View {
         }
         if lines.count > maxLines {
             var more = AttributedString("… \(lines.count - maxLines) more lines")
-            more.foregroundColor = Color.white.opacity(0.4)
+            more.foregroundColor = OS1VisualStyle.codeWellGutter
             output.append(more)
         }
         return output
     }
 
+    /// Every colour here resolves per appearance. They were white at three
+    /// opacities plus the chrome's status palette, which is a dark-theme set:
+    /// on a light well the context lines were white on near-white — invisible —
+    /// and the ± lines sat around 2:1.
     private static func color(for line: String) -> Color {
         if line.hasPrefix("+++") || line.hasPrefix("---") {
-            return Color.white.opacity(0.45)
+            return OS1VisualStyle.codeWellGutter
         }
-        if line.hasPrefix("+") { return OS1VisualStyle.green }
-        if line.hasPrefix("-") { return OS1VisualStyle.red }
+        if line.hasPrefix("+") { return OS1VisualStyle.codeWellAdd }
+        if line.hasPrefix("-") { return OS1VisualStyle.codeWellRemove }
         if line.hasPrefix("@@") || line.hasPrefix("*** ") {
-            return OS1VisualStyle.blue
+            return OS1VisualStyle.codeWellHunk
         }
-        return Color.white.opacity(0.6)
+        return OS1VisualStyle.codeWellText
     }
 }
 
