@@ -90,6 +90,10 @@ export interface PortEntry {
   upstream?: string;
   /** Direct preview URL (remote providers' port-forward domains). */
   url?: string;
+  /** Provider authentication/control headers applied by OpenSession's Caddy
+   *  portal. Kept server-side so private-provider credentials never enter the
+   *  browser URL, workspace, or reusable snapshot. */
+  requestHeaders?: Record<string, string>;
 }
 
 /** Preview port mapping: port inside the sandbox → where to reach it. A bare

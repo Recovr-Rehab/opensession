@@ -303,7 +303,9 @@ const g = globalThis as unknown as {
   __previewRoutes?: Map<number, string>;
   __previewHost?: string;
 };
-// httpsPort -> webappPort we've already configured (survives --hot reloads).
+// httpsPort -> upstream + request-header signature we've already configured
+// (survives --hot reloads). Provider preview tokens rotate on sandbox restart,
+// so the headers are part of idempotency even when the URL stays unchanged.
 const previewRoutes: Map<number, string> = (g.__previewRoutes ??= new Map());
 
 /** Caddy may outlive Open Session. Auth must fail closed for a route the
@@ -351,6 +353,7 @@ export function previewServerConfig(
   httpsPort: number,
   upstream: string,
   host: string,
+  requestHeaders: Record<string, string> = {},
 ) {
   const authPort = configuredServer().port;
   const remote = /^https?:\/\//.test(upstream) ? new URL(upstream) : null;
@@ -364,14 +367,23 @@ export function previewServerConfig(
         ],
         ...(remote.protocol === "https:"
           ? {
-              transport: {
-                protocol: "http",
-                tls: {},
-                tls_server_name: remote.hostname,
-              },
+              // Dialing the upstream by hostname already supplies TLS SNI.
+              // `tls_server_name` is not supported by the Caddy version
+              // shipped on existing OpenSession hosts and made the whole
+              // dynamic portal route fail to load.
+              transport: { protocol: "http", tls: {} },
             }
           : {}),
-        headers: { request: { set: { Host: [remote.host] } } },
+        headers: {
+          request: {
+            set: {
+              ...Object.fromEntries(
+                Object.entries(requestHeaders).map(([key, value]) => [key, [value]]),
+              ),
+              Host: [remote.host],
+            },
+          },
+        },
       }
     : {
         handler: "reverse_proxy",
@@ -423,9 +435,15 @@ export function previewServerConfig(
 }
 
 /** Add/refresh the Caddy server for this webapp (idempotent, cached). */
-async function ensurePreviewRoute(httpsPort: number, upstream: string, host: string): Promise<boolean> {
-  if (previewRoutes.get(httpsPort) === upstream) return true;
-  const server = previewServerConfig(httpsPort, upstream, host);
+async function ensurePreviewRoute(
+  httpsPort: number,
+  upstream: string,
+  host: string,
+  requestHeaders: Record<string, string> = {},
+): Promise<boolean> {
+  const signature = JSON.stringify([upstream, requestHeaders]);
+  if (previewRoutes.get(httpsPort) === signature) return true;
+  const server = previewServerConfig(httpsPort, upstream, host, requestHeaders);
   const path = `${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`;
   const put = () =>
     fetch(path, {
@@ -443,7 +461,7 @@ async function ensurePreviewRoute(httpsPort: number, upstream: string, host: str
       res = await put();
     }
     if (!res.ok) return false;
-    previewRoutes.set(httpsPort, upstream);
+    previewRoutes.set(httpsPort, signature);
     return true;
   } catch {
     return false;
@@ -949,10 +967,11 @@ export async function getSandboxPreviewStatus(
       const published = typeof entry === "number" ? entry : entry?.hostPort;
       const privateUpstream = typeof entry === "object" ? entry?.upstream : undefined;
       const directUrl = typeof entry === "object" ? entry?.url : undefined;
+      const requestHeaders = typeof entry === "object" ? entry?.requestHeaders : undefined;
       if (directUrl || published || privateUpstream) {
         const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
         const upstream = directUrl || privateUpstream || `127.0.0.1:${published}`;
-        if (await ensurePreviewRoute(httpsPort, upstream, host))
+        if (await ensurePreviewRoute(httpsPort, upstream, host, requestHeaders))
           previewUrl = `https://${host}:${httpsPort}`;
       }
     } else {
@@ -1157,9 +1176,16 @@ export async function startSandboxPreview(
   await seedSandboxPortsConf(sandbox, worktreeDir, port);
   const entry = portMap[port];
   const directUrl = typeof entry === "object" ? entry.url : undefined;
-  const httpsPort = directUrl ? null : sandboxHttpsPortFor(sandbox.id, port);
-  const host = directUrl ? null : await previewHost();
-  const previewUrl = directUrl || `https://${host}:${httpsPort}`;
+  const privateUpstream = typeof entry === "object" ? entry.upstream : undefined;
+  const published = typeof entry === "number" ? entry : entry?.hostPort;
+  const requestHeaders = typeof entry === "object" ? entry.requestHeaders : undefined;
+  const upstream = directUrl || privateUpstream || `127.0.0.1:${published}`;
+  const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
+  const host = await previewHost();
+  const previewUrl = `https://${host}:${httpsPort}`;
+  if (!(await ensurePreviewRoute(httpsPort, upstream, host, requestHeaders))) {
+    console.warn(`[preview] ${sandbox.id}: Caddy did not accept the sandbox preview portal route`);
+  }
   await writeSandboxTunnelsEnv(sandbox, worktreeDir, {
     PREVIEW_URL: previewUrl,
     [`PREVIEW_URL_${port}`]: previewUrl,

@@ -21,9 +21,9 @@
  *  - exec(): `process.executeCommand` returns no output for non-zero commands,
  *    so commands run in a subshell and encode stdout, stderr, and the real
  *    exit code into a successful transport response (see daytonaDriver).
- *  - ports(): getPreviewLink(port) URLs → PortMap `{url}` entries (Daytona's
- *    preview domain; non-public sandboxes need Daytona's preview token —
- *    operator-side setting).
+ *  - ports(): getPreviewLink(port) URLs + private-preview tokens → PortMap
+ *    entries. OpenSession's authenticated Caddy portal adds the token to the
+ *    upstream request; it never reaches the browser or workspace.
  *  - get()/destroy(): by sandbox id; destroy deletes the sandbox and with it
  *    the workspace — push your work (volume-mode contract).
  *
@@ -470,7 +470,15 @@ export class DaytonaProvider implements SandboxProvider {
         for (const port of sandboxConfig().previewPorts || []) {
           try {
             const link = await sbx.getPreviewLink(port);
-            if (link?.url) map[port] = { url: link.url };
+            if (link?.url) {
+              map[port] = {
+                url: link.url,
+                requestHeaders: {
+                  ...(link.token ? { "X-Daytona-Preview-Token": link.token } : {}),
+                  "X-Daytona-Skip-Preview-Warning": "true",
+                },
+              };
+            }
           } catch (e) {
             console.warn(`[sandbox:daytona] getPreviewLink(${port}) failed:`, e);
           }

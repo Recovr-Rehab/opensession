@@ -32,12 +32,27 @@ describe("permission-coupled preview portals", () => {
 		expect(proxy.upstreams).toEqual([
 			{ dial: "sandbox-provider.example:443" },
 		]);
-		expect(proxy.transport).toMatchObject({
-			protocol: "http",
-			tls_server_name: "sandbox-provider.example",
-		});
+		expect(proxy.transport).toEqual({ protocol: "http", tls: {} });
 		expect(proxy.headers.request.set.Host).toEqual([
 			"sandbox-provider.example",
 		]);
+	});
+
+	test("keeps private-provider preview credentials server-side", () => {
+		const config = previewServerConfig(
+			22003,
+			"https://sandbox-provider.example",
+			"preview.example.test",
+			{
+				"X-Daytona-Preview-Token": "private-token",
+				"X-Daytona-Skip-Preview-Warning": "true",
+			},
+		) as any;
+		const proxy = config.routes[0].handle[0].routes[0].handle[1];
+		expect(proxy.headers.request.set).toEqual({
+			"X-Daytona-Preview-Token": ["private-token"],
+			"X-Daytona-Skip-Preview-Warning": ["true"],
+			Host: ["sandbox-provider.example"],
+		});
 	});
 });
