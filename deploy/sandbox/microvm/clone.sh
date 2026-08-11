@@ -5,8 +5,7 @@
 # them at once. Host reaches the guest via the veth: 10.200.<idx>.2 with
 # ports DNAT'd into the guest (3300 dev, 8080 agent, 8081 root agent).
 #
-#   clone.sh create <idx> <pool-dir>   # restore the clean golden
-#   clone.sh create <idx> <pool-dir> <template-key> # cold-boot repo template when fresh
+#   clone.sh create <idx> <pool-dir> <template-key> <vcpus> <memory-mib> <disk-gib>
 #   clone.sh pause <idx> <pool-dir>    # stop compute/network, preserve COW disk
 #   clone.sh resume <idx> <pool-dir>   # cold-boot the preserved COW disk
 #   clone.sh publish-template <idx> <pool-dir> <template-key>
@@ -20,6 +19,13 @@
 set -euo pipefail
 CMD="$1"; IDX="$2"; POOL="${3:-/opt/firecracker/store}"
 TEMPLATE_KEY="${4:-}"
+VCPUS="${5:-4}"
+MEMORY_MIB="${6:-12288}"
+DISK_GIB="${7:-25}"
+case "$VCPUS:$MEMORY_MIB:$DISK_GIB" in
+  2:4096:25|4:8192:25|4:12288:25|4:12288:50|8:24576:100) ;;
+  *) echo "unsupported microvm size $VCPUS vCPU / $MEMORY_MIB MiB / $DISK_GIB GiB" >&2; exit 2 ;;
+esac
 [[ "$IDX" =~ ^[0-9]+$ ]] && [ "$IDX" -ge 1 ] && [ "$IDX" -le 254 ] || {
   echo "clone index must be an integer in 1..254" >&2; exit 2;
 }
@@ -162,6 +168,17 @@ if [ "$CMD" = "create" ]; then
   fi
   # COW disk: reflink when the store supports it (XFS), sparse copy otherwise.
   cp --reflink=auto --sparse=always "$SOURCE" "$DISK"
+  TARGET_BYTES=$((DISK_GIB * 1024 * 1024 * 1024))
+  CURRENT_BYTES=$(stat -c %s "$DISK")
+  if [ "$TARGET_BYTES" -gt "$CURRENT_BYTES" ]; then
+    truncate -s "$TARGET_BYTES" "$DISK"
+    set +e
+    e2fsck -pf "$DISK" >/dev/null
+    CHECK_CODE=$?
+    set -e
+    [ "$CHECK_CODE" -le 1 ] || { echo "could not check expanded clone disk" >&2; exit 5; }
+    resize2fs "$DISK" >/dev/null
+  fi
 else
   [ -f "$DISK" ] || { echo "clone $IDX has no preserved disk to resume" >&2; exit 4; }
   stop_runtime 2>/dev/null || true
@@ -213,9 +230,13 @@ iptables -C FORWARD -s "10.200.$IDX.0/30" -j ACCEPT 2>/dev/null || iptables -A F
 iptables -C FORWARD -d "10.200.$IDX.0/30" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null \
   || iptables -A FORWARD -d "10.200.$IDX.0/30" -m state --state RELATED,ESTABLISHED -j ACCEPT
 
-# pre-fault the memory file into host page cache: restores then fault against
-# RAM, not EBS ("restored VM feels native immediately"). No-op when cached.
-cat "$POOL/golden.mem" > /dev/null 2>&1 || true
+# Pre-fault the memory file only for the profile that can restore the golden
+# snapshot. Alternate machine sizes cold boot and should not read 12 GiB they
+# will never use.
+if [ "$CMD" = "create" ] && [ "$LOAD_MEMORY_SNAPSHOT" = "1" ] && \
+   [ "$VCPUS" = "4" ] && [ "$MEMORY_MIB" = "12288" ] && [ "$DISK_GIB" = "25" ]; then
+  cat "$POOL/golden.mem" > /dev/null 2>&1 || true
+fi
 
 # firecracker inside netns + private mountns (clone disk over the golden
 # path), detached into its own transient systemd scope — clone VMs must
@@ -261,7 +282,8 @@ fc() {
   curl -s --unix-socket "$API" -X "$1" "http://x$2" \
     -H 'Content-Type: application/json' -d "$3"
 }
-if [ "$CMD" = "create" ] && [ "$LOAD_MEMORY_SNAPSHOT" = "1" ]; then
+if [ "$CMD" = "create" ] && [ "$LOAD_MEMORY_SNAPSHOT" = "1" ] && \
+   [ "$VCPUS" = "4" ] && [ "$MEMORY_MIB" = "12288" ] && [ "$DISK_GIB" = "25" ]; then
   LOAD=$(fc PUT /snapshot/load \
     "{\"snapshot_path\":\"$POOL/golden.vmstate\",\"mem_backend\":{\"backend_type\":\"File\",\"backend_path\":\"$POOL/golden.mem\"},\"resume_vm\":true}")
   if echo "$LOAD" | grep -q fault_message; then
@@ -279,7 +301,7 @@ else
     "{\"drive_id\":\"rootfs\",\"path_on_host\":\"$POOL/golden.ext4\",\"is_root_device\":true,\"is_read_only\":false}" >/dev/null
   fc PUT /network-interfaces/eth0 \
     '{"iface_id":"eth0","guest_mac":"06:00:AC:10:64:02","host_dev_name":"bkstap0"}' >/dev/null
-  fc PUT /machine-config '{"vcpu_count":4,"mem_size_mib":12288}' >/dev/null
+  fc PUT /machine-config "{\"vcpu_count\":$VCPUS,\"mem_size_mib\":$MEMORY_MIB}" >/dev/null
   START=$(fc PUT /actions '{"action_type":"InstanceStart"}')
   if echo "$START" | grep -q fault_message; then
     echo "COLD BOOT FAILED: $START" >&2

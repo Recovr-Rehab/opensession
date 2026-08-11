@@ -328,6 +328,7 @@ export interface RemoteSandboxState {
   repoId?: string;
   trustProfile?: "interactive" | "automation";
   egressAllowlist?: string[];
+  resources?: { cpu?: number; memoryMb?: number; diskGb?: number };
   branch?: string;
   createdAt: string;
   lastActivityAt: string;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
 	SandboxConnectionInfo,
 	SandboxIngressInfo,
@@ -96,16 +96,75 @@ function providerLabel(provider: SandboxConnectionInfo["provider"]): string {
 }
 
 function machineSummary(environment: SandboxEnvironmentInfo): string {
-	if (environment.provider === "microvm") return "4 vCPU · 12 GB memory (local host profile)";
 	const settings = environment.settings;
-	if (!settings || !Object.keys(settings).length) return "Provider defaults";
+	if (!settings || !Object.keys(settings).length) {
+		return environment.provider === "microvm"
+			? "4 vCPU · 12 GB memory · 25 GB disk"
+			: "Provider defaults";
+	}
 	return [
-		settings.cpu ? `${settings.cpu} vCPU` : undefined,
+		settings.cpu
+			? `${settings.cpu} ${environment.provider === "modal" ? "physical CPU" : "vCPU"}`
+			: undefined,
 		settings.memoryMb ? `${settings.memoryMb >= 1024 ? `${settings.memoryMb / 1024} GB` : `${settings.memoryMb} MB`} memory` : undefined,
 		settings.diskGb ? `${settings.diskGb} GB disk` : undefined,
 	]
 		.filter(Boolean)
 		.join(" · ");
+}
+
+type MachineProfile = {
+	id: string;
+	label: string;
+	detail: string;
+	settings: SandboxMachineSettings;
+};
+
+const MACHINE_PROFILES: Record<"daytona" | "modal" | "microvm", MachineProfile[]> = {
+	daytona: [
+		{ id: "small", label: "Small", detail: "1 vCPU · 1 GB · 3 GB disk", settings: { cpu: 1, memoryMb: 1024, diskGb: 3 } },
+		{ id: "medium", label: "Medium", detail: "2 vCPU · 4 GB · 8 GB disk", settings: { cpu: 2, memoryMb: 4096, diskGb: 8 } },
+		{ id: "large", label: "Large", detail: "4 vCPU · 8 GB · 10 GB disk", settings: { cpu: 4, memoryMb: 8192, diskGb: 10 } },
+	],
+	modal: [
+		{ id: "efficient", label: "Efficient", detail: "0.5 physical CPU · 2 GB", settings: { cpu: 0.5, memoryMb: 2048 } },
+		{ id: "balanced", label: "Balanced", detail: "1 physical CPU · 4 GB", settings: { cpu: 1, memoryMb: 4096 } },
+		{ id: "performance", label: "Performance", detail: "2 physical CPUs · 8 GB", settings: { cpu: 2, memoryMb: 8192 } },
+	],
+	microvm: [
+		{ id: "compact", label: "Compact", detail: "2 vCPU · 4 GB · 25 GB disk", settings: { cpu: 2, memoryMb: 4096, diskGb: 25 } },
+		{ id: "standard", label: "Standard", detail: "4 vCPU · 8 GB · 25 GB disk", settings: { cpu: 4, memoryMb: 8192, diskGb: 25 } },
+		{ id: "large", label: "Large", detail: "4 vCPU · 12 GB · 25 GB disk", settings: { cpu: 4, memoryMb: 12_288, diskGb: 25 } },
+		{ id: "large-storage", label: "Large + storage", detail: "4 vCPU · 12 GB · 50 GB disk", settings: { cpu: 4, memoryMb: 12_288, diskGb: 50 } },
+		{ id: "xlarge", label: "X-Large", detail: "8 vCPU · 24 GB · 100 GB disk", settings: { cpu: 8, memoryMb: 24_576, diskGb: 100 } },
+	],
+};
+
+function machineProfiles(provider: SandboxConnectionInfo["provider"]): MachineProfile[] {
+	return provider === "daytona" || provider === "modal" || provider === "microvm"
+		? MACHINE_PROFILES[provider]
+		: [];
+}
+
+function defaultMachineProfile(provider: SandboxConnectionInfo["provider"]): string {
+	if (provider === "daytona") return "medium";
+	if (provider === "modal") return "balanced";
+	return "large";
+}
+
+function machineProfileForSettings(
+	provider: SandboxConnectionInfo["provider"],
+	settings?: SandboxMachineSettings,
+): string {
+	if (!settings) return defaultMachineProfile(provider);
+	return (
+		machineProfiles(provider).find(
+			(profile) =>
+				profile.settings.cpu === settings.cpu &&
+				profile.settings.memoryMb === settings.memoryMb &&
+				profile.settings.diskGb === settings.diskGb,
+		)?.id || defaultMachineProfile(provider)
+	);
 }
 
 function ConnectDialog({
@@ -451,14 +510,12 @@ function ProjectEnvironmentDialog({
 	onOpenChange,
 	target,
 	available,
-	connections,
 	onStarted,
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	target?: SandboxEnvironmentInfo;
 	available: SandboxEnvironmentInfo[];
-	connections: SandboxConnectionInfo[];
 	onStarted: (
 		operation: SandboxOperationInfo,
 		environment: SandboxEnvironmentInfo,
@@ -470,46 +527,38 @@ function ProjectEnvironmentDialog({
 		first?.provider || "microvm",
 	);
 	const [repo, setRepo] = useState(first?.repo || "");
-	const [cpu, setCpu] = useState("");
-	const [memoryMb, setMemoryMb] = useState("");
-	const [diskGb, setDiskGb] = useState("");
+	const [profile, setProfile] = useState(
+		machineProfileForSettings(first?.provider || "microvm", first?.settings),
+	);
 	const [saving, setSaving] = useState(false);
+	const wasOpen = useRef(false);
 
 	useEffect(() => {
-		if (!open) return;
-		const selected = target || available[0];
-		if (!selected) return;
-		setProvider(selected.provider);
-		setRepo(selected.repo);
-		setCpu(selected.settings?.cpu ? String(selected.settings.cpu) : "");
-		setMemoryMb(selected.settings?.memoryMb ? String(selected.settings.memoryMb) : "");
-		setDiskGb(selected.settings?.diskGb ? String(selected.settings.diskGb) : "");
+		if (open && !wasOpen.current) {
+			const selected = target || available[0];
+			if (selected) {
+				setProvider(selected.provider);
+				setRepo(selected.repo);
+				setProfile(machineProfileForSettings(selected.provider, selected.settings));
+			}
+		}
+		wasOpen.current = open;
 	}, [open, target, available]);
 
 	const providerOptions = Array.from(new Set(available.map((environment) => environment.provider)));
 	const projectOptions = available.filter((environment) => environment.provider === provider);
 	const selected = target || projectOptions.find((environment) => environment.repo === repo);
-	const connection = connections.find((candidate) => candidate.provider === provider);
 
 	function chooseProvider(next: SandboxConnectionInfo["provider"]) {
 		setProvider(next);
 		const nextEnvironment = available.find((environment) => environment.provider === next);
 		if (nextEnvironment) setRepo(nextEnvironment.repo);
-		setCpu("");
-		setMemoryMb("");
-		setDiskGb("");
+		setProfile(defaultMachineProfile(next));
 	}
 
 	async function prepare() {
 		if (!selected) return;
-		const settings: SandboxMachineSettings | undefined =
-			provider === "microvm"
-				? undefined
-				: {
-						...(cpu ? { cpu: Number(cpu) } : {}),
-						...(memoryMb ? { memoryMb: Number(memoryMb) } : {}),
-						...(provider === "daytona" && diskGb ? { diskGb: Number(diskGb) } : {}),
-					};
+		const settings = machineProfiles(provider).find((candidate) => candidate.id === profile)?.settings;
 		setSaving(true);
 		try {
 			const response = await rebuildSandboxEnvironment(selected.repo, provider, settings);
@@ -572,60 +621,24 @@ function ProjectEnvironmentDialog({
 					</div>
 				)}
 
-				{provider === "microvm" ? (
-					<div className="rounded-lg bg-surface p-3">
-						<div className="text-label font-medium text-fg">Fixed local profile</div>
-						<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
-							4 vCPU and 12 GB memory. Local MicroVM templates restore against the qualified
-							Firecracker snapshot, so their machine shape stays fixed.
-						</p>
-					</div>
-				) : (
-					<>
-						<div className="grid gap-3 sm:grid-cols-2">
-							<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-								CPU
-								<Input
-									type="number"
-									min="1"
-									max="64"
-									value={cpu}
-									onChange={(event) => setCpu(event.target.value)}
-									placeholder={String(connection?.settings.cpu || "Provider default")}
-								/>
-							</label>
-							<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-								Memory (MB)
-								<Input
-									type="number"
-									min="512"
-									max="262144"
-									step="512"
-									value={memoryMb}
-									onChange={(event) => setMemoryMb(event.target.value)}
-									placeholder={String(connection?.settings.memoryMb || "Provider default")}
-								/>
-							</label>
-							{provider === "daytona" && (
-								<label className="flex flex-col gap-1.5 text-label font-medium text-dim sm:col-span-2">
-									Disk (GB)
-									<Input
-										type="number"
-										min="3"
-										max="1000"
-										value={diskGb}
-										onChange={(event) => setDiskGb(event.target.value)}
-										placeholder="Provider default"
-									/>
-								</label>
-							)}
-						</div>
-						<p className="m-0 text-meta leading-relaxed text-faint">
-							Leave a field blank to inherit the provider connection default. Changing the
-							machine rebuilds this project’s reusable template.
-						</p>
-					</>
-				)}
+				<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+					Machine size
+					<Select value={profile} onChange={(event) => setProfile(event.target.value)}>
+						{machineProfiles(provider).map((candidate) => (
+							<option key={candidate.id} value={candidate.id}>
+								{candidate.label} — {candidate.detail}
+							</option>
+						))}
+					</Select>
+				</label>
+				<div className="rounded-lg bg-surface p-3 text-supporting leading-relaxed text-dim">
+					{provider === "daytona" &&
+						"Daytona supports custom resource combinations, but these documented sizes avoid invalid or undersized setups."}
+					{provider === "modal" &&
+						"Modal CPU values are physical cores and memory is a guaranteed request; workloads may burst when capacity is available."}
+					{provider === "microvm" &&
+						"The default size keeps the fast memory-snapshot restore. Other sizes cold-boot the same golden disk, then retain that shape across pause and resume."}
+				</div>
 
 				<Modal.Footer>
 					<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
@@ -872,7 +885,6 @@ export function SandboxesPanel() {
 				onOpenChange={setEnvironmentDialogOpen}
 				target={environmentTarget}
 				available={environmentTarget ? [environmentTarget] : availableEnvironments}
-				connections={connections}
 				onStarted={environmentStarted}
 			/>
 		</SettingsPanel>

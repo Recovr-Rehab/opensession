@@ -84,11 +84,15 @@ function normalizeMachineSettings(
   provider: WorkspaceSandboxProvider,
   raw?: SandboxMachineSettings,
 ): SandboxMachineSettings | undefined {
-  if (!raw || provider === "microvm") return undefined;
+  if (!raw) return undefined;
   const settings: SandboxMachineSettings = {};
   if (raw.cpu != null) {
-    if (!Number.isInteger(raw.cpu) || raw.cpu < 1 || raw.cpu > 64) {
-      throw Object.assign(new Error("CPU must be a whole number from 1 to 64"), { code: "MACHINE_SETTINGS_INVALID" });
+    const validCpu =
+      provider === "modal"
+        ? Number.isFinite(raw.cpu) && raw.cpu >= 0.125 && raw.cpu <= 16
+        : Number.isInteger(raw.cpu) && raw.cpu >= 1 && raw.cpu <= 64;
+    if (!validCpu) {
+      throw Object.assign(new Error("CPU is outside this provider's supported range"), { code: "MACHINE_SETTINGS_INVALID" });
     }
     settings.cpu = raw.cpu;
   }
@@ -98,11 +102,30 @@ function normalizeMachineSettings(
     }
     settings.memoryMb = raw.memoryMb;
   }
-  if (raw.diskGb != null && provider === "daytona") {
-    if (!Number.isInteger(raw.diskGb) || raw.diskGb < 3 || raw.diskGb > 1_000) {
-      throw Object.assign(new Error("Disk must be between 3 and 1000 GB"), { code: "MACHINE_SETTINGS_INVALID" });
+  if (raw.diskGb != null && (provider === "daytona" || provider === "microvm")) {
+    if (!Number.isInteger(raw.diskGb) || raw.diskGb < 1 || raw.diskGb > 1_000) {
+      throw Object.assign(new Error("Disk must be between 1 and 1000 GB"), { code: "MACHINE_SETTINGS_INVALID" });
     }
     settings.diskGb = raw.diskGb;
+  }
+  if (provider === "microvm") {
+    const supported = [
+      { cpu: 2, memoryMb: 4_096, diskGb: 25 },
+      { cpu: 4, memoryMb: 8_192, diskGb: 25 },
+      { cpu: 4, memoryMb: 12_288, diskGb: 25 },
+      { cpu: 4, memoryMb: 12_288, diskGb: 50 },
+      { cpu: 8, memoryMb: 24_576, diskGb: 100 },
+    ].some(
+      (profile) =>
+        profile.cpu === settings.cpu &&
+        profile.memoryMb === settings.memoryMb &&
+        profile.diskGb === settings.diskGb,
+    );
+    if (!supported) {
+      throw Object.assign(new Error("Choose one of the supported Local MicroVM sizes"), {
+        code: "MACHINE_SETTINGS_INVALID",
+      });
+    }
   }
   return Object.keys(settings).length ? settings : undefined;
 }

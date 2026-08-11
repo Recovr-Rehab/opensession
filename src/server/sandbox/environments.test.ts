@@ -76,6 +76,14 @@ describe("sandbox project environments", () => {
     await expect(
       prepareSandboxEnvironment(repo, "modal", { settings: { cpu: 0 } }),
     ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
+
+    connectSandboxProvider("microvm", {});
+    setSandboxConnectionQualification("microvm", { status: "ready" });
+    await expect(
+      prepareSandboxEnvironment(repo, "microvm", {
+        settings: { cpu: 3, memoryMb: 4_096, diskGb: 25 },
+      }),
+    ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
   });
 
   test("marks every reusable provider template stale after a default-branch update", async () => {

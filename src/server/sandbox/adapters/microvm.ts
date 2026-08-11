@@ -54,6 +54,7 @@ import {
   claimPrewarmOrWait,
   discardClaimedPrewarm,
   type PrewarmAdapter,
+  type SandboxMachineSettings,
 } from "../prewarm";
 
 const SCRIPTS = `${process.cwd()}/deploy/sandbox/microvm`;
@@ -61,6 +62,11 @@ const CONTROL_PORT = 8080;
 const ROOT_CONTROL_PORT = 8081;
 const DEFAULT_IDLE_STOP_MINUTES = 5;
 const IDLE_SWEEP_MS = 60_000;
+const DEFAULT_MACHINE: Required<SandboxMachineSettings> = {
+  cpu: 4,
+  memoryMb: 12_288,
+  diskGb: 25,
+};
 const AUTOMATION_BASELINE_EGRESS = [
   "https://github.com",
   "https://api.github.com",
@@ -365,9 +371,34 @@ async function pauseClone(idx: number, storeDir: string): Promise<void> {
   }
 }
 
-async function resumeClone(idx: number, storeDir: string): Promise<void> {
+function machine(resources?: SandboxMachineSettings): Required<SandboxMachineSettings> {
+  return {
+    cpu: resources?.cpu || DEFAULT_MACHINE.cpu,
+    memoryMb: resources?.memoryMb || DEFAULT_MACHINE.memoryMb,
+    diskGb: resources?.diskGb || DEFAULT_MACHINE.diskGb,
+  };
+}
+
+async function resumeClone(
+  idx: number,
+  storeDir: string,
+  resources?: SandboxMachineSettings,
+): Promise<void> {
+  const selected = machine(resources);
   const result = await run(
-    ["sudo", "-n", "bash", `${SCRIPTS}/clone.sh`, "resume", String(idx), storeDir],
+    [
+      "sudo",
+      "-n",
+      "bash",
+      `${SCRIPTS}/clone.sh`,
+      "resume",
+      String(idx),
+      storeDir,
+      "",
+      String(selected.cpu),
+      String(selected.memoryMb),
+      String(selected.diskGb),
+    ],
     180_000,
   );
   if (result.exitCode !== 0) {
@@ -433,7 +464,9 @@ async function allocateClone(
   indexStart: number,
   indexEnd: number,
   repoId?: string,
+  resources?: SandboxMachineSettings,
 ): Promise<number> {
+  const selected = machine(resources);
   return withRemoteEnsureLock("microvm", "__allocate__", async () => {
     for (let candidate = indexStart; candidate <= indexEnd; candidate++) {
       const result = await run(
@@ -445,7 +478,10 @@ async function allocateClone(
           "create",
           String(candidate),
           storeDir,
-          ...(repoId ? [repoTemplateKey(repoId)] : []),
+          repoId ? repoTemplateKey(repoId) : "",
+          String(selected.cpu),
+          String(selected.memoryMb),
+          String(selected.diskGb),
         ],
         300_000,
       );
@@ -487,6 +523,8 @@ export class MicrovmProvider implements SandboxProvider {
     const trustProfile = spec.trustProfile || previous?.trustProfile || "interactive";
     const egressAllowlist = spec.egressAllowlist || previous?.egressAllowlist || [];
     const repo = getRepo(spec.repo || previous?.repoId);
+    const { sandboxEnvironmentSettings } = await import("../environments");
+    const resources = previous?.resources || sandboxEnvironmentSettings(repo.id, this.id);
     const branch = spec.branch || previous?.branch || repo.defaultBranch;
     // Keep workspaces in a guest-only namespace. The runner checkout is baked
     // separately at REMOTE_REPO; the Sandbox handle reports the cloned repo cwd.
@@ -501,7 +539,7 @@ export class MicrovmProvider implements SandboxProvider {
           await driverFor(idx).ensureStarted();
         } else if (cloneDiskExists(idx, cfg.storeDir)) {
           resumeStartedAt = Date.now();
-          await resumeClone(idx, cfg.storeDir);
+          await resumeClone(idx, cfg.storeDir, resources);
           await driverFor(idx).ensureStarted();
           resumed = true;
           console.log(`[sandbox:microvm] woke ${sandboxId(idx)} for ${spec.sessionId}`);
@@ -527,7 +565,7 @@ export class MicrovmProvider implements SandboxProvider {
               await driverFor(candidate).ensureStarted();
             } else if (cloneDiskExists(candidate, cfg.storeDir)) {
               resumeStartedAt = Date.now();
-              await resumeClone(candidate, cfg.storeDir);
+              await resumeClone(candidate, cfg.storeDir, resources);
               await driverFor(candidate).ensureStarted();
               resumed = true;
             } else {
@@ -551,7 +589,13 @@ export class MicrovmProvider implements SandboxProvider {
       }
     }
     if (idx == null) {
-      idx = await allocateClone(cfg.storeDir, cfg.indexStart, cfg.indexEnd, repo.id);
+      idx = await allocateClone(
+        cfg.storeDir,
+        cfg.indexStart,
+        cfg.indexEnd,
+        repo.id,
+        resources,
+      );
       created = true;
     }
     if (created) {
@@ -566,6 +610,7 @@ export class MicrovmProvider implements SandboxProvider {
         lastActivityAt: new Date().toISOString(),
         trustProfile,
         egressAllowlist,
+        resources: machine(resources),
       });
     }
 
@@ -863,14 +908,20 @@ function ensureIdleSweep(): void {
 // ── Warm-on-typing workspace prewarm hooks ──────────────────────────────────
 
 export const microvmPrewarmAdapter: PrewarmAdapter = {
-  async create(labels) {
+  async create(labels, options) {
     const cfg = config();
     const key = labels["opensession.prewarm.key"];
     if (!key?.startsWith("microvm:")) {
       throw new Error(`invalid MicroVM prewarm key: ${key || "(missing)"}`);
     }
     const repoId = key.slice("microvm:".length);
-    const idx = await allocateClone(cfg.storeDir, cfg.indexStart, cfg.indexEnd, repoId);
+    const idx = await allocateClone(
+      cfg.storeDir,
+      cfg.indexStart,
+      cfg.indexEnd,
+      repoId,
+      options.resources,
+    );
     const id = sandboxId(idx);
     try {
       writeRemoteState({
@@ -879,6 +930,7 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
         sessionId: `__prewarm__:${key}`,
         cwd: workspacePath(`prewarm-${idx}`),
         repoId,
+        resources: machine(options.resources),
         createdAt: new Date().toISOString(),
         lastActivityAt: new Date().toISOString(),
       });
