@@ -34,6 +34,7 @@ afterEach(() => {
 
 describe("run journal", () => {
 	it("deduplicates and bounds restart recovery while rejecting recursive records", () => {
+		const now = Date.now();
 		const records: mod.ActiveRunRecord[] = Array.from({ length: 40 }, (_, i) => ({
 			runKey: `run-${i}`,
 			osSessionId: `session-${i}`,
@@ -41,17 +42,38 @@ describe("run journal", () => {
 			cwd: "/tmp",
 			mcpServers: [],
 			kind: "prompt",
-			startedAt: new Date(1_000 + i).toISOString(),
+			firstJournaledAt: new Date(now - 60_000).toISOString(),
+			startedAt: new Date(now - 40_000 + i).toISOString(),
 		}));
-		records.push({ ...records[0], runKey: "run-0-new", startedAt: new Date(9_000).toISOString() });
+		records.push({ ...records[0], runKey: "run-0-new", startedAt: new Date(now).toISOString() });
 		records.push({ ...records[1], runKey: "recursive", kind: "prompt-resume-resume" });
 
-		const result = agent.sanitizeInterruptedRuns(records);
+		const result = agent.sanitizeInterruptedRuns(records, now);
 		expect(result.interrupted).toHaveLength(agent.MAX_BOOT_RECOVERIES);
 		expect(result.interrupted.find((r) => r.osSessionId === "session-0")?.runKey).toBe("run-0-new");
 		expect(result.interrupted.some((r) => r.runKey === "recursive")).toBe(false);
-		expect(result.dropped.some((r) => r.runKey === "run-0")).toBe(true);
-		expect(result.dropped.some((r) => r.runKey === "recursive")).toBe(true);
+		expect(result.quarantined.some((r) => r.run.runKey === "run-0" && r.reason === "duplicate_session")).toBe(true);
+		expect(result.quarantined.some((r) => r.run.runKey === "recursive" && r.reason === "recursive_recovery_kind")).toBe(true);
+	});
+
+	it("rejects expired lineage and exhausted durable resume attempts", () => {
+		const now = Date.now();
+		const base: mod.ActiveRunRecord = {
+			runKey: "base",
+			osSessionId: "session-base",
+			cwd: "/tmp",
+			startedAt: new Date(now).toISOString(),
+			firstJournaledAt: new Date(now).toISOString(),
+		};
+		const result = agent.sanitizeInterruptedRuns([
+			{ ...base, runKey: "attempted", osSessionId: "attempted", resumeAttempts: agent.MAX_BOOT_RESUME_ATTEMPTS },
+			{ ...base, runKey: "expired", osSessionId: "expired", firstJournaledAt: new Date(now - agent.MAX_RECOVERY_AGE_MS - 1).toISOString() },
+		], now);
+		expect(result.interrupted).toEqual([]);
+		expect(result.quarantined.map((entry) => entry.reason).sort()).toEqual([
+			"recovery_expired",
+			"resume_attempts_exhausted",
+		]);
 	});
 
 	it("keeps recovery kinds and prompts bounded across repeated restarts", () => {
@@ -113,14 +135,34 @@ describe("run journal", () => {
 		expect(mod.takeInterruptedRuns()).toEqual([]);
 	});
 
-	it("clears rejected recovery records in one batch", () => {
+	it("moves rejected recovery records into an inspectable quarantine", async () => {
 		for (let i = 0; i < 5; i++) {
 			mod.journalSet({ runKey: `batch-${i}`, cwd: "/tmp", mcpServers: [], startedAt: new Date().toISOString() });
 		}
-		mod.journalClearMany(["batch-1", "batch-3", "missing"]);
+		mod.journalQuarantine([
+			{ run: mod.activeRunRecords().find((run) => run.runKey === "batch-1")!, reason: "boot_recovery_limit", notify: true },
+			{ run: mod.activeRunRecords().find((run) => run.runKey === "batch-3")!, reason: "duplicate_session", notify: false },
+		]);
 		expect(mod.activeRunRecords().map((run) => run.runKey).sort()).toEqual([
 			"batch-0", "batch-2", "batch-4",
 		]);
+		const quarantine = await Bun.file(join(dir, "active-runs.quarantine.json")).json();
+		expect(Object.values(quarantine).map((run: any) => run.quarantineReason).sort()).toEqual([
+			"boot_recovery_limit",
+			"duplicate_session",
+		]);
+	});
+
+	it("preserves first-journaled time while incrementing recovery attempts", () => {
+		const first = new Date(Date.now() - 10_000).toISOString();
+		mod.journalSet({ runKey: "lineage", cwd: "/tmp", startedAt: first });
+		const prepared = mod.journalStartRecovery(mod.activeRunRecords()[0]);
+		expect(prepared.firstJournaledAt).toBe(first);
+		expect(prepared.resumeAttempts).toBe(1);
+		expect(prepared.lastResumeAt).toBeTruthy();
+		mod.journalSet({ ...prepared, startedAt: new Date().toISOString() });
+		expect(mod.activeRunRecords()[0].firstJournaledAt).toBe(first);
+		expect(mod.activeRunRecords()[0].resumeAttempts).toBe(1);
 	});
 
 	it("emits recovered run stream events during restart resume", async () => {
@@ -132,7 +174,7 @@ describe("run journal", () => {
 			prompt: "continue",
 			cwd: "/tmp",
 			model: "claude-fable-5",
-			startedAt: "2026-07-02T00:00:00.000Z",
+			startedAt: new Date().toISOString(),
 		});
 
 		let resolveTerminal!: (value: { id?: string; event?: StreamEvent }) => void;

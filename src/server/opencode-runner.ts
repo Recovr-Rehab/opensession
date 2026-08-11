@@ -314,6 +314,7 @@ import {
 } from "./opencode-config";
 import {
   pickAccount,
+  peekAccount,
   getUsableAccountById,
   getAccountById,
   markExhausted,
@@ -845,7 +846,8 @@ export function pickMeridianAccount(
   pinnedId?: string,
   strict?: boolean,
   stickyId?: string,
-  out?: { reason?: string }
+  out?: { reason?: string },
+  recordPick = true,
 ): ClaudeAccount | { error: string } {
   if (isLocalProfile()) return localClaudeAccount();
   const allowedOwner = (a: ClaudeAccount) => !a.owner || (!!user && userMatchesAny(user, [a.owner]));
@@ -879,12 +881,44 @@ export function pickMeridianAccount(
     const known = ids.map((id) => getAccountById(id)?.name || id).join(", ");
     return { error: `no designated meridian bridge account is currently usable (tried: ${known})` };
   }
-  const picked = pickAccount(undefined, user, model);
+  const picked = recordPick
+    ? pickAccount(undefined, user, model)
+    : peekAccount(undefined, user, model);
   if (picked) {
     if (out) out.reason = picked.owner ? "personal-first" : "pool";
     return picked;
   }
   return { error: "no usable Claude account for the meridian bridge (pool exhausted or none configured)" };
+}
+
+/** Provider-dry dispatch circuit: when the configured Meridian account set is
+ * already known unusable, let agent-runner enter its fallback graph without
+ * starting an OpenCode attempt that can only emit another identical error.
+ * Returns null for non-Anthropic models and bridge modes whose availability is
+ * not represented by the Meridian subscription pool. */
+export function claudePoolDryReason(
+  opts: Pick<RunAgentOpts, "user" | "accountId" | "accountStrict" | "journal">,
+  model: string,
+): string | null {
+  if (isLocalProfile()) return null;
+  // Unattended runs intentionally wait for a near reset instead of model-
+  // hopping immediately; preserve that backpressure path in runOpencode.
+  if (poolWaitMsFor(opts.journal?.kind) > 0) return null;
+  const parsed = parseOpencodeModel(model);
+  if (parsed?.providerID !== "anthropic") return null;
+  const cfg = readOpencodeBridgeConfig();
+  if (!cfg?.enabled || cfg.bridgeMode !== "meridian") return null;
+  const picked = pickMeridianAccount(
+    opts.user,
+    parsed.modelID,
+    cfg.bridgeAccountIds,
+    opts.accountId,
+    opts.accountStrict,
+    undefined,
+    undefined,
+    false,
+  );
+  return "error" in picked ? picked.error : null;
 }
 
 /**

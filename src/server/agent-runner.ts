@@ -13,7 +13,14 @@
  * claudeSessionId slot like every other engine).
  */
 
-import { journalClear, journalClearMany, takeInterruptedRuns, type ActiveRunRecord } from "./run-journal";
+import {
+  journalClear,
+  journalQuarantine,
+  journalStartRecovery,
+  takeInterruptedRuns,
+  type ActiveRunRecord,
+  type QuarantinedRun,
+} from "./run-journal";
 import { transitionRunState } from "./run-state";
 import type { StreamEvent, ImageInput } from "./run-events";
 import {
@@ -25,6 +32,7 @@ import {
   tryReattachOpencodeRun,
   steerOpencodeRun,
   EMPTY_COMPLETION_RESULT,
+  claudePoolDryReason,
 } from "./opencode-runner";
 // Static import is deliberate: the pi-runner module itself is cheap (the
 // heavy @earendil-works SDK import stays dynamic inside it, prewarmed only
@@ -206,7 +214,13 @@ export interface RunAgentOpts {
    * never intentionally spend paid credits. Claude only.
    */
   usageCredits?: boolean;
-  journal?: { osSessionId?: string; kind?: string };
+  journal?: {
+    osSessionId?: string;
+    kind?: string;
+    firstJournaledAt?: string;
+    resumeAttempts?: number;
+    lastResumeAt?: string;
+  };
   /**
    * Unified session id (e.g. `linear-<branch>`) for the transcript-v2 oc→
    * unified map ONLY (opencode-transcript.ts recordBksSessionFor) — lets loop
@@ -239,6 +253,31 @@ export type EngineRunner = (
 let engineForTest: EngineRunner | null = null;
 export function __setEngineForTest(fn: EngineRunner | null): void {
   engineForTest = fn;
+}
+
+type ModelAvailabilityProbe = (opts: RunAgentOpts, model: string) => string | null;
+let modelAvailabilityForTest: ModelAvailabilityProbe | null = null;
+export function __setModelAvailabilityForTest(fn: ModelAvailabilityProbe | null): void {
+  modelAvailabilityForTest = fn;
+}
+
+function modelUnavailableReason(opts: RunAgentOpts, model: string): string | null {
+  const mapped = toOpencodeModel(model) || model;
+  if (modelAvailabilityForTest) return modelAvailabilityForTest(opts, mapped);
+  // A fake engine owns its scripted availability unless a test explicitly
+  // installs the separate probe above.
+  if (engineForTest) return null;
+  return claudePoolDryReason(opts, mapped);
+}
+
+function recordPoolDryShortCircuit(opts: RunAgentOpts, model: string, reason: string): void {
+  audit({
+    msg: "account_pool_short_circuit",
+    run_kind: opts.journal?.kind,
+    session_id: opts.journal?.osSessionId,
+    model,
+    reason,
+  });
 }
 
 function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncIterable<StreamEvent> {
@@ -299,6 +338,18 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   // No fallback configured (interactive auto-switch off, or an automation with
   // fallbackModel:"none") ⇒ run the primary and surface whatever it does.
   if (!preferredFallback || preferredFallback === "none") {
+    const dry = modelUnavailableReason(opts, primaryModel);
+    if (dry) {
+      recordPoolDryShortCircuit(opts, primaryModel, dry);
+      yield {
+        type: "error",
+        content: `Claude account pool is unavailable: ${dry}`,
+        provider: providerFor(primaryModel),
+        model: primaryModel,
+        usageLimitExhausted: true,
+      };
+      return;
+    }
     yield* runOnModel(opts, primaryModel);
     return;
   }
@@ -319,28 +370,34 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
     // failing" goal.
     let failure: { transient: boolean; content?: string } | null = null;
 
-    for await (const event of runOnModel(currentOpts, currentModel)) {
-      if (event.type === "init") {
-        currentEngineId = event.sessionId || currentEngineId;
-      }
-      if (event.type === "done" && event.usageLimitExhausted === true) {
-        failure = { transient: false };
-        break;
-      }
-      if (event.type === "error") {
-        if (event.usageLimitExhausted === true) {
-          failure = { transient: false, content: event.content };
+    const dry = modelUnavailableReason(currentOpts, currentModel);
+    if (dry) {
+      recordPoolDryShortCircuit(currentOpts, currentModel, dry);
+      failure = { transient: false, content: dry };
+    } else {
+      for await (const event of runOnModel(currentOpts, currentModel)) {
+        if (event.type === "init") {
+          currentEngineId = event.sessionId || currentEngineId;
+        }
+        if (event.type === "done" && event.usageLimitExhausted === true) {
+          failure = { transient: false };
           break;
         }
-        // A non-usage error that looks like infra (server death, wedge, 5xx,
-        // network, SQLite contention): the opencode runner already spent its own
-        // in-attempt retry, so escalate to the next model rather than failing.
-        if (isTransientRunError(event.content)) {
-          failure = { transient: true, content: event.content };
-          break;
+        if (event.type === "error") {
+          if (event.usageLimitExhausted === true) {
+            failure = { transient: false, content: event.content };
+            break;
+          }
+          // A non-usage error that looks like infra (server death, wedge, 5xx,
+          // network, SQLite contention): the opencode runner already spent its own
+          // in-attempt retry, so escalate to the next model rather than failing.
+          if (isTransientRunError(event.content)) {
+            failure = { transient: true, content: event.content };
+            break;
+          }
         }
+        yield event;
       }
-      yield event;
     }
 
     if (!failure) return;
@@ -724,8 +781,16 @@ export function resumeInterruptedRuns(
   onEvent?: (osSessionId: string, event: StreamEvent) => void,
 ): string[] {
   const taken = takeInterruptedRuns();
-  const { interrupted, dropped } = sanitizeInterruptedRuns(taken);
-  journalClearMany(dropped.map((run) => run.runKey));
+  const { interrupted, quarantined } = sanitizeInterruptedRuns(taken);
+  journalQuarantine(quarantined);
+  for (const entry of quarantined) {
+    if (!entry.notify || !entry.run.osSessionId) continue;
+    onResumed?.(entry.run.osSessionId, {
+      type: "error",
+      content: recoveryQuarantineMessage(entry),
+      model: entry.run.model,
+    });
+  }
   const resumed: string[] = [];
   const recoveryTasks: Array<() => Promise<void>> = [];
 
@@ -770,6 +835,7 @@ export function resumeInterruptedRuns(
       const isDocker = run.sandboxProvider === "docker";
       if (run.osSessionId) resumed.push(run.osSessionId);
       recoveryTasks.push(async () => {
+        Object.assign(run, journalStartRecovery(run));
         const recoveryStartedAt = Date.now();
         let recoveryRecorded = false;
         const recordRecovery = (outcome: "ok" | "failed", reason?: string) => {
@@ -836,6 +902,7 @@ export function resumeInterruptedRuns(
         `[runner] Re-running interrupted ${run.kind || "run"} ${run.osSessionId || run.runKey} from scratch (never got an engine session)`
       );
       recoveryTasks.push(async () => {
+        Object.assign(run, journalStartRecovery(run));
         try {
           // The re-run journals under its own runKey — drop the claimed
           // record now (runAgent's intake journalSet is the very next step,
@@ -868,7 +935,13 @@ export function resumeInterruptedRuns(
             accountStrict: run.accountStrict,
             usageCredits: run.usageCredits,
             prReviewer: run.prReviewer,
-            journal: { osSessionId: run.osSessionId, kind: recoveryKind(run.kind, "rerun") },
+            journal: {
+              osSessionId: run.osSessionId,
+              kind: recoveryKind(run.kind, "rerun"),
+              firstJournaledAt: run.firstJournaledAt,
+              resumeAttempts: run.resumeAttempts,
+              lastResumeAt: run.lastResumeAt,
+            },
             onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           })) {
             if (run.osSessionId) onEvent?.(run.osSessionId, event);
@@ -884,6 +957,7 @@ export function resumeInterruptedRuns(
     }
     if (run.osSessionId) resumed.push(run.osSessionId);
     recoveryTasks.push(async () => {
+      Object.assign(run, journalStartRecovery(run));
       try {
         let repairingRecoveredResult = false;
         // First choice: REATTACH — the run's detached `opencode serve`
@@ -972,7 +1046,13 @@ export function resumeInterruptedRuns(
           accountStrict: run.accountStrict,
           usageCredits: run.usageCredits,
           prReviewer: run.prReviewer,
-          journal: { osSessionId: run.osSessionId, kind: recoveryKind(run.kind, "resume") },
+          journal: {
+            osSessionId: run.osSessionId,
+            kind: recoveryKind(run.kind, "resume"),
+            firstJournaledAt: run.firstJournaledAt,
+            resumeAttempts: run.resumeAttempts,
+            lastResumeAt: run.lastResumeAt,
+          },
           onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
         })) {
           if (run.osSessionId) onEvent?.(run.osSessionId, event);
@@ -993,6 +1073,8 @@ export function resumeInterruptedRuns(
 
 export const MAX_BOOT_RECOVERIES = 32;
 export const BOOT_RECOVERY_CONCURRENCY = 4;
+export const MAX_BOOT_RESUME_ATTEMPTS = 2;
+export const MAX_RECOVERY_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** Collapse recovery suffixes so a crash during recovery never grows
  * `prompt-resume-resume` (or recursively wraps the same continuation forever). */
@@ -1004,16 +1086,26 @@ export function recoveryKind(kind: string | undefined, suffix: "resume" | "rerun
 /** One boot recovery per owning session, newest journal record wins. Records
  * without a session id remain independently recoverable by run key. A hard
  * fuse prevents a malformed journal from monopolizing boot and starving HTTP. */
-export function sanitizeInterruptedRuns(runs: ActiveRunRecord[]): {
+export function sanitizeInterruptedRuns(runs: ActiveRunRecord[], now = Date.now()): {
   interrupted: ActiveRunRecord[];
-  dropped: ActiveRunRecord[];
+  quarantined: QuarantinedRun[];
 } {
   const newest = new Map<string, ActiveRunRecord>();
-  const dropped: ActiveRunRecord[] = [];
+  const quarantined: QuarantinedRun[] = [];
   for (const run of runs) {
     const recoverySuffixes = run.kind?.match(/-(?:resume|rerun)/g)?.length ?? 0;
     if (recoverySuffixes > 1) {
-      dropped.push(run);
+      quarantined.push({ run, reason: "recursive_recovery_kind", notify: true });
+      continue;
+    }
+    const resumeAttempts = run.resumeAttempts ?? recoverySuffixes;
+    if (resumeAttempts >= MAX_BOOT_RESUME_ATTEMPTS) {
+      quarantined.push({ run, reason: "resume_attempts_exhausted", notify: true });
+      continue;
+    }
+    const firstJournaled = Date.parse(run.firstJournaledAt || run.startedAt || "");
+    if (!Number.isFinite(firstJournaled) || now - firstJournaled > MAX_RECOVERY_AGE_MS) {
+      quarantined.push({ run, reason: "recovery_expired", notify: true });
       continue;
     }
     const key = run.osSessionId ? `session:${run.osSessionId}` : `run:${run.runKey}`;
@@ -1025,23 +1117,41 @@ export function sanitizeInterruptedRuns(runs: ActiveRunRecord[]): {
     const priorAt = Date.parse(prior.startedAt || "") || 0;
     const runAt = Date.parse(run.startedAt || "") || 0;
     if (runAt >= priorAt) {
-      dropped.push(prior);
+      quarantined.push({ run: prior, reason: "duplicate_session", notify: false });
       newest.set(key, run);
     } else {
-      dropped.push(run);
+      quarantined.push({ run, reason: "duplicate_session", notify: false });
     }
   }
   const ordered = [...newest.values()].sort(
     (a, b) => (Date.parse(b.startedAt || "") || 0) - (Date.parse(a.startedAt || "") || 0),
   );
   const interrupted = ordered.slice(0, MAX_BOOT_RECOVERIES);
-  dropped.push(...ordered.slice(MAX_BOOT_RECOVERIES));
-  if (dropped.length) {
+  quarantined.push(
+    ...ordered.slice(MAX_BOOT_RECOVERIES).map((run) => ({
+      run,
+      reason: "boot_recovery_limit" as const,
+      notify: true,
+    })),
+  );
+  if (quarantined.length) {
     console.warn(
-      `[runner] Restart recovery kept ${interrupted.length} unique run(s), dropped ${dropped.length} duplicate/excess journal record(s)`,
+      `[runner] Restart recovery kept ${interrupted.length} unique run(s), quarantined ${quarantined.length} duplicate/unsafe/excess record(s)`,
     );
   }
-  return { interrupted, dropped };
+  return { interrupted, quarantined };
+}
+
+function recoveryQuarantineMessage(entry: QuarantinedRun): string {
+  const reason =
+    entry.reason === "resume_attempts_exhausted"
+      ? `it already used ${entry.run.resumeAttempts ?? MAX_BOOT_RESUME_ATTEMPTS} restart recovery attempts`
+      : entry.reason === "recovery_expired"
+        ? "its durable journal lineage is older than 24 hours"
+        : entry.reason === "boot_recovery_limit"
+          ? `the boot recovery safety limit is ${MAX_BOOT_RECOVERIES} runs`
+          : "its recovery lineage was recursively re-journaled";
+  return `Restart recovery was stopped safely because ${reason}. The record was moved to the run-journal quarantine for inspection; send the prompt again to continue.`;
 }
 
 export async function runRecoveryQueue(tasks: Array<() => Promise<void>>): Promise<void> {

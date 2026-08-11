@@ -14,13 +14,17 @@ import { stateDir } from "../../server/paths";
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { tryGetSessionControl, type SessionControl, type SessionSummary } from "../../server/session-control";
-import { REPOS, worktreeHeadBranch } from "../../server/worktree";
+import { audit } from "../../server/audit";
+import { isSharedCheckoutDir, REPOS, worktreeHeadBranch } from "../../server/worktree";
 import { defaultRepo } from "../../server/config";
 
 const PENDING_PATH = `${stateDir("github")}/pending-deploys.json`;
 const DEPLOY_WORKFLOW_PATH = ".github/workflows/deploy.yml";
 /** A merge whose deploy never reported back is dropped after this long. */
 const PENDING_TTL_MS = 48 * 60 * 60 * 1000;
+/** A branch-linked event should normally target one session. Refuse an
+ * implausible broadcast before it can start a fleet of agent turns. */
+export const MAX_SESSION_NOTIFICATION_FANOUT = 25;
 
 interface PendingDeploy {
   prNumber: number;
@@ -65,10 +69,42 @@ export function matchSessions(control: SessionControl, workspaceId: string, bran
       // The agent may have switched branches inside its worktree (automations
       // renaming their auto-generated branch before opening the PR) while the
       // session record keeps the original name — match the actual HEAD too.
-      if (worktreeHeadBranch(s.worktreeDir) === branch) return true;
+      // A shared checkout's HEAD belongs to the whole instance, not to this
+      // session. Treating it as session identity caused PR #5593's branch to
+      // match 645 unrelated sessions that all pointed at the same checkout.
+      if (!isSharedCheckoutDir(s.worktreeDir) && worktreeHeadBranch(s.worktreeDir) === branch)
+        return true;
     }
     return (s.attachedRepos || []).some((r) => r.repo === workspaceId && r.branch === branch);
   });
+}
+
+/** Deduplicate ordinary multi-session matches and fail closed on an
+ * implausible broadcast. Exported as a pure seam for the fan-out regression
+ * test; the caller owns logging/auditing the refusal. */
+export function boundedSessionNotificationIds(sessionIds: string[]): string[] | null {
+  const unique = [...new Set(sessionIds)];
+  return unique.length <= MAX_SESSION_NOTIFICATION_FANOUT ? unique : null;
+}
+
+function guardedSessionNotificationIds(
+  sessionIds: string[],
+  event: "pr_merged" | "deploy_completed",
+  detail: Record<string, unknown>,
+): string[] | null {
+  const bounded = boundedSessionNotificationIds(sessionIds);
+  if (bounded) return bounded;
+  console.error(
+    `[github] Refusing ${event} session notification fan-out to ${new Set(sessionIds).size} sessions`,
+  );
+  audit({
+    msg: "github_session_notification_fuse",
+    event,
+    matched_sessions: new Set(sessionIds).size,
+    max_sessions: MAX_SESSION_NOTIFICATION_FANOUT,
+    ...detail,
+  });
+  return null;
 }
 
 async function deliver(control: SessionControl, sessionIds: string[], message: string): Promise<void> {
@@ -115,8 +151,15 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
       : "") +
     " This is an FYI event: acknowledge briefly; no action needed unless something depends on it.";
 
-  console.log(`[github] PR #${prNumber} merged → notifying ${sessions.length} session(s) on ${workspaceId}:${headRef}`);
-  await deliver(control, sessions.map((s) => s.id), message);
+  const sessionIds = guardedSessionNotificationIds(
+    sessions.map((s) => s.id),
+    "pr_merged",
+    { pr_number: prNumber, workspace_id: workspaceId, head_ref: headRef },
+  );
+  if (!sessionIds) return;
+
+  console.log(`[github] PR #${prNumber} merged → notifying ${sessionIds.length} session(s) on ${workspaceId}:${headRef}`);
+  await deliver(control, sessionIds, message);
 
   if (trackDeploy) {
     const pending = readPending();
@@ -124,7 +167,7 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
       prNumber,
       title,
       headRef,
-      sessionIds: sessions.map((s) => s.id),
+      sessionIds,
       recordedAt: new Date().toISOString(),
     };
     writeJsonAtomic(PENDING_PATH, pending);
@@ -151,6 +194,13 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
     ? `🚀 Deploy finished for PR #${entry.prNumber} “${entry.title}” — the merge is live in production. This is an FYI event: acknowledge briefly; no action needed.`
     : `❌ Deploy ${run.conclusion || "failed"} for PR #${entry.prNumber} “${entry.title}” — worth a look: ${run.html_url}`;
 
-  console.log(`[github] Deploy ${run.conclusion} for ${run.head_sha} → notifying ${entry.sessionIds.length} session(s)`);
-  await deliver(control, entry.sessionIds, message);
+  const sessionIds = guardedSessionNotificationIds(entry.sessionIds, "deploy_completed", {
+    pr_number: entry.prNumber,
+    head_sha: run.head_sha,
+    conclusion: run.conclusion,
+  });
+  if (!sessionIds) return;
+
+  console.log(`[github] Deploy ${run.conclusion} for ${run.head_sha} → notifying ${sessionIds.length} session(s)`);
+  await deliver(control, sessionIds, message);
 }

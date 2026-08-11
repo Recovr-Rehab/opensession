@@ -55,7 +55,7 @@ import { dirname } from "path";
 import { OPENSESSION_SESSIONS_DIR, homeDir, stateDir } from "../../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
-import { RESUME_CONTINUATION_PROMPT } from "../../agent-runner";
+import { recoveryKind, RESUME_CONTINUATION_PROMPT } from "../../agent-runner";
 import { accountsForRemoteUpload } from "../../claude-accounts";
 import { audit } from "../../audit";
 import { authedRemoteUrl } from "../../codestorage/auth";
@@ -1344,6 +1344,9 @@ function recordForSpec(
     sandboxProvider: provider,
     trustProfile: spec.trustProfile,
     kind: spec.journalKind || "prompt",
+    firstJournaledAt: spec.firstJournaledAt,
+    resumeAttempts: spec.resumeAttempts,
+    lastResumeAt: spec.lastResumeAt,
     startedAt: new Date().toISOString(),
   };
 }
@@ -1725,7 +1728,10 @@ export async function resumeRemoteSandboxRun(
     accountStrict: run.accountStrict,
     usageCredits: run.usageCredits,
     trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
-    journalKind: `${run.kind || "prompt"}-resume`,
+    journalKind: recoveryKind(run.kind, "resume"),
+    firstJournaledAt: run.firstJournaledAt,
+    resumeAttempts: run.resumeAttempts,
+    lastResumeAt: run.lastResumeAt,
   };
   try {
     if (oldDir && existsSync(oldDir)) rmSync(oldDir, { recursive: true, force: true });

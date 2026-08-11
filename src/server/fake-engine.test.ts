@@ -12,7 +12,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
-import { __setEngineForTest, engineFamily, runAgent } from "./agent-runner";
+import {
+	__setEngineForTest,
+	__setModelAvailabilityForTest,
+	engineFamily,
+	runAgent,
+} from "./agent-runner";
 import { __setActiveRunsPathForTest, activeRunRecords } from "./run-journal";
 import type { StreamEvent } from "./run-events";
 import { makeFakeEngine } from "./testing/fake-engine";
@@ -22,6 +27,7 @@ const prevJournal = __setActiveRunsPathForTest(journalTmp);
 
 afterEach(() => {
 	__setEngineForTest(null);
+	__setModelAvailabilityForTest(null);
 });
 // Restore the journal path for any later test file in the suite.
 process.on("beforeExit", () => __setActiveRunsPathForTest(prevJournal));
@@ -129,6 +135,52 @@ describe("fake engine through runAgent", () => {
 		expect(fake.calls[1].sessionId).toBeUndefined();
 		expect(fake.calls[1].prompt).toContain("previous attempt");
 		expect(fake.calls[1].journalKind).toBe("prompt-fallback");
+	});
+
+	test("known-dry Claude pool skips the doomed engine attempt and enters fallback directly", async () => {
+		const fake = makeFakeEngine([{ kind: "clean", text: ["direct fallback"] }]);
+		__setEngineForTest(fake.engine);
+		__setModelAvailabilityForTest((_opts, model) =>
+			model.includes("/anthropic/") ? "all configured accounts are exhausted" : null,
+		);
+		const events = await collect(
+			runAgent({
+				prompt: "keep going",
+				cwd: "/tmp",
+				mcpServers: [],
+				model: "claude-sonnet-5",
+				fallbackModel: "claude-opus-4-8",
+				journal: { osSessionId: "bks-test-dry-short-circuit", kind: "prompt" },
+			}),
+		);
+		expect(types(events)).toEqual(["model_switch", "init", "text_chunk", "done"]);
+		expect(fake.calls).toHaveLength(1);
+		expect(fake.calls[0].model).toBe("opencode/openai/gpt-5.6-sol");
+		expect(events[0]).toMatchObject({
+			type: "model_switch",
+			fromModel: "claude-sonnet-5",
+			toModel: "opencode/openai/gpt-5.6-sol",
+		});
+	});
+
+	test("known-dry Claude pool fails once without touching the engine when fallback is disabled", async () => {
+		const fake = makeFakeEngine([{ kind: "clean", text: ["must not run"] }]);
+		__setEngineForTest(fake.engine);
+		__setModelAvailabilityForTest((_opts, model) =>
+			model.includes("/anthropic/") ? "all configured accounts are exhausted" : null,
+		);
+		const events = await collect(
+			runAgent({
+				prompt: "p",
+				cwd: "/tmp",
+				mcpServers: [],
+				model: "claude-sonnet-5",
+				fallbackModel: "none",
+			}),
+		);
+		expect(fake.calls).toHaveLength(0);
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({ type: "error", usageLimitExhausted: true });
 	});
 
 	test("two consecutive transient failures trip the infrastructure circuit breaker", async () => {

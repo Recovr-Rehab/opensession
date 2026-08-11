@@ -115,7 +115,7 @@ import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir, } from "../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
-import { RESUME_CONTINUATION_PROMPT } from "../agent-runner";
+import { recoveryKind, RESUME_CONTINUATION_PROMPT } from "../agent-runner";
 import { providerFor } from "../models";
 import { hostRunBusy, hostSteer, hostInterruptSteer, hostCancel } from "../host-registry";
 import { registerRunToken, unregisterRunToken } from "../run-rpc";
@@ -1000,6 +1000,9 @@ function recordForSpec(spec: RunHostSpec, sandboxId: string): ActiveRunRecord {
     sandboxProvider: "docker",
     trustProfile: spec.trustProfile,
     kind: spec.journalKind || "prompt",
+    firstJournaledAt: spec.firstJournaledAt,
+    resumeAttempts: spec.resumeAttempts,
+    lastResumeAt: spec.lastResumeAt,
     startedAt: new Date().toISOString(),
   };
 }
@@ -1649,7 +1652,10 @@ export async function resumeDockerSandboxRun(
     accountStrict: run.accountStrict,
     usageCredits: run.usageCredits,
     trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
-    journalKind: `${run.kind || "prompt"}-resume`,
+    journalKind: recoveryKind(run.kind, "resume"),
+    firstJournaledAt: run.firstJournaledAt,
+    resumeAttempts: run.resumeAttempts,
+    lastResumeAt: run.lastResumeAt,
   };
   try {
     if (oldDir && existsSync(oldDir)) rmSync(oldDir, { recursive: true, force: true });

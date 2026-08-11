@@ -28,6 +28,7 @@ import type { McpScope } from "./runner-shared";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 import {
   runAgent,
+  recoveryKind,
   resumeContinuationPrompt,
   type RunAgentOpts,
   type StreamEvent,
@@ -97,6 +98,9 @@ export interface HostedRunOpts {
   user?: string;
   fallbackModel?: string;
   journalKind?: string;
+  firstJournaledAt?: string;
+  resumeAttempts?: number;
+  lastResumeAt?: string;
   onAskUser?: RunAgentOpts["onAskUser"];
   /** A steer arrived too late at the host — queue it so it isn't dropped. */
   onSteerFailed?: (text: string) => void;
@@ -141,7 +145,13 @@ export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<Strea
     author: opts.author,
     user: opts.user,
     fallbackModel: opts.fallbackModel,
-    journal: { osSessionId: opts.osSessionId, kind: opts.journalKind || "prompt" },
+    journal: {
+      osSessionId: opts.osSessionId,
+      kind: opts.journalKind || "prompt",
+      firstJournaledAt: opts.firstJournaledAt,
+      resumeAttempts: opts.resumeAttempts,
+      lastResumeAt: opts.lastResumeAt,
+    },
     onAskUser: opts.onAskUser,
   });
 }
@@ -176,6 +186,9 @@ async function spawnHostRun(opts: HostedRunOpts): Promise<HostHandle> {
     user: opts.user,
     fallbackModel: opts.fallbackModel,
     journalKind: opts.journalKind,
+    firstJournaledAt: opts.firstJournaledAt,
+    resumeAttempts: opts.resumeAttempts,
+    lastResumeAt: opts.lastResumeAt,
   };
   writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec);
   if (rpcToken) registerRunToken(rpcToken, { sessionId: opts.osSessionId, user: opts.user });
@@ -730,7 +743,7 @@ export class HostHandle {
       images: undefined,
       forkSession: undefined,
       resumeSessionAt: undefined,
-      journalKind: `${this.spec.journalKind || "prompt"}-resume`,
+      journalKind: recoveryKind(this.spec.journalKind, "resume"),
     };
     if (this.launcher.writeSpec) {
       await this.launcher.writeSpec(dir, spec);

@@ -893,11 +893,12 @@ export function removeAccount(id: string): boolean {
  * concurrent runs between polls would all pile onto one account.) Returns
  * undefined when nothing eligible is configured or all of it is sidelined.
  */
-export function pickAccount(
+function selectAccount(
   exclude?: Set<string>,
   user?: string,
   model?: ClaudeModelRequirement,
-  allowExtraUsage?: boolean
+  allowExtraUsage?: boolean,
+  recordPick = true,
 ): ClaudeAccount | undefined {
   const eligible = readStore().filter(
     (a) => !exclude?.has(a.id) && isAccountUsableFor(a, model, allowExtraUsage)
@@ -917,8 +918,28 @@ export function pickAccount(
     ? best(eligible.filter((a) => a.owner && userMatchesAny(user, [a.owner])))
     : undefined;
   const picked = personal ?? best(eligible.filter((a) => !a.owner));
-  if (picked) lastPickedAt.set(picked.id, Date.now());
+  if (picked && recordPick) lastPickedAt.set(picked.id, Date.now());
   return picked;
+}
+
+export function pickAccount(
+  exclude?: Set<string>,
+  user?: string,
+  model?: ClaudeModelRequirement,
+  allowExtraUsage?: boolean,
+): ClaudeAccount | undefined {
+  return selectAccount(exclude, user, model, allowExtraUsage, true);
+}
+
+/** Non-mutating availability probe for dispatch circuit breakers. It uses the
+ * exact picker eligibility rules without consuming the round-robin turn. */
+export function peekAccount(
+  exclude?: Set<string>,
+  user?: string,
+  model?: ClaudeModelRequirement,
+  allowExtraUsage?: boolean,
+): ClaudeAccount | undefined {
+  return selectAccount(exclude, user, model, allowExtraUsage, false);
 }
 
 /**

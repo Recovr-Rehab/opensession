@@ -99,6 +99,10 @@ export interface RunHostSpec {
   /** Allow accounts spending usage-credits past their subscription limits. */
   usageCredits?: boolean;
   journalKind?: string;
+  /** Durable restart-recovery lineage (see server/run-journal.ts). */
+  firstJournaledAt?: string;
+  resumeAttempts?: number;
+  lastResumeAt?: string;
   /** Trust boundary selected by the caller. Automation hosts receive only
    *  their pinned model credential and explicitly proxied MCP servers. */
   trustProfile?: "interactive" | "automation";

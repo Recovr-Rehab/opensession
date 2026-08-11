@@ -435,7 +435,13 @@ try {
     accountId: spec.accountId,
     accountStrict: spec.accountStrict,
     usageCredits: spec.usageCredits,
-    journal: { osSessionId: spec.osSessionId, kind: spec.journalKind || "prompt" },
+    journal: {
+      osSessionId: spec.osSessionId,
+      kind: spec.journalKind || "prompt",
+      firstJournaledAt: spec.firstJournaledAt,
+      resumeAttempts: spec.resumeAttempts,
+      lastResumeAt: spec.lastResumeAt,
+    },
     onAskUser,
   })) {
     if (event.type === "init" && event.sessionId) {

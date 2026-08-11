@@ -73,6 +73,13 @@ export interface ActiveRunRecord {
   /** Credential/network boundary for a sandbox run, preserved on relaunch. */
   trustProfile?: "interactive" | "automation";
   kind?: string;
+  /** First time this logical run entered the journal. Unlike startedAt, this
+   * survives fallback/recovery re-journals and makes real age enforceable. */
+  firstJournaledAt?: string;
+  /** Number of boot recovery attempts already started for this logical run. */
+  resumeAttempts?: number;
+  /** Time the most recent boot recovery attempt started. */
+  lastResumeAt?: string;
   startedAt: string;
   /** Stamped when a boot sweep hands the record to resumeInterruptedRuns. The
    *  record stays journaled until its resume outcome re-registers (journalSet)
@@ -118,11 +125,19 @@ export function buildRunJournalRecord(
     selectedModel?: string;
     transientFallback?: boolean;
     fallbackModel?: string;
+    journal?: {
+      firstJournaledAt?: string;
+      resumeAttempts?: number;
+      lastResumeAt?: string;
+    };
   },
   site: Omit<
     ActiveRunRecord,
     | "startedAt"
     | "claimedAt"
+    | "firstJournaledAt"
+    | "resumeAttempts"
+    | "lastResumeAt"
     | "deniedTools"
     | "aws"
     | "claudeCliEnv"
@@ -132,6 +147,7 @@ export function buildRunJournalRecord(
     | "fallbackModel"
   >,
 ): ActiveRunRecord {
+  const startedAt = new Date().toISOString();
   return {
     ...site,
     deniedTools: opts.deniedTools,
@@ -141,14 +157,26 @@ export function buildRunJournalRecord(
     selectedModel: opts.selectedModel,
     transientFallback: opts.transientFallback,
     fallbackModel: opts.fallbackModel,
-    startedAt: new Date().toISOString(),
+    // Leave a fresh lineage unset here: journalSet fills it from an existing
+    // record with the same runKey, or from startedAt for a genuinely new run.
+    firstJournaledAt: opts.journal?.firstJournaledAt,
+    resumeAttempts: opts.journal?.resumeAttempts,
+    lastResumeAt: opts.journal?.lastResumeAt,
+    startedAt,
   };
 }
 
 export function journalSet(record: ActiveRunRecord): void {
   const journal = readRunJournal();
-  const rejournal = record.runKey in journal;
-  journal[record.runKey] = record;
+  const prior = journal[record.runKey];
+  const rejournal = !!prior;
+  journal[record.runKey] = {
+    ...record,
+    firstJournaledAt:
+      record.firstJournaledAt || prior?.firstJournaledAt || prior?.startedAt || record.startedAt,
+    resumeAttempts: record.resumeAttempts ?? prior?.resumeAttempts,
+    lastResumeAt: record.lastResumeAt ?? prior?.lastResumeAt,
+  };
   writeRunJournal(journal);
   // A fallback hop re-journals the same runKey mid-run — that's the running
   // self-edge, not a new registration, so keep the event but tag it.
@@ -160,28 +188,82 @@ export function journalSet(record: ActiveRunRecord): void {
     });
 }
 
+export type RunQuarantineReason =
+  | "duplicate_session"
+  | "recursive_recovery_kind"
+  | "resume_attempts_exhausted"
+  | "recovery_expired"
+  | "boot_recovery_limit";
+
+export interface QuarantinedRun {
+  run: ActiveRunRecord;
+  reason: RunQuarantineReason;
+  notify: boolean;
+}
+
+/** Move rejected recovery records out of the live journal in one atomic pair
+ * of writes. They remain inspectable beside active-runs.json instead of being
+ * silently deleted; `notify` is consumed by agent-runner to settle the owning
+ * session visibly when no newer duplicate will continue it. */
+export function journalQuarantine(entries: QuarantinedRun[]): void {
+  if (!entries.length) return;
+  const journal = readRunJournal();
+  const quarantinePath = ACTIVE_RUNS_PATH.replace(/\.json$/, "") + ".quarantine.json";
+  let quarantine: Record<string, ActiveRunRecord & {
+    quarantinedAt: string;
+    quarantineReason: RunQuarantineReason;
+  }> = {};
+  try {
+    if (existsSync(quarantinePath)) {
+      quarantine = JSON.parse(readFileSync(quarantinePath, "utf-8"));
+    }
+  } catch {}
+  const quarantinedAt = new Date().toISOString();
+  let changed = false;
+  for (const [index, entry] of entries.entries()) {
+    if (journal[entry.run.runKey]) {
+      delete journal[entry.run.runKey];
+      changed = true;
+    }
+    quarantine[`${quarantinedAt}:${index}:${entry.run.runKey}`] = {
+      ...entry.run,
+      quarantinedAt,
+      quarantineReason: entry.reason,
+    };
+  }
+  if (!changed) return;
+  writeJsonAtomic(quarantinePath, quarantine);
+  writeRunJournal(journal);
+}
+
+/** Persist the recovery lineage immediately before a queued recovery task
+ * actually starts. A process death after this point consumes one attempt; a
+ * death while the task was merely waiting in the concurrency queue does not. */
+export function journalStartRecovery(record: ActiveRunRecord): ActiveRunRecord {
+  const journal = readRunJournal();
+  const current = journal[record.runKey] || record;
+  const now = new Date().toISOString();
+  const prepared: ActiveRunRecord = {
+    ...current,
+    ...record,
+    firstJournaledAt:
+      record.firstJournaledAt || current.firstJournaledAt || current.startedAt || record.startedAt,
+    resumeAttempts: Math.max(record.resumeAttempts ?? 0, current.resumeAttempts ?? 0) + 1,
+    lastResumeAt: now,
+    claimedAt: current.claimedAt,
+  };
+  journal[record.runKey] = prepared;
+  writeRunJournal(journal);
+  const { claimedAt: _claimed, ...returned } = prepared;
+  return returned;
+}
+
 export function journalClear(runKey: string): void {
   const journal = readRunJournal();
   if (runKey in journal) {
     delete journal[runKey];
     writeRunJournal(journal);
   }
-}
-
-/** Remove many recovery records with one read/atomic write. Boot sanitization
- * can reject hundreds of corrupt duplicates; clearing one-by-one would rewrite
- * a multi-megabyte journal hundreds of times and recreate the startup stall. */
-export function journalClearMany(runKeys: Iterable<string>): void {
-  const keys = new Set(runKeys);
-  if (keys.size === 0) return;
-  const journal = readRunJournal();
-  let changed = false;
-  for (const key of keys) {
-    if (!(key in journal)) continue;
-    delete journal[key];
-    changed = true;
-  }
-  if (changed) writeRunJournal(journal);
 }
 
 /** Snapshot of the runs currently journaled as in-flight (does not clear). */
