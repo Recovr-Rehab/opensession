@@ -56,6 +56,9 @@ export type ModalContentProps = Omit<
 	/** Element to focus when the dialog opens (Base UI otherwise focuses the
 	 *  first tabbable). Pass the ref of the field you want the caret in. */
 	initialFocus?: React.RefObject<HTMLElement | null>;
+	/** Element to focus when the dialog closes. Pass `false` when closing the
+	 *  dialog also replaces the surface that opened it. */
+	finalFocus?: React.ComponentProps<typeof BaseDialog.Popup>["finalFocus"];
 	variant?: ModalVariant;
 };
 

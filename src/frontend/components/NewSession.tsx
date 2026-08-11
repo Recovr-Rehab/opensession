@@ -522,6 +522,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // arrive before a `creating`-gated effect would have registered this handler
   // — the palette would miss it (stuck on "creating", draft never cleared).
   const creatingRef = useRef(false);
+  // A successful create replaces the surface behind this dialog. Returning
+  // focus to the now-removed opener makes Base UI advance to the new session's
+  // "+" button, so Enter immediately creates another session. Cancelling still
+  // restores focus normally.
+  const createdRef = useRef(false);
   useEffect(() => {
     return addHandler((msg) => {
       if (!creatingRef.current) return;
@@ -548,6 +553,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         } else {
           // Close the palette; App's global session_created handler drops us
           // into the newly created session behind it.
+          createdRef.current = true;
           onBack();
         }
       }
@@ -708,6 +714,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         // The prompt, not the repo picker Base UI would otherwise land on as the
         // first tabbable.
         initialFocus={promptRef}
+        finalFocus={() => !createdRef.current}
       >
         {/* Header: repo (left) · create-from (right). The repo picker is
             always visible — on phones the create-from picker hides until the
