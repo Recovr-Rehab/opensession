@@ -106,8 +106,15 @@
 	--top-divider: color-mix(in srgb, var(--border) 68%, transparent);
 	/* Top scroll-edge wash: content dissolves into the fixed session header.
 	   The composer owns its much shorter overlap gradient directly; keeping the
-	   two separate lets rows scroll under the input without a blank band. */
-	--wash-depth: 24px;
+	   two separate lets rows scroll under the input without a blank band.
+
+	   Only the transcript with no tab strip above it takes this, and that is
+	   the tall header — it already leaves plenty of clear space, so the wash
+	   doesn't reach as far down as it used to. At 24px it swallowed the whole
+	   clipped line and read as a blank band under the bar; ending higher keeps
+	   that line legible, which is what makes it read as content passing
+	   beneath the header rather than as padding. */
+	--wash-depth: 16px;
 	--wash-up: linear-gradient(
 		to top,
 		transparent 0,
