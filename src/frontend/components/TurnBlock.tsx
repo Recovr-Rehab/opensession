@@ -153,7 +153,7 @@ export const TurnBlock = React.memo(function TurnBlock({
       >
         <span
           className={cn(
-            "grid size-5 flex-shrink-0 self-center place-items-center leading-none text-faint transition-transform duration-150",
+            "grid size-5 -translate-x-2.5 flex-shrink-0 self-center place-items-center leading-none text-faint transition-transform duration-150",
             !expanded && "-rotate-90"
           )}
         >
