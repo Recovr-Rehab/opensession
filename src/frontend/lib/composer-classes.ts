@@ -197,9 +197,13 @@ export const composerQueueTitle = "text-[12px] font-semibold text-faint";
 export const composerQueueList = "flex flex-col gap-2";
 /** One queued/steered row. The floor is one line of body text, so a row whose
  *  point is a single message does not inherit the 40px action cluster's
- *  height. */
+ *  height. Centered rather than top-aligned: the body is a single truncated
+ *  line, so the tallest thing in the row is whatever attachment preview it
+ *  carries — top alignment left a 34px thumbnail hanging 9px below the text
+ *  and the actions. Nothing here ever wraps, so there is no first-line to
+ *  align to. */
 export const composerQueueItem =
-	"relative flex min-h-[calc(13px*1.45)] items-start gap-2";
+	"relative flex min-h-[calc(13px*1.45)] items-center gap-2";
 /** The hairline between rows. The stylesheet drew it with
  *  `.composer-queue-item + .composer-queue-item`, which a utility cannot
  *  spell against itself — so each list applies it from its own index. The
@@ -243,8 +247,11 @@ export const composerQueuePillGithub = "border-line bg-raised text-dim";
 /** Optimistic busy send: in the flap since the send, awaiting the server
  *  echo. */
 export const composerQueuePillSending = "border-line bg-raised text-faint";
-export const composerQueueContent = "flex min-w-0 flex-1 items-start gap-2";
-export const composerQueueImage = "relative mt-px h-[34px] w-[46px] flex-none";
+export const composerQueueContent = "flex min-w-0 flex-1 items-center gap-2";
+/** The thumbnail keeps its size — shrunk to the 19px line box it stops being a
+ *  recognizable preview, and the `+N` badge below is nearly as tall as the
+ *  image it counts. The row centers on it instead. */
+export const composerQueueImage = "relative h-[34px] w-[46px] flex-none";
 export const composerQueueImageThumb =
 	"block size-full rounded-[calc(8px*var(--rf))] border border-line object-cover";
 export const composerQueueImageCount =
