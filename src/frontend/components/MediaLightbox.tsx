@@ -748,9 +748,9 @@ function ZoomableImage({
 	);
 }
 
-// Past this many, dots stop being countable at a glance and start being a
-// smear of identical targets — the plain counter reads better.
-const MAX_DOTS = 10;
+// Apple's page control keeps a small moving window for long galleries instead
+// of dropping the dots entirely. Edge dots shrink to hint that more lie beyond.
+const MAX_VISIBLE_DOTS = 7;
 
 // Download / Open: quiet pills in the top action cluster, matching the asset
 // preview's separation between actions above and descriptions below.
@@ -774,6 +774,14 @@ function MediaLightbox({
 }) {
 	const item = items[index];
 	const many = items.length > 1;
+	const dotStart = Math.min(
+		Math.max(0, index - Math.floor(MAX_VISIBLE_DOTS / 2)),
+		Math.max(0, items.length - MAX_VISIBLE_DOTS),
+	);
+	const dotIndexes = Array.from(
+		{ length: Math.min(items.length, MAX_VISIBLE_DOTS) },
+		(_, offset) => dotStart + offset,
+	);
 	const [imageZoomed, setImageZoomed] = useState(false);
 	// Which way the last page turn went, so the arriving item slides in from
 	// the side it came from — set by the arrows and the keyboard too, not just
@@ -1019,23 +1027,27 @@ function MediaLightbox({
 					</div>
 				)}
 				<div className="flex items-center gap-1.5">
-					{many && items.length <= MAX_DOTS && (
+					{many && (
 						// Dots provide direct jumps; the counter beside them gives the
 						// exact position without making the reader count circles.
 						<div className="flex items-center">
-							{items.map((it, i) => (
+							{dotIndexes.map((dot, position) => (
 								<button
-									key={`${i}-${it.src}`}
+									key={`${dot}-${items[dot].src}`}
 									type="button"
-									onClick={() => go(i)}
-									aria-label={`Show ${i + 1} of ${items.length}`}
-									aria-current={i === index ? "true" : undefined}
+									onClick={() => go(dot)}
+									aria-label={`Show ${dot + 1} of ${items.length}`}
+									aria-current={dot === index ? "true" : undefined}
 									className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
 								>
 									<span
 										className={cn(
-											"block size-1.5 rounded-full transition-colors",
-											i === index
+											"block size-1.5 rounded-full transition-[scale,background-color]",
+											((position === 0 && dotStart > 0) ||
+												(position === dotIndexes.length - 1 &&
+													dotStart + dotIndexes.length < items.length)) &&
+												"scale-[0.67]",
+											dot === index
 												? "bg-white"
 												: "bg-white/30 group-hover:bg-white/60",
 										)}
