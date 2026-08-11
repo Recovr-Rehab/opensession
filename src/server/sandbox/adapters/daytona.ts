@@ -679,7 +679,11 @@ export async function qualifyDaytonaConnection(): Promise<void> {
       "test \"$(cat /tmp/opensession-qualification)\" = opensession-qualified",
     );
     if (lifecycle.exitCode !== 0) throw new Error("Daytona stop/start lost filesystem state");
-    await source._experimental_createSnapshot(snapshotName, 300);
+    // Even a nearly-empty Daytona sandbox can take 8–10 minutes to seal when
+    // the provider is busy. Keep this aligned with repository templates: a
+    // shorter client wait reports a false SNAPSHOT_FAILED while Daytona keeps
+    // snapshotting successfully in the background.
+    await source._experimental_createSnapshot(snapshotName, 900);
     restored = await client.create(
       {
         snapshot: snapshotName,
