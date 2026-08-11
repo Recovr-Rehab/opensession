@@ -337,8 +337,40 @@ function prMentionLink(repo: string, number: string, label: string): string {
     ` data-pr-number="${attr(number)}"` +
     (ghRepo ? ` data-pr-gh="${attr(ghRepo)}"` : "") +
     ` title="${attr(`Open the review for ${repoLabel(repo)} #${number}`)}">` +
-    `${attr(label)}</a>`
+    `<span class="pr-ref-icon" aria-hidden="true">` +
+    `<svg viewBox="0 0 24 24" fill="none">` +
+    `<circle cx="7" cy="6.5" r="1.75"/><circle cx="7" cy="17.5" r="1.75"/>` +
+    `<circle cx="17" cy="17.5" r="1.75"/><path d="M7 8.25V15.75"/>` +
+    `<path d="M12.25 6.5H15C16.1046 6.5 17 7.39543 17 8.5V15.75"/>` +
+    `</svg></span><span class="pr-ref-label">${attr(label)}</span></a>`
   );
+}
+
+/** A GitHub PR page that belongs to a repo this instance serves. */
+function githubPrTarget(
+  href: string | null | undefined,
+): { repo: string; number: string } | null {
+  if (!href) return null;
+  let url: URL;
+  try {
+    url = new URL(String(href));
+  } catch {
+    return null;
+  }
+  if (
+    !["github.com", "www.github.com"].includes(url.hostname.toLowerCase()) ||
+    url.search ||
+    url.hash
+  )
+    return null;
+  const match = /^\/([^/]+)\/([^/]+)\/pull\/(\d{1,5})\/?$/.exec(url.pathname);
+  if (!match) return null;
+  const githubRepo = `${match[1]}/${match[2]}`.toLowerCase();
+  for (const [repo, configuredGithubRepo] of knownRepos) {
+    if (configuredGithubRepo?.toLowerCase() === githubRepo)
+      return { repo, number: match[3] };
+  }
+  return null;
 }
 
 // Links into OS1 itself must not open a new window — it's the same app. Known
@@ -449,6 +481,13 @@ md.use({
       // silently tears apart. The explicit link wins: inside it, chips degrade
       // back to the text they were written as.
       flattenChips(token.tokens);
+      const githubPr = githubPrTarget(token.href);
+      if (githubPr) {
+        const label = isBareUrlLink(token)
+          ? `PR #${githubPr.number}`
+          : String(token.text || `PR #${githubPr.number}`);
+        return prMentionLink(githubPr.repo, githubPr.number, label);
+      }
       const text = this.parser.parseInline(token.tokens);
       // A link to one of this session's scratch files is an asset, however it
       // was written: same chip, same overlay, so the two forms are one thing.

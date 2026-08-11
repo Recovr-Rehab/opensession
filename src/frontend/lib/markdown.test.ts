@@ -327,7 +327,8 @@ describe("renderMarkdown PR mentions", () => {
     expect(html).toContain('href="/pr/tella-fusion/5528"');
     expect(html).toContain('data-pr-repo="tella-fusion"');
     expect(html).toContain('data-pr-number="5528"');
-    expect(html).toContain(">#5528</a>");
+    expect(html).toContain('class="pr-ref-icon" aria-hidden="true"');
+    expect(html).toContain('<span class="pr-ref-label">#5528</span>');
   });
 
   it("carries the GitHub name for the cmd-click escape, when known", () => {
@@ -356,7 +357,9 @@ describe("renderMarkdown PR mentions", () => {
     ]);
     const qualified = renderMarkdown("See opensession#128 and #5528.", fusion);
     expect(qualified).toContain('href="/pr/opensession/128"');
-    expect(qualified).toContain(">opensession#128</a>");
+    expect(qualified).toContain(
+      '<span class="pr-ref-label">opensession#128</span>',
+    );
     // the bare one still belongs to the rendering repo
     expect(qualified).toContain('href="/pr/tella-fusion/5528"');
     // owner/repo is the same repo, addressed the GitHub way
@@ -397,6 +400,7 @@ describe("renderMarkdown PR mentions", () => {
   });
 
   it("leaves a URL fragment alone", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
     const html = renderMarkdown(
       "https://github.com/tellahq/tella-fusion/pull/5528#issuecomment-12345",
       fusion,
@@ -404,16 +408,35 @@ describe("renderMarkdown PR mentions", () => {
     expect(html).not.toContain("pr-ref");
   });
 
-  it("keeps a mention inside a link's text as text (no nested anchor)", () => {
+  it("turns an explicit GitHub PR link into the same in-app chip", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
     const html = renderMarkdown(
       "[PR #5528](https://github.com/tellahq/tella-fusion/pull/5528)",
       fusion,
     );
-    expect(html).toContain(
-      '<a href="https://github.com/tellahq/tella-fusion/pull/5528"',
+    expect(html).toContain('class="pr-ref"');
+    expect(html).toContain('href="/pr/tella-fusion/5528"');
+    expect(html).toContain('data-pr-gh="tellahq/tella-fusion"');
+    expect(html).toContain('<span class="pr-ref-label">PR #5528</span>');
+  });
+
+  it("labels a pasted GitHub PR URL without showing the whole URL", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    const url = "https://github.com/tellahq/tella-fusion/pull/5528";
+    const html = renderMarkdown(`Open ${url}.`, fusion);
+    expect(html).toContain('href="/pr/tella-fusion/5528"');
+    expect(html).toContain('<span class="pr-ref-label">PR #5528</span>');
+    expect(html).not.toContain(`>${url}</a>`);
+  });
+
+  it("keeps links to unregistered GitHub PRs external", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    const html = renderMarkdown(
+      "[upstream PR](https://github.com/vercel/next.js/pull/1234)",
+      fusion,
     );
-    expect(html).toContain(">PR #5528</a>");
     expect(html).not.toContain("pr-ref");
+    expect(html).toContain('target="_blank"');
   });
 
   it("renders the same source differently per repo (cache is repo-keyed)", () => {
