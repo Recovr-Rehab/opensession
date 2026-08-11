@@ -43,9 +43,6 @@ import {
 	PR_HEAD_PROMPTED,
 	PR_SIB_DOT,
 	PR_SIB_DOT_BG,
-	PR_SECTION_BG,
-	PR_SECTION_ROW,
-	PR_SECTION_STACK,
 	PR_STATE_TEXT,
 } from "../lib/pr-tone-classes";
 import { Tooltip } from "../ui/tooltip";
@@ -215,9 +212,8 @@ interface Props {
 	onOpenChecksTab?: () => void;
 	/** Archive via the owning viewer so it can select the neighboring sidebar row. */
 	onArchive?: () => void;
-	/** "header" renders just the PR chip + primary action while the panel is
-	 * closed. "section" renders the same status inside the Info panel. */
-	variant?: "bar" | "header" | "section";
+	/** "header" renders just the PR chip + primary action while the panel is closed. */
+	variant?: "bar" | "header";
 	/** Optional element rendered inside the strip, left of the PR chip (bar
 	    variant only) so it shares the strip's tone background — e.g. the globe
 	    staging-deploy icon in the Workspace panel. */
@@ -665,23 +661,13 @@ export function PrStatusBar({
 	if (!loaded && variant !== "header") {
 		const checking = (
 			<div
-				className={
-					variant === "section"
-						? `${PR_SECTION_ROW} ${PR_SECTION_BG.muted}`
-						: `pr-bar ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`
-				}
+				className={`pr-bar ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}
 			>
 				{leading}
 				<span className={`pr-bar-checking ${PR_BAR_CHECKING}`}>Checking status…</span>
 			</div>
 		);
-		return (
-			variant === "section" ? (
-				<div className={PR_SECTION_STACK}>{checking}</div>
-			) : (
-				checking
-			)
-		);
+		return checking;
 	}
 	if (
 		!loaded ||
@@ -938,11 +924,7 @@ export function PrStatusBar({
 	// push, pull and merge. Its other PRs stack underneath, one row each.
 	const primaryRow = (
 		<div
-			className={
-				variant === "section"
-					? `${PR_SECTION_ROW} ${PR_SECTION_BG[headlineTone]}`
-					: `pr-bar ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`
-			}
+			className={`pr-bar ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}
 		>
 			{leading}
 			{pr && (
@@ -976,7 +958,7 @@ export function PrStatusBar({
 						</button>
 					}
 				/>
-			) : (headline.key !== "no-pr" || siblings.length > 0) && (
+			) : (headline.key !== "no-pr" || statusRows.length > 0) && (
 				<Tooltip label="Open the PR tab">
 					<button
 						className={`${PR_BAR_STATE} ${PR_STATE_TEXT[headlineTone]}`}
@@ -991,24 +973,12 @@ export function PrStatusBar({
 			{renderAction()}
 		</div>
 	);
-	if (variant === "section") {
-		return (
-			<div className={PR_SECTION_STACK}>
-				{primaryRow}
-				<PrSeriesRows
-					refs={statusRows}
-					primaryRepo={primaryRepoId}
-					onOpen={onOpenPrTab}
-				/>
-			</div>
-		);
-	}
-	if (siblings.length === 0) return primaryRow;
+	if (statusRows.length === 0) return primaryRow;
 	return (
 		<div className={PR_BAR_STACK}>
 			{primaryRow}
 			<PrSeriesRows
-				refs={siblings}
+				refs={statusRows}
 				primaryRepo={primaryRepoId}
 				onOpen={onOpenPrTab}
 			/>

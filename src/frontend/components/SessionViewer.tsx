@@ -245,6 +245,7 @@ import {
 	INFO_OVERVIEW,
 	INFO_PAGE,
 	INFO_SECTION,
+	INFO_STATUS,
 	INFO_SUB,
 	infoTopbarClass,
 	infoTopbarTitleClass,
@@ -3900,36 +3901,6 @@ export function SessionViewer({
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [focused, session.prUrl, session.prs, session.previewPath, staging]);
 
-	const renderInfoPrStatus = (closeInfoPage: boolean) =>
-		hasWorkspace ? (
-			<PrStatusBar
-				sessionId={session.id}
-				repo={session.repo || undefined}
-				archived={session.archived}
-				prs={session.prs}
-				send={connected ? send : undefined}
-				onOpenPrTab={(ref) => {
-					if (closeInfoPage) setInfoPageOpen(false);
-					focusPrInReview(ref);
-				}}
-				onOpenChecksTab={() => {
-					if (closeInfoPage) setInfoPageOpen(false);
-					focusPrInReview(undefined, "checks");
-				}}
-				onArchive={handleArchive}
-				variant="section"
-				running={isRunningLive}
-				refreshTick={gitRefreshTick}
-				leading={
-					<StagingLink
-						session={session}
-						variant="header"
-						refreshTick={gitRefreshTick}
-					/>
-				}
-			/>
-		) : null;
-
 	return (
 		<div className="relative flex h-full min-h-0 flex-col">
 			{localMode && session.local && (
@@ -4620,6 +4591,35 @@ export function SessionViewer({
 										.join("  ·  ")}
 									</div>
 								</div>
+								{hasWorkspace && (
+									<div className={INFO_STATUS}>
+										<PrStatusBar
+											sessionId={session.id}
+											repo={session.repo || undefined}
+											archived={session.archived}
+											prs={session.prs}
+											send={connected ? send : undefined}
+											onOpenPrTab={(ref) => {
+												setInfoPageOpen(false);
+												focusPrInReview(ref);
+											}}
+											onOpenChecksTab={() => {
+												setInfoPageOpen(false);
+												focusPrInReview(undefined, "checks");
+											}}
+											onArchive={handleArchive}
+											running={isRunningLive}
+											refreshTick={gitRefreshTick}
+											leading={
+												<StagingLink
+													session={session}
+													variant="header"
+													refreshTick={gitRefreshTick}
+												/>
+											}
+										/>
+									</div>
+								)}
 								<div className={INFO_CONTENT}>
 									<div className={INFO_LIST}>
 										{hasWorkspace && (
@@ -4655,7 +4655,6 @@ export function SessionViewer({
 												}),
 											)}
 											repo={hasWorkspace ? session.repo || "repository" : undefined}
-											prStatus={renderInfoPrStatus(true)}
 											prState={hasWorkspace ? session.prState : undefined}
 											refreshTick={gitRefreshTick}
 											sandbox={session.sandbox}
@@ -5521,6 +5520,29 @@ export function SessionViewer({
 									<StagingLink session={session} refreshTick={gitRefreshTick} />
 								</div>
 							</div>
+							)}
+						{hasWorkspace && (
+							<PrStatusBar
+								sessionId={session.id}
+								repo={session.repo || undefined}
+								archived={session.archived}
+								prs={session.prs}
+								send={connected ? send : undefined}
+								onOpenPrTab={focusPrInReview}
+								onOpenChecksTab={() => focusPrInReview(undefined, "checks")}
+								onArchive={handleArchive}
+								running={isRunningLive}
+								refreshTick={gitRefreshTick}
+								leading={
+									!isPhone ? (
+										<StagingLink
+											session={session}
+											variant="header"
+											refreshTick={gitRefreshTick}
+										/>
+									) : undefined
+								}
+							/>
 						)}
 						<div className={PANEL_TABS}>
 							<button
@@ -5605,7 +5627,6 @@ export function SessionViewer({
 										repo={
 											hasWorkspace ? session.repo || "repository" : undefined
 										}
-										prStatus={renderInfoPrStatus(false)}
 										prState={hasWorkspace ? session.prState : undefined}
 										refreshTick={gitRefreshTick}
 										sandbox={session.sandbox}

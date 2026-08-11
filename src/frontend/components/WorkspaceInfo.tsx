@@ -1,7 +1,7 @@
 import { AGENT_NAME, GITHUB_BOT_NAME } from "../lib/brand";
 import { BASE_PATH } from "../lib/base";
 import { commitPrompt } from "../lib/commit-prompt";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
@@ -105,8 +105,6 @@ interface Props {
 	sessions: Array<OverviewSessionRef & { startedBy?: string | null }>;
 	/** Primary repo the workspace's sessions work in. */
 	repo?: string;
-	/** The shared PR status component, moved into Info as its first section. */
-	prStatus?: ReactNode;
 	/** PR lane state, when the session has a PR — gates the PR fetch. */
 	prState?: string | null;
 	/** Bumped when a GitHub webhook reports activity for this workspace's PR. */
@@ -1188,7 +1186,6 @@ export function WorkspaceInfo({
 	workspaceName,
 	sessions,
 	repo,
-	prStatus,
 	prState,
 	refreshTick,
 	sandbox,
@@ -1419,12 +1416,6 @@ export function WorkspaceInfo({
 					</div>
 				)}
 			</div>
-			{prStatus && (
-				<div className={INFO_SECTION_CLASS}>
-					<div className={INFO_LABEL_CLASS}>Pull requests</div>
-					{prStatus}
-				</div>
-			)}
 			{pr?.number && (
 				<AgentReviewCard
 					sessionId={sessionId}
