@@ -3213,7 +3213,7 @@ export function SessionViewer({
 	// read as "my message didn't go through" (three times, 2026-07-19).
 	const queuedOnlyCount = queued.length + pendingQueue.length;
 	const queueTitle = waitingForWorkspace
-		? `Waiting for workspace · ${queueCount} queued`
+		? `Setting up your workspace · ${queueCount} queued`
 		: queuedOnlyCount === 0
 			? `${visibleSteered.length} steered into the current turn`
 			: visibleSteered.length === 0
@@ -5073,8 +5073,8 @@ export function SessionViewer({
 								<WorkspaceWaiting
 									detail={
 										session.branch
-											? `Creating a worktree for ${session.branch} — queued messages send when it's ready.`
-											: "Creating the worktree — queued messages send when it's ready."
+											? `Creating a worktree for ${session.branch}. Your messages send when it's ready.`
+											: "Creating the worktree. Your messages send when it's ready."
 									}
 								/>
 							) : entries.length === 0 && !session.transcriptPath ? (
@@ -5682,7 +5682,7 @@ export function SessionViewer({
 							  (panelTab === "changes" || panelTab === "shell") ? (
 								// These tabs all read the worktree — hold them behind the
 								// waiting state until the create run finishes preparing it.
-								<WorkspaceWaiting detail="Waiting for the workspace to be ready." />
+								<WorkspaceWaiting detail="This takes a moment." />
 							) : panelTab === "changes" ? (
 								<DiffPanel
 									sessionId={session.id}
@@ -5740,7 +5740,7 @@ function WorkspaceWaiting({ detail }: { detail: string }) {
 		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
 			<PixelSpinner className="mb-2 text-dim" />
 			<div className="text-[14px] font-semibold text-fg">
-				Waiting for workspace
+				Setting up your workspace
 			</div>
 			<div className="max-w-[340px] text-[13px] font-medium leading-relaxed text-dim">
 				{detail}
