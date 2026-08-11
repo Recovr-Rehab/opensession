@@ -1018,7 +1018,7 @@ function MediaLightbox({
 						)}
 					</div>
 				)}
-				<div className="flex items-center gap-2 text-xs text-white/60">
+				<div className="flex items-center gap-1.5">
 					{many && items.length <= MAX_DOTS && (
 						// Dots provide direct jumps; the counter beside them gives the
 						// exact position without making the reader count circles.
@@ -1037,7 +1037,7 @@ function MediaLightbox({
 											"block size-1.5 rounded-full transition-colors",
 											i === index
 												? "bg-white"
-												: "bg-white/35 group-hover:bg-white/70",
+												: "bg-white/30 group-hover:bg-white/60",
 										)}
 									/>
 								</button>
@@ -1045,8 +1045,8 @@ function MediaLightbox({
 						</div>
 					)}
 					{many && (
-						<span className="tabular-nums">
-							{index + 1} / {items.length}
+						<span className="text-[11px] font-medium tabular-nums text-white/50">
+							{index + 1} of {items.length}
 						</span>
 					)}
 				</div>
