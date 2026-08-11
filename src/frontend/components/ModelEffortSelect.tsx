@@ -2,6 +2,7 @@ import React from "react";
 import type { ModelOption, ProviderAccountOption } from "../lib/api";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
+import { Switch } from "../ui/switch";
 import { Tooltip } from "../ui/tooltip";
 import { IconBolt, IconCheck, IconChevronRight } from "./icons";
 
@@ -480,22 +481,29 @@ export function ModelEffortSelect({
 				)}
 				{(hasEffort || hasAccount || hasFastMode) && <Menu.Separator className="my-1" />}
 				{hasFastMode && (
-					<Menu.Item
-						onClick={() => {
-							const next = !fastMode;
-							if (next && !currentAccount && subscriptionAccount) {
+					<Menu.CheckboxItem
+						checked={!!fastMode}
+						closeOnClick={false}
+						onCheckedChange={(checked) => {
+							if (checked && !currentAccount && subscriptionAccount) {
 								onAccountChange?.(subscriptionAccount.id);
 							}
-							onFastModeChange!(next);
+							onFastModeChange!(checked);
 						}}
-						className={cn("justify-between gap-3", fastMode && "bg-hover")}
+						className="justify-between gap-3"
 					>
 						<span className="flex min-w-0 items-center gap-2">
 							<IconBolt className="shrink-0 text-dim" size={20} />
 							<span className="truncate">Fast mode</span>
 						</span>
-						{fastMode && <IconCheck className="shrink-0 text-dim" size={17} />}
-					</Menu.Item>
+						<Switch
+							render={<span />}
+							checked={!!fastMode}
+							tabIndex={-1}
+							aria-hidden="true"
+							className="pointer-events-none"
+						/>
+					</Menu.CheckboxItem>
 				)}
 				{hasEffort && (
 					<Menu.SubmenuRoot>

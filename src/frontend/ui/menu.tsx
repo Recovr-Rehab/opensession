@@ -143,7 +143,7 @@ function CheckboxItem({
 }
 
 function Separator({ className }: { className?: string }) {
-	return <BaseMenu.Separator className={cn("my-1.5 h-px bg-line", className)} />;
+	return <BaseMenu.Separator className={cn("-mx-1.5 my-1.5 h-px bg-line", className)} />;
 }
 
 function GroupLabel({ className, ...props }: { className?: string; children?: React.ReactNode }) {
