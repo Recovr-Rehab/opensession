@@ -41,12 +41,15 @@ import { $ } from "bun";
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { codeStorageConfig, configuredRepos, type Repo } from "./config";
@@ -584,6 +587,64 @@ async function poolWriteFile(c: PoolContainer, path: string, content: string): P
   }
 }
 
+/** Gitignored files the app needs to boot, carried from the operator-owned
+ *  host checkout because git can't. */
+const SEED_ENV_FILES = ["packages/core/webapp/.env.local", ".envrc"];
+
+/** Host content for one seed file, with the dev-auth bypass stripped unless
+ *  this repo's previews deliberately keep it. Null when the host has no such
+ *  file. */
+function envSeedContent(repo: Repo, rel: string): string | null {
+  const src = join(repo.repo, rel);
+  if (!existsSync(src)) return null;
+  const content = readFileSync(src, "utf-8");
+  if (rel.endsWith(".env.local") && !previewPoolConfig(repo.id).devAuthBypass) {
+    return content.replace(/^DEV_AUTH_.*\n?/gm, "");
+  }
+  return content;
+}
+
+/** Re-seed env into a pool member about to (re)boot its dev server.
+ *
+ *  These files carry credentials that rotate, and the boot paths advance the
+ *  git tree but never them — so a container keeps whatever was current the day
+ *  its golden image was committed or its sandbox provisioned. A rotated Vercel
+ *  Flags key sat in the golden for weeks that way, and every preview's editor
+ *  answered 500 on /api/flags/collaboration until the image was rebuilt.
+ *
+ *  Warn rather than fail: a host file we can't read is no reason to refuse a
+ *  reboot, and the member still has its previous copy. */
+async function reseedEnv(c: PoolContainer): Promise<void> {
+  const repo = configuredRepos()[c.repoId];
+  if (!repo) return;
+  for (const rel of SEED_ENV_FILES) {
+    const content = envSeedContent(repo, rel);
+    if (content === null) continue;
+    if (!(await poolWriteFile(c, `${WORKSPACE}/${rel}`, content))) {
+      console.warn(`[preview-pool] ${c.repoId}: re-seeding ${rel} into ${c.name} failed`);
+    }
+  }
+}
+
+/** Same seeding for a docker container that hasn't started yet, where exec
+ *  isn't available — `docker cp` needs a path, so the (already gitignored)
+ *  content goes through a private temp file. */
+async function copySeedEnvFiles(name: string, repo: Repo): Promise<void> {
+  const staging = mkdtempSync(join(tmpdir(), "os-preview-seed-"));
+  try {
+    for (const rel of SEED_ENV_FILES) {
+      const content = envSeedContent(repo, rel);
+      if (content === null) continue;
+      const staged = join(staging, rel.replace(/\//g, "_"));
+      writeFileSync(staged, content, { mode: 0o600 });
+      const cp = await docker(["cp", staged, `${name}:${WORKSPACE}/${rel}`]);
+      if (!cp.ok) console.warn(`[preview-pool] ${repo.id}: seeding ${rel} into ${name} failed`);
+    }
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
 /** running/paused/gone in pool terms (daytona "stopped" maps to paused). */
 async function poolRuntimeStatus(c: PoolContainer): Promise<"running" | "paused" | "gone"> {
   if (isMicrovm(c)) {
@@ -666,6 +727,7 @@ async function poolUnfreeze(c: PoolContainer): Promise<boolean> {
 
 /** Reboot the dev tree for a clean module graph (big-delta claims). */
 async function poolRestartDev(c: PoolContainer): Promise<void> {
+  await reseedEnv(c);
   if (isMicrovm(c)) {
     await mvmAgent(c, {
       command: `pkill -TERM -f 'start.sh|dev-services|next dev|concurrently' 2>/dev/null; sleep 3; pkill -KILL -f 'next dev|rescript' 2>/dev/null; cd ${WORKSPACE} && : > /tmp/boot.log && (setpriv --reuid 1000 --regid 1000 --init-groups env HOME=${homeDir()} USER=ubuntu PATH=/usr/local/sbin:/usr/local/bin:/usr/local/bun/bin:/usr/sbin:/usr/bin:/sbin:/bin WEBAPP_PORT=${CONTAINER_PORT} OPENSESSION_BOOT_MODE=snapshot-restore bash .agents/start.sh < /dev/null > /tmp/boot.log 2>&1 &) && echo relaunched`,
@@ -686,6 +748,7 @@ async function poolRestartDev(c: PoolContainer): Promise<void> {
  *  when the exec ends (verified live: setsid-orphaned dev servers died a
  *  couple of minutes after passing the ready gate). */
 async function launchDaytonaDev(c: PoolContainer): Promise<void> {
+  await reseedEnv(c);
   const env = `WEBAPP_PORT=${CONTAINER_PORT} OPENSESSION_BOOT_MODE=snapshot-restore${c.previewUrl ? ` PREVIEW_URL=${c.previewUrl}` : ""}`;
   // stdin MUST be detached: next dev exits cleanly on stdin EOF (its
   // keyboard-shortcut listener), and the process session's pipe closing
@@ -1009,13 +1072,9 @@ async function spawnDaytonaWarm(repo: Repo): Promise<void> {
     );
     if (!clone.ok) return void (await fail(`clone: ${clone.out.slice(-400)}`));
 
-    for (const rel of ["packages/core/webapp/.env.local", ".envrc"]) {
-      const src = join(repo.repo, rel);
-      if (!existsSync(src)) continue;
-      let content = readFileSync(src, "utf-8");
-      if (rel.endsWith(".env.local") && !previewPoolConfig(repo.id).devAuthBypass) {
-        content = content.replace(/^DEV_AUTH_.*\n?/gm, "");
-      }
+    for (const rel of SEED_ENV_FILES) {
+      const content = envSeedContent(repo, rel);
+      if (content === null) continue;
       if (!(await poolWriteFile(c, `${WORKSPACE}/${rel}`, content))) {
         return void (await fail(`seed ${rel} failed`));
       }
@@ -1297,8 +1356,13 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
   const advance = cloneUrl
     ? `{ [ -f ${WORKSPACE}/${CLAIMED_MARKER} ] || (git fetch --depth 1 ${JSON.stringify(cloneUrl)} ${repo.defaultBranch} && git reset --hard FETCH_HEAD) || true; } && `
     : "";
-  const run = await docker([
-    "run", "-d", "--name", name,
+  // create + seed + start rather than `run`: the golden image carries the env
+  // files that were current when it was committed, and the boot command reads
+  // them immediately — copying them in after `run` would race the app's own
+  // startup. On a created-but-not-started container only `docker cp` works
+  // (poolWriteFile's docker path needs a running container to exec in).
+  const create = await docker([
+    "create", "--name", name,
     "--label", `${POOL_LABEL}=${repo.id}`,
     "-p", `127.0.0.1:${hostPort}:${CONTAINER_PORT}`,
     "--cpus", String(cfg.cpus), "--memory", cfg.memory,
@@ -1312,10 +1376,17 @@ async function spawnWarmContainer(repo: Repo): Promise<void> {
     "bash", "-c",
     `${BOOT_PREP} && ${advance}exec bash .agents/start.sh > /tmp/boot.log 2>&1`,
   ]);
-  if (!run.ok) {
+  if (!create.ok) {
     patchContainer(repo.id, name, null);
     // docker failure output can echo the command line, authed cloneUrl included.
-    return console.warn(`[preview-pool] ${repo.id}: warm spawn failed: ${redactUrl(run.out.slice(-300))}`);
+    return console.warn(`[preview-pool] ${repo.id}: warm spawn failed: ${redactUrl(create.out.slice(-300))}`);
+  }
+  await copySeedEnvFiles(name, repo);
+  const run = await docker(["start", name]);
+  if (!run.ok) {
+    await docker(["rm", "-f", name]);
+    patchContainer(repo.id, name, null);
+    return console.warn(`[preview-pool] ${repo.id}: warm start failed: ${redactUrl(run.out.slice(-300))}`);
   }
   await refreshContainerCreds(name);
   const up = await waitForUp(name, hostPort, 4 * 60_000);
