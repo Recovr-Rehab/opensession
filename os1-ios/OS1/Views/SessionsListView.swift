@@ -207,6 +207,14 @@ struct SessionsListView: View {
                 // hash, which is exactly where two repos can collide.
                 _ = try? await OS1API.repos()
             }
+            #if os(iOS)
+            .task {
+                while !Task.isCancelled {
+                    await supportQueue.load()
+                    try? await Task.sleep(for: .seconds(60))
+                }
+            }
+            #endif
             .onDisappear {
                 viewModel.stopPolling()
             }
@@ -1698,19 +1706,35 @@ struct SessionsListView: View {
                     Text("Plain")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(OS1VisualStyle.textDim)
+                    Text("\(supportQueue.threads.count)")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.textFaint)
                     Spacer()
+                    if urgentPlainTicketCount > 0 {
+                        Text("\(urgentPlainTicketCount)")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.red)
+                    }
                 }
                 .padding(.vertical, 11)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open Plain")
+            .accessibilityLabel(
+                urgentPlainTicketCount > 0
+                    ? "Open Plain, \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
+                    : "Open Plain, \(supportQueue.threads.count) tickets"
+            )
         }
         .listRowInsets(EdgeInsets(
             top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
         ))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
+    }
+
+    private var urgentPlainTicketCount: Int {
+        supportQueue.threads.lazy.filter { $0.lane == .urgent }.count
     }
     #endif
 

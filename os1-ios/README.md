@@ -210,7 +210,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
 - **Support** (`SupportView.swift`, `SupportViewModel.swift`) — the Plain
-  queue (iOS: a `Plain` project row below worktrees and above Archived;
+  queue (iOS: a `Plain` project row below worktrees and above Archived, with
+  total and red urgent counts refreshed every minute;
   macOS: the sidebar header). Two screens: the Todo queue in Plain's four
   priority lanes (`GET /api/plain/threads`), and one ticket's timeline
   (`GET /api/plain/threads/:id`) with the customer on the left, us on the
