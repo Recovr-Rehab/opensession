@@ -16,31 +16,19 @@ export function Switch({ className, ...props }: SwitchProps) {
 				// It is longer and flatter than the iOS switch (51×31), which
 				// is the shape difference you see against the native app.
 				"relative inline-flex h-6 w-[54px] shrink-0 cursor-pointer rounded-full bg-active outline-none",
-				// Checked is --blue, not the ink accent. On the Mac the on-state
-				// is the system accent colour, and that hue is what makes it
-				// read as ON at a glance; ink can't, because in dark mode the
-				// accent is near-white and a white knob on a white track has no
-				// internal contrast — the switch went bright but stopped
-				// looking flipped. This is the one place hue earns its keep in
-				// the monochrome chrome: it carries state, exactly like
-				// --blue-soft already does for "needs you".
-				"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-blue",
+				// The checked track is the selected app accent, matching native
+				// controls. Its knob takes --on-accent so Mono still has internal
+				// contrast when the accent becomes white in dark mode.
+				"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent",
 				"focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
 				"data-[disabled]:cursor-default data-[disabled]:opacity-40",
 				className,
 			)}
 			{...props}
 		>
-			{/* Two things the current Mac switch does that the old web one
-			    didn't. The knob is a 32×20 CAPSULE, not a circle — that wider
-			    shape is most of what reads as "the new toggle". And the knob
-			    stays light in every state and both appearances: macOS never
-			    inverts to a dark knob, it moves the state onto the TRACK. So
-			    this keeps a white knob on the checked accent track too, and
-			    separates it with the hairline + drop shadow the native control
-			    uses rather than by flipping to --on-accent, which in dark mode
-			    (where the accent is near-white) read as a negative image. */}
-			<BaseSwitch.Thumb className="absolute left-0.5 top-0.5 h-5 w-8 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-transform duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:translate-x-[18px]" />
+			{/* The knob is a 32×20 capsule, not a circle — that wider shape is
+			    most of what reads as the current macOS switch. */}
+			<BaseSwitch.Thumb className="absolute left-0.5 top-0.5 h-5 w-8 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[transform,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:translate-x-[18px] data-[checked]:bg-on-accent" />
 		</BaseSwitch.Root>
 	);
 }
