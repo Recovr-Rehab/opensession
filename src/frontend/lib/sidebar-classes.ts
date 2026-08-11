@@ -192,12 +192,11 @@ export const SIDEBAR_LANE_HEADER =
 export const SIDEBAR_GROUP_NAME = "min-w-0 truncate text-left";
 
 /**
- * A glyphless lane caption needs its own inset to sit comfortably beside the
- * sidebar edge. The desktop rail adds 4px to the phone inset; the pad stays on
- * the label rather than the header so the hover pill keeps running the
- * sidebar's full width.
+ * Phone lane captions keep a small inset for arm's-length reading. Desktop
+ * captions sit directly on the header's content rail, while the hover pill
+ * still runs the sidebar's full width.
  */
-export const SIDEBAR_LANE_NAME = "pl-1 desktop:pl-2";
+export const SIDEBAR_LANE_NAME = "pl-1 desktop:pl-0";
 
 /**
  * The collapse chevron. Revealed by the header's hover, and rotated to mark the
@@ -312,11 +311,11 @@ export const SIDEBAR_BAND_TOGGLE =
 
 /**
  * The inset the Automations and People headings take. The desktop value lands
- * the glyphless labels on the same 24px rail as Tools, Workspaces and lane
+ * the glyphless labels on the same 16px rail as Tools, Workspaces and lane
  * captions. The phone layout keeps its tighter base inset.
  */
 export const SIDEBAR_BAND_TOGGLE_INSET =
-	"pr-1 pl-2 desktop:pr-2 desktop:pl-[18px]";
+	"pr-1 pl-2 desktop:pr-2 desktop:pl-[10px]";
 
 /**
  * The chevron reveals on hover but stays IN LAYOUT at all times (visibility,
