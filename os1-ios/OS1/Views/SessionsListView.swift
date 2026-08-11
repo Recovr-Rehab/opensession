@@ -1593,6 +1593,10 @@ struct SessionsListView: View {
                 }
             }
 
+            #if os(iOS)
+            mobilePlainRow
+            #endif
+
             if !visibleArchivedSessions.isEmpty {
                 Section {
                     Button {
@@ -1653,9 +1657,6 @@ struct SessionsListView: View {
                 }
             }
 
-            #if os(iOS)
-            mobileSupportRow
-            #endif
         }
     }
 
@@ -1685,19 +1686,16 @@ struct SessionsListView: View {
     }
 
     #if os(iOS)
-    /// One destination row after the worktree/session sections — not a card
-    /// and not an inline copy of the queue.
-    private var mobileSupportRow: some View {
+    /// Plain is a project feed on the web, so it sits after the worktree/session
+    /// sections and before Archived in the same ordinary row shape.
+    private var mobilePlainRow: some View {
         Section {
             Button {
                 showSupport = true
             } label: {
                 HStack(spacing: 9) {
-                    Image(systemName: "lifepreserver")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .frame(width: 22, height: 22)
-                    Text("Support")
+                    RepoTile(name: "plain", size: 22)
+                    Text("Plain")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(OS1VisualStyle.textDim)
                     Spacer()
@@ -1706,7 +1704,7 @@ struct SessionsListView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open the support queue")
+            .accessibilityLabel("Open Plain")
         }
         .listRowInsets(EdgeInsets(
             top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
