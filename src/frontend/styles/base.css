@@ -1440,7 +1440,7 @@ a.asset-ref {
 	padding: 2px 7px 2px 4px;
 	border: 0;
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
-	background: var(--blue-soft);
+	background: var(--accent-soft);
 	color: var(--text);
 	cursor: pointer;
 	text-decoration: none;
@@ -1448,11 +1448,11 @@ a.asset-ref {
 	transition: background var(--dur-micro) var(--ease);
 }
 a.asset-ref:hover {
-	background: color-mix(in srgb, var(--blue) 16%, transparent);
+	background: color-mix(in srgb, var(--accent) 20%, transparent);
 	text-decoration: none;
 }
 a.asset-ref:active {
-	background: color-mix(in srgb, var(--blue) 22%, transparent);
+	background: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 a.asset-ref:focus-visible {
 	outline: 2px solid var(--accent);
@@ -1464,7 +1464,7 @@ a.asset-ref:focus-visible {
 	height: 20px;
 	flex: none;
 	place-items: center;
-	color: var(--blue);
+	color: var(--accent);
 }
 .asset-ref-icon svg {
 	width: 16px;
@@ -1484,6 +1484,8 @@ a.asset-ref:focus-visible {
 	border-radius: 0;
 	background: transparent;
 	color: inherit;
+	font-family: inherit;
+	font-size: inherit;
 }
 
 /* A session reference rendered by markdown.ts as a clickable link into that
