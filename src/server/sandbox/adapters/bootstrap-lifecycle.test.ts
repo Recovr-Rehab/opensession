@@ -44,9 +44,9 @@ function driver(results: Array<{ exitCode: number; stdout?: string; stderr?: str
 
 describe("remote repo lifecycle", () => {
 	test("bootstrap identity includes the preview runtime contract", () => {
-		expect(bootstrapSignature()).toContain("node@24");
+		expect(bootstrapSignature()).toContain("node@24.18.1");
 		expect(bootstrapSignature()).toContain("just@1.43.1");
-		expect(bootstrapSignature()).toContain("workspace-runtime-v3");
+		expect(bootstrapSignature()).toContain("workspace-runtime-v4");
 	});
 
 	test("setup is skipped after its durable stamp", async () => {

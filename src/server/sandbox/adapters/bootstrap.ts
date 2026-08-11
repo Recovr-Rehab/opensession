@@ -127,9 +127,10 @@ const REMOTE_OPENCODE_VERSION = "1.17.15";
 /** Keep these aligned with deploy/sandbox/Dockerfile. The runtime revision is
  * part of bootstrapSignature, so changing this contract invalidates old
  * prewarms and provider templates instead of calling them Ready. */
-const REMOTE_NODE_MAJOR = 24;
+const REMOTE_NODE_VERSION = "24.18.1";
+const REMOTE_NODE_MAJOR = Number(REMOTE_NODE_VERSION.split(".")[0]);
 const REMOTE_JUST_VERSION = "1.43.1";
-const REMOTE_RUNTIME_REVISION = "workspace-runtime-v3";
+const REMOTE_RUNTIME_REVISION = "workspace-runtime-v4";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
@@ -580,7 +581,7 @@ export function bootstrapSignature(): string {
   const base = cfg.runnerSha || cfg.runnerBundleUrl || "unpinned";
   return (
     `${base}+opencode@${REMOTE_OPENCODE_VERSION}` +
-    `+node@${REMOTE_NODE_MAJOR}+just@${REMOTE_JUST_VERSION}` +
+    `+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
     `+${REMOTE_RUNTIME_REVISION}`
   );
 }
@@ -634,32 +635,38 @@ async function bootstrapRemoteBaseRuntime(
     "workspace tools check",
   );
 
-  // NodeSource is the same source and major used by the Docker image. All
-  // currently supported remote images are Ubuntu/Debian based; fail loudly on
-  // a future image instead of accepting an arbitrary distro Node version.
+  // Provider images can already carry an older /usr/local/bin/node that wins
+  // over distro packages (Daytona ships Node 20 this way). Install the pinned
+  // official release into /usr/local so the binary agents actually resolve is
+  // deterministic. Verify against Node's published SHASUMS before extracting.
   const node = await driver.exec(
-    `node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true`,
+    `node -p 'process.versions.node' 2>/dev/null || true`,
   );
-  if (node.stdout.trim() !== String(REMOTE_NODE_MAJOR)) {
-    log(`installing Node ${REMOTE_NODE_MAJOR}…`);
+  if (node.stdout.trim() !== REMOTE_NODE_VERSION) {
+    log(`installing Node ${REMOTE_NODE_VERSION}…`);
     need(
       await driver.exec(
-        `command -v apt-get >/dev/null 2>&1 || { echo "Node ${REMOTE_NODE_MAJOR} bootstrap requires an apt-based provider image" >&2; exit 1; }; ` +
-          `if [ "$(id -u)" = 0 ]; then ` +
-          `curl -fsSL https://deb.nodesource.com/setup_${REMOTE_NODE_MAJOR}.x | bash - && apt-get install -y -qq nodejs; ` +
-          `elif command -v sudo >/dev/null 2>&1; then ` +
-          `curl -fsSL https://deb.nodesource.com/setup_${REMOTE_NODE_MAJOR}.x | sudo -n bash - && sudo -n apt-get install -y -qq nodejs; ` +
-          `else echo "root privileges are required to install Node ${REMOTE_NODE_MAJOR}" >&2; exit 1; fi`,
+        `case "$(uname -m)" in x86_64) arch=x64;; aarch64|arm64) arch=arm64;; ` +
+          `*) echo "unsupported Node architecture: $(uname -m)" >&2; exit 1;; esac; ` +
+          `version=${REMOTE_NODE_VERSION}; archive=node-v$version-linux-$arch.tar.xz; tmp=$(mktemp -d); ` +
+          `trap 'rm -rf "$tmp"' EXIT; ` +
+          `curl -fsSL https://nodejs.org/download/release/v$version/$archive -o "$tmp/$archive" && ` +
+          `curl -fsSL https://nodejs.org/download/release/v$version/SHASUMS256.txt -o "$tmp/SHASUMS256.txt" && ` +
+          `(cd "$tmp" && grep "  $archive$" SHASUMS256.txt | sha256sum -c -) && ` +
+          `if [ "$(id -u)" = 0 ]; then tar -xJf "$tmp/$archive" --strip-components=1 -C /usr/local; ` +
+          `elif command -v sudo >/dev/null 2>&1; then sudo -n tar -xJf "$tmp/$archive" --strip-components=1 -C /usr/local; ` +
+          `else echo "root privileges are required to install Node $version" >&2; exit 1; fi`,
         { timeoutMs: 300_000 },
       ),
-      `Node ${REMOTE_NODE_MAJOR} install`,
+      `Node ${REMOTE_NODE_VERSION} install`,
     );
   }
   need(
     await driver.exec(
-      `test "$(node -p 'process.versions.node.split(\".\")[0]')" = "${REMOTE_NODE_MAJOR}"`,
+      `test "$(/usr/local/bin/node -p 'process.versions.node')" = "${REMOTE_NODE_VERSION}" && ` +
+        `test "$(node -p 'process.versions.node')" = "${REMOTE_NODE_VERSION}"`,
     ),
-    `Node ${REMOTE_NODE_MAJOR} check`,
+    `Node ${REMOTE_NODE_VERSION} check`,
   );
 
   const remoteJust = "/usr/local/bin/just";
