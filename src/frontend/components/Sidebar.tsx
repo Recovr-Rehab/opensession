@@ -3619,7 +3619,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	return (
 		<div
 			className={cn(
-				"flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+				// `sidebar-scroll` stays on the markup as a hook: base.css's
+				// vibrancy chrome (html.material-backdrop) dissolves this box's
+				// top edge into the chrome row above it, which it can only do
+				// with a mask on the scrollport itself.
+				"sidebar-scroll flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
 				// The whole sidebar scrolls as one on phones, so the tool cards (and
 				// the Workspaces header) scroll away with the list instead of staying
 				// pinned above a separately-scrolling list. The top bar floats over

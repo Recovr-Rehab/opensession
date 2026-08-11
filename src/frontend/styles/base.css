@@ -802,44 +802,48 @@ html.wco .app {
 		background: transparent;
 	}
 
-	/* A pinned sidebar heading has to stop the rows sliding under it. The
-	   backing it paints elsewhere is the material over an opaque --bg-raised,
-	   and on this surface that composites to a fully opaque slab: material
-	   above it, material below it, and none of the wallpaper in between. It
-	   reads as a foreign plate — a dark band over a bright desktop picture, a
-	   light one over a dark picture — and no stack of washes fixes it, because
-	   the alpha that hides a row is the same alpha that stops the wallpaper.
+	/* Sidebar headings do not pin on this surface, and the list dissolves into
+	   the chrome row instead of being cut off by it.
 
-	   Frosting it is the way out, and it is what the surface is already about:
-	   blur only ever sees OUR paint (the native vibrancy is behind the window,
-	   not in the page), so the rows dissolve while the band keeps roughly the
-	   alpha its surroundings have and the wallpaper still comes through. Half a
-	   wash rides along to quiet what the blur leaves.
+	   Pinning is what forced the problem: a heading held at the top has rows
+	   sliding under it, so it has to paint a backing — and every backing is
+	   wrong here. Opaque, it is a plate: material above, material below, none
+	   of the wallpaper in between (dark over a bright desktop picture, light
+	   over a dark one). Translucent, the rows read straight through it. There
+	   is no third alpha, because the alpha that hides a row is the alpha that
+	   stops the wallpaper, and blur does not rescue it: it cannot reach the
+	   native vibrancy at all, and against our own paint it still leaves the
+	   band brighter than its surroundings, since blurring bright text spreads
+	   that ink across the whole strip.
 
-	   This is not the backdrop-filter the sidebar dropped: that one sat on the
-	   whole rail and re-rasterized it on any repaint behind it. This is a 44px
-	   strip that only exists while a heading is actually pinned.
+	   So nothing is held at the top, nothing paints a backing, and the only
+	   edge left — the scrollport's own top — is a mask rather than a cut. The
+	   mask is unconditional but costs nothing at rest: the matching padding
+	   starts the list below the fade, so the first row is only ever caught by
+	   it once it has actually scrolled up into it.
 
-	   Blur is deliberately on the ::before rather than on the heading — the
-	   heading is the hover row, and filtering there would smear its own
-	   hover wash. Note a headless Chrome started with --disable-gpu drops
-	   backdrop blur silently (other backdrop filters keep working), so verify
-	   this with a GPU/SwiftShader browser or it looks like dead CSS. */
-	html.material-backdrop [data-sticky-head].is-stuck::before {
-		background: color-mix(in srgb, var(--sidebar-material) 50%, transparent);
-		backdrop-filter: blur(30px) saturate(1.7);
-		-webkit-backdrop-filter: blur(30px) saturate(1.7);
-		/* The bottom edge is where blurred rows meet sharp ones, so it
-		   dissolves over 14px instead of cutting. The overhang blurs the top of
-		   the row below, which is what makes the dissolve read as depth rather
-		   than as a fading rectangle. */
-		bottom: -14px;
+	   The plain web build keeps its pinned headings; there the sidebar is an
+	   opaque surface, so their backing is just the surface's own colour. */
+	html.material-backdrop {
+		--sidebar-edge-fade: 16px;
+	}
+
+	html.material-backdrop [data-sticky-head] {
+		position: static;
+	}
+
+	html.material-backdrop .sidebar-scroll {
+		padding-top: var(--sidebar-edge-fade);
 		-webkit-mask-image: linear-gradient(
 			to bottom,
-			#000 calc(100% - 14px),
-			transparent
+			transparent 0,
+			#000 var(--sidebar-edge-fade)
 		);
-		mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+		mask-image: linear-gradient(
+			to bottom,
+			transparent 0,
+			#000 var(--sidebar-edge-fade)
+		);
 	}
 
 	/* --row-chip is deliberately NOT re-derived here, and the vibrancy sidebar
@@ -866,14 +870,15 @@ html.wco .app {
 		background: var(--bg-raised);
 	}
 
-	/* No wallpaper to protect here, so the pinned backing goes back to the
-	   opaque slab the rest of the app uses — and the blur, which exists only to
-	   avoid painting one, comes off with it. */
-	html.material-backdrop [data-sticky-head].is-stuck::before {
-		background: var(--bg-raised);
-		backdrop-filter: none;
-		-webkit-backdrop-filter: none;
-		bottom: -1px;
+	/* Opaque surfaces again, so a pinned heading's backing is simply this
+	   sidebar's own colour and there is nothing for it to give away. Pinning
+	   comes back, and the scroll edge goes back to a plain cut. */
+	html.material-backdrop [data-sticky-head] {
+		position: sticky;
+	}
+
+	html.material-backdrop .sidebar-scroll {
+		padding-top: 0;
 		-webkit-mask-image: none;
 		mask-image: none;
 	}
