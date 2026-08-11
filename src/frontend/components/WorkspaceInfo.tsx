@@ -1746,17 +1746,23 @@ export function WorkspaceInfo({
 							<div className={INFO_LABEL_CLASS}>
 								{media.length} screenshot{media.length === 1 ? "" : "s"}
 							</div>
-							{/* Not a card like the lists above it: the strip runs the
-							    full width of the panel, so tiles leave the screen at
-							    its edge instead of ending inside a rounded box.
-							    Frames leaving the screen is what reads as "scrolls";
-							    the same frames tucked inside a container read as a
-							    complete set that happens to be clipped.
-							    The negative margins cancel the panel's own `px-2`,
-							    plus (on desktop) the `px-1` wrapper the session
-							    viewer puts around this panel — hence the extra 4px. */}
+							{/* Not a card like the lists above it: a scrollable strip
+							    bleeds out to the panel's right edge, so tiles leave
+							    the screen instead of ending inside a rounded box —
+							    frames leaving the screen is what reads as "scrolls".
+							    Only the trailing side bleeds: the leading padding is
+							    put back so the first tile lines up with every other
+							    section at rest. The negative margins cancel the
+							    panel's own `px-2` plus, on desktop, the `px-1`
+							    wrapper the session viewer puts around this panel —
+							    hence the extra 4px. A strip that can't scroll (one or
+							    two frames) keeps the normal section bounds. */}
 							<div
-								className="-mx-2 flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden desktop:-mx-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								className={cn(
+									"flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+									media.length > 2 &&
+										"-mx-2 pl-2 [scroll-padding-left:8px] desktop:-mx-3 desktop:pl-3 desktop:[scroll-padding-left:12px]",
+								)}
 							>
 								{media.map((m, i) => (
 									<button
@@ -1773,7 +1779,7 @@ export function WorkspaceInfo({
 													? "w-[calc((100%-8px)/2)]"
 													: // Two full tiles + the 8px gap + a 22px sliver
 														// of the third, which then keeps going past
-														// the panel edge.
+														// the panel's trailing edge.
 														"w-[calc((100%-30px)/2)]",
 										)}
 										title={[m.sessionTitle, new Date(m.at).toLocaleString()]
