@@ -416,7 +416,7 @@ struct CatchUpDeckView: View {
                     Button(action: performUndo) {
                         Text("Undo")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(OS1VisualStyle.accent)
+                            .foregroundStyle(OS1VisualStyle.accentInk)
                     }
                     .buttonStyle(.plain)
                 }

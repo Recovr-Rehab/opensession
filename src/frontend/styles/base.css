@@ -398,11 +398,13 @@ html[data-theme="light"] {
 /* ── Accent themes ────────────────────────────────────────────
    The same ten sRGB pairs as native AccentTheme.swift. data-accent is written
    before paint by index.html and maintained by lib/accent-theme.ts. Keeping the
-   values as theme-level tokens means every existing bg-accent/text-accent
-   consumer switches together, while --on-accent remains the legible ink on a
-   filled control and --accent-soft becomes a hue-tinted wash/ring/shadow. */
+   values as theme-level tokens means every existing accent consumer switches
+   together. --accent is the saturated fill/ring, --accent-ink is its readable
+   foreground form on a page, --on-accent sits on a filled control, and
+   --accent-soft becomes a hue-tinted wash/ring/shadow. */
 html[data-accent] {
 	--accent: var(--accent-dark);
+	--accent-ink: var(--accent-ink-dark, var(--accent));
 	--on-accent: var(--on-accent-dark, #ffffff);
 	--accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
 	/* A hue has somewhere to go that ink does not, so it deepens instead of
@@ -416,6 +418,7 @@ html[data-accent] {
 
 html[data-theme="light"][data-accent] {
 	--accent: var(--accent-light);
+	--accent-ink: var(--accent-ink-light, var(--accent));
 	--on-accent: var(--on-accent-light, #ffffff);
 	--accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
 }
@@ -456,8 +459,10 @@ html[data-accent="orange"] {
 }
 
 html[data-accent="lime"] {
-	--accent-light: #789000;
+	--accent-light: #e4f222;
 	--accent-dark: #e4f222;
+	--accent-ink-light: #607400;
+	--accent-ink-dark: #e4f222;
 	--on-accent-light: #000000;
 	--on-accent-dark: #000000;
 }
@@ -1455,7 +1460,7 @@ a.asset-ref:active {
 	background: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 a.asset-ref:focus-visible {
-	outline: 2px solid var(--accent);
+	outline: 2px solid var(--accent-ink);
 	outline-offset: 2px;
 }
 .asset-ref-icon {
@@ -1464,7 +1469,7 @@ a.asset-ref:focus-visible {
 	height: 20px;
 	flex: none;
 	place-items: center;
-	color: var(--accent);
+	color: var(--accent-ink);
 }
 .asset-ref-icon svg {
 	width: 20px;
@@ -1568,7 +1573,7 @@ a.pr-ref:active {
 	background: var(--hover-strong);
 }
 a.pr-ref:focus-visible {
-	outline: 2px solid var(--accent);
+	outline: 2px solid var(--accent-ink);
 	outline-offset: 2px;
 }
 .pr-ref-icon {

@@ -1088,7 +1088,7 @@ struct SessionsListView: View {
                     : "line.3.horizontal.decrease.circle.fill"
             )
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(repoFilter == "all" ? OS1VisualStyle.textDim : OS1VisualStyle.accent)
+            .foregroundStyle(repoFilter == "all" ? OS1VisualStyle.textDim : OS1VisualStyle.accentInk)
             .frame(width: 26, height: 24)
             .contentShape(Rectangle())
             #else
@@ -1097,7 +1097,7 @@ struct SessionsListView: View {
                 size: 24,
                 color: repoFilter == "all"
                     ? OS1VisualStyle.textDim
-                    : OS1VisualStyle.accent
+                    : OS1VisualStyle.accentInk
             )
             #endif
         }

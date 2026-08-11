@@ -6,7 +6,7 @@ export const ACCENT_THEME_OPTIONS = [
 	{ value: "pink", label: "Rose", light: "#d1238c", dark: "#ee29a1" },
 	{ value: "coral", label: "Coral", light: "#dd243b", dark: "#f73648" },
 	{ value: "orange", label: "Tangerine", light: "#e84f00", dark: "#ff5a00" },
-	{ value: "lime", label: "Lime", light: "#789000", dark: "#e4f222" },
+	{ value: "lime", label: "Lime", light: "#e4f222", dark: "#e4f222" },
 	{ value: "green", label: "Clover", light: "#209148", dark: "#26a653" },
 	{ value: "mono", label: "Mono", light: "#000000", dark: "#ffffff" },
 ] as const;
@@ -38,7 +38,7 @@ export function getAccentThemeOption(theme: AccentTheme) {
 	return ACCENT_THEME_OPTIONS.find((option) => option.value === theme)!;
 }
 
-export function getAccentThemeInk(
+export function getOnAccentInk(
 	theme: AccentTheme,
 	tone: "light" | "dark",
 ): "#000000" | "#ffffff" {

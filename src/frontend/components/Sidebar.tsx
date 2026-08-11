@@ -4351,7 +4351,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								>
 									<IconBell
 										className={SIDEBAR_GROUP_ICON}
-										style={{ color: "var(--accent)" }}
+										style={{ color: "var(--accent-ink)" }}
 									/>
 									<span className={SIDEBAR_GROUP_NAME}>Needs review</span>
 									<span className={SIDEBAR_GROUP_COUNT}>

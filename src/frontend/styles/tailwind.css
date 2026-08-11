@@ -83,6 +83,7 @@
 
 	/* Accent + status */
 	--color-accent: var(--accent);
+	--color-accent-ink: var(--accent-ink);
 	--color-accent-soft: var(--accent-soft);
 	/* What sits ON an --accent fill: its inverse. Pair it with bg-accent —
 	   text-white only worked while the accent was a saturated red. */
@@ -233,11 +234,24 @@
 	--ease-in-out: var(--ease);
 }
 
+/* Accent is intentionally a bright fill/ring. Text needs the readable ink
+   counterpart instead, especially for Lime on a light surface. Keeping the
+   established class name makes every existing text/hover variant safe while
+   bg-accent and border-accent retain the saturated active-state colour. */
+@utility text-accent {
+	/* The theme also generates a generic color utility with this name. Doubling
+	   the class keeps the semantic text treatment ahead without !important, so
+	   state/responsive variants remain composable. */
+	&& {
+		color: var(--accent-ink);
+	}
+}
+
 /* One keyboard-focus treatment for raw controls. It intentionally does not
    animate, so focus is immediate and reduced-motion needs no special case. */
 @utility focus-ring {
 	&:focus-visible {
-		outline: 2px solid var(--accent);
+		outline: 2px solid var(--accent-ink);
 		outline-offset: 2px;
 	}
 

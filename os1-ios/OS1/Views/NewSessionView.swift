@@ -391,7 +391,7 @@ struct NewSessionView: View {
         } label: {
             Image(systemName: "map")
                 .foregroundStyle(
-                    planFirst ? OS1VisualStyle.accent : OS1VisualStyle.text
+                    planFirst ? OS1VisualStyle.accentInk : OS1VisualStyle.text
                 )
                 .frame(width: 30, height: 30)
                 .background {

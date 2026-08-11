@@ -8,12 +8,11 @@ import UIKit
 
 /// The app's primary colour, as data.
 ///
-/// Every accent surface reads `OS1VisualStyle.accent` / `.onAccent`, and those
-/// read the case selected here — the composer's send disc, the new-session
-/// start disc, the app-wide `.tint` that colours system controls, an active
-/// glyph. Changing the whole app's primary colour is therefore one value, and
-/// ADDING a colour is one line in `fills`: a name, and the two hexes it wears
-/// in light and dark.
+/// Every accent surface reads `OS1VisualStyle.accent` / `.accentInk` /
+/// `.onAccent`, and those read the case selected here — filled controls, system
+/// tint, and active glyphs. Changing the whole app's primary colour is therefore
+/// one value, and adding a colour starts with one line in `fills`: a name, and
+/// the two hexes it wears in light and dark.
 ///
 /// What sits ON the accent is deliberately NOT part of that table. Jewel tones
 /// take white ink, bright lime takes black, and `mono` inverts with its fill.
@@ -63,7 +62,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         case .pink: (0xD1_23_8C, 0xEE_29_A1)
         case .coral: (0xDD_24_3B, 0xF7_36_48)
         case .orange: (0xE8_4F_00, 0xFF_5A_00)
-        case .lime: (0x78_90_00, 0xE4_F2_22)
+        case .lime: (0xE4_F2_22, 0xE4_F2_22)
         case .green: (0x20_91_48, 0x26_A6_53)
         case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
@@ -73,6 +72,17 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     var accent: Color {
         Color(platformColor: AccentTheme.dynamic(
             light: AccentTheme.platformColor(fills.light),
+            dark: AccentTheme.platformColor(fills.dark)
+        ))
+    }
+
+    /// The accent as foreground ink on the page. Ramp-style Lime keeps its
+    /// neon fill in both appearances, but needs a deeper lime on light surfaces
+    /// when it is used for an icon or label rather than as a plate or ring.
+    var accentInk: Color {
+        guard self == .lime else { return accent }
+        return Color(platformColor: AccentTheme.dynamic(
+            light: AccentTheme.platformColor(0x60_74_00),
             dark: AccentTheme.platformColor(fills.dark)
         ))
     }

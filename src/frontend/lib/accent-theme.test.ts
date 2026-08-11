@@ -3,8 +3,8 @@ import {
 	ACCENT_THEME_OPTIONS,
 	DEFAULT_ACCENT_THEME,
 	getAccentTheme,
-	getAccentThemeInk,
 	getAccentThemeOption,
+	getOnAccentInk,
 	handleAccentStorageChange,
 	isAccentTheme,
 	setAccentTheme,
@@ -87,6 +87,7 @@ describe("accent theme", () => {
 		);
 		expect(css).toContain("--on-accent-light: #000000");
 		expect(css).toContain("--on-accent-dark: #000000");
+		expect(css).toContain("--accent-ink-light: #607400");
 		expect(html).toContain('if (accent === "gold")');
 		expect(html).toContain('accent = "lime"');
 	});
@@ -95,7 +96,7 @@ describe("accent theme", () => {
 		for (const option of ACCENT_THEME_OPTIONS) {
 			for (const tone of ["light", "dark"] as const) {
 				const fill = option[tone];
-				const ink = getAccentThemeInk(option.value, tone);
+				const ink = getOnAccentInk(option.value, tone);
 				const fillLuminance = luminance(fill);
 				const inkLuminance = luminance(ink);
 				const contrast =

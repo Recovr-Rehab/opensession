@@ -290,7 +290,7 @@ struct WorktreeInfoView: View {
                             .font(.caption2.weight(.semibold))
                     }
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(OS1VisualStyle.accent)
+                    .foregroundStyle(OS1VisualStyle.accentInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .frame(minHeight: 44)

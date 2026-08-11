@@ -519,7 +519,7 @@ struct SettingsView: View {
                             .labelStyle(.iconOnly)
                             .font(.body.weight(.semibold))
                     }
-                    .tint(OS1VisualStyle.accent)
+                    .tint(OS1VisualStyle.accentInk)
                 #else
                     Button("Done") { dismiss() }
                 #endif

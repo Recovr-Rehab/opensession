@@ -1253,7 +1253,7 @@ private struct ScrollToLatestButton: View {
                     .font(.caption.weight(.medium))
             }
             .foregroundStyle(
-                hasNewOutput ? OS1VisualStyle.accent : OS1VisualStyle.textDim
+                hasNewOutput ? OS1VisualStyle.accentInk : OS1VisualStyle.textDim
             )
             .padding(.horizontal, 10)
             .padding(.vertical, 5)

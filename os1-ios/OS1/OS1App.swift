@@ -59,7 +59,7 @@ struct RootView: View {
 
     var body: some View {
         SessionsListView()
-            .tint(OS1VisualStyle.accent)
+            .tint(OS1VisualStyle.accentInk)
             .background(OS1VisualStyle.background.ignoresSafeArea())
             .preferredColorScheme(preferredColorScheme)
             .sheet(isPresented: $showSettings) {

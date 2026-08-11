@@ -962,7 +962,7 @@ struct ShortcutsSettingsView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(OS1VisualStyle.accent)
+                .foregroundStyle(OS1VisualStyle.accentInk)
                 .frame(width: 26, height: 26)
                 .background(OS1VisualStyle.hover, in: Circle())
                 // Optically centred on the title's cap height rather than the

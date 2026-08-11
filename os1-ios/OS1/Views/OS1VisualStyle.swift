@@ -198,14 +198,15 @@ enum OS1VisualStyle {
     #endif
     /// The brand mark, and the app's one primary colour: whichever `AccentTheme`
     /// is selected in Settings › Appearance, resolved per appearance. It is a
-    /// FILL colour — the send disc, the app tint, an active icon — and
-    /// deliberately not a text colour: at label contrast, words wearing it are
-    /// indistinguishable from body copy, so inline affordances (links, fold
-    /// toggles) take `link` instead.
+    /// FILL colour — the send disc, active borders and selected surfaces — and
+    /// deliberately not a text colour. Foreground icons use `accentInk`; inline
+    /// affordances (links, fold toggles) take `link` instead.
     ///
     /// Computed rather than stored so a view that reads it inside `body` picks
     /// up a change to the setting immediately; see `AccentStore`.
     static var accent: Color { AccentStore.shared.theme.accent }
+    /// The accent adapted for use as an icon or short label on the page.
+    static var accentInk: Color { AccentStore.shared.theme.accentInk }
     /// What sits on top of an `accent` fill, so the glyph in the send disc
     /// stays legible in either appearance. Derived from the fill's luminance —
     /// see `AccentTheme.onAccent`.

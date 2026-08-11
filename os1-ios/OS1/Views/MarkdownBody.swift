@@ -227,7 +227,7 @@ private extension MarkdownRenderConfig {
                 regularTextColor: OS1VisualStyle.text,
                 headerBackgroundColor: OS1VisualStyle.panel,
                 borderColor: OS1VisualStyle.border,
-                actionButtonColor: OS1VisualStyle.accent
+                actionButtonColor: OS1VisualStyle.accentInk
             ),
             inlineStyle: .init(
                 boldTextColor: text,
@@ -270,7 +270,7 @@ private extension MarkdownRenderConfig {
                 regularTextColor: OS1VisualStyle.text,
                 headerBackgroundColor: OS1VisualStyle.panel,
                 borderColor: OS1VisualStyle.border,
-                actionButtonColor: OS1VisualStyle.accent
+                actionButtonColor: OS1VisualStyle.accentInk
             ),
             inlineStyle: .init(
                 boldTextColor: text,

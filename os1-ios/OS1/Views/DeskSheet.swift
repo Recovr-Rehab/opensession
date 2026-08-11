@@ -226,7 +226,7 @@ struct DeskSheet: View {
         } label: {
             headerGlyph(
                 engine.active ? "mic.fill" : "mic",
-                color: engine.active ? OS1VisualStyle.accent : OS1VisualStyle.textDim
+                color: engine.active ? OS1VisualStyle.accentInk : OS1VisualStyle.textDim
             )
         }
         .accessibilityLabel(engine.active ? "Return to the voice call" : "Start a voice call")

@@ -70,6 +70,11 @@ final class AccentThemeTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "lime")
     }
 
+    func testLimeKeepsTheRampFillInBothAppearances() {
+        XCTAssertEqual(AccentTheme.lime.fills.light, 0xE4_F2_22)
+        XCTAssertEqual(AccentTheme.lime.fills.dark, 0xE4_F2_22)
+    }
+
     func testSelectionPersists() {
         let defaults = scratchDefaults()
         let store = AccentStore(defaults: defaults)

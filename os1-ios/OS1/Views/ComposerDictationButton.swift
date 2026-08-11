@@ -41,7 +41,7 @@ struct ComposerDictationButton: View {
             Image(systemName: dictation.active ? "waveform" : "mic")
                 .font(.system(size: glyph, weight: .medium))
                 .foregroundStyle(
-                    dictation.active ? OS1VisualStyle.accent : OS1VisualStyle.textDim
+                    dictation.active ? OS1VisualStyle.accentInk : OS1VisualStyle.textDim
                 )
                 .symbolEffect(.variableColor.iterative, isActive: dictation.active)
                 #if os(iOS)
