@@ -1600,24 +1600,28 @@ a.pr-ref:focus-visible {
 }
 a.pr-ref[data-pr-tone="green"] {
 	background: var(--green-soft);
+	color: var(--green);
 }
 a.pr-ref[data-pr-tone="green"]:hover {
 	background: color-mix(in srgb, var(--green) 20%, transparent);
 }
 a.pr-ref[data-pr-tone="purple"] {
 	background: color-mix(in srgb, var(--purple) 12%, transparent);
+	color: var(--purple);
 }
 a.pr-ref[data-pr-tone="purple"]:hover {
 	background: color-mix(in srgb, var(--purple) 20%, transparent);
 }
 a.pr-ref[data-pr-tone="red"] {
 	background: var(--red-soft);
+	color: var(--red);
 }
 a.pr-ref[data-pr-tone="red"]:hover {
 	background: color-mix(in srgb, var(--red) 18%, transparent);
 }
 a.pr-ref[data-pr-tone="yellow"] {
 	background: var(--yellow-soft);
+	color: var(--yellow);
 }
 a.pr-ref[data-pr-tone="yellow"]:hover {
 	background: color-mix(in srgb, var(--yellow) 20%, transparent);
