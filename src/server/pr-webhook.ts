@@ -91,6 +91,22 @@ function branchesFor(
 const pendingBroadcasts = new Map<string, ReturnType<typeof setTimeout>>();
 const BROADCAST_DEBOUNCE_MS = 2_000;
 
+export function sandboxEnvironmentInvalidationNeeded(
+	event: string,
+	payload: any,
+	defaultBranch: string,
+): boolean {
+	if (event === "push") {
+		return payload?.ref === `refs/heads/${defaultBranch}`;
+	}
+	return (
+		event === "pull_request" &&
+		payload?.action === "closed" &&
+		payload?.pull_request?.merged === true &&
+		payload?.pull_request?.base?.ref === defaultBranch
+	);
+}
+
 function scheduleBroadcast(
 	repoId: string,
 	ghRepo: string,
@@ -127,13 +143,9 @@ export function handlePrWebhookEvent(event: string, payload: any): void {
 		const [repoId, repo] = match;
 		const ghRepo = repo.ghRepo;
 		const { branches, number } = branchesFor(event, payload, ghRepo);
-		const defaultBranchChanged =
-			branches.includes(repo.defaultBranch) ||
-			(event === "pull_request" &&
-				payload?.action === "closed" &&
-				payload?.pull_request?.merged === true &&
-				payload?.pull_request?.base?.ref === repo.defaultBranch);
-		if (defaultBranchChanged) scheduleSandboxEnvironmentInvalidation(repoId);
+		if (sandboxEnvironmentInvalidationNeeded(event, payload, repo.defaultBranch)) {
+			scheduleSandboxEnvironmentInvalidation(repoId);
+		}
 		// Default-branch activity (deploy workflows on master/main) is not PR
 		// activity — nudging every session parked on that branch would spend gh
 		// calls on branches that have no PR.
