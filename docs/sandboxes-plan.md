@@ -5,7 +5,9 @@ decision is **stay opt-in for now**: the live 30-day scorecard does not yet meet
 the dogfooding sample thresholds, so host worktrees remain the default. This is
 a completed decision gate, not an unfinished implementation or an invented
 claim of parity. The scorecard keeps collecting evidence for a later human
-reconsideration.
+reconsideration. The next product layer—workspace-owned provider credentials
+with managed-feeling setup—is specified in
+[sandbox-connections-plan.md](sandbox-connections-plan.md).
 
 Goal: prove that every session should run in a VM/sandbox instead of the
 current host-worktree default. Iterate on the local Firecracker (microvm)
