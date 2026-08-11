@@ -20,6 +20,7 @@ import {
   SettingsFormTitle,
   SettingsGroupLabel,
   SettingsHeader,
+  SettingsHint,
   SettingsPanel,
   SettingsSection,
   rowMenuTriggerClasses,
@@ -591,7 +592,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
 
   return (
     <>
-      <SectionHeading>GitHub accounts — PRs as yourself</SectionHeading>
+      <SectionHeading>{personal ? "GitHub" : "GitHub accounts"}</SectionHeading>
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
@@ -604,12 +605,14 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         <SettingRow className="items-start gap-x-3">
           <IconTile name="github" size={30} />
           <SettingRowText>
-            <SettingRowTitle>Per-user GitHub auth</SettingRowTitle>
-            <SettingRowDescription className="leading-snug">
-              {active
-                ? "Interactive sessions of a connected teammate open PRs as their own GitHub account. Everyone else (and all automations) keeps the bot."
-                : "Off — sessions open PRs as the bot account. Opt in via config: integrations.github { userPrAuth: true, oauthClientId } in ~/.opensession/config.json."}
-            </SettingRowDescription>
+            <SettingRowTitle>{personal ? "GitHub sign-in" : "Per-user GitHub auth"}</SettingRowTitle>
+            {!personal && (
+              <SettingRowDescription className="leading-snug">
+                {active
+                  ? "Interactive sessions of a connected teammate open PRs as their own GitHub account. Everyone else (and all automations) keeps the bot."
+                  : "Off. Sessions open PRs as the bot account. Opt in via config: integrations.github { userPrAuth: true, oauthClientId } in ~/.opensession/config.json."}
+              </SettingRowDescription>
+            )}
           </SettingRowText>
           <SettingRowControl className="flex items-center gap-3">
             <StatusChip
@@ -735,6 +738,13 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
             );
           })}
       </SettingCard>
+      {personal && (
+        <SettingsHint>
+          {active
+            ? "Connect GitHub to open pull requests as yourself in interactive sessions. Automations and unconnected teammates use the workspace bot."
+            : "Personal GitHub sign-in is not enabled for this workspace. Pull requests use the workspace bot."}
+        </SettingsHint>
+      )}
     </>
   );
 }

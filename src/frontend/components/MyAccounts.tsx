@@ -134,12 +134,12 @@ export function MyAccountsPanel() {
 			{error && (
 				<InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
 			)}
-			<SettingsGroupLabel>MCP accounts — tools as yourself</SettingsGroupLabel>
+			<SettingsGroupLabel>Tools</SettingsGroupLabel>
 			{servers === null ? (
 				<LoadingState>Checking connections…</LoadingState>
 			) : oauthServers.length === 0 ? (
 				<EmptyState placement="card">
-					No OAuth-capable MCP servers configured yet — add one on the
+					No tools with personal sign-in are configured yet. Add one on the
 					Connections page and it shows up here.
 				</EmptyState>
 			) : (
@@ -186,9 +186,8 @@ export function MyAccountsPanel() {
 			)}
 			{oauthServers.length > 0 && (
 				<SettingsHint>
-					Connect one and your sessions use your own account for that tool.
-					Anything you leave unconnected keeps running on the workspace
-					credential.
+					Connect a tool to use your own account in sessions. Unconnected tools
+					use the workspace account.
 				</SettingsHint>
 			)}
 			<GithubAccounts personal />
