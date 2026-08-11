@@ -88,6 +88,8 @@ interface Props {
 	refreshTick?: number;
 	/** Lets the session column make room for the floating card while it is open. */
 	onOpenChange?: (open: boolean) => void;
+	/** The desktop tab strip sits between the header anchor and the transcript. */
+	tabStripVisible?: boolean;
 }
 
 type PeekData = {
@@ -143,6 +145,7 @@ export function WorkspacePeek({
 	send,
 	refreshTick,
 	onOpenChange,
+	tabStripVisible,
 }: Props) {
 	const [open, setOpen] = useState(false);
 	useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
@@ -170,6 +173,10 @@ export function WorkspacePeek({
 				side="bottom"
 				align="end"
 				anchor={anchor}
+				// Keep the usual 8px air below whichever chrome row is lowest. The
+				// desktop tab strip is 40px tall and sits after the header's own 8px
+				// inset, so clear both before adding the final 8px gap.
+				sideOffset={tabStripVisible ? 56 : 8}
 				elevation="lg"
 				className={PEEK_CARD}
 				initialFocus

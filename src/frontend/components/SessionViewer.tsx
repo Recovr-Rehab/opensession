@@ -4537,6 +4537,7 @@ export function SessionViewer({
 							send={connected ? send : undefined}
 							refreshTick={gitRefreshTick}
 							onOpenChange={setWorkspacePeekOpen}
+							tabStripVisible={tabStripVisible}
 						/>
 					)}
 					{!isPhone && panelAvailable && (
