@@ -152,7 +152,7 @@ interface Props {
 	liveMedia?: WorkspaceMediaItem[];
 }
 
-const INFO_LABEL_CLASS = "px-1 text-label font-semibold tracking-[-0.01em] text-faint";
+const INFO_LABEL_CLASS = "px-2 text-label font-semibold tracking-[-0.01em] text-faint";
 const INFO_SECTION_CLASS = "grid gap-[5px]";
 const INFO_LIST_CLASS =
 	"grid gap-px overflow-hidden rounded-lg bg-panel p-1";
@@ -1447,7 +1447,7 @@ export function WorkspaceInfo({
 				<div className="grid gap-4">
 					{comments.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							<div className="flex items-center justify-between gap-2 px-1 text-label font-semibold tracking-[-0.01em] text-faint">
+							<div className="flex items-center justify-between gap-2 px-2 text-label font-semibold tracking-[-0.01em] text-faint">
 								<span>
 									{comments.length} PR comment{comments.length === 1 ? "" : "s"}
 								</span>
@@ -1493,7 +1493,7 @@ export function WorkspaceInfo({
 					)}
 					{changed.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							<div className="flex items-center justify-between gap-2 px-1 text-label font-semibold tracking-[-0.01em] text-faint">
+							<div className="flex items-center justify-between gap-2 px-2 text-label font-semibold tracking-[-0.01em] text-faint">
 								<span>
 									{changed.length} file{changed.length === 1 ? "" : "s"} changed
 								</span>
