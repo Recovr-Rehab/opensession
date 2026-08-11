@@ -41,6 +41,58 @@ import { automationRunMcpForSession, selfImproveMcpForSession } from "./automati
 import { findSession, touchNativeSession } from "./session-cache";
 import { attachRepo, linkPr, resolveSessionRepoContext, sessionRepoIds, switchPrimaryRepo } from "./session-repos";
 import { makeAskHandler } from "./asks";
+import { activeSandboxFor } from "./session-sandbox";
+
+type PreviewAction = "start" | "status" | "stop";
+type PreviewModule = typeof import("./preview");
+
+interface PreviewLifecycleDeps {
+	findSession: typeof findSession;
+	activeSandboxFor: typeof activeSandboxFor;
+	loadPreview: () => Promise<PreviewModule>;
+}
+
+const previewLifecycleDeps: PreviewLifecycleDeps = {
+	findSession,
+	activeSandboxFor,
+	loadPreview: () => import("./preview"),
+};
+
+/**
+ * Execute the same Preview lifecycle for an agent tool as the session UI.
+ * Sandboxed workspaces must never fall through to host Preview: the host path
+ * is a different checkout and cannot observe or control the sandbox service.
+ */
+export async function runSessionPreviewAction(
+	sessionId: string,
+	action: PreviewAction,
+	deps: PreviewLifecycleDeps = previewLifecycleDeps,
+) {
+	const session = deps.findSession(sessionId);
+	const worktreeDir = session?.worktreeDir;
+	if (!session || !worktreeDir)
+		throw new Error("this session has no worktree to preview");
+
+	const sandbox = await deps.activeSandboxFor(session);
+	if (!sandbox && session.sandbox?.sandboxId) {
+		throw new Error(
+			`this session's ${session.sandbox.provider} sandbox is not available`,
+		);
+	}
+
+	const preview = await deps.loadPreview();
+	if (sandbox) {
+		if (action === "start")
+			return preview.startSandboxPreview(sandbox, worktreeDir);
+		if (action === "stop")
+			return preview.stopSandboxPreview(sandbox, worktreeDir);
+		return preview.getSandboxPreviewStatus(sandbox, worktreeDir);
+	}
+
+	if (action === "start") return preview.startPreview(worktreeDir);
+	if (action === "stop") return preview.stopPreview(worktreeDir);
+	return preview.getPreviewStatus(worktreeDir);
+}
 
 /** The session's primary repo id, for the papercuts toggle (undefined =
  *  session-only session, which logs under no repo and is always enabled). */
@@ -195,10 +247,7 @@ export function interactiveMcpServers(
 							}),
 						current: () => findSession(sessionId)?.previewPath ?? null,
 						start: async () => {
-							const wt = findSession(sessionId)?.worktreeDir;
-							if (!wt) throw new Error("this session has no worktree to preview");
-							const { startPreview } = await import("./preview");
-							const s = await startPreview(wt);
+							const s = await runSessionPreviewAction(sessionId, "start");
 							return {
 								running: s.running,
 								starting: s.starting,
@@ -207,17 +256,11 @@ export function interactiveMcpServers(
 							};
 						},
 						status: async () => {
-							const wt = findSession(sessionId)?.worktreeDir;
-							if (!wt) throw new Error("this session has no worktree to preview");
-							const { getPreviewStatus } = await import("./preview");
-							const s = await getPreviewStatus(wt);
+							const s = await runSessionPreviewAction(sessionId, "status");
 							return { running: s.running, starting: s.starting, previewUrl: s.previewUrl };
 						},
 						stop: async () => {
-							const wt = findSession(sessionId)?.worktreeDir;
-							if (!wt) throw new Error("this session has no worktree to preview");
-							const { stopPreview } = await import("./preview");
-							const s = await stopPreview(wt);
+							const s = await runSessionPreviewAction(sessionId, "stop");
 							return { running: s.running, starting: s.starting, previewUrl: s.previewUrl };
 						},
 					}),

@@ -116,7 +116,7 @@ export function createPreviewMcpServer(ctx: PreviewToolContext) {
             return text(
               s.bootable === false
                 ? "Preview can't start: this worktree has no preview boot path (no repo start script or configured preview command). Don't retry start_preview — verify another way (e.g. run the app yourself)."
-                : "Preview didn't start: no warm pool container was available and the host boot didn't kick off (port allocation or boot resolution failed). Check preview_status once; if it's still down, don't loop on start_preview — investigate or verify another way.",
+                : "Preview didn't start: its boot process didn't kick off (port allocation or boot resolution failed). Check preview_status once; if it's still down, don't loop on start_preview — inspect the Preview service log or verify another way.",
             );
           }
           return text(describeStatus(s));
