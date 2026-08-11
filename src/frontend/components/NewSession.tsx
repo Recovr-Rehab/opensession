@@ -21,7 +21,6 @@ import {
   IconBox,
   IconFile,
   IconFolderPlus,
-  IconMap,
   IconStack,
 } from "./icons";
 import type { WSServerMessage } from "../lib/types";
@@ -209,9 +208,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     navigator.userAgent.includes("Electron/");
   const [prefill] = useState(readPrefill);
   const [mode, setMode] = useState<"ask" | "code" | "scratch">(forceMode || prefill.mode);
-  // Plan-first gate (code mode): design doc + ask_user approval before any
-  // code, then vertical slices with per-slice evidence. See buildPlanFirstNote.
-  const [planFirst, setPlanFirst] = useState(false);
   // The desktop app's local bridge merges local and hosted sessions. Hosted is
   // deliberately the default; local execution is still experimental and must
   // be selected explicitly for each palette lifetime.
@@ -639,7 +635,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       branch: mode === "code" ? branch : "",
       prompt: prompt.trim(),
       user: getCurrentUser(),
-      ...(mode === "code" && planFirst ? { planFirst: true } : {}),
       ...(model ? { model } : {}),
       effort,
       ...(accountProvider && accountId ? { accountId } : {}),
@@ -735,22 +730,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 
   // One frame closed so the palette animates in; App mounts us already-open.
   const open = useEnterOnMount();
-  // Plan mode tints the writing surface and hatches it. Applied here rather
-  // than through a `.palette-card.is-plan-mode` descendant rule now that the
-  // shell is the shared Modal and no longer carries `.palette-card`.
-  const planSurface: React.CSSProperties | undefined = planFirst
-    ? { background: "color-mix(in srgb, var(--bg-panel) 96%, var(--accent))" }
-    : undefined;
-  const planBody: React.CSSProperties | undefined = planFirst
-    ? {
-        backgroundColor: "color-mix(in srgb, var(--bg-panel) 96%, var(--accent))",
-        // The hatch fades out downwards, same as the composer's ask mode: the
-        // flat tint is layered back over the stripes so the writing surface
-        // settles into the footer instead of hatching all the way to the edge.
-        backgroundImage:
-          "linear-gradient(to bottom, transparent 15%, color-mix(in srgb, var(--bg-panel) 96%, var(--accent)) 72%), repeating-linear-gradient(45deg, color-mix(in srgb, var(--accent) 5%, transparent) 0, color-mix(in srgb, var(--accent) 5%, transparent) 12px, transparent 12px, transparent 24px)",
-      }
-    : undefined;
 
   return (
     <Modal.Root
@@ -882,7 +861,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         {/* Prompt */}
         <div
           className={BODY}
-          style={planBody}
           onDrop={(e) => {
             if (e.dataTransfer?.files?.length) {
               e.preventDefault();
@@ -941,7 +919,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         )}
 
         {/* Footer toolbar */}
-        <div className={FOOTER} style={planSurface}>
+        <div className={FOOTER}>
           <div className={FOOTER_LEFT}>
             <Tooltip label="Attach a file">
               <button
@@ -964,23 +942,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 e.target.value = "";
               }}
             />
-            {mode === "code" && (
-              <Tooltip label={planFirst ? "Exit plan mode" : "Enter plan mode"}>
-                <button
-                  type="button"
-                  className={cn(FOOTER_ICON_BTN, planFirst && paletteIconBtnOn)}
-                  onClick={() => setPlanFirst((v) => !v)}
-                  disabled={creating}
-                  aria-label={planFirst ? "Exit plan mode" : "Enter plan mode"}
-                  aria-pressed={planFirst}
-                >
-                  <IconMap size={20} />
-                </button>
-              </Tooltip>
-            )}
             {/* Rarely changed execution settings stay one level behind a single
                 overflow button. Their current values remain visible in the
-                submenu rows, while attachment and plan mode stay one tap away. */}
+                submenu rows, while attachment stays one tap away. */}
             <Menu.Root>
               <Tooltip label="More options">
                 <Menu.Trigger

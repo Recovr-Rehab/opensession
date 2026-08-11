@@ -249,7 +249,6 @@ registerSessionControl({
 		sandbox,
 		forkFrom,
 		accountId: accountIdInput,
-		planFirst,
 	}) => {
 		// Fork: branch a new session off an existing one — same rules as the
 		// web create (shares the source's cwd/branch/model; Claude sources are
@@ -588,7 +587,6 @@ registerSessionControl({
 			parentSessionId,
 			spawnedBy,
 			reportBack,
-			planFirst: planFirst === true,
 			model,
 			effort: createEffort,
 			fastMode: createFastMode || undefined,

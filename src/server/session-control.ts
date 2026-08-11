@@ -105,8 +105,6 @@ export interface CreateSessionOpts {
    * mismatched/unknown/foreign personal ids are dropped rather than persisted.
    */
   accountId?: string;
-  /** Plan-first gate: the session must post a design doc before editing files. */
-  planFirst?: boolean;
   /**
    * Fork an existing session instead of starting fresh: the new session shares
    * the source's worktree/branch/model (and effort/fast-mode/account pin), and

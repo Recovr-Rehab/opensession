@@ -432,10 +432,6 @@ export interface NativeSessionFile {
   lastActivity: string;
   title?: string;
   mode?: "ask" | "code" | "scratch";
-  /** Plan-first gate (code mode only): the session must post a program-design
-   *  doc and get it approved via ask_user before writing code, then implement
-   *  in vertical slices with per-slice evidence. See buildPlanFirstNote. */
-  planFirst?: boolean;
   repo?: string; // which registered repo this session works in
   workspaceId?: string | null; // Workspace this session belongs to
   /** The branch this session's worktree was cut from, when it was stacked on

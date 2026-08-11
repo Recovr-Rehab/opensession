@@ -46,7 +46,7 @@ type ResolvedSandboxProvider = Extract<
 	{ ok: true }
 >["provider"];
 import { SESSION_EFFORTS, findSession, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
-import { buildBranchNote, buildPlanFirstNote, memoryNoteFor, workspaceOwningWorktree } from "./session-repos";
+import { buildBranchNote, memoryNoteFor, workspaceOwningWorktree } from "./session-repos";
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
 import { userMatchesAny } from "./shared/user-mappings";
@@ -82,7 +82,6 @@ export interface CreateSessionMessage {
 	workspaceId?: unknown;
 	plainThreadId?: unknown;
 	createWorkspace?: { name?: unknown };
-	planFirst?: unknown;
 }
 
 /** A resolved fork request: the source session plus how it can be forked. */
@@ -201,7 +200,6 @@ export interface ResolvedCreate {
 	/** Agent that created this session (SessionData.spawnedBy). */
 	spawnedBy?: string;
 	reportBack?: boolean;
-	planFirst?: boolean;
 	/** Undefined only for forks of sessions with no recorded model (historic). */
 	model?: string;
 	effort?: string;
@@ -347,7 +345,6 @@ export async function openCreatedSession(
 				...(spec.stackedOn && spec.stackedOn.branch !== spec.persistBranch
 					? { stackedOn: spec.stackedOn }
 					: {}),
-				...(spec.planFirst && spec.mode !== "ask" ? { planFirst: true } : {}),
 				...(spec.effort ? { effort: spec.effort } : {}),
 				...(spec.fastMode ? { fastMode: true } : {}),
 				...(spec.accountId ? { accountId: spec.accountId } : {}),
@@ -480,10 +477,6 @@ export async function openCreatedSession(
 				mcpServers: spec.runMcpServers as McpScope,
 				reposNote:
 					[
-						buildPlanFirstNote({
-							mode: spec.mode,
-							planFirst: !!spec.planFirst,
-						}),
 						buildBranchNote({
 							mode: spec.mode,
 							branch: spec.branch,
@@ -1197,7 +1190,6 @@ export async function handleCreateSessionMessage(
 			announceWorkspaceId: workspace?.id,
 			createdWorkspaceNow,
 			autoNameWorkspace: wsAutoNamed ? workspace : null,
-			planFirst: msg.planFirst === true,
 			model,
 			effort: createEffort,
 			fastMode: createFastMode,

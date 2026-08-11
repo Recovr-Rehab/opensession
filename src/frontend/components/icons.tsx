@@ -353,16 +353,6 @@ export function IconCursor(p: IconProps) {
   );
 }
 
-export function IconMap(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path {...stroke} d="M4.75 6.75L9.25 4.75V17.25L4.75 19.25V6.75Z" />
-      <path {...stroke} d="M14.75 6.75L19.25 4.75V17.25L14.75 19.25V6.75Z" />
-      <path {...stroke} d="M14.75 6.75L9.25 4.75V17.25L14.75 19.25V6.75Z" />
-    </Svg>
-  );
-}
-
 /* ── Tool icons (transcript work blocks) ─────────────────── */
 
 export function IconTerminal(p: IconProps) {

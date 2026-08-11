@@ -734,15 +734,10 @@ enum OS1API {
         effort: String? = nil,
         fastMode: Bool = false,
         images: [String] = [],
-        workspaceId: String? = nil,
-        planFirst: Bool = false
+        workspaceId: String? = nil
     ) async throws -> String {
         struct CreateResponse: Decodable { let id: String }
         var body: [String: Any] = ["prompt": prompt, "mode": mode]
-        // The server drops planFirst on an ask session (session-create.ts) —
-        // send it only where it means something, so a stray flag never reads
-        // as a mode the session isn't in.
-        if planFirst && mode == "code" { body["planFirst"] = true }
         if !repo.isEmpty { body["repo"] = repo }
         // Join an existing workspace as a sibling session (a new tab) rather
         // than starting a standalone session: the server takes the workspace's

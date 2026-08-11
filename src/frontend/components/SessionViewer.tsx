@@ -5605,7 +5605,7 @@ export function SessionViewer({
 									}
 									// Ask mode lost its chip when the toolbar collapsed into
 									// the "+", so the writing surface carries the state
-									// instead — tinted and hatched like plan mode.
+									// instead — tinted and hatched.
 									askMode={isAsk}
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}

@@ -190,8 +190,8 @@ interface Props {
   skillsFetch?: (query: string) => Promise<FileMention[]>;
   /**
    * Ask mode: this session can read the checkout but not change it. Tints the
-   * writing surface the way plan mode does — the state has no chip of its own,
-   * so the surface is what says it.
+   * writing surface — the state has no chip of its own, so the surface is what
+   * says it.
    */
   askMode?: boolean;
 }
@@ -223,8 +223,8 @@ function composerRadius(): number {
 
 /** The writing surface for a composer that isn't in its ordinary state: a flat
  *  tint plus a 45° hatch that fades out downwards, so the box settles into its
- *  toolbar instead of hatching all the way to the edge. Shared shape with the
- *  new-session palette's plan mode; the modes differ only in ink and strength.
+ *  toolbar instead of hatching all the way to the edge. One shape for every
+ *  such state; the modes differ only in ink and strength.
  *  Ask mode is ambient (on for the session's whole life), so it's painted
  *  lighter than the transient modes. */
 function tintedSurface(ink: string, tint: number, hatch: number, edge: number): React.CSSProperties {
