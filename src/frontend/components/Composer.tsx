@@ -8,6 +8,8 @@ import {
 } from "../lib/composer-highlight";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
+import { QuoteChips } from "./QuoteChips";
+import type { Quote } from "../lib/quotes";
 import { useFileMentions } from "./useFileMentions";
 import {
   IconArrowUp,
@@ -164,6 +166,13 @@ interface Props {
    */
   files?: FileAttachment[];
   onFilesChange?: (files: FileAttachment[]) => void;
+  /**
+   * Passages quoted out of the transcript ("Add to chat"). Shown as removable
+   * chips above the draft; the parent decides how they ride along with the
+   * message (see lib/quotes.ts).
+   */
+  quotes?: Quote[];
+  onQuotesChange?: (quotes: Quote[]) => void;
   /**
    * Enables "@"-mention file autocomplete. Given the text typed after the "@",
    * returns matching files (primary repo + any attached repos). When omitted,
@@ -342,6 +351,8 @@ export function Composer({
   onImagesChange,
   files,
   onFilesChange,
+  quotes,
+  onQuotesChange,
   mentionFetch,
   skillsFetch,
   askMode,
@@ -439,7 +450,12 @@ export function Composer({
   const [focused, setFocused] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const hasAttached = !!attached;
-  const hasContent = !!text.trim() || imgs.length > 0 || fls.length > 0 || hasAttached;
+  const hasContent =
+    !!text.trim() ||
+    imgs.length > 0 ||
+    fls.length > 0 ||
+    (quotes?.length ?? 0) > 0 ||
+    hasAttached;
   const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
   const showSend = !busy || hasContent;
   // Whether the send button/plain send steers right now: each gesture has its
@@ -760,6 +776,13 @@ export function Composer({
                 : "V-LINE"}
           </div>
         )}
+        <QuoteChips
+          quotes={quotes ?? []}
+          onRemove={(id) =>
+            onQuotesChange?.((quotes ?? []).filter((q) => q.id !== id))
+          }
+          disabled={disabled}
+        />
         <ImageThumbs images={imgs} onRemove={removeImage} disabled={disabled} />
         <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
         <motion.div

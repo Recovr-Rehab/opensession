@@ -20,6 +20,8 @@ import {
 	recordSessionPerf,
 } from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { newQuote, withQuotes, type Quote } from "../lib/quotes";
+import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
 import type {
@@ -2915,6 +2917,15 @@ export function SessionViewer({
 	// first send as `contextSessions` and the server inlines a fenced transcript
 	// digest of each. One-shot: cleared once a send consumes them.
 	const [contextSessions, setContextSessions] = useState<string[]>([]);
+
+	// Passages quoted out of the transcript ("Add to chat" on a text selection).
+	// They ride along with the next message as markdown blockquotes and clear
+	// once a send consumes them — see lib/quotes.ts.
+	const [quotes, setQuotes] = useState<Quote[]>([]);
+	// Switching sessions drops staged selections: they quote THAT transcript.
+	useEffect(() => {
+		setQuotes([]);
+	}, [session.id]);
 	const [showAllContextSessions, setShowAllContextSessions] = useState(false);
 	const contextSessionOptions = useMemo(() => {
 		// Whole workspace, archived sessions included — the common case is exactly a
@@ -2984,10 +2995,13 @@ export function SessionViewer({
 	// Composer knows to clear its draft; false keeps it for a retry.
 	function handleSend(raw: string, opts?: { steer?: boolean }): boolean {
 		const sendStartedAt = performance.now();
-		const text = raw.trim();
+		const typed = raw.trim();
+		// Quoted transcript selections lead the message as blockquotes, so the
+		// agent — and the sender's own bubble — carry what was being pointed at.
+		const text = withQuotes(quotes, typed);
 		const imgs = images;
 		const fls = files;
-		if (!text && imgs.length === 0 && fls.length === 0) return false;
+		if (!typed && imgs.length === 0 && fls.length === 0) return false;
 		if (!connected) return false;
 
 		const user = getCurrentUser();
@@ -3011,6 +3025,7 @@ export function SessionViewer({
 			setForkFrom(null);
 			setImages([]);
 			setFiles([]);
+			setQuotes([]);
 			return true;
 		}
 
@@ -3109,6 +3124,7 @@ export function SessionViewer({
 		scrollToLatest("auto");
 		setImages([]);
 		setFiles([]);
+		setQuotes([]);
 		setContextSessions([]);
 		measureSessionPerf("send_handler_ms", sendStartedAt);
 		return true;
@@ -5059,6 +5075,16 @@ export function SessionViewer({
 					) : (
 					<>
 					<div className={VIEWER_MESSAGES_REGION}>
+						{/* Select any transcript text -> "Add to chat" -> it becomes a
+						    "Selected text" chip on the composer. */}
+						<QuoteSelection
+							containerRef={messagesRef}
+							disabled={!connected || noEngine}
+							onQuote={(text) => {
+								setQuotes((q) => [...q, newQuote(text)]);
+								if (!isPhone) composerRef.current?.focus();
+							}}
+						/>
 						<div
 							className={VIEWER_MESSAGES}
 							ref={messagesRef}
@@ -5353,16 +5379,20 @@ export function SessionViewer({
 									onImagesChange={setImages}
 									files={files}
 									onFilesChange={setFiles}
+									quotes={quotes}
+									onQuotesChange={setQuotes}
 									placeholder={
 										!connected
 											? "Not connected"
 											: forkFrom
 												? "New direction…"
-												: isBusy
-													? "Queue for when it finishes…"
-													: isAsk
-														? `Ask ${AGENT_NAME} — read-only…`
-														: `Ask ${AGENT_NAME}…`
+												: quotes.length > 0
+													? "Chat with selected text"
+													: isBusy
+														? "Queue for when it finishes…"
+														: isAsk
+															? `Ask ${AGENT_NAME} — read-only…`
+															: `Ask ${AGENT_NAME}…`
 									}
 									disabled={!connected}
 									sendDisabled={(text) =>
