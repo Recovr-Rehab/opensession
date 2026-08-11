@@ -118,6 +118,31 @@ describe("remote repo lifecycle", () => {
 });
 
 describe("remote workspace private seed files", () => {
+	test("uses the remote-tracking default branch instead of a parked checkout branch", () => {
+		const root = seedRepo([".env.local"]);
+		writeFileSync(join(root, ".gitignore"), ".env.local\nother.env\n");
+		writeFileSync(join(root, ".env.local"), "SOURCE=default\n");
+		Bun.spawnSync({ cmd: ["git", "-C", root, "add", ".agents/environment.json", ".gitignore"] });
+		Bun.spawnSync({
+			cmd: [
+				"git", "-C", root,
+				"-c", "user.name=OpenSession Test",
+				"-c", "user.email=test@opensession.local",
+				"commit", "-qm", "default manifest",
+			],
+		});
+		Bun.spawnSync({ cmd: ["git", "-C", root, "update-ref", "refs/remotes/origin/main", "HEAD"] });
+		writeFileSync(
+			join(root, ".agents/environment.json"),
+			JSON.stringify({ seedFiles: ["other.env"] }),
+		);
+		writeFileSync(join(root, "other.env"), "SOURCE=parked-branch\n");
+
+		expect(
+			loadRemoteWorkspaceSeedFiles({ id: "app", repo: root, defaultBranch: "main" }),
+		).toEqual([{ path: ".env.local", content: "SOURCE=default\n" }]);
+	});
+
 	test("loads declared gitignored text files from the registered checkout", () => {
 		const root = seedRepo(["packages/web/.env.local", ".envrc"]);
 		writeFileSync(join(root, ".gitignore"), ".envrc\npackages/web/.env.local\n");

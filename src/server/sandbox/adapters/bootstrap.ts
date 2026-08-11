@@ -886,12 +886,38 @@ export interface RemoteWorkspaceSeedFile {
 export function loadRemoteWorkspaceSeedFiles(repo: {
   id: string;
   repo: string;
+  defaultBranch?: string;
 }): RemoteWorkspaceSeedFile[] {
-  const manifestPath = resolve(repo.repo, REMOTE_SEED_MANIFEST);
-  if (!existsSync(manifestPath)) return [];
+  // Registered checkouts can legitimately be parked on another session's
+  // branch. Prefer the trusted remote-tracking default branch so a freshly
+  // merged environment manifest applies immediately and an old branch cannot
+  // keep requesting seed files that default has removed.
+  let manifestText: string | null = null;
+  if (repo.defaultBranch) {
+    const ref = `refs/remotes/origin/${repo.defaultBranch}`;
+    const refExists = Bun.spawnSync({
+      cmd: ["git", "-C", repo.repo, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    if (refExists.exitCode === 0) {
+      const shown = Bun.spawnSync({
+        cmd: ["git", "-C", repo.repo, "show", `${ref}:${REMOTE_SEED_MANIFEST}`],
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      if (shown.exitCode !== 0) return [];
+      manifestText = shown.stdout.toString("utf-8");
+    }
+  }
+  if (manifestText == null) {
+    const manifestPath = resolve(repo.repo, REMOTE_SEED_MANIFEST);
+    if (!existsSync(manifestPath)) return [];
+    manifestText = readFileSync(manifestPath, "utf-8");
+  }
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
+    raw = JSON.parse(manifestText);
   } catch (error) {
     throw new Error(
       `${repo.id} ${REMOTE_SEED_MANIFEST} is invalid JSON: ${(error as Error).message}`,
