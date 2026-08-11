@@ -57,8 +57,7 @@ describe("CodeFlow", () => {
 		expect(html).toContain("2 changed flows");
 		expect(html).toContain("src/Profile.tsx");
 		expect(html.match(/src\/Profile\.tsx/g)).toHaveLength(1);
-		expect(html).toContain("Powered by calldiff by Tanishq Kancharla");
-		expect(html).toContain("github.com/tanishqkancharla/calldiff");
+		expect(html).not.toContain("Powered by");
 	});
 
 	test("has a focused empty state", () => {

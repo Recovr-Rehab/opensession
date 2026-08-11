@@ -19,8 +19,6 @@ const MARK: Record<CodeFlowNode["status"], string> = {
 	modified: "~",
 };
 
-const CALLDIFF_CREDIT = "Powered by calldiff by Tanishq Kancharla";
-
 function shortPath(path: string): string {
 	const parts = path.split("/");
 	return parts.length > 2 ? `${parts.at(-2)}/${parts.at(-1)}` : path;
@@ -170,11 +168,8 @@ export function CodeFlow({
 					</article>
 				))}
 			</div>
-			<footer className="mt-3 flex items-center justify-between gap-3 px-1 text-meta text-faint phone:flex-col phone:items-start">
-				<span>Approximate, syntax-based structure{data.skippedFiles ? ` · ${data.skippedFiles} file${data.skippedFiles === 1 ? "" : "s"} skipped` : ""}</span>
-				<a className="shrink-0 text-faint underline decoration-line underline-offset-2 hover:text-link" href="https://github.com/tanishqkancharla/calldiff" target="_blank" rel="noopener noreferrer">
-					{CALLDIFF_CREDIT}
-				</a>
+			<footer className="mt-3 px-1 text-meta text-faint">
+				Approximate, syntax-based structure{data.skippedFiles ? ` · ${data.skippedFiles} file${data.skippedFiles === 1 ? "" : "s"} skipped` : ""}
 			</footer>
 		</section>
 	);
