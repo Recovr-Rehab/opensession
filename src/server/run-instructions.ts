@@ -385,8 +385,8 @@ export function buildRunInstructions(input: {
         "`publish_walkthrough`: a short demo screen-recording of the change working, " +
         "at least one after screenshot when the change is visual (plus before screenshots " +
         "when useful), and a 2-6 sentence markdown writeup whose first paragraph says what " +
-        "changed and why it matters. Merged visual PRs use that after screenshot and first " +
-        "paragraph for the team's shipped-change Slack post. Record media " +
+        "changed and why it matters. That proof makes a deliberate Share to Slack action " +
+        "available after the PR merges. Record media " +
         "first and pass absolute file paths; they are copied to durable " +
         "storage. It renders inline in the session where you publish it (video and all) and " +
         "in the session's Review tab" +

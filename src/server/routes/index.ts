@@ -24,6 +24,7 @@ import { handleSessionAssetsRoutes } from "./session-assets";
 import { handleSandboxRoutes } from "./sandbox";
 import { handleSandboxesRoutes } from "./sandboxes";
 import { handleSessionsRoutes } from "./sessions";
+import { handleShippedChangeRoutes } from "./shipped-changes";
 import { handlePrRoutes } from "./pr";
 import { handleSessionGitRoutes } from "./session-git";
 import { handlePreviewRoutes } from "./preview";
@@ -82,6 +83,7 @@ export const routeHandlers: RouteHandler[] = [
 	handleSessionAssetsRoutes,
 	handleSandboxesRoutes,
 	handleSandboxRoutes,
+	handleShippedChangeRoutes,
 	handleSessionsRoutes,
 	handlePrRoutes,
 	handleSessionGitRoutes,

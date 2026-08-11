@@ -701,7 +701,7 @@ describe("buildRunInstructions", () => {
     });
     expect(s).toContain("at least one after screenshot when the change is visual");
     expect(s).toContain("why it matters");
-    expect(s).toContain("shipped-change Slack post");
+    expect(s).toContain("deliberate Share to Slack action");
   });
   test("ask and scratch runs never get a reviewer instruction", () => {
     for (const input of [

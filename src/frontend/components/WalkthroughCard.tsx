@@ -6,6 +6,7 @@ import { cn } from "../ui/cn";
 import { IconChevronDown, IconPlay, IconPlayRectangle } from "./icons";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { openLightbox, type LightboxItem } from "./MediaLightbox";
+import { Button } from "../ui/button";
 
 /** Stream server-side media (staged under the uploads dir) through the
  *  existing scoped media route — same URL shape MessageBubble uses. */
@@ -30,9 +31,14 @@ const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
 export function WalkthroughCard({
 	walkthrough,
 	variant = "panel",
+	slackShare,
 }: {
 	walkthrough: SessionWalkthrough;
 	variant?: "panel" | "session";
+	slackShare?: {
+		status: "idle" | "sharing" | "shared";
+		onShare: () => void;
+	};
 }) {
 	const session = variant === "session";
 	const [expanded, setExpanded] = useState(!session);
@@ -180,6 +186,20 @@ export function WalkthroughCard({
 				<div className="mb-2 flex items-center gap-1.5">
 					<IconPlayRectangle size={20} className="text-faint" />
 					<span className="text-xs font-semibold text-dim">Walkthrough</span>
+					{slackShare && (
+						<Button
+							size="xs"
+							className="ml-auto phone:min-h-11"
+							disabled={slackShare.status !== "idle"}
+							onClick={slackShare.onShare}
+						>
+							{slackShare.status === "sharing"
+								? "Sharing…"
+								: slackShare.status === "shared"
+									? "Shared"
+									: "Share to Slack"}
+						</Button>
+					)}
 				</div>
 			)}
 

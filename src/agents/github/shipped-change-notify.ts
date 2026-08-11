@@ -1,7 +1,7 @@
 /**
- * Share visual changes in Slack once their PR merges. A walkthrough's durable
- * `after` screenshot is both the visual-change signal and the attachment, so
- * this path needs no model classification and never posts text-only noise.
+ * Deliberately share a merged visual change in Slack. A walkthrough's durable
+ * `after` screenshot is both the visual-change signal and the attachment; the
+ * route calls this only after a teammate clicks Share to Slack.
  */
 import {
   mkdirSync,
@@ -14,19 +14,13 @@ import {
 import { dirname, relative, resolve } from "path";
 import { createHash } from "crypto";
 import { personaName } from "../../server/config";
-import { sessionRefFromPrBody } from "../../server/pr-cache";
-import {
-  tryGetSessionControl,
-  type SessionControl,
-  type SessionSummary,
-} from "../../server/session-control";
 import { audit } from "../../server/audit";
 import { stateDir } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { UPLOADS_DIR } from "../../server/uploads";
+import type { UnifiedSession } from "../../server/types";
 import { postSlackFile } from "../slack/slack-api";
 import { shippedChangesChannel } from "./constants";
-import { matchSessions, workspaceIdForRepo } from "./session-notify";
 
 export interface ShippedVisualChange {
   sessionId: string;
@@ -123,29 +117,17 @@ export function validWalkthroughScreenshot(
   }
 }
 
-/** Prefer the PR-attributed session, then the newest branch match with proof. */
 export function selectShippedVisualChange(
-  sessions: SessionSummary[],
-  preferredSessionId?: string,
+  session: UnifiedSession,
   fileExists: (path: string, sessionId: string) => boolean = validWalkthroughScreenshot,
 ): ShippedVisualChange | null {
-  const ordered = [...sessions].sort((a, b) => {
-    if (a.id === preferredSessionId) return -1;
-    if (b.id === preferredSessionId) return 1;
-    const bTime = Date.parse(b.walkthrough?.publishedAt || "") || 0;
-    const aTime = Date.parse(a.walkthrough?.publishedAt || "") || 0;
-    return bTime - aTime;
-  });
-  for (const session of ordered) {
-    const screenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
-    if (!screenshot || !fileExists(screenshot, session.id)) continue;
-    return {
-      sessionId: session.id,
-      screenshot,
-      summary: session.walkthrough!.summary,
-    };
-  }
-  return null;
+  const screenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
+  if (!screenshot || !fileExists(screenshot, session.id)) return null;
+  return {
+    sessionId: session.id,
+    screenshot,
+    summary: session.walkthrough!.summary,
+  };
 }
 
 /** Collapse the walkthrough's first prose paragraph into Slack-sized copy. */
@@ -173,45 +155,23 @@ function slackText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function candidateSessions(
-  control: SessionControl,
-  workspaceId: string,
-  headRef: string,
-  preferredSessionId?: string,
-): SessionSummary[] {
-  if (!preferredSessionId) return [];
-  const matches = matchSessions(control, workspaceId, headRef);
-  const preferred = matches.find((session) => session.id === preferredSessionId);
-  return preferred ? [preferred] : [];
-}
-
-/** `pull_request` webhook payload with action=closed & merged=true. */
-export async function announceShippedVisualChange(payload: any): Promise<void> {
+export async function shareShippedVisualChange(opts: {
+  session: UnifiedSession;
+  pr: { number: number; title: string; url: string };
+  repoFullName: string;
+  requestedBy?: string;
+}): Promise<{ status: "shared" | "already_shared" }> {
   const channel = shippedChangesChannel();
-  if (!channel) return;
-  const pr = payload?.pull_request;
-  const repoFullName: string = payload?.repository?.full_name || "";
-  const workspaceId = workspaceIdForRepo(repoFullName);
-  const headRef: string = pr?.head?.ref || "";
-  const control = tryGetSessionControl();
-  if (!pr || !workspaceId || !headRef || !control) return;
-
-  const preferredSessionId = sessionRefFromPrBody(pr.body);
-  const visual = selectShippedVisualChange(
-    candidateSessions(control, workspaceId, headRef, preferredSessionId),
-    preferredSessionId,
-  );
-  if (!visual) return;
-
-  const prNumber: number = pr.number;
-  const title = String(pr.title || `PR #${prNumber}`).replace(/\|/g, "¦");
-  const url = pr.html_url || `https://github.com/${repoFullName}/pull/${prNumber}`;
+  if (!channel) throw new Error("Shipped changes channel is not configured");
+  const visual = selectShippedVisualChange(opts.session);
+  if (!visual) throw new Error("Walkthrough has no valid after screenshot");
+  const title = opts.pr.title.replace(/\|/g, "¦");
   const reason = shippedChangeOneLiner(visual.summary);
-  if (!reason) return;
-  const comment = `*${slackText(personaName())} shipped <${url}|${slackText(title)}>*\n${slackText(reason)}`;
-  const announcementKey = `${repoFullName}#${prNumber}@${pr.merge_commit_sha || pr.merged_at || "merged"}`;
+  if (!reason) throw new Error("Walkthrough has no prose explanation");
+  const comment = `*${slackText(personaName())} shipped <${opts.pr.url}|${slackText(title)}>*\n${slackText(reason)}`;
+  const announcementKey = `${opts.repoFullName}#${opts.pr.number}`;
   const claimId = claimShippedChangeAnnouncement(announcementKey);
-  if (!claimId) return;
+  if (!claimId) return { status: "already_shared" };
   try {
     await postSlackFile(channel, visual.screenshot, comment, {
       title: `${title} — shipped`,
@@ -229,12 +189,14 @@ export async function announceShippedVisualChange(payload: any): Promise<void> {
   }
   audit({
     msg: "github_shipped_visual_change_announced",
-    repo: repoFullName,
-    pr_number: prNumber,
+    repo: opts.repoFullName,
+    pr_number: opts.pr.number,
     session_id: visual.sessionId,
     slack_channel: channel,
+    requested_by: opts.requestedBy,
   });
   console.log(
-    `[github] Shared merged visual change ${repoFullName}#${prNumber} in Slack from ${visual.sessionId}`,
+    `[github] Shared merged visual change ${opts.repoFullName}#${opts.pr.number} in Slack from ${visual.sessionId}`,
   );
+  return { status: "shared" };
 }

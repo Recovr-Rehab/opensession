@@ -2,10 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { defaultRepo } from "../../server/config";
-import type { SessionControl, SessionSummary } from "../../server/session-control";
+import type { UnifiedSession } from "../../server/types";
 import {
-  candidateSessions,
   claimShippedChangeAnnouncement,
   selectShippedVisualChange,
   settleShippedChangeAnnouncement,
@@ -23,82 +21,37 @@ function session(
   id: string,
   publishedAt: string,
   shots: Array<{ before?: string; after?: string }>,
-): SessionSummary {
+): UnifiedSession {
   return {
     id,
-    state: "idle",
-    queuedCount: 0,
-    controllable: false,
-    repo: defaultRepo().id,
     branch: "visual-branch",
-    worktreeDir: defaultRepo().repo,
     walkthrough: { summary: `Why ${id} matters.`, publishedAt, shots },
-  } as SessionSummary;
+  } as UnifiedSession;
 }
 
 describe("shipped visual change selection", () => {
-  test("prefers the PR-attributed session's after screenshot", () => {
-    const older = session("preferred", "2026-08-10T10:00:00Z", [
+  test("uses the session's after screenshot", () => {
+    const visual = session("preferred", "2026-08-10T10:00:00Z", [
       { before: "/tmp/before.png", after: "/tmp/preferred.png" },
     ]);
-    const newer = session("newer", "2026-08-11T10:00:00Z", [
-      { after: "/tmp/newer.png" },
-    ]);
 
-    expect(
-      selectShippedVisualChange([newer, older], "preferred", () => true),
-    ).toEqual({
+    expect(selectShippedVisualChange(visual, () => true)).toEqual({
       sessionId: "preferred",
       screenshot: "/tmp/preferred.png",
       summary: "Why preferred matters.",
     });
   });
 
-  test("falls back to the newest valid visual proof", () => {
+  test("requires a valid after screenshot", () => {
     const textOnly = session("text-only", "2026-08-12T10:00:00Z", [
       { before: "/tmp/before.png" },
     ]);
     const missing = session("missing", "2026-08-11T10:00:00Z", [
       { after: "/tmp/missing.png" },
     ]);
-    const valid = session("valid", "2026-08-10T10:00:00Z", [
-      { after: "/tmp/valid.png" },
-    ]);
 
-    expect(
-      selectShippedVisualChange(
-        [valid, textOnly, missing],
-        undefined,
-        (path) => path === "/tmp/valid.png",
-      )?.sessionId,
-    ).toBe("valid");
-  });
-
-  test("does not trust a PR body session link outside the matching branch", () => {
-    const matched = session("matched", "2026-08-10T10:00:00Z", [
-      { after: "/tmp/matched.png" },
-    ]);
-    const unrelated = {
-      ...session("unrelated", "2026-08-11T10:00:00Z", [
-        { after: "/tmp/unrelated.png" },
-      ]),
-      branch: "another-branch",
-    };
-    const control = {
-      listSessions: () => [unrelated, matched],
-    } as SessionControl;
-
-    expect(
-      candidateSessions(control, defaultRepo().id, "visual-branch", "unrelated").map(
-        (candidate) => candidate.id,
-      ),
-    ).toEqual([]);
-    expect(
-      candidateSessions(control, defaultRepo().id, "visual-branch", "matched").map(
-        (candidate) => candidate.id,
-      ),
-    ).toEqual(["matched"]);
-    expect(candidateSessions(control, defaultRepo().id, "visual-branch")).toEqual([]);
+    expect(selectShippedVisualChange(textOnly, () => true)).toBeNull();
+    expect(selectShippedVisualChange(missing, () => false)).toBeNull();
   });
 
   test("accepts only bounded images inside the session walkthrough directory", () => {

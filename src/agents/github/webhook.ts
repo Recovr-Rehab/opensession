@@ -165,12 +165,6 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
       import("./missed-bugs")
         .then((m) => m.analyzeMergedPrForMissedBugs(payload))
         .catch((e) => console.warn(`[github] missed-bug analysis failed for #${pr.number}:`, e));
-      import("./shipped-change-notify")
-        .then((m) => m.announceShippedVisualChange(payload))
-        .catch((e) =>
-          console.error(`[github] shipped-change announcement failed for #${pr.number}:`, e),
-        );
-
       if (!isDefaultRepo) return; // docs-sync/SEO/session-notify are default-repo flows
       import("./session-notify")
         .then((m) => m.notifyMergedPrSessions(payload))

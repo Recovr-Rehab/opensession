@@ -98,6 +98,7 @@ import { GitDivergenceStrip, GitStatusRows } from "./pr/GitStatus";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
+import { shareShippedChange } from "../lib/api/shipped-changes";
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export { checkClass, isDeployment, formatPrCommentPrompt, CheckRow, PrStateIcon };
@@ -403,6 +404,9 @@ export function PrPanel({
   const [closing, setClosing] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
+  const [slackShareStatus, setSlackShareStatus] = useState<
+    "idle" | "sharing" | "shared"
+  >("idle");
   const [mergeAfterReview, setMergeAfterReview] = useState(reviewCanvas === true);
   const [checksOpen, setChecksOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -446,6 +450,7 @@ export function PrPanel({
   const activeLoadTargetRef = useRef(loadTargetKey);
   const loadInFlightRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
   activeLoadTargetRef.current = loadTargetKey;
+  useEffect(() => setSlackShareStatus("idle"), [loadTargetKey, walkthrough?.publishedAt]);
 
   const load = useCallback((force = false): Promise<void> => {
     if (loadTargetKey !== activeLoadTargetRef.current) return Promise.resolve();
@@ -1174,6 +1179,32 @@ export function PrPanel({
     );
 
   const status = deriveStatus(pr);
+  const slackShare =
+    !previewTarget &&
+    pr.state === "MERGED" &&
+    walkthrough?.shots?.some((shot) => shot.after)
+      ? {
+          status: slackShareStatus,
+          onShare: async () => {
+            setSlackShareStatus("sharing");
+            try {
+              const result = await shareShippedChange(sessionId, {
+                repo: active?.repo,
+                branch: active?.branch,
+              });
+              setSlackShareStatus("shared");
+              toast(
+                result.status === "already_shared"
+                  ? "This change was already shared"
+                  : "Shared to Slack",
+              );
+            } catch (error: any) {
+              setSlackShareStatus("idle");
+              toast(error?.message || "Couldn't share the visual change");
+            }
+          },
+        }
+      : undefined;
   const files = pr.files || [];
   const reviewers = pr.reviewers || [];
   // Bot bookkeeping comments are pure HTML markers — hide them, and strip
@@ -1407,12 +1438,17 @@ export function PrPanel({
               ) : diffView === "commits" ? (
                 <CommitsView commits={pr.commits || []} showNotes={caps.commitNotes} />
               ) : diffView === "conversation" ? (
-                <ConversationView
-                  author={pr.author}
-                  descriptionHtml={bodyHtml}
-                  comments={comments}
-                  repo={markdownRepo}
-                />
+                <div className="flex flex-col gap-5">
+                  {walkthrough && (
+                    <WalkthroughCard walkthrough={walkthrough} slackShare={slackShare} />
+                  )}
+                  <ConversationView
+                    author={pr.author}
+                    descriptionHtml={bodyHtml}
+                    comments={comments}
+                    repo={markdownRepo}
+                  />
+                </div>
               ) : diffView === "flow" ? (
                 <CodeFlow
                   data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
@@ -1768,7 +1804,7 @@ export function PrPanel({
             </div>
           )}
 
-          {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
+          {walkthrough && <WalkthroughCard walkthrough={walkthrough} slackShare={slackShare} />}
 
           {!!bodyHtml && (
             <div className="-mt-1.5">
