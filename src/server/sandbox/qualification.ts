@@ -166,15 +166,28 @@ function failureSummary(code: string): string {
   return summaries[code] || "Qualification failed. Review provider and ingress diagnostics, then retry.";
 }
 
+function safeFailureDetail(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/([?&]_token=)[^&\s)]+/gi, "$1[redacted]")
+    .replace(/\bbox_[A-Za-z0-9_-]+\b/g, "Box")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 400);
+}
+
 export async function qualifySandboxConnection(
   provider: WorkspaceSandboxProvider,
+  update: (patch: { stage: string; progress?: number; detail?: string }) => void = () => undefined,
 ): Promise<void> {
   setSandboxConnectionQualification(provider, { status: "checking" });
   try {
     if (provider === "daytona" || provider === "box" || provider === "modal") {
       // Prove ingress before allocating paid provider compute.
+      update({ stage: "Checking public ingress", progress: 10 });
       await verifyPublicSandboxIngress();
     }
+    update({ stage: "Checking provider", progress: 20 });
     if (provider === "docker") await qualifyDocker();
     else if (provider === "microvm") await qualifyMicrovm();
     else if (provider === "daytona") {
@@ -182,7 +195,7 @@ export async function qualifySandboxConnection(
       await qualifyDaytonaConnection();
     } else if (provider === "box") {
       const { qualifyBoxConnection } = await import("./adapters/box");
-      await qualifyBoxConnection();
+      await qualifyBoxConnection((stage, progress) => update({ stage, progress }));
     } else {
       const { qualifyModalConnection } = await import("./adapters/modal");
       await qualifyModalConnection();
@@ -194,13 +207,18 @@ export async function qualifySandboxConnection(
     audit({ kind: "sandbox_connection_qualified", provider });
   } catch (error) {
     const code = failureCode(error);
-    const summary = failureSummary(code);
+    const genericSummary = failureSummary(code);
+    const detail = safeFailureDetail(error);
+    const summary = code === "QUALIFICATION_FAILED" && detail
+      ? `Qualification failed: ${detail}`
+      : genericSummary;
     setSandboxConnectionQualification(provider, {
       status: "failed",
       checkedAt: new Date().toISOString(),
       failureCode: code,
       failureSummary: summary,
     });
+    console.error(`[sandbox:qualification] ${provider} failed (${code}): ${detail || "unknown error"}`);
     audit({ kind: "sandbox_connection_qualification_failed", provider, failure_code: code });
     throw Object.assign(new Error(summary), { code });
   }

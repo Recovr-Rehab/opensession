@@ -308,6 +308,7 @@ function composeShell(cmd: string, opts?: RemoteExecOpts): string {
 }
 
 export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
+  let runtimeHomeReady = false;
   const result = (response: BoxCommandResponse) => ({
     exitCode: response.timedOut ? 124 : Number(response.exitCode ?? 1),
     stdout: response.stdout ?? "",
@@ -323,6 +324,38 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       { command: shell, detached: true },
       60_000,
     );
+
+  const ensureRuntimeHome = async () => {
+    // Box persists /home/user across archive/resume and named snapshots, while
+    // the VM root is rebuilt. Keep the cross-provider /home/ubuntu contract by
+    // linking it to that durable home on every fresh boot.
+    const response = result(
+      await boxApi<BoxCommandResponse>(
+        cfg,
+        "POST",
+        `/boxes/${boxId}/commands`,
+        {
+          command:
+            "test -d /home/user && test -w /home/user && " +
+            "if [ -L /home/ubuntu ] && [ \"$(readlink -f /home/ubuntu)\" = /home/user ]; then :; " +
+            "elif [ -L /home/ubuntu ]; then sudo -n rm /home/ubuntu && sudo -n ln -s /home/user /home/ubuntu; " +
+            "elif [ -d /home/ubuntu ] && [ -z \"$(ls -A /home/ubuntu)\" ]; then sudo -n rmdir /home/ubuntu && sudo -n ln -s /home/user /home/ubuntu; " +
+            "elif [ ! -e /home/ubuntu ]; then sudo -n ln -s /home/user /home/ubuntu; " +
+            "else echo 'cannot map /home/ubuntu to the persistent Box home' >&2; exit 1; fi",
+          timeoutSeconds: 60,
+        },
+        90_000,
+      ),
+    );
+    if (response.exitCode !== 0) {
+      throw new Error(
+        `Box cannot provide Open Session's durable /home/ubuntu runtime path: ${(
+          response.stderr || response.stdout
+        ).trim().slice(0, 200)}`,
+      );
+    }
+    runtimeHomeReady = true;
+  };
 
   const execDetached = async (shell: string, timeoutMs: number) => {
     try {
@@ -410,8 +443,11 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     async ensureStarted() {
       const box = await getBox(cfg, boxId);
       if (!box) throw new Error(`box ${boxId} is gone`);
-      if (LIVE_STATES.has(String(box.state || ""))) return;
-      await waitForLive(cfg, boxId, 300_000);
+      if (!LIVE_STATES.has(String(box.state || ""))) {
+        runtimeHomeReady = false;
+        await waitForLive(cfg, boxId, 300_000);
+      }
+      if (!runtimeHomeReady) await ensureRuntimeHome();
     },
   };
 }
@@ -739,6 +775,7 @@ export class BoxProvider implements SandboxProvider {
       }
       await waitForLive(cfg, sandboxId, 300_000);
     }
+    await boxDriver(cfg, sandboxId).ensureStarted();
     return this.makeHandle(cfg, sandboxId, state.sessionId, state.cwd);
   }
 
@@ -874,9 +911,11 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
     const name = `opensession-prewarm-${Buffer.from(key).toString("base64url")}`.slice(0, 120);
     await boxApi(cfg, "PATCH", `/boxes/${response.box.id}`, { name });
     await waitForLive(cfg, response.box.id, 300_000);
+    const driver = boxDriver(cfg, response.box.id);
+    await driver.ensureStarted();
     return {
       sandboxId: response.box.id,
-      driver: boxDriver(cfg, response.box.id),
+      driver,
       restoredFromTemplate,
     };
   },
@@ -937,8 +976,11 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
 /** Workspace qualification: credentials/quota, exec semantics, file upload,
  * private preview registration, stop/resume persistence, and a distinct
  * named-snapshot restore. Every disposable box is archived in finally. */
-export async function qualifyBoxConnection(): Promise<void> {
+export async function qualifyBoxConnection(
+  progress: (stage: string, value: number) => void = () => undefined,
+): Promise<void> {
   const cfg = boxClientConfig();
+  progress("Checking Box account", 25);
   await boxApi(cfg, "GET", "/me");
   const limits = await boxApi<{ canStart?: boolean; blockedReason?: string | null }>(
     cfg,
@@ -955,6 +997,7 @@ export async function qualifyBoxConnection(): Promise<void> {
   const snapshotName = `opensession-qualification-${suffix}`;
   const boxIds: string[] = [];
   try {
+    progress("Creating qualification Box", 35);
     const created = await boxApi<{ box: BoxRecord }>(cfg, "POST", "/boxes", {
       type: "small",
       ttlSeconds: 600,
@@ -965,17 +1008,10 @@ export async function qualifyBoxConnection(): Promise<void> {
       name: `opensession-qualification-${suffix}`,
     });
     await waitForLive(cfg, created.box.id, 300_000);
-    const driver = boxDriver(cfg, created.box.id);
+    let driver = boxDriver(cfg, created.box.id);
+    await driver.ensureStarted();
+    progress("Checking commands and private ingress", 45);
     await assertDialbackReachable(driver, "box-qualification");
-    const runtimeHome = await driver.exec(
-      "test -w /home/ubuntu || (sudo -n mkdir -p /home/ubuntu && sudo -n chown $(id -u):$(id -g) /home/ubuntu)",
-      { timeoutMs: 60_000 },
-    );
-    if (runtimeHome.exitCode !== 0) {
-      throw new Error(
-        `Box cannot provide Open Session's /home/ubuntu runtime path: ${(runtimeHome.stderr || runtimeHome.stdout).trim().slice(0, 200)}`,
-      );
-    }
     const semantics = await driver.exec(
       "printf qualification-out; printf qualification-err >&2; exit 7",
       { timeoutMs: 60_000 },
@@ -991,6 +1027,7 @@ export async function qualifyBoxConnection(): Promise<void> {
       throw new Error("Box private preview URL check failed");
     }
 
+    progress("Checking archive and resume", 60);
     await stopBox(cfg, created.box.id);
     await boxApi(cfg, "POST", `/boxes/${created.box.id}/resume`, {
       type: "small",
@@ -998,16 +1035,20 @@ export async function qualifyBoxConnection(): Promise<void> {
       ttlSeconds: 600,
     });
     await waitForLive(cfg, created.box.id, 300_000);
+    driver = boxDriver(cfg, created.box.id);
+    await driver.ensureStarted();
     const persisted = await driver.exec(
       "test \"$(cat /home/ubuntu/.opensession-qualification)\" = opensession-qualified",
     );
     if (persisted.exitCode !== 0) throw new Error("Box stop/resume lost filesystem state");
 
+    progress("Creating qualification snapshot", 72);
     await boxApi(cfg, "POST", "/named-snapshots", {
       boxId: created.box.id,
       name: snapshotName,
     }, 60_000);
     await waitForNamedSnapshot(cfg, snapshotName);
+    progress("Restoring qualification snapshot", 84);
     const restored = await boxApi<{ box: BoxRecord }>(cfg, "POST", "/boxes", {
       from: snapshotName,
       type: "small",
@@ -1022,13 +1063,16 @@ export async function qualifyBoxConnection(): Promise<void> {
       name: `opensession-qualification-${suffix}-restore`,
     });
     await waitForLive(cfg, restored.box.id, 300_000);
-    const restoredProbe = await boxDriver(cfg, restored.box.id).exec(
+    const restoredDriver = boxDriver(cfg, restored.box.id);
+    await restoredDriver.ensureStarted();
+    const restoredProbe = await restoredDriver.exec(
       "test \"$(cat /home/ubuntu/.opensession-qualification)\" = opensession-qualified",
     );
     if (restoredProbe.exitCode !== 0) {
       throw new Error("Box named snapshot did not restore filesystem state");
     }
   } finally {
+    progress("Cleaning up qualification resources", 94);
     const cleanupErrors: string[] = [];
     for (const boxId of boxIds.reverse()) {
       await archiveAndForgetBox(cfg, boxId).catch((error) => {

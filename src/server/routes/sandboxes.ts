@@ -49,7 +49,7 @@ async function connectionPayload(ctx: Pick<RouteContext, "authUser">) {
 function qualificationOperation(provider: Parameters<typeof qualifySandboxConnection>[0]) {
   return startSandboxOperation(
     { kind: "qualification", provider },
-    () => qualifySandboxConnection(provider),
+    (update) => qualifySandboxConnection(provider, update),
   );
 }
 
