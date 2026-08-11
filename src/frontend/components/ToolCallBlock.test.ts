@@ -2,8 +2,11 @@ import { expect, test } from "bun:test";
 import {
   assetToolPath,
   canonicalToolName,
+  mcpServerDisplayName,
+  mcpToolDisplayName,
   parseMcpTool,
   toolDurationMs,
+  toolDisplayName,
   toolFamily,
   toolLineStats,
   toolSummary,
@@ -121,6 +124,15 @@ test("MCP tools parse in both the mcp__ and flattened forms", () => {
   expect(parseMcpTool("apply_patch")).toBeNull();
   expect(parseMcpTool("exec_command")).toBeNull();
   expect(parseMcpTool("read")).toBeNull();
+});
+
+test("MCP labels read as actions rather than machine identifiers", () => {
+  expect(mcpServerDisplayName("opensession-preview")).toBe("Open Session Preview");
+  expect(mcpToolDisplayName("start_preview")).toBe("Start preview");
+  expect(toolDisplayName("opensession-preview_start_preview")).toBe(
+    "Open Session Preview · Start preview"
+  );
+  expect(toolSummary("opensession-preview_start_preview", {}, "Using opensession-preview_start_preview")).toBe("");
 });
 
 test("an assets call reads as the file it names, not its contents", () => {

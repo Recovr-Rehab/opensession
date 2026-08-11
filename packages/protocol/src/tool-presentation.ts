@@ -89,11 +89,54 @@ export function parseMcpTool(
   return flat ? { server: flat[1], tool: flat[2] } : null;
 }
 
-/** "mcp__linear__list_issues" → "linear · list_issues", else the tool name. */
+const IDENTIFIER_NAMES: Record<string, string> = {
+  api: "API",
+  github: "GitHub",
+  ios: "iOS",
+  mcp: "MCP",
+  opensession: "Open Session",
+  posthog: "PostHog",
+  sql: "SQL",
+  tella: "Tella",
+  url: "URL",
+  workos: "WorkOS",
+};
+
+function identifierWords(value: string): string[] {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[\s_-]+/)
+    .filter(Boolean);
+}
+
+/** "opensession-preview" → "Open Session Preview". */
+export function mcpServerDisplayName(name: string): string {
+  return identifierWords(name)
+    .map((word) => {
+      const lower = word.toLowerCase();
+      return IDENTIFIER_NAMES[lower] ?? `${lower[0]?.toUpperCase() ?? ""}${lower.slice(1)}`;
+    })
+    .join(" ");
+}
+
+/** "start_preview" → "Start preview". */
+export function mcpToolDisplayName(name: string): string {
+  const words = identifierWords(name).map(
+    (word) => IDENTIFIER_NAMES[word.toLowerCase()] ?? word.toLowerCase(),
+  );
+  if (!words.length) return name;
+  return `${words[0][0]?.toUpperCase() ?? ""}${words[0].slice(1)}${
+    words.length > 1 ? ` ${words.slice(1).join(" ")}` : ""
+  }`;
+}
+
+/** "mcp__linear__list_issues" → "Linear · List issues", else the tool name. */
 export function toolDisplayName(name?: string): string {
   if (!name) return "Tool";
   const mcp = parseMcpTool(name);
-  return mcp ? `${mcp.server} · ${mcp.tool}` : name;
+  return mcp
+    ? `${mcpServerDisplayName(mcp.server)} · ${mcpToolDisplayName(mcp.tool)}`
+    : name;
 }
 
 /**

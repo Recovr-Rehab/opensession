@@ -19,6 +19,8 @@ import {
   canonicalToolName,
   formatToolDetail,
   isHiddenToolInputKey,
+  mcpServerDisplayName,
+  mcpToolDisplayName,
   parseMcpTool,
   toolCommand as commandOf,
   toolDetail,
@@ -151,6 +153,8 @@ export type { PathRoot };
 export {
   assetToolPath,
   canonicalToolName,
+  mcpServerDisplayName,
+  mcpToolDisplayName,
   parseMcpTool,
   toolDisplayName,
   toolFamily,
@@ -189,10 +193,10 @@ export function toolSummary(
   fallback: string,
   roots: readonly PathRoot[] = []
 ): string {
-  return (
-    formatToolDetail(toolDetail(toolName, input), (p) => tidyPath(p, roots)) ||
-    fallback
-  );
+  const detail = formatToolDetail(toolDetail(toolName, input), (p) => tidyPath(p, roots));
+  if (detail) return detail;
+  if (parseMcpTool(toolName) && fallback.trim() === `Using ${toolName}`) return "";
+  return fallback;
 }
 
 export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: number }) {
@@ -402,11 +406,10 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
         </span>
 
         {mcp ? (
-          <span className="flex min-w-0 flex-shrink-0 items-baseline gap-1.5 text-[14px] leading-5">
-            <span className="font-semibold text-faint">
-              {mcp.server}
-            </span>
-            <span className="font-medium text-dim transition-colors group-hover:text-fg">{mcp.tool}</span>
+          <span className="flex min-w-0 flex-shrink-0 items-baseline gap-1 text-[14px] leading-5 font-medium text-dim transition-colors group-hover:text-fg">
+            <span>{mcpServerDisplayName(mcp.server)}</span>
+            <span className="text-faint">·</span>
+            <span>{mcpToolDisplayName(mcp.tool)}</span>
           </span>
         ) : (
           <span className="flex-shrink-0 text-[14px] leading-5 font-medium text-dim transition-colors group-hover:text-fg">{toolName}</span>
