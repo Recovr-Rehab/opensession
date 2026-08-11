@@ -804,6 +804,17 @@ export function SessionViewer({
 			mergedWalkthroughPr
 				? {
 						prNumber: mergedWalkthroughPr.number!,
+						preview: {
+							persona: AGENT_NAME,
+							title:
+								mergedWalkthroughPr.title ||
+								`PR #${mergedWalkthroughPr.number}`,
+							url: mergedWalkthroughPr.url!,
+							summary: session.walkthrough!.summary,
+							screenshot: session.walkthrough!.shots!.find(
+								(shot) => shot.after,
+							)!.after!,
+						},
 						status: walkthroughSlackShareStatus,
 						onShare: shareWalkthroughToSlack,
 					}

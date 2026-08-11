@@ -43,7 +43,18 @@ describe("TranscriptBlocks shipped change action", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				entries={entries}
-				slackShare={{ prNumber: 5606, status: "idle", onShare: () => {} }}
+				slackShare={{
+					prNumber: 5606,
+					preview: {
+						persona: "Michael",
+						title: "Adopt the OpenSession toggle style",
+						url: "https://github.com/tellahq/tella-fusion/pull/5606",
+						summary: "The longer toggle is easier to read.",
+						screenshot: "/tmp/toggle-after.png",
+					},
+					status: "idle",
+					onShare: () => {},
+				}}
 			/>,
 		);
 		expect(html.indexOf("PR #5606 is merged")).toBeLessThan(
@@ -52,13 +63,28 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html.indexOf("Share to Slack")).toBeLessThan(
 			html.indexOf("Deployment finished"),
 		);
+		expect(html).toContain("Michael shipped");
+		expect(html).toContain("Adopt the OpenSession toggle style");
+		expect(html).toContain("The longer toggle is easier to read.");
+		expect(html).toContain("%2Ftmp%2Ftoggle-after.png");
 	});
 
 	test("does not show the action for a different merged PR", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				entries={entries}
-				slackShare={{ prNumber: 5607, status: "idle", onShare: () => {} }}
+				slackShare={{
+					prNumber: 5607,
+					preview: {
+						persona: "Michael",
+						title: "Another PR",
+						url: "https://github.com/tellahq/tella-fusion/pull/5607",
+						summary: "Another visual change.",
+						screenshot: "/tmp/another.png",
+					},
+					status: "idle",
+					onShare: () => {},
+				}}
 			/>,
 		);
 		expect(html).not.toContain("Share to Slack");

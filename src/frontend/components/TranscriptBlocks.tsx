@@ -39,6 +39,13 @@ interface Props {
 	walkthrough?: SessionWalkthrough;
 	slackShare?: {
 		prNumber: number;
+		preview: {
+			persona: string;
+			title: string;
+			url: string;
+			summary: string;
+			screenshot: string;
+		};
 		status: "idle" | "sharing" | "shared";
 		onShare: () => void;
 	};
@@ -50,19 +57,63 @@ function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
 	return match ? Number(match[1]) : null;
 }
 
+function shippedChangeOneLiner(markdown: string, max = 280): string {
+	const prose = markdown
+		.split(/\n\s*\n/)
+		.map((part) => part.trim())
+		.find((part) => part && !/^#{1,6}\s/.test(part) && !/^[-*]\s*$/.test(part)) || "";
+	const plain = prose
+		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+		.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+		.replace(/^\s*(?:#{1,6}|[-*+])\s+/gm, "")
+		.replace(/[*_`~]/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (plain.length <= max) return plain;
+	const clipped = plain.slice(0, max - 1);
+	const wordBoundary = clipped.lastIndexOf(" ");
+	return `${clipped.slice(0, wordBoundary > max * 0.7 ? wordBoundary : undefined).trimEnd()}…`;
+}
+
 function ShippedChangeAction({
+	preview,
 	status,
 	onShare,
 }: NonNullable<Props["slackShare"]>) {
+	const reason = shippedChangeOneLiner(preview.summary);
 	return (
-		<div className="mx-auto mb-6 -mt-2 flex w-full max-w-[var(--session-col)]">
-			<Button size="sm" disabled={status !== "idle"} onClick={onShare}>
-				{status === "sharing"
-					? "Sharing…"
-					: status === "shared"
-						? "Shared to Slack"
-						: "Share to Slack"}
-			</Button>
+		<div className="mx-auto mb-6 -mt-2 w-full max-w-[var(--session-col)] overflow-hidden rounded-lg border border-line bg-panel">
+			<div className="border-b border-line px-3 py-2 text-meta font-medium text-faint">
+				Slack preview
+			</div>
+			<div className="px-3 py-3 text-body leading-relaxed text-fg">
+				<strong>
+					{preview.persona} shipped{" "}
+					<a
+						className="text-link no-underline hover:underline"
+						href={preview.url}
+						target="_blank"
+						rel="noopener"
+					>
+						{preview.title}
+					</a>
+				</strong>
+				{reason && <div>{reason}</div>}
+			</div>
+			<img
+				className="max-h-80 w-full border-y border-line bg-surface object-contain"
+				src={`/media?path=${encodeURIComponent(preview.screenshot)}`}
+				alt={`Screenshot of the shipped visual change: ${preview.title}`}
+			/>
+			<div className="flex justify-end px-3 py-2.5">
+				<Button size="sm" disabled={status !== "idle"} onClick={onShare}>
+					{status === "sharing"
+						? "Sharing…"
+						: status === "shared"
+							? "Shared to Slack"
+							: "Share to Slack"}
+				</Button>
+			</div>
 		</div>
 	);
 }
