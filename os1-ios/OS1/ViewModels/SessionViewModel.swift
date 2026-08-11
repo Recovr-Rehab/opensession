@@ -157,6 +157,17 @@ final class SessionViewModel {
     private var streamEnded = true
     /// Optimistic local user messages, removed once the server echoes them back.
     private var localEchoIds: Set<String> = []
+    /// Server user entries that landed here, with the CLIENT-clock moment they
+    /// arrived. The transcript broadcast goes out at intake — before the POST
+    /// that carries the message answers — so a send's own entry routinely
+    /// beats its delivery reply, and a retried send (answered from the
+    /// server's prompt receipt) can be answered minutes later. Without this
+    /// the echo in `acceptDelivery` was appended next to the server's own copy
+    /// and nothing ever retired it: the message stayed on screen twice.
+    /// Claims are one-to-one and only reach entries that arrived AFTER the
+    /// message was written, so an old identical message ("continue") can never
+    /// swallow a fresh bubble.
+    private var landedUserEntries: [(id: String, text: String, at: Date)] = []
     /// Ids for client-side transcript notices (see `noteLocally`).
     private var localNoticeSeq = 0
     /// Chip ids whose message text landed in a user entry that arrived AFTER
@@ -658,6 +669,21 @@ final class SessionViewModel {
             // whole result; nothing enters the transcript.
             if !delivery.message.isEmpty { notice = delivery.message }
         default:
+            // The server's own copy of this message may already be on screen:
+            // its transcript entry is broadcast at intake, before this reply
+            // was even written, so on a slow link the entry wins the race —
+            // and a retry answered from the prompt receipt lands long after.
+            // Claim that entry rather than echoing a second copy of the
+            // message next to it.
+            let shown = Set(entries.map(\.id))
+            if let landed = landedUserEntries.firstIndex(where: { landed in
+                landed.at >= item.createdAt
+                    && shown.contains(landed.id)
+                    && Self.delivers(content: item.content, in: landed.text)
+            }) {
+                landedUserEntries.remove(at: landed)
+                return
+            }
             let localId = "local-\(item.id)"
             localEchoIds.insert(localId)
             entries.append(TranscriptEntry(
@@ -1065,6 +1091,7 @@ final class SessionViewModel {
                 where chipDelivered(chip, in: candidate.text) {
                     landedChipIds.insert(chip.id)
                 }
+                rememberLandedUserEntry(candidate)
             }
             // Optimistic bubbles whose echo the snapshot doesn't carry
             // survive the resync: an init can race the ~1s persist of a
@@ -1497,6 +1524,7 @@ final class SessionViewModel {
                     where chipDelivered(chip, in: entry.text) {
                         landedChipIds.insert(chip.id)
                     }
+                    rememberLandedUserEntry(entry)
                 }
                 entries.append(entry)
             }
@@ -1528,10 +1556,36 @@ final class SessionViewModel {
     /// form ("[user] content").
     private func echoDelivered(_ echo: TranscriptEntry, in entry: TranscriptEntry) -> Bool {
         guard entry.isUser else { return false }
-        let content = echo.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return true }
-        return entry.content == echo.content || entry.text.contains(content)
+        if entry.content == echo.content { return true }
+        return Self.delivers(content: echo.text, in: entry.text)
     }
+
+    /// The text half of `echoDelivered`, for a message that has no entry yet —
+    /// the claim in `acceptDelivery` matches an outbox item's raw content
+    /// against a user entry that already landed.
+    private static func delivers(content: String, in text: String) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        return text.contains(trimmed)
+    }
+
+    /// Remember a server user entry as a possible answer to a send still
+    /// waiting for its delivery reply. Bounded in both directions: a send this
+    /// old has long since been echoed or given up on.
+    private func rememberLandedUserEntry(_ entry: TranscriptEntry) {
+        let now = Date()
+        landedUserEntries.append((id: entry.id, text: entry.text, at: now))
+        let cutoff = now.addingTimeInterval(-Self.landedUserEntryGrace)
+        landedUserEntries.removeAll { $0.at < cutoff }
+        if landedUserEntries.count > Self.landedUserEntryLimit {
+            landedUserEntries.removeFirst(
+                landedUserEntries.count - Self.landedUserEntryLimit
+            )
+        }
+    }
+
+    private static let landedUserEntryGrace: TimeInterval = 30 * 60
+    private static let landedUserEntryLimit = 50
 
     private func updateDelivering(_ items: [QueueItem]) {
         deliveringItems = items

@@ -851,6 +851,93 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.id), ["u1"], "optimistic bubble must be replaced, not doubled")
     }
 
+    /// The reported duplicate (2026-08-11): the server persists the user line
+    /// at intake and broadcasts it BEFORE the POST that carried it answers, so
+    /// the entry routinely beats its own delivery reply. Echoing anyway left
+    /// the message on screen twice, permanently — nothing retires a bubble
+    /// whose server copy landed before it existed.
+    func testServerEntryArrivingBeforeDeliveryReplyIsNotEchoedTwice() async {
+        outbox.transport = { [weak self] item, images in
+            guard let self else { return .unavailable("test torn down") }
+            self.deliveries.append((item, images))
+            // The broadcast overtakes the reply still in flight.
+            self.viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
+                TranscriptEntry(id: "u1", type: "user", content: item.content)
+            ]))
+            return .delivered(status: "started", message: "")
+        }
+        await send("hi")
+        XCTAssertEqual(
+            viewModel.entries.map(\.id), ["u1"],
+            "the server's own entry is the message — no second bubble beside it"
+        )
+    }
+
+    /// Same race, attributed form: a message delivered through the queue drain
+    /// lands as "[user] content".
+    func testAttributedServerEntryBeforeReplyIsNotEchoedTwice() async {
+        outbox.transport = { [weak self] item, images in
+            guard let self else { return .unavailable("test torn down") }
+            self.deliveries.append((item, images))
+            self.viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
+                TranscriptEntry(id: "u1", type: "user", content: "[jaap] \(item.content)")
+            ]))
+            return .delivered(status: "started", message: "")
+        }
+        await send("hi")
+        XCTAssertEqual(viewModel.entries.map(\.id), ["u1"])
+    }
+
+    /// A resync snapshot can carry the entry just as an append can.
+    func testResyncEntryBeforeDeliveryReplyIsNotEchoedTwice() async {
+        outbox.transport = { [weak self] item, images in
+            guard let self else { return .unavailable("test torn down") }
+            self.deliveries.append((item, images))
+            self.viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
+                TranscriptEntry(id: "u1", type: "user", content: item.content)
+            ], cursor: .empty))
+            return .delivered(status: "started", message: "")
+        }
+        await send("hi")
+        XCTAssertEqual(viewModel.entries.map(\.id), ["u1"])
+    }
+
+    /// The claim is one-to-one and never reaches backwards: sending the same
+    /// text twice must still show the second one immediately, rather than
+    /// claiming the first message's entry and blinking out until it lands.
+    func testRepeatedIdenticalSendStillEchoes() async {
+        await send("continue")
+        viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
+            entry("u1", "user", text: "continue")
+        ]))
+        XCTAssertEqual(viewModel.entries.map(\.id), ["u1"])
+        await send("continue")
+        XCTAssertEqual(
+            viewModel.entries.map(\.text), ["continue", "continue"],
+            "the second send has its own bubble"
+        )
+    }
+
+    /// A send whose reply was lost is retried, and the server answers from its
+    /// prompt receipt (`src/server/prompt-receipts.ts`) — minutes after the
+    /// message's own entry landed. The replayed answer must not echo it again.
+    func testRetriedSendAnsweredAfterItsEntryLandedIsNotEchoedTwice() async {
+        stubbedOutcome = .unavailable("offline")
+        await send("delivered but unanswered")
+        XCTAssertEqual(unsent.count, 1)
+        // The server actually took it the first time: the entry arrives while
+        // the client still owes the message.
+        viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
+            entry("u1", "user", text: "delivered but unanswered")
+        ]))
+        await comeBackOnline()
+        XCTAssertTrue(unsent.isEmpty)
+        XCTAssertEqual(
+            viewModel.entries.map(\.id), ["u1"],
+            "the receipt replay must claim the landed entry, not double it"
+        )
+    }
+
     func testWhitespaceOnlyDraftIsNotSent() async {
         await send("   \n  ")
         XCTAssertTrue(deliveries.isEmpty)
