@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import type { SessionSubagentSnapshot } from "../lib/api";
 import { currentPlanItem, planDoneCount, type PlanItem } from "@tellahq/opensession-protocol/todo-plan";
+import { composerFlapBorder } from "../lib/composer-classes";
 import { cn } from "../ui/cn";
 import { IconChevronDown, IconChevronRight } from "./icons";
 import { PlanChecklist } from "./PlanChecklist";
@@ -139,7 +140,10 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 		// top). The summary row sits at the bottom, nearest the composer, and the
 		// detail card grows upward so the composer stays anchored.
 		<div
-			className="relative -mb-3.5 flex w-full flex-col gap-2.5 rounded-t-[var(--composer-radius)] border border-b-0 border-[color:var(--composer-border)] bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[22px] text-label font-medium text-fg"
+			className={cn(
+				"relative -mb-3.5 flex w-full flex-col gap-2.5 rounded-t-[var(--composer-radius)] border-x border-t bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[22px] text-label font-medium text-fg",
+				composerFlapBorder,
+			)}
 			data-open={open ? "" : undefined}
 		>
 			{open && (

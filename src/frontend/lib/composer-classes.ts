@@ -179,6 +179,24 @@ export const fileChipMeta = "flex min-w-0 flex-col gap-px";
 export const fileChipName = "truncate text-label text-fg";
 export const fileChipSub = "text-meta text-faint";
 
+/* ── Flap edges ───────────────────────────────────────────────────
+   Shared by both flaps that tuck under the composer (the queue flap below and
+   the run-status flap in components/ComposerAgents.tsx). */
+/** The hairline a flap draws, matched to the edge the composer actually paints.
+ *
+ *  On desktop the composer carries NO border: `composerBox` makes it
+ *  transparent and hands its edge to `smooth-shadow-ring-soft`, whose ring
+ *  layer is `--composer-border` at 35%. A flap flush with that box, drawing the
+ *  same token at full strength, is therefore about three times the ink —
+ *  measured #dcdcdc against the composer's ~#ededed in light, which reads as
+ *  the panel BEHIND having the harder edge. Match the ring's strength instead;
+ *  the alpha composites over the flap's own fill (backgrounds paint under
+ *  borders), so it lands within a couple of levels of the composer's ring.
+ *
+ *  Phones keep the solid border, because there the composer keeps one too. */
+export const composerFlapBorder =
+	"border-[color:var(--composer-border)] desktop:border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]";
+
 /* ── The queue flap ───────────────────────────────────────────────
    The flap that folds out from behind the composer: a dimmer panel flush with
    the composer's edges, rounded only on top, its bottom tucked under the
@@ -192,7 +210,9 @@ export const fileChipSub = "text-meta text-faint";
    to be `border-bottom-style: none`, not a zero-width solid, because the
    composer's own hairline continues it. `border-b-0` leaves the style behind. */
 export const composerQueue =
-	"relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t border-[color:var(--composer-border)] bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[26px]";
+	"relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t " +
+	composerFlapBorder +
+	" bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[26px]";
 export const composerQueueTitle = "text-[12px] font-semibold text-faint";
 export const composerQueueList = "flex flex-col gap-2";
 /** One queued/steered row. The floor is one line of body text, so a row whose
