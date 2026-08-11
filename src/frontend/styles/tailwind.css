@@ -56,6 +56,9 @@
 	--color-surface: var(--bg);
 	--color-raised: var(--bg-raised);
 	--color-panel: var(--bg-panel);
+	/* Floating popups (hover cards, menus). Its own surface rather than
+	   bg-panel: in light a popup is paper on the page, not a panel in it. */
+	--color-popup: var(--popup-surface);
 	/* bg-hover is the interaction *wash* (translucent ink, so it reads the same
 	   strength over any surface) — that's what `hover:bg-hover` wants at all of
 	   its call sites. bg-active stays an opaque surface: it's used as one (switch

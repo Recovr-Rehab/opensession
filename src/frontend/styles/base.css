@@ -61,6 +61,13 @@
 	   whisper of shadow. Codex-style. */
 	--control-surface: #292929;
 	--control-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+	/* Floating popups — hover cards, menus, context menus. Same L3 tier as the
+	   controls above, and in dark that is all it needs: lighter than the page,
+	   so the fill alone reads as lifted and the hairline is just an edge. Light
+	   is the case that needs its own pair, for the reason the composer states
+	   below — see the light block. */
+	--popup-surface: var(--control-surface);
+	--popup-ring: var(--smooth-ring-color);
 	/* The composer's own fill + edge. In dark it IS --control-surface: lighter
 	   than the page, so the box already reads as lifted. Light needs its own
 	   pair — see the light block. */
@@ -303,6 +310,15 @@ html[data-theme="light"] {
 	   front of them, so the thing on top looked like the thing behind. */
 	--composer-surface: #ffffff;
 	--composer-border: #dcdcdc;
+	/* A hover card is the composer's case again: a big floating box, and the
+	   ramp's "step away from the page" (darker in light) turns it into a grey
+	   slab dropped on white — the same greyed-out signal, and it drags every
+	   thumbnail and chip inside it down with it. Paper instead: white, lifted
+	   by its shadow and an edge rather than a fill. That needs the composer's
+	   firmer line — the smooth-shadow ring resolves to ~#f3f3f3 here, which
+	   holds an edge under a grey fill but disappears under a white one. */
+	--popup-surface: #ffffff;
+	--popup-ring: var(--composer-border);
 	--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 14px 36px rgba(0, 0, 0, 0.08);
 	--bg-panel: #f0f0f0;
 	--bg-hover: #e9e9e9;

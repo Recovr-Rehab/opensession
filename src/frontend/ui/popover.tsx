@@ -114,7 +114,9 @@ function Popup({
 				<BasePopover.Popup
 					initialFocus={initialFocus}
 					className={cn(
-						"rounded-control [corner-shape:squircle] bg-panel outline-none",
+						// The ring override rides on the popup so the arrow, which
+						// continues that hairline, inherits the same value.
+						"rounded-control [corner-shape:squircle] bg-popup [--smooth-ring-color:var(--popup-ring)] outline-none",
 						elevation === "lg"
 							? "smooth-shadow-ring-lg"
 							: "smooth-shadow-ring-md",
@@ -131,7 +133,7 @@ function Popup({
 						// the cross-axis offset inline; the main-axis one is ours.
 						<BasePopover.Arrow
 							className={cn(
-								"size-[10px] rotate-45 [border-color:var(--smooth-ring-color)] bg-panel",
+								"size-[10px] rotate-45 [border-color:var(--smooth-ring-color)] bg-popup",
 								"data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l",
 								"data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r",
 								"data-[side=top]:bottom-[-6px] data-[side=top]:border-r data-[side=top]:border-b",

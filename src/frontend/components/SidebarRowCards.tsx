@@ -139,7 +139,10 @@ export function CardLink({
 }
 
 /** The strip every card ends on: where this row leads on the left, when it
- *  last changed on the right. */
+ *  last changed on the right. No rule above it — the card is 300px wide and
+ *  everything in it is already ranged left, so a full-width line splits a
+ *  small card in two to separate things nothing was confusing; the gap does
+ *  that on its own. */
 export function CardFooter({
 	children,
 	time,
@@ -151,7 +154,7 @@ export function CardFooter({
 	timeTitle?: string;
 }) {
 	return (
-		<div className="mt-2.5 flex min-w-0 items-center gap-2 border-t border-line pt-2">
+		<div className="mt-3.5 flex min-w-0 items-center gap-2">
 			{children}
 			<span className="ml-auto shrink-0 text-[11px] text-faint" title={timeTitle}>
 				{time}

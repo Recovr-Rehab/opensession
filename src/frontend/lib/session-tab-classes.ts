@@ -360,7 +360,7 @@ export const TAB_HISTORY =
  *  rule named after the swatch row it no longer dresses (those chips live in the
  *  tab context menu now). Above every other popup on the pane at z-1000. */
 export const NEW_MENU =
-	"fixed z-[1000] flex min-w-[250px] flex-col gap-px rounded-lg border border-line-strong bg-panel p-1 " +
+	"fixed z-[1000] flex min-w-[250px] flex-col gap-px rounded-lg border border-line-strong bg-popup p-1 " +
 	"shadow-[0_10px_30px_rgba(0,0,0,0.32)]";
 export const NEW_MENU_ITEM =
 	"block w-full cursor-pointer whitespace-nowrap rounded-[calc(6px*var(--rf))] border-0 " +
