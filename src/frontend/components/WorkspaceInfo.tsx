@@ -1831,9 +1831,21 @@ export function WorkspaceInfo({
 										type="button"
 										onClick={() => onOpenAsset?.(a.path)}
 										title={`Open ${a.path}`}
-										className="flex w-full min-w-0 items-start gap-2 rounded-control px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover"
+										className={cn(
+											"flex w-full min-w-0 gap-2 rounded-control px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover",
+											// With a description the row is two lines and the icon
+											// and size ride the first one; a bare filename is a
+											// single line, so centre everything on it instead.
+											a.description ? "items-start" : "items-center",
+										)}
 									>
-										<IconFile size={14} className="mt-0.5 shrink-0 text-faint" />
+										<IconFile
+											size={14}
+											className={cn(
+												"shrink-0 text-faint",
+												a.description && "mt-0.5",
+											)}
+										/>
 										<span className="min-w-0 flex-1">
 											<span className="block truncate">{a.path}</span>
 											{a.description && (
