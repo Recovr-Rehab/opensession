@@ -402,6 +402,7 @@ export function AssetPreview({
 	sessionId,
 	file,
 	onOpenNewSession,
+	onBackdropClick,
 	className,
 }: {
 	sessionId: string;
@@ -409,6 +410,8 @@ export function AssetPreview({
 	/** A link inside an HTML asset that spells out a new session — the artifact
 	 *  can hand work back to the app it was written in. */
 	onOpenNewSession: (prefill: NewSessionPrefill) => void;
+	/** Dismiss an overlay when the letterboxed image canvas is clicked. */
+	onBackdropClick?: () => void;
 	className?: string;
 }) {
 	const kind = assetPreviewKind(file.path);
@@ -469,11 +472,15 @@ export function AssetPreview({
 					className="h-full w-full border-0"
 				/>
 			) : kind === "image" ? (
-				<div className="flex h-full items-center justify-center overflow-auto p-3">
+				<div
+					className="flex h-full items-center justify-center overflow-auto p-3"
+					onClick={onBackdropClick}
+				>
 					<button
 						type="button"
 						className="flex max-h-full max-w-full cursor-zoom-in border-0 bg-transparent"
-						onClick={(event) =>
+						onClick={(event) => {
+							event.stopPropagation();
 							openLightbox(
 								[
 									{
@@ -485,8 +492,8 @@ export function AssetPreview({
 								],
 								0,
 								event.currentTarget,
-							)
-						}
+							);
+						}}
 						aria-label={`Zoom ${file.path}`}
 					>
 						<img
@@ -717,6 +724,7 @@ export function AssetOverlay({
 						<AssetPreview
 							sessionId={sessionId}
 							file={file}
+							onBackdropClick={onClose}
 							onOpenNewSession={(prefill) => {
 								onClose();
 								onOpenNewSession(prefill);
