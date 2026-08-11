@@ -634,6 +634,9 @@ export function App(
 								number: session.prNumber,
 								state: session.prState,
 								isDraft: session.prIsDraft,
+								mergeable: session.prMergeable,
+								reviewDecision: session.prReviewDecision,
+								checks: session.prChecks,
 							},
 						]
 					: []),

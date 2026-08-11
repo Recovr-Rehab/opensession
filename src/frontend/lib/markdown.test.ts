@@ -348,18 +348,34 @@ describe("renderMarkdown PR mentions", () => {
 
   it("shows live open, draft, merged, and closed state", () => {
     for (const [state, isDraft, label, tone] of [
-      ["OPEN", false, "Open", "open"],
-      ["OPEN", true, "Draft", "draft"],
-      ["MERGED", false, "Merged", "merged"],
-      ["CLOSED", false, "Closed", "closed"],
+      ["OPEN", false, "Open", "green"],
+      ["OPEN", true, "Draft", "muted"],
+      ["MERGED", false, "Merged", "purple"],
+      ["CLOSED", false, "Closed", "muted"],
     ] as const) {
       setKnownPrStates([
         { repo: "tella-fusion", number: 5528, state, isDraft },
       ]);
       const html = renderMarkdown("Fixed in #5528.", fusion);
-      expect(html).toContain(`data-pr-state="${tone}"`);
+      expect(html).toContain(`data-pr-tone="${tone}"`);
       expect(html).toContain(`<span class="pr-ref-state">${label}</span>`);
       expect(html).toContain(`· ${label}`);
+    }
+  });
+
+  it("uses mergeability, reviews, and checks to color the whole chip", () => {
+    for (const [input, label, state, tone] of [
+      [{ state: "OPEN", mergeable: "MERGEABLE" }, "Mergeable", "mergeable", "green"],
+      [{ state: "OPEN", reviewDecision: "APPROVED" }, "Approved", "approved", "green"],
+      [{ state: "OPEN", mergeable: "CONFLICTING" }, "Conflicts", "conflicts", "red"],
+      [{ state: "OPEN", checks: { failed: 1 } }, "Checks failing", "checks-failing", "red"],
+      [{ state: "OPEN", checks: { pending: 2 } }, "Checks running", "checks-running", "yellow"],
+    ] as const) {
+      setKnownPrStates([{ repo: "tella-fusion", number: 5528, ...input }]);
+      const html = renderMarkdown("Fixed in #5528.", fusion);
+      expect(html).toContain(`data-pr-state="${state}"`);
+      expect(html).toContain(`data-pr-tone="${tone}"`);
+      expect(html).toContain(`<span class="pr-ref-state">${label}</span>`);
     }
   });
 

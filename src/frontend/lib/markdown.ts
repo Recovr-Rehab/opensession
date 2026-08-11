@@ -1,6 +1,7 @@
 import { Marked } from "marked";
 import { BASE_PATH } from "./base";
 import { PUBLIC_BASE_URL } from "./brand";
+import { prStatusMark, type PrStatusInput } from "./pr-status";
 import { repoLabel } from "./repo-label";
 import { sessionAssetRawUrl } from "./api/sessions";
 
@@ -296,16 +297,33 @@ const PR_MENTION_START = new RegExp(`(?:^|[^\\w#&/])(?=${PR_MENTION_SRC})`);
  */
 let knownRepos = new Map<string, string | undefined>();
 
-type PrStateInput = {
+type PrStateInput = PrStatusInput & {
   repo?: string;
   number?: number;
-  state?: "OPEN" | "MERGED" | "CLOSED";
-  isDraft?: boolean;
 };
 
 type PrDisplayState = {
-  label: "Open" | "Draft" | "Merged" | "Closed";
-  tone: "open" | "draft" | "merged" | "closed";
+  label: string;
+  state: string;
+  tone: PrTone;
+};
+
+type PrTone = "green" | "purple" | "red" | "yellow" | "muted";
+
+const PR_MARK_TONE: Record<string, PrTone> = {
+  "text-green": "green",
+  "text-purple": "purple",
+  "text-red": "red",
+  "text-yellow": "yellow",
+  "text-faint": "muted",
+};
+
+const PR_MARK_LABEL: Record<string, string> = {
+  "PR has conflicts": "Conflicts",
+  "PR changes requested": "Changes requested",
+  "PR checks failing": "Checks failing",
+  "PR checks running": "Checks running",
+  "Draft PR": "Draft",
 };
 
 let knownPrStates = new Map<string, PrDisplayState>();
@@ -315,12 +333,19 @@ function prStateKey(repo: string, number: string | number): string {
 }
 
 function displayPrState(pr: PrStateInput): PrDisplayState | null {
-  if (pr.state === "MERGED") return { label: "Merged", tone: "merged" };
-  if (pr.state === "CLOSED") return { label: "Closed", tone: "closed" };
-  if (pr.state === "OPEN" && pr.isDraft)
-    return { label: "Draft", tone: "draft" };
-  if (pr.state === "OPEN") return { label: "Open", tone: "open" };
-  return null;
+  if (!pr.state) return null;
+  const mark = prStatusMark(pr);
+  const tone = PR_MARK_TONE[mark.className] ?? "muted";
+  const label =
+    mark.label === "PR open" && pr.mergeable === "MERGEABLE"
+      ? "Mergeable"
+      : (PR_MARK_LABEL[mark.label] ??
+        mark.label.replace(/^PR /, "").replace(/^./, (c) => c.toUpperCase()));
+  return {
+    label,
+    state: label.toLowerCase().replaceAll(" ", "-"),
+    tone,
+  };
 }
 
 function prRefTitle(repo: string, number: string, state?: PrDisplayState): string {
@@ -342,11 +367,13 @@ function syncRenderedPrStates(): void {
     let label = anchor.querySelector<HTMLElement>(".pr-ref-state");
     if (!state) {
       delete anchor.dataset.prState;
+      delete anchor.dataset.prTone;
       label?.remove();
       anchor.title = prRefTitle(repo, number);
       continue;
     }
-    anchor.dataset.prState = state.tone;
+    anchor.dataset.prState = state.state;
+    anchor.dataset.prTone = state.tone;
     if (!label) {
       label = document.createElement("span");
       label.className = "pr-ref-state";
@@ -371,6 +398,7 @@ export function setKnownPrStates(prs: Iterable<PrStateInput>): void {
     [...next].every(
       ([key, state]) =>
         knownPrStates.get(key)?.label === state.label &&
+        knownPrStates.get(key)?.state === state.state &&
         knownPrStates.get(key)?.tone === state.tone,
     )
   )
@@ -421,7 +449,9 @@ function prMentionLink(repo: string, number: string, label: string): string {
     `<a href="${attr(href)}" class="pr-ref" data-pr-repo="${attr(repo)}"` +
     ` data-pr-number="${attr(number)}"` +
     (ghRepo ? ` data-pr-gh="${attr(ghRepo)}"` : "") +
-    (state ? ` data-pr-state="${state.tone}"` : "") +
+    (state
+      ? ` data-pr-state="${state.state}" data-pr-tone="${state.tone}"`
+      : "") +
     ` title="${attr(prRefTitle(repo, number, state))}">` +
     `<span class="pr-ref-icon" aria-hidden="true">` +
     `<svg viewBox="0 0 24 24" fill="none">` +

@@ -1607,15 +1607,41 @@ a.pr-ref:focus-visible {
 	margin-right: 3px;
 	color: var(--text-faint);
 }
-a.pr-ref[data-pr-state="open"] .pr-ref-state {
+a.pr-ref[data-pr-tone="green"] {
+	background: var(--green-soft);
+}
+a.pr-ref[data-pr-tone="green"]:hover {
+	background: color-mix(in srgb, var(--green) 20%, transparent);
+}
+a.pr-ref[data-pr-tone="purple"] {
+	background: color-mix(in srgb, var(--purple) 12%, transparent);
+}
+a.pr-ref[data-pr-tone="purple"]:hover {
+	background: color-mix(in srgb, var(--purple) 20%, transparent);
+}
+a.pr-ref[data-pr-tone="red"] {
+	background: var(--red-soft);
+}
+a.pr-ref[data-pr-tone="red"]:hover {
+	background: color-mix(in srgb, var(--red) 18%, transparent);
+}
+a.pr-ref[data-pr-tone="yellow"] {
+	background: var(--yellow-soft);
+}
+a.pr-ref[data-pr-tone="yellow"]:hover {
+	background: color-mix(in srgb, var(--yellow) 20%, transparent);
+}
+a.pr-ref[data-pr-tone="green"] :is(.pr-ref-icon, .pr-ref-state) {
 	color: var(--green);
 }
-a.pr-ref[data-pr-state="merged"] .pr-ref-state {
+a.pr-ref[data-pr-tone="purple"] :is(.pr-ref-icon, .pr-ref-state) {
 	color: var(--purple);
 }
-a.pr-ref[data-pr-state="draft"] .pr-ref-state,
-a.pr-ref[data-pr-state="closed"] .pr-ref-state {
-	color: var(--text-dim);
+a.pr-ref[data-pr-tone="red"] :is(.pr-ref-icon, .pr-ref-state) {
+	color: var(--red);
+}
+a.pr-ref[data-pr-tone="yellow"] :is(.pr-ref-icon, .pr-ref-state) {
+	color: var(--yellow);
 }
 
 /* The line-number gutter shiki writes into highlighted output
