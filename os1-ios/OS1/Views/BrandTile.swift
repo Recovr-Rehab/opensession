@@ -10,6 +10,7 @@ struct BrandTile: View {
 
     var body: some View {
         let brand = Brand.colors(for: name)
+        let logoScale = name.lowercased() == "tella" ? 1.0 : 0.56
         RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
             .fill(brand?.background ?? Color.secondary.opacity(0.16))
             .frame(width: size, height: size)
@@ -17,7 +18,7 @@ struct BrandTile: View {
                 if let logo = Brand.logo(for: name) {
                     BrandLogoShape(logo: logo)
                         .fill(brand?.foreground ?? .secondary)
-                        .frame(width: size * 0.56, height: size * 0.56)
+                        .frame(width: size * logoScale, height: size * logoScale)
                 } else {
                     Text(initial)
                         .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))

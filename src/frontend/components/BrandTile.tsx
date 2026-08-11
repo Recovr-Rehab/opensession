@@ -45,6 +45,7 @@ export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
   const brand = BRANDS[key];
   // Agents like "grafana-poller" reuse the base brand's logo.
   const logo = BRAND_LOGOS[key] || BRAND_LOGOS[key.split("-")[0]];
+  const logoSize = key === "tella" ? size : size * 0.56;
   return (
     <span
       className="flex flex-shrink-0 items-center justify-center rounded-md font-semibold"
@@ -59,8 +60,8 @@ export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
       {logo ? (
         <svg
           viewBox={logo.viewBox}
-          width={size * 0.56}
-          height={size * 0.56}
+          width={logoSize}
+          height={logoSize}
           fill="currentColor"
           aria-hidden="true"
         >
