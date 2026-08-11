@@ -105,7 +105,12 @@ export interface PrewarmAdapter {
   create(
     labels: Record<string, string>,
     opts: { autoStopMinutes: number; autoDeleteMinutes: number },
-  ): Promise<{ sandboxId: string; driver: RemoteDriver }>;
+  ): Promise<{
+    sandboxId: string;
+    driver: RemoteDriver;
+    /** The provider created this sandbox from the current repo template. */
+    restoredFromTemplate?: boolean;
+  }>;
   destroy(sandboxId: string): Promise<void>;
   /** Provider-side sandboxes still carrying PREWARM_LABEL, with their
    *  PREWARM_KEY_LABEL (orphan audit — the key scopes who may reap). */
@@ -114,6 +119,14 @@ export interface PrewarmAdapter {
    * bootstrap, followed by the optional warm-preview workspace clone. */
   prepare?(
     driver: RemoteDriver,
+    repo: (typeof REPOS)[string],
+    label: string,
+  ): Promise<void>;
+  /** Publish the fully bootstrapped, post-setup, credential-scrubbed
+   * filesystem as the provider's shared repo template. Called only when
+   * create() did not already restore the current template. */
+  publishTemplate?(
+    sandboxId: string,
     repo: (typeof REPOS)[string],
     label: string,
   ): Promise<void>;
@@ -206,6 +219,10 @@ async function adapterFor(provider: string): Promise<PrewarmAdapter | null> {
     const { microvmPrewarmAdapter } = await import("./adapters/microvm");
     return microvmPrewarmAdapter;
   }
+  if (provider === "modal") {
+    const { modalPrewarmAdapter } = await import("./adapters/modal");
+    return modalPrewarmAdapter;
+  }
   // e2b: no prewarm adapter yet — requests answer "unsupported" until one
   // registers here (the pool itself is already provider-agnostic).
   return null;
@@ -252,7 +269,9 @@ export async function requestPrewarm(
   if (
     !cfg.enabled ||
     !sandboxProviderConfigured(provider) ||
-    !sandboxProviderCertified(provider)
+    (!sandboxProviderCertified(provider) &&
+      process.env.OPENSESSION_SANDBOX_CERTIFICATION_RUN !== "1" &&
+      !testAdapters.has(provider))
   ) return { state: "disabled" };
   ensurePrewarmSweep();
 
@@ -316,7 +335,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
   try {
     const ttl = sandboxPrewarmConfig().ttlMinutes;
     console.log(`[sandbox-prewarm] starting ${entry.key} prewarm (user ${entry.user || "?"})`);
-    const { sandboxId, driver } = await adapter.create(
+    const { sandboxId, driver, restoredFromTemplate } = await adapter.create(
       { [PREWARM_LABEL]: "1", [PREWARM_KEY_LABEL]: entry.key, "opensession.sandbox": "1" },
       {
         autoStopMinutes: ttl + BACKSTOP_STOP_EXTRA_MIN,
@@ -332,7 +351,16 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
     persist(entry);
     const repo = REPOS[entry.repoId];
     if (!repo) throw new Error(`unknown prewarm repo ${entry.repoId}`);
-    if (adapter.prepare) {
+    if (restoredFromTemplate && adapter.publishTemplate) {
+      await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
+      await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
+      const { validateRemoteRepoTemplate } = await import("./remote-repo-template");
+      await validateRemoteRepoTemplate(
+        driver,
+        entry.provider as "daytona" | "modal",
+        repo,
+      );
+    } else if (adapter.prepare) {
       await adapter.prepare(driver, repo, `${entry.provider}-prewarm`);
     } else {
       await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
@@ -341,25 +369,33 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
         destroyLater(entry.provider, sandboxId, "superseded mid-bootstrap");
         return;
       }
-      // Warm-previews repos ALSO get their workspace pre-cloned at the default
-      // branch (+ deps) — the adopting session then just mv's it into place and
-      // branches (setupRemoteWorkspace). Non-fatal: a failure leaves a normal
-      // runner-only prewarm.
+      // Repo-template providers ALWAYS pre-clone and run `.agents/setup`
+      // before publishing their filesystem snapshot. Providers without a
+      // template publisher retain the old optional warm-deps behavior.
       try {
         const { warmTemplateConfig } = await import("../warm-template");
-        if (warmTemplateConfig(entry.repoId).enabled) {
+        const warm = warmTemplateConfig(entry.repoId).enabled;
+        if (warm || adapter.publishTemplate) {
           const { warmRemoteWorkspace } = await import("./adapters/bootstrap");
-          await warmRemoteWorkspace(driver, repo, `${entry.provider}-prewarm`, {
+          const prepared = await warmRemoteWorkspace(driver, repo, `${entry.provider}-prewarm`, {
+            installDeps: warm,
             runSetup: true,
           });
+          if (!prepared && adapter.publishTemplate) {
+            throw new Error(`could not prepare ${repo.id} for a repo template`);
+          }
         }
       } catch (e) {
+        if (adapter.publishTemplate) throw e;
         console.warn(`[sandbox-prewarm] ${entry.key} warm workspace failed (non-fatal):`, e);
       }
     }
     if (!current()) {
       destroyLater(entry.provider, sandboxId, "superseded mid-warm");
       return;
+    }
+    if (adapter.publishTemplate && !restoredFromTemplate) {
+      await adapter.publishTemplate(sandboxId, repo, `${entry.provider}-prewarm`);
     }
     if (adapter.park) await adapter.park(sandboxId);
     if (!current()) {
@@ -578,7 +614,7 @@ async function auditProviderOrphans(now: number): Promise<void> {
   const g = globalThis as unknown as { __prewarmOrphanAuditAt?: number };
   if (now - (g.__prewarmOrphanAuditAt || 0) < ORPHAN_AUDIT_INTERVAL_MS) return;
   g.__prewarmOrphanAuditAt = now;
-  for (const provider of ["daytona", "e2b", "microvm"]) {
+  for (const provider of ["daytona", "e2b", "modal", "microvm"]) {
     if (!sandboxProviderConfigured(provider as "daytona" | "e2b" | "microvm")) continue;
     // A create in flight has a live sandbox with no recorded id yet — skip
     // this provider's audit round rather than destroy it mid-bootstrap.

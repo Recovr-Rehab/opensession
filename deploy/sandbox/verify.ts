@@ -20,7 +20,8 @@
  * the destroy-removes-the-workspace-volume contract.
  *
  * SNAPSHOTS section: a fourth sbxtest session (bind mode, snapshots enabled
- * in the scratch config) writes a marker into the CONTAINER LAYER, is
+ * in the scratch config) runs `.agents/setup` to write state into the
+ * CONTAINER LAYER, is
  * idle-snapshotted by the real sweep (scoped to itself — the scratch config
  * must never touch live sandboxes), has its container removed, and is then
  * ensure()d again: the new container must come FROM the snapshot image
@@ -69,6 +70,10 @@ process.env.OPENSESSION_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
 // live box has no config.json, so this only ADDS the scratch repo over the
 // built-in defaults.
 process.env.OPENSESSION_CONFIG = `${SCRATCH}/opensession-config.json`;
+// Keep the verifier's isolated checkout under its private worktree root so
+// repoForPath recognizes it as an owned worktree without registering that
+// checkout itself as a shared mainline.
+process.env.OPENSESSION_WORKTREES_DIR = `${SCRATCH}/worktrees`;
 
 import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
@@ -88,7 +93,7 @@ type RunHostSpec = import("../../src/runner-host/protocol").RunHostSpec;
 const SESSION_ID = `sbxtest-${Date.now().toString(36)}`;
 const CONTAINER = containerNameFor(SESSION_ID);
 const MAIN = `${SCRATCH}/main-repo`;
-const WT = `${SCRATCH}/wt-sbxtest`;
+const WT = `${SCRATCH}/worktrees/sbxtest-sbxtest-branch`;
 const BARE = `${SCRATCH}/origin.git`;
 
 // Volume-mode section resources (own session/container; also sbxtest-*).
@@ -312,7 +317,7 @@ try {
       mode: "ask",
       model: "claude-haiku-4-5",
       mcpServers: [],
-      journalKind: "sandbox-verify",
+      journalKind: "prompt",
     };
     const handle = sandbox.launchRun(spec, {});
     const events: string[] = [];
@@ -355,7 +360,7 @@ try {
   const failHandle = new HostHandle(
     failDir,
     { hostId: "rh-sbxtest-fail", osSessionId: failSession, prompt: "x", cwd: WT,
-      mode: "ask", model: "claude-haiku-4-5", mcpServers: [], journalKind: "sandbox-verify" },
+      mode: "ask", model: "claude-haiku-4-5", mcpServers: [], journalKind: "prompt" },
     {},
     // Launcher that "succeeds" but never brings up a socket = unreachable host.
     { alive: () => false, newRunDir: () => failDir, launch: async () => {} },
@@ -586,7 +591,7 @@ try {
       mode: "ask",
       model: "claude-haiku-4-5",
       mcpServers: [],
-      journalKind: "sandbox-verify",
+      journalKind: "prompt",
     };
     const wsHandle = wsSbx.launchRun(wsSpec, {});
     const wsEvents: string[] = [];
@@ -622,7 +627,7 @@ try {
       mode: "ask",
       model: "claude-haiku-4-5",
       mcpServers: [],
-      journalKind: "sandbox-verify",
+      journalKind: "prompt",
     };
     const cancelHandle = wsSbx.launchRun(cancelSpec, {});
     let cSawInit = false;
@@ -667,9 +672,20 @@ try {
     process.env.OPENSESSION_SANDBOX_CONFIG!,
     JSON.stringify({ provider: "docker", snapshots: { enabled: true, maxPerSession: 2 } }),
   );
+  mkdirSync(`${WT}/.agents`, { recursive: true });
+  await Bun.write(
+    `${WT}/.agents/setup`,
+    "#!/usr/bin/env bash\nprintf post-setup > /home/ubuntu/sbx-post-setup-proof\n",
+  );
   const snapRepo = snapshotRepoForSandbox(SNAP_CONTAINER);
   const snapSbx = await provider.ensure({ sessionId: SNAP_SESSION_ID, cwd: WT });
   ok("ensure() created the snapshots-section container", snapSbx.id === SNAP_CONTAINER, snapSbx.id);
+  const setupProof = await snapSbx.exec(["cat", "/home/ubuntu/sbx-post-setup-proof"]);
+  ok(
+    ".agents/setup produced container-layer state before snapshot",
+    setupProof.exitCode === 0 && setupProof.stdout === "post-setup",
+    (setupProof.stdout || setupProof.stderr).trim(),
+  );
   const mark = await snapSbx.exec(["sh", "-c", "echo snap-layer-state > /home/ubuntu/sbx-snap-marker"]);
   ok("wrote a container-layer marker", mark.exitCode === 0, mark.stderr.trim());
 
@@ -693,6 +709,15 @@ try {
   ok("restored container came from the snapshot (container-layer marker present)",
     marker.exitCode === 0 && marker.stdout.includes("snap-layer-state"),
     (marker.stdout || marker.stderr).trim());
+  const restoredSetupProof = await restored.exec([
+    "cat",
+    "/home/ubuntu/sbx-post-setup-proof",
+  ]);
+  ok(
+    "snapshot restore retained .agents/setup state without rerunning setup",
+    restoredSetupProof.exitCode === 0 && restoredSetupProof.stdout === "post-setup",
+    (restoredSetupProof.stdout || restoredSetupProof.stderr).trim(),
+  );
   const fromImage = await sh(["docker", "inspect", "-f", "{{.Config.Image}}", SNAP_CONTAINER]);
   ok("container image is the snapshot", fromImage.out.trim() === `${snapRepo}:latest`, fromImage.out.trim());
   const snapGit = await restored.exec(["git", "status", "--porcelain"]);
@@ -789,8 +814,11 @@ exec bun -e 'Bun.serve({ port: Number(process.env.WEBAPP_PORT), hostname: "0.0.0
   ok("Caddy route exists and dials the published loopback port",
     routeJson.includes(`127.0.0.1:${publishedWebapp}`), routeJson.slice(0, 120) || `status ${routeRes.status}`);
   const viaCaddy = await sh(["curl", "-ks", "--max-time", "10", pst.previewUrl || "https://invalid"]);
-  ok("preview URL serves the in-container server through Caddy",
-    viaCaddy.out.includes("lifecycle-preview-ok"), JSON.stringify(viaCaddy.out.slice(0, 40)));
+  ok("unauthenticated Portal request fails closed at Caddy",
+    viaCaddy.out.includes("Sign in required"), JSON.stringify(viaCaddy.out.slice(0, 40)));
+  const directPreview = await sh(["curl", "-sS", "--max-time", "10", `http://127.0.0.1:${publishedWebapp}`]);
+  ok("Caddy upstream serves the in-container app",
+    directPreview.out.includes("lifecycle-preview-ok"), JSON.stringify(directPreview.out.slice(0, 40)));
 
   // .tunnels.env contract (bind mount → host-visible).
   const tunnels = await sh(["cat", `${WT}/.tunnels.env`]);

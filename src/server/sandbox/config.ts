@@ -15,10 +15,12 @@
  * new runs regardless of config — mirroring host-client's disable-run-hosts.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
+import { dirname } from "path";
 import { getDefaultModel, providerFor, resolveModel } from "../models";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir } from "../paths";
+import { writeJsonAtomic } from "../shared/atomic-write";
 import type { SandboxProviderId } from "./provider";
 
 export const DEFAULT_SANDBOX_PREVIEW_PORTS = [3300, 3301, 3302] as const;
@@ -220,6 +222,8 @@ export interface SandboxAutomationConfig {
 
 export interface SandboxConfig {
   provider: SandboxProviderId;
+  /** Shared default for NEW interactive sessions. Absent/"none" = host. */
+  sessionDefault?: RunnableSandboxProviderId | "none";
   /** Container image for the docker provider (Phase 1). */
   image?: string;
   /** Stop idle sandboxes after this many minutes; unset = provider default (30). */
@@ -333,6 +337,12 @@ export function sandboxConfig(): SandboxConfig {
         typeof v === "string" && v.trim() ? v.trim() : undefined;
       return {
         provider: asProviderId(raw?.provider) || "local",
+        sessionDefault:
+          raw?.sessionDefault === "none"
+            ? "none"
+            : isRunnableSandboxProvider(raw?.sessionDefault)
+              ? raw.sessionDefault
+              : undefined,
         image: typeof raw?.image === "string" ? raw.image : undefined,
         idleStopMinutes:
           typeof raw?.idleStopMinutes === "number" && raw.idleStopMinutes > 0
@@ -539,8 +549,9 @@ export function sandboxPrewarmConfig(): SandboxPrewarmConfig {
     Boolean(
       cfg.daytona?.apiKey ||
         process.env.DAYTONA_API_KEY ||
-        cfg.e2b?.apiKey ||
+      cfg.e2b?.apiKey ||
         process.env.E2B_API_KEY ||
+        sandboxProviderConfigured("modal") ||
         sandboxProviderConfigured("microvm"),
     );
   return {
@@ -577,27 +588,94 @@ export const RUNNABLE_SANDBOX_PROVIDERS = [
 ] as const;
 export type RunnableSandboxProviderId = (typeof RUNNABLE_SANDBOX_PROVIDERS)[number];
 
-/** Providers whose complete live behavioral matrix has passed. Adapters that
- *  have only compiled or mocked coverage remain in-tree for conformance work,
- *  but are not offered for new sessions and cannot become the default. */
+export interface SandboxProviderCertification {
+  certified: boolean;
+  /** Complete engine/exec/preview/lifecycle matrix. */
+  behavioralPassedAt?: string;
+  /** Provider-native post-setup warm restore, including credential scrub. */
+  warmRestorePassedAt?: string;
+  lastPassedAt?: string;
+  note?: string;
+}
+
+/** Certification is derived, never hand-asserted: both independent live
+ * evidence dates must exist before a provider can be selected or defaulted. */
+function certification(
+  evidence: Omit<SandboxProviderCertification, "certified" | "lastPassedAt">,
+): SandboxProviderCertification {
+  const passed = Boolean(evidence.behavioralPassedAt && evidence.warmRestorePassedAt);
+  const dates = [evidence.behavioralPassedAt, evidence.warmRestorePassedAt].filter(
+    (date): date is string => Boolean(date),
+  );
+  return {
+    ...evidence,
+    certified: passed,
+    ...(passed ? { lastPassedAt: dates.sort().at(-1) } : {}),
+  };
+}
+
 export const SANDBOX_PROVIDER_CERTIFICATIONS: Record<
   RunnableSandboxProviderId,
-  { certified: boolean; lastPassedAt?: string; note?: string }
+  SandboxProviderCertification
 > = {
-  docker: { certified: true, note: "live socket and WebSocket matrices passed" },
-  daytona: { certified: true, lastPassedAt: "2026-07-09" },
-  e2b: { certified: false, note: "live matrix has not run on a funded E2B account" },
-  box: { certified: false, note: "live matrix has not run on a Box account" },
-  modal: { certified: true, lastPassedAt: "2026-07-17" },
-  microvm: { certified: true, lastPassedAt: "2026-08-10" },
-  "lambda-microvm": {
-    certified: false,
+  docker: certification({
+    behavioralPassedAt: "2026-08-11",
+    warmRestorePassedAt: "2026-08-11",
+    note: "live socket/WebSocket, Portal, lifecycle, and Docker commit/restore matrices passed",
+  }),
+  daytona: certification({
+    behavioralPassedAt: "2026-08-11",
+    warmRestorePassedAt: "2026-08-11",
+    note: "live provider snapshot restore and full remote-run matrix passed",
+  }),
+  e2b: certification({ note: "live matrix has not run on a funded E2B account" }),
+  box: certification({ note: "live matrix has not run on a Box account" }),
+  modal: certification({
+    behavioralPassedAt: "2026-08-11",
+    warmRestorePassedAt: "2026-08-11",
+    note: "live filesystem-image restore and full remote-run matrix passed",
+  }),
+  microvm: certification({
+    behavioralPassedAt: "2026-08-10",
+    warmRestorePassedAt: "2026-08-10",
+  }),
+  "lambda-microvm": certification({
     note: "live matrix has not run against a provisioned Lambda MicroVM image",
-  },
+  }),
 };
 
 export function sandboxProviderCertified(id: RunnableSandboxProviderId): boolean {
   return SANDBOX_PROVIDER_CERTIFICATIONS[id].certified;
+}
+
+/** Persist the Workspace-wide default without rewriting any provider secrets
+ * or other sandbox configuration. "none" is both the UI and storage default. */
+export function setWorkspaceSandboxDefault(
+  value: string,
+): RunnableSandboxProviderId | "none" {
+  const normalized = value.trim().toLowerCase();
+  if (normalized !== "none" && !isRunnableSandboxProvider(normalized)) {
+    throw new Error(`Unknown sandbox provider "${value}"`);
+  }
+  if (
+    normalized !== "none" &&
+    (!sandboxProviderCertified(normalized) || !sandboxProviderConfigured(normalized))
+  ) {
+    throw new Error(`Sandbox provider "${normalized}" is not currently available`);
+  }
+  const path = configPath();
+  // Absence already means None; do not create a config file merely to record
+  // the default, because config-file presence is the sandbox feature gate.
+  if (normalized === "none" && !existsSync(path)) return "none";
+  let raw: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
+  } catch {}
+  raw.sessionDefault = normalized;
+  mkdirSync(dirname(path), { recursive: true });
+  writeJsonAtomic(path, raw);
+  return normalized as RunnableSandboxProviderId | "none";
 }
 
 export function isRunnableSandboxProvider(v: unknown): v is RunnableSandboxProviderId {

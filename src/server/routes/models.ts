@@ -10,6 +10,11 @@ import { requestUser, type RouteContext } from "./context";
 import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, localProfileDefaultModel, localProfileModels, modelEfforts, refreshOpencodePickerModels, refreshPiPickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
 import { type Sandbox } from "../sandbox";
 import { sandboxCapabilityStatus } from "../sandbox/config";
+import {
+	sandboxDefaultsStatus,
+	savePersonalSandboxDefault,
+	saveWorkspaceSandboxDefault,
+} from "../sandbox/defaults";
 import { suggestBranchName } from "../suggest-branch";
 import { buildSystemPromptParts } from "../system-prompt";
 import { MAX_AUDIO_BYTES, transcribeAudio } from "../transcribe";
@@ -71,7 +76,35 @@ export async function handleModelsRoutes(
 	// next fetch. Behavior is unit-tested via sandboxCapabilityStatus()
 	// (src/server/sandbox/capability-status.test.ts).
 	if (path === "/api/sandbox/status" && req.method === "GET") {
-		return Response.json(sandboxCapabilityStatus());
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
+		return Response.json({
+			...sandboxCapabilityStatus(),
+			defaults: sandboxDefaultsStatus(user),
+		});
+	}
+
+	// Shared Workspace default + per-person override. Omitted config resolves
+	// Personal → Workspace → None; explicit per-session picks still win.
+	if (path === "/api/sandbox/defaults" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		if (!body || typeof body.scope !== "string" || typeof body.value !== "string") {
+			return Response.json(
+				{ error: "scope and value are required" },
+				{ status: 400 },
+			);
+		}
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		try {
+			if (body.scope === "workspace") saveWorkspaceSandboxDefault(body.value);
+			else if (body.scope === "personal") savePersonalSandboxDefault(user, body.value);
+			else return Response.json({ error: "scope must be workspace or personal" }, { status: 400 });
+			return Response.json({ defaults: sandboxDefaultsStatus(user) });
+		} catch (error) {
+			return Response.json(
+				{ error: error instanceof Error ? error.message : String(error) },
+				{ status: 400 },
+			);
+		}
 	}
 
 	// Audit-backed real-work scorecard. This is evidence for the human

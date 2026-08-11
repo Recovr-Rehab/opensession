@@ -11,11 +11,12 @@
  * still passes.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
   SANDBOX_MODEL_FAMILIES,
+  SANDBOX_PROVIDER_CERTIFICATIONS,
   resolveRequestedSandbox,
   sandboxableModelFamily,
   sandboxConfig,
@@ -23,7 +24,9 @@ import {
   sandboxModelFamilyFor,
   sandboxProviderConfigured,
   sandboxesEnabled,
+  setWorkspaceSandboxDefault,
 } from "./config";
+import { resolveInteractiveSandbox } from "./defaults";
 
 let scratch: string;
 let prevEnvConfig: string | undefined;
@@ -73,6 +76,27 @@ afterAll(() => {
 const write = (cfg: object) => writeFileSync(cfgPath(), JSON.stringify(cfg));
 
 describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
+	test("certification requires both behavioral and warm-restore evidence", () => {
+		for (const certification of Object.values(SANDBOX_PROVIDER_CERTIFICATIONS)) {
+			if (!certification.certified) continue;
+			expect(certification.behavioralPassedAt).toBeTruthy();
+			expect(certification.warmRestorePassedAt).toBeTruthy();
+		}
+	});
+
+	test("workspace default persists without replacing provider configuration", () => {
+		write({ provider: "docker", image: "runner:test", nested: { keep: true } });
+		expect(setWorkspaceSandboxDefault("docker")).toBe("docker");
+		const stored = JSON.parse(readFileSync(cfgPath(), "utf-8"));
+		expect(stored).toMatchObject({
+			provider: "docker",
+			image: "runner:test",
+			nested: { keep: true },
+			sessionDefault: "docker",
+		});
+		expect(sandboxConfig().sessionDefault).toBe("docker");
+	});
+
   test("no config file: disabled, everything unconfigured, default local", () => {
     const s = sandboxCapabilityStatus();
     expect(s.enabled).toBe(false);
@@ -253,6 +277,16 @@ describe("provider-independent model-family sandboxability", () => {
 });
 
 describe("resolveRequestedSandbox (create-path validation)", () => {
+	test("omitted interactive choice uses defaults; explicit Host still wins", () => {
+		write({ provider: "docker", sessionDefault: "docker" });
+		expect(
+			resolveInteractiveSandbox(undefined, "sandbox-default-test-user", undefined, "claude-fable-5"),
+		).toEqual({ ok: true, provider: "docker" });
+		expect(
+			resolveInteractiveSandbox("local", "sandbox-default-test-user", undefined, "claude-fable-5"),
+		).toEqual({ ok: true, provider: null });
+	});
+
   test("falsy = no sandbox", () => {
     expect(resolveRequestedSandbox(undefined)).toEqual({ ok: true, provider: null });
     expect(resolveRequestedSandbox(false)).toEqual({ ok: true, provider: null });

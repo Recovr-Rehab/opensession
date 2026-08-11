@@ -124,14 +124,18 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_VERSION}" \
        esac
 
 # --- Open Session runner bundle ---
-# Deps first for layer caching: only re-installs when package.json / bun.lock change.
+# Deps first for layer caching: only re-installs when the package manifest,
+# lockfile, or one of Bun's declared dependency patches changes.
 WORKDIR /home/ubuntu/projects/opensession
 COPY --chown=ubuntu:ubuntu package.json bun.lock ./
+COPY --chown=ubuntu:ubuntu patches ./patches
+COPY --chown=ubuntu:ubuntu packages/protocol/package.json ./packages/protocol/package.json
 RUN bun install --frozen-lockfile
 
 # App source at the identical absolute path (worktrees are bind-mounted separately).
 COPY --chown=ubuntu:ubuntu tsconfig.json backstage.ts opensession.ts ./
 COPY --chown=ubuntu:ubuntu src ./src
+COPY --chown=ubuntu:ubuntu packages/protocol ./packages/protocol
 
 WORKDIR /home/ubuntu
 

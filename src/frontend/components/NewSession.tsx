@@ -326,8 +326,17 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // server has no sandbox config or the kill switch is on.
   const [sandboxProvider, setSandboxProvider] = useState("");
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatusInfo | null>(null);
+  const sandboxSelectionTouched = useRef(false);
   useEffect(() => {
-    fetchSandboxStatus().then(setSandboxStatus).catch(() => {});
+    fetchSandboxStatus(getCurrentUser())
+      .then((status) => {
+        setSandboxStatus(status);
+        if (!sandboxSelectionTouched.current) {
+          const effective = status.defaults?.effective || "none";
+          setSandboxProvider(effective === "none" ? "" : effective);
+        }
+      })
+      .catch(() => {});
   }, []);
   const sandboxChoices = (sandboxStatus?.providers || []).filter(
     (p) => p.configured && p.certified,
@@ -617,8 +626,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       ...(model ? { model } : {}),
       effort,
       ...(accountProvider && accountId ? { accountId } : {}),
-      // Explicit provider id; omitted entirely for Host (= no sandbox).
-      ...(sandboxProvider ? { sandbox: sandboxProvider } : {}),
+      // Once defaults have loaded, Host is an explicit override ("local") —
+      // omitting the field would make the server re-apply the user's default.
+      ...(sandboxStatus ? { sandbox: sandboxProvider || "local" } : {}),
       ...(selectedMcpServers.length ? { mcpServers: selectedMcpServers } : {}),
       ...(images.length ? { images } : {}),
       ...(files.length
@@ -959,7 +969,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                           return (
                             <Menu.Item
                               key={opt.id || "host"}
-                              onClick={() => setSandboxProvider(opt.id)}
+                              onClick={() => {
+                                sandboxSelectionTouched.current = true;
+                                setSandboxProvider(opt.id);
+                              }}
                               className="items-start"
                             >
                               <IconCheck

@@ -22,6 +22,7 @@ import { assignRepoTileColors } from "../repo-tile-colors";
 import { runSessionPrompt } from "../run-session";
 import { type Sandbox, hasRemoteWorkspace, workspaceExecFor } from "../sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "../sandbox/config";
+import { resolveInteractiveSandbox } from "../sandbox/defaults";
 import {
 	SESSIONS_DIR,
 	findSession,
@@ -622,8 +623,9 @@ export async function handleWorkspaceRoutes(
 		const siblingModel = body.model
 			? resolveModel(String(body.model))?.id
 			: undefined;
-		const sandboxResolved = resolveRequestedSandbox(
+		const sandboxResolved = resolveInteractiveSandbox(
 			body.sandbox,
+			requestUser(ctx, body.user),
 			repoId,
 			siblingModel,
 		);

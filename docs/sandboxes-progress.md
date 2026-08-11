@@ -272,12 +272,34 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
 2. Run the live behavioral matrix for E2B, Box and Lambda MicroVM when those
    provider accounts/images are available. Docker, Daytona, Modal and MicroVM
    have live evidence; untested adapters are not called equivalent.
-3. Add a proper Firecracker jailer before claiming hostile multi-tenant
-   isolation. Today's MicroVM is a durable execution boundary for trusted team
-   code, not an adversarial tenant boundary.
-4. Only after the default flip is approved: build the separate credential-free
-   automation profile plus egress allowlist. Automation-owned sessions remain
-   refused by the credential-bearing interactive sandbox path today.
+3. Do not describe the local MicroVM as a separate hardware trust domain. Its
+   Firecracker process is jailed/unprivileged, but guests still share the host
+   kernel; hostile multi-tenant isolation needs a stronger boundary.
+
+## 2026-08-11 — external post-setup snapshots certified; defaults exposed
+
+- Certification now requires both a full behavioral date and a provider-native
+  warm-restore date. The registry derives `certified` from those two fields, so
+  a compile pass or an older general conformance run cannot accidentally make a
+  provider selectable.
+- Docker's rebuilt runner image fixed missing Bun patch/workspace inputs. The
+  strengthened verifier passed **100/100**: socket and WS agent runs, Portal
+  auth/upstream behavior, lifecycle and terminal flows, plus Docker commit →
+  new-container restore retaining state written by `.agents/setup` without
+  rerunning it.
+- Daytona passed **41/41** against the configured sized snapshot. A fresh
+  post-setup provider snapshot restored into a distinct sandbox with the exact
+  nonce, setup log, prepared repo artifact and scrubbed clone authority; real
+  agent execution, WS drop/redial, steer/cancel and cleanup also passed. The
+  SDK wait is now 15 minutes because the 19.4 GB artifact took about six.
+- Modal's prewarm path now publishes 24-hour filesystem Images and restores
+  them into new sandboxes. Conformance caught and fixed missing encrypted ports
+  on prewarm-created sandboxes; the clean **41/41** rerun covers the same
+  exact-seal and no-setup-rerun contract plus the full remote-run matrix.
+- Settings exposes the shared default under Workspace → Models and the personal
+  override under Personal → Preferences. Resolution is explicit session choice
+  → personal choice → Workspace choice → None. None is the shipped default;
+  only configured providers with both live evidence dates appear.
 
 ## 2026-08-10 — final live acceptance
 

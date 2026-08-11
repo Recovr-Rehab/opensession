@@ -813,6 +813,7 @@ export async function warmRemoteWorkspace(
     await runRemoteLifecycleHook(driver, dir, "setup", "fresh", repo.id);
   }
   if (opts?.installDeps === false) {
+    await scrubRemoteWarmWorkspaceAuthority(driver, repo, dir);
     log(opts.runSetup ? "ready (post-setup)" : "ready (clone only)");
     return true;
   }
@@ -829,7 +830,31 @@ export async function warmRemoteWorkspace(
   } else {
     log("ready");
   }
+  await scrubRemoteWarmWorkspaceAuthority(driver, repo, dir);
   return true;
+}
+
+/** A provider snapshot is shared by future sessions, so it may never retain
+ * the short-lived token used to clone a private repo. Adoption restores the
+ * current scoped URL before fetching. Keep an inert origin (rather than
+ * deleting it) so `git remote set-url origin …` stays deterministic. */
+export async function scrubRemoteWarmWorkspaceAuthority(
+  driver: RemoteDriver,
+  repo: { id: string; ghRepo?: string },
+  dir = remoteWarmWorkspaceDir(repo.id),
+): Promise<void> {
+  const safeOrigin = repo.ghRepo
+    ? `https://github.com/${repo.ghRepo}.git`
+    : "https://invalid.invalid/opensession-credential-scrubbed.git";
+  const scrubbed = await driver.exec(
+    `git remote set-url origin ${shellQuoteWord(safeOrigin)}`,
+    { cwd: dir },
+  );
+  if (scrubbed.exitCode !== 0) {
+    throw new Error(
+      `could not scrub clone authority from ${repo.id} repo template: ${scrubbed.stderr.trim().slice(0, 200)}`,
+    );
+  }
 }
 
 export async function setupRemoteWorkspace(
@@ -953,8 +978,11 @@ export async function runRemoteLifecycleHook(
     (hook === "setup" ? ` && touch ${shellQuoteWord(stamp)}` : "");
   const result = await driver.exec(command, { cwd, timeoutMs: 20 * 60_000 });
   if (result.exitCode !== 0) {
+    const tail = await driver.exec(`tail -80 ${shellQuoteWord(log)} 2>/dev/null || true`);
+    const detail = (tail.stdout || tail.stderr).trim().slice(-4_000);
     throw new Error(
-      `.agents/${hook} failed with exit ${result.exitCode}; see ${log}`,
+      `.agents/${hook} failed with exit ${result.exitCode}; see ${log}` +
+        (detail ? `\n${detail}` : ""),
     );
   }
   return { ran: true, log };

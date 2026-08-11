@@ -33,6 +33,20 @@ import {
   type RemoteDriver,
   type RemoteExecOpts,
 } from "./bootstrap";
+import {
+  claimPrewarmOrWait,
+  discardClaimedPrewarm,
+  PREWARM_KEY_LABEL,
+  PREWARM_LABEL,
+  type PrewarmAdapter,
+} from "../prewarm";
+import {
+  invalidateRemoteRepoTemplate,
+  readRemoteRepoTemplate,
+  REMOTE_REPO_TEMPLATE_TTL_MS,
+  sealRemoteRepoTemplate,
+  writeRemoteRepoTemplate,
+} from "../remote-repo-template";
 
 const SESSION_TAG = "opensession.session";
 const DEFAULT_APP = "opensession-sandboxes";
@@ -204,25 +218,64 @@ export class ModalProvider implements SandboxProvider {
       sandbox = null;
     }
     if (!sandbox) {
+      const claim = await claimPrewarmOrWait(this.id, repo.id, spec.sessionId);
+      if (claim) {
+        try {
+          const candidate = await client.sandboxes.fromId(claim.sandboxId);
+          if ((await candidate.poll()) === null) {
+            await candidate.setTags({
+              [SESSION_TAG]: spec.sessionId,
+              "opensession.sandbox": "1",
+            });
+            sandbox = candidate;
+            console.log(
+              `[sandbox:modal] adopted prewarmed sandbox ${candidate.sandboxId} for ${spec.sessionId}`,
+            );
+          } else {
+            discardClaimedPrewarm(this.id, claim.sandboxId);
+          }
+        } catch (error) {
+          console.warn("[sandbox:modal] prewarm adoption failed (cold-creating):", error);
+          discardClaimedPrewarm(this.id, claim.sandboxId);
+          sandbox = null;
+        }
+      }
+    }
+    if (!sandbox) {
       if (prevState) {
         removeRemoteState(this.id, prevState.sandboxId);
         prevState = null;
       }
       console.log(`[sandbox:modal] creating sandbox for ${spec.sessionId}`);
-      const image = client.images.fromRegistry(cfg.modal?.image || DEFAULT_IMAGE);
-      sandbox = await client.sandboxes.create(app, image, {
-        tags: { [SESSION_TAG]: spec.sessionId, "opensession.sandbox": "1" },
-        timeoutMs: MAX_LIFETIME_MS,
-        idleTimeoutMs:
-          (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000,
-        cpu: cfg.cpus,
-        cpuLimit: cfg.cpus,
-        memoryMiB: memoryMiB(cfg.memory),
-        memoryLimitMiB: memoryMiB(cfg.memory),
-        regions: cfg.modal?.region ? [cfg.modal.region] : undefined,
-        cloud: cfg.modal?.cloud,
-        encryptedPorts: cfg.modal?.publicPreviews ? cfg.previewPorts : undefined,
-      });
+      const template = readRemoteRepoTemplate("modal", repo.id);
+      const create = async (imageId?: string) => {
+        const image = imageId
+          ? await client.images.fromId(imageId)
+          : client.images.fromRegistry(cfg.modal?.image || DEFAULT_IMAGE);
+        return client.sandboxes.create(app, image, {
+          tags: { [SESSION_TAG]: spec.sessionId, "opensession.sandbox": "1" },
+          timeoutMs: MAX_LIFETIME_MS,
+          idleTimeoutMs:
+            (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000,
+          cpu: cfg.cpus,
+          cpuLimit: cfg.cpus,
+          memoryMiB: memoryMiB(cfg.memory),
+          memoryLimitMiB: memoryMiB(cfg.memory),
+          regions: cfg.modal?.region ? [cfg.modal.region] : undefined,
+          cloud: cfg.modal?.cloud,
+          encryptedPorts: cfg.modal?.publicPreviews ? cfg.previewPorts : undefined,
+        });
+      };
+      try {
+        sandbox = await create(template?.artifactId);
+      } catch (error) {
+        if (!template) throw error;
+        invalidateRemoteRepoTemplate("modal", repo.id);
+        console.warn(
+          `[sandbox:modal] repo template ${template.artifactId} is unavailable; retrying cold`,
+        );
+        sandbox = await create();
+      }
       created = true;
     }
 
@@ -319,3 +372,107 @@ export class ModalProvider implements SandboxProvider {
     removeRemoteState(this.id, sandboxId);
   }
 }
+
+// ── Warm-on-typing + post-setup filesystem templates ────────────────────────
+
+export const modalPrewarmAdapter: PrewarmAdapter = {
+  async create(labels) {
+    const cfg = sandboxConfig();
+    const key = labels[PREWARM_KEY_LABEL] || "";
+    const repoId = key.startsWith("modal:") ? key.slice("modal:".length) : "";
+    if (!repoId) throw new Error(`invalid Modal prewarm key: ${key || "(missing)"}`);
+    const client = await modalClient();
+    const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
+      createIfMissing: true,
+    });
+    const template = readRemoteRepoTemplate("modal", repoId);
+    const create = async (imageId?: string) => {
+      const image = imageId
+        ? await client.images.fromId(imageId)
+        : client.images.fromRegistry(cfg.modal?.image || DEFAULT_IMAGE);
+      return client.sandboxes.create(app, image, {
+        tags: labels,
+        timeoutMs: MAX_LIFETIME_MS,
+        // The Open Session prewarm sweep owns the short TTL. Keep Modal's
+        // idle timeout session-sized so an adopted sandbox does not die five
+        // minutes later with no API to extend that create-time setting.
+        idleTimeoutMs:
+          (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000,
+        cpu: cfg.cpus,
+        cpuLimit: cfg.cpus,
+        memoryMiB: memoryMiB(cfg.memory),
+        memoryLimitMiB: memoryMiB(cfg.memory),
+        regions: cfg.modal?.region ? [cfg.modal.region] : undefined,
+        cloud: cfg.modal?.cloud,
+        encryptedPorts: cfg.modal?.publicPreviews ? cfg.previewPorts : undefined,
+      });
+    };
+    let sandbox: ModalSandbox;
+    let restoredFromTemplate = Boolean(template);
+    try {
+      sandbox = await create(template?.artifactId);
+    } catch (error) {
+      if (!template) throw error;
+      invalidateRemoteRepoTemplate("modal", repoId);
+      restoredFromTemplate = false;
+      sandbox = await create();
+    }
+    return {
+      sandboxId: sandbox.sandboxId,
+      driver: modalDriver(sandbox),
+      restoredFromTemplate,
+    };
+  },
+
+  async publishTemplate(sandboxId, repo) {
+    const client = await modalClient();
+    const sandbox = await client.sandboxes.fromId(sandboxId);
+    await sealRemoteRepoTemplate(modalDriver(sandbox), "modal", repo);
+    const image = await sandbox.snapshotFilesystem({
+      timeoutMs: 10 * 60_000,
+      ttlMs: REMOTE_REPO_TEMPLATE_TTL_MS,
+    });
+    const { previous } = writeRemoteRepoTemplate("modal", repo.id, image.imageId);
+    if (previous?.artifactId && previous.artifactId !== image.imageId) {
+      await client.images.delete(previous.artifactId).catch(() => {});
+    }
+    console.log(
+      `[sandbox:modal] published post-setup repo template ${image.imageId} for ${repo.id}`,
+    );
+  },
+
+  async destroy(sandboxId) {
+    try {
+      const client = await modalClient();
+      const sandbox = await client.sandboxes.fromId(sandboxId);
+      await sandbox.terminate();
+    } catch (error) {
+      if ((error as { name?: string })?.name !== "NotFoundError") {
+        console.warn(`[sandbox:modal] prewarm destroy(${sandboxId}):`, error);
+      }
+    }
+  },
+
+  async listPrewarmed() {
+    const cfg = sandboxConfig();
+    const client = await modalClient();
+    const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
+      createIfMissing: true,
+    });
+    const out: Array<{ id: string; key: string }> = [];
+    for await (const sandbox of client.sandboxes.list({
+      appId: app.appId,
+      tags: { [PREWARM_LABEL]: "1" },
+    })) {
+      if ((await sandbox.poll()) !== null) continue;
+      const tags: Record<string, string> = await sandbox
+        .getTags()
+        .catch(() => ({} as Record<string, string>));
+      out.push({
+        id: sandbox.sandboxId,
+        key: String(tags[PREWARM_KEY_LABEL] || ""),
+      });
+    }
+    return out;
+  },
+};

@@ -1,6 +1,6 @@
 # Sandbox plan — make sandboxes the default session environment
 
-Status: implementation complete on 2026-08-10. The evidence-based default
+Status: implementation complete on 2026-08-11. The evidence-based default
 decision is **stay opt-in for now**: the live 30-day scorecard does not yet meet
 the dogfooding sample thresholds, so host worktrees remain the default. This is
 a completed decision gate, not an unfinished implementation or an invented
@@ -99,7 +99,8 @@ set. Conformance and acceptance runs prove the mechanisms, not sustained use.
 
 ## Phase 3 — provider parity
 
-Status: complete. The behavioral harness is the certification boundary.
+Status: complete. Certification requires two independent live evidence dates:
+the full behavioral harness and a provider-native post-setup warm restore.
 Docker, Daytona, Modal and MicroVM are live-certified and are the only
 providers offered for new sessions. E2B, Box and Lambda MicroVM adapters remain
 in-tree for conformance work, but the picker hides them, create rejects them,
@@ -109,7 +110,11 @@ its live matrix passes.
 - Turn the verify scripts into a behavioral conformance matrix — setup hook,
   snapshot/warm start, wake, preview, shell, resume, audit mirroring — and
   run every provider against it. Each provider passes identically or gets
-  cut. Provider choice becomes an implementation detail.
+  cut. Provider choice becomes an implementation detail. The 2026-08-11
+  rerun proved Docker commit/restore (100/100), Daytona provider snapshots
+  (41/41), Modal filesystem images (41/41), and the previously certified
+  MicroVM COW template; general conformance alone can no longer certify a
+  provider without the warm-restore evidence.
 
 ## Phase 4 — flip + automations
 
@@ -118,7 +123,9 @@ profile shipped independently because it is useful without making sandboxes the
 interactive default.
 
 - Default decision: retain host worktrees until the Phase 2 scorecard passes
-  and a human approves the flip. No code path silently pre-empts that gate.
+  and a human approves the flip. Workspace and personal Settings expose an
+  explicit default selector; the shipped/effective default is None, with
+  precedence per-session override → personal override → Workspace → None.
 - Sandboxed automations use MicroVM-only isolation, one hard-pinned model
   account, an explicit MCP allowlist, no cross-model/account fallback, guest-
   only volume workspaces, and a host-resolved fail-closed TCP egress allowlist.

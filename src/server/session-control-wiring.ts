@@ -17,6 +17,7 @@ import { enqueuePrompt, runSessionPrompt, runSessionPromptAndDrain, sessionMenti
 import { parseImageDataUrls } from "./uploads";
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
+import { resolveInteractiveSandbox } from "./sandbox/defaults";
 import { findSession, getCachedSessions, invalidateSessionsCache, touchNativeSession } from "./session-cache";
 import { type SessionState, type SessionSummary, registerSessionControl } from "./session-control";
 import { type ResolvedCreate, forkHandoffContext, openCreatedSession, resolveForkContext, resolvePinnedAccountId } from "./session-create";
@@ -317,11 +318,9 @@ registerSessionControl({
 		// the create loudly instead of silently running on the host. Forks
 		// never sandbox — they share/fork the source session's engine state
 		// and cwd (same rule as the web create).
-		const sandboxResolved = resolveRequestedSandbox(
-			fork ? undefined : sandbox,
-			repo.id,
-			model,
-		);
+		const sandboxResolved = fork
+			? resolveRequestedSandbox(undefined, repo.id, model)
+			: resolveInteractiveSandbox(sandbox, user, repo.id, model);
 		if (!sandboxResolved.ok) throw new Error(sandboxResolved.error);
 		const sandboxProvider = sandboxResolved.provider;
 		const remoteSandbox = isRemoteSandboxProvider(sandboxProvider);

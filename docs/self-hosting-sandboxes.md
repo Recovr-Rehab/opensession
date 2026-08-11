@@ -188,6 +188,11 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   // "lambda-microvm"
   "provider": "docker",
 
+  // Shared Workspace default for NEW interactive sessions. "none" is the
+  // shipped default. A person's Settings override and an explicit session
+  // choice both take precedence.
+  "sessionDefault": "none",
+
   // ── Docker provider ────────────────────────────────────────────────
   // Container image (default "opensession-runner:latest").
   "image": "opensession-runner:latest",
@@ -558,14 +563,16 @@ This no longer certifies the shipped architecture: remote providers and
 MicroVMs now run the engine inside the sandbox. Use the behavioral conformance
 matrix above for current certification.
 
-### Daytona (implemented, live-certified — full launchRun matrix green 2026-07-09)
+### Daytona (implemented, live-certified 2026-08-11)
 
 Self-hostable sandbox platform (Helm/K8s) with a hosted cloud. The adapter
 (`src/server/sandbox/adapters/daytona.ts`) creates sandboxes over the
 Daytona API/SDK: volume-style workspace cloned in-sandbox over https
 (`cloneCredential`), ws transport always, runner bootstrapped on first
-ensure (minutes cold — provider snapshots as a prebaked fast path are a
-backlog item). Idle-stop is native (`autoStopInterval`).
+ensure. A prewarm clones the repo, runs `.agents/setup`, scrubs clone and
+model authority, and publishes a 24-hour Daytona snapshot. Later prewarms
+restore that provider artifact into a new sandbox and skip setup. Idle-stop
+is native (`autoStopInterval`).
 
 - Config: `provider: "daytona"` + the `daytona` block (or `DAYTONA_API_KEY`)
   + a reachable dial-back URL (the `publicIngress` section above — hosted
@@ -577,10 +584,12 @@ backlog item). Idle-stop is native (`autoStopInterval`).
   on lower tiers; runs don't.
 - Certify against your own account/deployment:
   `bun run deploy/sandbox/conformance.ts daytona` (needs the API key; runs
-  one smallest-size, sbxtest-labeled sandbox and destroys it, then lists
+  a source sandbox and a distinct restore sandbox, destroys both, then lists
   the org's sandboxes to prove nothing leaked). The full matrix — incl.
   the launchRun round-trip + steer/cancel + mid-run WS drop/redial — went
-  27/27 green 2026-07-09 against hosted Daytona (Tier 3) dialing back over
+  41/41 green 2026-08-11 against hosted Daytona (Tier 3), including an exact
+  sealed-filesystem restore into a second sandbox, setup non-reexecution,
+  real agent execution, and WS reconnect/steer/cancel, dialing back over
   the public ingress (`SBX_CONF_LISTEN_PORT=3860
   SBX_CONF_PUBLIC_BASE=wss://your.domain`).
 
@@ -627,7 +636,7 @@ fix what fails, and record the certification in this doc + the plan.
 Until then, the adapter is available only to the conformance harness; it is
 hidden from the picker and rejected by session creation.
 
-### Modal (implemented, live-certified 2026-07-17)
+### Modal (implemented, live-certified 2026-08-11)
 
 Modal sandboxes are ephemeral containers created through the official
 Apache-2.0 TypeScript SDK. The adapter (`src/server/sandbox/adapters/modal.ts`)
@@ -649,9 +658,14 @@ contract as the other remote providers.
 - Modal caps a sandbox's lifetime at 24 hours. Idle timeout or lifetime expiry
   terminates the container and deletes its workspace; the next turn creates a
   fresh sandbox, so push code-mode work early.
-- No prewarm adapter or Shell-tab remote PTY yet.
-- The live conformance pass covered provisioning, bootstrap, git/exec,
-  idempotent reuse, previews, and cleanup. Modal's SDK file-upload helper uses
+- The prewarm adapter publishes Modal filesystem Images after `.agents/setup`
+  and credential scrubbing (24-hour TTL). A restored prewarm preserves the
+  exact seal and setup output, then is adopted by the session. Shell-tab
+  remote PTY remains provider-dependent work.
+- The 41/41 live conformance pass covered provisioning, bootstrap, git/exec,
+  idempotent reuse, encrypted preview tunnels, a distinct filesystem-image
+  restore, real agent execution, WS reconnect/steer/cancel, and cleanup.
+  Modal's SDK file-upload helper uses
   `ReadableStream.from`, which Bun lacks; the adapter's streamed-stdin fallback
   was separately verified against a disposable live sandbox with read-back.
 - Re-run with `bun run deploy/sandbox/conformance.ts modal`; remote dial-back

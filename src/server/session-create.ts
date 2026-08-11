@@ -38,6 +38,7 @@ import { type ImageInput, shouldPersistModelSwitch } from "./run-events";
 import { attachSessionWatchersToEngineTranscript, drainQueue, foldSessionUsage, maybeLaunchSandboxedRun, maybeQueueAutoContinue, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
 import { type McpScope, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { isRemoteSandboxProvider, resolveRequestedSandbox, sandboxConfig, sandboxesEnabled } from "./sandbox/config";
+import { resolveInteractiveSandbox } from "./sandbox/defaults";
 
 /** Sandbox provider id as resolveRequestedSandbox resolves it (null = host). */
 type ResolvedSandboxProvider = Extract<
@@ -821,11 +822,14 @@ export async function handleCreateSessionMessage(
 	// names an explicit provider (including "modal" / "lambda-microvm"),
 	// validated against the current config. Forks never sandbox —
 	// they share/fork the source session's engine state and cwd.
-	const sandboxResolved = resolveRequestedSandbox(
-		forkSource ? undefined : (msg.sandbox as boolean | string | undefined),
-		repo.id,
-		model,
-	);
+	const sandboxResolved = forkSource
+		? resolveRequestedSandbox(undefined, repo.id, model)
+		: resolveInteractiveSandbox(
+				msg.sandbox as boolean | string | undefined,
+				user,
+				repo.id,
+				model,
+			);
 	if (!sandboxResolved.ok) {
 		ws.send(
 			JSON.stringify({ type: "error", message: sandboxResolved.error }),

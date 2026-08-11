@@ -69,6 +69,7 @@ import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { getCurrentUser } from "../UserPicker";
 import { Select, SettingRow } from "./shared";
+import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
 
@@ -393,6 +394,7 @@ export function PreferencesPanel() {
 						/>
 					}
 				/>
+				<PersonalSandboxDefaultRow />
 				<SettingRow
 					title="Send messages with"
 					desc={`${sendKey === "mod-enter" ? "↵" : "⇧↵"} makes a new line.`}

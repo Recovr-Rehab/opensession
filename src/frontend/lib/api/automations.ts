@@ -176,14 +176,28 @@ export interface SandboxStatusInfo {
 		note?: string;
 	}>;
 	killSwitch: boolean;
+	defaults?: {
+		workspace: string;
+		personal: string;
+		effective: string;
+	};
 	/** Absent on a pre-upgrade server = no client-side combo warnings. */
 	modelFamilies?: SandboxModelFamilyInfo[];
 }
 
-export async function fetchSandboxStatus(): Promise<SandboxStatusInfo> {
-	const res = await fetch(`${BASE}/sandbox/status`);
+export async function fetchSandboxStatus(user?: string): Promise<SandboxStatusInfo> {
+	const query = user ? `?user=${encodeURIComponent(user)}` : "";
+	const res = await fetch(`${BASE}/sandbox/status${query}`);
 	if (!res.ok) throw new Error(`Failed to fetch sandbox status: ${res.status}`);
 	return res.json();
+}
+
+export async function saveSandboxDefault(input: {
+	scope: "workspace" | "personal";
+	value: string;
+	user: string;
+}): Promise<{ defaults: NonNullable<SandboxStatusInfo["defaults"]> }> {
+	return request("/sandbox/defaults", { method: "PUT", body: input });
 }
 
 /** Warm-on-typing sandbox prewarm (POST /api/sandbox/prewarm): fired by the

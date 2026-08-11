@@ -17,12 +17,14 @@
  *   them from the LIVE ~/.opensession-sandbox.json provider blocks (or
  *   DAYTONA_API_KEY / E2B_API_KEY). Without credentials the section prints
  *   `SKIPPED: no credentials` and does NOT fake success; a key-holder gets
- *   the full matrix. Remote entries create at most ONE smallest-size sandbox
- *   each, sbxtest-labeled, and destroy it; the section ends by listing the
- *   provider's sandboxes to prove nothing was left behind.
- * - Remote workspaces clone github.com/octocat/Hello-World (tiny, public);
- *   the runner bundle clones THIS repo's origin, so a private origin needs
- *   `cloneCredential` — the suite auto-wires a GitHub token from
+ *   the full matrix. Remote entries create the minimum sandbox set needed for
+ *   the matrix: one source sandbox, plus one distinct restore sandbox for
+ *   snapshot-capable providers. Every sandbox is sbxtest-labeled and destroyed;
+ *   the section ends by listing the provider's sandboxes to prove nothing was
+ *   left behind.
+ * - Remote snapshot-capable providers clone this Open Session repo so the
+ *   committed `.agents/setup` hook runs before publication. A private origin
+ *   needs `cloneCredential`; the suite auto-wires a GitHub token from
  *   GITHUB_API_TOKEN or ~/.slack-agent.env when present.
  *
  * Everything is sbxtest-prefixed; the run journal, sandbox config, chat-store
@@ -46,6 +48,9 @@ process.env.OPENSESSION_SESSIONS_DIR = `${SCRATCH}/sessions`;
 // verify.ts. The live box has no config.json, so this only ADDS the scratch
 // repos over the built-in defaults.
 process.env.OPENSESSION_CONFIG = `${SCRATCH}/opensession-config.json`;
+// The suite is what earns certification; it must be able to exercise a
+// provider while the production picker correctly keeps it decertified.
+process.env.OPENSESSION_SANDBOX_CERTIFICATION_RUN = "1";
 
 import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
@@ -55,6 +60,13 @@ const runWs = await import("../../src/server/run-ws");
 const { hostRunBusy } = await import("../../src/server/host-registry");
 const { OPENSESSION_SESSIONS_DIR } = await import("../../src/server/paths");
 const { statePath } = await import("../../src/server/paths");
+const {
+  invalidateRemoteRepoTemplate,
+  readRemoteRepoTemplate,
+  remoteRepoTemplateProofPath,
+} = await import(
+  "../../src/server/sandbox/remote-repo-template"
+);
 // The orphan-snapshot sweep (docker.ts, piggybacked on the idle sweep) reads
 // session/state files through the — now scratch-redirected — chats dir, so it
 // would see every LIVE session as gone. Arm its once-an-hour throttle up
@@ -170,9 +182,8 @@ await sh(["git", "remote", "add", "origin", BARE], MAIN);
 await sh(["git", "worktree", "add", "-q", WT, "-b", "sbxtest-conf-branch"], MAIN);
 // Register the scratch repos through the config-driven registry (REPOS is a
 // read-only Proxy now; OPENSESSION_CONFIG points at this scratch file — same
-// pattern as verify.ts). sbxpub is the remote workspace source: tiny public
-// repo whose `repo` path has no git checkout, so remoteCloneUrl falls through
-// to ghRepo's https URL.
+// pattern as verify.ts). sbxpub points at this repo's origin so certification
+// exercises the real `.agents/setup` hook before taking a provider snapshot.
 await Bun.write(
   process.env.OPENSESSION_CONFIG!,
   JSON.stringify({
@@ -181,11 +192,20 @@ await Bun.write(
       [PUB_REPO_ID]: {
         repo: `${SCRATCH}/no-local-checkout`,
         wtPrefix: PUB_REPO_ID,
-        defaultBranch: "master",
-        ghRepo: "octocat/Hello-World",
+        defaultBranch: "main",
+        ghRepo: "tellahq/opensession",
+        // A second deterministic artifact complements the real lifecycle-hook
+        // stamp and is easy for the restored session to assert.
+        depsInstall:
+          "mkdir -p .opensession-conformance && printf post-setup > .opensession-conformance/template-proof",
       },
     },
   }),
+);
+mkdirSync(`${OPENSESSION_SESSIONS_DIR}/warm-templates`, { recursive: true });
+await Bun.write(
+  `${OPENSESSION_SESSIONS_DIR}/warm-templates/config.json`,
+  JSON.stringify({ repos: { [PUB_REPO_ID]: { enabled: true, intervalHours: 24 } } }),
 );
 
 // ── shared dial-back WS server (docker-ws + remote entries) ──────────────────
@@ -200,6 +220,7 @@ await Bun.write(
 //     bun run deploy/sandbox/conformance.ts daytona
 const LISTEN_PORT = parseInt(process.env.SBX_CONF_LISTEN_PORT || "0", 10) || 0;
 const PUBLIC_BASE = (process.env.SBX_CONF_PUBLIC_BASE || "").replace(/\/+$/, "");
+const CADDY_PREFIX = (process.env.SBX_CONF_CADDY_PREFIX || "").replace(/\/+$/, "");
 
 const wsSrv = Bun.serve({
   port: LISTEN_PORT,
@@ -237,6 +258,65 @@ const remoteBase = PUBLIC_BASE || (publicIp ? `ws://${publicIp}:${wsSrv.port}` :
 console.log(
   `dial-back listener on 0.0.0.0:${wsSrv.port} (bridge ${bridgeGw}, remote base ${remoteBase || "unknown"})`,
 );
+
+// A production Open Session process already owns the permanent public-ingress
+// listener on many hosts. For certification, expose this scratch listener at
+// a unique path instead of stopping or replacing that process. The route is
+// tagged and removed from the CURRENT Caddy config in finally, so unrelated
+// routes added while this long-running matrix executes are preserved.
+const CADDY_ROUTES_URL =
+  "http://127.0.0.1:2019/config/apps/http/servers/srv1/routes/0/handle/0/routes";
+const caddyRouteId = `sandbox-conformance-${RUN_TS}`;
+
+async function mutateCaddyRoutes(
+  mutate: (routes: Array<Record<string, unknown>>) => Array<Record<string, unknown>>,
+): Promise<void> {
+  const currentRes = await fetch(CADDY_ROUTES_URL);
+  if (!currentRes.ok) throw new Error(`Caddy route read failed (${currentRes.status})`);
+  const current = (await currentRes.json()) as Array<Record<string, unknown>>;
+  const updated = mutate(current);
+  const patchRes = await fetch(CADDY_ROUTES_URL, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updated),
+  });
+  if (!patchRes.ok) {
+    throw new Error(`Caddy route update failed (${patchRes.status}): ${await patchRes.text()}`);
+  }
+}
+
+async function installScratchIngress(): Promise<void> {
+  if (!CADDY_PREFIX) return;
+  if (!/^\/[A-Za-z0-9._-]+$/.test(CADDY_PREFIX)) {
+    throw new Error("SBX_CONF_CADDY_PREFIX must be one safe path segment beginning with /");
+  }
+  if (!PUBLIC_BASE.endsWith(CADDY_PREFIX)) {
+    throw new Error("SBX_CONF_PUBLIC_BASE must end with SBX_CONF_CADDY_PREFIX");
+  }
+  await mutateCaddyRoutes((routes) => [
+    {
+      "@id": caddyRouteId,
+      terminal: true,
+      match: [{ path: [CADDY_PREFIX, `${CADDY_PREFIX}/*`] }],
+      handle: [
+        { handler: "rewrite", strip_path_prefix: CADDY_PREFIX },
+        { handler: "reverse_proxy", upstreams: [{ dial: `127.0.0.1:${wsSrv.port}` }] },
+      ],
+    },
+    ...routes.filter((route) => route["@id"] !== caddyRouteId),
+  ]);
+  const healthBase = PUBLIC_BASE.replace(/^ws(s?):/, "http$1:");
+  const health = await fetch(`${healthBase}/ingress-health`, { signal: AbortSignal.timeout(10_000) });
+  if (!health.ok || (await health.text()) !== "ok") {
+    throw new Error(`scratch public ingress health failed (${health.status})`);
+  }
+  console.log(`scratch ingress ${CADDY_PREFIX} → 127.0.0.1:${wsSrv.port}`);
+}
+
+async function removeScratchIngress(): Promise<void> {
+  if (!CADDY_PREFIX) return;
+  await mutateCaddyRoutes((routes) => routes.filter((route) => route["@id"] !== caddyRouteId));
+}
 
 // ── matrix entries ────────────────────────────────────────────────────────────
 
@@ -300,7 +380,10 @@ const entries: Entry[] = [
       provider: "daytona",
       callbackBaseUrl: remoteBase,
       previewPorts: [8080],
-      daytona: { apiKey: daytonaKey },
+      // Keep the operator's sized snapshot/endpoint. Daytona's default
+      // 1GB/3GiB image cannot install this repo and is not representative of
+      // the production provider configuration being certified.
+      daytona: { ...(liveCfg?.daytona || {}), apiKey: daytonaKey },
       // Warm-on-typing prewarm (src/server/sandbox/prewarm.ts): the section
       // prewarms BEFORE the first ensure, which must then ADOPT the warmed
       // sandbox (same id, seconds not minutes) — total sandbox count stays 1.
@@ -355,13 +438,12 @@ const entries: Entry[] = [
       provider: "modal",
       callbackBaseUrl: remoteBase,
       previewPorts: [8080],
+      prewarm: { enabled: true, ttlMinutes: 20, maxLive: 2 },
       modal: {
+        ...(liveCfg?.modal || {}),
         ...(modalTokenId && modalTokenSecret
           ? { tokenId: modalTokenId, tokenSecret: modalTokenSecret }
           : {}),
-        ...(liveCfg?.modal?.profile ? { profile: liveCfg.modal.profile } : {}),
-        ...(liveCfg?.modal?.image ? { image: liveCfg.modal.image } : {}),
-        ...(liveCfg?.modal?.environment ? { environment: liveCfg.modal.environment } : {}),
         publicPreviews: true,
       },
       ...(githubToken() ? { cloneCredential: { type: "https-token", token: githubToken() } } : {}),
@@ -414,6 +496,69 @@ const selected = entries.filter((e) => !wanted.length || wanted.includes(e.name)
 
 // ── the parameterized checks ──────────────────────────────────────────────────
 
+async function waitForPrewarm(entry: Entry, checkPrefix = "prewarm"): Promise<string> {
+  const { requestPrewarm } = await import("../../src/server/sandbox/prewarm");
+  const startedAt = Date.now();
+  let st = await requestPrewarm(entry.providerId, entry.repoId, "sbxtest");
+  ok(
+    `${checkPrefix} request accepted`,
+    st.state === "bootstrapping" || st.state === "ready",
+    st.state,
+  );
+  const deadline = Date.now() + 900_000;
+  while (st.state === "bootstrapping" && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 5000));
+    st = await requestPrewarm(entry.providerId, entry.repoId, "sbxtest");
+  }
+  ok(
+    `${checkPrefix} reached ready`,
+    st.state === "ready" && !!st.sandboxId,
+    `${st.state} in ${((Date.now() - startedAt) / 1000).toFixed(0)}s`,
+  );
+  return st.sandboxId || "";
+}
+
+async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
+  if (entry.providerId !== "daytona" && entry.providerId !== "modal") return;
+  const template = readRemoteRepoTemplate(entry.providerId, entry.repoId);
+  if (!template) return;
+  try {
+    if (entry.providerId === "daytona") {
+      const { Daytona } = await import("@daytonaio/sdk");
+      const client = new Daytona({ apiKey: daytonaKey });
+      const snapshot = await client.snapshot.get(template.artifactId);
+      await client.snapshot.delete(snapshot);
+    } else {
+      const { ModalClient } = await import("modal");
+      const modalCfg = liveCfg?.modal || {};
+      const previousProfile = process.env.MODAL_PROFILE;
+      if (modalCfg.profile) process.env.MODAL_PROFILE = modalCfg.profile;
+      try {
+        const client = new ModalClient({
+          tokenId: modalTokenId || undefined,
+          tokenSecret: modalTokenSecret || undefined,
+          environment: modalCfg.environment,
+          endpoint: modalCfg.endpoint,
+        });
+        await client.images.delete(template.artifactId);
+      } finally {
+        if (modalCfg.profile) {
+          if (previousProfile === undefined) delete process.env.MODAL_PROFILE;
+          else process.env.MODAL_PROFILE = previousProfile;
+        }
+      }
+    }
+    invalidateRemoteRepoTemplate(entry.providerId, entry.repoId);
+    ok("certification repo-template artifact removed", true, template.artifactId);
+  } catch (error) {
+    ok(
+      "certification repo-template artifact removed",
+      false,
+      String(error).slice(0, 180),
+    );
+  }
+}
+
 async function runEntry(entry: Entry): Promise<void> {
   section = entry.name;
   console.log(`\n══ ${entry.name} ══`);
@@ -439,24 +584,11 @@ async function runEntry(entry: Entry): Promise<void> {
   //    cold runner bootstrap (minutes).
   let prewarmedId = "";
   if (entry.remote && (entry.config as any).prewarm?.enabled) {
-    const { requestPrewarm } = await import("../../src/server/sandbox/prewarm");
-    const tP = Date.now();
-    let st = await requestPrewarm(entry.providerId, entry.repoId, "sbxtest");
-    ok("prewarm request accepted", st.state === "bootstrapping" || st.state === "ready", st.state);
-    const deadline = Date.now() + 900_000;
-    while (st.state === "bootstrapping" && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 5000));
-      st = await requestPrewarm(entry.providerId, entry.repoId, "sbxtest");
-    }
-    ok(
-      "prewarm reached ready",
-      st.state === "ready" && !!st.sandboxId,
-      `${st.state} in ${((Date.now() - tP) / 1000).toFixed(0)}s`,
-    );
-    prewarmedId = st.sandboxId || "";
+    prewarmedId = await waitForPrewarm(entry);
   }
 
   let sandbox: Sandbox | null = null;
+  let restoredSandbox: Sandbox | null = null;
   try {
     // 1. ensure / reuse
     const t0 = Date.now();
@@ -505,6 +637,68 @@ async function runEntry(entry: Entry): Promise<void> {
     ok("workspace edits are visible to git", dirty.stdout.includes("sbx-conf-file.txt"));
     if (entry.remote) {
       ok("no host dir was created (volume-style workspace)", !existsSync(sandbox.cwd), sandbox.cwd);
+    }
+
+    // Provider-native post-setup template certification. The first prewarm
+    // published a credential-free snapshot; a SECOND prewarm must create a
+    // different sandbox from it, retain the exact seal nonce + prepared repo
+    // artifact, and be adopted by a second session. Repeating cold setup
+    // cannot satisfy the nonce equality check.
+    if (entry.providerId === "daytona" || entry.providerId === "modal") {
+      const proofPath = remoteRepoTemplateProofPath(entry.repoId);
+      const firstSeal = await sandbox.exec(["cat", proofPath]);
+      const firstPrepared = await sandbox.exec([
+        "cat",
+        ".opensession-conformance/template-proof",
+      ]);
+      const firstSetupLog = await sandbox.exec([
+        "cat",
+        `/home/ubuntu/.opensession/lifecycle/${entry.repoId}-setup.log`,
+      ]);
+      ok(
+        "source sandbox sealed a credential-free repo template",
+        firstSeal.exitCode === 0 && firstSeal.stdout.includes('"nonce"'),
+        firstSeal.stderr.trim().slice(0, 120),
+      );
+      ok(
+        "post-setup repo artifact exists before snapshot restore",
+        firstPrepared.exitCode === 0 &&
+          firstPrepared.stdout === "post-setup" &&
+          firstSetupLog.exitCode === 0,
+      );
+      const restoredPrewarmId = await waitForPrewarm(entry, "snapshot restore prewarm");
+      const restoredSpec = {
+        ...spec,
+        sessionId: `${sessionId}-snapshot-restore`,
+      };
+      restoredSandbox = await provider.ensure(restoredSpec);
+      ok(
+        "snapshot restore used a new provider sandbox",
+        restoredSandbox.id === restoredPrewarmId && restoredSandbox.id !== sandbox.id,
+        `${sandbox.id} → ${restoredSandbox.id}`,
+      );
+      const restoredSeal = await restoredSandbox.exec(["cat", proofPath]);
+      const restoredPrepared = await restoredSandbox.exec([
+        "cat",
+        ".opensession-conformance/template-proof",
+      ]);
+      const restoredSetupLog = await restoredSandbox.exec([
+        "cat",
+        `/home/ubuntu/.opensession/lifecycle/${entry.repoId}-setup.log`,
+      ]);
+      ok(
+        "provider snapshot restored the exact sealed filesystem",
+        restoredSeal.exitCode === 0 && restoredSeal.stdout === firstSeal.stdout,
+      );
+      ok(
+        "provider snapshot restored post-setup repo state without rerunning setup",
+        restoredPrepared.exitCode === 0 &&
+          restoredPrepared.stdout === "post-setup" &&
+          restoredSetupLog.exitCode === 0 &&
+          restoredSetupLog.stdout === firstSetupLog.stdout,
+      );
+      await provider.destroy(restoredSandbox.id);
+      restoredSandbox = null;
     }
 
     // Durable lifecycle parity where the provider exposes it: releasing
@@ -759,6 +953,7 @@ async function runEntry(entry: Entry): Promise<void> {
     ok("get() reattaches by id", got !== null && got.cwd === sandbox.cwd, got?.cwd);
   } finally {
     // 8. destroy — always, even on failures above (paid remote compute).
+    if (restoredSandbox) await provider.destroy(restoredSandbox.id).catch(() => {});
     if (sandbox) {
       await provider.destroy(sandbox.id);
       const gone = (await (await provider.get(sandbox.id))?.status()?.catch(() => "gone")) ?? "gone";
@@ -769,6 +964,7 @@ async function runEntry(entry: Entry): Promise<void> {
           !existsSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${sandbox.id}.json`),
       );
     }
+    await cleanupCertificationTemplate(entry);
   }
 }
 
@@ -974,6 +1170,7 @@ async function auditModalLeftovers(): Promise<void> {
 // ── run the matrix ────────────────────────────────────────────────────────────
 
 try {
+  await installScratchIngress();
   for (const entry of selected) {
     try {
       await runEntry(entry);
@@ -987,6 +1184,11 @@ try {
   await auditModalLeftovers();
 } finally {
   console.log("\n── cleanup ──");
+  try {
+    await removeScratchIngress();
+  } catch (e) {
+    console.warn("  scratch ingress cleanup failed:", String(e).slice(0, 200));
+  }
   // Docker scratch containers/volumes/state for both docker entries.
   const { containerNameFor } = await import("../../src/server/sandbox/docker");
   for (const e of entries.filter((x) => x.providerId === "docker")) {

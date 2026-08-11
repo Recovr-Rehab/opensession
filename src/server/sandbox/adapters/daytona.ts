@@ -66,6 +66,13 @@ import {
   PREWARM_LABEL,
   type PrewarmAdapter,
 } from "../prewarm";
+import {
+  invalidateRemoteRepoTemplate,
+  readRemoteRepoTemplate,
+  remoteRepoTemplateName,
+  sealRemoteRepoTemplate,
+  writeRemoteRepoTemplate,
+} from "../remote-repo-template";
 
 const SESSION_LABEL = "opensession.session";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
@@ -292,14 +299,28 @@ export class DaytonaProvider implements SandboxProvider {
       // 2026-07). Unset = Daytona's default snapshot (1 vCPU/1GB/3GiB disk),
       // too small for real repo workspaces: the runner payload alone is ~2GB
       // and a tella-fusion clone died on ENOSPC. See SandboxDaytonaConfig.
-      sbx = await client.create(
-        {
-          ...(cfg.daytona?.snapshot ? { snapshot: cfg.daytona.snapshot } : {}),
-          labels: { [SESSION_LABEL]: spec.sessionId, "opensession.sandbox": "1" },
-          autoStopInterval: cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES,
-        } as any,
-        { timeout: 300 },
-      );
+      const template = readRemoteRepoTemplate("daytona", repo.id);
+      const create = (snapshot?: string) =>
+        client.create(
+          {
+            ...(snapshot ? { snapshot } : {}),
+            labels: { [SESSION_LABEL]: spec.sessionId, "opensession.sandbox": "1" },
+            autoStopInterval: cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES,
+          } as any,
+          { timeout: 300 },
+        );
+      try {
+        sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
+      } catch (error) {
+        if (!template) throw error;
+        // Provider artifacts can be deleted independently of the local index.
+        // Drop the stale mapping and retry the configured base snapshot once.
+        invalidateRemoteRepoTemplate("daytona", repo.id);
+        console.warn(
+          `[sandbox:daytona] repo template ${template.artifactId} is unavailable; retrying cold`,
+        );
+        sbx = await create(cfg.daytona?.snapshot);
+      }
     }
 
     const driver = daytonaDriver(sbx);
@@ -404,16 +425,74 @@ export class DaytonaProvider implements SandboxProvider {
 export const daytonaPrewarmAdapter: PrewarmAdapter = {
   async create(labels, opts) {
     const cfg = sandboxConfig();
-    const sbx = await (await daytonaClient()).create(
-      {
-        ...(cfg.daytona?.snapshot ? { snapshot: cfg.daytona.snapshot } : {}),
-        labels,
-        autoStopInterval: opts.autoStopMinutes,
-        autoDeleteInterval: opts.autoDeleteMinutes,
-      } as any,
-      { timeout: 300 },
-    );
-    return { sandboxId: sbx.id, driver: daytonaDriver(sbx) };
+    const key = labels[PREWARM_KEY_LABEL] || "";
+    const repoId = key.startsWith("daytona:") ? key.slice("daytona:".length) : "";
+    if (!repoId) throw new Error(`invalid Daytona prewarm key: ${key || "(missing)"}`);
+    const client = await daytonaClient();
+    const template = readRemoteRepoTemplate("daytona", repoId);
+    const create = (snapshot?: string) =>
+      client.create(
+        {
+          ...(snapshot ? { snapshot } : {}),
+          labels,
+          autoStopInterval: opts.autoStopMinutes,
+          autoDeleteInterval: opts.autoDeleteMinutes,
+        } as any,
+        { timeout: 300 },
+      );
+    let sbx: DaytonaSandbox;
+    let restoredFromTemplate = Boolean(template);
+    try {
+      sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
+    } catch (error) {
+      if (!template) throw error;
+      invalidateRemoteRepoTemplate("daytona", repoId);
+      restoredFromTemplate = false;
+      sbx = await create(cfg.daytona?.snapshot);
+    }
+    return {
+      sandboxId: sbx.id,
+      driver: daytonaDriver(sbx),
+      restoredFromTemplate,
+    };
+  },
+
+  async publishTemplate(sandboxId, repo) {
+    const client = await daytonaClient();
+    const name = remoteRepoTemplateName("daytona", repo.id);
+    const sbx = await client.get(sandboxId);
+    await sealRemoteRepoTemplate(daytonaDriver(sbx), "daytona", repo);
+    try {
+      const existing = await client.snapshot.get(name);
+      const completedAt = Date.parse(
+        String((existing as any).updatedAt || (existing as any).createdAt || ""),
+      );
+      // Daytona can finish a large snapshot just after the SDK's wait timed
+      // out. Recover that provider-side success on the next request instead
+      // of deleting and rebuilding the same 10+ GiB artifact. The narrow
+      // window does not defeat the template TTL's deliberate daily refresh.
+      if (
+        String((existing as any).state || "").toLowerCase() === "active" &&
+        Number.isFinite(completedAt) &&
+        Date.now() - completedAt < 60 * 60_000
+      ) {
+        writeRemoteRepoTemplate("daytona", repo.id, name);
+        console.log(`[sandbox:daytona] recovered completed post-setup repo template ${name}`);
+        return;
+      }
+      await client.snapshot.delete(existing);
+    } catch {}
+    // Full repository templates are materially larger than Daytona's base
+    // images; the live opensession template takes about six minutes to seal.
+    await sbx._experimental_createSnapshot(name, 900);
+    const { previous } = writeRemoteRepoTemplate("daytona", repo.id, name);
+    if (previous?.artifactId && previous.artifactId !== name) {
+      try {
+        const stale = await client.snapshot.get(previous.artifactId);
+        await client.snapshot.delete(stale);
+      } catch {}
+    }
+    console.log(`[sandbox:daytona] published post-setup repo template ${name}`);
   },
 
   async destroy(sandboxId) {
