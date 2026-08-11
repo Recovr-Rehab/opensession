@@ -210,14 +210,14 @@ export function WsPrStatusMark({
 				/>
 			);
 		return (
-			<span title="No pull request">
+			<span className="flex items-center" title="No pull request">
 				<IconPullRequest size={size} className="text-faint" />
 			</span>
 		);
 	}
 	if (session.prState === "MERGED") {
 		return (
-			<span title="PR merged">
+			<span className="flex items-center" title="PR merged">
 				<IconPullRequest size={size} className="text-purple" />
 			</span>
 		);
@@ -248,7 +248,7 @@ export function WsPrStatusMark({
 								? "PR approved"
 								: "PR open";
 	return (
-		<span title={label}>
+		<span className="flex items-center" title={label}>
 			<IconPullRequest size={size} className={className} />
 		</span>
 	);
