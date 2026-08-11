@@ -29,6 +29,8 @@ const ENV_KEYS = [
   "OPENSESSION_PROFILE",
   "OPENSESSION_CLOUD_UPSTREAM",
   "OPENSESSION_CLOUD_TOKEN",
+  "OPENSESSION_UI_BASE",
+  "PREVIEW_HOST",
 ] as const;
 const saved: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) saved[k] = process.env[k];
@@ -51,6 +53,13 @@ afterEach(() => {
 });
 
 describe("config loader", () => {
+	test("defaults preview portals to the public UI hostname", () => {
+		withConfig(JSON.stringify({ server: { publicBaseUrl: "https://os.example.test" } }));
+		delete process.env.OPENSESSION_UI_BASE;
+		delete process.env.PREVIEW_HOST;
+		expect(configuredServer().previewHost).toBe("os.example.test");
+	});
+
   test("no file → portable self-repo defaults", () => {
     withConfig(null); // path exists as a dir entry that was never written
     for (const k of ENV_KEYS.slice(1)) delete process.env[k];

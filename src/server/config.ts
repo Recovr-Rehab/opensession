@@ -559,15 +559,23 @@ export function configuredServer(): ResolvedServer {
   const envPort = parseInt(process.env.PORT || "");
   const envWebhookPort = parseInt(process.env.WEBHOOK_PORT || "");
   const port = Number.isFinite(envPort) ? envPort : s.port ?? 3850;
+  const publicBaseUrl =
+    process.env.OPENSESSION_UI_BASE ||
+    s.publicBaseUrl ||
+    `http://127.0.0.1:${port}`;
+  let publicHost = "127.0.0.1";
+  try {
+    publicHost = new URL(publicBaseUrl).hostname || publicHost;
+  } catch {}
   return {
     host: process.env.HOST || s.host || "127.0.0.1",
     port,
     webhookPort: Number.isFinite(envWebhookPort) ? envWebhookPort : s.webhookPort ?? 3848,
-    publicBaseUrl:
-      process.env.OPENSESSION_UI_BASE ||
-      s.publicBaseUrl ||
-      `http://127.0.0.1:${port}`,
-    previewHost: process.env.PREVIEW_HOST || s.previewHost || "127.0.0.1",
+    publicBaseUrl,
+    // Portals authenticate with the OpenSession browser cookie. Defaulting to
+    // the UI hostname keeps that cookie same-site across preview ports; an
+    // unrelated machine/tailnet hostname would make every browser portal 401.
+    previewHost: process.env.PREVIEW_HOST || s.previewHost || publicHost,
     caddyAdmin: s.caddyAdmin || "http://localhost:2019",
   };
 }
