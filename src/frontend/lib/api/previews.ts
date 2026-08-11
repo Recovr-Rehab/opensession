@@ -9,13 +9,6 @@ export interface PreviewService {
 	previewUrl?: string | null;
 }
 
-export interface PreviewPortalRecipe {
-	name: string;
-	description?: string;
-	skill: string;
-	serviceKey?: string;
-}
-
 export interface PreviewStatus {
 	hasPortsConf: boolean;
 	webappPort: number | null;
@@ -27,8 +20,6 @@ export interface PreviewStatus {
 	 *  fallback). Absent on servers that predate the field — treat as true. */
 	bootable?: boolean;
 	services: PreviewService[];
-	/** Skill-backed starters declared by the repository. */
-	portalRecipes?: PreviewPortalRecipe[];
 	/** Whose preview this is — shown on the interstitial so a reused tab can
 	 *  never masquerade as another session's wait. */
 	sessionTitle?: string | null;

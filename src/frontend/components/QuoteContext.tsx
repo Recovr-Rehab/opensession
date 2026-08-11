@@ -26,7 +26,7 @@ export function QuoteContext({ quote, onRemove, disabled }: Props) {
 		>
 			<div
 				title={quote.text}
-				className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-label font-normal text-fg"
+				className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-label font-medium text-fg"
 			>
 				<IconCursor size={15} className="shrink-0 text-faint" />
 				<span className="truncate">Selected text</span>

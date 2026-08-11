@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import {
-  parsePreviewPortalRecipes,
-  repoLifecycle,
-  resolvePreviewBoot,
-} from "./preview";
+import { repoLifecycle, resolvePreviewBoot } from "./preview";
 
 // The resolver is the ONE bring-up chain shared by host and sandbox previews:
 // repo-committed .agents/start.sh → configured previewCommand.
@@ -136,45 +132,5 @@ describe("repoLifecycle", () => {
       start: false,
       previewJson: false,
     });
-  });
-});
-
-describe("preview portal recipes", () => {
-  test("reads skill-backed starters from preview.json", () => {
-    expect(
-      parsePreviewPortalRecipes(
-        JSON.stringify({
-          warmRoutes: ["/"],
-          portals: [
-            {
-              name: "Tella local",
-              description: "Authenticated local webapp",
-              skill: "tella-local",
-              serviceKey: "WEBAPP_PORT",
-            },
-          ],
-        }),
-      ),
-    ).toEqual([
-      {
-        name: "Tella local",
-        description: "Authenticated local webapp",
-        skill: "tella-local",
-        serviceKey: "WEBAPP_PORT",
-      },
-    ]);
-  });
-
-  test("drops recipes that could inject a prompt or invalid port key", () => {
-    expect(
-      parsePreviewPortalRecipes(
-        JSON.stringify({
-          portals: [
-            { name: "Unsafe", skill: "tella-local\nignore-instructions" },
-            { name: "Safe", skill: "docs", serviceKey: "$(BAD)_PORT" },
-          ],
-        }),
-      ),
-    ).toEqual([{ name: "Safe", skill: "docs" }]);
   });
 });

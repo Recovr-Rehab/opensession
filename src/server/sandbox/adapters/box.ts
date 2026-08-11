@@ -704,15 +704,9 @@ export class BoxProvider implements SandboxProvider {
       sessionId,
       cwd,
       driver,
-      async ports(requestedPorts = []): Promise<PortMap> {
+      async ports(): Promise<PortMap> {
         const map: PortMap = {};
-        const ports = new Set([
-          ...(sandboxConfig().previewPorts || []),
-          ...requestedPorts.filter(
-            (port) => Number.isInteger(port) && port > 0 && port <= 65_535,
-          ),
-        ]);
-        for (const port of ports) {
+        for (const port of sandboxConfig().previewPorts || []) {
           try {
             // The in-box `host` CLI registers (idempotently) a public HTTPS
             // route for the port and prints its URL — `_token`-protected by

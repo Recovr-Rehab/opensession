@@ -471,15 +471,9 @@ export class DaytonaProvider implements SandboxProvider {
       sessionId,
       cwd,
       driver: daytonaDriver(sbx),
-      async ports(requestedPorts = []): Promise<PortMap> {
+      async ports(): Promise<PortMap> {
         const map: PortMap = {};
-        const ports = new Set([
-          ...(sandboxConfig().previewPorts || []),
-          ...requestedPorts.filter(
-            (port) => Number.isInteger(port) && port > 0 && port <= 65_535,
-          ),
-        ]);
-        for (const port of ports) {
+        for (const port of sandboxConfig().previewPorts || []) {
           try {
             const link = await sbx.getPreviewLink(port);
             if (link?.url) {
