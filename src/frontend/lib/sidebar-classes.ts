@@ -427,14 +427,16 @@ export const SIDEBAR_FILTER_DOT =
 	"relative after:absolute after:top-[5px] after:right-[5px] after:size-1.5 after:rounded-full after:bg-accent after:content-['']";
 
 /**
- * The needs-input count on a COLLAPSED repo band — urgent rows must not vanish
- * inside a closed group, so the band keeps a badge in the needs-input lane's
- * colour. `rounded-full`, not `rounded-[999px]`: the old rule set no
- * corner-shape, and rounded-full is the one radius spelling base.css leaves
- * un-squircled.
+ * The attention count on a COLLAPSED band — urgent rows must not vanish inside
+ * a closed group, so the band keeps a badge for them. The FILL is the call
+ * site's, because it carries the meaning: a repo band counts needs-input rows
+ * and wears that lane's blue, while a feed band counts its attention lane and
+ * wears that lane's colour (Plain's Urgent is red — SUPPORT_PRIORITY_GROUPS).
+ * `rounded-full`, not `rounded-[999px]`: the old rule set no corner-shape, and
+ * rounded-full is the one radius spelling base.css leaves un-squircled.
  */
 export const SIDEBAR_ATTN_COUNT =
-	"min-w-4 flex-[0_0_auto] rounded-full bg-blue px-1 text-center text-[10px] leading-4 font-semibold text-white";
+	"min-w-4 flex-[0_0_auto] rounded-full px-1 text-center text-[10px] leading-4 font-semibold text-white";
 
 /**
  * ── Workspace rows: the trailing cluster ────────────────────────────────────
