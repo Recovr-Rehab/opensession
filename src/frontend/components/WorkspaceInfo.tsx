@@ -1397,7 +1397,9 @@ export function WorkspaceInfo({
 	// INFO_OVERVIEW (lib/session-viewer-classes).
 	return (
 		<div className="workspace-info-panel flex flex-col gap-4 px-2 pb-[22px] pt-3">
-			<div className="grid gap-1 px-1">
+			{/* px-2 like INFO_LABEL_CLASS: the title, meta line and review chip
+			    share a left edge with the section headings below them. */}
+			<div className="grid gap-1 px-2">
 				<div className="workspace-info-title selectable text-item-title font-semibold leading-[1.2] text-fg [overflow-wrap:anywhere]">
 					{title}
 				</div>
