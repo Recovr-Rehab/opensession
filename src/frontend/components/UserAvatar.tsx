@@ -25,9 +25,15 @@ export function githubLoginFor(name?: string | null): string | null {
  * initial for unknown users (the agent persona, Anonymous) or when the image fails to
  * load. `children` render on top of the squircle — the presence facepile uses
  * that for its count badge.
+ *
+ * `login` overrides the directory lookup for callers that already hold the
+ * GitHub login — the members roster edits the identity table itself, so its
+ * rows must picture the login being typed rather than the one /api/people
+ * last published.
  */
 export function UserAvatar({
 	name,
+	login: loginProp,
 	size = 24,
 	className,
 	title,
@@ -35,13 +41,14 @@ export function UserAvatar({
 	children,
 }: {
 	name: string;
+	login?: string | null;
 	size?: number;
 	className?: string;
 	title?: string;
 	style?: React.CSSProperties;
 	children?: React.ReactNode;
 }) {
-	const login = githubLoginFor(name);
+	const login = loginProp?.trim() || githubLoginFor(name);
 	const [failed, setFailed] = useState(false);
 	useEffect(() => setFailed(false), [login]);
 	return (

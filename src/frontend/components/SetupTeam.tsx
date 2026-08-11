@@ -17,6 +17,7 @@ import {
 import { toast } from "../ui/toast";
 import { IconPencil, IconPlus, IconTrash } from "./icons";
 import { setupRequest, type TeamMember } from "./setup-shared";
+import { UserAvatar } from "./UserAvatar";
 
 // Settings → Setup → Team: the manageable roster. The identity table drives
 // commit attribution, `allowedUsers` MCP scoping, and GitHub sign-in, so each
@@ -135,9 +136,7 @@ function MemberRow({
 	].filter(Boolean);
 	return (
 		<SettingRow>
-			<span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-active text-control-label font-bold text-dim">
-				{member.name.charAt(0).toUpperCase()}
-			</span>
+			<UserAvatar name={member.name} login={member.github} size={28} />
 			<SettingRowText>
 				<SettingRowTitle>{member.name}</SettingRowTitle>
 				{details.length > 0 && (
