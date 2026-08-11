@@ -698,7 +698,7 @@ export function Home({
                           }
                           title={`${repoLabel(row.repo)} · ${row.branch}`}
                         >
-                          <span className={status.className} title={status.label}>
+                          <span className={`${status.className} flex items-center`} title={status.label}>
                             <StateIcon state={row.state} />
                           </span>
                           {person === "all" && row.person ? (
