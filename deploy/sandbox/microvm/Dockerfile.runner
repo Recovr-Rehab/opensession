@@ -1,5 +1,5 @@
 # Runner-payload filesystem image for the `microvm` sandbox provider —
-# Slice A of docs/sandboxes-phase1-brain-inside.md (payload-baked golden).
+# Slice A of docs/self-hosting-sandboxes.md (payload-baked golden).
 #
 # Layers the full opensession runner payload on top of Dockerfile.workspace,
 # reproducing the BOOTSTRAP layout (`bootstrapRemoteSandbox` in

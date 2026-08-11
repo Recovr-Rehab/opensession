@@ -10,6 +10,7 @@
 import type { ModalClient, Sandbox as ModalSandbox } from "modal";
 import { getRepo, worktreePathFor } from "../../worktree";
 import { sandboxConfig } from "../config";
+import { getSandboxConnection, sandboxProviderCredential } from "../connections";
 import type {
   PortMap,
   Sandbox,
@@ -55,6 +56,26 @@ const DEFAULT_IDLE_STOP_MINUTES = 30;
 const MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const RECREATE_BEFORE_EXPIRY_MS = 60 * 60 * 1000;
 
+function modalConfig(): ReturnType<typeof sandboxConfig> {
+  const cfg = sandboxConfig();
+  const settings = getSandboxConnection("modal")?.settings || {};
+  return {
+    ...cfg,
+    cpus: settings.cpu,
+    memory: settings.memoryMb ? `${settings.memoryMb}m` : undefined,
+    modal: {
+      profile: settings.profile,
+      app: settings.app,
+      image: settings.image,
+      environment: settings.environment,
+      endpoint: settings.endpoint,
+      region: settings.region,
+      cloud: settings.cloud,
+      publicPreviews: settings.publicPreviews,
+    },
+  };
+}
+
 function memoryMiB(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const match = value.trim().match(/^(\d+(?:\.\d+)?)([kmg])b?$/i);
@@ -67,32 +88,26 @@ function memoryMiB(value: string | undefined): number | undefined {
 }
 
 async function modalClient(): Promise<ModalClient> {
-  const cfg = sandboxConfig().modal || {};
-  const tokenId = cfg.tokenId || process.env.MODAL_TOKEN_ID;
-  const tokenSecret = cfg.tokenSecret || process.env.MODAL_TOKEN_SECRET;
+  const cfg = modalConfig().modal || {};
+  const workspaceCredential = sandboxProviderCredential("modal") as
+    | { tokenId: string; tokenSecret: string }
+    | undefined;
+  if (!workspaceCredential) throw new Error("Modal workspace credentials are not configured");
+  const { tokenId, tokenSecret } = workspaceCredential;
   const key = JSON.stringify([tokenId, tokenSecret, cfg.profile, cfg.environment, cfg.endpoint]);
   const cached = (globalThis as any).__opensessionModalClient as
     | { key: string; client: ModalClient }
     | undefined;
   if (cached?.key === key) return cached.client;
-  const previousProfile = process.env.MODAL_PROFILE;
-  if (cfg.profile) process.env.MODAL_PROFILE = cfg.profile;
-  try {
-    const { ModalClient } = await import("modal");
-    const client = new ModalClient({
-      tokenId,
-      tokenSecret,
-      environment: cfg.environment,
-      endpoint: cfg.endpoint,
-    });
-    (globalThis as any).__opensessionModalClient = { key, client };
-    return client;
-  } finally {
-    if (cfg.profile) {
-      if (previousProfile === undefined) delete process.env.MODAL_PROFILE;
-      else process.env.MODAL_PROFILE = previousProfile;
-    }
-  }
+  const { ModalClient } = await import("modal");
+  const client = new ModalClient({
+    tokenId,
+    tokenSecret,
+    environment: cfg.environment,
+    endpoint: cfg.endpoint,
+  });
+  (globalThis as any).__opensessionModalClient = { key, client };
+  return client;
 }
 
 function modalDriver(sandbox: ModalSandbox): RemoteDriver {
@@ -159,7 +174,7 @@ export class ModalProvider implements SandboxProvider {
     if (spec.attachedDirs?.length) {
       throw new Error("attached repos are not supported in remote sandboxes — detach them or use docker/local");
     }
-    const cfg = sandboxConfig();
+    const cfg = modalConfig();
     const client = await modalClient();
     const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
       createIfMissing: true,
@@ -322,7 +337,7 @@ export class ModalProvider implements SandboxProvider {
       driver: modalDriver(sandbox),
       async ports(): Promise<PortMap> {
         const map: PortMap = {};
-        const cfg = sandboxConfig();
+        const cfg = modalConfig();
         if (!cfg.modal?.publicPreviews || !cfg.previewPorts?.length) return map;
         try {
           const tunnels = await sandbox.tunnels();
@@ -377,7 +392,7 @@ export class ModalProvider implements SandboxProvider {
 
 export const modalPrewarmAdapter: PrewarmAdapter = {
   async create(labels) {
-    const cfg = sandboxConfig();
+    const cfg = modalConfig();
     const key = labels[PREWARM_KEY_LABEL] || "";
     const repoId = key.startsWith("modal:") ? key.slice("modal:".length) : "";
     if (!repoId) throw new Error(`invalid Modal prewarm key: ${key || "(missing)"}`);
@@ -454,7 +469,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
   },
 
   async listPrewarmed() {
-    const cfg = sandboxConfig();
+    const cfg = modalConfig();
     const client = await modalClient();
     const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
       createIfMissing: true,
@@ -476,3 +491,93 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
     return out;
   },
 };
+
+/** Bounded account + native filesystem-image qualification used by Settings. */
+export async function qualifyModalConnection(): Promise<void> {
+  const cfg = modalConfig();
+  const client = await modalClient();
+  const suffix = crypto.randomUUID().slice(0, 12);
+  const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
+    createIfMissing: true,
+  });
+  let source: ModalSandbox | undefined;
+  let restored: ModalSandbox | undefined;
+  let imageId: string | undefined;
+  try {
+    const baseImage = client.images.fromRegistry(cfg.modal?.image || DEFAULT_IMAGE);
+    source = await client.sandboxes.create(app, baseImage, {
+      tags: { "opensession.qualification": suffix },
+      timeoutMs: 30 * 60_000,
+      idleTimeoutMs: 10 * 60_000,
+      cpu: cfg.cpus,
+      cpuLimit: cfg.cpus,
+      memoryMiB: memoryMiB(cfg.memory),
+      memoryLimitMiB: memoryMiB(cfg.memory),
+      regions: cfg.modal?.region ? [cfg.modal.region] : undefined,
+      cloud: cfg.modal?.cloud,
+      encryptedPorts: [8765],
+    });
+    const probe = await modalDriver(source).exec(
+      "set -eu; uname -s; printf opensession-qualified > /tmp/opensession-qualification",
+      { timeoutMs: 60_000 },
+    );
+    if (probe.exitCode !== 0) throw new Error("Modal qualification command failed");
+    const semantics = await modalDriver(source).exec(
+      "printf qualification-out; printf qualification-err >&2; exit 7",
+      { timeoutMs: 60_000 },
+    );
+    if (
+      semantics.exitCode !== 7 ||
+      !semantics.stdout.includes("qualification-out") ||
+      !semantics.stderr.includes("qualification-err")
+    ) {
+      throw new Error("Modal exec stream or exit-code semantics are incompatible");
+    }
+    await modalDriver(source).writeFile("/tmp/opensession-upload", "uploaded");
+    const upload = await modalDriver(source).exec(
+      "test \"$(cat /tmp/opensession-upload)\" = uploaded",
+    );
+    if (upload.exitCode !== 0) throw new Error("Modal file upload check failed");
+    const tunnels = await source.tunnels(60_000);
+    if (!tunnels[8765]?.url.startsWith("https://")) {
+      throw new Error("Modal encrypted tunnel discovery failed");
+    }
+    const image = await source.snapshotFilesystem({
+      timeoutMs: 10 * 60_000,
+      ttlMs: 60 * 60_000,
+    });
+    imageId = image.imageId;
+    restored = await client.sandboxes.create(app, await client.images.fromId(imageId), {
+      tags: { "opensession.qualification": `${suffix}-restore` },
+      timeoutMs: 30 * 60_000,
+      idleTimeoutMs: 10 * 60_000,
+    });
+    if (restored.sandboxId === source.sandboxId) {
+      throw new Error("Modal filesystem restore was not distinct");
+    }
+    const restoreProbe = await modalDriver(restored).exec(
+      "test \"$(cat /tmp/opensession-qualification)\" = opensession-qualified",
+      { timeoutMs: 60_000 },
+    );
+    if (restoreProbe.exitCode !== 0) {
+      throw new Error("Modal qualification image did not restore filesystem state");
+    }
+  } finally {
+    await restored?.terminate().catch(() => {});
+    await source?.terminate().catch(() => {});
+    if (imageId) await client.images.delete(imageId).catch(() => {});
+  }
+  for await (const sandbox of client.sandboxes.list({
+    appId: app.appId,
+    tags: { "opensession.qualification": suffix },
+  })) {
+    if ((await sandbox.poll()) === null) {
+      throw new Error("Modal qualification cleanup left a sandbox behind");
+    }
+  }
+}
+
+export async function deleteModalTemplateArtifact(artifactId: string): Promise<void> {
+  const client = await modalClient();
+  await client.images.delete(artifactId).catch(() => {});
+}

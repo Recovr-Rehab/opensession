@@ -1,6 +1,6 @@
 /**
  * Config for the OpenCode engine's Anthropic subscription bridge
- * (docs/sandboxes-plan.md).
+ * (docs/self-hosting-sandboxes.md).
  *
  * File: ~/.opensession-opencode.json (legacy ~/.opensession-opencode.json still read) — missing or `enabled: false` means NO
  * bridge of any kind ever starts and `opencode/anthropic/*` models fail with a

@@ -63,6 +63,11 @@ import {
   isRemoteSandboxProvider,
 } from "./config";
 import {
+  getSandboxConnection,
+  isWorkspaceSandboxProvider,
+  sandboxConnectionReady,
+} from "./connections";
+import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
   bootstrapSignature,
@@ -198,7 +203,7 @@ function prewarmSignature(provider: string): string {
   const cfg = sandboxConfig();
   const shape =
     provider === "daytona"
-      ? cfg.daytona?.snapshot || "default"
+      ? getSandboxConnection("daytona")?.settings.snapshot || "default"
       : provider === "e2b"
         ? cfg.e2b?.template || "base"
         : "";
@@ -265,6 +270,13 @@ export async function requestPrewarm(
     return { state: "unsupported" };
   }
   if (!sandboxesEnabled()) return { state: "disabled" };
+  if (
+    isWorkspaceSandboxProvider(provider) &&
+    getSandboxConnection(provider) &&
+    !sandboxConnectionReady(provider)
+  ) {
+    return { state: "disabled" };
+  }
   const cfg = sandboxPrewarmConfig();
   if (
     !cfg.enabled ||
@@ -328,6 +340,24 @@ export function touchPrewarm(provider: string, repoId: string): void {
   if (!entry || (entry.state !== "bootstrapping" && entry.state !== "ready")) return;
   entry.lastTouchedAt = new Date().toISOString();
   persist(entry);
+}
+
+export function prewarmStatus(provider: string, repoId: string): PrewarmEntry | undefined {
+  const entry = pool().get(`${provider}:${repoId}`);
+  return entry ? { ...entry } : undefined;
+}
+
+/** Remove a provider/repo prewarm before an explicit environment rebuild. */
+export async function invalidatePrewarm(provider: string, repoId: string): Promise<void> {
+  const key = `${provider}:${repoId}`;
+  const entry = pool().get(key);
+  if (!entry) return;
+  pool().delete(key);
+  removeFile(entry);
+  if (entry.sandboxId && entry.state !== "claimed") {
+    const adapter = await adapterFor(provider);
+    await adapter?.destroy(entry.sandboxId);
+  }
 }
 
 async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter): Promise<void> {

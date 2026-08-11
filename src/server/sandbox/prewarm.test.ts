@@ -26,6 +26,10 @@ import { join } from "path";
 import { __setSessionsDirForTest } from "../paths";
 import { sandboxesEnabled } from "./config";
 import {
+  connectSandboxProvider,
+  setSandboxConnectionQualification,
+} from "./connections";
+import {
   claimPrewarm,
   claimPrewarmOrWait,
   discardClaimedPrewarm,
@@ -42,7 +46,7 @@ import {
 let scratch: string;
 let prevSessionsDir: string;
 let prevEnvConfig: string | undefined;
-let prevDaytonaKey: string | undefined;
+let prevSecretsStore: string | undefined;
 const cfgPath = () => join(scratch, "sandbox.json");
 const prewarmDir = () => join(scratch, "sessions", "sandbox-prewarm");
 
@@ -56,9 +60,9 @@ beforeAll(() => {
   mkdirSync(join(scratch, "sessions"), { recursive: true });
   prevSessionsDir = __setSessionsDirForTest(join(scratch, "sessions"));
   prevEnvConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
-  prevDaytonaKey = process.env.DAYTONA_API_KEY;
+  prevSecretsStore = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
-  delete process.env.DAYTONA_API_KEY;
+  process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
 });
 
 afterAll(() => {
@@ -67,7 +71,8 @@ afterAll(() => {
   __setSessionsDirForTest(prevSessionsDir);
   if (prevEnvConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
-  if (prevDaytonaKey !== undefined) process.env.DAYTONA_API_KEY = prevDaytonaKey;
+  if (prevSecretsStore === undefined) delete process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
+  else process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = prevSecretsStore;
   rmSync(scratch, { recursive: true, force: true });
 });
 
@@ -83,16 +88,25 @@ afterEach(() => {
 });
 
 function writeConfig(overrides: Record<string, unknown>): void {
+  const snapshot =
+    typeof overrides.connectionSnapshot === "string"
+      ? overrides.connectionSnapshot
+      : "snap-A";
+  const { connectionSnapshot: _connectionSnapshot, ...runtimeOverrides } = overrides;
   writeFileSync(
     cfgPath(),
     JSON.stringify({
       provider: "daytona",
-      daytona: { apiKey: "test-key", snapshot: "snap-A" },
       runnerSha: "sha-A",
       prewarm: { ttlMinutes: 10, maxLive: 2 },
-      ...overrides,
+      ...runtimeOverrides,
     }),
   );
+  connectSandboxProvider("daytona", {
+    secret: "test-key",
+    settings: { snapshot },
+  });
+  setSandboxConnectionQualification("daytona", { status: "ready" });
 }
 
 /** Fake adapter whose driver satisfies the real dial-back + bootstrap-marker
@@ -237,7 +251,7 @@ describe("claimPrewarm (adoption)", () => {
     const fake = makeFakeAdapter();
     await requestPrewarm("daytona", "tella-fusion");
     await until(() => readyEntry()?.state === "ready");
-    writeConfig({ daytona: { apiKey: "test-key", snapshot: "snap-B" } });
+    writeConfig({ connectionSnapshot: "snap-B" });
     expect(claimPrewarm("daytona", "tella-fusion", "bks-s")).toBeNull();
     await until(() => fake.destroyed.includes(fake.created[0]));
   });

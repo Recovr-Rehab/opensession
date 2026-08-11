@@ -1,5 +1,5 @@
 /**
- * Sandbox provider registry (docs/sandboxes-plan.md).
+ * Sandbox provider registry (docs/self-hosting-sandboxes.md).
  *
  * `getSandboxProvider()` resolves the provider for a run: an explicit spec
  * wins, otherwise the config file (~/.opensession-sandbox.json) decides, and the

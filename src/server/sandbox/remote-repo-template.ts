@@ -19,6 +19,7 @@ import {
   shellQuoteWord,
   type RemoteDriver,
 } from "./adapters/bootstrap";
+import { getSandboxConnection } from "./connections";
 
 export type RemoteTemplateProvider = "daytona" | "modal";
 
@@ -142,15 +143,16 @@ export function remoteRepoTemplateSignature(
   provider: RemoteTemplateProvider,
 ): string {
   const cfg = sandboxConfig();
+  const settings = getSandboxConnection(provider)?.settings || {};
   const shape =
     provider === "daytona"
-      ? { baseSnapshot: cfg.daytona?.snapshot || "default" }
+      ? { baseSnapshot: settings.snapshot || "default" }
       : {
-          image: cfg.modal?.image || "daytonaio/sandbox:0.8.0",
-          cpu: cfg.cpus || null,
-          memory: cfg.memory || null,
-          region: cfg.modal?.region || null,
-          cloud: cfg.modal?.cloud || null,
+          image: settings.image || "daytonaio/sandbox:0.8.0",
+          cpu: settings.cpu || null,
+          memory: settings.memoryMb || null,
+          region: settings.region || null,
+          cloud: settings.cloud || null,
         };
   return createHash("sha256")
     .update(`${bootstrapSignature()}|${JSON.stringify(shape)}`)

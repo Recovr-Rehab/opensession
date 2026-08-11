@@ -9,7 +9,7 @@
 #   1. Dockerfile.workspace — the minimal guest tool baseline, and
 #   2. Dockerfile.runner    — the full opensession runner payload on top,
 #      laid out exactly like `bootstrapRemoteSandbox` would install it
-#      (docs/sandboxes-phase1-brain-inside.md, Slice A). The payload pins
+#      (docs/self-hosting-sandboxes.md, Slice A). The payload pins
 #      (runnerSha, opencode version, bootstrap signature) are computed from
 #      the live sandbox config via bootstrap.ts, so the baked marker is
 #      byte-identical to what ensure() expects and the bootstrap

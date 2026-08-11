@@ -1,5 +1,5 @@
 /**
- * Sandbox seam (docs/sandboxes-plan.md): the interfaces every execution
+ * Sandbox seam (docs/self-hosting-sandboxes.md): the interfaces every execution
  * backend implements. A "sandbox" is where a session's work happens — a git
  * worktree on this host (LocalProvider, src/server/sandbox/local.ts), a
  * Docker container or local microVM per session, or a remote

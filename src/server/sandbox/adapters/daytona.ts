@@ -1,6 +1,6 @@
 /**
  * DaytonaProvider — remote sandbox adapter over the Daytona API
- * (docs/sandboxes-plan.md).
+ * (docs/self-hosting-sandboxes.md).
  *
  * LICENSING: the Daytona *platform* is AGPL-3.0, but it is consumed here
  * purely over its HTTP API via the official TypeScript SDK `@daytonaio/sdk`
@@ -29,13 +29,14 @@
  *
  * The SDK is imported lazily inside methods so opensession boot never pays its
  * dependency tree (otel/aws-sdk) unless the provider is actually used.
- * Unconfigured (no apiKey in ~/.opensession-sandbox.json `daytona` block or
- * DAYTONA_API_KEY) fails loudly at ensure-time.
+ * Credentials and provider settings come only from the normalized workspace
+ * connection.
  */
 
 import type { Daytona, Sandbox as DaytonaSandbox } from "@daytonaio/sdk";
 import { getRepo, worktreePathFor } from "../../worktree";
 import { sandboxConfig } from "../config";
+import { getSandboxConnection, sandboxProviderCredential } from "../connections";
 import type {
   PortMap,
   Sandbox,
@@ -79,13 +80,44 @@ const DEFAULT_IDLE_STOP_MINUTES = 30;
 /** Delimits stdout from stderr inside the merged executeCommand output. */
 const ERR_DELIM = "__OS_STDERR_7f3a__";
 
+function daytonaConfig(): ReturnType<typeof sandboxConfig> {
+  const cfg = sandboxConfig();
+  const settings = getSandboxConnection("daytona")?.settings || {};
+  return {
+    ...cfg,
+    cpus: settings.cpu,
+    memory: settings.memoryMb ? `${settings.memoryMb}m` : undefined,
+    daytona: {
+      apiUrl: settings.apiUrl,
+      target: settings.target,
+      snapshot: settings.snapshot,
+    },
+  };
+}
+
+function daytonaMemoryGiB(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const match = value.match(/^(\d+(?:\.\d+)?)([kmg])b?$/i);
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  if (unit === "g") return Math.max(1, Math.ceil(amount));
+  if (unit === "m") return Math.max(1, Math.ceil(amount / 1024));
+  return Math.max(1, Math.ceil(amount / 1024 / 1024));
+}
+
+function daytonaCreateResources(cfg: ReturnType<typeof sandboxConfig>) {
+  const memory = daytonaMemoryGiB(cfg.memory);
+  return cfg.cpus || memory
+    ? { cpu: cfg.cpus || 2, memory: memory || 4, disk: 10 }
+    : undefined;
+}
+
 async function daytonaClient(): Promise<Daytona> {
-  const cfg = sandboxConfig().daytona || {};
-  const apiKey = cfg.apiKey || process.env.DAYTONA_API_KEY;
+  const cfg = daytonaConfig().daytona || {};
+  const apiKey = (sandboxProviderCredential("daytona") as { apiKey: string } | undefined)?.apiKey;
   if (!apiKey) {
-    throw new Error(
-      'daytona sandbox provider is not configured — set {"daytona":{"apiKey":"…"}} in ~/.opensession-sandbox.json or DAYTONA_API_KEY',
-    );
+    throw new Error("Daytona workspace credentials are not configured");
   }
   const { Daytona } = await import("@daytonaio/sdk");
   return new Daytona({ apiKey, apiUrl: cfg.apiUrl, target: cfg.target as any });
@@ -233,7 +265,7 @@ export class DaytonaProvider implements SandboxProvider {
     if (spec.attachedDirs?.length) {
       throw new Error("attached repos are not supported in remote sandboxes — detach them or use docker/local");
     }
-    const cfg = sandboxConfig();
+    const cfg = daytonaConfig();
     const client = await daytonaClient();
     const prevState = findRemoteStateBySession(this.id, spec.sessionId);
     const repo = getRepo(spec.repo || prevState?.repoId);
@@ -304,6 +336,9 @@ export class DaytonaProvider implements SandboxProvider {
         client.create(
           {
             ...(snapshot ? { snapshot } : {}),
+            ...(!snapshot && daytonaCreateResources(cfg)
+              ? { resources: daytonaCreateResources(cfg) }
+              : {}),
             labels: { [SESSION_LABEL]: spec.sessionId, "opensession.sandbox": "1" },
             autoStopInterval: cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES,
           } as any,
@@ -424,7 +459,7 @@ export class DaytonaProvider implements SandboxProvider {
  */
 export const daytonaPrewarmAdapter: PrewarmAdapter = {
   async create(labels, opts) {
-    const cfg = sandboxConfig();
+    const cfg = daytonaConfig();
     const key = labels[PREWARM_KEY_LABEL] || "";
     const repoId = key.startsWith("daytona:") ? key.slice("daytona:".length) : "";
     if (!repoId) throw new Error(`invalid Daytona prewarm key: ${key || "(missing)"}`);
@@ -434,6 +469,9 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
       client.create(
         {
           ...(snapshot ? { snapshot } : {}),
+          ...(!snapshot && daytonaCreateResources(cfg)
+            ? { resources: daytonaCreateResources(cfg) }
+            : {}),
           labels,
           autoStopInterval: opts.autoStopMinutes,
           autoDeleteInterval: opts.autoDeleteMinutes,
@@ -521,3 +559,96 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     return out;
   },
 };
+
+/** Bounded account + native snapshot qualification used by Settings. Every
+ * resource has provider-side auto-delete and is also cleaned in finally. */
+export async function qualifyDaytonaConnection(): Promise<void> {
+  const cfg = daytonaConfig();
+  const client = await daytonaClient();
+  const suffix = crypto.randomUUID().slice(0, 12);
+  const snapshotName = `opensession-qualification-${suffix}`;
+  let source: DaytonaSandbox | undefined;
+  let restored: DaytonaSandbox | undefined;
+  try {
+    source = await client.create(
+      {
+        ...(cfg.daytona?.snapshot ? { snapshot: cfg.daytona.snapshot } : {}),
+        ...(!cfg.daytona?.snapshot && daytonaCreateResources(cfg)
+          ? { resources: daytonaCreateResources(cfg) }
+          : {}),
+        labels: { "opensession.qualification": suffix },
+        autoStopInterval: 10,
+        autoDeleteInterval: 30,
+      } as any,
+      { timeout: 300 },
+    );
+    const sourceDriver = daytonaDriver(source);
+    const probe = await sourceDriver.exec(
+      "set -eu; uname -s; printf opensession-qualified > /tmp/opensession-qualification",
+      { timeoutMs: 60_000 },
+    );
+    if (probe.exitCode !== 0) throw new Error("Daytona qualification command failed");
+    const semantics = await sourceDriver.exec(
+      "printf qualification-out; printf qualification-err >&2; exit 7",
+      { timeoutMs: 60_000 },
+    );
+    if (
+      semantics.exitCode !== 7 ||
+      !semantics.stdout.includes("qualification-out") ||
+      !semantics.stderr.includes("qualification-err")
+    ) {
+      throw new Error("Daytona exec stream or exit-code semantics are incompatible");
+    }
+    await sourceDriver.writeFile("/tmp/opensession-upload", "uploaded");
+    const upload = await sourceDriver.exec("test \"$(cat /tmp/opensession-upload)\" = uploaded");
+    if (upload.exitCode !== 0) throw new Error("Daytona file upload check failed");
+    const preview = await source.getPreviewLink(8765);
+    if (!preview?.url) throw new Error("Daytona encrypted preview link check failed");
+    await source.stop(120);
+    await source.start(120);
+    const lifecycle = await sourceDriver.exec(
+      "test \"$(cat /tmp/opensession-qualification)\" = opensession-qualified",
+    );
+    if (lifecycle.exitCode !== 0) throw new Error("Daytona stop/start lost filesystem state");
+    await source._experimental_createSnapshot(snapshotName, 300);
+    restored = await client.create(
+      {
+        snapshot: snapshotName,
+        labels: { "opensession.qualification": `${suffix}-restore` },
+        autoStopInterval: 10,
+        autoDeleteInterval: 30,
+      } as any,
+      { timeout: 300 },
+    );
+    if (restored.id === source.id) throw new Error("Daytona snapshot restore was not distinct");
+    const restoreProbe = await daytonaDriver(restored).exec(
+      "test \"$(cat /tmp/opensession-qualification)\" = opensession-qualified",
+      { timeoutMs: 60_000 },
+    );
+    if (restoreProbe.exitCode !== 0) {
+      throw new Error("Daytona qualification snapshot did not restore filesystem state");
+    }
+  } finally {
+    for (const sandbox of [restored, source]) {
+      if (!sandbox) continue;
+      await client.delete(sandbox, 120).catch(() => {});
+    }
+    try {
+      const snapshot = await client.snapshot.get(snapshotName);
+      await client.snapshot.delete(snapshot);
+    } catch {}
+  }
+  for await (const sandbox of client.list({ labels: { "opensession.qualification": suffix } } as any)) {
+    if (!/destroy|delet/i.test(String((sandbox as any).state || ""))) {
+      throw new Error("Daytona qualification cleanup left a sandbox behind");
+    }
+  }
+}
+
+export async function deleteDaytonaTemplateArtifact(artifactId: string): Promise<void> {
+  const client = await daytonaClient();
+  try {
+    const snapshot = await client.snapshot.get(artifactId);
+    await client.snapshot.delete(snapshot);
+  } catch {}
+}

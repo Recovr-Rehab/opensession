@@ -181,8 +181,60 @@ export interface SandboxStatusInfo {
 		personal: string;
 		effective: string;
 	};
+	connections?: SandboxConnectionInfo[];
+	operations?: SandboxOperationInfo[];
+	ingress?: SandboxIngressInfo;
+	canManage?: boolean;
 	/** Absent on a pre-upgrade server = no client-side combo warnings. */
 	modelFamilies?: SandboxModelFamilyInfo[];
+}
+
+export type SandboxConnectionState =
+	| "not_configured"
+	| "checking"
+	| "ready"
+	| "needs_attention"
+	| "disabled";
+
+export interface SandboxConnectionInfo {
+	id: string;
+	provider: "docker" | "daytona" | "modal" | "microvm";
+	enabled: boolean;
+	settings: Record<string, string | number | boolean | undefined>;
+	qualification?: {
+		status: "checking" | "ready" | "failed";
+		adapterSignature: string;
+		checkedAt?: string;
+		failureCode?: string;
+		failureSummary?: string;
+	};
+	createdAt: string;
+	updatedAt: string;
+	hasCredentials: boolean;
+	state: SandboxConnectionState;
+}
+
+export interface SandboxOperationInfo {
+	id: string;
+	kind: "qualification" | "repair" | "environment_rebuild";
+	provider: string;
+	repo?: string;
+	status: "running" | "succeeded" | "failed";
+	stage: string;
+	createdAt: string;
+	updatedAt: string;
+	failureCode?: string;
+	failureSummary?: string;
+}
+
+export interface SandboxIngressInfo {
+	configuredUrl?: string;
+	proposedUrl?: string;
+	source: "sandbox_config" | "caddy_webhook" | "public_ui" | "none";
+	health: "ready" | "unreachable" | "not_configured";
+	caddyAdminReachable: boolean;
+	generatedSnippet: string;
+	note?: string;
 }
 
 export async function fetchSandboxStatus(user?: string): Promise<SandboxStatusInfo> {

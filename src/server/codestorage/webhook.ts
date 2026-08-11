@@ -24,6 +24,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { codeStorageConfig, configuredRepos } from "../config";
 import { prHostFor } from "../pr-host";
 import { invalidateSessionsCache } from "../session-cache";
+import { scheduleSandboxEnvironmentInvalidation } from "../sandbox/environments";
 import { broadcastToAll } from "../ws-hub";
 
 /** Reject deliveries whose signed timestamp is too far from now (replay cap). */
@@ -203,6 +204,7 @@ export async function handleCsWebhook(req: Request): Promise<Response> {
     // fire-and-forget) — the next PR-info read re-fetches the branch diff.
     prHostFor(repo).invalidatePrInfo(repo.csRepo, branch);
     scheduleCsBroadcast(repo.id, repo.csRepo, branch);
+    if (branch === repo.defaultBranch) scheduleSandboxEnvironmentInvalidation(repo.id);
     matched = true;
   }
   // Session prState enrichment reads through the 2s sessions cache — drop it

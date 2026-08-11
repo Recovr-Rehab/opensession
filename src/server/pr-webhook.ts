@@ -25,6 +25,7 @@ import {
 	cachedPrBranchByNumber,
 } from "./sessions";
 import { invalidateSessionsCache } from "./session-cache";
+import { scheduleSandboxEnvironmentInvalidation } from "./sandbox/environments";
 import { broadcastToAll } from "./ws-hub";
 
 /** Head branches (and PR number, when known) a delivery is about. */
@@ -72,6 +73,10 @@ function branchesFor(
 			};
 		case "workflow_run": {
 			const branch = payload?.workflow_run?.head_branch;
+			return { branches: branch ? [branch] : [] };
+		}
+		case "push": {
+			const branch = payload?.ref?.replace?.(/^refs\/heads\//, "");
 			return { branches: branch ? [branch] : [] };
 		}
 		default:
@@ -122,6 +127,13 @@ export function handlePrWebhookEvent(event: string, payload: any): void {
 		const [repoId, repo] = match;
 		const ghRepo = repo.ghRepo;
 		const { branches, number } = branchesFor(event, payload, ghRepo);
+		const defaultBranchChanged =
+			branches.includes(repo.defaultBranch) ||
+			(event === "pull_request" &&
+				payload?.action === "closed" &&
+				payload?.pull_request?.merged === true &&
+				payload?.pull_request?.base?.ref === repo.defaultBranch);
+		if (defaultBranchChanged) scheduleSandboxEnvironmentInvalidation(repoId);
 		// Default-branch activity (deploy workflows on master/main) is not PR
 		// activity — nudging every session parked on that branch would spend gh
 		// calls on branches that have no PR.

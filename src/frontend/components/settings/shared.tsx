@@ -43,22 +43,25 @@ export function Select<T extends string>({
 	options,
 	onChange,
 	label,
+	disabled,
 }: {
 	value: T;
-	options: { value: T; label: string }[];
+	options: { value: T; label: string; disabled?: boolean }[];
 	onChange: (v: T) => void;
 	label: string;
+	disabled?: boolean;
 }) {
 	return (
 		<span className="relative inline-grid">
 			<select
 				className={`${settingsSelectClass} appearance-none !pr-9`}
 				aria-label={label}
+				disabled={disabled}
 				value={value}
 				onChange={(e) => onChange(e.target.value as T)}
 			>
 				{options.map((o) => (
-					<option key={o.value} value={o.value}>
+					<option key={o.value} value={o.value} disabled={o.disabled}>
 						{o.label}
 					</option>
 				))}

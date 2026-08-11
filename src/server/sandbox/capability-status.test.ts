@@ -27,30 +27,25 @@ import {
   setWorkspaceSandboxDefault,
 } from "./config";
 import { resolveInteractiveSandbox } from "./defaults";
+import {
+  connectSandboxProvider,
+  setSandboxConnectionQualification,
+} from "./connections";
 
 let scratch: string;
 let prevEnvConfig: string | undefined;
-let prevDaytonaKey: string | undefined;
 let prevE2bKey: string | undefined;
-let prevModalTokenId: string | undefined;
-let prevModalTokenSecret: string | undefined;
-let prevModalConfigPath: string | undefined;
+let prevSecretsStore: string | undefined;
 const cfgPath = () => join(scratch, "sandbox.json");
 
 beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), "bks-sandbox-status-"));
   prevEnvConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
-  prevDaytonaKey = process.env.DAYTONA_API_KEY;
   prevE2bKey = process.env.E2B_API_KEY;
-  prevModalTokenId = process.env.MODAL_TOKEN_ID;
-  prevModalTokenSecret = process.env.MODAL_TOKEN_SECRET;
-  prevModalConfigPath = process.env.MODAL_CONFIG_PATH;
+  prevSecretsStore = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
-  delete process.env.DAYTONA_API_KEY;
   delete process.env.E2B_API_KEY;
-  delete process.env.MODAL_TOKEN_ID;
-  delete process.env.MODAL_TOKEN_SECRET;
-  process.env.MODAL_CONFIG_PATH = join(scratch, "missing-modal.toml");
+  process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
 });
 
 afterEach(() => {
@@ -62,18 +57,24 @@ afterEach(() => {
 afterAll(() => {
   if (prevEnvConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
-  if (prevDaytonaKey !== undefined) process.env.DAYTONA_API_KEY = prevDaytonaKey;
   if (prevE2bKey !== undefined) process.env.E2B_API_KEY = prevE2bKey;
-  if (prevModalTokenId !== undefined) process.env.MODAL_TOKEN_ID = prevModalTokenId;
-  else delete process.env.MODAL_TOKEN_ID;
-  if (prevModalTokenSecret !== undefined) process.env.MODAL_TOKEN_SECRET = prevModalTokenSecret;
-  else delete process.env.MODAL_TOKEN_SECRET;
-  if (prevModalConfigPath !== undefined) process.env.MODAL_CONFIG_PATH = prevModalConfigPath;
-  else delete process.env.MODAL_CONFIG_PATH;
+  if (prevSecretsStore !== undefined) process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = prevSecretsStore;
+  else delete process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   rmSync(scratch, { recursive: true, force: true });
 });
 
 const write = (cfg: object) => writeFileSync(cfgPath(), JSON.stringify(cfg));
+const ready = (provider: "docker" | "daytona" | "modal" | "microvm") => {
+  connectSandboxProvider(
+    provider,
+    provider === "daytona"
+      ? { secret: "test-daytona-key" }
+      : provider === "modal"
+        ? { tokenId: "test-modal-id", tokenSecret: "test-modal-secret" }
+        : {},
+  );
+  setSandboxConnectionQualification(provider, { status: "ready" });
+};
 
 describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
 	test("certification requires both behavioral and warm-restore evidence", () => {
@@ -86,6 +87,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
 
 	test("workspace default persists without replacing provider configuration", () => {
 		write({ provider: "docker", image: "runner:test", nested: { keep: true } });
+		ready("docker");
 		expect(setWorkspaceSandboxDefault("docker")).toBe("docker");
 		const stored = JSON.parse(readFileSync(cfgPath(), "utf-8"));
 		expect(stored).toMatchObject({
@@ -120,19 +122,20 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     expect(s.killSwitch).toBe(!sandboxesEnabled());
   });
 
-  test("docker-only config: docker configured, remotes not", () => {
+  test("a raw Docker block is not a workspace connection", () => {
     write({ provider: "docker", image: "opensession-runner:latest" });
     const s = sandboxCapabilityStatus();
     expect(s.enabled).toBe(true);
     expect(s.defaultProvider).toBe("docker");
-    expect(s.providers.find((p) => p.id === "docker")?.configured).toBe(true);
+    expect(s.providers.find((p) => p.id === "docker")?.configured).toBe(false);
     expect(s.providers.find((p) => p.id === "daytona")?.configured).toBe(false);
     expect(s.providers.find((p) => p.id === "daytona")?.note).toBeUndefined();
     expect(s.providers.find((p) => p.id === "e2b")?.configured).toBe(false);
   });
 
   test("remote provider without a dial-back URL carries a pointed note", () => {
-    write({ provider: "docker", daytona: { apiKey: "dtn_x" }, e2b: { apiKey: "e2b_x" } });
+    write({ provider: "docker", e2b: { apiKey: "e2b_x" } });
+    ready("daytona");
     const s = sandboxCapabilityStatus();
     const d = s.providers.find((p) => p.id === "daytona")!;
     expect(d.configured).toBe(true);
@@ -145,22 +148,22 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   test("healthy remote provider (public ingress configured) carries no note", () => {
     write({
       provider: "docker",
-      daytona: { apiKey: "dtn_x" },
       publicIngress: { enabled: true, port: 3860, publicBaseUrl: "wss://example.ts.net" },
     });
+    ready("daytona");
     const d = sandboxCapabilityStatus().providers.find((p) => p.id === "daytona")!;
     expect(d.configured).toBe(true);
     expect(d.note).toBeUndefined();
   });
 
-  test("modal requires both token credentials", () => {
-    write({ provider: "modal", modal: { tokenId: "ak-one-sided" } });
-    expect(sandboxProviderConfigured("modal")).toBe(false);
+  test("Modal requires both normalized workspace token credentials", () => {
+    write({ provider: "modal" });
+    expect(() => connectSandboxProvider("modal", { tokenId: "ak-one-sided" })).toThrow();
     write({
       provider: "modal",
-      modal: { tokenId: "ak-test", tokenSecret: "as-test" },
       callbackBaseUrl: "wss://os.example.ts.net",
     });
+    ready("modal");
     const modal = sandboxCapabilityStatus().providers.find((p) => p.id === "modal")!;
     expect(modal.configured).toBe(true);
     expect(modal.note).toBeUndefined();
@@ -221,9 +224,9 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   test("a disabled publicIngress block does not count as dial-back configured", () => {
     write({
       provider: "docker",
-      daytona: { apiKey: "dtn_x" },
       publicIngress: { enabled: false, publicBaseUrl: "wss://example.ts.net" },
     });
+    ready("daytona");
     const d = sandboxCapabilityStatus().providers.find((p) => p.id === "daytona")!;
     expect(d.note).toContain("no dial-back URL configured");
   });
@@ -279,6 +282,7 @@ describe("provider-independent model-family sandboxability", () => {
 describe("resolveRequestedSandbox (create-path validation)", () => {
 	test("omitted interactive choice uses defaults; explicit Host still wins", () => {
 		write({ provider: "docker", sessionDefault: "docker" });
+		ready("docker");
 		expect(
 			resolveInteractiveSandbox(undefined, "sandbox-default-test-user", undefined, "claude-fable-5"),
 		).toEqual({ ok: true, provider: "docker" });
@@ -295,6 +299,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
 
   test("true = config default provider (today's boolean behavior)", () => {
     write({ provider: "docker" });
+    ready("docker");
     const r = resolveRequestedSandbox(true);
     expect(r.ok).toBe(true);
     // Kill-switch-aware like effectiveSandboxProvider — on a switched-off box
@@ -305,10 +310,11 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   test("explicit configured and certified provider is accepted", () => {
     write({
       provider: "docker",
-      daytona: { apiKey: "dtn_x" },
-      modal: { tokenId: "ak-test", tokenSecret: "as-test" },
       awsLambdaMicrovm: { imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image/test" },
     });
+    ready("docker");
+    ready("daytona");
+    ready("modal");
     expect(resolveRequestedSandbox("docker")).toEqual({ ok: true, provider: "docker" });
     expect(resolveRequestedSandbox("daytona")).toEqual({ ok: true, provider: "daytona" });
     expect(resolveRequestedSandbox("modal")).toEqual({ ok: true, provider: "modal" });
@@ -365,7 +371,9 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("model-family sandboxability is enforced at create, not just in the UI", () => {
-    write({ provider: "docker", daytona: { apiKey: "dtn_x" } });
+    write({ provider: "docker" });
+    ready("docker");
+    ready("daytona");
     // Supported combos pass through.
     expect(resolveRequestedSandbox("daytona", undefined, "claude-fable-5")).toEqual({
       ok: true,
@@ -392,7 +400,9 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("pi models pass the create-gate on configured providers", () => {
-    write({ provider: "docker", daytona: { apiKey: "dtn_x" } });
+    write({ provider: "docker" });
+    ready("docker");
+    ready("daytona");
     expect(
       resolveRequestedSandbox("daytona", undefined, "pi/anthropic/claude-sonnet-5"),
     ).toEqual({ ok: true, provider: "daytona" });

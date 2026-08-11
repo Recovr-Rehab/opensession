@@ -37,6 +37,7 @@ import { PapercutsPanel } from "./settings/PapercutsPanel";
 import { PreferencesPanel } from "./settings/PreferencesPanel";
 import { PrewarmingPanel } from "./settings/PrewarmingPanel";
 import { ReposPanel } from "./settings/ReposPanel";
+import { SandboxesPanel } from "./settings/SandboxesPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { SetupPanel } from "./Setup";
 
@@ -75,6 +76,7 @@ export type SettingsSectionKey =
 	| "repos"
 	| "members"
 	| "models"
+	| "sandboxes"
 	| "integrations"
 	| "connections"
 	| "memory"
@@ -291,6 +293,17 @@ const SECTIONS: {
 				<rect x="8.75" y="8.75" width="5" height="5" rx="1" />
 				<circle cx="11.25" cy="4.75" r="2.5" />
 				<path d="M4.75 9.5v1.75a1 1 0 0 0 1 1h1.75" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
+		key: "sandboxes",
+		label: "Sandboxes",
+		group: "Workspace",
+		icon: (
+			<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+				<path d="M8 1.8l5.2 2.9v6.1L8 13.8l-5.2-3V4.7L8 1.8z" strokeLinejoin="round" />
+				<path d="M2.9 4.9L8 7.7l5.1-2.8M8 7.8v5.8" />
 			</svg>
 		),
 	},
@@ -651,6 +664,7 @@ function SectionPanel({
 			{section === "integrations" && <IntegrationsPanel />}
 			{section === "audit" && <AuditPanel />}
 			{section === "models" && <ModelsPanel />}
+			{section === "sandboxes" && <SandboxesPanel />}
 			{section === "connections" && <Connections />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}

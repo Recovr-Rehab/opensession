@@ -1,5 +1,5 @@
 # opensession-runner — prebaked image for the Docker sandbox provider
-# (docs/sandboxes-plan.md; operator guide: docs/self-hosting-sandboxes.md)
+# (docs/self-hosting-sandboxes.md; operator guide: docs/self-hosting-sandboxes.md)
 #
 # Contains the exact toolchain an Open Session runner needs to execute an agent run
 # inside a container: bun (pinned to host), node LTS, git, gh, ripgrep, the Claude

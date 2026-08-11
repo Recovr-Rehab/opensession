@@ -319,7 +319,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 
   // Sandbox provider picker: the complete model engine + workspace run in the
   // selected environment; native Codex is the sole host-only family.
-  // "" = Host (no sandbox, the default); otherwise an explicit provider id
+  // "" = None (host, no sandbox); otherwise an explicit provider id
   // sent as the create's `sandbox` string. Options come from
   // /api/sandbox/status (fetched once when the palette opens) — only
   // configured providers are offered, and the whole control hides when the
@@ -338,13 +338,26 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       })
       .catch(() => {});
   }, []);
-  const sandboxChoices = (sandboxStatus?.providers || []).filter(
-    (p) => p.configured && p.certified,
-  );
-  const showSandboxPicker =
-    !!sandboxStatus?.enabled && !sandboxStatus.killSwitch && sandboxChoices.length > 0;
+  const sandboxChoices = sandboxStatus?.connections?.length
+    ? sandboxStatus.connections
+        .filter((connection) => connection.state === "ready")
+        .map((connection) => ({ id: connection.provider, note: undefined as string | undefined }))
+    : (sandboxStatus?.providers || []).filter((p) => p.configured && p.certified);
+  const selectedSandboxAvailable =
+    !sandboxProvider || sandboxChoices.some((choice) => choice.id === sandboxProvider);
+  const visibleSandboxChoices =
+    sandboxProvider && !selectedSandboxAvailable
+      ? [
+          {
+            id: sandboxProvider,
+            note: "Unavailable — choose None or a Ready connection before creating",
+          },
+          ...sandboxChoices,
+        ]
+      : sandboxChoices;
+  const showSandboxPicker = !!sandboxStatus;
   const sandboxLabel = (id: string) =>
-    id === "" ? "Host" : id === "docker" ? "Docker" : id === "daytona" ? "Daytona" : id === "e2b" ? "E2B" : id === "box" ? "Box" : id === "modal" ? "Modal" : id === "microvm" ? "Local Firecracker MicroVM" : id === "lambda-microvm" ? "AWS Lambda MicroVM" : id;
+    id === "" ? "None" : id === "docker" ? "Docker" : id === "daytona" ? "Daytona" : id === "e2b" ? "E2B" : id === "box" ? "Box" : id === "modal" ? "Modal" : id === "microvm" ? "Local MicroVM" : id === "lambda-microvm" ? "AWS Lambda MicroVM" : id;
 
   // Provider-independent family check, driven by the same server list the
   // create path enforces.
@@ -380,6 +393,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   };
 
   const sandboxModelWarning = (() => {
+    if (sandboxProvider && !selectedSandboxAvailable) {
+      return `${sandboxLabel(sandboxProvider)} is unavailable. Choose None or a Ready sandbox connection.`;
+    }
     if (!sandboxProvider || !modelFamily) return null;
     if (modelFamily.sandboxable) return null;
     return (
@@ -963,7 +979,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                       </span>
                     </Menu.SubmenuTrigger>
                     <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
-                      {[{ id: "", note: undefined as string | undefined }, ...sandboxChoices].map(
+                      {[{ id: "", note: undefined as string | undefined }, ...visibleSandboxChoices].map(
                         (opt) => {
                           const selected = sandboxProvider === opt.id;
                           return (

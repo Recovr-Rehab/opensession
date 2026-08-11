@@ -26,6 +26,7 @@ import { bold, dim, fail, green, heading, info, ok, run, runInherit, warn } from
 import { INTEGRATIONS, findIntegration } from "../src/server/integrations/registry";
 import { findRecipe, installRecipe, installedKeys, listRecipes, removeRecipe } from "./lib/recipes";
 import { connect, nodeRun, nodeStatus, nodesList, nodesPair, nodesRemove } from "./lib/connect";
+import { sandbox } from "./lib/sandbox";
 
 const argv = process.argv.slice(2);
 const command = argv[0] ?? "help";
@@ -49,6 +50,11 @@ ${bold("Setup")}
   repos [add <spec>]       register repositories; owner/name clones via gh
   doctor                   check tooling, config, integrations and the server
   service install          install and enable the systemd unit
+  sandbox enable docker    install, configure and qualify local Docker
+  sandbox enable microvm   install, configure and qualify Local MicroVM
+  sandbox test <provider>  re-run a connection qualification
+  sandbox disable <provider> stop new use without deleting live sandboxes
+  sandbox ingress install <https-origin> install an owned Caddy fragment
 
 ${bold("Running")}
   start [--foreground]     start the server
@@ -262,6 +268,9 @@ async function main(): Promise<number> {
 
     case "doctor":
       return await doctor();
+
+    case "sandbox":
+      return await sandbox(positional);
 
     case "start":
       return await start();

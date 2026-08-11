@@ -11,6 +11,7 @@ import {
   sandboxProviderConfigured,
   setWorkspaceSandboxDefault,
 } from "./config";
+import { getSandboxConnection, isWorkspaceSandboxProvider, sandboxConnectionReady } from "./connections";
 
 export type WorkspaceSandboxDefault = RunnableSandboxProviderId | "none";
 export type PersonalSandboxDefault = WorkspaceSandboxDefault | "workspace";
@@ -60,6 +61,13 @@ export function effectiveSandboxDefault(
 
 function assertAvailable(value: string): asserts value is RunnableSandboxProviderId {
   if (!runnable(value)) throw new Error(`Unknown sandbox provider "${value}"`);
+  if (
+    isWorkspaceSandboxProvider(value) &&
+    getSandboxConnection(value) &&
+    !sandboxConnectionReady(value)
+  ) {
+    throw new Error(`Sandbox provider "${value}" is not currently available`);
+  }
   if (!sandboxProviderCertified(value) || !sandboxProviderConfigured(value)) {
     throw new Error(`Sandbox provider "${value}" is not currently available`);
   }

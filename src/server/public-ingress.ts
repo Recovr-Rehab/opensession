@@ -37,8 +37,10 @@
  * remoteSandboxCallbackBaseUrl). The main server keeps serving the same
  * routes for the tailnet path (docker-ws) — this listener is additive.
  *
- * Lifecycle: started once from opensession.ts boot (needs a real restart to
- * start/stop or change port/host — listeners are runner-adjacent internals).
+ * Lifecycle: started once from opensession.ts boot on loopback even before a
+ * public URL is configured. That makes provider connect a Settings operation,
+ * not a server-restart operation; an empty token registry still rejects every
+ * upgrade. Changing the listen port/host remains a restart-level operation.
  * The server object is parked on globalThis and reused across `bun --hot`
  * reloads (same pattern as the main serve); route logic goes through an impl
  * table so edits to THIS module hot-apply through the captured handlers.
@@ -184,8 +186,11 @@ export function startPublicIngress(overrides?: {
   port?: number;
   host?: string;
 }): PublicIngressHandle | null {
-  const cfg = publicIngressConfig();
-  if (!cfg) return null;
+  const cfg = publicIngressConfig() || {
+    enabled: true,
+    port: 3860,
+    host: "127.0.0.1",
+  };
   const existing = g.__publicIngressServer as PublicIngressHandle | undefined;
   if (existing) return existing;
   const server = Bun.serve({

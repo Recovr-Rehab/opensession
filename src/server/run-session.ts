@@ -80,6 +80,7 @@ import {
 	sandboxesEnabled,
 	sandboxProviderConfigured,
 } from "./sandbox/config";
+import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
 import { getTitleOverride } from "./title-overrides";
 import { ensureGeneratedTitle } from "./generated-titles";
 import { gitIdentityFor } from "./shared/user-mappings";
@@ -1023,22 +1024,16 @@ export async function autoPushSessionBranches(session: UnifiedSession): Promise<
 
 
 /**
- * Sandbox routing for runSessionPromptInner (docs/sandboxes-plan.md;
+ * Sandbox routing for runSessionPromptInner (docs/self-hosting-sandboxes.md;
  * generalized to every registry provider — docker/daytona/e2b). Returns the
- * run's event stream when the session opted into a sandbox at create time AND
- * the kill-switch + provider config currently allow it — otherwise null, and
- * the caller's existing in-process runAgent path runs completely unchanged
- * (sessions without a `sandbox` field can never reach any of this).
- *
- * Every failure mode falls back to null (in-process on the host): that is
- * exactly today's trust level for interactive sessions, and a session must
- * never lose a prompt to sandbox infrastructure. The exception is volume
- * workspaces (docker volume mode, and remote providers — always volume):
- * they have no host checkout, so the CALLER turns a null into a clean turn
- * error instead of a host run. Automation-owned sessions are refused
- * outright — sandboxes carry interactive-parity credentials (~/.ssh, gh,
- * account pool / scoped OAuth upload) that untrusted prompt text must not
- * reach.
+ * run's event stream when the session opted into a sandbox at create time.
+ * Null means only that the session did not select a runnable sandbox. Once a
+ * session records a provider, every unavailable/config/launch failure is
+ * surfaced by the caller and the prompt is not run on the host. Changing the
+ * execution, trust or billing boundary always requires a person's choice.
+ * Automation-owned sessions are refused outright — sandboxes carry
+ * interactive-parity credentials (~/.ssh, gh, account pool / scoped OAuth
+ * upload) that untrusted prompt text must not reach.
  */
 export async function maybeLaunchSandboxedRun(
 	session: UnifiedSession,
@@ -1064,17 +1059,14 @@ export async function maybeLaunchSandboxedRun(
 ) | null> {
 	const sbProvider = session.sandbox?.provider;
 	if (!isRunnableSandboxProvider(sbProvider)) return null; // "local"/absent/unknown = host
-	if (!sandboxesEnabled()) return null; // kill-switch file — instant revert
+	if (!sandboxesEnabled()) {
+		throw new Error("Sandbox execution is disabled by the operator kill switch");
+	}
 	if (!sandboxProviderConfigured(sbProvider)) {
-		// Config gone / API key removed since create — same instant-revert
-		// semantics as the kill switch (volume workspaces get the caller's
-		// no-host-fallback turn error instead of a silent host run).
-		console.warn(`[sandbox] ${session.id}: provider "${sbProvider}" is no longer configured — not sandboxing`);
-		return null;
+		throw new Error(`Sandbox provider "${sbProvider}" is not configured and Ready`);
 	}
 	if (opts.isAutomationSession) {
-		console.warn(`[sandbox] ${session.id}: automation sessions are not sandboxed in Phase 1 — running on host`);
-		return null;
+		throw new Error("Interactive sandbox connections are unavailable to automation sessions");
 	}
 	// Hoisted so the catch below can unregister it — a failed launch must not
 	// leak the run token (spawnHostRun's error path does the same cleanup).
@@ -1082,7 +1074,7 @@ export async function maybeLaunchSandboxedRun(
 	const sandboxStartedAt = Date.now();
 	try {
 		const provider = getSandboxProvider(sbProvider);
-		const sandbox = await provider.ensure({
+		const sandbox = await ensureSandboxWithTransientRetry(provider, {
 			sessionId: session.id,
 			repo: session.repo,
 			branch: session.branch || undefined,
@@ -1093,6 +1085,18 @@ export async function maybeLaunchSandboxedRun(
 			attachedDirs: (session.attachedRepos || [])
 				.map((r) => r.dir)
 				.filter(Boolean),
+		}, {
+			onRetry(error) {
+				console.warn(
+					`[sandbox:${sbProvider}] transient ensure failure for ${session.id}; retrying once:`,
+					error instanceof Error ? error.message : String(error),
+				);
+				audit({
+					kind: "sandbox_start_retry",
+					session_id: session.id,
+					provider: sbProvider,
+				});
+			},
 		});
 		// Remote engine databases live inside the sandbox. A replacement VM cannot
 		// resume the old engine id, even when its git workspace was safely pushed.
@@ -1169,10 +1173,8 @@ export async function maybeLaunchSandboxedRun(
 				watchExternalRunAndDrain(session.id);
 			},
 		};
-		// Launch EAGERLY (docker exec + socket connect awaited here) so a failure
-		// is caught by this try/catch and falls back to the host run — a lazy
-		// launch would only surface the failure as an error bubble mid-stream,
-		// after the fallback window has closed.
+		// Launch eagerly (docker exec + socket connect awaited here) so failure is
+		// visible before the stream begins and the prompt is never rerouted.
 		const handle = sandbox.launchRunEager
 			? await sandbox.launchRunEager(spec, runCallbacks)
 			: sandbox.launchRun(spec, runCallbacks);
@@ -1202,23 +1204,12 @@ export async function maybeLaunchSandboxedRun(
 			sbProvider === "daytona"
 				? " If the sandbox could not dial back, check callbackBaseUrl and your Daytona org tier's egress — see docs/self-hosting-sandboxes.md."
 				: "";
-		if (hasRemoteWorkspace(session)) {
-			// Volume-mode workspaces live only inside the sandbox — there is no
-			// host checkout to fall back to (the caller ends the turn with an
-			// explicit error), so don't promise a host run.
-			console.error(`[sandbox] ${session.id}: launch failed (volume workspace — no host fallback):`, e);
-			broadcastToSession(session.id, {
-				type: "notice",
-				message: `Sandbox unavailable (${reason}) — this workspace lives in the sandbox and has no host fallback. Retry when the ${sbProvider} sandbox is healthy.${dialBackHint}`,
-			});
-		} else {
-			console.error(`[sandbox] ${session.id}: launch failed — falling back to host run:`, e);
-			broadcastToSession(session.id, {
-				type: "notice",
-				message: `Sandbox unavailable (${reason}) — running on the host this turn.`,
-			});
-		}
-		return null;
+		console.error(`[sandbox] ${session.id}: launch failed — prompt not run:`, e);
+		broadcastToSession(session.id, {
+			type: "notice",
+			message: `Sandbox unavailable (${reason}) — the prompt was not run. Retry when ${sbProvider} is healthy or explicitly choose another environment for a new session.${dialBackHint}`,
+		});
+		throw new Error(`Sandbox unavailable: ${reason}`);
 	}
 }
 
@@ -1854,11 +1845,11 @@ async function runSessionPromptInner(
 		isRunning: true,
 	});
 
-	// Sandbox routing (docs/sandboxes-plan.md): a session that opted
+	// Sandbox routing (docs/self-hosting-sandboxes.md): a session that opted
 	// into a sandbox (docker/daytona/e2b) runs this prompt inside its
 	// per-session sandbox; null (the default for every session without the
-	// opt-in field, plus every failure/kill-switch case) = the unchanged
-	// in-process path below.
+	// opt-in field) = the unchanged in-process path below. A recorded provider
+	// that is unavailable throws before this point; it never falls back.
 	const turnMetricStartedAt = Date.now();
 	const sandboxRun = await maybeLaunchSandboxedRun(session, {
 		prompt,
@@ -1871,13 +1862,9 @@ async function runSessionPromptInner(
 		isAutomationSession,
 	});
 
-	// A volume-mode workspace (docker volume mode, or any remote provider)
-	// exists ONLY inside its sandbox — there is no host fallback (runAgent on
-	// the nonexistent host path would just ENOENT, and running in the main
-	// checkout instead would be worse). End the turn with an explicit error;
-	// the kill-switch/config flip that caused this is an operator action, not
-	// a transient.
-	if (!sandboxRun && hasRemoteWorkspace(session)) {
+	// Defensive guard: a session with an explicit runnable provider must never
+	// reach the host path, even if a future launcher regression returns null.
+	if (!sandboxRun && isRunnableSandboxProvider(session.sandbox?.provider)) {
 		const msg =
 			"This session's workspace lives in its sandbox volume, but the sandbox is unavailable (disabled by config/kill-switch, or it failed to start) — the prompt was not run. Re-enable sandboxes and try again." +
 			(session.sandbox?.provider === "daytona"

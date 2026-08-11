@@ -68,7 +68,7 @@ export interface PreviewPoolRepoConfig {
    * golden image). "daytona": remote Daytona sandboxes, provisioned once and
    * kept running (ready) or stopped-with-disk (the "paused" tier — a claim
    * restarts them, ~30s, still far cheaper than a cold boot). Requires the
-   * sandbox config's daytona apiKey + a sized org snapshot.
+   * Ready Daytona workspace connection and its sized org snapshot.
    */
   backend: PreviewPoolBackend;
   /** Warm containers kept RUNNING (default 1). */
@@ -299,10 +299,12 @@ async function containerRunning(name: string): Promise<"running" | "paused" | "g
 // route. The SDK is imported lazily so docker-only setups never load it.
 
 async function daytonaClientForPool() {
-  const cfg = sandboxConfig().daytona;
-  if (!cfg?.apiKey) throw new Error("preview-pool daytona backend: no daytona.apiKey in sandbox config");
+  const { getSandboxConnection, sandboxProviderCredential } = await import("./sandbox/connections");
+  const cfg = getSandboxConnection("daytona")?.settings;
+  const credential = sandboxProviderCredential("daytona") as { apiKey: string } | undefined;
+  if (!credential) throw new Error("preview-pool daytona backend: no Ready workspace connection");
   const { Daytona } = await import("@daytonaio/sdk");
-  return new Daytona({ apiKey: cfg.apiKey, apiUrl: cfg.apiUrl, target: cfg.target as never });
+  return new Daytona({ apiKey: credential.apiKey, apiUrl: cfg?.apiUrl, target: cfg?.target as never });
 }
 
 async function daytonaSbx(id: string) {

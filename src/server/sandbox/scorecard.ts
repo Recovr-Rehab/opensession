@@ -6,7 +6,7 @@
  * that a path can work, while this module asks whether it has worked often,
  * over multiple days, without being slower or less reliable than worktrees.
  * A passing automatic gate is still only evidence for the human default-flip
- * decision documented in docs/sandboxes-plan.md.
+ * decision documented in docs/self-hosting-sandboxes.md.
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -334,7 +334,7 @@ export function buildSandboxScorecard(
       defaultFlipApproved: false,
       readyToFlip: false,
       reasons,
-      note: "Passing metrics nominate the default flip; they never approve it. The human decision in docs/sandboxes-plan.md remains required.",
+      note: "Passing metrics nominate the default flip; they never approve it. The human decision in docs/self-hosting-sandboxes.md remains required.",
     },
   };
 }

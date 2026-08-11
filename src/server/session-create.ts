@@ -400,14 +400,15 @@ export async function openCreatedSession(
 		// window from double-starting a run (same race as
 		// runSessionPrompt).
 		markSessionStarting(bksId);
-		if (spec.needsWorktree) preparingWorkspaces.add(bksId);
+		const preparingEnvironment = spec.needsWorktree || Boolean(spec.sandboxProvider);
+		if (preparingEnvironment) preparingWorkspaces.add(bksId);
 		try {
 			await persist();
 			io.announce({
 				id: bksId,
 				workspaceId: spec.announceWorkspaceId,
 				newWorkspace: !!spec.createdWorkspaceNow,
-				preparingWorkspace: spec.needsWorktree,
+				preparingWorkspace: preparingEnvironment,
 				createdBy: spec.createdBy,
 				createdAt: spec.createdAt,
 			});
@@ -438,10 +439,9 @@ export async function openCreatedSession(
 			// created above, so the bind mounts are ready; ensure() is
 			// idempotent + per-session locked, and later prompts are held
 			// behind markSessionStarting, so there's no double-ensure race).
-			// Volume workspaces (docker volume mode / remote providers) have
-			// no host dir: a failed launch errors the stream (announced is
-			// set, so the catch below closes it out). Bind mode keeps the
-			// host fallback — a failed launch runs this turn on the worktree.
+			// A failed launch errors the stream for every selected provider.
+			// Bind mode has a host checkout, but silently using it would still
+			// change the chosen isolation boundary.
 			let sandboxOpeningRun: AsyncGenerator<StreamEvent> | null = null;
 			if (spec.sandboxProvider) {
 				const created = findSession(bksId);
@@ -455,11 +455,13 @@ export async function openCreatedSession(
 							isAutomationSession: false,
 						})
 					: null;
-				if (!sandboxOpeningRun && (spec.volumeWorkspace || spec.remoteSandbox)) {
+				if (!sandboxOpeningRun) {
 					throw new Error(
-						"Sandbox unavailable for this volume-workspace session - the opening prompt was not run. Check sandbox config/kill-switch and retry.",
+						"Sandbox unavailable - the opening prompt was not run. Check the selected sandbox connection and retry.",
 					);
 				}
+				preparingWorkspaces.delete(bksId);
+				io.emit({ type: "workspace_status", ready: true });
 			}
 
 			for await (const event of sandboxOpeningRun ?? runAgent({
@@ -995,7 +997,7 @@ export async function handleCreateSessionMessage(
 				if (branch)
 					branch = await resolveUniqueBranch(branch, repo.id);
 				wtPath = worktreePathFor(branch, repo.id);
-				// Volume-mode sandbox (docs/sandboxes-plan.md): the
+				// Volume-mode sandbox (docs/self-hosting-sandboxes.md): the
 				// workspace is cloned into a per-session volume INSIDE the
 				// sandbox — skip host createWorktree entirely. The session
 				// keeps the canonical path; the provider's ensure()

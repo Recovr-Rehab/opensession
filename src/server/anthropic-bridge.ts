@@ -4,7 +4,7 @@
  * official Claude Agent SDK running on designated Max-subscription accounts
  * from the claude-accounts layer. It exists so the OpenCode engine
  * (opencode-runner.ts) can run `opencode/anthropic/*` models on subscription
- * capacity instead of raw API keys (docs/sandboxes-plan.md).
+ * capacity instead of raw API keys (docs/self-hosting-sandboxes.md).
  *
  * This is OUR reimplementation of the mapping pioneered by
  * github.com/ianjwhite99/opencode-with-claude + @rynfar/meridian (both MIT —

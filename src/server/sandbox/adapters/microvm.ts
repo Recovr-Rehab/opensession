@@ -390,6 +390,19 @@ function repoTemplateKey(repoId: string): string {
   return `repo-${repo}-${signature}`;
 }
 
+export function microvmRepoTemplatePath(repoId: string): string | undefined {
+  const storeDir = sandboxConfig().firecrackerMicrovm?.storeDir;
+  return storeDir
+    ? `${storeDir}/repo-templates/${repoTemplateKey(repoId)}.ext4`
+    : undefined;
+}
+
+export async function deleteMicrovmRepoTemplate(repoId: string): Promise<void> {
+  const path = microvmRepoTemplatePath(repoId);
+  if (!path) return;
+  await run(["sudo", "-n", "rm", "-f", path], 30_000);
+}
+
 async function publishRepoTemplate(
   idx: number,
   storeDir: string,

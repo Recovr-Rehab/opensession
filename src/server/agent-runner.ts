@@ -817,7 +817,7 @@ export function resumeInterruptedRuns(
       journalClear(run.runKey);
       continue;
     }
-    // Sandboxed runs (docs/sandboxes-plan.md): the sandbox — and
+    // Sandboxed runs (docs/self-hosting-sandboxes.md): the sandbox — and
     // often the in-sandbox run host itself — outlives a opensession restart.
     // Reattach/relaunch through the provider instead of running in-process;
     // the sandbox modules are imported lazily so these paths stay completely

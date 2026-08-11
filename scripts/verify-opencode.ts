@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Manual verification for the OpenCode engine (docs/sandboxes-plan.md,
+ * Manual verification for the OpenCode engine (docs/self-hosting-sandboxes.md,
  * Workstream E). First empirically asserts the server's Basic-auth is
  * enforced (scratch server, no config), then starts a scratch opencode
  * session in a throwaway directory via runOpencode — never touches real user

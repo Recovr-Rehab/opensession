@@ -1,6 +1,6 @@
 /**
  * LocalProvider — the host-worktree default behind the Sandbox interface
- * (docs/sandboxes-plan.md). The "sandbox" is just the host: `ensure` resolves a
+ * (docs/self-hosting-sandboxes.md). The "sandbox" is just the host: `ensure` resolves a
  * workspace exactly the way the existing session paths do (delegating to
  * worktree.ts — never duplicating its git logic), `exec` runs on the host via
  * Bun's `$`, and `launchRun` is the current in-process `runAgent` path.

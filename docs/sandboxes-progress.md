@@ -1,8 +1,8 @@
 # Sandboxes work — running progress log (append-only)
 
 Handoff log for the orb-inspired sandbox overhaul. Newest entries at the
-bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
-[sandboxes-phase1-brain-inside.md](sandboxes-phase1-brain-inside.md).
+bottom. Plan: [self-hosting-sandboxes.md](self-hosting-sandboxes.md). Phase 1 design:
+[self-hosting-sandboxes.md](self-hosting-sandboxes.md).
 
 ## 2026-08-10 — research + plan approved
 
@@ -10,7 +10,7 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
   event-driven-orbs, size-the-orbs-of-production, putting-an-agent-in-an-orb,
   what-i-want-to-tell-you-about-orbs, schedule, multiplayer, from-agent-to-agent)
   and audited our sandbox stack (~5,200 lines, 8 providers, 3 certified).
-- Michiel approved the plan (docs/sandboxes-plan.md, commit 8a5bb00b):
+- Michiel approved the plan (docs/self-hosting-sandboxes.md, commit 8a5bb00b):
   microvm becomes the flagship, orb-level polish, default opt-in until it
   earns opt-out; goal is to prove sandboxes should replace the worktree
   default. Decisions: **brain-inside** (engine runs in the VM, scoped creds
@@ -27,14 +27,14 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
 - 0e6ec1d3 — hygiene sweep from the audit: Dockerfile path-parity fix
   (stale tella-backstage paths), duplicate OPENSESSION_BOOT_MODE deleted,
   e2b got assertDialbackReachable, busybox sha256-pinned, stale module docs
-  fixed, old-plan § references repointed at docs/sandboxes-plan.md.
+  fixed, old-plan § references repointed at docs/self-hosting-sandboxes.md.
 - Server restarted and verified healthy (active, 200, clean boot log).
 - Consequence: repos still carrying `.opensession/` hooks (e.g. tella-fusion
   if it has them) lose Preview bootability until migrated to `.agents/`.
 
 ## 2026-08-10 — Phase 1 design done, Slice A in flight
 
-- Design committed: docs/sandboxes-phase1-brain-inside.md (bf04d70d).
+- Design committed: docs/self-hosting-sandboxes.md (bf04d70d).
   Key points: lambda-microvm is already brain-inside Firecracker with the
   same control daemon — conversion largely copies it; bake runner payload
   into the golden (keeps ~1s restores; bootstrap stays as marker-check/self-
@@ -75,7 +75,7 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
   opencode-other likely just needs a scoped per-launch provider-auth upload
   next to the existing Claude-slice/OpenAI-seed uploads in bootstrap.ts.
 - A design agent is investigating pi + opencode-other in-sandbox; its
-  addendum will amend Slice C of sandboxes-phase1-brain-inside.md. Slice C
+  addendum will amend Slice C of self-hosting-sandboxes.md. Slice C
   should not be implemented until that addendum lands.
 - Refinement from Michiel (hard constraint, relayed to the design agent):
   **sandboxes adapt to the engines, never the reverse.** Opencode and pi
@@ -94,7 +94,7 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
    deliberate `systemctl restart opensession` after commit+push.
 3. After D: wake-on-demand slice, then snapshot-after-setup per repo
    (design §7 lists the invariants already baked in), then Phase 2
-   instrumentation/scorecard per docs/sandboxes-plan.md.
+   instrumentation/scorecard per docs/self-hosting-sandboxes.md.
 4. Remember the shared-checkout git rules (CLAUDE.md): specific-file adds,
    check the staged index, pathspec commits, push promptly.
 
@@ -161,7 +161,7 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
 ## 2026-08-10 — all-engines addendum recovered; Slice C unblocked
 
 - The missing Pi/OpenCode-other investigation is now folded into
-  `sandboxes-phase1-brain-inside.md` under the Slice C deletion plan. The key
+  `self-hosting-sandboxes.md` under the Slice C deletion plan. The key
   finding: `runner-host` already calls the same `runAgent` inside the guest,
   which embeds Pi in-process, launches normal OpenCode, and turns every trusted
   opensession-* MCP into an rpc-ws stdio proxy. No Pi service extraction,
@@ -380,3 +380,37 @@ bottom. Plan: [sandboxes-plan.md](sandboxes-plan.md). Phase 1 design:
   Workflow upstreams returned 307 and 200 respectively; the Emails preview
   upstream itself returned 500 at `/`, independently of the working Portal
   authentication and routing layer.
+
+## 2026-08-11 — managed-feeling BYOC connections implemented
+
+- Workspace → Sandboxes now owns Docker, Local MicroVM, Daytona and Modal
+  connections. Daytona/Modal credentials live only behind opaque workspace
+  secret references; raw config and environment credential paths are not
+  supported. Workspace members can read readiness and choose Ready providers,
+  while verified workspace-admin authority gates every shared mutation.
+- None remains the shipped workspace default. Personal and per-session choices
+  remain overrides; unavailable saved choices are shown as unavailable and
+  fail closed. Opening and later sandbox turns never silently fall back to the
+  host or another provider.
+- The isolated loopback listener is always available on 3860. Existing webhook
+  Caddy origins are discovered, an owned-fragment installer validates/reloads/
+  verifies/rolls back safely, and user-managed Caddyfiles get an exact generated
+  snippet. Qualification proves a real authenticated run-ws upgrade before paid
+  remote compute.
+- Disposable qualification now covers native create/exec/upload/preview or
+  tunnel/lifecycle/snapshot-distinct-restore/cleanup for Daytona and Modal,
+  Docker snapshot restore, and Local MicroVM boot/exec/pause/wake/teardown.
+  Adapter/bootstrap signature changes make Ready state stale.
+- `opensession sandbox enable docker|microvm`, `test`, `disable`, and `ingress
+  install` provide the host-side workflow, including signed artifacts,
+  persistent metadata firewall, KVM/cgroup/disk/COW checks, and qualification.
+- Per-repo/provider environment readiness and rebuild operations persist across
+  reloads, reuse the sealed provider-native template path, and hold the opening
+  prompt visibly behind preparation.
+- Caddy installation restores the previous managed fragment after any install,
+  validation, reload or public-health failure. Clearly transient sandbox
+  creation failures retry once, and default-branch updates invalidate reusable
+  repository templates.
+- Verification: `bun run typecheck`; **1,940 pass, 4 skip, 0 fail** across 202
+  test files. The focused connection/secret/admin/Caddy/ingress/environment
+  suite is included in that total.

@@ -276,6 +276,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"repos",
 	"members",
 	"models",
+	"sandboxes",
 	"integrations",
 	"connections",
 	"memory",

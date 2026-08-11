@@ -66,7 +66,7 @@ Same conventions as `setup`: `cwd` = repo root, no arguments, **idempotent**
 actionable because continuing with a half-repaired workspace is unsafe.
 
 No host runs it yet — the reader lands with the sandbox plan's Phase 1
-(docs/sandboxes-plan.md); committing one today is forward-compatible.
+(docs/self-hosting-sandboxes.md); committing one today is forward-compatible.
 
 ## start.sh — boot the dev server
 

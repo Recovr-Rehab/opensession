@@ -18,14 +18,13 @@
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname } from "path";
 import { getDefaultModel, providerFor, resolveModel } from "../models";
-import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
+import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import type { SandboxProviderId } from "./provider";
 
 export const DEFAULT_SANDBOX_PREVIEW_PORTS = [3300, 3301, 3302] as const;
 
-const HOME = homeDir();
 // Env-overridable so the verify suite (and unit tests) can point a scratch
 // config at a scratch docker setup without touching the live file (which is
 // read fresh per run). Read per call, not at module load, so a test can flip
@@ -36,17 +35,11 @@ function configPath(): string {
     stateDir("sandbox.json")
   );
 }
-const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-sandboxes`;
 
-function modalConfigHasCredentials(): boolean {
-  try {
-    const path = process.env.MODAL_CONFIG_PATH || `${HOME}/.modal.toml`;
-    const text = readFileSync(path, "utf-8");
-    return /(?:^|\n)token_id\s*=/.test(text) && /(?:^|\n)token_secret\s*=/.test(text);
-  } catch {
-    return false;
-  }
+export function sandboxConfigPath(): string {
+  return configPath();
 }
+const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-sandboxes`;
 
 export interface SandboxRepoOverride {
   provider?: SandboxProviderId;
@@ -136,8 +129,6 @@ const PREWARM_DEFAULTS: Omit<SandboxPrewarmConfig, "enabled"> = {
 };
 
 export interface SandboxDaytonaConfig {
-  /** Falls back to DAYTONA_API_KEY. */
-  apiKey?: string;
   apiUrl?: string;
   target?: string;
   /**
@@ -167,10 +158,7 @@ export interface SandboxBoxConfig {
 }
 
 export interface SandboxModalConfig {
-  /** Modal token credentials. Fall back to MODAL_TOKEN_ID/MODAL_TOKEN_SECRET. */
-  tokenId?: string;
-  tokenSecret?: string;
-  /** Named profile in ~/.modal.toml (or use MODAL_PROFILE / the active profile). */
+  /** Optional named provider profile stored as non-secret connection metadata. */
   profile?: string;
   /** Modal App name used to group sandboxes (default opensession-sandboxes). */
   app?: string;
@@ -387,15 +375,6 @@ export function sandboxConfig(): SandboxConfig {
                 publicBaseUrl: str(raw.publicIngress.publicBaseUrl),
               }
             : undefined,
-        daytona:
-          raw?.daytona && typeof raw.daytona === "object"
-            ? {
-                apiKey: str(raw.daytona.apiKey),
-                apiUrl: str(raw.daytona.apiUrl),
-                target: str(raw.daytona.target),
-                snapshot: str(raw.daytona.snapshot),
-              }
-            : undefined,
         e2b:
           raw?.e2b && typeof raw.e2b === "object"
             ? { apiKey: str(raw.e2b.apiKey), template: str(raw.e2b.template) }
@@ -403,21 +382,6 @@ export function sandboxConfig(): SandboxConfig {
         box:
           raw?.box && typeof raw.box === "object"
             ? { apiKey: str(raw.box.apiKey), apiUrl: str(raw.box.apiUrl) }
-            : undefined,
-        modal:
-          raw?.modal && typeof raw.modal === "object"
-            ? {
-                tokenId: str(raw.modal.tokenId),
-                tokenSecret: str(raw.modal.tokenSecret),
-                profile: str(raw.modal.profile),
-                app: str(raw.modal.app),
-                image: str(raw.modal.image),
-                environment: str(raw.modal.environment),
-                endpoint: str(raw.modal.endpoint),
-                region: str(raw.modal.region),
-                cloud: str(raw.modal.cloud),
-                publicPreviews: raw.modal.publicPreviews === true || undefined,
-              }
             : undefined,
         awsLambdaMicrovm:
           raw?.awsLambdaMicrovm && typeof raw.awsLambdaMicrovm === "object"
@@ -547,9 +511,8 @@ export function sandboxPrewarmConfig(): SandboxPrewarmConfig {
   const prewarmProviderConfigured =
     sandboxConfigPresent() &&
     Boolean(
-      cfg.daytona?.apiKey ||
-        process.env.DAYTONA_API_KEY ||
-      cfg.e2b?.apiKey ||
+      normalizedConnectionConfigured("daytona") === true ||
+        cfg.e2b?.apiKey ||
         process.env.E2B_API_KEY ||
         sandboxProviderConfigured("modal") ||
         sandboxProviderConfigured("microvm"),
@@ -678,6 +641,39 @@ export function setWorkspaceSandboxDefault(
   return normalized as RunnableSandboxProviderId | "none";
 }
 
+/** Store the operator-approved public callback origin without touching
+ * provider credentials or requiring a server restart (3860 already listens). */
+export function setSandboxPublicIngressUrl(value: string): string {
+  const url = new URL(value.trim());
+  if (url.protocol !== "https:" && url.protocol !== "wss:") {
+    throw new Error("Sandbox ingress URL must use HTTPS or WSS");
+  }
+  url.protocol = "https:";
+  url.pathname = url.pathname.replace(/\/$/, "");
+  url.search = "";
+  url.hash = "";
+  const publicBaseUrl = url.toString().replace(/\/$/, "");
+  let raw: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(readFileSync(configPath(), "utf-8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
+  } catch {}
+  const previous =
+    raw.publicIngress && typeof raw.publicIngress === "object"
+      ? (raw.publicIngress as Record<string, unknown>)
+      : {};
+  raw.publicIngress = {
+    ...previous,
+    enabled: true,
+    port: PUBLIC_INGRESS_DEFAULT_PORT,
+    host: typeof previous.host === "string" ? previous.host : "127.0.0.1",
+    publicBaseUrl,
+  };
+  mkdirSync(dirname(configPath()), { recursive: true });
+  writeJsonAtomic(configPath(), raw);
+  return publicBaseUrl;
+}
+
 export function isRunnableSandboxProvider(v: unknown): v is RunnableSandboxProviderId {
   return (
     typeof v === "string" &&
@@ -710,6 +706,26 @@ function sandboxConfigPresent(): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** A normalized connection is authoritative when present. Kept as a small
+ * raw read here (rather than importing connections.ts) to avoid a config ↔
+ * connection parsing cycle. Secret existence is enforced by the connection
+ * API/default layer and again when an SDK client is constructed. */
+function normalizedConnectionConfigured(id: RunnableSandboxProviderId): boolean | undefined {
+  try {
+    const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
+    const values = Array.isArray(raw?.connections)
+      ? raw.connections
+      : raw?.connections && typeof raw.connections === "object"
+        ? Object.values(raw.connections)
+        : [];
+    const connection = values.find((value: any) => value?.provider === id) as any;
+    if (!connection) return undefined;
+    return connection.enabled !== false;
+  } catch {
+    return undefined;
   }
 }
 
@@ -819,31 +835,13 @@ export interface SandboxCapabilityStatus {
  */
 export function sandboxProviderConfigured(id: RunnableSandboxProviderId): boolean {
   if (!sandboxConfigPresent()) return false;
+  const normalized = normalizedConnectionConfigured(id);
+  if (normalized !== undefined) return normalized;
   const cfg = sandboxConfig();
-  if (id === "docker") return true;
-  if (id === "daytona") return Boolean(cfg.daytona?.apiKey || process.env.DAYTONA_API_KEY);
+  if (id === "docker" || id === "daytona" || id === "modal" || id === "microvm") {
+    return false;
+  }
   if (id === "box") return Boolean(cfg.box?.apiKey || process.env.BOX_API_KEY);
-  if (id === "modal") {
-    return Boolean(
-      ((cfg.modal?.tokenId || process.env.MODAL_TOKEN_ID) &&
-        (cfg.modal?.tokenSecret || process.env.MODAL_TOKEN_SECRET)) ||
-        cfg.modal?.profile ||
-        process.env.MODAL_PROFILE ||
-        modalConfigHasCredentials(),
-    );
-  }
-  if (id === "microvm") {
-    const m = cfg.firecrackerMicrovm;
-    return Boolean(
-      m?.enabled &&
-        m.indexStart <= m.indexEnd &&
-        existsSync("/opt/firecracker/firecracker") &&
-        existsSync("/opt/firecracker/vmlinux") &&
-        existsSync(`${m.storeDir}/golden.ext4`) &&
-        existsSync(`${m.storeDir}/golden.mem`) &&
-        existsSync(`${m.storeDir}/golden.vmstate`),
-    );
-  }
   if (id === "lambda-microvm") return Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
   return Boolean(cfg.e2b?.apiKey || process.env.E2B_API_KEY);
 }
@@ -852,24 +850,14 @@ export function sandboxProviderConfigured(id: RunnableSandboxProviderId): boolea
 export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
   const enabled = sandboxConfigPresent();
   const cfg = sandboxConfig();
-  const daytonaConfigured =
-    enabled && Boolean(cfg.daytona?.apiKey || process.env.DAYTONA_API_KEY);
+  const daytonaConfigured = enabled && normalizedConnectionConfigured("daytona") === true;
   const e2bConfigured =
     enabled && Boolean(cfg.e2b?.apiKey || process.env.E2B_API_KEY);
   const boxConfigured =
     enabled && Boolean(cfg.box?.apiKey || process.env.BOX_API_KEY);
-  const modalConfigured =
-    enabled &&
-    Boolean(
-      ((cfg.modal?.tokenId || process.env.MODAL_TOKEN_ID) &&
-        (cfg.modal?.tokenSecret || process.env.MODAL_TOKEN_SECRET)) ||
-        cfg.modal?.profile ||
-        process.env.MODAL_PROFILE ||
-        modalConfigHasCredentials(),
-    );
+  const modalConfigured = enabled && normalizedConnectionConfigured("modal") === true;
   const lambdaMicrovmConfigured = enabled && Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
-  const firecrackerMicrovmConfigured =
-    enabled && sandboxProviderConfigured("microvm");
+  const firecrackerMicrovmConfigured = enabled && normalizedConnectionConfigured("microvm") === true;
   // Remote sandboxes must dial back over WS: healthy = a public-ingress URL or
   // an explicit callbackBaseUrl is configured, and then the row shows no note.
   // Only an actually-missing dial-back URL surfaces a caveat (no static
@@ -884,7 +872,10 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
         note: "no dial-back URL configured — set publicIngress.publicBaseUrl (or callbackBaseUrl) so sandboxes can reach this server; see docs/self-hosting-sandboxes.md",
       };
   const providersWithoutCertification: Array<Omit<SandboxProviderStatusEntry, "certified" | "lastPassedAt">> = [
-    { id: "docker", configured: enabled },
+    {
+      id: "docker",
+      configured: enabled && normalizedConnectionConfigured("docker") === true,
+    },
     {
       id: "daytona",
       configured: daytonaConfigured,
@@ -966,6 +957,26 @@ export function resolveRequestedSandbox(
     provider: SandboxProviderId | null,
   ): { ok: true; provider: SandboxProviderId | null } | { ok: false; error: string } => {
     if (!provider || provider === "local") return { ok: true, provider };
+    if (isRunnableSandboxProvider(provider)) {
+      const normalized = normalizedConnectionConfigured(provider);
+      if (normalized !== undefined) {
+        try {
+          const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
+          const values = Array.isArray(raw?.connections)
+            ? raw.connections
+            : raw?.connections && typeof raw.connections === "object"
+              ? Object.values(raw.connections)
+              : [];
+          const connection = values.find((value: any) => value?.provider === provider) as any;
+          if (connection?.qualification?.status !== "ready") {
+            return {
+              ok: false,
+              error: `Sandbox provider "${provider}" has not passed workspace qualification. Test it in Workspace → Sandboxes first.`,
+            };
+          }
+        } catch {}
+      }
+    }
     if (isRunnableSandboxProvider(provider) && !sandboxProviderCertified(provider)) {
       const certification = SANDBOX_PROVIDER_CERTIFICATIONS[provider];
       return {
@@ -990,15 +1001,15 @@ export function resolveRequestedSandbox(
   if (!sandboxProviderConfigured(id)) {
     const hint =
       id === "docker"
-        ? "create ~/.opensession-sandbox.json (see docs/self-hosting-sandboxes.md)"
+        ? "run opensession sandbox enable docker"
         : id === "daytona"
-          ? 'set {"daytona":{"apiKey":"…"}} in ~/.opensession-sandbox.json (or DAYTONA_API_KEY)'
+          ? "connect Daytona in Workspace → Sandboxes"
           : id === "box"
             ? 'set {"box":{"apiKey":"…"}} in ~/.opensession-sandbox.json (or BOX_API_KEY)'
             : id === "modal"
-              ? 'set {"modal":{"tokenId":"…","tokenSecret":"…"}} in ~/.opensession-sandbox.json (or MODAL_TOKEN_ID/MODAL_TOKEN_SECRET)'
+              ? "connect Modal in Workspace → Sandboxes"
               : id === "microvm"
-                ? 'build a clean golden with deploy/sandbox/microvm/refresh-sandbox-golden.sh and set {"firecrackerMicrovm":{"enabled":true,"storeDir":"/opt/firecracker/sandbox-store"}}'
+                ? "run opensession sandbox enable microvm"
               : id === "lambda-microvm"
                 ? 'set {"awsLambdaMicrovm":{"imageIdentifier":"arn:aws:lambda:…:microvm-image/…"}} in ~/.opensession-sandbox.json'
                 : 'set {"e2b":{"apiKey":"…"}} in ~/.opensession-sandbox.json (or E2B_API_KEY)';

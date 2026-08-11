@@ -173,14 +173,18 @@ describe("rate limiting", () => {
   });
 });
 
-describe("config gating", () => {
-  test("disabled/absent publicIngress → startPublicIngress returns null", async () => {
+describe("always-available loopback ingress", () => {
+  test("starts on loopback before a public URL is configured", async () => {
     ingress.stopPublicIngress();
     try {
       writeConfig({ provider: "local" });
-      expect(ingress.startPublicIngress({ port: 0 })).toBe(null);
+      const absent = ingress.startPublicIngress({ port: 0 });
+      expect(absent?.hostname).toBe("127.0.0.1");
+      absent?.stop(true);
       writeConfig({ provider: "local", publicIngress: { enabled: false } });
-      expect(ingress.startPublicIngress({ port: 0 })).toBe(null);
+      const disabled = ingress.startPublicIngress({ port: 0 });
+      expect(disabled?.hostname).toBe("127.0.0.1");
+      disabled?.stop(true);
     } finally {
       writeConfig({ provider: "local", publicIngress: { enabled: true } });
       handle = ingress.startPublicIngress({ port: 0, host: "127.0.0.1" });

@@ -3,47 +3,49 @@
 How to run Open Session sessions inside isolated sandboxes on your own
 infrastructure. Companion to `deploy/sandbox/README.md` (the runner image +
 provider internals). This page is the operator's view: what to install, the
-full config schema, the provider guides, and the safety switches.
+provider guides, and the safety switches.
 
-**Default = no sandboxes.** With no config file, every session runs on the
-host exactly as before. Sandboxes are opt-in per session (the "Run in
-sandbox" toggle on session create, the `sandbox: true` arg on
-`create_session`, or a per-automation `sandbox: true` field) and only take
-effect once a provider is configured.
+**Default = None.** Sessions run on the host unless a Ready workspace
+connection is selected explicitly, personally, or as the workspace default.
 
-## TL;DR (Docker, the self-host default)
+## Setup
+
+Workspace administrators configure the four supported choices in
+**Workspace → Sandboxes**. Daytona and Modal accept workspace-owned credentials
+there; credentials are written once to the server-side workspace secret store
+and are never returned to the browser or placed in a sandbox.
+
+Local providers use one generated host command:
 
 ```sh
-# 1. One-time host setup: block containers from the cloud metadata service
-deploy/sandbox/setup-host.sh
-
-# 2. Build the runner image (tags opensession-runner:latest + :<git-sha>)
-deploy/sandbox/build.sh
-
-# 3. Configure the provider
-cat > ~/.opensession-sandbox.json <<'EOF'
-{ "provider": "docker", "image": "opensession-runner:latest" }
-EOF
-
-# 4. Restart Open Session to load runner-internal changes
-sudo systemctl restart opensession
-
-# 5. Verify
-bun run deploy/sandbox/verify.ts
+opensession sandbox enable docker
+opensession sandbox enable microvm
 ```
 
-Then create a session with the sandbox toggle on. The session gets a
-container named `bks-sbx-<sessionId>` that survives across turns; the badge
-in the session header shows `docker · bind` (provider · workspace mode).
+The command checks the host, installs and verifies signed release artifacts,
+installs the persistent metadata firewall, runs a disposable qualification,
+and records Ready in the shared connection store. Re-running it is safe.
+`opensession sandbox test <provider>` requalifies a connection;
+`opensession sandbox disable <provider>` stops future use without deleting
+live sandboxes.
 
-### What setup-host.sh does
+Remote providers need the isolated public callback listener. Settings discovers
+an existing webhook Caddy origin and provides the exact route snippet plus:
 
-Installs an idempotent `DOCKER-USER` iptables rule dropping container
-traffic to `169.254.169.254` (EC2 IMDS) — the container mirror of the
-`IPAddressDeny` the systemd units enforce, so sandboxed agent code can never
-mint instance-role credentials. Off-cloud it's harmless. **Not persisted
-across host reboots** — re-run it after one (or wire a `@reboot` cron /
-systemd oneshot).
+```sh
+opensession sandbox ingress install https://ingress.example.com
+```
+
+The installer changes only an explicitly imported Open Session fragment,
+validates and reloads Caddy, verifies the public route, and restores its prior
+fragment on failure. For a user-managed Caddyfile without that import it
+refuses to mutate the file and Settings remains the copy/paste path. Connecting
+a provider or changing its callback origin does not restart Open Session.
+
+None remains a first-class personal and per-session choice. If a chosen
+provider later becomes unavailable, creation or the next turn fails clearly;
+Open Session never changes the execution boundary to the host or another
+provider.
 
 ### Building the image
 
@@ -157,6 +159,12 @@ Honest status, because these are the newest parts:
   offered for new sessions: configuring one does not certify it, and create
   fails until its live matrix passes and the code certification registry is
   updated.
+- Clearly transient provider/network failures during idempotent sandbox
+  creation are retried once. Agent launch is never retried because that could
+  duplicate a turn.
+- A default-branch update invalidates the repository's reusable Daytona,
+  Modal and MicroVM templates. The next preparation rebuilds from current
+  source rather than adopting a stale artifact.
 
 If you are starting out: use Docker, leave prewarm and snapshots off, and come
 back to them when cold starts actually bother you.
@@ -174,7 +182,13 @@ files provisions and boots itself in any sandbox with zero instance config:
 - `.agents/start.sh` — dev-server / preview entry, foreground, honoring
   `WEBAPP_PORT` / `PREVIEW_URL` / `OPENSESSION_BOOT_MODE`.
 
-## Config schema — `~/.opensession-sandbox.json`
+## Internal runtime config — `~/.opensession-sandbox.json`
+
+Do not configure Docker, Daytona, Modal or Local MicroVM connections by editing
+this file. Normalized connections and opaque credential references are
+server-owned. Raw Daytona/Modal credentials and credential environment
+variables are not supported. The schema below documents low-level runtime
+controls and experimental conformance providers.
 
 Read fresh per run (no restart for value changes — but see "What needs a
 restart" below). Missing file, invalid JSON, or unknown values all resolve
@@ -266,13 +280,7 @@ to `provider: "local"` (today's host behavior). Env override for the path:
     "publicBaseUrl": "wss://your.domain"  // what sandboxes dial
   },
 
-  // ── Remote providers ────────────────────────────────────────────────
-  "daytona": {
-    "apiKey": "dtn_…",         // falls back to DAYTONA_API_KEY
-    "apiUrl": "…",             // optional (self-hosted Daytona)
-    "target": "…",             // optional region/target
-    "snapshot": "…"            // optional org snapshot to create sandboxes from
-  },
+  // ── Experimental conformance providers ─────────────────────────────
   "e2b": {
     "apiKey": "e2b_…",         // falls back to E2B_API_KEY
     "template": "base"         // sandbox template id (default "base")
@@ -280,17 +288,6 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   "box": {
     "apiKey": "box_…",         // falls back to BOX_API_KEY
     "apiUrl": "…"              // optional (default https://ascii.dev/api/box/v1)
-  },
-  "modal": {
-    "tokenId": "ak-…",        // falls back to MODAL_TOKEN_ID
-    "tokenSecret": "as-…",   // falls back to MODAL_TOKEN_SECRET
-    "profile": "default",     // alternative: named ~/.modal.toml profile
-    "app": "opensession-sandboxes", // optional Modal App name
-    "image": "daytonaio/sandbox:0.8.0", // optional registry image
-    "environment": "main",   // optional Modal environment
-    "region": "us-east",     // optional Modal region
-    "cloud": "aws",           // optional cloud placement
-    "publicPreviews": false    // opt in to public Modal tunnel URLs
   },
   "awsLambdaMicrovm": {
     "imageIdentifier": "arn:aws:lambda:us-east-1:123456789012:microvm-image:opensession",
@@ -574,10 +571,9 @@ model authority, and publishes a 24-hour Daytona snapshot. Later prewarms
 restore that provider artifact into a new sandbox and skip setup. Idle-stop
 is native (`autoStopInterval`).
 
-- Config: `provider: "daytona"` + the `daytona` block (or `DAYTONA_API_KEY`)
-  + a reachable dial-back URL (the `publicIngress` section above — hosted
-  Daytona sandboxes are on the public internet, not your tailnet) +
-  `cloneCredential` for private repos.
+- Connect in Workspace → Sandboxes with a Daytona API key and a reachable
+  public callback origin. Settings owns region/resource/snapshot overrides;
+  private-repo clone authority remains a separately scoped runtime concern.
 - **Org-tier egress caveat (hosted Daytona):** Tier 1/2 orgs restrict
   sandbox egress, which blocks the WS dial-back entirely — `launchRun`
   needs a **Tier 3 org or self-hosted Daytona**. Workspace clone/exec work
@@ -643,15 +639,9 @@ Apache-2.0 TypeScript SDK. The adapter (`src/server/sandbox/adapters/modal.ts`)
 uses the same volume-style workspace, remote bootstrap, and WebSocket dial-back
 contract as the other remote providers.
 
-- Config: `provider: "modal"` + both Modal token credentials in the `modal`
-  block, `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`, or credentials in the
-  active/named `~/.modal.toml` profile (`modal.profile` / `MODAL_PROFILE`).
-- The default registry image is `daytonaio/sandbox:0.8.0`; set `modal.image`
-  to a compatible image with git, curl, and passwordless sudo (or a writable
-  `/home/ubuntu`).
-- `cpus`, `memory`, `idleStopMinutes`, `previewPorts`, `modal.region`, and
-  `modal.cloud` are applied when the sandbox is created. CPU and memory are
-  hard limits as well as reservations.
+- Connect in Workspace → Sandboxes with a Modal token ID and secret. The
+  connection owns app/environment, registry image, region, cloud, CPU and
+  memory settings; CPU and memory are hard limits as well as reservations.
 - Modal encrypted tunnel URLs are public Internet endpoints. Preview tunnels
   stay disabled unless `modal.publicPreviews` is explicitly `true`; only use
   that option for dev servers that are safe to expose publicly.

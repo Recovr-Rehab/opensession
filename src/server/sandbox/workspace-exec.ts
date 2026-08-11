@@ -1,6 +1,6 @@
 /**
  * workspace-exec — the single choke point that decides WHERE a session's
- * workspace commands run (docs/sandboxes-plan.md).
+ * workspace commands run (docs/self-hosting-sandboxes.md).
  *
  * The four host-filesystem-coupled surfaces (file-index.ts @-mention search,
  * git-diff.ts, git-status.ts push/pull/status, and their opensession.ts routes)
