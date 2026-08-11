@@ -5180,12 +5180,12 @@ export function SessionViewer({
 												<div
 													role="group"
 													aria-label="Earlier messages"
-													className="inline-flex items-stretch overflow-hidden rounded-full bg-control text-dim shadow-[0_1px_6px_rgba(0,0,0,0.12)]"
+													className="inline-flex items-stretch overflow-hidden rounded-full bg-control shadow-[0_1px_6px_rgba(0,0,0,0.12)]"
 												>
 													<button
 														type="button"
 														onClick={loadAllHistory}
-														className="group inline-flex cursor-pointer items-center gap-1.5 px-3.5 py-2 text-label font-semibold transition-[background-color,color] hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+														className="group inline-flex cursor-pointer items-center gap-1.5 px-3.5 py-2 text-label font-semibold text-dim transition-[background-color,color] hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
 													>
 														<IconArrowUp
 															size={13}
@@ -5198,7 +5198,7 @@ export function SessionViewer({
 													<button
 														type="button"
 														onClick={jumpToStart}
-														className="group flex w-9 cursor-pointer items-center justify-center transition-[background-color,color] hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+														className="group flex w-9 cursor-pointer items-center justify-center text-dim transition-[background-color,color] hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
 														title="Go to first message"
 														aria-label="Go to first message"
 													>
