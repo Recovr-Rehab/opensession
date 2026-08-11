@@ -19,6 +19,7 @@ export const BRANDS: Record<string, { bg: string; fg?: string }> = {
   circle: { bg: "#6c47ff" },
   brex: { bg: "#212121" },
   posthog: { bg: "#f54e00" },
+  tella: { bg: "#5e51f8" },
   dub: { bg: "#000000" },
 };
 
