@@ -1768,7 +1768,13 @@ export function WorkspaceInfo({
 											openLightbox(media, i, event.currentTarget)
 										}
 										className={cn(
-											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-control border border-line bg-surface transition-colors hover:border-line-strong hover:bg-hover",
+											// Concentric with the card: inner = outer − padding,
+											// i.e. rounded-lg (14·rf) minus the card's 8px. No
+											// token lands there — the neighbouring lists' rows
+											// get away with rounded-control because they only
+											// sit 4px in — so it's spelled out, and it follows
+											// --rf like every other radius.
+											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-[calc(14px*var(--rf)-8px)] border border-line bg-surface transition-colors hover:border-line-strong hover:bg-hover",
 											media.length === 1
 												? "w-full"
 												: media.length === 2
