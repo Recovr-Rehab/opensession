@@ -20,6 +20,8 @@ import {
 
 interface DeskConversationProps {
 	sessionId: string;
+	/** The dismissed Desk stays mounted and streaming, but is not presence. */
+	presenceActive?: boolean;
 	placeholder?: string;
 	effort?: string;
 	hideBefore?: string;
@@ -46,6 +48,7 @@ interface DeskConversationProps {
  */
 export function DeskConversation({
 	sessionId,
+	presenceActive = true,
 	placeholder,
 	effort,
 	hideBefore,
@@ -54,7 +57,7 @@ export function DeskConversation({
 	staleAfterMs,
 	suggestions,
 }: DeskConversationProps) {
-	const { connected, send, addHandler } = useWebSocket();
+	const { connected, send, addHandler } = useWebSocket(presenceActive);
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
 	const [streamText, setStreamText] = useState("");
 	const [isRunning, setIsRunning] = useState(false);

@@ -56,8 +56,11 @@ export function SessionSplit({
 	onRatioChange,
 	renderColumn,
 }: Props) {
-	const leftSocket = useWebSocket();
-	const rightSocket = useWebSocket();
+	// Both panes keep streaming, but only the selected pane may put this user's
+	// face on a sidebar row. Otherwise whichever socket joined last wins global
+	// presence, which makes an unfocused session look randomly watched.
+	const leftSocket = useWebSocket(focusedSide === "left");
+	const rightSocket = useWebSocket(focusedSide === "right");
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const stopResizeRef = useRef<(() => void) | null>(null);
 	const [draftRatio, setDraftRatio] = useState(() => clampSplitRatio(ratio));

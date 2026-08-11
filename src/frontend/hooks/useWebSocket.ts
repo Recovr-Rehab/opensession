@@ -34,7 +34,13 @@ const ACTIVITY_EVENTS = [
   "touchstart",
 ] as const;
 
-export function useWebSocket() {
+/**
+ * One UI WebSocket. `presenceActive` controls only whether this surface may
+ * claim the user's presence; its watch and transcript stream stay alive. This
+ * matters for persistent/background surfaces such as the unfocused half of a
+ * split and the dismissed Desk overlay.
+ */
+export function useWebSocket(presenceActive = true) {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const handlersRef = useRef<((msg: WSServerMessage) => void)[]>([]);
@@ -51,6 +57,9 @@ export function useWebSocket() {
   // streaming its session (unread counts, notifications) but must stop telling
   // teammates its owner is looking at that session.
   const awayRef = useRef(false);
+  const presenceActiveRef = useRef(presenceActive);
+  presenceActiveRef.current = presenceActive;
+  const syncPresenceRef = useRef<() => void>(() => {});
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -245,7 +254,9 @@ export function useWebSocket() {
       } catch {}
     };
     const focused = () =>
-      document.visibilityState === "visible" && document.hasFocus();
+      presenceActiveRef.current &&
+      document.visibilityState === "visible" &&
+      document.hasFocus();
     const syncPresence = () => {
       if (!focused()) {
         clearTimeout(idleTimer.current);
@@ -271,6 +282,7 @@ export function useWebSocket() {
       clearTimeout(idleTimer.current);
       idleTimer.current = setTimeout(() => sendAway(true), IDLE_MS);
     }
+    syncPresenceRef.current = syncPresence;
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
         resync();
@@ -292,6 +304,7 @@ export function useWebSocket() {
 
     return () => {
       disposedRef.current = true;
+      syncPresenceRef.current = () => {};
       clearTimeout(reconnectTimer.current);
       clearInterval(heartbeat);
       clearTimeout(idleTimer.current);
@@ -305,6 +318,13 @@ export function useWebSocket() {
       wsRef.current?.close();
     };
   }, [connect]);
+
+  // A mounted surface can become foreground/background without replacing its
+  // socket (split focus changes; the Desk opens and closes). Re-evaluate its
+  // presence immediately instead of waiting for the next pointer or focus event.
+  useEffect(() => {
+    syncPresenceRef.current();
+  }, [presenceActive]);
 
   const send = useCallback(
     (msg: WSClientMessage) => {

@@ -215,6 +215,7 @@ function DeskBody({
 				) : sessionId ? (
 					<DeskConversation
 						sessionId={sessionId}
+						presenceActive={active}
 						effort="low"
 						hideBefore={clearedAt}
 						voiceSend={(text) =>
