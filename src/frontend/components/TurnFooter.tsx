@@ -15,7 +15,9 @@ import {
 import { useOpenAsset } from "../lib/open-asset";
 import { formatDuration, fullTime } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
-import { canonicalToolName } from "./ToolCallBlock";
+import { canonicalToolName, useToolPathRoots } from "./ToolCallBlock";
+import { tidyPath, type PathRoot } from "../lib/tidy-path";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { LANG_MARKS } from "./lang-marks";
 
 export interface TouchedFile {
@@ -28,21 +30,33 @@ interface Props {
   /** The turn's final answer entry — copy copies its markdown, fork forks from it. */
   entry: TranscriptEntry;
   durationMs: number;
+  /** Files the turn's tool calls wrote, merged per path in first-touch order. */
+  files: TouchedFile[];
   /** Scratch files the turn wrote (`opensession-assets`), in first-write order. */
   assets: string[];
   onFork?: (entryId: string) => void;
 }
 
 /**
- * Quiet answer actions plus produced assets. Work duration, model and exact
- * time stay one click away; touched files live in the work disclosure/Changes.
+ * Quiet answer actions plus produced assets, and which files the turn wrote.
+ * Work duration and model stay one click away.
+ *
+ * Nothing here is hover-revealed. Which files a turn touched, and how long it
+ * took, are the answer's result — read as often as the answer itself — and an
+ * affordance you have to hover to find is one you have to already suspect is
+ * there. The row is muted instead: faint ink under the answer, at a size that
+ * reads past. The full file list, with paths rather than bare names, is in the
+ * ⋯ menu, which is also where a narrow row's "+N more" resolves.
  */
 export const TurnFooter = React.memo(function TurnFooter({
   entry,
   durationMs,
+  files,
   assets,
   onFork,
 }: Props) {
+  const pathRoots = useToolPathRoots();
+  const isPhone = useIsPhone();
   const [copied, setCopied] = useState(false);
   const doCopy = () => {
     copyText(entry.content, () => {
@@ -52,8 +66,20 @@ export const TurnFooter = React.memo(function TurnFooter({
   };
 
   const duration = formatDuration(durationMs);
+  // Named files, then a count for the rest. Chips keep their natural width and
+  // wrap with the row rather than sharing a shrinking box: a chip spends ~60px
+  // on its ± counts before it spends any on the name, so a row that seats them
+  // by shrinking crushes exactly the part worth reading — at 390px both names
+  // went to nothing and left two bare "TS +160" chips. A phone seats one; the
+  // ⋯ menu is the complete list either way.
+  const shownFiles = files.slice(0, isPhone ? 1 : MAX_CHIPS);
+  const restFiles = files.slice(shownFiles.length);
+
   return (
     <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
+      {duration && (
+        <span className={cn("mr-1.5 text-faint", FOOTER_TEXT)}>{duration}</span>
+      )}
       {assets.map((path) => (
         <AssetChip key={path} path={path} />
       ))}
@@ -79,7 +105,12 @@ export const TurnFooter = React.memo(function TurnFooter({
           >
             <IconDotsHorizontal size={20} />
           </Menu.Trigger>
-          <Menu.Popup side="bottom" align="start" sideOffset={4}>
+          <Menu.Popup
+            side="bottom"
+            align="start"
+            sideOffset={4}
+            className="max-w-[380px]"
+          >
             {onFork && (
               <Menu.Item onClick={() => onFork(entry.id)}>
                 <IconBranches size={20} className="text-faint" />
@@ -89,7 +120,7 @@ export const TurnFooter = React.memo(function TurnFooter({
             {onFork && <Menu.Separator className="my-1" />}
             <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
               <IconClock size={20} />
-              {[duration, fullTime(entry.timestamp)].filter(Boolean).join(" · ")}
+              {fullTime(entry.timestamp)}
             </div>
             {entry.model && (
               <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
@@ -97,9 +128,48 @@ export const TurnFooter = React.memo(function TurnFooter({
                 Written by {messageModelLabel(entry.model)}
               </div>
             )}
+            {/* The chips' non-hover home. Paths are tidied rather than cut to
+                the filename: with room for the whole line, which of two
+                same-named files a turn touched is worth more than the space. */}
+            {files.length > 0 && (
+              <>
+                <Menu.Separator className="my-1" />
+                {/* GroupLabel MUST live inside a Group — bare it throws Base UI
+                    error #31 and white-screens the app on open. */}
+                <Menu.Group>
+                  <Menu.GroupLabel className="px-2.5 pt-0.5">
+                    Changed files
+                  </Menu.GroupLabel>
+                  {files.slice(0, MAX_MENU_FILES).map((f) => (
+                    <div
+                      key={f.path}
+                      className="flex items-center gap-2 px-2.5 py-1 text-xs font-medium text-faint"
+                    >
+                      <ExtBadge name={fileName(f.path)} />
+                      <span className="min-w-0 flex-1 truncate text-dim">
+                        {tidyPath(f.path, pathRoots)}
+                      </span>
+                      <LineStats
+                        additions={f.additions}
+                        deletions={f.deletions}
+                      />
+                    </div>
+                  ))}
+                  {files.length > MAX_MENU_FILES && (
+                    <div className="px-2.5 py-1 text-xs font-medium text-faint">
+                      +{files.length - MAX_MENU_FILES} more
+                    </div>
+                  )}
+                </Menu.Group>
+              </>
+            )}
           </Menu.Popup>
         </Menu.Root>
       </div>
+      {shownFiles.map((f) => (
+        <FileChip key={f.path} file={f} roots={pathRoots} />
+      ))}
+      {restFiles.length > 0 && <MoreChip files={restFiles} />}
     </div>
   );
 }, turnFooterPropsEqual);
@@ -109,22 +179,43 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
     prev.entry !== next.entry ||
     prev.durationMs !== next.durationMs ||
     prev.onFork !== next.onFork ||
-    prev.assets.length !== next.assets.length
+    prev.assets.length !== next.assets.length ||
+    prev.files.length !== next.files.length
   )
     return false;
   for (let i = 0; i < next.assets.length; i++)
     if (prev.assets[i] !== next.assets[i]) return false;
+  for (let i = 0; i < next.files.length; i++) {
+    const a = prev.files[i];
+    const b = next.files[i];
+    if (
+      a.path !== b.path ||
+      a.additions !== b.additions ||
+      a.deletions !== b.deletions
+    )
+      return false;
+  }
   return true;
 }
 
 const BTN =
   "flex size-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
 
-const ACTIONS =
-  "flex items-center gap-0.5 [@media(hover:hover)]:opacity-0 " +
-  "[@media(hover:hover)]:transition-opacity [@media(hover:hover)]:focus-within:opacity-100 " +
-  "[@media(hover:hover)]:[.transcript-window:hover_&]:opacity-100 " +
-  "[@media(hover:hover)]:[.transcript-window:hover+.transcript-window_&]:opacity-100";
+/** The whole row is always on the page, and muted rather than hidden: an
+ * action you can see is one you know exists, and `text-faint` on a transparent
+ * button is quiet enough to read past. The colour is the only thing separating
+ * it from the answer — hover and focus still bring both up. */
+const ACTIONS = "flex items-center gap-0.5";
+
+/** Named files in the row; the rest collapse into MoreChip. */
+const MAX_CHIPS = 2;
+
+/** The menu has room to name more of them, being a list rather than a row. */
+const MAX_MENU_FILES = 10;
+
+function fileName(path: string): string {
+  return path.split("/").pop() || path;
+}
 
 /** Friendly name for a per-message model id: opencode ids take their model
  * part, raw API ids drop the date suffix — "opencode/anthropic/claude-sonnet-5"
@@ -179,9 +270,59 @@ function AssetChip({ path }: { path: string }) {
   );
 }
 
-/** A quiet produced-asset shortcut beneath the answer. */
+/** The shared chip shell: the footer's file and asset chips are the same
+ * object with different tails (± counts, or a way in). */
 const CHIP =
   "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-fg/[0.03] py-0 pl-1 text-left";
+
+/**
+ * One file the turn wrote, with the ±lines it moved there. A label rather than
+ * a button: the per-file diff lives in the Changes tab, which reads the real
+ * worktree instead of these tool inputs, and a chip that looked clickable
+ * would promise a second, disagreeing answer. The tooltip carries the path the
+ * name was cut from.
+ */
+function FileChip({
+  file,
+  roots,
+}: {
+  file: TouchedFile;
+  roots: readonly PathRoot[];
+}) {
+  const name = fileName(file.path);
+  return (
+    <Tooltip label={tidyPath(file.path, roots)}>
+      <span className={cn(CHIP, "pr-1.5")}>
+        <ExtBadge name={name} />
+        <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
+          {name}
+        </span>
+        <LineStats additions={file.additions} deletions={file.deletions} />
+      </span>
+    </Tooltip>
+  );
+}
+
+/** Everything past the row's chip budget, as one count plus its own totals. */
+function MoreChip({ files }: { files: TouchedFile[] }) {
+  const additions = files.reduce((n, f) => n + f.additions, 0);
+  const deletions = files.reduce((n, f) => n + f.deletions, 0);
+  return (
+    <Tooltip
+      label={
+        files.slice(0, 12).map((f) => fileName(f.path)).join(", ") +
+        (files.length > 12 ? ", …" : "")
+      }
+    >
+      <span className="ml-1 flex h-6 flex-shrink-0 items-center gap-1.5 rounded-md px-1.5">
+        <span className={cn("text-faint", FOOTER_TEXT)}>
+          +{files.length} more
+        </span>
+        <LineStats additions={additions} deletions={deletions} />
+      </span>
+    </Tooltip>
+  );
+}
 
 export function LineStats({
   additions,

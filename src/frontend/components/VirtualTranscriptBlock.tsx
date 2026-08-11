@@ -44,7 +44,7 @@ export const VirtualTranscriptBlock = React.memo(function VirtualTranscriptBlock
 		return (
 			<div
 				ref={ref}
-				className="transcript-window pointer-events-none"
+				className="pointer-events-none"
 				data-eid={anchorId}
 				aria-hidden
 				style={{ height: heightRef.current }}
@@ -55,14 +55,12 @@ export const VirtualTranscriptBlock = React.memo(function VirtualTranscriptBlock
 	return (
 		<div
 			ref={ref}
+			// Settled turns get skipped during layout/paint while off-screen, at
+			// their measured height.
 			className={
 				enabled
-					? // Settled turns get skipped during layout/paint while off-screen,
-					  // at their measured height. `transcript-window` stays as a bare
-					  // hook: it carries no rules, but TurnFooter's quiet actions key
-					  // off hovering this element or the answer window before it.
-					  "transcript-window [content-visibility:auto] [contain-intrinsic-size:auto_96px]"
-					: "transcript-window"
+					? "[content-visibility:auto] [contain-intrinsic-size:auto_96px]"
+					: undefined
 			}
 		>
 			{children}

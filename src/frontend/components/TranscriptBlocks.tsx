@@ -2,7 +2,7 @@ import React from "react";
 import type { SessionWalkthrough, TranscriptEntry } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
 import { TurnBlock } from "./TurnBlock";
-import { TurnFooter } from "./TurnFooter";
+import { collectTouchedFiles, TurnFooter, type TouchedFile } from "./TurnFooter";
 import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
@@ -16,6 +16,7 @@ type RenderBlock =
 			kind: "footer";
 			entry: TranscriptEntry;
 			durationMs: number;
+			files: TouchedFile[];
 			assets: string[];
 	  }
 	| { kind: "walkthrough"; walkthrough: SessionWalkthrough };
@@ -87,9 +88,8 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			if (folded.length > 0) blocks.push({ kind: "turn", items: folded });
 			if (final) blocks.push({ kind: "entry", entry: final });
 		}
-		// Quiet actions under the settled answer, plus scratch files that have no
-		// other direct route from the transcript. Work/file detail stays in the
-		// disclosure above instead of becoming a second toolbar below the answer.
+		// Quiet actions under the settled answer, the files the turn wrote, and
+		// scratch files that have no other direct route from the transcript.
 		if (final && !(live && trailing)) {
 			blocks.push({
 				kind: "footer",
@@ -97,6 +97,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 				durationMs:
 					new Date(final.timestamp).getTime() -
 					new Date(turn[0].timestamp).getTime(),
+				files: collectTouchedFiles(turn),
 				assets: collectWrittenAssets(turn),
 			});
 		}
@@ -159,6 +160,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 					<TurnFooter
 						entry={block.entry}
 						durationMs={block.durationMs}
+						files={block.files}
 						assets={block.assets}
 						onFork={onFork}
 					/>
