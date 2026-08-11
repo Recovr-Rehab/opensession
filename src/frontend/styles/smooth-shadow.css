@@ -53,6 +53,16 @@ html[data-theme="light"] {
 	--smooth-ring-color: color-mix(in srgb, var(--text) 5%, var(--bg));
 }
 
+/* Cast-only tiers for surfaces that already carry a meaningful border. */
+@utility smooth-shadow-sm {
+	--smooth-shadow-color: var(--tw-shadow-color, black);
+	box-shadow:
+		0 1px 3px -1px
+		color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
+		0 4px 10px -4px
+		color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent);
+}
+
 @utility smooth-shadow-ring-sm {
 	--smooth-shadow-color: var(--tw-shadow-color, black);
 	box-shadow:
@@ -62,6 +72,15 @@ html[data-theme="light"] {
 		color-mix(in srgb, var(--smooth-shadow-color) 9%, transparent),
 		0 0 0 var(--smooth-ring-width, 1px)
 		color-mix(in srgb, var(--smooth-ring-color) 80%, transparent);
+}
+
+@utility smooth-shadow-md {
+	--smooth-shadow-color: var(--tw-shadow-color, black);
+	box-shadow:
+		0 2px 6px -2px
+		color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
+		0 10px 28px -8px
+		color-mix(in srgb, var(--smooth-shadow-color) 10%, transparent);
 }
 
 @utility smooth-shadow-ring-md {
@@ -75,6 +94,15 @@ html[data-theme="light"] {
 		color-mix(in srgb, var(--smooth-ring-color) 65%, transparent);
 }
 
+@utility smooth-shadow-lg {
+	--smooth-shadow-color: var(--tw-shadow-color, black);
+	box-shadow:
+		0 4px 12px -4px
+		color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
+		0 18px 48px -14px
+		color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent);
+}
+
 @utility smooth-shadow-ring-lg {
 	--smooth-shadow-color: var(--tw-shadow-color, black);
 	box-shadow:
@@ -84,6 +112,15 @@ html[data-theme="light"] {
 		color-mix(in srgb, var(--smooth-shadow-color) 11%, transparent),
 		0 0 0 var(--smooth-ring-width, 1px)
 		color-mix(in srgb, var(--smooth-ring-color) 50%, transparent);
+}
+
+@utility smooth-shadow-soft {
+	--smooth-shadow-color: var(--tw-shadow-color, black);
+	box-shadow:
+		0 3px 10px -3px
+		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
+		0 20px 56px -16px
+		color-mix(in srgb, var(--smooth-shadow-color) 12%, transparent);
 }
 
 /*

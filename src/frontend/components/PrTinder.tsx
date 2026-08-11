@@ -585,7 +585,7 @@ export function PrTinder({ onExit }: Props) {
 			{/* Undo / status toast. */}
 			{toast && (
 				<div className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2">
-					<div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-line-strong bg-panel px-4 py-2.5 text-sm text-fg shadow-[0_6px_20px_rgba(0,0,0,0.35)]">
+					<div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-line-strong bg-panel px-4 py-2.5 text-sm text-fg smooth-shadow-md">
 						{toast.text}
 						{toast.undo && (
 							<button
@@ -720,7 +720,7 @@ function CommentPanel({
 	const [text, setText] = useState("");
 	return (
 		<div
-			className="absolute inset-x-4 bottom-24 z-30 mx-auto w-auto max-w-[600px] rounded-lg border border-line-strong bg-panel p-3 shadow-[0_10px_34px_rgba(0,0,0,0.4)] sm:inset-x-auto sm:left-1/2 sm:w-[600px] sm:-translate-x-1/2"
+			className="absolute inset-x-4 bottom-24 z-30 mx-auto w-auto max-w-[600px] rounded-lg border border-line-strong bg-panel p-3 smooth-shadow-soft sm:inset-x-auto sm:left-1/2 sm:w-[600px] sm:-translate-x-1/2"
 			onPointerDownCapture={(e) => e.stopPropagation()}
 		>
 			<Textarea
@@ -777,7 +777,7 @@ function LabelPanel({
 	const rows = [...shortlist, ...rest].filter(match);
 	return (
 		<div
-			className="absolute inset-x-4 bottom-24 z-30 mx-auto flex max-h-[55%] w-auto max-w-[600px] flex-col rounded-lg border border-line-strong bg-panel shadow-[0_10px_34px_rgba(0,0,0,0.4)] sm:inset-x-auto sm:left-1/2 sm:w-[600px] sm:-translate-x-1/2"
+			className="absolute inset-x-4 bottom-24 z-30 mx-auto flex max-h-[55%] w-auto max-w-[600px] flex-col rounded-lg border border-line-strong bg-popup-glass [backdrop-filter:var(--popup-blur)] smooth-shadow-soft sm:inset-x-auto sm:left-1/2 sm:w-[600px] sm:-translate-x-1/2"
 			onPointerDownCapture={(e) => e.stopPropagation()}
 		>
 			<div className="flex items-center gap-2 border-b border-line px-3 py-2">

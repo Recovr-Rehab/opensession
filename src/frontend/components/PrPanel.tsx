@@ -1558,7 +1558,7 @@ export function PrPanel({
               aria-label="Close sessions"
               onClick={() => setSessionsOpen(false)}
             />
-            <div className="absolute right-5 top-[92px] z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
+            <div className="absolute right-5 top-[92px] z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 smooth-shadow-lg">
               <div className="mb-2 flex items-center">
                 <span className="text-sm font-semibold text-fg">
                   Sessions on this PR
@@ -1589,7 +1589,7 @@ export function PrPanel({
           </>
         )}
 
-        <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex min-h-[54px] items-center rounded-md border border-line-strong bg-panel/95 px-3 py-2 shadow-[0_12px_35px_rgba(0,0,0,0.3)] backdrop-blur">
+        <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex min-h-[54px] items-center rounded-md border border-line-strong bg-panel/95 px-3 py-2 smooth-shadow-soft backdrop-blur">
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium text-fg">
               {reviewDone === "merged"
@@ -1654,7 +1654,7 @@ export function PrPanel({
               aria-label="Close review form"
               onClick={() => setReviewOpen(false)}
             />
-            <div className="absolute bottom-5 right-5 z-30 w-[430px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
+            <div className="absolute bottom-5 right-5 z-30 w-[430px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 smooth-shadow-lg">
               <div className="mb-3 flex items-center">
                 <span className="text-sm font-semibold text-fg">Finish review for #{pr.number}</span>
                 <button
@@ -2008,7 +2008,7 @@ export function PrPanel({
                     size="sm"
                     role="tab"
                     aria-selected={diffView === key}
-                    className={`rounded-sm border-0 px-2.5 py-1 text-xs font-medium ${diffView === key ? "bg-panel text-fg shadow-sm" : "text-faint hover:bg-transparent"}`}
+                    className={`rounded-sm border-0 px-2.5 py-1 text-xs font-medium ${diffView === key ? "bg-panel text-fg smooth-shadow-sm" : "text-faint hover:bg-transparent"}`}
                     onClick={() => setDiffView(key)}
                   >
                     {label}

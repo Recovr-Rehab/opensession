@@ -428,7 +428,7 @@ function NewScanModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] shadow-2xl")}>
+      <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] smooth-shadow-lg")}>
         <div>
           <div className={FORM_TITLE}>New scan</div>
           <div className="text-dim text-[13px] mt-0.5">
@@ -609,7 +609,7 @@ function ProfileModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] shadow-2xl")}>
+      <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] smooth-shadow-lg")}>
         <div className={FORM_TITLE}>
           {initial ? `Edit "${initial.name}"` : "New scan profile"}
         </div>

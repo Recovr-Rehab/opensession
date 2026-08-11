@@ -212,7 +212,7 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 			</svg>
 			{hover !== null && tooltipRows.length > 0 && (
 				<div
-					className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 rounded-md border border-line bg-panel px-2.5 py-2 shadow-lg"
+					className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 rounded-md border border-line bg-panel px-2.5 py-2 smooth-shadow-md"
 					style={{ left: tooltipLeft }}
 				>
 					<div className="mb-1 text-meta font-semibold text-fg">{shortDate(labels[hover])}</div>

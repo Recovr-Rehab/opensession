@@ -130,7 +130,7 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 			transition={{ type: "spring", duration: 0.34, bounce: 0.22 }}
 			onClick={() => dismissToast(t.id)}
 			className={cn(
-				"pointer-events-auto flex cursor-default items-center gap-2.5 rounded-lg border bg-panel px-3.5 py-2.5 text-sm text-fg shadow-[0_8px_24px_rgba(0,0,0,0.34)]",
+				"pointer-events-auto flex cursor-default items-center gap-2.5 rounded-lg border bg-panel px-3.5 py-2.5 text-sm text-fg smooth-shadow-md",
 				t.variant === "error" ? "border-line-strong" : "border-line-strong",
 			)}
 		>

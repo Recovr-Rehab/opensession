@@ -227,7 +227,7 @@ export function PreviewButton({
         }
       }}
     >
-      <div className="bg-raised border border-line rounded-panel shadow-2xl p-3 max-w-[90vw] max-h-[90vh] flex flex-col gap-2.5">
+      <div className="bg-raised border border-line rounded-panel smooth-shadow-lg p-3 max-w-[90vw] max-h-[90vh] flex flex-col gap-2.5">
         {shotError ? (
           <div className="text-red text-[13px] px-2 py-4">{shotError}</div>
         ) : (
@@ -253,7 +253,7 @@ export function PreviewButton({
           )}
           {shot && (
             <a
-              className="inline-flex min-h-[26px] items-center justify-center whitespace-nowrap rounded-xs border border-line bg-control px-2.5 text-xs font-medium text-dim shadow-control transition hover:border-line-strong hover:text-fg active:scale-[0.97]"
+              className="inline-flex min-h-[26px] items-center justify-center whitespace-nowrap rounded-xs border border-line bg-control px-2.5 text-xs font-medium text-dim smooth-shadow-sm transition hover:border-line-strong hover:text-fg active:scale-[0.97]"
               href={shot}
               download={`preview-${session.id}.png`}
             >

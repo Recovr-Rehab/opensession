@@ -329,7 +329,7 @@ export function SchedulePromptButton({
             if (e.target === e.currentTarget) setCustomOpen(false);
           }}
         >
-          <div className="w-[420px] max-w-[92vw] rounded-xl border border-line-strong bg-raised p-5 shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
+          <div className="w-[420px] max-w-[92vw] rounded-xl border border-line-strong bg-raised p-5 smooth-shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[17px] font-semibold text-fg">

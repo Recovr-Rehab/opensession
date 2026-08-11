@@ -113,7 +113,7 @@ export const composerMenuItem =
 export const composerMenuIcon =
 	"inline-flex w-5 items-center justify-center text-label text-dim";
 export const composerMenuPopup =
-	"absolute bottom-[calc(100%+6px)] z-40 rounded-lg border border-line-strong bg-panel p-1 shadow-[0_8px_28px_rgba(0,0,0,0.28)]";
+	"absolute bottom-[calc(100%+6px)] z-40 rounded-lg border border-line-strong bg-popup-glass [backdrop-filter:var(--popup-blur)] p-1 smooth-shadow-md";
 /** The menu's own floor width. Kept out of the surface above because a second
  *  `min-w-*` on the same element would not compose — the send-later menu is
  *  wider (it lists pending messages), and whichever Tailwind emitted last would

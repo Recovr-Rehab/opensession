@@ -119,7 +119,7 @@ export function SidebarCtxMenu({
 	return createPortal(
 		<>
 			<div
-				className="[corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+				className="smooth-shadow-md [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
 				style={{ ...CTX_MENU_STYLE, left: x, top: y }}
 				onClick={(e) => e.stopPropagation()}
 			>
@@ -236,7 +236,7 @@ export function SidebarCtxMenu({
 			</div>
 			{sub?.kind === "status" && statusEntry && (
 				<div
-					className="[corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+					className="smooth-shadow-md [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
 					style={{
 						...CTX_MENU_STYLE,
 						left: subLeft,
@@ -275,7 +275,7 @@ export function SidebarCtxMenu({
 			)}
 			{sub?.kind === "snooze" && snoozeEntry && (
 				<div
-					className="[corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+					className="smooth-shadow-md [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
 					style={{
 						...CTX_MENU_STYLE,
 						left: subLeft,

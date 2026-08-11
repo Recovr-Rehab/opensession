@@ -170,7 +170,7 @@ function AssetSideButton({
 				}
 				aria-label={label}
 				className={cn(
-					"absolute top-1/2 z-20 size-10 -translate-y-1/2 rounded-full bg-raised shadow-control",
+					"absolute top-1/2 z-20 size-10 -translate-y-1/2 rounded-full bg-raised smooth-shadow-sm",
 					previous ? "right-full mr-3" : "left-full ml-3",
 				)}
 				onClick={onClick}

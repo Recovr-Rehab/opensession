@@ -132,7 +132,7 @@ export const SIDEBAR_PIN_ENTRY = "relative";
  * list-level selector did — so the list needs no class of its own.
  */
 export const SIDEBAR_PIN_ENTRY_DRAGGING =
-	"z-[5] rounded-row bg-bg shadow-[0_4px_14px_rgba(0,0,0,0.25)]";
+	"z-[5] rounded-row bg-bg smooth-shadow-ring-sm";
 export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
 
 /**

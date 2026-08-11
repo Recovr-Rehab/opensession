@@ -34,7 +34,7 @@ export function DeviceCode({
 				onClick={() => copy(code, { toast: "Code copied" })}
 				className={cn(
 					"group inline-flex items-center gap-1.5 rounded-control border border-line bg-control px-2.5 py-1",
-					"font-mono text-item-title font-bold text-fg shadow-control",
+					"font-mono text-item-title font-bold text-fg smooth-shadow-sm",
 					"transition-[background-color,border-color,scale] active:scale-[0.98]",
 					"hover:border-line-strong hover:bg-hover focus-ring",
 					className,

@@ -127,7 +127,7 @@ export const TAB_ITEM =
 /** Picked up: desktop tabs are flat labels on the strip's own background, so a
  *  dragged one has no surface of its own and smears over every tab it passes.
  *  It lifts into an opaque chip instead. */
-export const TAB_ITEM_DRAGGING = `${PILL} cursor-grabbing bg-panel shadow-[0_0_0_1px_var(--border),0_8px_20px_rgba(0,0,0,0.22)]`;
+export const TAB_ITEM_DRAGGING = `${PILL} cursor-grabbing bg-panel smooth-shadow-ring-sm`;
 
 /**
  * Where the dragged tab will land. Reorder already opens the gap live, but an
@@ -161,7 +161,7 @@ const TAB_BASE =
 	// A floating pill with a solid fill, so the transcript scrolling underneath
 	// never shows through it. (`--tab-stroke`, the ring's colour in the old
 	// sheet, was never set anywhere — it always resolved to transparent.)
-	`border ${PILL} shadow-[0_1px_2px_rgba(0,0,0,0.12)] ` +
+	`border ${PILL} smooth-shadow-sm ` +
 	// Desktop: no fill, ring or rounding — just the label, with a transparent
 	// underline reserved so the active/inactive swap never shifts the row.
 	"desktop:rounded-none desktop:border-0 desktop:bg-transparent desktop:hover:bg-transparent";
@@ -361,7 +361,7 @@ export const TAB_HISTORY =
  *  tab context menu now). Above every other popup on the pane at z-1000. */
 export const NEW_MENU =
 	"fixed z-[1000] flex min-w-[250px] flex-col gap-px rounded-popup border border-line-strong bg-popup-glass [backdrop-filter:var(--popup-blur)] p-1 " +
-	"shadow-[0_10px_30px_rgba(0,0,0,0.32)]";
+	"smooth-shadow-md";
 export const NEW_MENU_ITEM =
 	"block w-full cursor-pointer whitespace-nowrap rounded-[calc(6px*var(--rf))] border-0 " +
 	"bg-transparent px-2 py-1.5 text-left text-label text-fg hover:bg-hover";

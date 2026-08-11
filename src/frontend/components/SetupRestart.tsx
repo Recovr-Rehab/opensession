@@ -14,7 +14,7 @@ export function SetupRestart({ setup }: { setup: SetupController }) {
 	return (
 		<>
 			{restartNeeded && restartState !== "working" && (
-				<div className="sticky bottom-3 z-20 mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line bg-panel px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.18),0_1px_3px_rgba(0,0,0,0.08)]">
+				<div className="sticky bottom-3 z-20 mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line bg-panel px-4 py-3 smooth-shadow-soft">
 					<div className="min-w-0 flex-1">
 						<div className="text-control-label font-medium text-fg">
 							Changes saved — restart to apply

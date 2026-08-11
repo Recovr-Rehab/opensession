@@ -231,7 +231,7 @@ export function prChipClass(tone: PrTone, size: ChipSize): string {
 	// separated from the strip by its fill, and a sibling chip is too small to
 	// carry one.
 	const shadow = tone === "muted" && (size === "bar" || size === "head");
-	return `${CHIP_BASE} ${CHIP_SIZE[size]} ${flat ? CHIP_TONE_FLAT[tone] : CHIP_TONE[tone]}${shadow ? " shadow-control" : ""}`;
+	return `${CHIP_BASE} ${CHIP_SIZE[size]} ${flat ? CHIP_TONE_FLAT[tone] : CHIP_TONE[tone]}${shadow ? " smooth-shadow-sm" : ""}`;
 }
 
 /** The outbound half of the split button: same tone, square inner corner, and
@@ -244,7 +244,7 @@ export function prChipExternalClass(tone: PrTone, size: "bar" | "head"): string 
 		tone === "muted"
 			? // No ink of its own: the neutral half is an <a>, so its arrow takes
 				// the link colour, and the hover wash mixes from it.
-				"border-line bg-control shadow-control hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)]"
+				"border-line bg-control smooth-shadow-sm hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)]"
 			: CHIP_TONE[tone];
 	return `${geometry} ${size === "head" ? "size-[32px]" : "size-[30px]"} ${colour}`;
 }

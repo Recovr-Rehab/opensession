@@ -61,7 +61,7 @@ export const MOBILE_FAB =
 export const DESK_FAB =
 	"fixed right-[18px] bottom-[18px] z-500 flex size-11 items-center justify-center " +
 	"rounded-full border border-[color:var(--composer-border)] bg-[var(--composer-surface)] text-dim " +
-	"shadow-[0_1px_2px_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.08)] " +
+	"smooth-shadow-ring-sm " +
 	"transition-[color,translate,scale] hover:-translate-y-px hover:text-fg " +
 	"phone:right-[calc(12px+58px+12px)] phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
 	"phone:size-[58px] phone:text-fg " +

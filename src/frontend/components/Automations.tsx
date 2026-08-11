@@ -926,7 +926,7 @@ function CreateAutomationModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={cn(FORM_CARD, "my-auto w-full max-w-[680px] shadow-2xl")}>
+      <div className={cn(FORM_CARD, "my-auto w-full max-w-[680px] smooth-shadow-lg")}>
         {step === "type" ? (
           <TypeChooser
             onPick={(draft, s) => {

@@ -442,7 +442,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 			{/* Undo / status toast. */}
 			{toast && (
 				<div className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2">
-					<div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-line-strong bg-panel px-4 py-2.5 text-sm text-fg shadow-[0_6px_20px_rgba(0,0,0,0.35)]">
+					<div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-line-strong bg-panel px-4 py-2.5 text-sm text-fg smooth-shadow-md">
 						{toast.text}
 						{toast.undo && (
 							<button

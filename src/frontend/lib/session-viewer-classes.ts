@@ -353,7 +353,7 @@ export const infoTopbarTitleClass = (scrolled: boolean) =>
  *  soft key shadow here that it doesn't carry elsewhere. */
 export const INFO_HERO =
 	"flex flex-col items-center gap-[9px] px-5 pt-0.5 pb-5 text-center " +
-	"[&_.repo-tile]:shadow-[0_4px_16px_rgba(0,0,0,0.18)]";
+	"[&_.repo-tile]:smooth-shadow-ring-sm";
 
 /** 20px in the old sheet — the page's one heading, so it snaps to
  *  `text-page-title` (19px). */
