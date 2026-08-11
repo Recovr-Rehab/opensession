@@ -130,8 +130,16 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 			transition={{ type: "spring", duration: 0.34, bounce: 0.22 }}
 			onClick={() => dismissToast(t.id)}
 			className={cn(
-				"pointer-events-auto flex cursor-default items-center gap-2.5 rounded-lg border bg-panel px-3.5 py-2.5 text-sm text-fg smooth-shadow-md",
-				t.variant === "error" ? "border-line-strong" : "border-line-strong",
+				// The floating-surface vocabulary the menus, popovers and the
+				// scroll-to-bottom pill share: a thinned fill over a heavy blur,
+				// with the hairline coming from the shadow's own ring rather
+				// than a border. An opaque panel behind a solid `border-line-strong`
+				// read as a foreign card dropped over the page; this reads as
+				// held above it. Falls back to the opaque popup surface where
+				// backdrop-filter can't run or transparency is reduced (base.css).
+				"pointer-events-auto flex cursor-default items-center gap-2.5 rounded-lg",
+				"bg-popup-glass px-3.5 py-2.5 text-sm text-fg [backdrop-filter:var(--popup-blur)]",
+				"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md",
 			)}
 		>
 			{t.variant === "success" && (
