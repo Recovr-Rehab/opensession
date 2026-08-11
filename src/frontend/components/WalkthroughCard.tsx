@@ -101,7 +101,19 @@ export function WalkthroughCard({
 				// trails more space than it leads: unlike the neighbouring blocks
 				// it ends in media, which otherwise butts straight into the next
 				// message.
-				session ? "mx-auto mb-6 mt-2 w-full max-w-[var(--session-col)]" : "mb-4",
+				session && "mx-auto mb-6 mt-2 w-full",
+				session && !expanded && "max-w-[var(--session-col)]",
+				// Opened, it stops being a line in the conversation and becomes the
+				// thing you are looking at, so it takes the room the pane has —
+				// where the reading column is a limit the media never asked for. A
+				// before and an after sit side by side, so each of them is half of
+				// whatever the card gets: at the 780px column, two desktop
+				// screenshots come out ~370px wide, which is too small to see what
+				// changed in the picture you opened the card to check. The prose
+				// keeps its own measure (the summary caps at 68ch), and the ceiling
+				// keeps the card from running the width of a large display.
+				session && expanded && "max-w-[min(1040px,100%)]",
+				!session && "mb-4",
 			)}
 		>
 			{session ? (
@@ -162,7 +174,7 @@ export function WalkthroughCard({
 				<div className="-mx-4 mt-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 					<div className="flex w-max items-start gap-4">
 						{walkthrough.video && (
-							<figure className="m-0 w-40 shrink-0">
+							<figure className="m-0 w-40 shrink-0 desktop:w-52">
 								<figcaption className="mb-1 inline-flex rounded-full bg-blue-soft px-2 py-0.5 text-[11px] font-semibold leading-4 text-blue">
 									Demo
 								</figcaption>
@@ -194,7 +206,15 @@ export function WalkthroughCard({
 									(side) =>
 										shot[side] && (
 											<figure
-												className="m-0 w-40 shrink-0"
+												// One tile size for the demo and every still,
+												// wider where there is room for it: a thumbnail
+												// of a UI is a picture of small things, and two
+												// 160px tiles of the same screen are hard to
+												// tell apart — which makes the folded strip
+												// decorative rather than the answer to "what
+												// changed". The phone keeps the smaller tile, so
+												// two of them still fit across the card.
+												className="m-0 w-40 shrink-0 desktop:w-52"
 												key={side}
 											>
 												<figcaption
@@ -315,8 +335,16 @@ export function WalkthroughCard({
 														<img
 															className={cn(
 																"block object-contain object-top",
+																// A cap on HEIGHT costs a PORTRAIT shot its
+																// width too: a phone screenshot is about
+																// twice as tall as it is wide, so every
+																// point off the ceiling takes half a point
+																// off the picture. At 256px one rendered
+																// ~120px across — a column of grey. 384
+																// still leaves the pair, the writeup above
+																// it and the next block in view.
 																session
-																	? "max-h-64 max-w-full"
+																	? "max-h-96 max-w-full"
 																	: "w-full",
 															)}
 															src={mediaUrl(shot[side]!)}
