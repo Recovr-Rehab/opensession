@@ -93,7 +93,17 @@ function Content({
 							// --rf-lg rather than the scale's `rounded-xl`: a big
 							// overlay keeps its corner in browsers without
 							// `corner-shape` instead of shrinking to 0.85 (base.css).
-							"rounded-[calc(18px*var(--rf-lg))] bg-panel smooth-shadow-ring-lg",
+							// Same corner as the centered dialog, one step up from the
+							// 18px it used to carry.
+							"rounded-[calc(22px*var(--rf-lg))]",
+							// The same glass the menus and hover cards are made of
+							// (ui/menu.tsx), so the palette reads as one more floating
+							// surface rather than an opaque card — just denser, because
+							// this one sits over a dimming backdrop. --palette-glass
+							// falls back to the opaque fill without backdrop-filter and
+							// under prefers-reduced-transparency (base.css).
+							"bg-palette-glass [backdrop-filter:var(--popup-blur)]",
+							"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-lg",
 							// Drops in from just above its resting place, the way a
 							// palette summoned by a keystroke should.
 							"origin-top transition-[transform,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]",
@@ -131,8 +141,12 @@ function Content({
 					// Palettes sit on their own, lower tier so anything that has
 					// always floated above them (the caret-anchored mention popup at
 					// 10500, the modal tier at 10000) keeps doing so.
+					// A lighter tint than the opaque shell needed, over a heavier
+					// blur: the palette is glass now, so the scrim composites
+					// THROUGH it — at the old 42% the page's dimming showed up
+					// inside the palette as a grey wash over its own fill.
 					palette
-						? "z-[6000] bg-black/42 backdrop-blur-[3px] duration-[var(--dur-micro)]"
+						? "z-[6000] bg-black/22 backdrop-blur-[6px] duration-[var(--dur-micro)]"
 						: "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
 					// `palette-backdrop` rides along purely as a runtime marker, and
 					// nothing styles it any more: SessionViewer (⌘P) and Sidebar

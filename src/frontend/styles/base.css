@@ -76,6 +76,14 @@
 	   for browsers without backdrop-filter and for reduced transparency. */
 	--popup-glass: color-mix(in srgb, var(--popup-surface) 72%, transparent);
 	--popup-blur: blur(20px) saturate(1.8);
+	/* The command palette's own glass. Denser than a menu's for two reasons: it
+	   is a big empty box rather than a strip of rows — the same reason
+	   --composer-surface and --popup-surface go white in light instead of
+	   following the ramp down — and it is the one popup with a dimming backdrop
+	   underneath, which composites THROUGH the fill and drags a 72% mix down to
+	   a grey slab. At 88% the page's colour and shape still read through it and
+	   the surface stays paper. */
+	--palette-glass: color-mix(in srgb, var(--popup-surface) 88%, transparent);
 	/* The composer's own fill + edge. In dark it IS --control-surface: lighter
 	   than the page, so the box already reads as lifted. Light needs its own
 	   pair — see the light block. */
@@ -386,12 +394,14 @@ html[data-theme="light"] {
 @supports not (backdrop-filter: blur(1px)) {
 	:root {
 		--popup-glass: var(--popup-surface);
+		--palette-glass: var(--popup-surface);
 	}
 }
 
 @media (prefers-reduced-transparency: reduce) {
 	:root {
 		--popup-glass: var(--popup-surface);
+		--palette-glass: var(--popup-surface);
 	}
 }
 

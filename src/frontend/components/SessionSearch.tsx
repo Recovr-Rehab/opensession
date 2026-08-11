@@ -43,15 +43,20 @@ function sessionRepo(s: UnifiedSession): string {
 type Status = "needsinput" | "running" | "review" | "merged" | "pending";
 
 /** A keycap. Hidden below 720px, where the palette is driven by touch and the
- *  keyboard hints are noise. */
+ *  keyboard hints are noise. Filled with the translucent `--hover` ink rather
+ *  than the `--bg-raised` surface: the palette shell is glass, and an absolute
+ *  surface reads as an opaque chip cut out of it (and in dark it sat *below*
+ *  the popup fill, so a "keycap" rendered sunken). */
 const KBD =
-	"mx-px inline-flex min-w-4 items-center justify-center rounded-sm border border-line-strong bg-raised px-1 py-px font-sans text-meta text-dim phone:hidden";
+	"mx-px inline-flex min-w-4 items-center justify-center rounded-md border border-line-strong bg-hover px-1.5 py-px font-sans text-meta text-dim phone:hidden";
 
 /** A result row. The selected wash rides on `aria-selected`, which the button
  *  already carries for the listbox — so the icon and keycap tones that used to
- *  need `.ss-item-active` descendant rules are `group-aria-selected:` here. */
+ *  need `.ss-item-active` descendant rules are `group-aria-selected:` here.
+ *  `bg-pressed` rather than the `--bg-active` surface: the palette shell is
+ *  glass, and an absolute surface would land on it as an opaque patch. */
 const ITEM =
-	"group flex w-full cursor-pointer items-center gap-2.5 rounded-md border-none bg-transparent px-2.5 py-2 text-left text-fg aria-selected:bg-active";
+	"group flex w-full cursor-pointer items-center gap-3 rounded-lg border-none bg-transparent px-3 py-2.5 text-left text-fg aria-selected:bg-pressed";
 
 const STATUS_META: Record<Status, { label: string; dotClass: string }> = {
 	needsinput: { label: "Needs input", dotClass: "bg-accent" },
@@ -142,7 +147,9 @@ function FilterPill({
 	return (
 		<div
 			className={cn(
-				"relative inline-flex cursor-pointer items-center gap-[5px] rounded-full border bg-raised px-[9px] py-1 text-label",
+				// `bg-hover`, not the `--bg-raised` surface, for the same reason the
+				// keycaps use it: the shell behind the pill is glass.
+				"relative inline-flex cursor-pointer items-center gap-[5px] rounded-full border bg-hover px-2.5 py-1 text-label",
 				"transition-[border-color,color] duration-[var(--dur-micro)] ease-[var(--ease)]",
 				// Hover outranked `.ss-pill-active` on specificity, so an active
 				// pill has always dimmed to the plain hover tone. Kept.
@@ -403,7 +410,7 @@ export function SessionSearch({
 				initialFocus={inputRef}
 				onKeyDown={onKeyDown}
 			>
-				<div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
+				<div className="flex items-center gap-3 border-b border-line px-5 py-4">
 					<IconSearch className="shrink-0 text-faint" size={22} />
 					<input
 						ref={inputRef}
@@ -439,7 +446,7 @@ export function SessionSearch({
 				</div>
 
 				<div
-					className="flex flex-wrap items-center gap-[7px] border-b border-line px-3.5 py-2"
+					className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5"
 					aria-label="Session filters"
 				>
 					<FilterPill
@@ -476,7 +483,7 @@ export function SessionSearch({
 
 				<div
 					id="command-palette-results"
-					className="min-h-0 flex-1 overflow-y-auto p-1.5"
+					className="min-h-0 flex-1 overflow-y-auto p-2"
 					ref={listRef}
 					role="listbox"
 				>
@@ -491,7 +498,7 @@ export function SessionSearch({
 							return (
 								<React.Fragment key={`action:${result.action.id}`}>
 									{startsGroup && (
-										<div className="px-2.5 pb-[5px] pt-2.5 text-meta font-semibold text-faint">
+										<div className="px-3 pb-1.5 pt-2.5 text-meta font-semibold text-faint">
 											{result.category}
 										</div>
 									)}
@@ -529,7 +536,7 @@ export function SessionSearch({
 							return (
 								<React.Fragment key={`pr:${pr.url}`}>
 									{startsGroup && (
-										<div className="px-2.5 pb-[5px] pt-2.5 text-meta font-semibold text-faint">
+										<div className="px-3 pb-1.5 pt-2.5 text-meta font-semibold text-faint">
 											{result.category}
 										</div>
 									)}
@@ -564,7 +571,7 @@ export function SessionSearch({
 						return (
 							<React.Fragment key={`session:${s.id}`}>
 								{startsGroup && (
-										<div className="px-2.5 pb-[5px] pt-2.5 text-meta font-semibold text-faint">
+										<div className="px-3 pb-1.5 pt-2.5 text-meta font-semibold text-faint">
 											{result.category}
 										</div>
 									)}
@@ -603,7 +610,7 @@ export function SessionSearch({
 					})}
 				</div>
 
-				<div className="flex items-center gap-4 border-t border-line px-3.5 py-2 text-meta text-faint">
+				<div className="flex items-center gap-4 border-t border-line px-4 py-2.5 text-meta text-faint">
 					<span className="phone:hidden">
 						<kbd className={KBD}>↑</kbd>
 						<kbd className={KBD}>↓</kbd> navigate
