@@ -43,6 +43,9 @@ export function RowCardPopup({
 		<Popover.Popup
 			side="right"
 			align="start"
+			// Sit on the sidebar's trailing gutter instead of aligning exactly with
+			// the content seam, which made the card and chat read as one surface.
+			sideOffset={0}
 			arrow
 			elevation="lg"
 			anchor={anchor}
