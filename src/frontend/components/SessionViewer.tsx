@@ -5184,7 +5184,7 @@ export function SessionViewer({
 									{historyTruncated && (
 										<div className="flex justify-center [overflow-anchor:none] px-0 pt-3 pb-3.5">
 											{loadingHistory ? (
-												<div className="inline-flex min-h-10 items-center gap-1.5 rounded-[999px] bg-popup px-4 text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm">
+												<div className="inline-flex min-h-10 items-center gap-1.5 rounded-[999px] bg-popup-glass px-4 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm">
 													<span
 														className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim"
 														aria-hidden
@@ -5199,7 +5199,7 @@ export function SessionViewer({
 												<button
 													type="button"
 													onClick={loadAllHistory}
-													className="group inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[999px] bg-popup px-4 text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[background-color,scale] hover:bg-[color-mix(in_srgb,var(--popup-surface)_94%,var(--text))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
+													className="group relative inline-flex min-h-10 cursor-pointer items-center gap-1.5 overflow-hidden rounded-[999px] bg-popup-glass px-4 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[scale] before:pointer-events-none before:absolute before:inset-0 before:bg-transparent before:transition-colors before:content-[''] hover:before:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
 												>
 													<IconArrowUp
 														size={13}
@@ -5304,16 +5304,13 @@ export function SessionViewer({
 
 								{showScrollToBottom && entries.length > 0 && (
 									<button
-										/* Keep the control surface opaque over transcript text; a
-										   pseudo-element paints the translucent hover wash without
-										   replacing that surface. */
-										className="group absolute left-1/2 bottom-6 z-[5] inline-flex -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--bg))] px-3 py-1 text-label font-semibold text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm transition-[color,scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-transparent before:transition-colors before:content-[''] hover:before:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+										className="group absolute left-1/2 bottom-6 z-[5] inline-flex min-h-10 -translate-x-1/2 cursor-pointer items-center gap-1.5 overflow-hidden rounded-[999px] bg-popup-glass px-4 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[scale] before:pointer-events-none before:absolute before:inset-0 before:bg-transparent before:transition-colors before:content-[''] hover:before:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
 										onClick={() => scrollToLatest("smooth")}
 										title="Scroll to the bottom"
 									>
 										<IconArrowDown
 											size={13}
-											className="text-accent transition-transform group-hover:translate-y-px"
+											className="text-dim transition-transform group-hover:translate-y-px"
 											aria-hidden
 										/>
 										{newBelow ? "New messages" : "Scroll to bottom"}
