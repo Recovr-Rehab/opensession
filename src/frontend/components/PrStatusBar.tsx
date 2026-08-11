@@ -43,6 +43,7 @@ import {
 	PR_HEAD_PROMPTED,
 	PR_SIB_DOT,
 	PR_SIB_DOT_BG,
+	PR_SECTION_BG,
 	PR_SECTION_ROW,
 	PR_SECTION_STACK,
 	PR_STATE_TEXT,
@@ -666,7 +667,7 @@ export function PrStatusBar({
 			<div
 				className={
 					variant === "section"
-						? `${PR_SECTION_ROW} ${PR_BAR_BG.muted}`
+						? `${PR_SECTION_ROW} ${PR_SECTION_BG.muted}`
 						: `pr-bar ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`
 				}
 			>
@@ -939,7 +940,7 @@ export function PrStatusBar({
 		<div
 			className={
 				variant === "section"
-					? `${PR_SECTION_ROW} ${PR_BAR_BG[headlineTone]}`
+					? `${PR_SECTION_ROW} ${PR_SECTION_BG[headlineTone]}`
 					: `pr-bar ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`
 			}
 		>

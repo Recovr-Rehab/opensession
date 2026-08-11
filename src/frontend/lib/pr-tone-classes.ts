@@ -129,6 +129,13 @@ export const PR_BAR_BG: Record<PrTone, string> = {
 		"bg-[var(--topbar-bg)] phone:[.session-info-status_&]:bg-transparent",
 };
 
+/** Info-panel rows keep a visible neutral surface too, so empty/loading states
+ * paint the same full padded block as colored PR states. */
+export const PR_SECTION_BG: Record<PrTone, string> = {
+	...PR_BAR_BG,
+	muted: "bg-panel",
+};
+
 /** A session that shipped one feature as several PRs: the primary strip plus a
  *  row per sibling, as one continuous block of status. */
 export const PR_BAR_STACK = `flex min-w-0 flex-col ${PR_BAR_IN_CARD}`;
