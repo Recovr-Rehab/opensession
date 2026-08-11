@@ -109,11 +109,9 @@ goes through `opencode/openai/*` models; `aws: true` can't mint creds inside
   3302]`): each container port in the set is published to a random
   **loopback** host port at container create; `sandbox.ports()` reads the
   live map and preview.ts routes the same Caddy tailnet-HTTPS front at the
-  published port. In-container dev-server start is gated behind
-  `"devServerInSandbox": true` (default off); without it, preview start is a
-  no-op and only status/ports/Caddy routing are active. See "Previews in
-  sandboxes" below for the full Phase 4A flow (port namespace, lifecycle
-  scripts, `.tunnels.env`).
+  published port. Selecting a sandbox is the explicit opt-in for in-sandbox
+  Preview. See "Previews in sandboxes" below for the full flow (port
+  namespace, lifecycle scripts, `.tunnels.env`).
 
 ## Previews in sandboxes (Phase 4A)
 

@@ -36,7 +36,6 @@ import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { audit } from "./audit";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { sandboxConfig } from "./sandbox/config";
 import {
   lookupSandboxHttpsPort,
   releaseSandboxPreviewPorts,
@@ -1080,9 +1079,9 @@ async function writeSandboxTunnelsEnv(
 }
 
 /**
- * Bring the dev server up INSIDE the sandbox. Gated behind config
- * `devServerInSandbox` (default off). The flow (docs in
- * deploy/sandbox/README.md "Previews in sandboxes"):
+ * Bring the dev server up INSIDE the sandbox. Selecting a sandbox is the
+ * explicit opt-in. The flow (docs in deploy/sandbox/README.md "Previews in
+ * sandboxes"):
  *
  *  1. Pick a webapp port from the container's PRE-PUBLISHED preview range
  *     (docker -p at create; config `previewPorts`, default 3300-3302) —
@@ -1104,12 +1103,6 @@ export async function startSandboxPreview(
 ): Promise<PreviewStatus> {
   const status = await getSandboxPreviewStatus(sandbox, worktreeDir);
   if (status.running || status.starting) return status;
-  if (!sandboxConfig().devServerInSandbox) {
-    console.log(
-      `[preview] ${sandbox.id}: in-sandbox dev-server start is gated off (devServerInSandbox) — not starting`,
-    );
-    return status;
-  }
 
   // 1. Allocate a webapp port from the pre-published range.
   const portMap = await sandbox.ports();

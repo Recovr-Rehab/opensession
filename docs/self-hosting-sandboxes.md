@@ -235,10 +235,6 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   // same Caddy tailnet-HTTPS front at the published port).
   // Default [3300, 3301, 3302].
   "previewPorts": [3300],
-  // Allow startPreview to launch the dev-server bring-up INSIDE the
-  // sandbox. Default false: only port-mapping + Caddy routing are active
-  // (the stock image doesn't carry your app's dev toolchain).
-  "devServerInSandbox": false,
 
   // Snapshot-based warm restores (docker only; see docker.ts "Snapshots").
   // On idle-stop the container is `docker commit`ed; a later ensure() for a

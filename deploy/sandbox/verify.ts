@@ -459,9 +459,8 @@ try {
   ok("configured preview port is published to a loopback host port", !!hostPort,
     JSON.stringify(portMap));
   if (hostPort) {
-    // Trivial static server INSIDE the container on the published port (the
-    // tella-fusion dev-server flow needs toolchain the image doesn't carry
-    // yet — gated behind devServerInSandbox; this proves the port+map layer).
+    // Trivial static server INSIDE the container on the published port; this
+    // independently proves the port+map layer before lifecycle Preview below.
     await sh(["docker", "exec", "-d", vol.id, "bun", "-e",
       `Bun.serve({ port: ${PREVIEW_PORT}, hostname: "0.0.0.0", fetch: () => new Response("sbx-preview-ok") });`]);
     let body = "";
@@ -750,7 +749,7 @@ try {
   const previewPortsMod = await import("../../src/server/sandbox/preview-ports");
   await Bun.write(
     process.env.OPENSESSION_SANDBOX_CONFIG!,
-    JSON.stringify({ provider: "docker", devServerInSandbox: true, previewPorts: PRE_PORTS }),
+    JSON.stringify({ provider: "docker", previewPorts: PRE_PORTS }),
   );
   mkdirSync(`${WT}/.agents`, { recursive: true });
   await Bun.write(

@@ -143,8 +143,6 @@ export async function handlePreviewRoutes(
 					{ error: "Session not found" },
 					{ status: 404 },
 				);
-			// In-container start is gated on config devServerInSandbox — see
-			// startSandboxPreview; without the gate it just reports status.
 			const sbx = session.worktreeDir
 				? await activeSandboxFor(session)
 				: null;

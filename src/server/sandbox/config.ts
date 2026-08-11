@@ -226,10 +226,6 @@ export interface SandboxConfig {
   /** Container ports to publish for previews (docker -p 127.0.0.1::<port>,
    *  random loopback host port, set at container create). Default none. */
   previewPorts?: number[];
-  /** Allow startPreview to launch the dev-server bring-up INSIDE the sandbox
-   *  (requires the image to carry the repo's dev toolchain). Default false:
-   *  only the port-mapping + Caddy layer is active. */
-  devServerInSandbox?: boolean;
   /** Snapshot-based warm restores (docker provider only). Absent = disabled. */
   snapshots?: SandboxSnapshotsConfig;
   /** Per-repo overrides keyed by repo id (worktree.ts REPOS). */
@@ -343,7 +339,6 @@ export function sandboxConfig(): SandboxConfig {
             : undefined,
         workspace: raw?.workspace === "volume" ? "volume" : undefined,
         previewPorts: previewPorts.length ? previewPorts : undefined,
-        devServerInSandbox: raw?.devServerInSandbox === true || undefined,
         snapshots:
           raw?.snapshots && typeof raw.snapshots === "object"
             ? {
