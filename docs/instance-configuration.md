@@ -66,6 +66,22 @@ entitlements, deployment scripts, and infrastructure log destinations are
 distribution/deployment metadata. A downstream distributor should replace
 those files without changing application behavior.
 
+### iOS Live Activities
+
+The native app can show the signed-in person's running sessions as one optional
+Live Activity. Foreground updates work without server credentials. Background
+updates are enabled only when all of these environment variables are present:
+
+- `OPENSESSION_APNS_KEY_ID`
+- `OPENSESSION_APNS_TEAM_ID`
+- `OPENSESSION_APNS_PRIVATE_KEY_PATH` (Apple `.p8` ES256 key)
+- `OPENSESSION_APNS_BUNDLE_ID` (optional; defaults to `dev.tella.os1`)
+- `OPENSESSION_APNS_ENV=sandbox` for development builds (production is default)
+
+The iOS App ID and provisioning profile must include Push Notifications. The
+widget extension needs no APNs credential: it renders ActivityKit state supplied
+by the host app and APNs.
+
 ## Compatibility literals
 
 Several old names are protocol or persisted-data compatibility, not instance

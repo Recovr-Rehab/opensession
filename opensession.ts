@@ -17,6 +17,7 @@ import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
+import { startLiveActivitySync } from "./src/server/live-activities";
 import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
 import { makeAskHandler } from "./src/server/asks";
 import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
@@ -528,6 +529,7 @@ if (!g.__opensessionBooted) {
 	const devInstance = isDevInstance();
 	let detachedAdoption: Promise<number> | undefined;
 	if (!localProfile && !devInstance) {
+	startLiveActivitySync();
 	// Detached engine servers (src/server/opencode-detach.ts): opt this — and
 	// only this — process into spawning `opencode serve` in transient systemd
 	// user scopes, so in-flight turns survive a `systemctl restart`. Runner-host

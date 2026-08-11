@@ -4,6 +4,7 @@ import {
 	resumeSessionFeed,
 	sessionFeedSnapshot,
 } from "./session-feed";
+import { onSessionStateChange } from "./session-state-events";
 
 describe("session feed", () => {
 	test("orders active frames and resumes a true gap", () => {
@@ -58,5 +59,20 @@ describe("session feed", () => {
 		const resumed = resumeSessionFeed(sessionId, 0, start.feedEpoch);
 		expect(resumed.frames).toEqual([]);
 		expect(resumed.snapshot.active).toBeNull();
+	});
+
+	test("stream boundaries emit authoritative running transitions", () => {
+		const sessionId = `feed-${crypto.randomUUID()}`;
+		const states: boolean[] = [];
+		const unsubscribe = onSessionStateChange((event) => {
+			if (event.sessionId === sessionId) states.push(event.isRunning);
+		});
+		try {
+			appendSessionFeed(sessionId, { type: "stream_start", sessionId });
+			appendSessionFeed(sessionId, { type: "stream_done", sessionId });
+		} finally {
+			unsubscribe();
+		}
+		expect(states).toEqual([true, false]);
 	});
 });

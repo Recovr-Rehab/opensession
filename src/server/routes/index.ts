@@ -54,6 +54,7 @@ import { handleSearchRoutes } from "./search";
 import { handleSetupRoutes } from "./setup";
 import { handleOs1UpdateRoutes } from "./os1-update";
 import { handleInstanceSettingsRoutes } from "./instance-settings";
+import { handleLiveActivityRoutes } from "./live-activities";
 
 export type { RouteContext, RouteHandler } from "./context";
 
@@ -71,6 +72,7 @@ export const routeHandlers: RouteHandler[] = [
 	handleSlackChannelRoutes,
 	handleSystemRoutes,
 	handleOs1UpdateRoutes,
+	handleLiveActivityRoutes,
 	handleSessionTransferRoutes,
 	// Local profile only: the cloud-target New Session palette reads the hosted
 	// model catalog and account pools instead of the reduced local equivalents.

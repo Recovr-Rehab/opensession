@@ -521,6 +521,100 @@ enum OS1API {
         try await get("/api/auth/status")
     }
 
+    private struct LiveActivityResponse: Decodable, Sendable { let ok: Bool? }
+
+    struct LiveActivityConnection: Equatable, Sendable {
+        let baseURL: URL
+        let token: String
+        let user: String
+
+        static func current() -> LiveActivityConnection? {
+            let config = ServerConfig.shared
+            guard let baseURL = config.baseURL, config.isConfigured else { return nil }
+            return LiveActivityConnection(
+                baseURL: baseURL,
+                token: config.token,
+                user: config.userName
+            )
+        }
+    }
+
+    static func registerLiveActivityDevice(
+        deviceId: String,
+        pushToStartToken: String,
+        connection: LiveActivityConnection
+    ) async throws {
+        let _: LiveActivityResponse = try await liveActivityMutate(
+            "/api/live-activities/device",
+            method: "PUT",
+            body: [
+                "deviceId": deviceId,
+                "pushToStartToken": pushToStartToken,
+                "user": connection.user,
+            ],
+            connection: connection
+        )
+    }
+
+    static func registerLiveActivity(
+        deviceId: String,
+        activityId: String,
+        pushToken: String,
+        connection: LiveActivityConnection
+    ) async throws {
+        let _: LiveActivityResponse = try await liveActivityMutate(
+            "/api/live-activities/activity",
+            method: "PUT",
+            body: [
+                "deviceId": deviceId,
+                "activityId": activityId,
+                "pushToken": pushToken,
+                "user": connection.user,
+            ],
+            connection: connection
+        )
+    }
+
+    static func unregisterLiveActivityDevice(
+        deviceId: String,
+        connection: LiveActivityConnection
+    ) async throws {
+        let encoded = deviceId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? deviceId
+        let _: LiveActivityResponse = try await liveActivityMutate(
+            "/api/live-activities/device/\(encoded)",
+            method: "DELETE",
+            body: ["user": connection.user],
+            connection: connection
+        )
+    }
+
+    private static func liveActivityMutate<T: Decodable & Sendable>(
+        _ path: String,
+        method: String,
+        body: [String: Any],
+        connection: LiveActivityConnection
+    ) async throws -> T {
+        guard let url = URL(string: connection.baseURL.absoluteString + path) else {
+            throw APIError.badURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
+               let message = serverError.error {
+                throw APIError.server(message)
+            }
+            throw APIError.http(http.statusCode)
+        }
+        return try await decodeDetached(T.self, from: data)
+    }
+
     /// Revoke the server-side web session before removing its keychain copy.
     static func logout() async throws {
         struct LogoutResponse: Decodable { let ok: Bool? }

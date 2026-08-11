@@ -4,14 +4,13 @@
 //   node fetch-provisioning-profile.mjs "OS1 Widgets App Store" out.mobileprovision
 //
 // Reads the same App Store Connect API key the TestFlight upload uses
-// (ASC_KEY_ID / ASC_ISSUER_ID / ASC_PRIVATE_KEY), so shipping a new app
-// extension needs no new repository secret: the profile lives in App Store
-// Connect and is fetched at build time. The app target's own profile still
-// comes from a secret — this is the path for everything added since.
+// (ASC_KEY_ID / ASC_ISSUER_ID / ASC_PRIVATE_KEY), so profiles live in App Store
+// Connect and are fetched at build time instead of copied into repository
+// secrets that silently drift behind App ID capabilities.
 //
 // Regenerating a profile that has expired (they last a year, tied to the
-// signing certificate) is a POST /v1/profiles away; see the widget target's
-// comment in project.yml.
+// signing certificate) is a POST /v1/profiles away; release CI fetches both
+// the app and widget profiles so capabilities cannot drift behind a secret.
 import crypto from "node:crypto";
 import fs from "node:fs";
 

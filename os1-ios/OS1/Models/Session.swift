@@ -42,6 +42,8 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var prState: String?
     var prNumber: Int?
     var startedBy: String?
+    var createdBy: String?
+    var createdByLogin: String?
     var automation: AutomationFlag?
     var attachedRepos: [AttachedRepo]?
     /// The requested sandbox provider and materialized sandbox id. This is a

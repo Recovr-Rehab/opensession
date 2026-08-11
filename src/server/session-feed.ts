@@ -1,3 +1,5 @@
+import { emitSessionStateChange } from "./session-state-events";
+
 /**
  * Ordered, bounded feed for the live half of a session.
  *
@@ -162,6 +164,21 @@ export function appendSessionFeed(
 	if (type === "stream_done") {
 		state.active = null;
 		state.landed = [];
+	}
+	const running =
+		type === "stream_start"
+			? true
+			: type === "stream_done"
+				? false
+				: type === "session_status" && typeof event.isRunning === "boolean"
+					? event.isRunning
+					: undefined;
+	if (typeof running === "boolean") {
+		emitSessionStateChange({
+			sessionId,
+			isRunning: running,
+			at: Date.now(),
+		});
 	}
 	return frame;
 }

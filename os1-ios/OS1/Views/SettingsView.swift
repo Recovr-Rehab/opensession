@@ -534,6 +534,9 @@ struct SettingsView: View {
 
     private func signOut() {
         Task {
+            #if os(iOS)
+            await LiveActivityCoordinator.shared.disable()
+            #endif
             try? await OS1API.logout()
             config.token = ""
             token = ""

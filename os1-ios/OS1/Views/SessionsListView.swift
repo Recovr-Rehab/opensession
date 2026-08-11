@@ -75,6 +75,8 @@ struct SessionsListView: View {
     @State private var newSessionRequest: NewSessionRequest?
     /// Parked "Start an Agent" requests (`StartAgentIntent`, widgets, Siri).
     @State private var quickCapture = QuickCapture.shared
+    /// A session tapped in the Live Activity, parked until the list has loaded.
+    @State private var requestedSession = SessionOpenRequest.shared
     /// Opening prompts (and images) of just-created sessions, keyed by id —
     /// seeds the conversation view so it renders instantly instead of waiting
     /// for the server to persist the session.
@@ -239,12 +241,17 @@ struct SessionsListView: View {
             #endif
             .onChange(of: viewModel.hasLoaded) {
                 autoOpenFromEnvironment()
+                openRequestedSession()
             }
             // "Start an Agent" (StartAgentIntent — Action Button, widget,
             // Siri). It can run before this view exists (cold launch) or while
             // it's already on screen, so both entrances read the parked request.
-            .onAppear { openQuickCapture() }
+            .onAppear {
+                openQuickCapture()
+                openRequestedSession()
+            }
             .onChange(of: quickCapture.request?.id) { openQuickCapture() }
+            .onChange(of: requestedSession.request?.id) { openRequestedSession() }
             .alert(
                 "Couldn't start session",
                 isPresented: Binding(
@@ -792,6 +799,11 @@ struct SessionsListView: View {
     private func openQuickCapture() {
         guard let request = quickCapture.take() else { return }
         newSessionRequest = NewSessionRequest(dictate: request.dictate)
+    }
+
+    private func openRequestedSession() {
+        guard viewModel.hasLoaded, let request = requestedSession.take() else { return }
+        _ = openSessionLink(id: request.sessionId)
     }
 
     /// Dev convenience for simulator runs: OS1_OPEN_SESSION=<id> jumps straight

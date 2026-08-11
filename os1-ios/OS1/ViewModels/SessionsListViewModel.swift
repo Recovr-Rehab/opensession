@@ -36,6 +36,9 @@ final class SessionsListViewModel {
     @ObservationIgnored private var serverArchived: [Session] = []
     @ObservationIgnored private var archivedFetchedAt: Date?
     @ObservationIgnored private var archivedFetchInFlight = false
+    #if os(iOS)
+    @ObservationIgnored private var liveActivityConnection: OS1API.LiveActivityConnection?
+    #endif
 
     /// Memoized sidebar rows for the current list — see `sidebarRows`.
     ///
@@ -79,6 +82,9 @@ final class SessionsListViewModel {
         sessions = next
         sidebarRowsCache = rows
         sessionsRevision += 1
+        #if os(iOS)
+        LiveActivityCoordinator.shared.sync(next)
+        #endif
     }
 
     /// Cached rows with one session spliced in as a row of its own, or nil when
@@ -645,9 +651,18 @@ final class SessionsListViewModel {
         // first request instead of after its timeout — the banner is up in
         // milliseconds, and a request that lands clears it.
         if !hasLoaded { diagnoseUnreachableServer() }
+        #if os(iOS)
+        let requestConnection = OS1API.LiveActivityConnection.current()
+        #endif
         do {
             async let workspaceRequest = try? OS1API.workspaces()
             let all = try await OS1API.sessions()
+            #if os(iOS)
+            // A server or account can change while this request is in flight.
+            // Never publish the old account's rows into its replacement.
+            guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
+            let connectionChanged = requestConnection != liveActivityConnection
+            #endif
             // Renames are held back rather than published on arrival: names
             // feed every row's title, so publishing them on their own would
             // strand the grouping cache and leave the next body to rebuild it
@@ -690,18 +705,35 @@ final class SessionsListViewModel {
             // Most 5s polls change nothing — skip the assignment so the whole
             // list doesn't re-diff (grouping, sorting, row rebuilds) for a
             // byte-identical result.
-            if next != sessions || renamed != nil {
+            #if os(iOS)
+            let shouldPublish = next != sessions || renamed != nil || connectionChanged
+            #else
+            let shouldPublish = next != sessions || renamed != nil
+            #endif
+            if shouldPublish {
                 // Group before publishing, not after: the assignment wakes
                 // every observing view, so a grouping that starts afterwards
                 // always loses the race to the body that needs it.
                 let names = renamed ?? workspaceNames
                 let grouped = await Self.groupedOffMain(next, workspaceNames: names)
+                #if os(iOS)
+                guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
+                #endif
                 SessionLinks.register(titles: grouped.titles)
                 if let renamed { workspaceNames = renamed }
+                #if os(iOS)
+                liveActivityConnection = requestConnection
+                #endif
                 setSessions(next, rows: grouped.rows)
             }
+            #if os(iOS)
+            // An authoritative empty first response still matters: without it
+            // the coordinator cannot distinguish "not loaded" from "no runs".
+            if !hasLoaded { LiveActivityCoordinator.shared.sync(next) }
+            #endif
             error = nil
             loadFailure = nil
+            hasLoaded = true
         } catch {
             // Keep showing the last good list; surface the error alongside it.
             let diagnosis = await Reachability.diagnose(error)
@@ -711,7 +743,6 @@ final class SessionsListViewModel {
             self.error = diagnosis.isConnection ? diagnosis.title : diagnosis.detail
             self.loadFailure = diagnosis
         }
-        hasLoaded = true
     }
 
     /// How stale the archived index may get before a poll refetches it. The

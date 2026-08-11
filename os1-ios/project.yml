@@ -19,6 +19,10 @@ targets:
   OS1:
     type: application
     platform: iOS
+    entitlements:
+      path: OS1.entitlements
+      properties:
+        aps-environment: $(APS_ENVIRONMENT)
     sources:
       - OS1
       # mermaid's browser bundle and the offscreen page that drives it. Listed
@@ -54,6 +58,7 @@ targets:
         # Composer dictation. Transcription runs on device where the hardware
         # supports it, but the permission is required either way.
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Turn what you say into text in the message box.
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
         PRODUCT_BUNDLE_IDENTIFIER: dev.tella.os1
         DEVELOPMENT_TEAM: 6GUXT43C8B
         CODE_SIGN_STYLE: Automatic
@@ -62,6 +67,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CURRENT_PROJECT_VERSION: 2
         MARKETING_VERSION: 0.1.0
+        APS_ENVIRONMENT: development
       configs:
         # Release = App Store signing, scoped to the app target only. These
         # used to ride the CI xcodebuild command line, but command-line
@@ -69,9 +75,10 @@ targets:
         # (SwiftStreamingMarkdown and friends) reject provisioning profiles,
         # failing the archive. Debug stays Automatic for local dev.
         Release:
+          APS_ENVIRONMENT: production
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: Apple Distribution
-          PROVISIONING_PROFILE_SPECIFIER: OS1 App Store
+          PROVISIONING_PROFILE_SPECIFIER: OS1 App Store Push
   # Widget extension: the Home Screen / Lock Screen widget and the Control
   # Center control. iOS only — a macOS widget would need its own target, and
   # the Mac app has no Action Button or Control Center to put one in.
@@ -88,6 +95,8 @@ targets:
       # run this intent, and an intent must be compiled into every target that
       # references it.
       - path: OS1/Intents/StartAgentIntent.swift
+      - path: OS1/Intents/OpenSessionIntent.swift
+      - path: OS1/Models/ActiveSessionsActivity.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: NO

@@ -10,6 +10,9 @@ struct NotificationsSettingsView: View {
     @AppStorage("os1.notifications.whenToNotify") private var whenToNotify = "background"
     @AppStorage("os1.notifications.needsInput") private var needsInputAlerts = true
     @AppStorage("os1.notifications.runComplete") private var runCompleteAlerts = true
+    #if os(iOS)
+    @AppStorage(LiveActivityCoordinator.preferenceKey) private var liveActivities = false
+    #endif
 
     var body: some View {
         Form {
@@ -34,6 +37,16 @@ struct NotificationsSettingsView: View {
                 Toggle("Session needs input", isOn: $needsInputAlerts)
                 Toggle("Session run completes", isOn: $runCompleteAlerts)
             }
+
+            #if os(iOS)
+            Section {
+                Toggle("Show active sessions", isOn: $liveActivities)
+            } header: {
+                Text("Live Activities")
+            } footer: {
+                Text(liveActivityFooter)
+            }
+            #endif
         }
         .navigationTitle("Notifications")
         .onChange(of: pushAlerts) { _, enabled in
@@ -44,7 +57,26 @@ struct NotificationsSettingsView: View {
                 }
             }
         }
+        #if os(iOS)
+        .onChange(of: liveActivities) { _, enabled in
+            Task {
+                if enabled {
+                    LiveActivityCoordinator.shared.start()
+                } else {
+                    await LiveActivityCoordinator.shared.disable()
+                }
+            }
+        }
+        #endif
     }
+
+    #if os(iOS)
+    private var liveActivityFooter: String {
+        LiveActivityCoordinator.shared.areActivitiesAvailable
+            ? "Shows your running sessions on the Lock Screen and Dynamic Island. Session titles follow your Lock Screen privacy settings."
+            : "Live Activities are disabled for OS1 in iPhone Settings."
+    }
+    #endif
 }
 
 /// Everything about how you work with a session: the message box, what a

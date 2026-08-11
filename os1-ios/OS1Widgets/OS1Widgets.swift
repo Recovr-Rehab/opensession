@@ -7,15 +7,15 @@ import WidgetKit
 /// Everything here is one gesture: press, and the app opens on the new-session
 /// composer with the mic already listening (`StartAgentIntent`, shared with the
 /// app target — the same intent Siri, Spotlight and the Action Button run).
-/// Nothing in this extension talks to the server or reads app state: it holds
-/// no token and shares no container with the app, so a widget can never show
-/// stale session data or fail because the phone is offline. It is a door, not
-/// a dashboard.
+/// The static widgets never talk to the server or hold a token. The Live
+/// Activity below receives its bounded state from ActivityKit, through the host
+/// app or APNs, and likewise performs no network access itself.
 @main
 struct OS1Widgets: WidgetBundle {
     var body: some Widget {
         StartAgentWidget()
         StartAgentControl()
+        ActiveSessionsLiveActivity()
     }
 }
 

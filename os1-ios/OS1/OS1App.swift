@@ -56,6 +56,9 @@ struct RootView: View {
     @State private var config = ServerConfig.shared
     @State private var showedInitialSettings = false
     @State private var showSettings = false
+    #if os(iOS)
+    @AppStorage(LiveActivityCoordinator.preferenceKey) private var liveActivitiesEnabled = false
+    #endif
 
     var body: some View {
         SessionsListView()
@@ -119,6 +122,15 @@ struct RootView: View {
                     GitHubSignIn.shared.nudge()
                 }
             }
+            #if os(iOS)
+            .task(id: liveActivityTaskID) {
+                if liveActivitiesEnabled {
+                    LiveActivityCoordinator.shared.start()
+                } else {
+                    await LiveActivityCoordinator.shared.disable()
+                }
+            }
+            #endif
             #if os(macOS)
             .frame(minWidth: 520, minHeight: 560)
             #endif
@@ -135,4 +147,10 @@ struct RootView: View {
     private var preferenceHydrationID: String {
         "\(scenePhase)|\(config.baseURLString)|\(config.userName)|\(config.githubLogin)|\(config.token.hashValue)"
     }
+
+    #if os(iOS)
+    private var liveActivityTaskID: String {
+        "\(liveActivitiesEnabled)|\(preferenceHydrationID)"
+    }
+    #endif
 }
