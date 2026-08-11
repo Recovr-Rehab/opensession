@@ -73,6 +73,17 @@ export interface PreviewService {
   previewUrl?: string | null;
 }
 
+export interface PreviewPortalRecipe {
+  /** Human-facing service name shown in the Portals panel. */
+  name: string;
+  /** Optional one-line explanation supplied by the repository. */
+  description?: string;
+  /** User-invocable skill the session agent should use to start it. */
+  skill: string;
+  /** .ports.conf key expected to become live after the skill runs. */
+  serviceKey?: string;
+}
+
 export interface PreviewStatus {
   hasPortsConf: boolean;
   /** WEBAPP_PORT, or null if the worktree has no .ports.conf yet. */
@@ -88,6 +99,45 @@ export interface PreviewStatus {
    *  False = the Start button can't do anything; the UI shows what to add. */
   bootable: boolean;
   services: PreviewService[];
+  /** Declarative, skill-backed starters from .agents/preview.json. */
+  portalRecipes: PreviewPortalRecipe[];
+}
+
+/** Parse the safe, declarative Portal subset of .agents/preview.json. */
+export function parsePreviewPortalRecipes(raw: string | null): PreviewPortalRecipe[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as { portals?: unknown };
+    if (!Array.isArray(parsed.portals)) return [];
+    return parsed.portals.slice(0, 12).flatMap((value): PreviewPortalRecipe[] => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+      const item = value as Record<string, unknown>;
+      const name = typeof item.name === "string" ? item.name.trim() : "";
+      const skill = typeof item.skill === "string" ? item.skill.trim() : "";
+      if (!name || name.length > 80 || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(skill)) return [];
+      const description =
+        typeof item.description === "string" && item.description.trim().length <= 240
+          ? item.description.trim()
+          : undefined;
+      const serviceKey =
+        typeof item.serviceKey === "string" && /^[A-Z][A-Z0-9_]*_PORT$/.test(item.serviceKey)
+          ? item.serviceKey
+          : undefined;
+      return [{ name, skill, ...(description ? { description } : {}), ...(serviceKey ? { serviceKey } : {}) }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function hostPreviewPortalRecipes(worktreeDir: string): PreviewPortalRecipe[] {
+  try {
+    return parsePreviewPortalRecipes(
+      readFileSync(join(worktreeDir, LIFECYCLE_DIR, "preview.json"), "utf8"),
+    );
+  } catch {
+    return [];
+  }
 }
 
 /** Absolute instance preview-command directories that sandbox providers need
@@ -201,12 +251,16 @@ const warnedMissingPreviewCommand = new Set<string>();
 const gStart = globalThis as unknown as {
   __previewStarting?: Map<string, number>;
   __previewStartPgids?: Map<string, number>;
+  __sandboxPreviewAwsRefresh?: Map<string, number>;
 };
 const starting: Map<string, number> = (gStart.__previewStarting ??= new Map());
 // worktreeDir -> process group of the in-flight bring-up (see startPreview's
 // setsid). Lets stopPreview cancel a start whose services aren't listening yet.
 const startPgids: Map<string, number> = (gStart.__previewStartPgids ??= new Map());
+const sandboxAwsRefresh: Map<string, number> =
+  (gStart.__sandboxPreviewAwsRefresh ??= new Map());
 const START_TTL_MS = 5 * 60_000;
+const SANDBOX_AWS_REFRESH_MS = 10 * 60_000;
 
 function isStarting(worktreeDir: string): boolean {
   const t = starting.get(worktreeDir);
@@ -507,6 +561,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
           pids: [],
         },
       ],
+      portalRecipes: hostPreviewPortalRecipes(worktreeDir),
     };
   }
   const ports = readPorts(worktreeDir);
@@ -570,6 +625,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
       !!webapp?.running ||
       (await resolvePreviewBoot(worktreeDir, repoForPath(worktreeDir), hostExists)) != null,
     services,
+    portalRecipes: hostPreviewPortalRecipes(worktreeDir),
   };
 }
 
@@ -944,6 +1000,93 @@ function assertSafePath(p: string): string {
   return p;
 }
 
+const SANDBOX_PREVIEW_AWS_DIR = "/tmp/opensession-preview-aws";
+
+/**
+ * Write the short-lived AWS scope to a sandbox-local shared credentials file.
+ * Some repositories export AWS_PROFILE in direnv; AWS SDK v3 then ignores
+ * otherwise-valid AWS_ACCESS_KEY_ID variables unless that named profile exists.
+ *
+ * Secrets are passed only through Sandbox.exec's env seam. The command text is
+ * static, so provider logs and process listings never receive credential values.
+ */
+export async function writeSandboxPreviewAwsCredentials(
+  sandbox: Sandbox,
+  awsEnv: Record<string, string>,
+  profile?: string,
+): Promise<Record<string, string>> {
+  if (!awsEnv.AWS_ACCESS_KEY_ID || !awsEnv.AWS_SECRET_ACCESS_KEY) return awsEnv;
+  const safeProfile = profile && /^[A-Za-z0-9_+=,.@-]+$/.test(profile) ? profile : "";
+  const credentialsFile = `${SANDBOX_PREVIEW_AWS_DIR}/credentials`;
+  const configFile = `${SANDBOX_PREVIEW_AWS_DIR}/config`;
+  const script = `set -eu
+umask 077
+mkdir -p ${SANDBOX_PREVIEW_AWS_DIR}
+profile="$OPENSESSION_AWS_PROFILE"
+write_section() {
+  printf 'aws_access_key_id = %s\n' "$AWS_ACCESS_KEY_ID"
+  printf 'aws_secret_access_key = %s\n' "$AWS_SECRET_ACCESS_KEY"
+  if [ -n "\${AWS_SESSION_TOKEN:-}" ]; then
+    printf 'aws_session_token = %s\n' "$AWS_SESSION_TOKEN"
+  fi
+}
+{
+  printf '[default]\n'
+  write_section
+  if [ -n "$profile" ] && [ "$profile" != default ]; then
+    printf '\n[%s]\n' "$profile"
+    write_section
+  fi
+} > ${credentialsFile}
+{
+  printf '[default]\nregion = %s\n' "$AWS_REGION"
+  if [ -n "$profile" ] && [ "$profile" != default ]; then
+    printf '\n[profile %s]\nregion = %s\n' "$profile" "$AWS_REGION"
+  fi
+} > ${configFile}
+chmod 600 ${credentialsFile} ${configFile}`;
+  const env = {
+    ...awsEnv,
+    AWS_REGION: awsEnv.AWS_REGION || awsEnv.AWS_DEFAULT_REGION || "us-east-1",
+    OPENSESSION_AWS_PROFILE: safeProfile,
+  };
+  const result = await sandbox.exec(["sh", "-c", script], { env });
+  if (result.exitCode !== 0) {
+    console.warn(
+      `[preview] ${sandbox.id}: could not write sandbox AWS profile: ${result.stderr.trim().slice(0, 200)}`,
+    );
+    return awsEnv;
+  }
+  return {
+    ...awsEnv,
+    AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
+    AWS_CONFIG_FILE: configFile,
+  };
+}
+
+async function sandboxPreviewAwsEnv(
+  sandbox: Sandbox,
+  worktreeDir: string,
+  force = false,
+): Promise<Record<string, string>> {
+  const now = Date.now();
+  const previous = sandboxAwsRefresh.get(sandbox.id) ?? 0;
+  const awsEnv = await getAgentAwsEnv();
+  const pointers = {
+    ...awsEnv,
+    AWS_SHARED_CREDENTIALS_FILE: `${SANDBOX_PREVIEW_AWS_DIR}/credentials`,
+    AWS_CONFIG_FILE: `${SANDBOX_PREVIEW_AWS_DIR}/config`,
+  };
+  if (!force && now - previous < SANDBOX_AWS_REFRESH_MS) return pointers;
+  const env = await writeSandboxPreviewAwsCredentials(
+    sandbox,
+    awsEnv,
+    repoForPath(worktreeDir).previewAwsProfile,
+  );
+  if (env.AWS_SHARED_CREDENTIALS_FILE) sandboxAwsRefresh.set(sandbox.id, now);
+  return env;
+}
+
 /** True when a TCP connect to 127.0.0.1:<port> succeeds INSIDE the sandbox. */
 async function sandboxPortListening(sandbox: Sandbox, port: number): Promise<boolean> {
   const r = await sandbox.exec([
@@ -960,8 +1103,14 @@ export async function getSandboxPreviewStatus(
   // way for volume-mode workspaces (no host copy).
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
+  const previewManifest = await sandbox.exec(["cat", `${LIFECYCLE_DIR}/preview.json`]);
+  const portalRecipes = parsePreviewPortalRecipes(
+    previewManifest.exitCode === 0 ? previewManifest.stdout : null,
+  );
   const services: PreviewService[] = [];
-  const portMap = await sandbox.ports();
+  // Remote providers can publish a port on demand. Docker/microVM providers
+  // may ignore this hint when their mappings are fixed at sandbox creation.
+  const portMap = await sandbox.ports(ports.map((service) => service.port));
   const host = await previewHost();
   for (const { key, port } of ports) {
     const running = await sandboxPortListening(sandbox, port);
@@ -1017,6 +1166,15 @@ export async function getSandboxPreviewStatus(
     starting.delete(worktreeDir);
   }
 
+  // Shared-file credentials rotate under long-running preview processes. This
+  // also repairs portals started before profile vending existed as soon as a
+  // status poll rediscovers them.
+  if (services.some((service) => service.running)) {
+    await sandboxPreviewAwsEnv(sandbox, worktreeDir).catch((error) =>
+      console.warn(`[preview] ${sandbox.id}: AWS profile refresh failed:`, error),
+    );
+  }
+
   return {
     hasPortsConf: ports.length > 0,
     webappPort: webapp?.port ?? null,
@@ -1028,6 +1186,7 @@ export async function getSandboxPreviewStatus(
       (await resolvePreviewBoot(worktreeDir, repoForPath(worktreeDir), sandboxExists(sandbox))) !=
         null,
     services,
+    portalRecipes,
   };
 }
 
@@ -1201,7 +1360,7 @@ export async function startSandboxPreview(
   // Pass the host's short-lived AWS scope as process env so repo setup/start
   // scripts can fetch private build artifacts. It is never written to the
   // workspace or reusable provider snapshot.
-  const awsEnv = await getAgentAwsEnv();
+  const awsEnv = await sandboxPreviewAwsEnv(sandbox, worktreeDir, true);
   const r = await sandbox.exec([
     "sh", "-c",
     `mkdir -p .ports && nohup setsid env HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PREVIEW_PATH)} ` +
@@ -1225,6 +1384,7 @@ export async function stopSandboxPreview(
   worktreeDir: string,
 ): Promise<PreviewStatus> {
   starting.delete(worktreeDir);
+  sandboxAwsRefresh.delete(sandbox.id);
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
   for (const service of ports) {
@@ -1237,7 +1397,11 @@ export async function stopSandboxPreview(
   ]);
   await sandbox.exec(["pkill", "-f", "next dev"]);
   await sandbox.exec(["pkill", "-f", ".agents/start.sh"]);
-  await sandbox.exec(["sh", "-c", "rm -f .ports/dev-pgid .tunnels.env"]);
+  await sandbox.exec([
+    "sh",
+    "-c",
+    `rm -f .ports/dev-pgid .tunnels.env ${SANDBOX_PREVIEW_AWS_DIR}/credentials ${SANDBOX_PREVIEW_AWS_DIR}/config`,
+  ]);
   return getSandboxPreviewStatus(sandbox, worktreeDir);
 }
 

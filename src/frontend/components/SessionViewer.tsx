@@ -122,6 +122,9 @@ import type { NewSessionPrefill } from "../lib/new-session-link";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { PreviewButton } from "./PreviewButton";
 import { PreviewPane } from "./PreviewPane";
+import { PortalPane } from "./PortalPane";
+import { PortalsPanel } from "./PortalsPanel";
+import type { PortalTarget } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceInfo } from "./WorkspaceInfo";
 import { WorkspacePeek } from "./WorkspacePeek";
@@ -427,6 +430,12 @@ interface Props {
 	onOpenPr?: (repo: string, branch: string) => void;
 	/** Close the Preview view-tab (its Stop button / tab close). */
 	onClosePreviewTab?: () => void;
+	/** Foregrounded browser pane for a service selected in Portals. */
+	showPortal?: boolean;
+	/** The service currently loaded in the center-panel browser. */
+	portalTarget?: PortalTarget | null;
+	/** Open a running service in the center-panel browser. */
+	onOpenPortal?: (target: PortalTarget) => void;
 	/** Return from a view-tab (Review/Preview environment/Assets) to this workspace's active session. */
 	onOpenWorkspace?: () => void;
 	/**
@@ -491,7 +500,8 @@ type PanelTab =
 	| "pr"
 	| "workflows"
 	| "assets"
-	| "reports";
+	| "reports"
+	| "portals";
 
 const archiveShortcutLabel = isChromium
 	? isApple
@@ -729,6 +739,9 @@ export function SessionViewer({
 	onOpenPreviewTab,
 	onOpenPr,
 	onClosePreviewTab,
+	showPortal = false,
+	portalTarget = null,
+	onOpenPortal,
 	onOpenAssets,
 	onCloseAssets,
 	onOpenWorkspace,
@@ -916,6 +929,7 @@ export function SessionViewer({
 		showStaging ||
 		showAssets ||
 		showPreviewTab ||
+		(showPortal && !!portalTarget) ||
 		subagentOpen ||
 		(showConversation && !!conversationThreadId) ||
 		(showVideo && !!videoPanel);
@@ -4043,9 +4057,15 @@ export function SessionViewer({
 	const [previewStatus, setPreviewStatus] = useState<PreviewStatus | null>(null);
 	useEffect(() => setPreviewStatus(null), [session.id]);
 	// The header preview control used to keep this status warm. Now that the
-	// launcher lives in the overflow menu, poll only while its view tab is open.
+	// launcher lives in the overflow menu. Keep status warm while Preview, the
+	// portal browser, or the Portals sidebar is visible; status requests also
+	// renew the authenticated Caddy routes for remote sandbox services.
 	useEffect(() => {
-		if (!showPreviewTab || !session.worktreeDir) return;
+		if (
+			(!showPreviewTab && !showPortal && panelTab !== "portals") ||
+			!session.worktreeDir
+		)
+			return;
 		let alive = true;
 		const load = () =>
 			fetchPreview(session.id)
@@ -4059,7 +4079,7 @@ export function SessionViewer({
 			alive = false;
 			stop();
 		};
-	}, [showPreviewTab, session.id, session.worktreeDir]);
+	}, [showPreviewTab, showPortal, panelTab, session.id, session.worktreeDir]);
 
 	// ⌘O opens the PR's preview environment (the Vercel preview StagingLink's globe
 	// points at); ⌘G opens its GitHub PR. Chords without a target (no staging
@@ -5079,7 +5099,11 @@ export function SessionViewer({
 
 			<div className="flex min-h-0 flex-1">
 				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]">
-					{showPreviewTab ? (
+					{showPortal && portalTarget ? (
+						<div className={VIEWER_REVIEW_MAIN}>
+							<PortalPane target={portalTarget} />
+						</div>
+					) : showPreviewTab ? (
 						<div className={VIEWER_REVIEW_MAIN}>
 							<PreviewPane
 								session={session}
@@ -5800,6 +5824,24 @@ export function SessionViewer({
 									>
 										Terminal
 									</button>
+									<button
+										className={panelTabClass(panelTab === "portals")}
+										onClick={() => selectPanelTab("portals")}
+										title="Services exposed by this session"
+									>
+										Portals
+										{previewStatus?.services.filter(
+											(service) => service.running && service.previewUrl,
+										).length ? (
+											<span className={panelTabCountClass(panelTab === "portals")}>
+												{
+													previewStatus.services.filter(
+														(service) => service.running && service.previewUrl,
+													).length
+												}
+											</span>
+										) : null}
+									</button>
 								</>
 							)}
 							{/* Shown whenever the session CAN run workflows (it needs a
@@ -5886,6 +5928,25 @@ export function SessionViewer({
 										liveMedia={liveOverviewMedia}
 									/>
 								</div>
+							) : panelTab === "portals" ? (
+								<PortalsPanel
+									sessionId={session.id}
+									status={previewStatus}
+									activePortal={portalTarget}
+									onOpenPortal={onOpenPortal}
+									onStartPortal={(recipe) =>
+										send({
+											type: "prompt",
+											sessionId: session.id,
+											user: getCurrentUser(),
+											content:
+												`Use the $${recipe.skill} skill to start the “${recipe.name}” portal for this session. ` +
+												(recipe.serviceKey
+													? `Make sure it listens on the ${recipe.serviceKey} port declared in .ports.conf, then report when it is ready.`
+													: "Expose its listening port in .ports.conf with a descriptive *_PORT key, then report when it is ready."),
+										})
+									}
+								/>
 							) : panelTab === "workflows" ? (
 								// Before the Plain fallthrough: a Plain-only session's
 								// Agents tab must win over its default timeline panel.

@@ -122,13 +122,29 @@ boot, so the first human or agent visit is fast:
 
 ```json
 {
-  "warmRoutes": ["/", "/dashboard", "/api/session"]
+  "warmRoutes": ["/", "/dashboard", "/api/session"],
+  "portals": [
+    {
+      "name": "Local webapp",
+      "description": "Authenticated app and its local dependencies",
+      "skill": "app-local",
+      "serviceKey": "WEBAPP_PORT"
+    }
+  ]
 }
 ```
 
 Keep it to the handful of routes people actually open first from a preview.
 Precedence: explicit instance Settings → the repo's committed
 `.agents/preview.json` → built-in defaults.
+
+`portals` is optional. It adds repository-recommended starters to the session's
+Portals tab. The UI never runs a repository-provided command: clicking **Ask
+agent to start** sends a fixed prompt naming the validated user-invocable skill.
+`serviceKey` connects the recipe to a `*_PORT` entry in `.ports.conf`; once that
+service is listening, the same card opens its authenticated Portal. Repositories
+can also expose ad-hoc services at runtime by appending a descriptive `*_PORT`
+entry to `.ports.conf` and listening on that port.
 
 ## environment.json — private workspace files
 

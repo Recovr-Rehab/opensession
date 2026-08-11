@@ -29,6 +29,13 @@ server has rediscovered that exact port, preventing a stale upstream from being
 reused as somebody else's Portal. Stopping a dev server removes every service
 route, not only the webapp route.
 
+Sessions may expose an ad-hoc service by adding a descriptive `*_PORT` entry to
+`.ports.conf` and listening on that port. Remote providers with dynamic tunnel
+APIs (Daytona, E2B, and Box) publish that port on the next status poll. Providers
+whose network mappings are fixed at sandbox creation can expose only their
+configured preview-port range; the service still appears, marked unavailable,
+instead of silently receiving an unreachable URL.
+
 The Preview button is the primary webapp Portal; the service menu is the
 multi-port surface. `.agents/start.sh` receives `WEBAPP_PORT`, `PREVIEW_URL`
 and `OPENSESSION_BOOT_MODE`, while `.tunnels.env` exposes the generated Portal

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { portalRouteAuthorized, previewServerConfig } from "./preview";
+import {
+	portalRouteAuthorized,
+	previewServerConfig,
+	writeSandboxPreviewAwsCredentials,
+} from "./preview";
+import type { Sandbox } from "./sandbox/provider";
 
 describe("permission-coupled preview portals", () => {
 	test("fails closed when Caddy retained a route the restarted server has not rediscovered", () => {
@@ -67,5 +72,39 @@ describe("permission-coupled preview portals", () => {
 		expect(proxy.rewrite).toEqual({
 			uri: "?{http.request.uri.query}&_token=private-token",
 		});
+	});
+
+	test("vends named AWS profiles without putting secrets in the command", async () => {
+		const calls: Array<{
+			cmd: string[];
+			env?: Record<string, string>;
+		}> = [];
+		const sandbox = {
+			id: "sandbox-test",
+			exec: async (cmd: string[], opts?: { env?: Record<string, string> }) => {
+				calls.push({ cmd, env: opts?.env });
+				return { exitCode: 0, stdout: "", stderr: "" };
+			},
+		} as unknown as Sandbox;
+		const secret = "secret-that-must-not-reach-command-text";
+		const env = await writeSandboxPreviewAwsCredentials(
+			sandbox,
+			{
+				AWS_ACCESS_KEY_ID: "test-key",
+				AWS_SECRET_ACCESS_KEY: secret,
+				AWS_SESSION_TOKEN: "test-token",
+				AWS_REGION: "us-east-2",
+			},
+			"tella-dev",
+		);
+
+		expect(calls).toHaveLength(1);
+		expect(calls[0].cmd.join(" ")).not.toContain(secret);
+		expect(calls[0].env?.AWS_SECRET_ACCESS_KEY).toBe(secret);
+		expect(calls[0].env?.OPENSESSION_AWS_PROFILE).toBe("tella-dev");
+		expect(env.AWS_SHARED_CREDENTIALS_FILE).toBe(
+			"/tmp/opensession-preview-aws/credentials",
+		);
+		expect(env.AWS_CONFIG_FILE).toBe("/tmp/opensession-preview-aws/config");
 	});
 });

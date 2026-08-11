@@ -11,6 +11,9 @@ const VIEW_TABS = [
 	"staging",
 	"assets",
 	"preview",
+	// A portal target only lives in memory, so this center-panel browser is
+	// transient for the same reason as a sub-agent drill-in.
+	"portal",
 	// A sub-agent drill-in opened from a session's transcript. Transient: its
 	// breadcrumb stack only lives in memory, so this one is never persisted
 	// (saveActiveViewTab drops it) — a reload would restore an empty tab.
@@ -49,7 +52,7 @@ export function saveActiveViewTab(
 	if (!workspaceId) return;
 	// Sub-agent tabs are transient — leave the workspace's remembered pane
 	// alone rather than restoring a tab whose stack is gone.
-	if (tab === "subagent") return;
+	if (tab === "subagent" || tab === "portal") return;
 	const map = read();
 	map[workspaceId] = tab;
 	try {
