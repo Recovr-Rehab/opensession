@@ -20,7 +20,7 @@ import {
 	recordSessionPerf,
 } from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
-import { newQuote, withQuotes, type Quote } from "../lib/quotes";
+import { withQuotes, type Quote } from "../lib/quotes";
 import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
@@ -2918,14 +2918,19 @@ export function SessionViewer({
 	// digest of each. One-shot: cleared once a send consumes them.
 	const [contextSessions, setContextSessions] = useState<string[]>([]);
 
-	// Passages quoted out of the transcript ("Add to chat" on a text selection).
-	// They ride along with the next message as markdown blockquotes and clear
-	// once a send consumes them — see lib/quotes.ts.
-	const [quotes, setQuotes] = useState<Quote[]>([]);
+	// The transcript selection that rides along with the next message. A new
+	// selection replaces it immediately and stays highlighted while you type.
+	const [quote, setQuote] = useState<Quote | null>(null);
+	const clearQuote = useCallback(() => setQuote(null), []);
 	// Switching sessions drops staged selections: they quote THAT transcript.
 	useEffect(() => {
-		setQuotes([]);
+		setQuote(null);
 	}, [session.id]);
+	// Full-width view tabs unmount the transcript and its visible highlight. Do
+	// not leave that context invisibly attached when the conversation returns.
+	useEffect(() => {
+		if (sessionHidden) setQuote(null);
+	}, [sessionHidden]);
 	const [showAllContextSessions, setShowAllContextSessions] = useState(false);
 	const contextSessionOptions = useMemo(() => {
 		// Whole workspace, archived sessions included — the common case is exactly a
@@ -2998,7 +3003,7 @@ export function SessionViewer({
 		const typed = raw.trim();
 		// Quoted transcript selections lead the message as blockquotes, so the
 		// agent — and the sender's own bubble — carry what was being pointed at.
-		const text = withQuotes(quotes, typed);
+		const text = withQuotes(quote ? [quote] : [], typed);
 		const imgs = images;
 		const fls = files;
 		if (!typed && imgs.length === 0 && fls.length === 0) return false;
@@ -3025,7 +3030,7 @@ export function SessionViewer({
 			setForkFrom(null);
 			setImages([]);
 			setFiles([]);
-			setQuotes([]);
+			setQuote(null);
 			return true;
 		}
 
@@ -3124,7 +3129,7 @@ export function SessionViewer({
 		scrollToLatest("auto");
 		setImages([]);
 		setFiles([]);
-		setQuotes([]);
+		setQuote(null);
 		setContextSessions([]);
 		measureSessionPerf("send_handler_ms", sendStartedAt);
 		return true;
@@ -3550,6 +3555,12 @@ export function SessionViewer({
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
+	const focusComposerAfterQuote = useCallback(() => {
+		if (!isPhone)
+			queueMicrotask(() =>
+				composerRef.current?.focus({ preventScroll: true }),
+			);
+	}, [isPhone]);
 
 	// Run-status flap above the composer (ComposerAgents): the tappable
 	// pill → mini-card → full-panel progression, reusing the queue flap's
@@ -5095,15 +5106,15 @@ export function SessionViewer({
 					) : (
 					<>
 					<div className={VIEWER_MESSAGES_REGION}>
-						{/* Select any transcript text -> "Add to chat" -> it becomes a
-						    "Selected text" chip on the composer. */}
+						{/* Selecting transcript text immediately makes it context for the
+						    next message and keeps the passage visibly highlighted. */}
 						<QuoteSelection
 							containerRef={messagesRef}
 							disabled={!connected || noEngine}
-							onQuote={(text) => {
-								setQuotes((q) => [...q, newQuote(text)]);
-								if (!isPhone) composerRef.current?.focus();
-							}}
+							quote={quote}
+							onQuote={setQuote}
+							onClear={clearQuote}
+							onCaptured={focusComposerAfterQuote}
 						/>
 						<div
 							className={cn(
@@ -5414,18 +5425,14 @@ export function SessionViewer({
 									onImagesChange={setImages}
 									files={files}
 									onFilesChange={setFiles}
-									quotes={quotes}
-									onQuotesChange={setQuotes}
 									placeholder={
 										!connected
 											? "Not connected"
 											: forkFrom
 												? "New direction…"
-												: quotes.length > 0
-													? "Chat with selected text"
-													: isBusy
-														? "Queue for when it finishes…"
-														: isAsk
+												: isBusy
+													? "Queue for when it finishes…"
+													: isAsk
 															? `Ask ${AGENT_NAME} — read-only…`
 															: `Ask ${AGENT_NAME}…`
 									}
@@ -5516,9 +5523,12 @@ export function SessionViewer({
 											? ({ text, disabled, onScheduled }) => (
 													<SchedulePromptButton
 														sessionId={session.id}
-														text={text}
+														text={withQuotes(quote ? [quote] : [], text)}
 														disabled={disabled}
-														onScheduled={onScheduled}
+														onScheduled={() => {
+															clearQuote();
+															onScheduled();
+														}}
 														variant="menu-item"
 													/>
 												)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { quotePreview, withQuotes, type Quote } from "./quotes";
+import { withQuotes, type Quote } from "./quotes";
 
 const q = (id: string, text: string): Quote => ({ id, text });
 
@@ -28,15 +28,5 @@ describe("withQuotes", () => {
 
 	it("sends the passages alone when nothing was typed", () => {
 		expect(withQuotes([q("a", "one")], "   ")).toBe("> one");
-	});
-});
-
-describe("quotePreview", () => {
-	it("collapses whitespace", () => {
-		expect(quotePreview("a\n  b\tc")).toBe("a b c");
-	});
-
-	it("clips long passages", () => {
-		expect(quotePreview("x".repeat(50), 10)).toBe(`${"x".repeat(9)}…`);
 	});
 });

@@ -636,23 +636,6 @@ export function IconMessage(p: IconProps) {
   );
 }
 
-/** Quotation marks — a passage lifted out of the transcript and carried into
- *  the composer as context. */
-export function IconQuote(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path
-        {...stroke}
-        d="M9.75 6.75C7.05 7.75 5.75 9.75 5.75 12.75H9.25V17.25H4.75V12.75"
-      />
-      <path
-        {...stroke}
-        d="M19.25 6.75C16.55 7.75 15.25 9.75 15.25 12.75H18.75V17.25H14.25V12.75"
-      />
-    </Svg>
-  );
-}
-
 export function IconMessageQuestion(p: IconProps) {
   return (
     <Svg {...p}>
