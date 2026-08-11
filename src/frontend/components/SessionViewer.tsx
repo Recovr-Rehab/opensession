@@ -3951,7 +3951,7 @@ export function SessionViewer({
 					role="status"
 					aria-live="polite"
 				>
-					<div className="flex flex-col items-center gap-[14px] rounded-xl border border-line bg-panel px-8 py-[26px] shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
+					<div className="flex flex-col items-center gap-[14px] rounded-xl border border-line bg-panel px-8 py-[26px] smooth-shadow-lg">
 						{/* `rounded-full` rather than `rounded-[50%]`: base.css grants the
 						    squircle to every `rounded-*` class EXCEPT `rounded-full`, and
 						    this ring was a bare `border-radius: 50%` with no corner-shape.
