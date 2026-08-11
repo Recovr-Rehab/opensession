@@ -313,9 +313,6 @@ export function AppearancePanel() {
 						/>
 					))}
 				</div>
-				<div className="mt-3 text-meta text-faint">
-					{getAccentThemeOption(accent).label}, on this browser.
-				</div>
 			</SettingsSection>
 
 			<SettingsGroupLabel>
