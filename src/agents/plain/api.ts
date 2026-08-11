@@ -1,7 +1,7 @@
 /**
  * Plain and Linear API helpers for the Plain agent.
  */
-import { PlainClient } from "@team-plain/typescript-sdk";
+import { AttachmentType, PlainClient } from "@team-plain/typescript-sdk";
 import { loadTokens, getValidToken } from "../linear/oauth";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import { configuredIntegration } from "../../server/config";
@@ -11,12 +11,56 @@ const LINEAR_API_KEY = process.env.LINEAR_API_KEY || "";
 
 export const plain = new PlainClient({ apiKey: PLAIN_API_KEY });
 
+/** Upload one file to Plain and return the attachment id accepted by reply/note mutations. */
+export async function uploadPlainAttachment(
+  customerId: string,
+  fileName: string,
+  bytes: Uint8Array,
+  mimeType: string,
+  kind: "email" | "chat" | "note" | "slack" | "ms-teams" | "discord" | "custom",
+): Promise<string> {
+  const attachmentType = {
+    email: AttachmentType.Email,
+    chat: AttachmentType.Chat,
+    note: AttachmentType.Note,
+    slack: AttachmentType.Slack,
+    "ms-teams": AttachmentType.MsTeams,
+    discord: AttachmentType.Discord,
+    custom: AttachmentType.CustomTimelineEntry,
+  }[kind];
+  const prepared = await plain.createAttachmentUploadUrl({
+    customerId,
+    fileName,
+    fileSizeBytes: bytes.byteLength,
+    attachmentType,
+  });
+  if (prepared.error || !prepared.data) {
+    throw new Error(prepared.error?.message || "Plain rejected the attachment");
+  }
+
+  const form = new FormData();
+  for (const field of prepared.data.uploadFormData) {
+    form.append(field.key, field.value);
+  }
+  form.append("file", new Blob([Uint8Array.from(bytes).buffer], { type: mimeType }), fileName);
+  const uploaded = await fetchWithTimeout(
+    prepared.data.uploadFormUrl,
+    { method: "POST", body: form },
+    60_000,
+  );
+  if (!uploaded.ok) {
+    throw new Error(`Plain attachment upload failed (${uploaded.status})`);
+  }
+  return prepared.data.attachment.id;
+}
+
 /** Get thread with full timeline entries */
 export async function getThreadWithMessages(threadId: string): Promise<any> {
   const query = `
     query GetThreadWithMessages($threadId: ID!) {
       thread(threadId: $threadId) {
         id
+        channel
         title
         description
         status
@@ -111,6 +155,9 @@ export async function getThreadWithMessages(threadId: string): Promise<any> {
                   noteId
                   noteText: text
                   markdown
+                  attachments {
+                    ...AttachmentParts
+                  }
                 }
                 ... on EmailEntry {
                   emailId
@@ -562,7 +609,8 @@ export async function postNote(
   threadId: string,
   customerId: string,
   text: string,
-  markdown?: string
+  markdown?: string,
+  attachmentIds: string[] = [],
 ): Promise<boolean> {
   try {
     const result = await plain.createNote({
@@ -570,6 +618,7 @@ export async function postNote(
       customerId,
       text,
       markdown: markdown || text,
+      ...(attachmentIds.length ? { attachmentIds } : {}),
     });
 
     if (result.error) {
@@ -603,7 +652,8 @@ export async function sendCustomerReply(
   /** Per-user Plain OAuth token — the reply is then attributed to that
    *  person instead of the workspace machine user. Auth failures fall back
    *  to the system key so the customer still gets the reply. */
-  userToken?: string
+  userToken?: string,
+  attachmentIds: string[] = [],
 ): Promise<{ ok: boolean; sentAs: "user" | "system" }> {
   const cleanText = cleanDraftText(text);
   if (userToken) {
@@ -612,6 +662,7 @@ export async function sendCustomerReply(
       const result = await asUser.replyToThread({
         threadId,
         textContent: cleanText,
+        ...(attachmentIds.length ? { attachmentIds } : {}),
       });
       if (!result.error) {
         console.log(
@@ -634,6 +685,7 @@ export async function sendCustomerReply(
     const result = await plain.replyToThread({
       threadId,
       textContent: cleanText,
+      ...(attachmentIds.length ? { attachmentIds } : {}),
     });
 
     if (result.error) {

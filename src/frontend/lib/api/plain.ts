@@ -1,4 +1,4 @@
-import { request } from "./request";
+import { BASE, request } from "./request";
 import type {
 	PlainThread,
 	PlainWorkspaceUser,
@@ -42,11 +42,52 @@ export async function sendPlainReplyApi(
 	text: string,
 	kind: "reply" | "note",
 	user: string,
+	attachmentIds: string[] = [],
 ): Promise<void> {
 	await request<{ ok: boolean }>(
 		`/plain/threads/${encodeURIComponent(threadId)}/reply`,
-		{ method: "POST", body: { text, kind, user }, label: "Failed to send" },
+		{
+			method: "POST",
+			body: { text, kind, user, attachmentIds },
+			label: "Failed to send",
+		},
 	);
+}
+
+export const PLAIN_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
+export const PLAIN_REPLY_ATTACHMENT_MAX_BYTES = 6 * 1024 * 1024;
+export const PLAIN_NOTE_ATTACHMENTS_MAX_BYTES = 50 * 1024 * 1024;
+export const PLAIN_ATTACHMENTS_MAX_COUNT = 20;
+
+/** Upload a file to Plain for the active reply/note mode. */
+export async function uploadPlainAttachmentApi(
+	threadId: string,
+	file: File,
+	kind: "reply" | "note",
+): Promise<string> {
+	if (file.size > PLAIN_ATTACHMENT_MAX_BYTES) {
+		throw new Error(`${file.name} is too large (25 MB max)`);
+	}
+	const res = await fetch(
+		`${BASE}/plain/threads/${encodeURIComponent(threadId)}/attachments`,
+		{
+			method: "POST",
+			headers: {
+				"x-file-name": encodeURIComponent(file.name),
+				"x-plain-kind": kind,
+				"content-type": file.type || "application/octet-stream",
+			},
+			body: file,
+		},
+	);
+	const body = (await res.json().catch(() => null)) as {
+		attachmentId?: string;
+		error?: string;
+	} | null;
+	if (!res.ok || !body?.attachmentId) {
+		throw new Error(body?.error || `Attachment upload failed (${res.status})`);
+	}
+	return body.attachmentId;
 }
 
 /** Quick status change on a Plain thread: Todo / Snoozed / Done. */

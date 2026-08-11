@@ -79,6 +79,38 @@ let plainUsersCache: { data: unknown[]; ts: number } | null = null;
 let plainLabelTypesCache: { data: unknown[]; ts: number } | null = null;
 const PLAIN_META_TTL = 5 * 60_000;
 
+const plainAttachmentUploads = new Map<
+	string,
+	{ size: number; kind: "reply" | "note"; at: number }
+>();
+
+async function readBodyWithinLimit(
+	body: ReadableStream<Uint8Array> | null,
+	maxBytes: number,
+): Promise<Uint8Array | null> {
+	if (!body) return new Uint8Array();
+	const reader = body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > maxBytes) {
+			await reader.cancel();
+			return null;
+		}
+		chunks.push(value);
+	}
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return bytes;
+}
+
 export async function handlePlainRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
@@ -232,16 +264,114 @@ export async function handlePlainRoutes(
 	const plainReplyMatch = path.match(
 		/^\/api\/plain\/threads\/([^/]+)\/reply$/,
 	);
+	const plainAttachmentUploadMatch = path.match(
+		/^\/api\/plain\/threads\/([^/]+)\/attachments$/,
+	);
+	if (plainAttachmentUploadMatch && req.method === "POST") {
+		const threadId = decodeURIComponent(plainAttachmentUploadMatch[1]);
+		const rawName = req.headers.get("x-file-name") || "attachment";
+		const requestedKind = req.headers.get("x-plain-kind") === "note" ? "note" : "reply";
+		const declaredSize = Number(req.headers.get("content-length") || 0);
+		const maxBytes = 25 * 1024 * 1024;
+		if (declaredSize > maxBytes) {
+			return Response.json({ error: "Attachment is too large (25 MB max)" }, { status: 413 });
+		}
+		try {
+			let fileName: string;
+			try {
+				fileName = decodeURIComponent(rawName);
+			} catch {
+				return Response.json({ error: "Invalid attachment filename" }, { status: 400 });
+			}
+			const bytes = await readBodyWithinLimit(req.body, maxBytes);
+			if (!bytes) {
+				return Response.json({ error: "Attachment is too large (25 MB max)" }, { status: 413 });
+			}
+			if (!bytes.byteLength) {
+				return Response.json({ error: "Attachment is empty" }, { status: 400 });
+			}
+			const { getThreadWithMessages, uploadPlainAttachment } = await import(
+				"../../agents/plain/api"
+			);
+			const thread = await getThreadWithMessages(threadId);
+			const customerId = thread?.customer?.id;
+			if (!customerId) throw new Error("Thread has no customer");
+			const channel = String(thread.channel || "").toUpperCase();
+			const kind =
+				requestedKind === "note"
+					? "note"
+					: channel === "CHAT"
+						? "chat"
+						: channel === "SLACK"
+							? "slack"
+							: channel === "MS_TEAMS"
+								? "ms-teams"
+								: channel === "DISCORD"
+									? "discord"
+									: channel === "API" || channel === "IMPORT"
+										? "custom"
+										: "email";
+			const attachmentId = await uploadPlainAttachment(
+				customerId,
+				fileName,
+				bytes,
+				req.headers.get("content-type") || "application/octet-stream",
+				kind,
+			);
+			const now = Date.now();
+			for (const [id, upload] of plainAttachmentUploads) {
+				if (now - upload.at > 60 * 60_000) plainAttachmentUploads.delete(id);
+			}
+			plainAttachmentUploads.set(attachmentId, {
+				size: bytes.byteLength,
+				kind: requestedKind,
+				at: now,
+			});
+			return Response.json({ ok: true, attachmentId, fileName });
+		} catch (e: any) {
+			console.error(`[plain-attachment] Upload to ${threadId} failed:`, e);
+			return Response.json(
+				{ error: e?.message || "Plain attachment upload failed" },
+				{ status: 502 },
+			);
+		}
+	}
 	if (plainReplyMatch && req.method === "POST") {
 		const threadId = decodeURIComponent(plainReplyMatch[1]);
 		const body = (await req.json().catch(() => null)) as {
 			text?: string;
 			kind?: string;
 			user?: string;
+			attachmentIds?: string[];
 		} | null;
 		const text = typeof body?.text === "string" ? body.text.trim() : "";
 		const kind = body?.kind === "note" ? "note" : "reply";
-		if (!text)
+		const rawAttachmentIds = Array.isArray(body?.attachmentIds) ? body.attachmentIds : [];
+		if (rawAttachmentIds.length > 20) {
+			return Response.json({ error: "Too many attachments (20 max)" }, { status: 400 });
+		}
+		const attachmentIds = rawAttachmentIds.filter(
+			(id): id is string => typeof id === "string" && id.length > 0,
+		);
+		const attachmentUploads = attachmentIds.map((id) => plainAttachmentUploads.get(id));
+		if (attachmentUploads.some((upload) => !upload || upload.kind !== kind)) {
+			return Response.json(
+				{ error: "Attachment is missing or belongs to a different message mode" },
+				{ status: 400 },
+			);
+		}
+		const attachmentBytes = attachmentUploads.reduce(
+			(total, upload) => total + (upload?.size || 0),
+			0,
+		);
+		const attachmentLimit = kind === "note" ? 50 * 1024 * 1024 : 6 * 1024 * 1024;
+		if (attachmentBytes > attachmentLimit) {
+			return Response.json(
+				{ error: `${kind === "note" ? "Internal note" : "Reply"} attachments exceed the total size limit` },
+				{ status: 413 },
+			);
+		}
+		if (!text && attachmentIds.length === 0)
 			return Response.json({ error: "Empty message" }, { status: 400 });
 		// Plain's API can only impersonate customers, not workspace users, so
 		// everything lands as the bot machine user — carry the human's
@@ -261,7 +391,7 @@ export async function handlePlainRoutes(
 				const noteText = firstName
 					? `**${senderName} (via Open Session):**\n\n${text}`
 					: text;
-				const ok = await postNote(threadId, customerId, noteText);
+				const ok = await postNote(threadId, customerId, noteText, undefined, attachmentIds);
 				if (!ok) throw new Error("Plain rejected the note");
 			} else {
 				const alreadySigned =
@@ -271,7 +401,7 @@ export async function handlePlainRoutes(
 						"i",
 					).test(text.trimEnd());
 				const replyText =
-					firstName && !alreadySigned
+					firstName && text && !alreadySigned
 						? `${text.trimEnd()}\n\n${firstName}`
 						: text;
 				// Their own Plain grant (My accounts → Connect) sends the reply
@@ -286,16 +416,19 @@ export async function handlePlainRoutes(
 					"",
 					replyText,
 					grantToken,
+					attachmentIds,
 				);
 				if (!res.ok) throw new Error("Plain rejected the reply");
 				console.log(
 					`[plain-reply] ${senderName || "someone"} sent a reply to ${threadId} (as ${res.sentAs})`,
 				);
+				for (const id of attachmentIds) plainAttachmentUploads.delete(id);
 				return Response.json({ ok: true, sentAs: res.sentAs });
 			}
 			console.log(
 				`[plain-reply] ${requestUser(ctx, body?.user) || "someone"} sent a ${kind} to ${threadId}`,
 			);
+			for (const id of attachmentIds) plainAttachmentUploads.delete(id);
 			return Response.json({ ok: true });
 		} catch (e: any) {
 			console.error(`[plain-reply] ${kind} to ${threadId} failed:`, e);

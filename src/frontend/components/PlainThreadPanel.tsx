@@ -12,12 +12,17 @@ import {
 	fetchPlainLabelTypesApi,
 	fetchPlainThreadApi,
 	fetchPlainUsersApi,
+	PLAIN_ATTACHMENTS_MAX_COUNT,
+	PLAIN_ATTACHMENT_MAX_BYTES,
+	PLAIN_NOTE_ATTACHMENTS_MAX_BYTES,
+	PLAIN_REPLY_ATTACHMENT_MAX_BYTES,
 	sendPlainReplyApi,
 	setPlainThreadAssigneeApi,
 	setPlainThreadPriorityApi,
 	setPlainThreadSpamApi,
 	setPlainThreadStatusApi,
 	setPlainThreadTitleApi,
+	uploadPlainAttachmentApi,
 } from "../lib/api";
 import { BASE_PATH } from "../lib/base";
 import { Menu } from "../ui/menu";
@@ -36,9 +41,10 @@ import {
 	composerTextareaPadding,
 	composerToolbar,
 } from "../lib/composer-classes";
-import { paletteIconBtn, paletteIconBtnOn } from "../lib/palette-classes";
+import { paletteIconBtn } from "../lib/palette-classes";
 import { Tooltip } from "../ui/tooltip";
-import { IconArrowUp, IconPencil } from "./icons";
+import { IconArrowUp, IconPencil, IconPlus } from "./icons";
+import { FileChips } from "./FileChips";
 
 interface Props {
 	sessionId: string;
@@ -555,12 +561,14 @@ export function PlainReplyBox({
 	}, [draftKey, text]);
 	const [kind, setKind] = useState<"reply" | "note">("reply");
 	const [sending, setSending] = useState(false);
+	const [attachments, setAttachments] = useState<File[]>([]);
 	const [sent, setSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const sentTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	useEffect(() => () => clearTimeout(sentTimer.current), []);
 	const currentUser = useCurrentUser();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
 	useEffect(() => {
 		const el = textareaRef.current;
 		if (!el) return;
@@ -570,12 +578,28 @@ export function PlainReplyBox({
 
 	async function handleSend() {
 		const t = text.trim();
-		if (!t || sending) return;
+		if ((!t && attachments.length === 0) || sending) return;
+		const attachmentBytes = attachments.reduce((total, file) => total + file.size, 0);
+		const attachmentLimit =
+			kind === "note" ? PLAIN_NOTE_ATTACHMENTS_MAX_BYTES : PLAIN_REPLY_ATTACHMENT_MAX_BYTES;
+		if (attachmentBytes > attachmentLimit) {
+			setError(
+				kind === "note"
+					? "Internal note attachments are limited to 50 MB total"
+					: "Reply attachments are limited to 6 MB total",
+			);
+			return;
+		}
 		setSending(true);
 		setError(null);
 		try {
-			await sendPlainReplyApi(threadId, t, kind, currentUser);
+			const attachmentIds: string[] = [];
+			for (const file of attachments) {
+				attachmentIds.push(await uploadPlainAttachmentApi(threadId, file, kind));
+			}
+			await sendPlainReplyApi(threadId, t, kind, currentUser, attachmentIds);
 			setText("");
+			setAttachments([]);
 			clearDraft(draftKey);
 			setSent(true);
 			clearTimeout(sentTimer.current);
@@ -588,6 +612,16 @@ export function PlainReplyBox({
 		}
 	}
 
+	const noteFill = "color-mix(in srgb, var(--composer-surface) 92%, var(--yellow))";
+	const noteSurface: React.CSSProperties | undefined =
+		kind === "note"
+			? {
+					borderColor: "color-mix(in srgb, var(--yellow) 35%, transparent)",
+					backgroundColor: noteFill,
+					backgroundImage: `linear-gradient(to bottom, transparent 15%, ${noteFill} 72%), repeating-linear-gradient(45deg, color-mix(in srgb, var(--yellow) 7%, transparent) 0, color-mix(in srgb, var(--yellow) 7%, transparent) 12px, transparent 12px, transparent 24px)`,
+				}
+			: undefined;
+
 	return (
 		<div
 			className={cn(
@@ -596,7 +630,15 @@ export function PlainReplyBox({
 				composerBoxExpanded,
 				className,
 			)}
+			style={noteSurface}
 		>
+			<FileChips
+				files={attachments.map((file) => ({ name: file.name, type: file.type }))}
+				onRemove={(index) =>
+					setAttachments((current) => current.filter((_, i) => i !== index))
+				}
+				disabled={sending}
+			/>
 			<textarea
 				ref={textareaRef}
 				rows={1}
@@ -626,6 +668,39 @@ export function PlainReplyBox({
 				</div>
 			)}
 			<div className={composerToolbar}>
+				<Tooltip label="Add attachments">
+					<button
+						type="button"
+						className={cn(paletteIconBtn, "-ml-1.5")}
+						onClick={() => fileInputRef.current?.click()}
+						disabled={sending}
+						aria-label="Add attachments"
+					>
+						<IconPlus size={20} />
+					</button>
+				</Tooltip>
+				<input
+					ref={fileInputRef}
+					type="file"
+					multiple
+					hidden
+					onChange={(event) => {
+						const picked = Array.from(event.target.files || []);
+						const accepted = picked.filter((file) => file.size <= PLAIN_ATTACHMENT_MAX_BYTES);
+						const rejected = picked.find((file) => file.size > PLAIN_ATTACHMENT_MAX_BYTES);
+						if (accepted.length) {
+							setAttachments((current) => {
+								const available = PLAIN_ATTACHMENTS_MAX_COUNT - current.length;
+								if (accepted.length > available) {
+									setError(`You can attach up to ${PLAIN_ATTACHMENTS_MAX_COUNT} files`);
+								}
+								return [...current, ...accepted.slice(0, Math.max(0, available))];
+							});
+						}
+						if (rejected) setError(`${rejected.name} is too large (25 MB max)`);
+						event.target.value = "";
+					}}
+				/>
 				<Tooltip
 					label={
 						kind === "note" ? "Switch to customer reply" : "Write an internal note"
@@ -639,10 +714,11 @@ export function PlainReplyBox({
 						aria-pressed={kind === "note"}
 						className={cn(
 							paletteIconBtn,
-							kind === "note" && paletteIconBtnOn,
-							"-ml-1.5",
+							kind === "note" &&
+								"text-yellow hover:text-yellow before:bg-[color-mix(in_srgb,var(--yellow)_16%,transparent)] hover:before:bg-[color-mix(in_srgb,var(--yellow)_24%,transparent)]",
 						)}
 						onClick={() => setKind((current) => (current === "note" ? "reply" : "note"))}
+						disabled={sending}
 					>
 						<IconPencil size={20} />
 					</button>
@@ -661,7 +737,7 @@ export function PlainReplyBox({
 					type="button"
 					className={cn("ml-auto", composerSend, composerSendDefault)}
 					onClick={handleSend}
-					disabled={sending || !text.trim()}
+					disabled={sending || (!text.trim() && attachments.length === 0)}
 					title="Send (⌘↵)"
 					aria-label={kind === "note" ? "Add internal note" : "Send reply"}
 				>
