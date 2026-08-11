@@ -5166,7 +5166,7 @@ export function SessionViewer({
 									{historyTruncated && (
 										<div className="flex justify-center [overflow-anchor:none] px-0 pt-1 pb-3.5">
 											{loadingHistory ? (
-												<div className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3.5 py-1.5 text-label font-semibold text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm">
+												<div className="inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--bg))] px-3.5 py-1.5 text-label font-semibold text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm">
 													<PixelSpinner className="text-accent" />
 													<span>
 														{loadingAllHistory
@@ -5180,7 +5180,7 @@ export function SessionViewer({
 												<div
 													role="group"
 													aria-label="Earlier messages"
-													className="inline-flex items-stretch overflow-hidden rounded-full bg-accent-soft text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm"
+													className="inline-flex items-stretch overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--bg))] text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm"
 												>
 													<button
 														type="button"
@@ -5307,7 +5307,7 @@ export function SessionViewer({
 										/* Keep the control surface opaque over transcript text; a
 										   pseudo-element paints the translucent hover wash without
 										   replacing that surface. */
-										className="group absolute left-1/2 bottom-6 z-[5] inline-flex -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full bg-accent-soft px-3.5 py-1.5 text-label font-semibold text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm transition-[color,scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-transparent before:transition-colors before:content-[''] hover:before:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+										className="group absolute left-1/2 bottom-6 z-[5] inline-flex -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--bg))] px-3.5 py-1.5 text-label font-semibold text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm transition-[color,scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-transparent before:transition-colors before:content-[''] hover:before:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
 										onClick={() => scrollToLatest("smooth")}
 										title="Scroll to the bottom"
 									>
