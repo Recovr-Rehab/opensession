@@ -243,6 +243,13 @@ function AssetMenu({
 	);
 }
 
+/**
+ * What you are looking at, under the file — name, then description, then the
+ * pager. The same stack the media lightbox puts under a picture, because an
+ * asset and a screenshot are the same gesture: glance at one thing lifted over
+ * the conversation. Actions stay up top with Close, so nothing down here reads
+ * as a control.
+ */
 function AssetOverlayFooter({
 	file,
 	navigation,
@@ -252,7 +259,7 @@ function AssetOverlayFooter({
 	navigation: AssetNavigation | null;
 	phone: boolean;
 }) {
-	if (!file.description && !navigation) return null;
+	const name = file.path.split("/").pop() || file.path;
 	return (
 		<div
 			className={cn(
@@ -262,16 +269,27 @@ function AssetOverlayFooter({
 					: "absolute left-0 right-0 top-full mt-2",
 			)}
 		>
-			{file.description && (
+			<div className="flex max-w-full flex-col items-center gap-0.5 text-center">
 				<div
 					className={cn(
-						"max-w-[min(720px,90vw)] line-clamp-2 text-center leading-snug",
-						phone ? "text-supporting text-dim" : "text-sm text-white",
+						"max-w-full truncate font-medium",
+						phone ? "text-label text-fg" : "text-sm text-white",
 					)}
+					title={file.path}
 				>
-					{file.description}
+					{name}
 				</div>
-			)}
+				{file.description && (
+					<div
+						className={cn(
+							"max-w-[min(720px,90vw)] line-clamp-2 leading-snug",
+							phone ? "text-supporting text-dim" : "text-sm text-white/75",
+						)}
+					>
+						{file.description}
+					</div>
+				)}
+			</div>
 			<div className="flex max-w-full items-center justify-center gap-2">
 				{navigation && (
 					<AssetPager navigation={navigation} arrows={phone} onDark={!phone} />
@@ -663,15 +681,10 @@ export function AssetOverlay({
 					!isPhone && "rounded-[inherit]",
 				)}
 			>
+				{/* Actions only: the file's name reads under it, in the footer. */}
 				<div
-					className="flex min-h-10 shrink-0 items-center gap-1 px-3 pr-12"
+					className="flex min-h-10 shrink-0 items-center justify-end gap-1 px-3 pr-12"
 				>
-					<div
-						className="min-w-0 flex-1 truncate text-label font-medium text-fg"
-						title={file.path}
-					>
-						{name}
-					</div>
 					{listed && (
 						<span className="shrink-0 text-[11px] text-faint">
 							{formatAssetSize(file.size)}
