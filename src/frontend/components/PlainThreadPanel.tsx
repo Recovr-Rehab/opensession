@@ -26,8 +26,17 @@ import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { useCurrentUser } from "./UserPicker";
 import { cn } from "../ui/cn";
 import { PLAIN_WORKSPACE_ID, PRODUCT_NAME } from "../lib/brand";
-import { Textarea } from "../ui/input";
 import { plainStatusClass } from "../lib/plain-status";
+import {
+	composerBox,
+	composerBoxExpanded,
+	composerSend,
+	composerSendDefault,
+	composerTextarea,
+	composerTextareaPadding,
+	composerToolbar,
+} from "../lib/composer-classes";
+import { IconArrowUp } from "./icons";
 
 interface Props {
 	sessionId: string;
@@ -185,7 +194,7 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 					threadId={threadId}
 					customerName={thread.customer?.name || thread.customer?.email || null}
 					onSent={load}
-					className="border-t border-line"
+					className="mx-3 mb-3"
 				/>
 			)}
 		</div>
@@ -549,6 +558,13 @@ export function PlainReplyBox({
 	const sentTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	useEffect(() => () => clearTimeout(sentTimer.current), []);
 	const currentUser = useCurrentUser();
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	useEffect(() => {
+		const el = textareaRef.current;
+		if (!el) return;
+		el.style.height = "";
+		if (text) el.style.height = `${el.scrollHeight}px`;
+	}, [text]);
 
 	async function handleSend() {
 		const t = text.trim();
@@ -571,30 +587,22 @@ export function PlainReplyBox({
 	}
 
 	return (
-		<div className={cn("shrink-0 p-2.5 flex flex-col gap-1.5", className)}>
-			<div className="flex items-center gap-1.5">
-				{(["reply", "note"] as const).map((k) => (
-					<button
-						key={k}
-						type="button"
-						className={cn(
-							"cursor-pointer rounded-full border px-2 py-0.5 text-meta font-semibold",
-							kind === k
-								? "bg-active text-fg border-line-strong"
-								: "bg-transparent text-faint border-line hover:text-dim",
-						)}
-						onClick={() => setKind(k)}
-					>
-						{k === "reply" ? "Reply" : "Internal note"}
-					</button>
-				))}
-				{sent && (
-					<span className="text-meta font-semibold text-green">Sent ✓</span>
+		<div
+			className={cn(
+				"composer shrink-0",
+				composerBox,
+				composerBoxExpanded,
+				className,
+			)}
+		>
+			<textarea
+				ref={textareaRef}
+				rows={1}
+				className={cn(
+					"composer-textarea min-h-12 text-fg placeholder:text-faint",
+					composerTextarea,
+					composerTextareaPadding,
 				)}
-			</div>
-			<Textarea
-				size="sm"
-				className="min-h-[128px] p-2 text-[16px] leading-normal"
 				placeholder={
 					kind === "note"
 						? "Internal note for the team (English)…"
@@ -610,30 +618,49 @@ export function PlainReplyBox({
 					}
 				}}
 			/>
-			<div className="flex items-center gap-2 min-w-0">
-				{error ? (
-					<span className="text-red text-label truncate" title={error}>
-						{error}
-					</span>
-				) : (
-					<span className="truncate text-meta text-faint">
-						{kind === "note"
-							? `Posted as ${currentUser} (via ${PRODUCT_NAME})`
-							: `Sends via Plain, signed “${currentUser.split(/\s+/)[0]}”`}
+			{error && (
+				<div className="mt-1 truncate text-label text-red" title={error}>
+					{error}
+				</div>
+			)}
+			<div className={composerToolbar}>
+				<div className="flex shrink-0 items-center gap-1 rounded-[999px] bg-[var(--bg-hover)] p-0.5">
+					{(["reply", "note"] as const).map((k) => (
+						<button
+							key={k}
+							type="button"
+							aria-pressed={kind === k}
+							className={cn(
+								"cursor-pointer rounded-[999px] px-2.5 py-1 text-meta font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
+								kind === k
+									? "bg-active text-fg"
+									: "text-faint hover:text-dim",
+							)}
+							onClick={() => setKind(k)}
+						>
+							{k === "reply" ? "Reply" : "Internal note"}
+						</button>
+					))}
+				</div>
+				<span className="min-w-0 truncate text-meta text-faint phone:hidden">
+					{kind === "note"
+						? `Posted as ${currentUser} (via ${PRODUCT_NAME})`
+						: `Via Plain, signed “${currentUser.split(/\s+/)[0]}”`}
+				</span>
+				{sent && (
+					<span className="shrink-0 text-meta font-semibold text-green">
+						Sent ✓
 					</span>
 				)}
 				<button
 					type="button"
-					className="ml-auto shrink-0 rounded-control bg-accent text-on-accent text-supporting font-semibold px-2.5 py-1 cursor-pointer border-0 hover:opacity-90 disabled:opacity-50 disabled:cursor-default"
+					className={cn("ml-auto", composerSend, composerSendDefault)}
 					onClick={handleSend}
 					disabled={sending || !text.trim()}
 					title="Send (⌘↵)"
+					aria-label={kind === "note" ? "Add internal note" : "Send reply"}
 				>
-					{sending
-						? "Sending…"
-						: kind === "note"
-							? "Add note"
-							: "Send reply"}
+					<IconArrowUp size={24} />
 				</button>
 			</div>
 		</div>

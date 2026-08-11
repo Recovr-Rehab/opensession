@@ -219,7 +219,6 @@ export function ConversationPane({
 							thread.customer?.name || thread.customer?.email || null
 						}
 						onSent={load}
-						className="rounded-lg border border-line bg-panel"
 					/>
 				</div>
 			)}
