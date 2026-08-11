@@ -1,8 +1,31 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
 import {
+	bootstrapSignature,
+	loadRemoteWorkspaceSeedFiles,
 	runRemoteLifecycleHook,
 	type RemoteDriver,
 } from "./bootstrap";
+
+const scratch: string[] = [];
+
+afterEach(() => {
+	for (const path of scratch.splice(0)) rmSync(path, { recursive: true, force: true });
+});
+
+function seedRepo(seedFiles: string[]) {
+	const root = mkdtempSync(join(tmpdir(), "opensession-remote-seeds-"));
+	scratch.push(root);
+	Bun.spawnSync({ cmd: ["git", "init", "-q", root] });
+	mkdirSync(join(root, ".agents"), { recursive: true });
+	writeFileSync(
+		join(root, ".agents/environment.json"),
+		JSON.stringify({ seedFiles }),
+	);
+	return root;
+}
 
 function driver(results: Array<{ exitCode: number; stdout?: string; stderr?: string }>) {
 	const commands: Array<{ command: string; opts?: any }> = [];
@@ -20,6 +43,12 @@ function driver(results: Array<{ exitCode: number; stdout?: string; stderr?: str
 }
 
 describe("remote repo lifecycle", () => {
+	test("bootstrap identity includes the preview runtime contract", () => {
+		expect(bootstrapSignature()).toContain("node@24");
+		expect(bootstrapSignature()).toContain("just@1.43.1");
+		expect(bootstrapSignature()).toContain("workspace-runtime-v2");
+	});
+
 	test("setup is skipped after its durable stamp", async () => {
 		const d = driver([{ exitCode: 0, stdout: "stamped\n" }]);
 		expect(
@@ -43,6 +72,7 @@ describe("remote repo lifecycle", () => {
 		expect(result.ran).toBe(true);
 		expect(result.log).toContain("/.opensession/lifecycle/");
 		expect(d.commands[2]!.command).toContain("OPENSESSION_BOOT_MODE=fresh");
+		expect(d.commands[2]!.command).toContain("PATH=");
 		expect(d.commands[2]!.command).toContain("touch");
 		expect(d.commands[2]!.opts.timeoutMs).toBe(20 * 60_000);
 	});
@@ -84,5 +114,47 @@ describe("remote repo lifecycle", () => {
 		await expect(
 			runRemoteLifecycleHook(d.value, "/work/repo", "resume", "resume"),
 		).rejects.toThrow("not executable");
+	});
+});
+
+describe("remote workspace private seed files", () => {
+	test("loads declared gitignored text files from the registered checkout", () => {
+		const root = seedRepo(["packages/web/.env.local", ".envrc"]);
+		writeFileSync(join(root, ".gitignore"), ".envrc\npackages/web/.env.local\n");
+		for (const [path, content] of [
+			["packages/web/.env.local", "API_URL=https://example.test\n"],
+			[".envrc", "export APP_ENV=dev\n"],
+		] as const) {
+			mkdirSync(dirname(join(root, path)), { recursive: true });
+			writeFileSync(join(root, path), content);
+		}
+
+		expect(loadRemoteWorkspaceSeedFiles({ id: "app", repo: root })).toEqual([
+			{ path: "packages/web/.env.local", content: "API_URL=https://example.test\n" },
+			{ path: ".envrc", content: "export APP_ENV=dev\n" },
+		]);
+	});
+
+	test("refuses traversal and files that are not gitignored", () => {
+		const traversal = seedRepo(["../outside.env"]);
+		expect(() =>
+			loadRemoteWorkspaceSeedFiles({ id: "app", repo: traversal }),
+		).toThrow("unsafe path");
+
+		const tracked = seedRepo([".env.local"]);
+		writeFileSync(join(tracked, ".env.local"), "SECRET=value\n");
+		expect(() =>
+			loadRemoteWorkspaceSeedFiles({ id: "app", repo: tracked }),
+		).toThrow("must be gitignored");
+	});
+
+	test("refuses symlinks even when the path is ignored", () => {
+		const root = seedRepo([".env.local"]);
+		writeFileSync(join(root, ".gitignore"), ".env.local\n");
+		writeFileSync(join(root, "actual.env"), "SECRET=value\n");
+		symlinkSync("actual.env", join(root, ".env.local"));
+		expect(() =>
+			loadRemoteWorkspaceSeedFiles({ id: "app", repo: root }),
+		).toThrow("regular file");
 	});
 });

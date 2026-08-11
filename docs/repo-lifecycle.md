@@ -3,7 +3,7 @@
 Commit a `.agents/` directory to a repository and every agent host that
 follows this convention — Open Session, and anything else that adopts it —
 knows how to provision a workspace for that repo and boot its dev server.
-Four files, each optional:
+Five files, each optional:
 
 | File          | When it runs                              | Job                                       |
 | ------------- | ----------------------------------------- | ----------------------------------------- |
@@ -11,6 +11,7 @@ Four files, each optional:
 | `resume`      | after a paused/snapshotted workspace wakes | idempotent post-wake repair               |
 | `start.sh`    | when a preview starts                     | bring the dev server up in the foreground |
 | `preview.json`| warm-pool / warm-template refreshes       | declare which routes to pre-compile       |
+| `environment.json` | when a private remote workspace is adopted | seed explicitly declared local env files |
 
 Why commit them rather than configure the host: the boot recipe travels with
 the code. Every worktree of every session starts provisioned, the Preview
@@ -127,6 +128,29 @@ boot, so the first human or agent visit is fast:
 Keep it to the handful of routes people actually open first from a preview.
 Precedence: explicit instance Settings → the repo's committed
 `.agents/preview.json` → built-in defaults.
+
+## environment.json — private workspace files
+
+Remote providers clone the repository and therefore cannot see gitignored
+environment files from the registered local checkout. Declare the files a
+fresh remote workspace needs:
+
+```json
+{
+  "seedFiles": ["packages/web/.env.local", ".envrc"]
+}
+```
+
+Open Session copies each file from the same relative path in the registered
+checkout into the session-owned sandbox after a template is restored and
+before the session setup hook runs. The files are never included in a shared
+prewarm or provider snapshot.
+
+Every declared source is required, must be a regular gitignored text file
+inside the registered checkout, and is written mode `0600`. Individual files
+are capped at 1 MiB and the manifest at 4 MiB total. The manifest itself is
+read from the operator-controlled checkout, not from an agent branch, so a PR
+cannot ask Open Session to upload a different host file.
 
 ## A minimal pair
 

@@ -1038,6 +1038,13 @@ async function seedSandboxPortsConf(
   ]);
 }
 
+// Same command path as the remote runner bootstrap and Docker image. Preview
+// lifecycle scripts are launched by provider SDK shells, which do not
+// consistently source ~/.profile; without an explicit PATH a correctly
+// installed Bun/CLI can still look missing.
+const SANDBOX_PREVIEW_PATH =
+  "/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
 /**
  * `.tunnels.env` contract (adopted from background-agents): when a sandbox
  * preview starts, opensession writes `<worktree>/.tunnels.env` — a dotenv file
@@ -1169,7 +1176,8 @@ export async function startSandboxPreview(
   const bootMode = sandbox.bootMode || "fresh";
   const r = await sandbox.exec([
     "sh", "-c",
-    `mkdir -p .ports && nohup setsid env WEBAPP_PORT=${port} PREVIEW_URL=${shellQuoteWord(previewUrl)} ` +
+    `mkdir -p .ports && nohup setsid env HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PREVIEW_PATH)} ` +
+      `WEBAPP_PORT=${port} PREVIEW_URL=${shellQuoteWord(previewUrl)} ` +
       `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ` +
       `bash -c 'echo $$ > .ports/dev-pgid; exec ${cmd}' >> /tmp/backstage-preview.log 2>&1 &`,
   ]);

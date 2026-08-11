@@ -50,8 +50,16 @@
  * account, an explicit projected MCP allowlist, and no instance-wide config.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from "fs";
-import { dirname } from "path";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  unlinkSync,
+} from "fs";
+import { dirname, isAbsolute, relative, resolve } from "path";
 import { OPENSESSION_SESSIONS_DIR, homeDir, stateDir } from "../../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
@@ -116,6 +124,12 @@ const REMOTE_MCP_CONFIG = `${REMOTE_HOME}/.opensession-mcp-config.json`;
  *  too) — bump BOTH together. Part of bootstrapSignature, so a bump
  *  invalidates existing sandboxes/prewarms and re-bootstraps them. */
 const REMOTE_OPENCODE_VERSION = "1.17.15";
+/** Keep these aligned with deploy/sandbox/Dockerfile. The runtime revision is
+ * part of bootstrapSignature, so changing this contract invalidates old
+ * prewarms and provider templates instead of calling them Ready. */
+const REMOTE_NODE_MAJOR = 24;
+const REMOTE_JUST_VERSION = "1.43.1";
+const REMOTE_RUNTIME_REVISION = "workspace-runtime-v2";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
@@ -564,7 +578,11 @@ function need(r: ExecResult, what: string): void {
 export function bootstrapSignature(): string {
   const cfg = sandboxConfig();
   const base = cfg.runnerSha || cfg.runnerBundleUrl || "unpinned";
-  return `${base}+opencode@${REMOTE_OPENCODE_VERSION}`;
+  return (
+    `${base}+opencode@${REMOTE_OPENCODE_VERSION}` +
+    `+node@${REMOTE_NODE_MAJOR}+just@${REMOTE_JUST_VERSION}` +
+    `+${REMOTE_RUNTIME_REVISION}`
+  );
 }
 
 /** Install the portable base tools needed before the full runner payload. */
@@ -582,11 +600,11 @@ async function bootstrapRemoteBaseRuntime(
     `writable ${REMOTE_HOME} (image needs passwordless sudo or a prebaked /home/ubuntu)`,
   );
 
-  // Provider base images vary. Install one small, explicit command contract
-  // through whichever package manager the image supplies. coreutils provides
-  // base64/nl/wc; sed and ripgrep back the native read/search tools.
+  // Provider base images vary. Install the same workspace/preview contract as
+  // deploy/sandbox/Dockerfile: native build tools for dependency installs,
+  // direnv/lsof for lifecycle scripts, and the generic runner utilities.
   const tools = await driver.exec(
-    "for c in git curl unzip rg sed nl wc base64; do command -v \"$c\" >/dev/null 2>&1 || echo \"$c\"; done",
+    "for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v \"$c\" >/dev/null 2>&1 || echo \"$c\"; done",
   );
   if (tools.stdout.trim()) {
     log(`installing workspace tools (${tools.stdout.trim().replaceAll("\n", ", ")})…`);
@@ -594,13 +612,13 @@ async function bootstrapRemoteBaseRuntime(
       await driver.exec(
         `SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"; ` +
           `if command -v apt-get >/dev/null 2>&1; then ` +
-          `$SUDO apt-get update -qq && $SUDO apt-get install -y -qq git curl unzip ripgrep coreutils sed; ` +
+          `$SUDO apt-get update -qq && $SUDO apt-get install -y -qq ca-certificates git curl unzip xz-utils ripgrep coreutils sed python3 build-essential direnv lsof; ` +
           `elif command -v apk >/dev/null 2>&1; then ` +
-          `$SUDO apk add --no-cache git curl unzip ripgrep coreutils sed; ` +
+          `$SUDO apk add --no-cache ca-certificates git curl unzip xz ripgrep coreutils sed python3 build-base direnv lsof; ` +
           `elif command -v dnf >/dev/null 2>&1; then ` +
-          `$SUDO dnf install -y git curl unzip ripgrep coreutils sed; ` +
+          `$SUDO dnf install -y ca-certificates git curl unzip xz ripgrep coreutils sed python3 gcc-c++ make direnv lsof; ` +
           `elif command -v yum >/dev/null 2>&1; then ` +
-          `$SUDO yum install -y git curl unzip ripgrep coreutils sed; ` +
+          `$SUDO yum install -y ca-certificates git curl unzip xz ripgrep coreutils sed python3 gcc-c++ make direnv lsof; ` +
           `else echo "no supported package manager" >&2; exit 1; fi`,
         { timeoutMs: 300_000 },
       ),
@@ -609,9 +627,54 @@ async function bootstrapRemoteBaseRuntime(
   }
   need(
     await driver.exec(
-      "for c in git curl unzip rg sed nl wc base64; do command -v \"$c\" >/dev/null 2>&1 || { echo \"missing $c\" >&2; exit 1; }; done",
+      "for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v \"$c\" >/dev/null 2>&1 || { echo \"missing $c\" >&2; exit 1; }; done",
     ),
     "workspace tools check",
+  );
+
+  // NodeSource is the same source and major used by the Docker image. All
+  // currently supported remote images are Ubuntu/Debian based; fail loudly on
+  // a future image instead of accepting an arbitrary distro Node version.
+  const node = await driver.exec(
+    `node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true`,
+  );
+  if (node.stdout.trim() !== String(REMOTE_NODE_MAJOR)) {
+    log(`installing Node ${REMOTE_NODE_MAJOR}…`);
+    need(
+      await driver.exec(
+        `command -v apt-get >/dev/null 2>&1 || { echo "Node ${REMOTE_NODE_MAJOR} bootstrap requires an apt-based provider image" >&2; exit 1; }; ` +
+          `SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"; ` +
+          `curl -fsSL https://deb.nodesource.com/setup_${REMOTE_NODE_MAJOR}.x | $SUDO bash - && ` +
+          `$SUDO apt-get install -y -qq nodejs`,
+        { timeoutMs: 300_000 },
+      ),
+      `Node ${REMOTE_NODE_MAJOR} install`,
+    );
+  }
+  need(
+    await driver.exec(
+      `test "$(node -p 'process.versions.node.split(\".\")[0]')" = "${REMOTE_NODE_MAJOR}"`,
+    ),
+    `Node ${REMOTE_NODE_MAJOR} check`,
+  );
+
+  const remoteJust = "/usr/local/bin/just";
+  log(`ensuring just ${REMOTE_JUST_VERSION}…`);
+  need(
+    await driver.exec(
+      `test -x ${remoteJust} && test "$(${remoteJust} --version | awk '{print $2}')" = "${REMOTE_JUST_VERSION}" || ` +
+        `{ SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"; ` +
+        `curl -fsSL https://just.systems/install.sh | $SUDO bash -s -- ` +
+        `--tag ${REMOTE_JUST_VERSION} --to ${dirname(remoteJust)}; }`,
+      { timeoutMs: 120_000 },
+    ),
+    `just ${REMOTE_JUST_VERSION} install`,
+  );
+  need(
+    await driver.exec(
+      `test "$(${remoteJust} --version | awk '{print $2}')" = "${REMOTE_JUST_VERSION}"`,
+    ),
+    `just ${REMOTE_JUST_VERSION} check`,
   );
 
   log("ensuring bun…");
@@ -777,6 +840,121 @@ export async function bootstrapRemoteSandbox(
  *  them (warmRemoteWorkspace → setupRemoteWorkspace's mv). */
 const REMOTE_WARM_BASE = `${REMOTE_HOME}/.bks-warm`;
 
+const REMOTE_SEED_MANIFEST = ".agents/environment.json";
+const MAX_REMOTE_SEED_FILE_BYTES = 1024 * 1024;
+const MAX_REMOTE_SEED_TOTAL_BYTES = 4 * 1024 * 1024;
+
+export interface RemoteWorkspaceSeedFile {
+  path: string;
+  content: string;
+}
+
+/**
+ * Load the repo-owned list of private workspace files that should accompany a
+ * remote clone. The manifest is read from the registered, operator-controlled
+ * checkout (not the agent's branch), and every source must be a regular,
+ * gitignored file below that checkout. This prevents a branch from requesting
+ * arbitrary host files while keeping the zero-copy-path convention simple:
+ *
+ *   { "seedFiles": ["packages/web/.env.local"] }
+ */
+export function loadRemoteWorkspaceSeedFiles(repo: {
+  id: string;
+  repo: string;
+}): RemoteWorkspaceSeedFile[] {
+  const manifestPath = resolve(repo.repo, REMOTE_SEED_MANIFEST);
+  if (!existsSync(manifestPath)) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  } catch (error) {
+    throw new Error(
+      `${repo.id} ${REMOTE_SEED_MANIFEST} is invalid JSON: ${(error as Error).message}`,
+    );
+  }
+  const seedFiles = (raw as { seedFiles?: unknown })?.seedFiles;
+  if (!Array.isArray(seedFiles) || !seedFiles.every((file) => typeof file === "string")) {
+    throw new Error(`${repo.id} ${REMOTE_SEED_MANIFEST} must contain a string[] seedFiles`);
+  }
+
+  const seen = new Set<string>();
+  const loaded: RemoteWorkspaceSeedFile[] = [];
+  let total = 0;
+  for (const path of seedFiles) {
+    if (
+      !path ||
+      isAbsolute(path) ||
+      path.includes("\\") ||
+      path.split("/").some((part) => !part || part === "." || part === "..")
+    ) {
+      throw new Error(`${repo.id} ${REMOTE_SEED_MANIFEST} has unsafe path ${JSON.stringify(path)}`);
+    }
+    if (seen.has(path)) continue;
+    seen.add(path);
+    const source = resolve(repo.repo, path);
+    const within = relative(repo.repo, source);
+    if (!within || within.startsWith("..") || isAbsolute(within)) {
+      throw new Error(`${repo.id} seed file escapes the checkout: ${path}`);
+    }
+    if (!existsSync(source)) {
+      throw new Error(
+        `${repo.id} requires local seed file ${path}; create it in ${repo.repo} before preparing a sandbox`,
+      );
+    }
+    const stat = lstatSync(source);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      throw new Error(`${repo.id} seed file must be a regular file, not a symlink: ${path}`);
+    }
+    const ignored = Bun.spawnSync({
+      cmd: ["git", "-C", repo.repo, "check-ignore", "-q", "--", path],
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    if (ignored.exitCode !== 0) {
+      throw new Error(`${repo.id} seed file must be gitignored before upload: ${path}`);
+    }
+    if (stat.size > MAX_REMOTE_SEED_FILE_BYTES) {
+      throw new Error(`${repo.id} seed file exceeds 1 MiB: ${path}`);
+    }
+    total += stat.size;
+    if (total > MAX_REMOTE_SEED_TOTAL_BYTES) {
+      throw new Error(`${repo.id} seed files exceed the 4 MiB workspace limit`);
+    }
+    const content = readFileSync(source, "utf-8");
+    if (content.includes("\0")) {
+      throw new Error(`${repo.id} seed file must be text: ${path}`);
+    }
+    loaded.push({ path, content });
+  }
+  return loaded;
+}
+
+async function materializeRemoteWorkspaceSeedFiles(
+  driver: RemoteDriver,
+  cwd: string,
+  repoId?: string,
+): Promise<void> {
+  if (!repoId) return;
+  const { configuredRepos } = await import("../../config");
+  const repo = configuredRepos()[repoId];
+  if (!repo) throw new Error(`Unknown repo ${repoId}`);
+  const files = loadRemoteWorkspaceSeedFiles(repo);
+  for (const file of files) {
+    const target = `${cwd}/${file.path}`;
+    await driver.exec(`mkdir -p ${shellQuoteWord(dirname(target))}`);
+    await driver.writeFile(target, file.content);
+    const secured = await driver.exec(`chmod 600 ${shellQuoteWord(target)}`);
+    if (secured.exitCode !== 0) {
+      throw new Error(`could not secure remote seed file ${repoId}:${file.path}`);
+    }
+  }
+  if (files.length) {
+    console.log(
+      `[sandbox-remote] seeded ${files.length} private workspace file(s) for ${repoId}`,
+    );
+  }
+}
+
 export function remoteWarmWorkspaceDir(repoId: string): string {
   return `${REMOTE_WARM_BASE}/${sanitizeName(repoId)}`;
 }
@@ -934,6 +1112,10 @@ export async function setupRemoteWorkspace(
       );
     }
   }
+  // Per-session only: warm/template preparation never calls this path, so
+  // private files are injected after restore and can never land in a shared
+  // provider snapshot.
+  await materializeRemoteWorkspaceSeedFiles(driver, cwd, repoId);
   await runRemoteLifecycleHook(driver, cwd, "setup", "fresh", repoId);
 }
 
@@ -974,7 +1156,8 @@ export async function runRemoteLifecycleHook(
   const command =
     `mkdir -p ${shellQuoteWord(REMOTE_LIFECYCLE_DIR)} && ` +
     `: > ${shellQuoteWord(log)} && ` +
-    `env OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ${shellQuoteWord(script)} ` +
+    `env HOME=${REMOTE_HOME} PATH=${shellQuoteWord(REMOTE_PATH)} ` +
+    `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ${shellQuoteWord(script)} ` +
     `>> ${shellQuoteWord(log)} 2>&1` +
     (hook === "setup" ? ` && touch ${shellQuoteWord(stamp)}` : "");
   const result = await driver.exec(command, { cwd, timeoutMs: 20 * 60_000 });
