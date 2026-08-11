@@ -131,7 +131,6 @@ import {
 	IconPencil,
 	IconArrowDown,
 	IconArrowUp,
-	IconArrowUpToLine,
 	IconCrosshair,
 	IconDesk,
 	IconDotsHorizontal,
@@ -955,13 +954,8 @@ export function SessionViewer({
 		sessionId: string;
 		loaded: number;
 		cursor: number | null;
-		scrollToStart: boolean;
 	} | null>(null);
-	const [jumpingToStart, setJumpingToStart] = useState(false);
 	const [loadingAllHistory, setLoadingAllHistory] = useState(false);
-	// Set when the walk lands: the final page's entries render with the commit
-	// that follows, so the scroll itself happens in a layout effect below.
-	const scrollToTopRef = useRef(false);
 	// Byte offset the loaded history begins at — the "load earlier" pagination
 	// cursor (server: parseTranscriptTail/parseTranscriptWindow startOffset).
 	// null = unknown (old server) → load_history falls back to the full resend.
@@ -1421,8 +1415,6 @@ export function SessionViewer({
 	useEffect(() => {
 		return () => {
 			historyWalkRef.current = null;
-			scrollToTopRef.current = false;
-			setJumpingToStart(false);
 			setLoadingAllHistory(false);
 		};
 	}, [session.id]);
@@ -2040,7 +2032,6 @@ export function SessionViewer({
 					if (historyWalkRef.current?.sessionId === session.id) {
 						if (msg.truncated) {
 							historyWalkRef.current = null;
-							setJumpingToStart(false);
 							setLoadingAllHistory(false);
 						} else {
 							finishHistoryWalk();
@@ -2609,24 +2600,13 @@ export function SessionViewer({
 		relayout();
 	}, [entries, queued, visibleSteered, pending, relayout]);
 
-	// The landing half of "jump to the start": the walk's last page arrives with
-	// this commit, so the scroll has to wait for it. After relayout (source order
-	// = effect order) so nothing re-pins the reader afterwards.
-	useLayoutEffect(() => {
-		if (!scrollToTopRef.current) return;
-		scrollToTopRef.current = false;
-		const el = messagesRef.current;
-		if (el) el.scrollTop = 0;
-	}, [entries, messagesRef]);
-
-
 	// Ref mirror keeps rapid clicks from sending duplicate history requests
 	// before React re-renders with the disabled button.
 	const loadingHistoryRef = useRef(false);
 	useEffect(() => {
 		loadingHistoryRef.current = loadingHistory;
 	}, [loadingHistory]);
-	// One page request. `whole` is the jump-to-start variant: a fat page in seq
+	// One page request. `whole` is the whole-history variant: a fat page in seq
 	// mode, and in legacy mode the deliberately cursor-less request the server
 	// answers with the entire transcript in one transcript_init — byte-window
 	// paging has no cheap way to walk a backlog, and that full resend has always
@@ -2696,7 +2676,6 @@ export function SessionViewer({
 			sessionId: session.id,
 			loaded: 0,
 			cursor: null,
-			scrollToStart: false,
 		};
 		setLoadingAllHistory(true);
 		beginHistoryLoad(60_000);
@@ -2706,35 +2685,12 @@ export function SessionViewer({
 	// the transcript_history handler). `loadingHistory` deliberately stays true
 	// across the gaps, which is what keeps the auto-load sentinel and a second
 	// click from interleaving requests of their own.
-	const jumpToStart = useCallback(() => {
-		if (!historyTruncated || loadingHistoryRef.current) return;
-		loadingHistoryRef.current = true;
-		historyWalkRef.current = {
-			sessionId: session.id,
-			loaded: 0,
-			cursor: null,
-			scrollToStart: true,
-		};
-		setJumpingToStart(true);
-		beginHistoryLoad(60_000);
-		requestHistoryPage(true);
-	}, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
-	// Finish either whole-history walk. Loading all drops the temporary anchor
-	// hold only after the last prepend has landed; jumping additionally moves to
-	// scrollTop 0, the one position unaffected by rows settling below it.
 	const finishHistoryWalk = useCallback(() => {
-		const walk = historyWalkRef.current;
-		if (!walk) return;
+		if (!historyWalkRef.current) return;
 		historyWalkRef.current = null;
-		setJumpingToStart(false);
 		setLoadingAllHistory(false);
 		stopHistoryHold();
-		if (walk.scrollToStart) {
-			scrollToTopRef.current = true;
-			const el = messagesRef.current;
-			if (el) el.scrollTop = 0;
-		}
-	}, [messagesRef, stopHistoryHold]);
+	}, [stopHistoryHold]);
 
 	// Auto-load is driven by upward reader intent, never by viewport geometry
 	// alone. That keeps initial hydration and programmatic bottom settling from
@@ -5228,51 +5184,30 @@ export function SessionViewer({
 									{historyTruncated && (
 										<div className="flex justify-center [overflow-anchor:none] px-0 pt-3 pb-3.5">
 											{loadingHistory ? (
-												<div className="inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--bg))] px-3 py-1 text-label font-semibold text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm">
+												<div className="inline-flex min-h-10 items-center gap-1.5 rounded-[999px] bg-popup px-4 text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm">
 													<span
-														className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
+														className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim"
 														aria-hidden
 													/>
 													<span>
 														{loadingAllHistory
 															? "Loading all messages…"
-															: jumpingToStart
-															? "Finding first message…"
 															: "Loading older messages…"}
 													</span>
 												</div>
 											) : (
-												<div
-													role="group"
-													aria-label="Earlier messages"
-													className="inline-flex items-stretch overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--bg))] text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm"
+												<button
+													type="button"
+													onClick={loadAllHistory}
+													className="group inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[999px] bg-popup px-4 text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[background-color,scale] hover:bg-[color-mix(in_srgb,var(--popup-surface)_94%,var(--text))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
 												>
-													<button
-														type="button"
-														onClick={loadAllHistory}
-														className="group inline-flex cursor-pointer items-center gap-1.5 px-3 py-1 text-label font-semibold text-fg transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
-													>
-														<IconArrowUp
-															size={13}
-															className="text-accent transition-transform group-hover:-translate-y-px"
-															aria-hidden
-														/>
-														Load all
-													</button>
-													<span className="my-1.5 w-px shrink-0 bg-[color-mix(in_srgb,var(--accent)_22%,transparent)]" aria-hidden />
-													<button
-														type="button"
-														onClick={jumpToStart}
-														className="group flex w-8 cursor-pointer items-center justify-center text-accent transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
-														title="Go to first message"
-														aria-label="Go to first message"
-													>
-														<IconArrowUpToLine
-															size={13}
-															className="transition-transform group-hover:-translate-y-px"
-														/>
-													</button>
-												</div>
+													<IconArrowUp
+														size={13}
+														className="text-dim transition-transform group-hover:-translate-y-px"
+														aria-hidden
+													/>
+													Load all
+												</button>
 											)}
 										</div>
 									)}
