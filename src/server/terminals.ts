@@ -29,6 +29,9 @@
  *    echo, a dead-looking tab (bit us 2026-07-09). No published port, no
  *    extra HTTPS surface — the SDK socket terminates at opensession and the
  *    browser only ever speaks the existing tailnet-gated session WS.
+ *  - Box sandbox: Box's authenticated SSH-key API installs a dedicated
+ *    Open Session public key, then the host opens a normal SSH PTY. The
+ *    private key remains local and is never exposed to the browser or Box.
  *
  * Trust model: the web UI is Tailscale- + team-gated and interactive users are
  * already admin-equivalent (sessions run arbitrary Bash via prompts), so a
@@ -68,6 +71,10 @@ const MAX_TERMINALS_PER_SOCKET = 8;
 
 const HOME = homeDir();
 
+function shellQuote(word: string): string {
+  return `'${word.replaceAll("'", `'\"'\"'`)}'`;
+}
+
 function setTerm(ws: unknown, termId: string, entry: TermEntry): void {
   let m = terms.get(ws);
   if (!m) terms.set(ws, (m = new Map()));
@@ -100,9 +107,10 @@ export interface TerminalOpts {
   send: (msg: object) => void;
 }
 
-type TermTargetKind = "host" | "docker" | "daytona" | "microvm";
+type TermTargetKind = "host" | "docker" | "daytona" | "box" | "microvm";
 
-/** A shell realized as a host process wrapped in a Bun PTY (host + docker). */
+/** A shell realized as a host process wrapped in a Bun PTY (host, docker, or
+ * an SSH transport such as Box). */
 interface SpawnTarget {
   kind: "spawn";
   argv: string[];
@@ -234,6 +242,30 @@ async function resolveTarget(
       };
     }
 
+    if (sb.provider === "box" && sandboxProviderConfigured("box")) {
+      const { boxSshTarget } = await import("./sandbox/adapters/box");
+      const target = await boxSshTarget(sb.sandboxId);
+      return {
+        kind: "spawn",
+        target: "box",
+        displayCwd: cwd,
+        argv: [
+          "ssh",
+          "-tt",
+          "-i",
+          target.privateKeyPath,
+          "-o",
+          "IdentitiesOnly=yes",
+          "-o",
+          "StrictHostKeyChecking=accept-new",
+          "-o",
+          "ConnectTimeout=20",
+          `${target.user}@${target.host}`,
+          `cd ${shellQuote(cwd)} && exec bash -il`,
+        ],
+      };
+    }
+
     if (sb.provider === "microvm" && sandboxProviderConfigured("microvm")) {
       const { microvmPtySession } = await import("./sandbox/adapters/microvm");
       const sandboxId = sb.sandboxId;
@@ -255,7 +287,7 @@ async function resolveTarget(
 
 /**
  * Session-aware terminal start (the term_start WS handler's entry): resolves
- * the target (host / docker sandbox / daytona sandbox) and connects the shell
+ * the target (host / docker / Daytona / Box / MicroVM) and connects the shell
  * for one (socket, termId) pair. Async because sandbox resolution can take
  * seconds (container wake, remote PTY connect) — a term_stop or another
  * term_start for the same termId racing in cancels it.

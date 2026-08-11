@@ -16,6 +16,16 @@ const tileStyle = {
 };
 
 export function SandboxProviderLogo({ provider }: { provider: SandboxProvider }) {
+	if (provider === "box") {
+		return (
+			<span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-[#111]" style={tileStyle}>
+				<svg viewBox="-4.6 0 35.5 35.5" className="h-8 w-7" fill="currentColor" aria-hidden="true">
+					<path d="M20.9863 0C20.9693.0678 16.9743 16.0113 18.71 19.7461c1.7355 3.7334 7.5261 7.3733 7.5537 7.3906-.0157-.0022-6.1516-.8636-9.9678.5459V22.666h-5.0322v5.0322h4.9912c-.1821.0684-.3599.1396-.5303.2188-3.7311 1.7343-7.3688 7.519-7.3906 7.5537.0062-.0439.9536-6.8088-.7803-10.5391C5.8172 21.1961.021 17.5542 0 17.541c.0247.0035 6.8035.9561 10.5391-.7803C14.274 15.0235 20.9628.0528 20.9863 0Z" />
+				</svg>
+			</span>
+		);
+	}
+
 	if (provider === "daytona") {
 		return (
 			<span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white" style={tileStyle}>

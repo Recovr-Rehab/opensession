@@ -60,6 +60,12 @@ const PROVIDERS: Array<{
 		command: "",
 	},
 	{
+		id: "box",
+		label: "Box",
+		description: "Persistent Linux VMs in your Box account with fast snapshot restores and private previews.",
+		command: "",
+	},
+	{
 		id: "modal",
 		label: "Modal",
 		description: "Remote sandboxes in your Modal account, connected with a token pair.",
@@ -120,11 +126,16 @@ type MachineProfile = {
 	settings: SandboxMachineSettings;
 };
 
-const MACHINE_PROFILES: Record<"daytona" | "modal" | "microvm", MachineProfile[]> = {
+const MACHINE_PROFILES: Record<"daytona" | "box" | "modal" | "microvm", MachineProfile[]> = {
 	daytona: [
 		{ id: "small", label: "Small", detail: "1 vCPU · 1 GB · 3 GB disk", settings: { cpu: 1, memoryMb: 1024, diskGb: 3 } },
 		{ id: "medium", label: "Medium", detail: "2 vCPU · 4 GB · 8 GB disk", settings: { cpu: 2, memoryMb: 4096, diskGb: 8 } },
 		{ id: "large", label: "Large", detail: "4 vCPU · 8 GB · 10 GB disk", settings: { cpu: 4, memoryMb: 8192, diskGb: 10 } },
+	],
+	box: [
+		{ id: "small", label: "Small", detail: "2 shared vCPU · 4 GB · 40+ GB SSD", settings: { cpu: 2, memoryMb: 4096, diskGb: 40 } },
+		{ id: "default", label: "Default", detail: "4 shared vCPU · 8 GB · 80+ GB SSD", settings: { cpu: 4, memoryMb: 8192, diskGb: 80 } },
+		{ id: "large", label: "Large", detail: "8 shared vCPU · 16 GB · 100+ GB SSD", settings: { cpu: 8, memoryMb: 16_384, diskGb: 100 } },
 	],
 	modal: [
 		{ id: "efficient", label: "Efficient", detail: "0.5 physical CPU · 2 GB", settings: { cpu: 0.5, memoryMb: 2048 } },
@@ -141,13 +152,14 @@ const MACHINE_PROFILES: Record<"daytona" | "modal" | "microvm", MachineProfile[]
 };
 
 function machineProfiles(provider: SandboxConnectionInfo["provider"]): MachineProfile[] {
-	return provider === "daytona" || provider === "modal" || provider === "microvm"
+	return provider === "daytona" || provider === "box" || provider === "modal" || provider === "microvm"
 		? MACHINE_PROFILES[provider]
 		: [];
 }
 
 function defaultMachineProfile(provider: SandboxConnectionInfo["provider"]): string {
 	if (provider === "daytona") return "medium";
+	if (provider === "box") return "default";
 	if (provider === "modal") return "balanced";
 	return "large";
 }
@@ -242,7 +254,7 @@ function ConnectDialog({
 	}
 
 	const exists = connection.state !== "not_configured";
-	const remote = connection.provider === "daytona" || connection.provider === "modal";
+	const remote = connection.provider === "daytona" || connection.provider === "box" || connection.provider === "modal";
 	return (
 		<Modal.Root
 			open={open}
@@ -256,18 +268,20 @@ function ConnectDialog({
 					title={`${exists ? "Configure" : "Connect"} ${provider.label}`}
 					description={
 						remote
-							? "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
+							? connection.provider === "box"
+								? "Credentials stay on this server. Open Session tests ingress, creates a disposable Box, verifies archive/resume and snapshot restore, then archives it."
+								: "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
 							: "Run the setup command on this machine, then let Open Session verify the runtime and snapshot path."
 					}
 				/>
 
-				{connection.provider === "daytona" && (
+				{(connection.provider === "daytona" || connection.provider === "box") && (
 					<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-						Daytona API key
+						{connection.provider === "box" ? "Box API key" : "Daytona API key"}
 						<Input
 							type="password"
 							autoComplete="off"
-							placeholder={connection.hasCredentials ? "Leave blank to keep current key" : "Enter API key"}
+							placeholder={connection.hasCredentials ? "Leave blank to keep current key" : `Enter ${connection.provider === "box" ? "box_…" : "API key"}`}
 							value={apiKey}
 							onChange={(event) => setApiKey(event.target.value)}
 						/>
@@ -331,40 +345,42 @@ function ConnectDialog({
 								<pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-dim">{ingress.generatedSnippet}</pre>
 							</details>
 						)}
-						<details className="rounded-lg bg-surface p-3 text-supporting text-dim">
-							<summary className="cursor-pointer font-medium text-fg">Provider settings</summary>
-							<div className="mt-3 grid gap-3 sm:grid-cols-2">
-								<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-									Region
-									<Input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Provider default" />
-								</label>
-								<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-									CPU
-									<Input type="number" min="1" value={cpu} onChange={(event) => setCpu(event.target.value)} placeholder="Provider default" />
-								</label>
-								<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-									Memory (MB)
-									<Input type="number" min="512" value={memoryMb} onChange={(event) => setMemoryMb(event.target.value)} placeholder="Provider default" />
-								</label>
-								{connection.provider === "daytona" ? (
+						{connection.provider !== "box" && (
+							<details className="rounded-lg bg-surface p-3 text-supporting text-dim">
+								<summary className="cursor-pointer font-medium text-fg">Provider settings</summary>
+								<div className="mt-3 grid gap-3 sm:grid-cols-2">
 									<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-										Base snapshot
-										<Input value={snapshot} onChange={(event) => setSnapshot(event.target.value)} placeholder="Daytona default" />
+										Region
+										<Input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Provider default" />
 									</label>
-								) : (
-									<>
+									<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+										CPU
+										<Input type="number" min="1" value={cpu} onChange={(event) => setCpu(event.target.value)} placeholder="Provider default" />
+									</label>
+									<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+										Memory (MB)
+										<Input type="number" min="512" value={memoryMb} onChange={(event) => setMemoryMb(event.target.value)} placeholder="Provider default" />
+									</label>
+									{connection.provider === "daytona" ? (
 										<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-											Modal app
-											<Input value={app} onChange={(event) => setApp(event.target.value)} placeholder="opensession-sandboxes" />
+											Base snapshot
+											<Input value={snapshot} onChange={(event) => setSnapshot(event.target.value)} placeholder="Daytona default" />
 										</label>
-										<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-											Environment
-											<Input value={environment} onChange={(event) => setEnvironment(event.target.value)} placeholder="Modal default" />
-										</label>
-									</>
-								)}
-							</div>
-						</details>
+									) : connection.provider === "modal" ? (
+										<>
+											<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+												Modal app
+												<Input value={app} onChange={(event) => setApp(event.target.value)} placeholder="opensession-sandboxes" />
+											</label>
+											<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+												Environment
+												<Input value={environment} onChange={(event) => setEnvironment(event.target.value)} placeholder="Modal default" />
+											</label>
+										</>
+									) : null}
+								</div>
+							</details>
+						)}
 					</>
 				)}
 
@@ -634,6 +650,8 @@ function ProjectEnvironmentDialog({
 				<div className="rounded-lg bg-surface p-3 text-supporting leading-relaxed text-dim">
 					{provider === "daytona" &&
 						"Daytona supports custom resource combinations, but these documented sizes avoid invalid or undersized setups."}
+					{provider === "box" &&
+						"Box exposes three fixed machine types. Stop and resume retain the disk, and prepared projects restore from a named snapshot."}
 					{provider === "modal" &&
 						"Modal CPU values are physical cores and memory is a guaranteed request; workloads may burst when capacity is available."}
 					{provider === "microvm" &&

@@ -230,17 +230,17 @@ happens.
   resets the idle-stop clock; an idle-stop while a shell is open simply ends
   it (`term_exit` in the tab) — reopen to wake again. Works on every existing
   container: no image change, no published port, no Caddy route.
-- **Daytona**: a host `ssh` through Daytona's SSH gateway — `createSshAccess`
-  mints a per-shell token (`ssh <token>@ssh.app.daytona.io`, 12 h expiry)
-  that is **revoked the moment the shell closes**. Host keys aren't pinned
-  (their gateway fronts rotating infra); the token is the authentication.
-  Works against a bare, un-bootstrapped sandbox — the terminal needs no
-  runner payload.
+- **Daytona**: the SDK's native PTY socket, with working prompt, echo and
+  resize. It terminates at Open Session; no preview port or browser credential
+  is created.
+- **Box**: Box's authenticated API installs a dedicated Open Session public
+  key on the selected Box, then the host opens a normal SSH PTY. The private
+  key remains on the Open Session host. Opening the tab wakes an archived Box.
 - **Anything else / any failure** (kill-switch, gone container, provider
   unconfigured, e2b): host login shell in the worktree with a dim fallback
   notice — the pre-sandbox behavior.
 
-Deliberately NOT ttyd-in-the-sandbox: both providers already have an
+Deliberately NOT ttyd-in-the-sandbox: these providers already have an
 interactive exec transport that plugs into the existing PTY plumbing, so the
 browser only ever speaks the existing tailnet- + team-gated session WS — no
 extra HTTPS listener, no basic-auth credential to store, no public-ish
@@ -267,7 +267,7 @@ needed after changing it.
   check, rate-limited; see docs/self-hosting-sandboxes.md "Public dial-back
   ingress") instead of exposing the main server. Transport code is runner
   internals — restart + image rebuild to take effect.
-- **Remote adapters** (`provider: "daytona"` / `"e2b"`,
+- **Remote adapters** (`provider: "daytona"` / `"e2b"` / `"box"` / `"modal"`,
   src/server/sandbox/adapters/): always volume-style workspaces cloned
   in-sandbox over https (`cloneCredential`), always ws transport, runner
   payload installed on first ensure by `bootstrapRemoteSandbox` for engines
@@ -310,7 +310,9 @@ needed after changing it.
   (`bun run deploy/sandbox/conformance.ts [docker-socket|docker-ws|daytona|e2b|box|modal|microvm|lambda-microvm]`):
   verify.ts's checks parameterized over providers. Docker entries always run
   and must stay green; daytona/e2b/box/modal run only with credentials (else
-  `SKIPPED: no credentials`) and leave zero sandboxes behind.
+  `SKIPPED: no credentials`). Providers with hard deletion leave zero
+  sandboxes behind; Box leaves only archived, non-billing conformance entries
+  because its public API exposes archive rather than hard deletion.
 
 ## Host setup + verification
 

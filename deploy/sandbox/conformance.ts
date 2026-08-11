@@ -13,9 +13,10 @@
  *
  * - docker-socket / docker-ws ALWAYS run (docker is the self-host default —
  *   this host must keep them fully green).
- * - daytona / e2b run ONLY when credentials are configured — the suite lifts
- *   them from the LIVE ~/.opensession-sandbox.json provider blocks (or
- *   DAYTONA_API_KEY / E2B_API_KEY). Without credentials the section prints
+ * - daytona / e2b / box run ONLY when credentials are configured — the suite
+ *   reads workspace-owned Daytona/Box credentials through their opaque secret
+ *   references and the experimental E2B key from the live config. Without
+ *   credentials the section prints
  *   `SKIPPED: no credentials` and does NOT fake success; a key-holder gets
  *   the full matrix. Remote entries create the minimum sandbox set needed for
  *   the matrix: one source sandbox, plus one distinct restore sandbox for
@@ -39,6 +40,7 @@
 const SCRATCH = `${process.env.HOME || homedir()}/.sandbox-conformance-scratch`;
 process.env.OPENSESSION_RUN_JOURNAL = `${SCRATCH}/active-runs.json`;
 process.env.OPENSESSION_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
+process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = `${SCRATCH}/workspace-secrets.json`;
 // Provider state files + sandbox-runs dirs land under OPENSESSION_SESSIONS_DIR —
 // point it at the scratch dir so sbxtest state never lands in the live store.
 process.env.OPENSESSION_SESSIONS_DIR = `${SCRATCH}/sessions`;
@@ -120,10 +122,31 @@ function liveSandboxFileConfig(): any {
   return {};
 }
 const liveCfg = liveSandboxFileConfig();
-const daytonaKey: string = liveCfg?.daytona?.apiKey || process.env.DAYTONA_API_KEY || "";
+function liveConnection(provider: string): any {
+  return Array.isArray(liveCfg?.connections)
+    ? liveCfg.connections.find((connection: any) => connection?.provider === provider)
+    : undefined;
+}
+function liveWorkspaceSecret(ref?: string): string {
+  if (!ref) return "";
+  try {
+    const store = JSON.parse(readFileSync(`${HOME}/.opensession-workspace-secrets.json`, "utf-8"));
+    return String(store?.secrets?.find((secret: any) => secret?.id === ref)?.value || "");
+  } catch {
+    return "";
+  }
+}
+const daytonaKey: string =
+  liveWorkspaceSecret(liveConnection("daytona")?.credentialRef) ||
+  liveCfg?.daytona?.apiKey ||
+  process.env.DAYTONA_API_KEY ||
+  "";
 const e2bKey: string = liveCfg?.e2b?.apiKey || process.env.E2B_API_KEY || "";
-const boxKey: string = liveCfg?.box?.apiKey || process.env.BOX_API_KEY || "";
-const boxApiUrl: string = liveCfg?.box?.apiUrl || "https://ascii.dev/api/box/v1";
+const boxKey: string =
+  liveWorkspaceSecret(liveConnection("box")?.credentialRef) || "";
+const boxApiUrl: string =
+  liveConnection("box")?.settings?.apiUrl ||
+  "https://ascii.dev/api/box/v1";
 const modalTokenId: string = liveCfg?.modal?.tokenId || process.env.MODAL_TOKEN_ID || "";
 const modalTokenSecret: string =
   liveCfg?.modal?.tokenSecret || process.env.MODAL_TOKEN_SECRET || "";
@@ -414,12 +437,12 @@ const entries: Entry[] = [
   {
     name: "box",
     providerId: "box",
-    skip: boxKey ? null : "SKIPPED: no credentials (set box.apiKey in ~/.opensession-sandbox.json or BOX_API_KEY)",
+    skip: boxKey ? null : "SKIPPED: connect Box in Workspace → Sandboxes first",
     config: {
       provider: "box",
       callbackBaseUrl: remoteBase,
       previewPorts: [8080],
-      box: { apiKey: boxKey },
+      prewarm: { enabled: true, ttlMinutes: 20, maxLive: 2 },
       ...(githubToken() ? { cloneCredential: { type: "https-token", token: githubToken() } } : {}),
     },
     repoId: PUB_REPO_ID,
@@ -519,7 +542,7 @@ async function waitForPrewarm(entry: Entry, checkPrefix = "prewarm"): Promise<st
 }
 
 async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
-  if (entry.providerId !== "daytona" && entry.providerId !== "modal") return;
+  if (entry.providerId !== "daytona" && entry.providerId !== "box" && entry.providerId !== "modal") return;
   const template = readRemoteRepoTemplate(entry.providerId, entry.repoId);
   if (!template) return;
   try {
@@ -528,6 +551,12 @@ async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
       const client = new Daytona({ apiKey: daytonaKey });
       const snapshot = await client.snapshot.get(template.artifactId);
       await client.snapshot.delete(snapshot);
+    } else if (entry.providerId === "box") {
+      await fetch(`${boxApiUrl}/named-snapshots/${encodeURIComponent(template.artifactId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${boxKey}` },
+        signal: AbortSignal.timeout(60_000),
+      });
     } else {
       const { ModalClient } = await import("modal");
       const modalCfg = liveCfg?.modal || {};
@@ -567,6 +596,23 @@ async function runEntry(entry: Entry): Promise<void> {
     return;
   }
   await Bun.write(process.env.OPENSESSION_SANDBOX_CONFIG!, JSON.stringify(entry.config));
+  const { connectSandboxProvider, setSandboxConnectionQualification } = await import(
+    "../../src/server/sandbox/connections"
+  );
+  if (entry.providerId === "daytona") {
+    connectSandboxProvider("daytona", {
+      secret: daytonaKey,
+      settings: {
+        apiUrl: liveConnection("daytona")?.settings?.apiUrl || liveCfg?.daytona?.apiUrl,
+        target: liveConnection("daytona")?.settings?.target || liveCfg?.daytona?.target,
+        snapshot: liveConnection("daytona")?.settings?.snapshot || liveCfg?.daytona?.snapshot,
+      },
+    });
+    setSandboxConnectionQualification("daytona", { status: "ready" });
+  } else if (entry.providerId === "box") {
+    connectSandboxProvider("box", { secret: boxKey, settings: { apiUrl: boxApiUrl } });
+    setSandboxConnectionQualification("box", { status: "ready" });
+  }
   const provider = getSandboxProvider(entry.providerId);
   const sessionId = `sbxtest-conf-${entry.name}-${RUN_TS}`;
   const spec = {
@@ -644,7 +690,11 @@ async function runEntry(entry: Entry): Promise<void> {
     // different sandbox from it, retain the exact seal nonce + prepared repo
     // artifact, and be adopted by a second session. Repeating cold setup
     // cannot satisfy the nonce equality check.
-    if (entry.providerId === "daytona" || entry.providerId === "modal") {
+    if (
+      entry.providerId === "daytona" ||
+      entry.providerId === "box" ||
+      entry.providerId === "modal"
+    ) {
       const proofPath = remoteRepoTemplateProofPath(entry.repoId);
       const firstSeal = await sandbox.exec(["cat", proofPath]);
       const firstPrepared = await sandbox.exec([
@@ -1075,37 +1125,46 @@ async function auditBoxLeftovers(): Promise<void> {
   if (!boxKey) return;
   section = "box";
   try {
-    // Box has no labels — the adapter names boxes with their session id, so
-    // suite leftovers are exactly the ones named sbxtest-*. Same live-account
-    // guard as the other audits: never reap a real session's box.
+    // Box has no labels or public hard-delete endpoint. The adapter names
+    // boxes with their session id, so suite leftovers are exactly the ones
+    // named sbxtest-*. Archived boxes release compute and are expected to stay
+    // visible in the Box account; only a still-active test box is a leak.
     const res = await fetch(`${boxApiUrl}/boxes?limit=100`, {
       headers: { Authorization: `Bearer ${boxKey}` },
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) throw new Error(`list boxes: HTTP ${res.status}`);
-    const listLeftovers = (boxes: Array<{ id: string; name?: string; state?: string }>) =>
-      (boxes || []).filter((b) => String(b.name || "").startsWith("sbxtest-"));
-    let leftovers = listLeftovers(((await res.json()) as any).boxes);
+    const listActive = (boxes: Array<{ id: string; name?: string; state?: string }>) =>
+      (boxes || []).filter(
+        (box) =>
+          String(box.name || "").startsWith("sbxtest-") &&
+          String(box.state || "") !== "archived",
+      );
+    let leftovers = listActive(((await res.json()) as any).boxes);
     if (leftovers.length) {
-      // Deletions are async server-side — give in-flight teardowns a moment.
+      // Archival is asynchronous — give in-flight stops a moment.
       await new Promise((r) => setTimeout(r, 15_000));
       const again = await fetch(`${boxApiUrl}/boxes?limit=100`, {
         headers: { Authorization: `Bearer ${boxKey}` },
         signal: AbortSignal.timeout(30_000),
       });
-      leftovers = again.ok ? listLeftovers(((await again.json()) as any).boxes) : leftovers;
+      leftovers = again.ok ? listActive(((await again.json()) as any).boxes) : leftovers;
     }
     ok(
-      "no backstage-named boxes left behind",
+      "no active conformance boxes left behind",
       leftovers.length === 0,
       leftovers.map((l) => `${l.id}(${l.state})`).join(",") || "none",
     );
     for (const { id } of leftovers) {
-      console.warn(`  cleaning up leftover box ${id}`);
+      console.warn(`  archiving leftover box ${id}`);
       try {
-        await fetch(`${boxApiUrl}/boxes/${id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${boxKey}` },
+        await fetch(`${boxApiUrl}/boxes/${id}/stop`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${boxKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ force: false }),
           signal: AbortSignal.timeout(60_000),
         });
       } catch (e) {

@@ -150,7 +150,7 @@ export async function handleSandboxesRoutes(
       const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
       try {
 				if (
-					(provider === "daytona" || provider === "modal") &&
+					(provider === "daytona" || provider === "box" || provider === "modal") &&
 					typeof body.publicBaseUrl === "string" &&
 					body.publicBaseUrl.trim()
 				) {

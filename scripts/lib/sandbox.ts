@@ -40,7 +40,7 @@ function updateSandboxConfig(patch: Record<string, unknown>): void {
   chmodSync(sandboxConfigPath(), 0o600);
 }
 
-async function qualifyRemoteThroughServer(provider: "daytona" | "modal"): Promise<number> {
+async function qualifyRemoteThroughServer(provider: "daytona" | "box" | "modal"): Promise<number> {
   const token = localAutomationToken();
   if (!token) {
     fail(
@@ -65,7 +65,7 @@ async function qualifyRemoteThroughServer(provider: "daytona" | "modal"): Promis
   } catch {
     fail(
       "Open Session is not reachable on its local port",
-      "start the service before testing Daytona or Modal",
+      "start the service before testing Daytona, Box or Modal",
     );
     return 1;
   }
@@ -532,7 +532,7 @@ export async function sandbox(args: string[]): Promise<number> {
   }
   if (!isWorkspaceSandboxProvider(provider)) {
     fail("usage: opensession sandbox enable docker|microvm");
-    info(dim("Also available: opensession sandbox test|disable docker|daytona|modal|microvm"));
+    info(dim("Also available: opensession sandbox test|disable docker|daytona|box|modal|microvm"));
     info(dim("Provider accounts are connected in Workspace → Sandboxes."));
     return 1;
   }
@@ -558,7 +558,7 @@ export async function sandbox(args: string[]): Promise<number> {
       return 1;
     }
     heading(`${provider} qualification`);
-    if (provider === "daytona" || provider === "modal") {
+    if (provider === "daytona" || provider === "box" || provider === "modal") {
       return qualifyRemoteThroughServer(provider);
     }
     try {
@@ -571,6 +571,6 @@ export async function sandbox(args: string[]): Promise<number> {
     }
   }
   fail("usage: opensession sandbox enable docker|microvm");
-  info(dim("Also available: opensession sandbox test|disable docker|daytona|modal|microvm"));
+  info(dim("Also available: opensession sandbox test|disable docker|daytona|box|modal|microvm"));
   return 1;
 }

@@ -63,7 +63,7 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 		"usage",
 		"credits",
 	],
-	sandboxes: ["docker", "daytona", "modal", "microvm", "firecracker", "isolation", "compute"],
+	sandboxes: ["docker", "daytona", "box", "ascii", "modal", "microvm", "firecracker", "isolation", "compute"],
 	integrations: ["github sign-in", "oauth app"],
 	connections: ["mcp servers", "tools", "agents", "add mcp server"],
 	memory: ["facts", "remember", "scopes"],

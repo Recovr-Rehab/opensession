@@ -150,13 +150,6 @@ export interface SandboxE2bConfig {
   template?: string;
 }
 
-export interface SandboxBoxConfig {
-  /** ascii.dev Box API key (`box_…`). Falls back to BOX_API_KEY. */
-  apiKey?: string;
-  /** API base (default https://ascii.dev/api/box/v1). */
-  apiUrl?: string;
-}
-
 export interface SandboxModalConfig {
   /** Optional named provider profile stored as non-secret connection metadata. */
   profile?: string;
@@ -248,8 +241,6 @@ export interface SandboxConfig {
   daytona?: SandboxDaytonaConfig;
   /** E2B adapter (provider "e2b"). */
   e2b?: SandboxE2bConfig;
-  /** ascii.dev Box adapter (provider "box"). */
-  box?: SandboxBoxConfig;
   /** Modal adapter (provider "modal"). */
   modal?: SandboxModalConfig;
   /** AWS Lambda MicroVM adapter (provider "lambda-microvm"). */
@@ -373,10 +364,6 @@ export function sandboxConfig(): SandboxConfig {
         e2b:
           raw?.e2b && typeof raw.e2b === "object"
             ? { apiKey: str(raw.e2b.apiKey), template: str(raw.e2b.template) }
-            : undefined,
-        box:
-          raw?.box && typeof raw.box === "object"
-            ? { apiKey: str(raw.box.apiKey), apiUrl: str(raw.box.apiUrl) }
             : undefined,
         awsLambdaMicrovm:
           raw?.awsLambdaMicrovm && typeof raw.awsLambdaMicrovm === "object"
@@ -507,6 +494,7 @@ export function sandboxPrewarmConfig(): SandboxPrewarmConfig {
     sandboxConfigPresent() &&
     Boolean(
       normalizedConnectionConfigured("daytona") === true ||
+        normalizedConnectionConfigured("box") === true ||
         cfg.e2b?.apiKey ||
         process.env.E2B_API_KEY ||
         sandboxProviderConfigured("modal") ||
@@ -833,10 +821,15 @@ export function sandboxProviderConfigured(id: RunnableSandboxProviderId): boolea
   const normalized = normalizedConnectionConfigured(id);
   if (normalized !== undefined) return normalized;
   const cfg = sandboxConfig();
-  if (id === "docker" || id === "daytona" || id === "modal" || id === "microvm") {
+  if (
+    id === "docker" ||
+    id === "daytona" ||
+    id === "box" ||
+    id === "modal" ||
+    id === "microvm"
+  ) {
     return false;
   }
-  if (id === "box") return Boolean(cfg.box?.apiKey || process.env.BOX_API_KEY);
   if (id === "lambda-microvm") return Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
   return Boolean(cfg.e2b?.apiKey || process.env.E2B_API_KEY);
 }
@@ -848,8 +841,7 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
   const daytonaConfigured = enabled && normalizedConnectionConfigured("daytona") === true;
   const e2bConfigured =
     enabled && Boolean(cfg.e2b?.apiKey || process.env.E2B_API_KEY);
-  const boxConfigured =
-    enabled && Boolean(cfg.box?.apiKey || process.env.BOX_API_KEY);
+  const boxConfigured = enabled && normalizedConnectionConfigured("box") === true;
   const modalConfigured = enabled && normalizedConnectionConfigured("modal") === true;
   const lambdaMicrovmConfigured = enabled && Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
   const firecrackerMicrovmConfigured = enabled && normalizedConnectionConfigured("microvm") === true;
@@ -1000,7 +992,7 @@ export function resolveRequestedSandbox(
         : id === "daytona"
           ? "connect Daytona in Workspace → Sandboxes"
           : id === "box"
-            ? 'set {"box":{"apiKey":"…"}} in ~/.opensession-sandbox.json (or BOX_API_KEY)'
+            ? "connect Box in Workspace → Sandboxes"
             : id === "modal"
               ? "connect Modal in Workspace → Sandboxes"
               : id === "microvm"
@@ -1043,7 +1035,7 @@ export function publicIngressConfig(): SandboxPublicIngressConfig | null {
 }
 
 /**
- * The base URL REMOTE-provider sandboxes (daytona/e2b) dial back to: the
+ * The base URL remote-provider sandboxes dial back to: the
  * public-ingress URL when the isolated public listener is enabled and has a
  * publicBaseUrl, else the plain callbackBaseUrl (tailnet/self-hosted setups
  * where the sandbox can reach the main bind directly). Docker sandboxes never

@@ -63,7 +63,7 @@ const lambdaMicrovmProvider = new LambdaMicrovmProvider();
 /**
  * Resolve a SandboxProvider. `spec` (a provider id, e.g. from a session file's
  * `sandbox.provider`) overrides the config; omitted = effective config value.
- * Remote adapters (daytona/e2b) fail loudly at ensure-time when their API key
+ * Remote adapters fail loudly at ensure-time when their credentials
  * isn't configured — a premature config flip never silently runs unsandboxed.
  */
 export function getSandboxProvider(

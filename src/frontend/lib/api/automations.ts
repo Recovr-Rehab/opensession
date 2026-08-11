@@ -198,7 +198,7 @@ export type SandboxConnectionState =
 
 export interface SandboxConnectionInfo {
 	id: string;
-	provider: "docker" | "daytona" | "modal" | "microvm";
+	provider: "docker" | "daytona" | "box" | "modal" | "microvm";
 	enabled: boolean;
 	settings: Record<string, string | number | boolean | undefined>;
 	qualification?: {

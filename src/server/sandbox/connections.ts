@@ -21,6 +21,7 @@ import { bootstrapSignature } from "./adapters/bootstrap";
 export const WORKSPACE_SANDBOX_PROVIDERS = [
   "docker",
   "daytona",
+  "box",
   "modal",
   "microvm",
 ] as const;
@@ -195,7 +196,8 @@ export function getSandboxConnection(
 }
 
 export function sandboxAdapterSignature(provider: WorkspaceSandboxProvider): string {
-  return `${provider}:connection-v1:${bootstrapSignature()}`;
+  const version = provider === "box" ? "connection-v2" : "connection-v1";
+  return `${provider}:${version}:${bootstrapSignature()}`;
 }
 
 export function safeSandboxConnections(): SafeSandboxConnection[] {
@@ -253,15 +255,17 @@ export function connectSandboxProvider(
 ): SandboxConnection {
   const previous = getSandboxConnection(provider);
   let credentialRef = previous?.credentialRef;
-  if (provider === "daytona") {
+  if (provider === "daytona" || provider === "box") {
     if (input.secret) {
       credentialRef = putWorkspaceSecret(
-        "sandbox.daytona",
+        `sandbox.${provider}`,
         input.secret.trim(),
         credentialRef,
       );
     }
-    if (!credentialRef) throw new Error("Daytona API key is required");
+    if (!credentialRef) {
+      throw new Error(`${provider === "box" ? "Box" : "Daytona"} API key is required`);
+    }
   } else if (provider === "modal") {
     const tokenId = input.tokenId;
     const tokenSecret = input.tokenSecret;
@@ -368,7 +372,7 @@ export function sandboxConnectionReady(provider: WorkspaceSandboxProvider): bool
   const connection = getSandboxConnection(provider);
   if (!connection?.enabled || connection.qualification?.status !== "ready") return false;
   if (connection.qualification.adapterSignature !== sandboxAdapterSignature(provider)) return false;
-  if (provider === "daytona" || provider === "modal") {
+  if (provider === "daytona" || provider === "box" || provider === "modal") {
     return Boolean(connection.credentialRef && workspaceSecretExists(connection.credentialRef));
   }
   return true;
@@ -376,14 +380,14 @@ export function sandboxConnectionReady(provider: WorkspaceSandboxProvider): bool
 
 /** Internal-only account credential resolution for SDK construction. */
 export function sandboxProviderCredential(
-  provider: "daytona" | "modal",
+  provider: "daytona" | "box" | "modal",
 ): { apiKey: string } | { tokenId: string; tokenSecret: string } | undefined {
   const connection = getSandboxConnection(provider);
   const raw = connection?.credentialRef
     ? resolveWorkspaceSecret(connection.credentialRef)
     : undefined;
   if (!raw) return undefined;
-  if (provider === "daytona") return { apiKey: raw };
+  if (provider === "daytona" || provider === "box") return { apiKey: raw };
   try {
     const parsed = JSON.parse(raw);
     if (typeof parsed.tokenId === "string" && typeof parsed.tokenSecret === "string") {

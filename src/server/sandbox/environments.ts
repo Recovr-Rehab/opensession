@@ -108,6 +108,24 @@ function normalizeMachineSettings(
     }
     settings.diskGb = raw.diskGb;
   }
+  if (provider === "box") {
+    const supported = [
+      { cpu: 2, memoryMb: 4_096, diskGb: 40 },
+      { cpu: 4, memoryMb: 8_192, diskGb: 80 },
+      { cpu: 8, memoryMb: 16_384, diskGb: 100 },
+    ].some(
+      (profile) =>
+        profile.cpu === settings.cpu &&
+        profile.memoryMb === settings.memoryMb &&
+        profile.diskGb === raw.diskGb,
+    );
+    if (!supported) {
+      throw Object.assign(new Error("Choose one of Box's Small, Default, or Large machine sizes"), {
+        code: "MACHINE_SETTINGS_INVALID",
+      });
+    }
+    settings.diskGb = raw.diskGb;
+  }
   if (provider === "microvm") {
     const supported = [
       { cpu: 2, memoryMb: 4_096, diskGb: 25 },
@@ -174,7 +192,7 @@ async function derivedEnvironment(
       preparedAt: stored?.preparedAt || now,
     };
   }
-  if (provider === "daytona" || provider === "modal") {
+  if (provider === "daytona" || provider === "box" || provider === "modal") {
     const template = readRemoteRepoTemplate(provider, repo);
     if (template) {
       return {
@@ -230,7 +248,7 @@ async function derivedEnvironment(
 
 export async function listSandboxEnvironments(): Promise<SandboxEnvironment[]> {
   const out: SandboxEnvironment[] = [];
-  const providers: WorkspaceSandboxProvider[] = ["docker", "daytona", "modal", "microvm"];
+  const providers: WorkspaceSandboxProvider[] = ["docker", "daytona", "box", "modal", "microvm"];
   for (const repo of Object.keys(REPOS)) {
     for (const provider of providers) out.push(await derivedEnvironment(repo, provider));
   }
@@ -245,12 +263,15 @@ async function removeTemplate(
   repo: string,
   provider: WorkspaceSandboxProvider,
 ): Promise<void> {
-  if (provider === "daytona" || provider === "modal") {
+  if (provider === "daytona" || provider === "box" || provider === "modal") {
     const previous = invalidateRemoteRepoTemplate(provider, repo);
     if (previous?.artifactId) {
       if (provider === "daytona") {
         const { deleteDaytonaTemplateArtifact } = await import("./adapters/daytona");
         await deleteDaytonaTemplateArtifact(previous.artifactId);
+      } else if (provider === "box") {
+        const { deleteBoxTemplateArtifact } = await import("./adapters/box");
+        await deleteBoxTemplateArtifact(previous.artifactId);
       } else {
         const { deleteModalTemplateArtifact } = await import("./adapters/modal");
         await deleteModalTemplateArtifact(previous.artifactId);
@@ -269,7 +290,7 @@ async function removeTemplate(
  */
 export async function invalidateSandboxEnvironmentsForRepo(repo: string): Promise<void> {
   if (!(repo in REPOS)) return;
-  for (const provider of ["daytona", "modal", "microvm"] as const) {
+  for (const provider of ["daytona", "box", "modal", "microvm"] as const) {
     const stored = storedEnvironment(repo, provider);
     if (!stored) continue;
     await invalidatePrewarm(provider, repo).catch((error) => {

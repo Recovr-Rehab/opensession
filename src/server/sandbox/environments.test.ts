@@ -77,6 +77,14 @@ describe("sandbox project environments", () => {
       prepareSandboxEnvironment(repo, "modal", { settings: { cpu: 0 } }),
     ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
 
+    connectSandboxProvider("box", { secret: "test-box-key" });
+    setSandboxConnectionQualification("box", { status: "ready" });
+    await expect(
+      prepareSandboxEnvironment(repo, "box", {
+        settings: { cpu: 4, memoryMb: 8_192, diskGb: 40 },
+      }),
+    ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
+
     connectSandboxProvider("microvm", {});
     setSandboxConnectionQualification("microvm", { status: "ready" });
     await expect(
@@ -93,7 +101,7 @@ describe("sandbox project environments", () => {
       path,
       JSON.stringify({
         version: 1,
-        environments: ["daytona", "modal", "microvm"].map((provider) => ({
+        environments: ["daytona", "box", "modal", "microvm"].map((provider) => ({
           repo,
           provider,
           state: "ready",
@@ -104,7 +112,7 @@ describe("sandbox project environments", () => {
     );
     await invalidateSandboxEnvironmentsForRepo(repo);
     const stored = JSON.parse(readFileSync(path, "utf-8"));
-    expect(stored.environments).toHaveLength(3);
+    expect(stored.environments).toHaveLength(4);
     expect(stored.environments.every((environment: any) => environment.state === "stale")).toBe(true);
   });
 });

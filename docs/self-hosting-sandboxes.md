@@ -10,10 +10,10 @@ connection is selected explicitly, personally, or as the workspace default.
 
 ## Setup
 
-Workspace administrators configure the four supported choices in
-**Workspace → Sandboxes**. Daytona and Modal accept workspace-owned credentials
-there; credentials are written once to the server-side workspace secret store
-and are never returned to the browser or placed in a sandbox.
+Workspace administrators configure providers in **Workspace → Sandboxes**.
+Daytona, Box and Modal accept workspace-owned credentials there; credentials
+are written once to the server-side workspace secret store and are never
+returned to the browser or placed in a sandbox.
 
 Local providers use one generated host command:
 
@@ -163,7 +163,7 @@ Honest status, because these are the newest parts:
 - Clearly transient provider/network failures during idempotent sandbox
   creation are retried once. Agent launch is never retried because that could
   duplicate a turn.
-- A default-branch update invalidates the repository's reusable Daytona,
+- A default-branch update invalidates the repository's reusable Daytona, Box,
   Modal and MicroVM templates. The next preparation rebuilds from current
   source rather than adopting a stale artifact.
 
@@ -281,10 +281,6 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   "e2b": {
     "apiKey": "e2b_…",         // falls back to E2B_API_KEY
     "template": "base"         // sandbox template id (default "base")
-  },
-  "box": {
-    "apiKey": "box_…",         // falls back to BOX_API_KEY
-    "apiUrl": "…"              // optional (default https://ascii.dev/api/box/v1)
   },
   "awsLambdaMicrovm": {
     "imageIdentifier": "arn:aws:lambda:us-east-1:123456789012:microvm-image:opensession",
@@ -604,30 +600,41 @@ fix what fails, and record the certification in this doc + the plan.
 Until then, the adapter is available only to the conformance harness; it is
 hidden from the picker and rejected by session creation/prewarm.
 
-### Box / ascii.dev (implemented, NOT yet certified)
+### Box / ascii.dev (first-class, awaiting live certification)
 
-Persistent Ubuntu VMs (box.ascii.dev): 4 vCPU / 8GB fixed size, Docker
-inside the VM, per-second billing, EU-hosted. The adapter
-(`src/server/sandbox/adapters/box.ts`) speaks the plain HTTP API (no SDK
-dep) to the same contract as Daytona/E2B (volume-style workspace, ws
-transport, bootstrap on first ensure) but has **not been run against a live
-Box account** — treat it as untested until the conformance suite passes.
+Persistent Ubuntu VMs from box.ascii.dev, integrated through its public HTTP
+API without an SDK dependency. Connect an API key in **Workspace →
+Sandboxes**. It is stored as an opaque workspace secret; new Boxes use
+`noEnv: true`, so account-level Box/Git/agent credentials are never inherited.
 
-- Config: `provider: "box"` + the `box` block (or `BOX_API_KEY`).
-- Lifetime model: a TTL countdown to **archival** (disk snapshot; resume
-  restores it — gentler than E2B's kill). The adapter resets the TTL to
-  `idleStopMinutes` on activity; a long fully-idle gap archives the box and
-  the next turn resumes it.
-- Exec quirk: the commands endpoint caps at 60s per call, so longer
-  commands run detached in-VM and are polled (transparent to callers).
-- Preview URLs come from the in-box `host <port>` CLI
-  (`https://<subdomain>-<port>.on.ascii.dev`, `_token`-protected).
-- No prewarm adapter and no Shell-tab remote PTY yet (SSH-key provisioning
-  is the follow-up path for the latter).
-- To certify: `bun run deploy/sandbox/conformance.ts box` with credentials,
-fix what fails, and record the certification in this doc + the plan.
-Until then, the adapter is available only to the conformance harness; it is
-hidden from the picker and rejected by session creation.
+- Projects opt in independently. Preparation runs the repository setup inside
+  a Box, scrubs launch credentials, and publishes a named snapshot. Subsequent
+  prewarms and sessions restore that exact prepared filesystem and are sized
+  with Box's fixed **Small** (2 vCPU / 4 GB / at least 40 GB), **Default** (4 /
+  8 GB / at least 80 GB), or **Large** (8 / 16 GB / at least 100 GB) profile.
+- Warm-on-typing creates a Box while the user composes and the new session
+  adopts it. Cold creation falls back cleanly when a named snapshot has gone
+  stale.
+- The command API's synchronous limit is 600 seconds. Longer work and
+  background commands use Box's native detached-process endpoint and poll its
+  separate stdout/stderr and exit status.
+- A TTL archives idle Boxes. Archive releases compute, resume preserves the
+  workspace, and opening a Shell tab wakes the Box. The Shell uses Box's
+  authenticated SSH-key endpoint and a dedicated host-only Open Session key.
+- Private previews use `host <port> --private`. Their `_token` remains only in
+  the provider URL stored server-side; Open Session's Caddy Portal authenticates
+  the user and appends that token while proxying, so browsers receive only the
+  normal session Portal URL.
+- Box's current public API intentionally offers archive rather than hard
+  deletion. Removing a session archives its Box and forgets the Open Session
+  association; the no-compute archived entry remains visible in the user's Box
+  account. Prepared named snapshots can be deleted and rebuilt normally.
+- Workspace qualification checks credentials and quota, outbound dial-back,
+  command semantics, `/home/ubuntu` file writes, private previews,
+  archive/resume persistence, and a distinct named-snapshot restore. The full
+  release gate is `bun run deploy/sandbox/conformance.ts box`; until that runs
+  against a funded account and the certification evidence is recorded, Box is
+  visible for setup but unavailable for new sessions.
 
 ### Modal (implemented, live-certified 2026-08-11)
 

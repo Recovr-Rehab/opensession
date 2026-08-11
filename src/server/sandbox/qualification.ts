@@ -171,7 +171,7 @@ export async function qualifySandboxConnection(
 ): Promise<void> {
   setSandboxConnectionQualification(provider, { status: "checking" });
   try {
-    if (provider === "daytona" || provider === "modal") {
+    if (provider === "daytona" || provider === "box" || provider === "modal") {
       // Prove ingress before allocating paid provider compute.
       await verifyPublicSandboxIngress();
     }
@@ -180,6 +180,9 @@ export async function qualifySandboxConnection(
     else if (provider === "daytona") {
       const { qualifyDaytonaConnection } = await import("./adapters/daytona");
       await qualifyDaytonaConnection();
+    } else if (provider === "box") {
+      const { qualifyBoxConnection } = await import("./adapters/box");
+      await qualifyBoxConnection();
     } else {
       const { qualifyModalConnection } = await import("./adapters/modal");
       await qualifyModalConnection();

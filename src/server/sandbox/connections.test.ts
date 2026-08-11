@@ -58,6 +58,21 @@ describe("workspace sandbox connections", () => {
     expect(JSON.stringify(safe)).not.toContain("daytona-secret-value");
   });
 
+  test("stores Box credentials behind an opaque reference and exposes only readiness", () => {
+    connectSandboxProvider("box", {
+      secret: "box-secret-value",
+      settings: { apiUrl: "https://box.example.test/v1" },
+    });
+    const configText = readFileSync(process.env.OPENSESSION_SANDBOX_CONFIG!, "utf-8");
+    expect(configText).not.toContain("box-secret-value");
+    expect(sandboxProviderCredential("box")).toEqual({ apiKey: "box-secret-value" });
+    expect(safeSandboxConnections().find((value) => value.provider === "box")).toMatchObject({
+      hasCredentials: true,
+      state: "checking",
+      settings: { apiUrl: "https://box.example.test/v1" },
+    });
+  });
+
   test("rotates Modal credentials in place and disconnect deletes the secret", () => {
     const first = connectSandboxProvider("modal", {
       tokenId: "modal-id-one",

@@ -1,6 +1,6 @@
 /**
- * Warm-on-typing sandbox PREWARM pool for sandbox providers (Daytona and the
- * local Firecracker MicroVM today) — the background-agents pattern:
+ * Warm-on-typing sandbox PREWARM pool for sandbox providers (Daytona, Box,
+ * Modal, and the local Firecracker MicroVM) — the background-agents pattern:
  * sandbox provisioning starts when the user begins typing.
  *
  * Preparation is provider-specific. Daytona warms its sandbox runner; the
@@ -217,6 +217,8 @@ function prewarmSignature(provider: string, resources?: SandboxMachineSettings):
   const shape =
     provider === "daytona"
       ? getSandboxConnection("daytona")?.settings.snapshot || "default"
+      : provider === "box"
+        ? "named-snapshot"
       : provider === "e2b"
         ? cfg.e2b?.template || "base"
         : "";
@@ -243,6 +245,10 @@ async function adapterFor(provider: string): Promise<PrewarmAdapter | null> {
   if (provider === "daytona") {
     const { daytonaPrewarmAdapter } = await import("./adapters/daytona");
     return daytonaPrewarmAdapter;
+  }
+  if (provider === "box") {
+    const { boxPrewarmAdapter } = await import("./adapters/box");
+    return boxPrewarmAdapter;
   }
   if (provider === "microvm") {
     const { microvmPrewarmAdapter } = await import("./adapters/microvm");
@@ -423,7 +429,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
       const { validateRemoteRepoTemplate } = await import("./remote-repo-template");
       await validateRemoteRepoTemplate(
         driver,
-        entry.provider as "daytona" | "modal",
+        entry.provider as "daytona" | "box" | "modal",
         repo,
       );
     } else if (adapter.prepare) {
@@ -690,8 +696,12 @@ async function auditProviderOrphans(now: number): Promise<void> {
   const g = globalThis as unknown as { __prewarmOrphanAuditAt?: number };
   if (now - (g.__prewarmOrphanAuditAt || 0) < ORPHAN_AUDIT_INTERVAL_MS) return;
   g.__prewarmOrphanAuditAt = now;
-  for (const provider of ["daytona", "e2b", "modal", "microvm"]) {
-    if (!sandboxProviderConfigured(provider as "daytona" | "e2b" | "microvm")) continue;
+  for (const provider of ["daytona", "box", "e2b", "modal", "microvm"]) {
+    if (
+      !sandboxProviderConfigured(
+        provider as "daytona" | "box" | "e2b" | "modal" | "microvm",
+      )
+    ) continue;
     // A create in flight has a live sandbox with no recorded id yet — skip
     // this provider's audit round rather than destroy it mid-bootstrap.
     const creating = [...pool().values()].some(

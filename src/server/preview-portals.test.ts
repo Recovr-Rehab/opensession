@@ -55,4 +55,17 @@ describe("permission-coupled preview portals", () => {
 			Host: ["sandbox-provider.example"],
 		});
 	});
+
+	test("keeps provider query credentials in the server-side proxy route", () => {
+		const config = previewServerConfig(
+			22004,
+			"https://box-preview.on.ascii.dev?_token=private-token",
+			"preview.example.test",
+		) as any;
+		const proxy = config.routes[0].handle[0].routes[0].handle[1];
+		expect(proxy.upstreams).toEqual([{ dial: "box-preview.on.ascii.dev:443" }]);
+		expect(proxy.rewrite).toEqual({
+			uri: "?{http.request.uri.query}&_token=private-token",
+		});
+	});
 });

@@ -368,6 +368,16 @@ export function previewServerConfig(
               transport: { protocol: "http", tls: {} },
             }
           : {}),
+        ...(remote.search
+          ? {
+              // Provider preview credentials (Box's `_token`) stay in Caddy's
+              // server-side route. Preserve the browser's own query string
+              // while appending the provider query only to the proxied copy.
+              rewrite: {
+                uri: `?{http.request.uri.query}&${remote.searchParams.toString()}`,
+              },
+            }
+          : {}),
         headers: {
           request: {
             set: {

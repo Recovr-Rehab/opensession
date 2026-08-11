@@ -64,11 +64,11 @@ afterAll(() => {
 });
 
 const write = (cfg: object) => writeFileSync(cfgPath(), JSON.stringify(cfg));
-const ready = (provider: "docker" | "daytona" | "modal" | "microvm") => {
+const ready = (provider: "docker" | "daytona" | "box" | "modal" | "microvm") => {
   connectSandboxProvider(
     provider,
-    provider === "daytona"
-      ? { secret: "test-daytona-key" }
+    provider === "daytona" || provider === "box"
+      ? { secret: `test-${provider}-key` }
       : provider === "modal"
         ? { tokenId: "test-modal-id", tokenSecret: "test-modal-secret" }
         : {},
@@ -328,9 +328,9 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     write({
       provider: "e2b",
       e2b: { apiKey: "e2b_x" },
-      box: { apiKey: "box_x" },
       awsLambdaMicrovm: { imageIdentifier: "image-x" },
     });
+    ready("box");
     expect(sandboxCapabilityStatus().defaultProvider).toBe("local");
     for (const provider of ["e2b", "box", "lambda-microvm"] as const) {
       const status = sandboxCapabilityStatus().providers.find((p) => p.id === provider)!;
