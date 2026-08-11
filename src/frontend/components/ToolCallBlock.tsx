@@ -213,10 +213,10 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
       return <IconGlobe size={size} />;
     case "agent":
       return <IconSparkle size={size} />;
-    // IconConnections, not IconPlug: the plug only draws the middle half of
-    // the 24-grid, so it read a size smaller than every glyph beside it.
+    // The three nodes fill more of the 24-grid than the sparse tool glyphs.
+    // Pull it in optically so MCP rows carry the same weight as shell rows.
     case "mcp":
-      return <IconConnections size={size} />;
+      return <IconConnections size={size * 0.8} />;
     case "skill":
       return <IconBook size={size} />;
     default:
