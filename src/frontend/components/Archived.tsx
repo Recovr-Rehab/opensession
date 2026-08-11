@@ -19,6 +19,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
 import { useCurrentUser } from "./UserPicker";
+import { usePeople } from "../lib/people";
+import { archivedOwners, canonicalNames, sessionHasOwner } from "../lib/archived-owner";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { PageLayout } from "../ui/page";
 import { Button } from "../ui/button";
@@ -28,6 +30,7 @@ import { Menu } from "../ui/menu";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import { IconCheck, IconChevronRight, IconFilter, IconUnarchive } from "./icons";
 import { RepoTile } from "./RepoTile";
+import { UserAvatar } from "./UserAvatar";
 
 interface Props {
 	sessions: UnifiedSession[];
@@ -49,7 +52,11 @@ const SIDEBAR_FILTER_KEY = "opensession-sidebar-filter";
 /** How many rows the list draws before asking for a narrower search. */
 const PAGE_SIZE = 200;
 
-type OwnerFilter = "mine" | "everyone";
+/**
+ * `"mine"`, `"everyone"`, or one teammate's lowercased `startedBy` name — the
+ * archive is shared, so "whose is this" is a person, not a boolean.
+ */
+type OwnerFilter = "mine" | "everyone" | (string & {});
 type ReasonFilter = "all" | "manual" | "auto";
 
 const ARCHIVE_SECTION_ORDER = ["today", "yesterday", "week", "older"] as const;
@@ -132,6 +139,7 @@ function originChip(s: UnifiedSession): { label: string; tone: string } | null {
 
 export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 	const currentUser = useCurrentUser();
+	const roster = usePeople();
 	const [search, setSearch] = useState("");
 	const [busy, setBusy] = useState<string | null>(null);
 	// Scope: default to *my* archived sessions, and inherit the sidebar's
@@ -153,7 +161,17 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 	);
 	const hasAutoArchived = allArchived.some(isAutoReason);
 	const activeFilterCount =
-		(owner === "mine" ? 1 : 0) + (repo !== "all" ? 1 : 0) + (reason !== "all" ? 1 : 0);
+		(owner !== "everyone" ? 1 : 0) + (repo !== "all" ? 1 : 0) + (reason !== "all" ? 1 : 0);
+
+	// Teammates who archived something, most-archived first — the Owner options
+	// beyond you. Built from the whole archived set, not the filtered one, so
+	// choosing a person doesn't empty the list you chose them from.
+	const meKey = currentUser.toLowerCase();
+	const canonical = useMemo(() => canonicalNames(roster), [roster]);
+	const people = useMemo(
+		() => archivedOwners(allArchived, canonical, meKey),
+		[allArchived, canonical, meKey],
+	);
 
 	// Repos present in the archived set, most-used first — the repo dropdown options.
 	const repos = useMemo(() => {
@@ -173,16 +191,24 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 		if (repo !== "all" && !repos.includes(repo)) setRepo("all");
 	}, [repo, repos]);
 
+	// Same for a teammate who no longer has anything archived — but only once
+	// people have been seen at all, so a reload doesn't drop the choice mid-flight.
+	useEffect(() => {
+		if (
+			owner !== "mine" &&
+			owner !== "everyone" &&
+			people.length > 0 &&
+			!people.some((p) => p.key === owner)
+		)
+			setOwner("everyone");
+	}, [owner, people]);
+
 	const archived = useMemo(() => {
-		const user = currentUser.toLowerCase();
 		let list = allArchived;
-		if (owner === "mine")
-			list = list.filter(
-				(s) =>
-					!s.automation &&
-					!!s.startedBy &&
-					s.startedBy.toLowerCase() === user,
-			);
+		if (owner !== "everyone") {
+			const user = owner === "mine" ? meKey : owner;
+			list = list.filter((s) => sessionHasOwner(s, user, canonical));
+		}
 		if (repo !== "all") list = list.filter((s) => sessionRepo(s) === repo);
 		if (reason !== "all")
 			list = list.filter((s) =>
@@ -200,7 +226,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 			);
 		}
 		return list;
-	}, [allArchived, owner, repo, reason, search, currentUser]);
+	}, [allArchived, owner, repo, reason, search, meKey, canonical]);
 	const visibleArchived = archived.slice(0, PAGE_SIZE);
 	const sections = archiveSections(visibleArchived);
 
@@ -250,13 +276,24 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 						<Menu.Popup align="end" className="min-w-[220px]">
 							<Menu.Group>
 								<Menu.GroupLabel>Owner</Menu.GroupLabel>
-								<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(value as OwnerFilter)}>
-									{(["mine", "everyone"] as const).map((value) => (
-										<Menu.RadioItem key={value} value={value} closeOnClick>
-											<span className="min-w-0 flex-1">{value === "mine" ? "My archived" : "Everyone"}</span>
-											{owner === value && <IconCheck size={17} className="shrink-0 text-accent" />}
+								<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(String(value))}>
+									<Menu.RadioItem value="mine" closeOnClick>
+										<UserAvatar name={currentUser} size={18} />
+										<span className="min-w-0 flex-1">My archived</span>
+										{owner === "mine" && <IconCheck size={17} className="shrink-0 text-accent" />}
+									</Menu.RadioItem>
+									{people.map(({ key, label }) => (
+										<Menu.RadioItem key={key} value={key} closeOnClick>
+											<UserAvatar name={label} size={18} />
+											<span className="min-w-0 flex-1 truncate">{label}</span>
+											{owner === key && <IconCheck size={17} className="shrink-0 text-accent" />}
 										</Menu.RadioItem>
 									))}
+									<Menu.RadioItem value="everyone" closeOnClick>
+										<span className="size-[18px] shrink-0" />
+										<span className="min-w-0 flex-1">Everyone</span>
+										{owner === "everyone" && <IconCheck size={17} className="shrink-0 text-accent" />}
+									</Menu.RadioItem>
 								</Menu.RadioGroup>
 							</Menu.Group>
 							{repos.length > 1 && (
@@ -326,7 +363,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 				<Card>
 					<EmptyState>
 						Nothing archived
-						{search || owner === "mine" || repo !== "all" ? " matches" : " yet"}.
+						{search || owner !== "everyone" || repo !== "all" ? " matches" : " yet"}.
 					</EmptyState>
 				</Card>
 			) : (
