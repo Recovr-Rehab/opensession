@@ -5385,7 +5385,10 @@ async function* runOpencodeAttempt(
 export async function tryReattachOpencodeRun(
   run: ActiveRunRecord,
   handlers: { onAskUser?: RunAgentOpts["onAskUser"] }
-): Promise<AsyncGenerator<StreamEvent> | null> {
+): Promise<
+  | (AsyncGenerator<StreamEvent> & { cancelDetachedTurn: () => Promise<void> })
+  | null
+> {
   const ocSessionId = run.claudeSessionId;
   const serverKey = run.serverKey;
   if (!ocSessionId || !serverKey) return null;
@@ -6105,5 +6108,16 @@ export async function tryReattachOpencodeRun(
     }
   }
 
-  return attach();
+  const attached = attach() as AsyncGenerator<StreamEvent> & {
+    cancelDetachedTurn: () => Promise<void>;
+  };
+  // The generator registers its normal cancellation aliases on first next().
+  // Recovery can be stopped in the narrow gap after this function returns but
+  // before iteration starts, so expose the server-side abort independently.
+  attached.cancelDetachedTurn = async () => {
+    try {
+      await client.session.abort({ path: { id: ocSessionId! }, ...q });
+    } catch {}
+  };
+  return attached;
 }

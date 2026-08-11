@@ -1,11 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import * as mod from "./run-journal";
 import * as agent from "./agent-runner";
+import { clearRunState, getRunState, transitionRunState } from "./run-state";
 import * as shared from "./runner-shared";
 import type { StreamEvent } from "./run-events";
+import { makeFakeEngine } from "./testing/fake-engine";
 
 // __setActiveRunsPathForTest repoints the LIVE ACTIVE_RUNS_PATH binding, so
 // agent-runner.ts's own (already-cached, possibly earlier-imported-with-the-
@@ -26,6 +28,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	agent.__setEngineForTest(null);
 	mod.__setActiveRunsPathForTest(oldJournal);
 	if (oldForceLimit === undefined) delete process.env.OPENSESSION_FORCE_LIMIT;
 	else process.env.OPENSESSION_FORCE_LIMIT = oldForceLimit;
@@ -33,6 +36,174 @@ afterEach(() => {
 });
 
 describe("run journal", () => {
+	it("keeps interrupted and reattaching sessions busy until recovery settles", () => {
+		const sessionId = `recovery-${crypto.randomUUID()}`;
+		try {
+			transitionRunState(sessionId, "boot_journal_found", undefined, () => {});
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+			transitionRunState(sessionId, "reattach_start", undefined, () => {});
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+			transitionRunState(sessionId, "run_failed", undefined, () => {});
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
+		} finally {
+			clearRunState(sessionId);
+		}
+	});
+
+	it("settles an exhausted recovery with a visible terminal error", () => {
+		const sessionId = `exhausted-${crypto.randomUUID()}`;
+		const runKey = `run-${crypto.randomUUID()}`;
+		const startedAt = new Date().toISOString();
+		mod.journalSet({
+			runKey,
+			osSessionId: sessionId,
+			claudeSessionId: `engine-${crypto.randomUUID()}`,
+			cwd: "/tmp",
+			kind: "prompt-resume",
+			resumeAttempts: agent.MAX_BOOT_RESUME_ATTEMPTS,
+			firstJournaledAt: startedAt,
+			startedAt,
+		});
+		// Simulate the fresh process: journalSet marked the old process running,
+		// while restart recovery rebuilds state from the journal on boot.
+		clearRunState(sessionId);
+		expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+		let terminal: StreamEvent | undefined;
+		const errorLog = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const handled = agent.resumeInterruptedRuns((_id, event) => {
+				terminal = event;
+				throw new Error("observer failed");
+			});
+			expect(handled).toEqual([sessionId]);
+			expect(terminal).toMatchObject({
+				type: "error",
+				content: expect.stringContaining("restart recovery attempts"),
+			});
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
+			expect(mod.activeRunRecords()).toEqual([]);
+		} finally {
+			errorLog.mockRestore();
+			clearRunState(sessionId);
+		}
+	});
+
+	it("cancels a journal-owned recovery before its queued worker starts", () => {
+		const sessionId = `queued-recovery-${crypto.randomUUID()}`;
+		const runKey = `run-${crypto.randomUUID()}`;
+		try {
+			mod.journalSet({
+				runKey,
+				osSessionId: sessionId,
+				claudeSessionId: `engine-${crypto.randomUUID()}`,
+				cwd: "/tmp",
+				startedAt: new Date().toISOString(),
+			});
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+
+			expect(agent.cancelAgentRun(sessionId)).toBe(true);
+
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
+			expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(false);
+		} finally {
+			clearRunState(sessionId);
+		}
+	});
+
+	it("keeps an active cancelled recovery reserved until its worker exits", async () => {
+		const sessionId = `active-recovery-${crypto.randomUUID()}`;
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const fake = makeFakeEngine([{ kind: "clean", gate }]);
+		agent.__setEngineForTest(fake.engine);
+		mod.journalSet({
+			runKey: `run-${crypto.randomUUID()}`,
+			osSessionId: sessionId,
+			prompt: "continue",
+			cwd: "/tmp",
+			model: "claude-fable-5",
+			startedAt: new Date().toISOString(),
+		});
+		clearRunState(sessionId);
+
+		try {
+			agent.resumeInterruptedRuns();
+			while (fake.calls.length === 0) await Bun.sleep(5);
+
+			expect(agent.cancelAgentRun(sessionId)).toBe(true);
+			expect(getRunState(sessionId)).toBe("stopped");
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+
+			release();
+			while (agent.isAgentSessionBusy(sessionId)) await Bun.sleep(5);
+
+			agent.markSessionStarting(sessionId);
+			expect(getRunState(sessionId)).toBe("starting");
+			agent.unmarkSessionStarting(sessionId);
+			transitionRunState(sessionId, "start_aborted", undefined, () => {});
+		} finally {
+			release();
+			clearRunState(sessionId);
+		}
+	});
+
+	it("latches Stop while a prompt is still preparing", async () => {
+		const sessionId = `preparing-${crypto.randomUUID()}`;
+		const fake = makeFakeEngine([{ kind: "clean" }]);
+		agent.__setEngineForTest(fake.engine);
+		const run = () => agent.runAgent({
+			prompt: "continue",
+			cwd: "/tmp",
+			mcpServers: [],
+			model: "claude-fable-5",
+			fallbackModel: "none",
+			journal: { osSessionId: sessionId, kind: "prompt" },
+		});
+
+		try {
+			agent.markSessionStarting(sessionId);
+			expect(agent.cancelAgentRun(sessionId)).toBe(true);
+			for await (const _event of run()) {}
+			expect(fake.calls).toHaveLength(0);
+			agent.unmarkSessionStarting(sessionId);
+
+			agent.markSessionStarting(sessionId);
+			for await (const _event of run()) {}
+			expect(fake.calls).toHaveLength(1);
+			agent.unmarkSessionStarting(sessionId);
+		} finally {
+			agent.unmarkSessionStarting(sessionId);
+			clearRunState(sessionId);
+		}
+	});
+
+	it("does not notify for a rejected record when the same session will recover", () => {
+		const sessionId = `mixed-recovery-${crypto.randomUUID()}`;
+		const startedAt = new Date().toISOString();
+		const valid: mod.ActiveRunRecord = {
+			runKey: "valid",
+			osSessionId: sessionId,
+			cwd: "/tmp",
+			startedAt,
+		};
+		const unsafe: mod.ActiveRunRecord = {
+			...valid,
+			runKey: "unsafe",
+			kind: "prompt-resume-rerun",
+		};
+
+		const result = agent.sanitizeInterruptedRuns([unsafe, valid]);
+
+		expect(result.interrupted).toEqual([valid]);
+		expect(result.quarantined).toContainEqual({
+			run: unsafe,
+			reason: "recursive_recovery_kind",
+			notify: false,
+		});
+	});
+
 	it("deduplicates and bounds restart recovery while rejecting recursive records", () => {
 		const now = Date.now();
 		const records: mod.ActiveRunRecord[] = Array.from({ length: 40 }, (_, i) => ({

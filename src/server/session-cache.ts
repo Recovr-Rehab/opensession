@@ -8,8 +8,17 @@ import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { getAllSessions } from "./sessions";
 import { activeRunRecords } from "./run-journal";
-import { getRunState, transitionRunState, type RunState } from "./run-state";
-import { isAgentSessionBusy } from "./agent-runner";
+import {
+	getRunState,
+	isRunStateUnsettled,
+	transitionRunState,
+	type RunState,
+} from "./run-state";
+import {
+	isAgentEngineBusy,
+	isAgentLiveEngineBusy,
+	isAgentSessionBusy,
+} from "./agent-runner";
 import { audit } from "./audit";
 import { SESSION_EFFORTS as MODEL_EFFORTS } from "./models";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -46,20 +55,34 @@ export function getCachedSessions(): UnifiedSession[] {
 	// progress" elapsed ticker and survives a page refresh (a session can carry
 	// its bks id and its engine session id across records; key on both).
 	const runStarts = new Map<string, string>();
+	const journalBusy = new Set<string>();
 	for (const r of activeRunRecords()) {
 		if (!r.startedAt) continue;
 		for (const key of [r.osSessionId, r.claudeSessionId]) {
 			if (!key) continue;
+			journalBusy.add(key);
 			const prev = runStarts.get(key);
 			if (!prev || r.startedAt < prev) runStarts.set(key, r.startedAt);
 		}
 	}
 	// Sessions driven from the web UI run in-process; surface those too
 	for (const s of data) {
-		if (
-			!s.isRunning &&
-			isAgentSessionBusy(s.claudeSessionId, s.codexThreadId, s.id)
-		) {
+		const rs = getRunState(s.id);
+		const engineBusy = isAgentEngineBusy(
+			s.claudeSessionId,
+			s.codexThreadId,
+			s.id,
+		);
+		const liveEngineBusy = isAgentLiveEngineBusy(
+			s.claudeSessionId,
+			s.codexThreadId,
+			s.id,
+		);
+		const recoveryBusy =
+			journalBusy.has(s.id) ||
+			(!!s.claudeSessionId && journalBusy.has(s.claudeSessionId)) ||
+			(!!s.codexThreadId && journalBusy.has(s.codexThreadId));
+		if (!s.isRunning && (engineBusy || recoveryBusy || isRunStateUnsettled(rs))) {
 			s.isRunning = true;
 		}
 		if (s.isRunning) {
@@ -68,9 +91,8 @@ export function getCachedSessions(): UnifiedSession[] {
 				(s.claudeSessionId ? runStarts.get(s.claudeSessionId) : undefined) ||
 				(s.codexThreadId ? runStarts.get(s.codexThreadId) : undefined);
 		}
-		const rs = getRunState(s.id);
 		if (rs !== "idle") s.runState = rs;
-		checkRunStateWedge(s.id, rs, s.isRunning);
+		checkRunStateWedge(s.id, rs, liveEngineBusy);
 	}
 	sessionsCache = { data, ts: Date.now() };
 	return data;
@@ -87,16 +109,6 @@ export function peekCachedSessions(): UnifiedSession[] {
 
 // ── Run-state readers ─────────────────────────────────────────────────────────
 
-/** FSM states in which a session's run is still in flight or pending recovery. */
-const UNSETTLED_STATES: ReadonlySet<RunState> = new Set([
-	"preparing",
-	"starting",
-	"running",
-	"ask_blocked",
-	"interrupted",
-	"reattaching",
-] satisfies RunState[]);
-
 /**
  * A run is SETTLED only when nothing more will happen without new input: the
  * state machine is at rest (idle/stopped/failed), the engine layer isn't busy
@@ -108,7 +120,7 @@ const UNSETTLED_STATES: ReadonlySet<RunState> = new Set([
 export function isRunSettled(sessionId: string): boolean {
 	const session = findSession(sessionId);
 	const id = session?.id || sessionId;
-	if (UNSETTLED_STATES.has(getRunState(id))) return false;
+	if (isRunStateUnsettled(getRunState(id))) return false;
 	if (
 		isAgentSessionBusy(session?.claudeSessionId, session?.codexThreadId, id)
 	) {

@@ -16,6 +16,7 @@ import {
 	isAgentSessionBusy,
 	markSessionStarting,
 	unmarkSessionStarting,
+	isAgentSessionCancelled,
 	cancelAgentRun,
 	steerAgentRun,
 	interruptAgentRun,
@@ -803,6 +804,7 @@ export async function drainQueue(sessionId: string): Promise<void> {
 		const combinedFiles = batch.flatMap((m) =>
 			Array.isArray(m.files) ? m.files : [],
 		);
+		const contextSessions = [...new Set(batch.flatMap((m) => m.contextSessions ?? []))];
 		// A queued Slack-thread reply carries its origin thread — the turn's answer
 		// mirrors back there. Last one wins if a batch somehow spans threads.
 		const slackReplyTo = [...batch].reverse().find((m) => m.slackReplyTo)?.slackReplyTo;
@@ -813,7 +815,7 @@ export async function drainQueue(sessionId: string): Promise<void> {
 				batch[0].user,
 				combinedImages,
 				combinedFiles.length ? combinedFiles : undefined,
-				undefined,
+				contextSessions.length ? contextSessions : undefined,
 				slackReplyTo,
 			);
 		} catch (e) {
@@ -1059,6 +1061,12 @@ export async function maybeLaunchSandboxedRun(
 ) | null> {
 	const sbProvider = session.sandbox?.provider;
 	if (!isRunnableSandboxProvider(sbProvider)) return null; // "local"/absent/unknown = host
+	const cancelledRun = (sandbox?: { id: string }) =>
+		Object.assign((async function* (): AsyncGenerator<StreamEvent> {})(), {
+			sandboxProvider: sbProvider,
+			sandboxId: sandbox?.id,
+			sandboxReadyMs: Date.now() - sandboxStartedAt,
+		});
 	if (!sandboxesEnabled()) {
 		throw new Error("Sandbox execution is disabled by the operator kill switch");
 	}
@@ -1073,6 +1081,7 @@ export async function maybeLaunchSandboxedRun(
 	let rpcToken: string | undefined;
 	const sandboxStartedAt = Date.now();
 	try {
+		if (isAgentSessionCancelled(session.id)) return cancelledRun();
 		const provider = getSandboxProvider(sbProvider);
 		const sandbox = await ensureSandboxWithTransientRetry(provider, {
 			sessionId: session.id,
@@ -1098,6 +1107,7 @@ export async function maybeLaunchSandboxedRun(
 				});
 			},
 		});
+		if (isAgentSessionCancelled(session.id)) return cancelledRun(sandbox);
 		// Remote engine databases live inside the sandbox. A replacement VM cannot
 		// resume the old engine id, even when its git workspace was safely pushed.
 		const remoteSandboxReplaced =
@@ -1164,6 +1174,10 @@ export async function maybeLaunchSandboxedRun(
 			accountId: session.accountId,
 			journalKind: "prompt",
 		};
+		if (isAgentSessionCancelled(session.id)) {
+			unregisterRunToken(rpcToken);
+			return cancelledRun(sandbox);
+		}
 		const runCallbacks = {
 			onAskUser: makeAskHandler(session.id),
 			// A steer that reached the in-container run too late must not
@@ -1178,6 +1192,11 @@ export async function maybeLaunchSandboxedRun(
 		const handle = sandbox.launchRunEager
 			? await sandbox.launchRunEager(spec, runCallbacks)
 			: sandbox.launchRun(spec, runCallbacks);
+		if (isAgentSessionCancelled(session.id)) {
+			handle.cancel();
+			unregisterRunToken(rpcToken);
+			return cancelledRun(sandbox);
+		}
 		console.log(`[sandbox] ${session.id}: running in ${sandbox.id} (${sandbox.cwd})`);
 		return Object.assign(handle.events(), {
 			freshEngine: remoteSandboxReplaced || undefined,

@@ -31,8 +31,8 @@
  * (delivery obligations), manualStatus (human display pin), detached-vs-child
  * (a `running` attribute that only matters at shutdown).
  *
- * Wiring (transitions are additive observation, not control flow — nothing
- * branches on this state yet). Everything keys on the bks session id:
+ * Wiring (transitions are additive observation; the busy gate also treats
+ * unsettled states as session ownership). Everything keys on the bks session id:
  *   prompt                   agent-runner.ts markSessionStarting (called by
  *                            every run path before its first await)
  *   run_registered           run-journal.ts journalSet (run start + fallback
@@ -167,7 +167,7 @@ export const RUN_STATE_TRANSITIONS: Record<
 	interrupted: {
 		reattach_start: "reattaching",
 		resume_reprompt: "starting",
-		cancel: "idle",
+		cancel: "stopped",
 		engine_died: "interrupted",
 		boot_journal_found: "interrupted",
 		run_registered: "running",
@@ -202,6 +202,18 @@ export type RunStateEntry = {
 	since: string;
 	lastEvent?: RunEvent;
 };
+
+/** States that still own the session and must settle before a new turn starts. */
+export function isRunStateUnsettled(state: RunState): boolean {
+	return (
+		state === "preparing" ||
+		state === "starting" ||
+		state === "running" ||
+		state === "ask_blocked" ||
+		state === "interrupted" ||
+		state === "reattaching"
+	);
+}
 
 const g = globalThis as any;
 export const runStates: Map<string, RunStateEntry> = (g.__runStates ??=

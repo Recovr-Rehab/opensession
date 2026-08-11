@@ -5,6 +5,7 @@ import {
 	type RunState,
 	clearRunState,
 	getRunState,
+	isRunStateUnsettled,
 	nextRunState,
 	runStates,
 	transitionRunState,
@@ -170,6 +171,24 @@ describe("lifecycle paths", () => {
 	});
 });
 
+describe("settlement", () => {
+	test("restart recovery remains unsettled until its terminal outcome", () => {
+		for (const state of [
+			"preparing",
+			"starting",
+			"running",
+			"ask_blocked",
+			"interrupted",
+			"reattaching",
+		] satisfies RunState[]) {
+			expect(isRunStateUnsettled(state)).toBe(true);
+		}
+		for (const state of ["idle", "stopped", "failed"] satisfies RunState[]) {
+			expect(isRunStateUnsettled(state)).toBe(false);
+		}
+	});
+});
+
 describe("illegal combinations are rejected (the zombie class)", () => {
 	const rejected: Array<[RunState, RunEvent]> = [
 		["idle", "turn_end"], // double teardown
@@ -201,6 +220,9 @@ describe("engine death settles through interrupted", () => {
 			"running",
 		);
 		expect(walk("interrupted", ["resume_reprompt"])).toBe("starting");
+	});
+	test("stopping interrupted recovery remains stopped through terminal cleanup", () => {
+		expect(walk("interrupted", ["cancel", "turn_end"])).toBe("stopped");
 	});
 });
 
