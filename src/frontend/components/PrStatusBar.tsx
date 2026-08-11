@@ -697,12 +697,7 @@ export function PrStatusBar({
 	// Primary action for the current headline (right side of the strip). In the
 	// session header it sizes up to the header's other bordered controls, so the
 	// chip and the action read as a matched pair.
-	const actionBtn =
-		variant === "header"
-			? PR_HEAD_BTN
-			: variant === "section"
-				? "-translate-y-px"
-				: "";
+	const actionBtn = variant === "header" ? PR_HEAD_BTN : "";
 	function renderAction(): React.ReactNode {
 		if (prompted)
 			return (

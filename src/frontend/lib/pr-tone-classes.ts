@@ -102,7 +102,7 @@ export const PR_BAR =
 /** The same status row after it moves into the Info panel. Its section owns
  * the label and spacing; this row only supplies the tinted content. */
 export const PR_SECTION_ROW =
-	"pr-bar flex min-h-[52px] items-center gap-2.5 px-3 py-2 " +
+	"pr-bar flex min-h-[52px] items-center gap-2.5 px-3 pt-1.5 pb-2.5 " +
 	"[&>.staging-icon]:-ml-0.5 [&>.staging-icon]:shrink-0";
 
 /** A single rounded block whether the session has one PR or several. Each
