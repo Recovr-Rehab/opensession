@@ -7,7 +7,7 @@ import { SIDEBAR_STATUS_DOT, SIDEBAR_WS_SNOOZE, SIDEBAR_WS_TICKER } from "../../
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
 import { formatRemaining, snoozePresets } from "../../lib/snoozes";
-import { elapsedSince } from "../../lib/time";
+import { elapsedSince, fullTime } from "../../lib/time";
 import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
@@ -382,7 +382,7 @@ function WsOverviewInfo({
 							type="button"
 							onClick={() => openLightbox(media, i)}
 							className="relative block aspect-video w-[124px] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
-							title={[m.sessionTitle, new Date(m.at).toLocaleString()]
+							title={[m.sessionTitle, fullTime(m.at)]
 								.filter(Boolean)
 								.join(" · ")}
 						>

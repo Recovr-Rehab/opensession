@@ -40,6 +40,7 @@ import type {
 } from "../lib/types";
 import { formatPrCommentPrompt } from "./PrPanel";
 import { renderMarkdown } from "../lib/markdown";
+import { fullTime } from "../lib/time";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
 import {
 	personKey,
@@ -1787,7 +1788,7 @@ export function WorkspaceInfo({
 														// card's own padding, not against the panel.
 														"w-[calc((100%-30px)/2)]",
 										)}
-										title={[m.sessionTitle, new Date(m.at).toLocaleString()]
+										title={[m.sessionTitle, fullTime(m.at)]
 											.filter(Boolean)
 											.join(" · ")}
 									>

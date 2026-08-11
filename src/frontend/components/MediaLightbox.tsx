@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type WorkspaceMediaItem } from "../lib/api";
+import { fullTime } from "../lib/time";
 import { cn } from "../ui/cn";
 import {
 	IconArrowDown,
@@ -868,10 +869,9 @@ function MediaLightbox({
 	});
 
 	if (!item) return null;
-	const caption = [
-		item.sessionTitle,
-		item.at ? new Date(item.at).toLocaleString() : null,
-	]
+	// When it was taken, the way the rest of the app says it — "Today at 14:32",
+	// "Jul 12 at 09:05" — rather than a raw locale stamp with seconds in it.
+	const caption = [item.sessionTitle, item.at ? fullTime(item.at) : null]
 		.filter(Boolean)
 		.join(" · ");
 	const description = item.description?.trim();
