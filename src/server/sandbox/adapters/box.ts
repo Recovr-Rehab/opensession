@@ -186,6 +186,16 @@ function isNotFound(e: unknown): boolean {
   return (e as { status?: number })?.status === 404;
 }
 
+/** A 409 here means Box has not accepted the command — retrying after a
+ * resume is safe. It is distinct from a 502, where the command may have run. */
+export function boxCommandPlaneUnavailable(error: unknown): boolean {
+  const detail = error as { status?: number; code?: string };
+  return (
+    detail?.status === 409 &&
+    (detail.code === "machine_not_running" || detail.code === "box_starting")
+  );
+}
+
 async function getBox(cfg: BoxClientConfig, boxId: string): Promise<BoxRecord | null> {
   try {
     const res = await boxApi<{ box?: BoxRecord } & BoxRecord>(cfg, "GET", `/boxes/${boxId}`);
@@ -317,6 +327,7 @@ export function boxNativeFilePath(path: string): string {
 
 export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
   let runtimeHomeReady = false;
+  let commandPlaneReady = false;
   const result = (response: BoxCommandResponse) => ({
     exitCode: response.timedOut ? 124 : Number(response.exitCode ?? 1),
     stdout: response.stdout ?? "",
@@ -365,9 +376,73 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     runtimeHomeReady = true;
   };
 
+  const waitForCommandPlane = async () => {
+    const deadline = Date.now() + 90_000;
+    let last: unknown;
+    while (Date.now() < deadline) {
+      try {
+        const probe = await boxApi<BoxCommandResponse>(
+          cfg,
+          "POST",
+          `/boxes/${boxId}/commands`,
+          { command: "true", timeoutSeconds: 15 },
+          30_000,
+        );
+        if (probe.exitCode === 0 && !probe.timedOut) {
+          commandPlaneReady = true;
+          return;
+        }
+        throw new Error("Box command readiness probe did not succeed");
+      } catch (error) {
+        last = error;
+        if (!boxCommandPlaneUnavailable(error)) throw error;
+        // A Box can briefly report `idle` while its restored VM is still
+        // bringing the command service online. Resume is idempotent here;
+        // only the explicit 409 proves no user command has run.
+        try {
+          await boxApi(cfg, "POST", `/boxes/${boxId}/resume`, { noEnv: true }, 30_000);
+        } catch (resumeError) {
+          if (!boxCommandPlaneUnavailable(resumeError)) throw resumeError;
+        }
+        await sleep(POLL_INTERVAL_MS);
+      }
+    }
+    throw new Error(
+      `Box ${boxId} did not accept commands after resume: ${
+        last instanceof Error ? last.message : String(last || "unknown error")
+      }`,
+    );
+  };
+
+  const execOnce = (shell: string, timeoutMs: number) =>
+    boxApi<BoxCommandResponse>(
+      cfg,
+      "POST",
+      `/boxes/${boxId}/commands`,
+      {
+        command: shell,
+        timeoutSeconds: Math.max(1, Math.min(600, Math.ceil(timeoutMs / 1000))),
+      },
+      timeoutMs + 30_000,
+    );
+
+  /** Retry exactly once only when Box confirms it accepted no request. */
+  const afterCommandPlaneReady = async <T>(run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (error) {
+      if (!boxCommandPlaneUnavailable(error)) throw error;
+      runtimeHomeReady = false;
+      commandPlaneReady = false;
+      await waitForCommandPlane();
+      await ensureRuntimeHome();
+      return run();
+    }
+  };
+
   const execDetached = async (shell: string, timeoutMs: number) => {
     try {
-      const started = await startDetached(shell);
+      const started = await afterCommandPlaneReady(() => startDetached(shell));
       if (!Number.isInteger(started.processId)) {
         throw new Error("Box returned no process id for detached command");
       }
@@ -375,13 +450,24 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       let last: BoxCommandStatusResponse | undefined;
       while (Date.now() < deadline) {
         await sleep(POLL_INTERVAL_MS);
-        last = await boxApi<BoxCommandStatusResponse>(
-          cfg,
-          "GET",
-          `/boxes/${boxId}/commands/${started.processId}?tailBytes=${COMMAND_TAIL_BYTES}`,
-          undefined,
-          30_000,
-        );
+        try {
+          last = await boxApi<BoxCommandStatusResponse>(
+            cfg,
+            "GET",
+            `/boxes/${boxId}/commands/${started.processId}?tailBytes=${COMMAND_TAIL_BYTES}`,
+            undefined,
+            30_000,
+          );
+        } catch (error) {
+          // The process was already accepted. Do not re-submit it; merely
+          // wait for the command service to return before polling again.
+          if (!boxCommandPlaneUnavailable(error)) throw error;
+          runtimeHomeReady = false;
+          commandPlaneReady = false;
+          await waitForCommandPlane();
+          await ensureRuntimeHome();
+          continue;
+        }
         if (!last.running) return result(last);
       }
       return {
@@ -406,18 +492,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       const timeoutMs = opts?.timeoutMs ?? 120_000;
       if (timeoutMs > SYNC_EXEC_MAX_MS) return execDetached(shell, timeoutMs);
       try {
-        return result(
-          await boxApi<BoxCommandResponse>(
-            cfg,
-            "POST",
-            `/boxes/${boxId}/commands`,
-            {
-              command: shell,
-              timeoutSeconds: Math.max(1, Math.min(600, Math.ceil(timeoutMs / 1000))),
-            },
-            timeoutMs + 30_000,
-          ),
-        );
+        return result(await afterCommandPlaneReady(() => execOnce(shell, timeoutMs)));
       } catch (error) {
         return {
           exitCode: 1,
@@ -428,7 +503,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     },
 
     async execBackground(cmd: string, opts?: RemoteExecOpts) {
-      const started = await startDetached(composeShell(cmd, opts));
+      const started = await afterCommandPlaneReady(() => startDetached(composeShell(cmd, opts)));
       if (!Number.isInteger(started.processId)) {
         throw new Error("Box returned no process id for background command");
       }
@@ -440,12 +515,14 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       // prefix explicitly and use the native file API instead of serializing
       // every launch-time credential write through a shell command.
       const nativePath = boxNativeFilePath(path);
-      await boxApi(
-        cfg,
-        "PUT",
-        `/boxes/${boxId}/files`,
-        { path: nativePath, content, encoding: "utf8" },
-        60_000,
+      await afterCommandPlaneReady(() =>
+        boxApi(
+          cfg,
+          "PUT",
+          `/boxes/${boxId}/files`,
+          { path: nativePath, content, encoding: "utf8" },
+          60_000,
+        ),
       );
     },
 
@@ -454,8 +531,10 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       if (!box) throw new Error(`box ${boxId} is gone`);
       if (!LIVE_STATES.has(String(box.state || ""))) {
         runtimeHomeReady = false;
+        commandPlaneReady = false;
         await waitForLive(cfg, boxId, 300_000);
       }
+      if (!commandPlaneReady) await waitForCommandPlane();
       if (!runtimeHomeReady) await ensureRuntimeHome();
     },
   };

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { boxMachineType, boxNativeFilePath } from "./box";
+import { boxCommandPlaneUnavailable, boxMachineType, boxNativeFilePath } from "./box";
 
 describe("Box machine profiles", () => {
   test("maps the three provider-supported resource combinations", () => {
@@ -23,5 +23,14 @@ describe("Box persistent file paths", () => {
       "/home/user/.opensession/spec.json",
     );
     expect(boxNativeFilePath("/tmp/output")).toBe("/tmp/output");
+  });
+});
+
+describe("Box command readiness", () => {
+  test("only retries explicit no-command 409 states", () => {
+    expect(boxCommandPlaneUnavailable({ status: 409, code: "machine_not_running" })).toBe(true);
+    expect(boxCommandPlaneUnavailable({ status: 409, code: "box_starting" })).toBe(true);
+    expect(boxCommandPlaneUnavailable({ status: 502, code: "box_direct_failed" })).toBe(false);
+    expect(boxCommandPlaneUnavailable({ status: 409, code: "other" })).toBe(false);
   });
 });
