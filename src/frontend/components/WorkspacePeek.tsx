@@ -24,8 +24,8 @@ import {
 	PEEK_ROW,
 	PEEK_SECTION,
 	PEEK_SKELETON,
+	PEEK_STATE,
 	PEEK_THUMB,
-	PEEK_VALUE,
 } from "../lib/workspace-peek-classes";
 import {
 	IconArrowUp,
@@ -68,6 +68,14 @@ import {
 
 interface Props {
 	session: UnifiedSession;
+	/**
+	 * What the card aligns its right edge to — the header's actions row, not
+	 * the trigger. Anchoring to the trigger left it hanging off the middle of
+	 * the cluster with the panel toggle poking out beside it; against the row
+	 * it lands flush with the chrome's own right edge, which is where a summary
+	 * of the right-hand panel belongs.
+	 */
+	anchor?: React.RefObject<HTMLElement | null>;
 	/** Open the right panel on a tab — every row's destination. */
 	onOpenPanelTab: (tab: "info" | "changes") => void;
 	/** Open the Review tab (PR + its checks). */
@@ -79,6 +87,8 @@ interface Props {
 	send?: (msg: any) => void;
 	/** Bumped when a webhook or an auto-push reports workspace activity. */
 	refreshTick?: number;
+	/** Lets the session column make room for the floating card while it is open. */
+	onOpenChange?: (open: boolean) => void;
 }
 
 type PeekData = {
@@ -96,18 +106,51 @@ const lastKnown = new Map<string, PeekData>();
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
 
+/** The PR glyph's colour: where the pull request itself stands. */
+function prTone(pr: PrDetails): string {
+	if (pr.state === "MERGED") return "text-purple";
+	if (pr.state === "CLOSED") return "text-dim";
+	if (pr.isDraft) return "text-faint";
+	return "text-green";
+}
+
+/** The word at the row's right edge: the review verdict when there is one to
+ *  report, otherwise the PR's own state. A draft
+ *  says so before anything else — an approval on a draft still can't ship. */
+function prStatusLabel(pr: PrDetails): { label: string; tone: string } {
+	if (pr.state === "MERGED") return { label: "Merged", tone: "text-purple" };
+	if (pr.state === "CLOSED") return { label: "Closed", tone: "text-dim" };
+	if (pr.isDraft) return { label: "Draft", tone: "text-dim" };
+	if (pr.reviewDecision === "CHANGES_REQUESTED")
+		return { label: "Changes requested", tone: "text-red" };
+	if (pr.reviewDecision === "APPROVED")
+		return { label: "Approved", tone: "text-green" };
+	if (pr.reviewDecision === "REVIEW_REQUIRED")
+		return { label: "Review needed", tone: "text-dim" };
+	return { label: "Open", tone: "text-dim" };
+}
+
 export function WorkspacePeek({
 	session,
+	anchor,
 	onOpenPanelTab,
 	onOpenPr,
 	onOpenChecks,
 	onOpenAssets,
 	send,
 	refreshTick,
+	onOpenChange,
 }: Props) {
 	const [open, setOpen] = useState(false);
+	useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
 	return (
-		<Popover.Root open={open} onOpenChange={setOpen}>
+		<Popover.Root
+			open={open}
+			onOpenChange={(nextOpen) => {
+				setOpen(nextOpen);
+				onOpenChange?.(nextOpen);
+			}}
+		>
 			<Tooltip label="Workspace summary">
 				<Popover.Trigger
 					className={cn(
@@ -122,7 +165,14 @@ export function WorkspacePeek({
 					<IconListChecks size={20} />
 				</Popover.Trigger>
 			</Tooltip>
-			<Popover.Popup side="bottom" align="end" elevation="lg" initialFocus>
+			<Popover.Popup
+				side="bottom"
+				align="end"
+				anchor={anchor}
+				elevation="lg"
+				className={PEEK_CARD}
+				initialFocus
+			>
 				{/* Mounted only while open — that is what keeps the fetches off every
 				    session that merely has the header. */}
 				<PeekBody
@@ -193,7 +243,7 @@ function PeekBody({
 
 	if (!data)
 		return (
-			<div className={PEEK_CARD} aria-busy="true">
+			<div className="contents" aria-busy="true">
 				<div className={PEEK_SECTION}>Workspace</div>
 				<div className={cn(PEEK_SKELETON, "w-[60%]")} />
 				<div className={cn(PEEK_SKELETON, "w-[75%]")} />
@@ -232,7 +282,7 @@ function PeekBody({
 	const sources = assets.slice(0, 3);
 
 	return (
-		<div className={PEEK_CARD}>
+		<>
 			<div className={PEEK_SECTION}>Workspace</div>
 
 			{changedFiles > 0 && (
@@ -291,10 +341,20 @@ function PeekBody({
 			)}
 
 			{pr && (
-				<button className={PEEK_ROW} onClick={() => go(onOpenPr)} title={pr.title}>
-					<IconPullRequest size={15} className={PEEK_ICON} />
+				<button
+					className={PEEK_ROW}
+					onClick={() => go(onOpenPr)}
+					title={`#${pr.number} · ${pr.title}`}
+				>
+					{/* The glyph carries the PR's own state and the trailing word
+					    carries the review's — they answer different questions
+					    ("has it landed" vs "is anyone blocking it"), and a merged
+					    PR with an old approval on it must not read as open. */}
+					<IconPullRequest size={15} className={cn("shrink-0", prTone(pr))} />
 					<span className={PEEK_LABEL}>{pr.title}</span>
-					<span className={PEEK_VALUE}>#{pr.number}</span>
+					<span className={cn(PEEK_STATE, prStatusLabel(pr).tone)}>
+						{prStatusLabel(pr).label}
+					</span>
 				</button>
 			)}
 
@@ -369,6 +429,6 @@ function PeekBody({
 					)}
 				</>
 			)}
-		</div>
+		</>
 	);
 }

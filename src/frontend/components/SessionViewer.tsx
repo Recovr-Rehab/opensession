@@ -3519,7 +3519,9 @@ export function SessionViewer({
 	// header element itself so it tracks the real available width regardless
 	// of the surrounding chrome.
 	const headerRef = useRef<HTMLDivElement>(null);
+	const headerActionsRef = useRef<HTMLDivElement>(null);
 	const [headerW, setHeaderW] = useState(0);
+	const [workspacePeekOpen, setWorkspacePeekOpen] = useState(false);
 	useLayoutEffect(() => {
 		const el = headerRef.current;
 		if (!el) return;
@@ -4406,7 +4408,7 @@ export function SessionViewer({
 						</button>
 					)}
 				</div>
-				<div className={VIEWER_HEADER_ACTIONS}>
+				<div className={VIEWER_HEADER_ACTIONS} ref={headerActionsRef}>
 					{!isPhone && secondaryActions(false)}
 					{/* Whoever ELSE has the session open, right before Share. Your
 					    own face used to sit here too, which meant every session
@@ -4523,6 +4525,7 @@ export function SessionViewer({
 					{!isPhone && hasWorkspace && !panelOpen && (
 						<WorkspacePeek
 							session={session}
+							anchor={headerActionsRef}
 							onOpenPanelTab={(tab) => {
 								selectPanelTab(tab);
 								setPanelOpen(true);
@@ -4532,6 +4535,7 @@ export function SessionViewer({
 							onOpenAssets={onOpenAssets}
 							send={connected ? send : undefined}
 							refreshTick={gitRefreshTick}
+							onOpenChange={setWorkspacePeekOpen}
 						/>
 					)}
 					{!isPhone && panelAvailable && (
@@ -5104,7 +5108,12 @@ export function SessionViewer({
 							}}
 						/>
 						<div
-							className={VIEWER_MESSAGES}
+							className={cn(
+								VIEWER_MESSAGES,
+								workspacePeekOpen &&
+									headerW >= 1120 &&
+									"desktop:[&>*]:-translate-x-[160px]",
+							)}
 							ref={messagesRef}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
@@ -5368,7 +5377,14 @@ export function SessionViewer({
 								)}
 							</div>
 
-							<div className={VIEWER_INPUT}>
+							<div
+								className={cn(
+									VIEWER_INPUT,
+									workspacePeekOpen &&
+										headerW >= 1120 &&
+										"desktop:[&>*]:-translate-x-[160px]",
+								)}
+							>
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--session-col)] text-[13px] text-faint">
 										No engine session to resume
