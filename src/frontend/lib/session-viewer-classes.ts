@@ -266,7 +266,10 @@ export const VIEWER_MESSAGES =
  */
 export const VIEWER_INPUT =
 	"relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 px-5 pt-1 pb-3.5 " +
-	"[background:linear-gradient(to_bottom,transparent_0,var(--bg)_var(--session-under))] " +
+	// The fade is a later sibling of the native scroller, so painting it edge to
+	// edge also fades an overlay scrollbar. Leave its narrow gutter unpainted;
+	// raising the scroller would incorrectly lift transcript content too.
+	"[background:linear-gradient(to_bottom,transparent_0,var(--bg)_var(--session-under))_left_top/calc(100%_-_14px)_100%_no-repeat] " +
 	// Phone: clear the home indicator rather than jamming the composer against
 	// the very bottom edge — that gap is also all the room the composer's
 	// shadow gets in mobile Safari, where there is no safe-area inset.
