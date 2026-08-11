@@ -4,34 +4,6 @@
     {
       "layers": [
         {
-          "hidden": false,
-          "image-name": "meridian.svg",
-          "name": "Shadow silhouette",
-          "opacity": 1,
-          "position": {
-            "scale": 1,
-            "translation-in-points": [
-              0,
-              0
-            ]
-          }
-        }
-      ],
-      "name": "Shadow underlay",
-      "mode": "combined",
-      "specular": false,
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.14
-      },
-      "translucency": {
-        "enabled": false,
-        "value": 0
-      }
-    },
-    {
-      "layers": [
-        {
           "blend-mode-specializations": [
             {
               "value": "normal"

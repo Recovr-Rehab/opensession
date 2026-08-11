@@ -22,10 +22,6 @@ const H = (4 / 3) * 256 * BULGE; // Bézier control offset (max lateral bulge ~ 
 // as a pinched kink; V angles that tangent for a smooth flowing S.
 const V = 180;
 
-// Squircle corner arcs (1024 canvas, r=240)
-const TL = "C0 107 107 0 240 0";
-const BR = "C1024 917 917 1024 784 1024";
-const BL = "C107 1024 0 917 0 784";
 const SQUIRCLE =
   "M240 0h544c133 0 240 107 240 240v544c0 133-107 240-240 240H240C107 1024 0 917 0 784V240C0 107 107 0 240 0Z";
 
@@ -81,19 +77,23 @@ type Variant = {
   thetaDeg: number;
   seam: string;
   lobe: string;
+  darkLobe: string;
 };
 
 function vertical(dir: string, svg: string, layerName: string, preview: string, thetaDeg: number): Variant {
   const s = seamFor(thetaDeg);
-  // Close along bottom edge -> BL corner -> left edge -> TL corner -> top edge.
-  const lobe = `${s.seam}L240 1024${BL}L0 240${TL}Z`;
-  return { dir, svg, layerName, preview, thetaDeg, seam: s.seam, lobe };
+  // Close beyond the canvas and clip the fill to the outer squircle. Reusing the
+  // squircle edge in both the smoke and pearl paths leaves a one-pixel dark
+  // antialiasing fringe around the pearl's lower-left radius at small sizes.
+  const lobe = `${s.seam}L-64 1088L-64 -64Z`;
+  const darkLobe = `${s.seam}L1088 1088L1088 -64Z`;
+  return { dir, svg, layerName, preview, thetaDeg, seam: s.seam, lobe, darkLobe };
 }
 
 // The chosen icon: pure vertical seam. (Rotated and horizontal variants were
 // explored and dropped 2026-07-22 — seamFor() still takes any angle, and a
 // horizontal variant additionally needs a different lobe closure along the
-// bottom edge via the BR corner arc.)
+// bottom and right edges.)
 const meridian = vertical("OS1Meridian.icon", "meridian.svg", "Classic yin-yang, vertical", "os1-meridian", 0);
 
 const variants = [meridian];
@@ -128,13 +128,13 @@ function svgFor(v: Variant): string {
     <clipPath id="lobe"><path d="${v.lobe}"/></clipPath>
   </defs>
 
-  <path fill="url(#smoke)" d="${SQUIRCLE}"/>
+  <path fill="url(#smoke)" clip-path="url(#sq)" d="${v.darkLobe}"/>
 
   <g clip-path="url(#sq)">
     <path d="${v.seam}" fill="none" stroke="#e8f6f8" stroke-width="30" opacity="0.4" filter="url(#blur14)"/>
   </g>
 
-  <path fill="url(#pearl)" d="${v.lobe}"/>
+  <path fill="url(#pearl)" clip-path="url(#sq)" d="${v.lobe}"/>
 
   <g clip-path="url(#lobe)">
     <path d="${v.seam}" fill="none" stroke="#0b1216" stroke-width="110" opacity="0.34" filter="url(#blur28)"/>
@@ -152,22 +152,6 @@ function iconJsonFor(v: Variant): string {
     {
       fill: "system-dark",
       groups: [
-        {
-          layers: [
-            {
-              hidden: false,
-              "image-name": v.svg,
-              name: "Shadow silhouette",
-              opacity: 1,
-              position: { scale: 1, "translation-in-points": [0, 0] },
-            },
-          ],
-          name: "Shadow underlay",
-          mode: "combined",
-          specular: false,
-          shadow: { kind: "neutral", opacity: 0.14 },
-          translucency: { enabled: false, value: 0 },
-        },
         {
           layers: [
             {

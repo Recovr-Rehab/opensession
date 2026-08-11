@@ -13,20 +13,20 @@ cleanest mark and the most legible at 16 px.
 - `previews/os1-meridian.png` — 1024 px render (full-bleed)
 - `previews/small/` — 16/32 px legibility checks
 - `os1-meridian.icns` + `icon-512-padded.png` — legacy fallbacks, rebuilt by
-  `./build-fallbacks.sh` (renders every slot through `ictool`, then `pad.swift`
-  centers the art at **824/1024 of the canvas** — ictool exports are full-bleed,
-  and an unpadded icns/dock PNG draws visibly oversized next to other Dock
-  icons). Source iconset in `fallback-os1-meridian.iconset/`.
+  `./build-fallbacks.sh` (renders the raw SVG through `sips`, then `pad.swift`
+  adds a soft alpha-following shadow and centers the art at **824/1024 of the
+  canvas** — an unpadded icns/dock PNG draws visibly oversized next to other
+  Dock icons). Source iconset in `fallback-os1-meridian.iconset/`.
 
 Only the sources are tracked (`generate.ts`, `pad.swift`,
 `build-fallbacks.sh`, the `.icon` package); the rendered artifacts above —
 `previews/`, the `.icns`, `icon-512-padded.png`, the iconset — are gitignored
 and rebuilt with the commands below.
 
-The `.icon` package holds `icon.json` + one SVG asset. A neutral shadow-only
-underlay sits behind a single `mode: "combined"` glass group (`specular: true`,
-translucency 0.3), so the shadow cannot wash over the glass rim. The visible
-art remains one unified glass object with no per-lobe inflation.
+The `.icon` package holds `icon.json` + one SVG asset in a single
+`mode: "combined"` glass group (`specular: true`, translucency 0.3). Native
+platforms own its depth treatment; the raster fallback gets its softer shadow
+from `pad.swift`, behind the artwork rather than baked into its rim.
 
 ## Geometry / how to tweak
 
@@ -47,6 +47,9 @@ away if ever wanted again.
 Optical depth is baked *softly* into the SVG (radial smoke/pearl gradients, a
 `feGaussianBlur` seam shadow clipped to the pearl lobe, a thin lit seam edge,
 an Aqua top sheen) — no thick bevels; Icon Composer's glass does the rest.
+The pearl closes outside the canvas and is clipped once to the outer squircle;
+sharing that curved edge with the smoke path creates a dark antialiasing fringe
+at the lower-left radius in small light-background renders.
 
 ## Rendering
 
@@ -63,5 +66,4 @@ Gotchas learned along the way (kept for future edits):
 - `feGaussianBlur` filters and `clipPath` **are** supported in layer SVGs —
   use them instead of multi-stroke fake blurs (those band visibly).
 - Separate glass groups per color half make the top half look like a raised
-  inflatable slab — keep the visible artwork in one combined group. The
-  non-glass shadow silhouette is only an underlay and is fully covered by it.
+  inflatable slab — keep the visible artwork in one combined group.

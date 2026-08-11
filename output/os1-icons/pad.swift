@@ -17,7 +17,14 @@ guard a.count == 5, let canvas = Int(a[3]), let art = Int(a[4]),
 else { exit(1) }
 ctx.interpolationQuality = .high
 let off = CGFloat(canvas - art) / 2
-ctx.draw(img, in: CGRect(x: off, y: off, width: CGFloat(art), height: CGFloat(art)))
+let rect = CGRect(x: off, y: off, width: CGFloat(art), height: CGFloat(art))
+ctx.setShadow(
+    offset: CGSize(width: 0, height: -CGFloat(art) * 0.012),
+    blur: CGFloat(art) * 0.028,
+    color: CGColor(gray: 0, alpha: 0.16))
+ctx.draw(img, in: rect)
+ctx.setShadow(offset: .zero, blur: 0, color: nil)
+ctx.draw(img, in: rect)
 guard let out = ctx.makeImage(),
       let dest = CGImageDestinationCreateWithURL(
         URL(fileURLWithPath: a[2]) as CFURL, UTType.png.identifier as CFString, 1, nil)

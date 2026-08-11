@@ -24,16 +24,16 @@
       <feGaussianBlur stdDeviation="14"/>
     </filter>
     <clipPath id="sq"><path d="M240 0h544c133 0 240 107 240 240v544c0 133-107 240-240 240H240C107 1024 0 917 0 784V240C0 107 107 0 240 0Z"/></clipPath>
-    <clipPath id="lobe"><path d="M512 0C307.2 0 307.2 332 512 512C716.8 692 716.8 1024 512 1024L240 1024C107 1024 0 917 0 784L0 240C0 107 107 0 240 0Z"/></clipPath>
+    <clipPath id="lobe"><path d="M512 0C307.2 0 307.2 332 512 512C716.8 692 716.8 1024 512 1024L-64 1088L-64 -64Z"/></clipPath>
   </defs>
 
-  <path fill="url(#smoke)" d="M240 0h544c133 0 240 107 240 240v544c0 133-107 240-240 240H240C107 1024 0 917 0 784V240C0 107 107 0 240 0Z"/>
+  <path fill="url(#smoke)" clip-path="url(#sq)" d="M512 0C307.2 0 307.2 332 512 512C716.8 692 716.8 1024 512 1024L1088 1088L1088 -64Z"/>
 
   <g clip-path="url(#sq)">
     <path d="M512 0C307.2 0 307.2 332 512 512C716.8 692 716.8 1024 512 1024" fill="none" stroke="#e8f6f8" stroke-width="30" opacity="0.4" filter="url(#blur14)"/>
   </g>
 
-  <path fill="url(#pearl)" d="M512 0C307.2 0 307.2 332 512 512C716.8 692 716.8 1024 512 1024L240 1024C107 1024 0 917 0 784L0 240C0 107 107 0 240 0Z"/>
+  <path fill="url(#pearl)" clip-path="url(#sq)" d="M512 0C307.2 0 307.2 332 512 512C716.8 692 716.8 1024 512 1024L-64 1088L-64 -64Z"/>
 
   <g clip-path="url(#lobe)">
     <path d="M512 0C307.2 0 307.2 332 512 512C716.8 692 716.8 1024 512 1024" fill="none" stroke="#0b1216" stroke-width="110" opacity="0.34" filter="url(#blur28)"/>
