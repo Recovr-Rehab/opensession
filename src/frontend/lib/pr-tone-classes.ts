@@ -102,7 +102,7 @@ export const PR_BAR =
 /** Inside the info card the strip (or the stack of strips) is the card's
  *  content, so it takes the card's corner and clips to it. */
 export const PR_BAR_IN_CARD =
-	"phone:[.session-info-status>&]:overflow-hidden phone:[.session-info-status>&]:rounded-control";
+	"phone:[.session-info-status>&]:overflow-hidden";
 
 /** The strip's tone band. Purple and yellow had no soft token and were frozen
  *  as dark-theme rgba() literals, so both themes got the dark hue; mixing from
