@@ -102,6 +102,18 @@ function assetReferenceRegistry(
   return registry;
 }
 
+/** The chip itself: file glyph plus already-rendered label HTML. */
+function assetChip(sessionId: string, path: string, label: string): string {
+  const href = sessionAssetRawUrl(sessionId, path);
+  return (
+    `<a href="${attr(href)}" class="asset-ref" data-asset-path="${attr(path)}"` +
+    ` title="${attr(`Open ${path}`)}" target="_blank" rel="noopener noreferrer">` +
+    `<span class="asset-ref-icon" aria-hidden="true">` +
+    `<svg viewBox="0 0 24 24" fill="none"><path d="M7.75 19.25H16.25C17.3546 19.25 18.25 18.3546 18.25 17.25V9L14 4.75H7.75C6.64543 4.75 5.75 5.64543 5.75 6.75V17.25C5.75 18.3546 6.64543 19.25 7.75 19.25Z"/><path d="M18 9.25H13.75V5"/></svg>` +
+    `</span><span class="asset-ref-label">${label}</span></a>`
+  );
+}
+
 function assetReferenceLink(
   path: string,
   label: string,
@@ -109,15 +121,57 @@ function assetReferenceLink(
 ): string {
   if (!renderAssetSessionId)
     return coded ? `<code>${attr(label)}</code>` : attr(label);
-  const href = sessionAssetRawUrl(renderAssetSessionId, path);
   const text = coded ? `<code>${attr(label)}</code>` : attr(label);
-  return (
-    `<a href="${attr(href)}" class="asset-ref" data-asset-path="${attr(path)}"` +
-    ` title="${attr(`Open ${path}`)}" target="_blank" rel="noopener noreferrer">` +
-    `<span class="asset-ref-icon" aria-hidden="true">` +
-    `<svg viewBox="0 0 24 24" fill="none"><path d="M7.75 19.25H16.25C17.3546 19.25 18.25 18.3546 18.25 17.25V9L14 4.75H7.75C6.64543 4.75 5.75 5.64543 5.75 6.75V17.25C5.75 18.3546 6.64543 19.25 7.75 19.25Z"/><path d="M18 9.25H13.75V5"/></svg>` +
-    `</span><span class="asset-ref-label">${text}</span></a>`
-  );
+  return assetChip(renderAssetSessionId, path, text);
+}
+
+function decodeUriComponentSafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * The scratch file an explicit markdown link points at, if any. Agents name an
+ * artifact both ways — bare in prose and as `[label](report.html)` — and only
+ * the first was ever a chip, so the explicit form rendered as an ordinary link:
+ * it looked like a web link and, being same-origin, navigated the app off the
+ * session instead of opening the file over it.
+ */
+function assetLinkTarget(href: string | null | undefined): string | null {
+  const registry = renderAssetReferences;
+  if (!registry || !renderAssetSessionId || !href) return null;
+  const raw = String(href).trim();
+  if (!raw || raw.startsWith("#")) return null;
+  // A relative href is written the way prose names the file, so it resolves
+  // through the same alias table (`before.png` → `shots/before.png`).
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(raw) && !raw.startsWith("/")) {
+    const name = decodeUriComponentSafe(
+      raw.replace(/^\.\//, "").split(/[?#]/)[0],
+    );
+    return registry.targets.get(name) ?? null;
+  }
+  // Or the raw-file URL this renderer itself hands out, pasted back verbatim.
+  let url: URL;
+  try {
+    url = new URL(
+      raw,
+      typeof location !== "undefined" ? location.href : "http://127.0.0.1:3850/",
+    );
+  } catch {
+    return null;
+  }
+  const sameOrigin =
+    typeof location !== "undefined" && url.origin === location.origin;
+  if (!sameOrigin && !INTERNAL_HOSTS.has(url.hostname)) return null;
+  const match = /\/api\/sessions\/([^/]+)\/assets\/raw\/(.+)$/.exec(url.pathname);
+  if (!match) return null;
+  // Another session's scratch folder is not this session's to open over.
+  if (decodeUriComponentSafe(match[1]) !== renderAssetSessionId) return null;
+  const path = match[2].split("/").map(decodeUriComponentSafe).join("/");
+  return registry.targets.get(path) ?? null;
 }
 
 // Open Session session ids (`os-<uuidv7>`, and the pre-rename `bks-<uuidv7>` +
@@ -396,6 +450,11 @@ md.use({
       // back to the text they were written as.
       flattenChips(token.tokens);
       const text = this.parser.parseInline(token.tokens);
+      // A link to one of this session's scratch files is an asset, however it
+      // was written: same chip, same overlay, so the two forms are one thing.
+      const asset = assetLinkTarget(token.href);
+      if (asset && renderAssetSessionId)
+        return assetChip(renderAssetSessionId, asset, text);
       const title = token.title ? ` title="${attr(token.title)}"` : "";
       const internal = internalHref(token.href);
       if (internal) {

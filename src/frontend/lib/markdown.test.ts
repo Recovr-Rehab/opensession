@@ -246,6 +246,43 @@ describe("renderMarkdown asset references", () => {
     expect(html).not.toContain("asset-ref");
   });
 
+  it("chips an explicit link that points at one of the session's assets", () => {
+    const html = renderMarkdown(
+      "Open the [interactive preview](shadow-preview.html).",
+      { sessionId: "os-assets-test", assetPaths: ["shadow-preview.html"] },
+    );
+    expect(html).toContain('class="asset-ref"');
+    expect(html).toContain('data-asset-path="shadow-preview.html"');
+    expect(html).toContain(
+      '<span class="asset-ref-label">interactive preview</span>',
+    );
+    expect(html).toContain(
+      'href="/api/sessions/os-assets-test/assets/raw/shadow-preview.html"',
+    );
+  });
+
+  it("chips a link written as the asset's own raw URL", () => {
+    const html = renderMarkdown(
+      "See [before.png](/api/sessions/os-assets-test/assets/raw/shots/before.png).",
+      assets,
+    );
+    expect(html).toContain('data-asset-path="shots/before.png"');
+  });
+
+  it("leaves a link to another session's asset alone", () => {
+    const html = renderMarkdown(
+      "See [x](/api/sessions/os-other/assets/raw/report.html).",
+      assets,
+    );
+    expect(html).not.toContain("asset-ref");
+  });
+
+  it("leaves a relative link that names no asset alone", () => {
+    const html = renderMarkdown("See [docs](docs/setup.md).", assets);
+    expect(html).not.toContain("asset-ref");
+    expect(html).toContain('href="docs/setup.md"');
+  });
+
   it("does not link a matching filename inside a larger path or address", () => {
     const html = renderMarkdown(
       "See https://example.com/report.html or mail@report.html.",
