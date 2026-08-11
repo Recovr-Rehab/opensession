@@ -732,6 +732,33 @@ export class MicrovmProvider implements SandboxProvider {
   }
 }
 
+/** Provider qualification without coupling the Firecracker runtime check to a
+ * repository credential. Real sessions receive their current scoped clone URL
+ * at ensure-time; qualification proves the local isolation/snapshot machinery. */
+export async function qualifyMicrovmRuntime(): Promise<void> {
+  const cfg = config();
+  const idx = await allocateClone(cfg.storeDir, cfg.indexStart, cfg.indexEnd);
+  const driver = driverFor(idx);
+  try {
+    await driver.ensureStarted();
+    const probe = await driver.exec(
+      "set -eu; uname -s; printf opensession-qualified > /tmp/opensession-qualification",
+    );
+    if (probe.exitCode !== 0) throw new Error("MicroVM qualification command failed");
+    await pauseClone(idx, cfg.storeDir);
+    await resumeClone(idx, cfg.storeDir);
+    await driver.ensureStarted();
+    const restored = await driver.exec(
+      'test "$(cat /tmp/opensession-qualification)" = opensession-qualified',
+    );
+    if (restored.exitCode !== 0) {
+      throw new Error("MicroVM pause/wake did not preserve filesystem state");
+    }
+  } finally {
+    await destroyClone(idx, cfg.storeDir).catch(() => {});
+  }
+}
+
 /** Real interactive PTY inside a local Firecracker guest. The private control
  * lane exposes bounded start/read/write/resize/close calls; the browser still
  * talks only to Open Session's authenticated UI WebSocket. */

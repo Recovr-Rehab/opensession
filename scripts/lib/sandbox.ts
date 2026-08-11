@@ -23,6 +23,7 @@ import { configuredServer } from "../../src/server/config";
 import { stateDir } from "../../src/server/paths";
 import { writeJsonAtomic } from "../../src/server/shared/atomic-write";
 import { REPO_ROOT } from "./paths";
+import { localAutomationToken } from "./local-auth";
 import { dim, fail, heading, info, ok, run, runInherit, warn } from "./ui";
 
 function sandboxConfigPath(): string {
@@ -40,12 +41,7 @@ function updateSandboxConfig(patch: Record<string, unknown>): void {
 }
 
 async function qualifyRemoteThroughServer(provider: "daytona" | "modal"): Promise<number> {
-  let sessions: Array<{ token?: string }> = [];
-  try {
-    const parsed = JSON.parse(readFileSync(stateDir("web-sessions.json"), "utf-8"));
-    if (Array.isArray(parsed?.sessions)) sessions = parsed.sessions;
-  } catch {}
-  const token = sessions.find((session) => typeof session.token === "string")?.token;
+  const token = localAutomationToken();
   if (!token) {
     fail(
       "no local Open Session web session is available",

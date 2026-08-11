@@ -130,42 +130,8 @@ async function qualifyMicrovm(): Promise<void> {
       code: "MICROVM_RUNTIME_FAILED",
     });
   }
-  const { defaultRepo } = await import("../config");
-  const { MicrovmProvider } = await import("./adapters/microvm");
-  const repo = defaultRepo();
-  const provider = new MicrovmProvider();
-  const sessionId = `qualification-microvm-${crypto.randomUUID()}`;
-  let sandboxId: string | undefined;
-  try {
-    const sandbox = await provider.ensure({
-      sessionId,
-      repo: repo.id,
-      branch: repo.defaultBranch,
-      mode: "code",
-    });
-    sandboxId = sandbox.id;
-    const probe = await sandbox.exec([
-      "sh",
-      "-lc",
-      "uname -s && printf opensession-qualified > /tmp/opensession-qualification",
-    ]);
-    if (probe.exitCode !== 0) throw new Error("MicroVM qualification command failed");
-    if (provider.pause && provider.resume) {
-      await provider.pause(sandbox.id);
-      await provider.resume(sandbox.id);
-      const restored = await provider.get(sandbox.id);
-      const restoreProbe = await restored?.exec([
-        "sh",
-        "-lc",
-        "test \"$(cat /tmp/opensession-qualification)\" = opensession-qualified",
-      ]);
-      if (!restoreProbe || restoreProbe.exitCode !== 0) {
-        throw new Error("MicroVM pause/wake did not preserve filesystem state");
-      }
-    }
-  } finally {
-    if (sandboxId) await provider.destroy(sandboxId).catch(() => {});
-  }
+  const { qualifyMicrovmRuntime } = await import("./adapters/microvm");
+  await qualifyMicrovmRuntime();
 }
 
 function failureCode(error: unknown): string {

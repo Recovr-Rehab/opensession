@@ -18,9 +18,9 @@
  *  - launchRun(): HOST_ENTRY in-sandbox via a Daytona process session
  *    (runAsync — survives this call and this process), WS transport back to
  *    `callbackBaseUrl` (remote sandboxes have no socket option).
- *  - exec(): `process.executeCommand` takes a shell string and folds stderr
- *    into stdout, so commands are wrapped to preserve argv semantics AND a
- *    separate stderr/exit code (see daytonaDriver).
+ *  - exec(): `process.executeCommand` returns no output for non-zero commands,
+ *    so commands run in a subshell and encode stdout, stderr, and the real
+ *    exit code into a successful transport response (see daytonaDriver).
  *  - ports(): getPreviewLink(port) URLs → PortMap `{url}` entries (Daytona's
  *    preview domain; non-public sandboxes need Daytona's preview token —
  *    operator-side setting).
@@ -79,6 +79,24 @@ const SESSION_LABEL = "opensession.session";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
 /** Delimits stdout from stderr inside the merged executeCommand output. */
 const ERR_DELIM = "__OS_STDERR_7f3a__";
+/** Delimits stderr from the encoded command exit code. */
+const EXIT_DELIM = "__OS_EXIT_91c2__";
+
+export function parseDaytonaExecResult(res: {
+  exitCode?: number;
+  result?: unknown;
+}): { exitCode: number; stdout: string; stderr: string } {
+  const out = String(res.result ?? "");
+  const exitIdx = out.lastIndexOf(EXIT_DELIM);
+  const encodedExit = exitIdx >= 0 ? Number(out.slice(exitIdx + EXIT_DELIM.length)) : NaN;
+  const streams = exitIdx >= 0 && Number.isInteger(encodedExit) ? out.slice(0, exitIdx) : out;
+  const stderrIdx = streams.indexOf(ERR_DELIM);
+  return {
+    exitCode: Number.isInteger(encodedExit) ? encodedExit : Number(res.exitCode ?? 1),
+    stdout: stderrIdx >= 0 ? streams.slice(0, stderrIdx) : streams,
+    stderr: stderrIdx >= 0 ? streams.slice(stderrIdx + ERR_DELIM.length) : "",
+  };
+}
 
 function daytonaConfig(): ReturnType<typeof sandboxConfig> {
   const cfg = sandboxConfig();
@@ -128,11 +146,13 @@ async function daytonaClient(): Promise<Daytona> {
 function daytonaDriver(sbx: DaytonaSandbox): RemoteDriver {
   return {
     async exec(cmd: string, opts?: RemoteExecOpts) {
-      // executeCommand merges stderr into `result`; wrap to recover streams +
-      // exit code (the trailing `exit $__c` propagates the real code).
+      // Daytona omits `result` when the transported shell exits non-zero. Run
+      // the caller's command in a subshell (so `exit` cannot skip our trailer),
+      // encode its real exit code, and keep the outer transport successful.
       const wrapped =
-        `__o=$(mktemp); __e=$(mktemp); { ${cmd}\n} >"$__o" 2>"$__e"; __c=$?; ` +
-        `cat "$__o"; printf '%s' ${shellQuoteWord(ERR_DELIM)}; cat "$__e"; rm -f "$__o" "$__e"; exit $__c`;
+        `__o=$(mktemp); __e=$(mktemp); ( ${cmd}\n) >"$__o" 2>"$__e"; __c=$?; ` +
+        `cat "$__o"; printf '%s' ${shellQuoteWord(ERR_DELIM)}; cat "$__e"; ` +
+        `printf '%s%s' ${shellQuoteWord(EXIT_DELIM)} "$__c"; rm -f "$__o" "$__e"; exit 0`;
       try {
         const res = await sbx.process.executeCommand(
           wrapped,
@@ -140,13 +160,7 @@ function daytonaDriver(sbx: DaytonaSandbox): RemoteDriver {
           opts?.env,
           Math.ceil((opts?.timeoutMs ?? 120_000) / 1000),
         );
-        const out = String(res.result ?? "");
-        const idx = out.indexOf(ERR_DELIM);
-        return {
-          exitCode: Number(res.exitCode ?? 1),
-          stdout: idx >= 0 ? out.slice(0, idx) : out,
-          stderr: idx >= 0 ? out.slice(idx + ERR_DELIM.length) : "",
-        };
+        return parseDaytonaExecResult(res);
       } catch (e: any) {
         return { exitCode: 1, stdout: "", stderr: String(e?.message || e) };
       }
@@ -638,11 +652,21 @@ export async function qualifyDaytonaConnection(): Promise<void> {
       await client.snapshot.delete(snapshot);
     } catch {}
   }
-  for await (const sandbox of client.list({ labels: { "opensession.qualification": suffix } } as any)) {
-    if (!/destroy|delet/i.test(String((sandbox as any).state || ""))) {
-      throw new Error("Daytona qualification cleanup left a sandbox behind");
+  // Daytona's delete call can return before the list index reflects teardown.
+  // Give that eventually-consistent view a short bounded window to converge.
+  for (let attempt = 0; attempt < 15; attempt++) {
+    let liveSandbox = false;
+    for await (const sandbox of client.list({
+      labels: { "opensession.qualification": suffix },
+    } as any)) {
+      if (!/destroy|delet/i.test(String((sandbox as any).state || ""))) {
+        liveSandbox = true;
+      }
     }
+    if (!liveSandbox) return;
+    if (attempt < 14) await Bun.sleep(2_000);
   }
+  throw new Error("Daytona qualification cleanup left a sandbox behind");
 }
 
 export async function deleteDaytonaTemplateArtifact(artifactId: string): Promise<void> {

@@ -28,8 +28,9 @@ import {
 } from "../../ui/settings";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
-import { IconBox, IconCheck } from "../icons";
+import { IconCheck } from "../icons";
 import { WorkspaceSandboxDefaults } from "./SandboxDefaults";
+import { SandboxProviderLogo } from "./SandboxProviderLogo";
 
 const PROVIDERS: Array<{
 	id: SandboxConnectionInfo["provider"];
@@ -366,9 +367,7 @@ function ConnectionCard({
 		<>
 			<SettingCard>
 				<div className="flex flex-wrap items-start gap-3 px-4 py-4">
-					<div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface text-dim">
-						<IconBox size={21} />
-					</div>
+					<SandboxProviderLogo provider={connection.provider} />
 					<div className="min-w-[14rem] flex-1">
 						<div className="flex flex-wrap items-center gap-2">
 							<div className="text-item-title font-semibold text-fg">{provider.label}</div>
