@@ -90,6 +90,25 @@ describe("append + read roundtrip", () => {
   });
 });
 
+describe("stored media sanitation", () => {
+  test("removes implicit attachments from old grep result rows on every read path", () => {
+    const sid = "bks-grep-media";
+    const result = entry(
+      "grep-result",
+      'Found 1 match\n/workspace/src/video.rs:\n  Line 12: "https://example.com/demo.mp4"',
+      {
+        type: "tool_result",
+        videos: ["https://example.com/demo.mp4"],
+      },
+    );
+    store.appendTranscriptEvents(sid, [result]);
+
+    expect(store.readTail(sid).entries[0].videos).toBeUndefined();
+    expect(store.readSince(sid, 0).entries[0].videos).toBeUndefined();
+    expect(store.getFullEntry(sid, result.id)?.videos).toBeUndefined();
+  });
+});
+
 describe("uuid dedup + upsert", () => {
   const sid = "bks-dedup";
 

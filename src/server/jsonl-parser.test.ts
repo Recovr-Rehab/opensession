@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  extractImplicitMedia,
   extractVideoMarkers,
   parseJsonlLinesAsync,
   parseTranscript,
@@ -10,6 +11,7 @@ import {
   parseTranscriptFrom,
   parseTranscriptTail,
   parseTranscriptWindow,
+  sanitizeTranscriptMediaEntry,
 } from "./jsonl-parser";
 
 let dir: string;
@@ -641,6 +643,42 @@ describe("extractVideoMarkers", () => {
       "/media?path=%2Ftmp%2Fcapture-one.mp4",
       "/media?path=%2Ftmp%2Fsecond.webm",
     ]);
+  });
+});
+
+describe("implicit media in code search output", () => {
+  const grepOutput = `Found 3 matches
+/workspace/src/video.rs:
+  Line 12: let source = "https://example.com/screen.mp4";
+  Line 13: let poster = "https://example.com/poster.png";`;
+
+  it("does not turn URLs in grep source snippets into attachments", () => {
+    expect(extractImplicitMedia(grepOutput)).toEqual({ images: [], videos: [] });
+  });
+
+  it("still extracts a genuine remote media URL outside grep output", () => {
+    expect(
+      extractImplicitMedia("Rendered https://cdn.example.test/renders/demo.mp4"),
+    ).toEqual({
+      images: [],
+      videos: ["https://cdn.example.test/renders/demo.mp4"],
+    });
+  });
+
+  it("repairs old stored rows while preserving explicitly featured media", () => {
+    const featured = "/media?path=%2Ftmp%2Factual-demo.mp4";
+    const repaired = sanitizeTranscriptMediaEntry({
+      id: "tr-grep",
+      type: "tool_result",
+      content: grepOutput,
+      timestamp: TS,
+      images: ["https://example.com/poster.png"],
+      videos: ["https://example.com/screen.mp4", featured],
+      featuredMedia: [featured],
+    });
+    expect(repaired.images).toBeUndefined();
+    expect(repaired.videos).toEqual([featured]);
+    expect(repaired.featuredMedia).toEqual([featured]);
   });
 });
 

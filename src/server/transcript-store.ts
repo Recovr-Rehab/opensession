@@ -56,6 +56,7 @@ import {
   type TranscriptBusEvent,
 } from "./transcript-bus";
 import type { TranscriptEntry } from "./types";
+import { sanitizeTranscriptMediaEntry } from "./transcript-media";
 
 export type { SeqEntry, TranscriptBusEvent };
 
@@ -506,7 +507,7 @@ export class TranscriptStore {
       )?.data;
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as TranscriptEntry;
+      return sanitizeTranscriptMediaEntry(JSON.parse(raw) as TranscriptEntry);
     } catch {
       return null;
     }
@@ -859,7 +860,7 @@ function page(rows: { seq: number; change_seq: number; data: string }[]): Transc
   for (const r of rows) {
     try {
       entries.push({
-        ...(JSON.parse(r.data) as TranscriptEntry),
+        ...sanitizeTranscriptMediaEntry(JSON.parse(r.data) as TranscriptEntry),
         seq: r.seq,
         changeSeq: r.change_seq,
       });

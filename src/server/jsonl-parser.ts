@@ -7,6 +7,8 @@ import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presen
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
 import { configuredIntegration } from "./config";
+import { isGrepResultOutput } from "./transcript-media";
+export { isGrepResultOutput, sanitizeTranscriptMediaEntry } from "./transcript-media";
 
 const SLACK_USERS = SLACK_ID_TO_NAME;
 
@@ -186,6 +188,7 @@ export function extractImplicitMedia(text: string): {
   const images: string[] = [];
   const videos: string[] = [];
   if (!text || text.length > 512_000) return { images, videos };
+  if (isGrepResultOutput(text)) return { images, videos };
   const seen = new Set<string>();
   const add = (src: string, pathLike: string) => {
     if (seen.has(src)) return;
