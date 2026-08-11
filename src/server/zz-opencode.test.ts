@@ -694,6 +694,15 @@ describe("buildRunInstructions", () => {
     expect(s).toContain("a pushed branch IS the change request");
     expect(s).not.toContain("## PR reviewer");
   });
+  test("visual walkthroughs require an after screenshot and shipped-change copy", () => {
+    const s = buildRunInstructions({
+      isAsk: false,
+      inProcessMcp: { "opensession-walkthrough": {} },
+    });
+    expect(s).toContain("at least one after screenshot when the change is visual");
+    expect(s).toContain("why it matters");
+    expect(s).toContain("shipped-change Slack post");
+  });
   test("ask and scratch runs never get a reviewer instruction", () => {
     for (const input of [
       { isAsk: true, osSessionId: "os-1", prReviewer: "kentdebruin" },

@@ -383,8 +383,10 @@ export function buildRunInstructions(input: {
       "## Publish a walkthrough\nWhen you finish a user-visible change (UI, visual fix, new " +
         "feature flow), publish a walkthrough with opensession-walkthrough's " +
         "`publish_walkthrough`: a short demo screen-recording of the change working, " +
-        "before/after screenshots when the change is visual, and a 2-6 sentence markdown " +
-        "writeup (what changed, root cause for fixes, how you verified it). Record media " +
+        "at least one after screenshot when the change is visual (plus before screenshots " +
+        "when useful), and a 2-6 sentence markdown writeup whose first paragraph says what " +
+        "changed and why it matters. Merged visual PRs use that after screenshot and first " +
+        "paragraph for the team's shipped-change Slack post. Record media " +
         "first and pass absolute file paths; they are copied to durable " +
         "storage. It renders inline in the session where you publish it (video and all) and " +
         "in the session's Review tab" +

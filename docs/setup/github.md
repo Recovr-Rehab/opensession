@@ -91,7 +91,7 @@ the code consumes (`src/agents/github/webhook.ts`):
 | `issue_comment`, `pull_request_review_comment` (action `created`) | if the body matches a configured mention handle: intent-classified → whole-PR action (review / autofix / simplify / adversarial) or a conversational reply run in a PR-branch worktree |
 | `pull_request` action `labeled` | labels `os-review` / `os-auto-fix` / `os-simplify` / `os-adversarial` trigger the corresponding behavior (the legacy `michael-*` names are accepted as aliases — `src/agents/github/constants.ts`; create the labels on your repo first); auto-fix also merges the current base into conflicting PR branches and resolves the conflicts without force-pushing |
 | `pull_request` `opened`/`reopened`/`synchronize`/`ready_for_review` | auto-review, if the PR is non-draft and either carries `os-review` or the review automation is enabled |
-| `pull_request` action `closed` + merged | notifies linked sessions; fires the docs-sync automation on `github:pr_merged` |
+| `pull_request` action `closed` + merged | notifies linked sessions; shares walkthrough-backed visual changes in Slack; fires the docs-sync automation on `github:pr_merged` |
 | `pull_request_review` | handled by the Slack agent (review → Slack notification) |
 | `workflow_run` | notifies sessions waiting on a merged PR's deploy |
 
@@ -113,6 +113,11 @@ run for the **default repo only**.
   you set a prompt** in `integrations.github.docsSyncPrompt`. Set
   `integrations.github.docsSyncChannel` to have it announce its PRs in a Slack
   channel; leave the channel unset and it still runs, just silently.
+- Set `integrations.github.shippedChangesChannel` to a Slack channel id to
+  share merged visual changes there. A merge posts only when its linked Open
+  Session has a walkthrough with a durable `after` screenshot; that screenshot
+  is uploaded with the PR link and the walkthrough's first prose paragraph.
+  This keeps backend/refactor merges and visual changes without proof silent.
 - Mention replies are always on while the agent is loaded.
 - The agent itself is off unless enabled: `integrations.github.enabled: true`
   in config, or the `ENABLE_GITHUB_AGENT` env flag (which wins when set — see

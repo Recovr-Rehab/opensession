@@ -105,7 +105,8 @@
       "userPrAuth": false,
       "oauthClientId": "",
       "mentionHandles": ["assistant", "acme-automation"],
-      "previewEnvironment": "Preview"
+      "previewEnvironment": "Preview",
+      "shippedChangesChannel": "C0123456789"
     },
     "slack": {"enabled": false},
     "linear": {

@@ -57,6 +57,7 @@ Derived from the Web API methods the code actually calls
 Bot token scopes to grant:
 
 - `chat:write`, `chat:write.customize`
+- `files:write` (merged visual-change screenshots)
 - `reactions:write`
 - `channels:history`, `groups:history`, `im:history`, `mpim:history`
 - `channels:read`, `groups:read`, `im:read`
@@ -66,10 +67,9 @@ Bot token scopes to grant:
 - `users:read`
 - `assistant:write` (assistant threads + streaming)
 
-No `files:*` — the Slack agent doesn't upload files. The bot must be a
-member of a channel to read its history; the code calls `conversations.join`
-for channels it manages, but invite it to any pre-existing channel you want
-it to read.
+The bot must be a member of a channel to read its history and to share files;
+the code calls `conversations.join` for channels it manages, but invite it to
+any pre-existing channel you want it to read or post shipped changes into.
 
 ## Who can drive it (`ALLOWED_SLACK_USER_ID`)
 
@@ -116,6 +116,7 @@ message is skipped rather than misdelivered:
 | `integrations.slack.workspaceId` | building `app.slack.com` deep links in session labels |
 | `integrations.slack.channelNames` | channel-id→name map for rendering transcripts |
 | `integrations.github.docsSyncChannel` | where docs-sync announces its PRs |
+| `integrations.github.shippedChangesChannel` | where merged visual changes are shared with their walkthrough screenshot |
 | `grafanaPoll.slackChannel` (per-automation poll config) | Grafana-poller failure cards ([integrations-misc.md](integrations-misc.md#grafana-poller)) |
 
 Identity mapping (Slack id → person, for attribution and per-user MCP

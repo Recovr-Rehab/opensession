@@ -58,6 +58,12 @@ export function docsSyncChannel(): string | undefined {
   return typeof configured === "string" && configured.trim() ? configured.trim() : undefined;
 }
 
+/** Slack channel where merged visual changes are shared with their walkthrough screenshot. */
+export function shippedChangesChannel(): string | undefined {
+  const configured = configuredIntegration("github").shippedChangesChannel;
+  return typeof configured === "string" && configured.trim() ? configured.trim() : undefined;
+}
+
 /**
  * PR trigger labels. Canonical names are the generic os-* ones; the legacy
  * michael-* names keep working — matching accepts either alias

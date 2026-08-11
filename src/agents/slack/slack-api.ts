@@ -8,8 +8,11 @@
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import { personaName } from "../../server/config";
 import type { ImageInput } from "../../server/run-events";
+import { readFileSync, statSync } from "fs";
+import { basename } from "path";
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
+const MAX_SLACK_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // File attachments
@@ -253,6 +256,78 @@ export async function postSlackBlocks(
     }),
   });
   return response.json();
+}
+
+async function slackFormCall(
+  method: string,
+  params: Record<string, string | number>,
+): Promise<any> {
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) body.set(key, String(value));
+  const response = await fetchWithTimeout(`https://slack.com/api/${method}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+    },
+    body,
+  });
+  const data = await response.json();
+  if (!(data as any).ok) {
+    console.warn(`[slack] Slack API ${method} error:`, (data as any).error);
+  }
+  return data;
+}
+
+/**
+ * Upload a local file and share it as one Slack message. Slack retired the
+ * single-call files.upload endpoint, so this follows its external-upload
+ * handshake: reserve an upload URL, send the bytes, then complete and share.
+ */
+export async function postSlackFile(
+  channel: string,
+  path: string,
+  initialComment: string,
+  opts?: { title?: string; altText?: string },
+): Promise<any> {
+  const filename = basename(path);
+  const stat = statSync(path);
+  if (!stat.isFile()) throw new Error(`Slack upload path is not a regular file: ${path}`);
+  const length = stat.size;
+  if (!length || length > MAX_SLACK_UPLOAD_BYTES) {
+    throw new Error(`Slack upload must be between 1 byte and 20 MB: ${path}`);
+  }
+  const reserved = await slackFormCall("files.getUploadURLExternal", {
+    filename,
+    length,
+    ...(opts?.altText ? { alt_txt: opts.altText.slice(0, 1000) } : {}),
+  });
+  if (!reserved?.ok || !reserved.upload_url || !reserved.file_id) {
+    throw new Error(
+      `Slack upload reservation failed: ${reserved?.error || "invalid response"}`,
+    );
+  }
+
+  const uploaded = await fetchWithTimeout(reserved.upload_url, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: readFileSync(path),
+  });
+  if (!uploaded.ok) {
+    throw new Error(`Slack file upload failed: HTTP ${uploaded.status}`);
+  }
+
+  const completed = await slackFormCall("files.completeUploadExternal", {
+    files: JSON.stringify([{ id: reserved.file_id, title: opts?.title || filename }]),
+    channel_id: channel,
+    initial_comment: initialComment,
+  });
+  if (!completed?.ok) {
+    throw new Error(
+      `Slack upload completion failed: ${completed?.error || "invalid response"}`,
+    );
+  }
+  return completed;
 }
 
 export async function updateSlackBlocks(
