@@ -136,10 +136,10 @@ export const composerMenuAnchorLeft =
    legacy.css resolved to. */
 export const composerSend =
 	"inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[background-color,border-color,color,filter,scale] enabled:active:scale-[0.96] disabled:cursor-default disabled:opacity-35 phone:size-10";
-/** Ordinary send: the accent plate. Hover goes to ink rather than brightening —
- *  the accent is a wash now, and brightening it read as a disabled state. */
+/** Ordinary send: the accent plate. Hover takes `--accent-hover` rather than
+ *  brightening — brightening a wash read as a disabled state. */
 export const composerSendDefault =
-	"bg-accent text-on-accent enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))]";
+	"bg-accent text-on-accent enabled:hover:bg-accent-hover";
 /** Busy + queue keeps the send plate and changes the glyph. The old 2px ring
  *  read like a selected toggle, then hovered to dark-on-dark because its ink
  *  did not invert with the fill. */

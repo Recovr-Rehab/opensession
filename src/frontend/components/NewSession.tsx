@@ -138,9 +138,9 @@ const MODEL_PILL = cn(
    plate read visibly square next to its neighbours. */
 const CREATE_SPLIT = "relative inline-flex shrink-0 items-stretch";
 const CREATE_MAIN =
-	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-40 desktop:rounded-l-control phone:rounded-[999px] max-[560px]:px-3";
+	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 desktop:rounded-l-control phone:rounded-[999px] max-[560px]:px-3";
 const CREATE_CARET =
-	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[filter,opacity] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] phone:hidden";
+	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover phone:hidden";
 const CREATE_KBD = "opacity-70";
 const CREATE_MENU =
 	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control border border-line bg-raised p-[5px] shadow-[0_10px_30px_rgba(0,0,0,0.28)]";

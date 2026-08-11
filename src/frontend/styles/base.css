@@ -154,6 +154,10 @@
 	/* What sits ON an --accent fill: its inverse. Was a hardcoded #fff at every
 	   call site, which is white-on-white the moment the accent becomes ink. */
 	--on-accent: var(--bg);
+	/* Hover for a filled --accent control. While the accent is ink, the only
+	   direction with anywhere to go is toward the page: brightness-110 on a
+	   near-white or near-black plate is invisible. */
+	--accent-hover: color-mix(in srgb, var(--accent) 86%, var(--bg));
 	/* Achromatic wash for a SELECTED or ACTIVE surface, pitched above
 	   --hover-strong (0.11). Once the accent went ink this and the hover wash
 	   became the same ink, so the two were told apart only by opacity. The split
@@ -360,6 +364,13 @@ html[data-accent] {
 	--accent: var(--accent-dark);
 	--on-accent: var(--on-accent-dark, #ffffff);
 	--accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+	/* A hue has somewhere to go that ink does not, so it deepens instead of
+	   fading toward the page: the :root formula mixes the fill 14% into --bg,
+	   which on a teal plate lands on near-black rather than on a darker teal.
+	   Mixing into --text keeps the hue and reads as pressure in both themes —
+	   darker under light, lighter under dark, because that is where the ink
+	   ramp points. */
+	--accent-hover: color-mix(in srgb, var(--accent) 82%, var(--text));
 }
 
 html[data-theme="light"][data-accent] {
@@ -418,6 +429,9 @@ html[data-accent="mono"] {
 	--accent-dark: #ffffff;
 	--on-accent-light: #ffffff;
 	--on-accent-dark: #000000;
+	/* The one accent with no hue to deepen: it already sits past the end of the
+	   ink ramp, so mixing it into --text moves nothing. Back to the page. */
+	--accent-hover: color-mix(in srgb, var(--accent) 86%, var(--bg));
 }
 
 /* ── Motion ──────────────────────────────────────────────────

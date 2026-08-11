@@ -78,9 +78,10 @@ const iconOnlyPad: Record<Size, string> = {
 // The label is `text-on-accent` rather than a literal white: on an ink fill,
 // white-on-white is what you get in dark mode. And `brightness-110` (what
 // `primary` used to hover with) is invisible on a near-white or near-black
-// fill, so the hover mixes the fill toward the page instead.
+// fill, so the hover takes `--accent-hover`, which picks its own direction:
+// toward the page while the accent is ink, deeper into the hue once it isn't.
 const INK =
-	"bg-accent border-transparent text-on-accent shadow-control hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))]";
+	"bg-accent border-transparent text-on-accent shadow-control hover:bg-accent-hover";
 
 const variants: Record<Variant, string> = {
 	// The raised control look of the newest chrome (viewer Share button).

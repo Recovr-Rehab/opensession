@@ -29,7 +29,7 @@ function inTime(iso: string): string {
  *  a thin inset divider (short of the top/bottom edges, Slack-style) rather
  *  than a full-height seam. */
 const caretButton =
-	"relative inline-flex w-[30px] items-center justify-center rounded-r-lg bg-accent text-on-accent transition-[filter] before:absolute before:top-1/2 before:left-0 before:h-4 before:w-px before:-translate-y-1/2 before:bg-white/45 before:content-[''] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-35";
+	"relative inline-flex w-[30px] items-center justify-center rounded-r-lg bg-accent text-on-accent transition-[background-color] before:absolute before:top-1/2 before:left-0 before:h-4 before:w-px before:-translate-y-1/2 before:bg-white/45 before:content-[''] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-35";
 
 /** Date / time field in the custom-time dialog. `bg-transparent` is deliberate:
  *  the stylesheet asked for `var(--bg-surface)`, a token that has never been
@@ -374,7 +374,7 @@ export function SchedulePromptButton({
               </button>
               <button
                 type="button"
-                className="rounded-control bg-accent px-4 py-[9px] text-label font-semibold text-on-accent transition-[filter] enabled:hover:bg-[color-mix(in_srgb,var(--text)_86%,var(--bg))] disabled:cursor-default disabled:opacity-45"
+                className="rounded-control bg-accent px-4 py-[9px] text-label font-semibold text-on-accent transition-[background-color] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-45"
                 onClick={scheduleCustom}
                 disabled={saving || !date || !time}
               >

@@ -80,6 +80,10 @@
 	/* What sits ON an --accent fill: its inverse. Pair it with bg-accent —
 	   text-white only worked while the accent was a saturated red. */
 	--color-on-accent: var(--on-accent);
+	/* Hover for a filled accent plate. Every call site used to spell the
+	   ink-toward-page mix inline, which turned a themed accent black on hover;
+	   base.css picks the right direction per accent. */
+	--color-accent-hover: var(--accent-hover);
 	/* Inline affordances (a link, a PR title that opens). The accent is ink
 	   now, so it cannot mark a link inside running text; this can. */
 	--color-link: var(--link);
