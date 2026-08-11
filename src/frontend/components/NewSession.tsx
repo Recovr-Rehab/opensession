@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { fetchWorktrees, fetchModels, fetchFileMentions, fetchSkillMentions, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser, useAuthStatus } from "./UserPicker";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
@@ -104,11 +104,12 @@ const TRIGGER_STRONG =
 	"relative inline-flex max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
 const CHEVRON = "-ml-0.5 shrink-0 text-faint";
 
-/** No bottom padding: a long, scrolled draft ends flush against the footer
- *  divider instead of leaving a stray gap under the last line. */
-const BODY = "relative px-4 pt-3";
+/** One scroll surface for the prompt and its attachments. Keeping the image in
+ *  this flow means it travels with the text instead of pinning over it. */
+const BODY =
+	"relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 const TEXTAREA =
-	"max-h-[62vh] min-h-[132px] w-full resize-none border-none bg-transparent font-sans text-[15px] leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
+	"block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-[15px] leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
 const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red";
 
 /* Single-line footer: the model pill is the only flexible item — it gives way
@@ -697,6 +698,44 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
   ];
 
+  // The prompt grows naturally; once the palette reaches its viewport cap the
+  // BODY becomes the single scroller, carrying attachments with the text. Fade
+  // only an edge that has more content beyond it so short prompts stay crisp.
+  const PROMPT_FADE_PX = 28;
+  function updatePromptFade(el: HTMLDivElement) {
+    const top = el.scrollTop > 1;
+    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+    const mask =
+      top || bottom
+        ? `linear-gradient(to bottom, ${
+            top ? `transparent 0, #000 ${PROMPT_FADE_PX}px` : "#000 0"
+          }, ${
+            bottom
+              ? `#000 calc(100% - ${PROMPT_FADE_PX}px), transparent 100%`
+              : "#000 100%"
+          })`
+        : "";
+    el.style.setProperty("-webkit-mask-image", mask);
+    el.style.setProperty("mask-image", mask);
+  }
+
+  useLayoutEffect(() => {
+    const textarea = promptRef.current;
+    const body = mentions.inputWrapRef.current;
+    if (!textarea || !body) return;
+    textarea.style.height = "0px";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+    updatePromptFade(body);
+  }, [prompt, images.length, files.length]);
+
+  useEffect(() => {
+    const body = mentions.inputWrapRef.current;
+    if (!body) return;
+    const observer = new ResizeObserver(() => updatePromptFade(body));
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [mentions.inputWrapRef]);
+
   // One frame closed so the palette animates in; App mounts us already-open.
   const open = useEnterOnMount();
   // Plan mode tints the writing surface and hatches it. Applied here rather
@@ -736,6 +775,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     >
       <Modal.Content
         variant="palette"
+        className="max-h-[calc(89dvh-1rem)] max-[560px]:max-h-[calc(93dvh-1rem)]"
         aria-label="New session"
         // The prompt, not the repo picker Base UI would otherwise land on as the
         // first tabbable.
@@ -853,6 +893,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             }
           }}
           onDragOver={(e) => e.preventDefault()}
+          onScroll={(e) => updatePromptFade(e.currentTarget)}
           ref={mentions.inputWrapRef}
         >
           {mentions.popup}
