@@ -1313,7 +1313,7 @@ a.asset-ref {
 	padding: 2px 7px 2px 4px;
 	border: 0;
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
-	background: color-mix(in srgb, var(--text) 3%, transparent);
+	background: var(--blue-soft);
 	color: var(--text);
 	cursor: pointer;
 	text-decoration: none;
@@ -1321,11 +1321,11 @@ a.asset-ref {
 	transition: background var(--dur-micro) var(--ease);
 }
 a.asset-ref:hover {
-	background: var(--hover);
+	background: color-mix(in srgb, var(--blue) 16%, transparent);
 	text-decoration: none;
 }
 a.asset-ref:active {
-	background: var(--hover-strong);
+	background: color-mix(in srgb, var(--blue) 22%, transparent);
 }
 a.asset-ref:focus-visible {
 	outline: 2px solid var(--accent);
@@ -1337,11 +1337,7 @@ a.asset-ref:focus-visible {
 	height: 20px;
 	flex: none;
 	place-items: center;
-	color: var(--text-dim);
-	transition: color var(--dur-micro) var(--ease);
-}
-a.asset-ref:hover .asset-ref-icon {
-	color: var(--text);
+	color: var(--blue);
 }
 .asset-ref-icon svg {
 	width: 16px;
