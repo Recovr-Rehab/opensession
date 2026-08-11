@@ -462,6 +462,18 @@ html[data-theme="light"] {
 		animation-duration: 1.6s !important;
 		animation-iteration-count: infinite !important;
 	}
+
+	/* The vibrancy sidebar's row dissolve is not motion: it is scroll-linked
+	   opacity, and it advances only as far as the reader scrolls. It has to be
+	   exempted rather than left to the blanket, which does not merely still it
+	   — a scroll-driven animation given a 0.01ms duration finishes instantly
+	   and parks every row at the `to` step, i.e. invisible. `auto` is the
+	   value that hands the range back to the timeline. */
+	html.material-backdrop
+		.sidebar-scroll
+		:is(a, button):not([data-sticky-head] *):not(:is(a, button) *) {
+		animation-duration: auto !important;
+	}
 	.msg-streaming .msg-body-assistant::after {
 		animation-duration: 1s !important;
 		animation-iteration-count: infinite !important;
@@ -802,50 +814,6 @@ html.wco .app {
 		background: transparent;
 	}
 
-	/* Sidebar headings do not pin on this surface, and the list dissolves into
-	   the chrome row instead of being cut off by it.
-
-	   Pinning is what forced the problem: a heading held at the top has rows
-	   sliding under it, so it has to paint a backing — and every backing is
-	   wrong here. Opaque, it is a plate: material above, material below, none
-	   of the wallpaper in between (dark over a bright desktop picture, light
-	   over a dark one). Translucent, the rows read straight through it. There
-	   is no third alpha, because the alpha that hides a row is the alpha that
-	   stops the wallpaper, and blur does not rescue it: it cannot reach the
-	   native vibrancy at all, and against our own paint it still leaves the
-	   band brighter than its surroundings, since blurring bright text spreads
-	   that ink across the whole strip.
-
-	   So nothing is held at the top, nothing paints a backing, and the only
-	   edge left — the scrollport's own top — is a mask rather than a cut. The
-	   mask is unconditional but costs nothing at rest: the matching padding
-	   starts the list below the fade, so the first row is only ever caught by
-	   it once it has actually scrolled up into it.
-
-	   The plain web build keeps its pinned headings; there the sidebar is an
-	   opaque surface, so their backing is just the surface's own colour. */
-	html.material-backdrop {
-		--sidebar-edge-fade: 16px;
-	}
-
-	html.material-backdrop [data-sticky-head] {
-		position: static;
-	}
-
-	html.material-backdrop .sidebar-scroll {
-		padding-top: var(--sidebar-edge-fade);
-		-webkit-mask-image: linear-gradient(
-			to bottom,
-			transparent 0,
-			#000 var(--sidebar-edge-fade)
-		);
-		mask-image: linear-gradient(
-			to bottom,
-			transparent 0,
-			#000 var(--sidebar-edge-fade)
-		);
-	}
-
 	/* --row-chip is deliberately NOT re-derived here, and the vibrancy sidebar
 	   is the surface where the chip cannot have everything. Measured, in light,
 	   against a mid-green wallpaper: sidebar L222, hovered row L209. A chip
@@ -869,18 +837,90 @@ html.wco .app {
 	html.material-backdrop .sidebar-container {
 		background: var(--bg-raised);
 	}
+}
 
-	/* Opaque surfaces again, so a pinned heading's backing is simply this
-	   sidebar's own colour and there is nothing for it to give away. Pinning
-	   comes back, and the scroll edge goes back to a plain cut. */
+/* A pinned sidebar heading has rows sliding under it, so something has to hide
+   them — and on the vibrancy surface no full-width backing can. Opaque, it is a
+   plate: material above it, material below it, and none of the wallpaper in
+   between, which reads as a dark slab over a bright desktop picture and a light
+   one over a dark picture. Translucent, the rows read straight through it.
+   There is no third alpha, because the alpha that hides a row is the alpha that
+   stops the wallpaper — and no filter escapes that either. Blur leaves the band
+   BRIGHTER than its surroundings (it spreads the rows' bright ink across the
+   whole strip), and `backdrop-filter: opacity(0)` is a no-op in Chromium:
+   erasing the backdrop and painting nothing back still leaves the rows at full
+   strength, measured.
+
+   So the rows get out of the way instead of being covered. Each one dissolves
+   as it slides under the pinned stack, which leaves the heading nothing to hide
+   and no reason to paint anything — the material runs through the band
+   unbroken. It doubles as the soft top edge, so the list dissolves into the
+   chrome row rather than being cut off by it.
+
+   `--pin-depth` is how far the pinned stack currently reaches (a band row, plus
+   a lane and a nested lane as they stack). Sidebar.tsx publishes it from the
+   same pass that toggles `is-stuck`, and only when it changes, because every
+   row's timeline reads it. A fixed depth cannot stand in for it: too shallow
+   and rows survive under the deeper tiers, too deep and a lone band heading
+   floats above a hole where the list should resume.
+
+   Scoped away from reduced transparency, where the surfaces are opaque anyway
+   and a heading's ordinary backing gives nothing away. */
+@media (min-width: 721px) and (prefers-reduced-transparency: no-preference) {
+	html.material-backdrop {
+		--sidebar-edge-fade: 16px;
+	}
+
+	/* Without scroll-driven animations there is nothing to clear the band, so
+	   fall back to not pinning at all and cut the top edge with a mask. */
 	html.material-backdrop [data-sticky-head] {
-		position: sticky;
+		position: static;
 	}
 
 	html.material-backdrop .sidebar-scroll {
-		padding-top: 0;
-		-webkit-mask-image: none;
-		mask-image: none;
+		padding-top: var(--sidebar-edge-fade);
+		-webkit-mask-image: linear-gradient(
+			to bottom,
+			transparent 0,
+			#000 var(--sidebar-edge-fade)
+		);
+		mask-image: linear-gradient(
+			to bottom,
+			transparent 0,
+			#000 var(--sidebar-edge-fade)
+		);
+	}
+
+	@supports (animation-timeline: view()) {
+		html.material-backdrop [data-sticky-head] {
+			position: sticky;
+		}
+
+		/* The mask would eat the pinned headings too — they scroll inside this
+		   box — and the dissolve has made it redundant. */
+		html.material-backdrop .sidebar-scroll {
+			padding-top: 0;
+			-webkit-mask-image: none;
+			mask-image: none;
+		}
+
+		/* Nothing left under a pinned heading, so it paints nothing. */
+		html.material-backdrop [data-sticky-head].is-stuck::before {
+			background: none;
+		}
+
+		/* Rows only. A heading is what the dissolve clears the space FOR, and
+		   a control nested inside a row already fades with the row, so neither
+		   needs a timeline of its own. */
+		html.material-backdrop
+			.sidebar-scroll
+			:is(a, button):not([data-sticky-head] *):not(:is(a, button) *) {
+			animation: sidebar-row-dissolve linear both;
+			/* The inset moves the timeline's start edge down to the pin line,
+			   so a row is fully gone by the moment its bottom crosses it. */
+			animation-timeline: view(block var(--pin-depth, 16px) 0px);
+			animation-range: exit 0% exit 100%;
+		}
 	}
 }
 /* Sidebar top row clears the traffic lights. env(titlebar-area-x) is the
@@ -1664,6 +1704,18 @@ a.pr-ref:hover {
 	from {
 		opacity: 0;
 		transform: translateY(2px);
+	}
+}
+
+/* Drives a sidebar row out of the way as it slides under the pinned headings on
+   the vibrancy surface (see the material-backdrop chrome above, its only user).
+   Scroll-linked rather than timed: it advances only as far as the scroll does. */
+@keyframes sidebar-row-dissolve {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
 	}
 }
 
