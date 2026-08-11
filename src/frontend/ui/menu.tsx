@@ -82,7 +82,7 @@ function ContextPopup({
 				className="z-[10001] outline-none"
 			>
 				<BaseContextMenu.Popup
-					className={cn(popupClasses, className)}
+					className={cn("app-menu-popup", popupClasses, className)}
 					finalFocus={finalFocus}
 				>
 					<div className={popupInnerClasses}>{children}</div>
