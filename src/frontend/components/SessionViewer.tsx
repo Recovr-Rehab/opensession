@@ -5180,36 +5180,6 @@ export function SessionViewer({
 								<div className="py-10 text-center text-faint">Empty transcript</div>
 							) : (
 								<>
-									{historyTruncated && (
-										<div className="flex justify-center [overflow-anchor:none] px-0 pt-3 pb-3.5">
-											{loadingHistory ? (
-												<div className="inline-flex min-h-9 items-center gap-1 rounded-[999px] bg-popup-glass px-3.5 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm">
-													<span
-														className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim"
-														aria-hidden
-													/>
-													<span>
-														{loadingAllHistory
-															? "Loading all messages…"
-															: "Loading older messages…"}
-													</span>
-												</div>
-											) : (
-												<button
-													type="button"
-													onClick={loadAllHistory}
-													className="group relative inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-[999px] bg-popup-glass px-3.5 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-transparent before:transition-colors before:content-[''] after:absolute after:-inset-1 after:content-[''] hover:before:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
-												>
-													<IconArrowUp
-														size={13}
-														className="text-dim transition-transform group-hover:-translate-y-px"
-														aria-hidden
-													/>
-													Load all
-												</button>
-											)}
-										</div>
-									)}
 									<OpenAssetPathsProvider value={assetPaths}>
 										<React.Profiler
 											id="transcript"
@@ -5301,7 +5271,38 @@ export function SessionViewer({
 							<div ref={spacerRef} className={TURN_SPACER} aria-hidden="true" />
 						</div>
 
-								{showScrollToBottom && entries.length > 0 && (
+							{historyTruncated && (
+								<div className="pointer-events-none absolute top-3 left-1/2 z-[5] -translate-x-1/2">
+									{loadingHistory ? (
+										<div className="inline-flex min-h-9 items-center gap-1 rounded-[999px] bg-popup-glass px-3.5 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm">
+											<span
+												className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim"
+												aria-hidden
+											/>
+											<span>
+												{loadingAllHistory
+													? "Loading all messages…"
+													: "Loading older messages…"}
+											</span>
+										</div>
+									) : (
+										<button
+											type="button"
+											onClick={loadAllHistory}
+											className="group pointer-events-auto relative inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-[999px] bg-popup-glass px-3.5 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-transparent before:transition-colors before:content-[''] after:absolute after:-inset-1 after:content-[''] hover:before:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
+										>
+											<IconArrowUp
+												size={13}
+												className="text-dim transition-transform group-hover:-translate-y-px"
+												aria-hidden
+											/>
+											Load all
+										</button>
+									)}
+								</div>
+							)}
+
+							{showScrollToBottom && entries.length > 0 && (
 									<button
 										className="group absolute left-1/2 bottom-6 z-[5] inline-flex min-h-9 -translate-x-1/2 cursor-pointer items-center gap-1 rounded-[999px] bg-popup-glass px-3.5 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-transparent before:transition-colors before:content-[''] after:absolute after:-inset-1 after:content-[''] hover:before:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
 										onClick={() => scrollToLatest("smooth")}
