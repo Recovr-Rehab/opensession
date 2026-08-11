@@ -8,6 +8,8 @@ import {
 } from "../lib/composer-highlight";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
+import { QuoteContext } from "./QuoteContext";
+import type { Quote } from "../lib/quotes";
 import { useFileMentions } from "./useFileMentions";
 import {
   IconArrowUp,
@@ -165,6 +167,9 @@ interface Props {
    */
   files?: FileAttachment[];
   onFilesChange?: (files: FileAttachment[]) => void;
+  /** The transcript selection currently attached as ephemeral context. */
+  quote?: Quote | null;
+  onQuoteClear?: () => void;
   /**
    * Enables "@"-mention file autocomplete. Given the text typed after the "@",
    * returns matching files (primary repo + any attached repos). When omitted,
@@ -343,6 +348,8 @@ export function Composer({
   onImagesChange,
   files,
   onFilesChange,
+  quote,
+  onQuoteClear,
   mentionFetch,
   skillsFetch,
   askMode,
@@ -444,6 +451,7 @@ export function Composer({
     !!text.trim() ||
     imgs.length > 0 ||
     fls.length > 0 ||
+    !!quote ||
     hasAttached;
   const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
   const showSend = !busy || hasContent;
@@ -765,6 +773,11 @@ export function Composer({
                 : "V-LINE"}
           </div>
         )}
+        <QuoteContext
+          quote={quote ?? null}
+          onRemove={() => onQuoteClear?.()}
+          disabled={disabled}
+        />
         <ImageThumbs images={imgs} onRemove={removeImage} disabled={disabled} />
         <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
         <motion.div

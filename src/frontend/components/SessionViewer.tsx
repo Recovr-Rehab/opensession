@@ -3512,12 +3512,11 @@ export function SessionViewer({
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
-	const focusComposerAfterQuote = useCallback(() => {
-		if (!isPhone)
-			queueMicrotask(() =>
-				composerRef.current?.focus({ preventScroll: true }),
-			);
-	}, [isPhone]);
+	const focusComposerForQuote = useCallback(() => {
+		const composer = composerRef.current;
+		composer?.focus({ preventScroll: true });
+		return composer;
+	}, []);
 
 	// Run-status flap above the composer (ComposerAgents): the tappable
 	// pill → mini-card → full-panel progression, reusing the queue flap's
@@ -5065,11 +5064,11 @@ export function SessionViewer({
 						    next message and keeps the passage visibly highlighted. */}
 						<QuoteSelection
 							containerRef={messagesRef}
-							disabled={!connected || noEngine}
+							disabled={noEngine}
 							quote={quote}
 							onQuote={setQuote}
 							onClear={clearQuote}
-							onCaptured={focusComposerAfterQuote}
+							onInputIntent={focusComposerForQuote}
 						/>
 						<div
 							className={cn(
@@ -5357,6 +5356,8 @@ export function SessionViewer({
 									onImagesChange={setImages}
 									files={files}
 									onFilesChange={setFiles}
+									quote={quote}
+									onQuoteClear={clearQuote}
 									placeholder={
 										!connected
 											? "Not connected"
