@@ -27,23 +27,34 @@ struct MarkdownBody: View {
         self.dimmed = dimmed
     }
 
+    /// One rendered piece of a message: prose for the library, a diagram, or a
+    /// table this app lays out itself.
+    private enum Block {
+        case markdown(String)
+        case mermaid(String)
+        case table(MarkdownTable)
+    }
+
     var body: some View {
         // ```mermaid fences are lifted out before anything else touches the
         // text: they render as drawn diagrams, and the link rewrites below
         // would corrupt a URL or file path inside a diagram label into
-        // markdown link syntax that mermaid can no longer parse.
-        let segments = MermaidSegmenter.split(text)
-        if segments.count == 1, case .markdown(let only) = segments[0] {
+        // markdown link syntax that mermaid can no longer parse. Tables come
+        // out of what's left, for the width reasons in MarkdownTableSegmenter.
+        let blocks = Self.blocks(of: text)
+        if blocks.count == 1, case .markdown(let only) = blocks[0] {
             // The overwhelmingly common shape — no extra stack around it.
             markdown(only)
         } else {
             VStack(alignment: .leading, spacing: Self.segmentSpacing) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                    switch segment {
+                ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                    switch block {
                     case .markdown(let value):
                         markdown(value)
                     case .mermaid(let source):
                         MermaidDiagramView(source: source)
+                    case .table(let table):
+                        MarkdownTableView(table: linkified(table), dimmed: dimmed)
                     }
                 }
             }
@@ -51,26 +62,56 @@ struct MarkdownBody: View {
         }
     }
 
+    private static func blocks(of text: String) -> [Block] {
+        MermaidSegmenter.split(text).flatMap { segment -> [Block] in
+            switch segment {
+            case .mermaid(let source):
+                return [.mermaid(source)]
+            case .markdown(let value):
+                return MarkdownTableSegmenter.split(value).map { piece in
+                    switch piece {
+                    case .markdown(let prose): .markdown(prose)
+                    case .table(let table): .table(table)
+                    }
+                }
+            }
+        }
+    }
+
     private func markdown(_ value: String) -> some View {
         SwiftStreamingMarkdown.MarkdownView(
-            // Session ids, file paths, scratch files and bare URLs become
-            // links here rather than in the display pass: the entry's own text
-            // stays the raw markdown, so copying a message still yields what
-            // the agent actually wrote. Autolinking runs first so a session URL
-            // is already a link target by the time `SessionLinks` looks for
-            // loose ids, and each rewrite after it leaves the links already
-            // there alone. `AssetLinks` runs last, so a name that is both a
-            // repo path and a scratch file keeps its diff.
-            text: AssetLinks.linkify(
-                FileLinks.linkify(
-                    SessionLinks.linkify(MarkdownAutolink.linkify(value)),
-                    sessionId: openPanel.sessionId
-                ),
-                sessionId: openPanel.sessionId
-            ),
+            text: linkified(value),
             config: dimmed ? .os1Dim : .os1Static
         )
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A table's cells get the same rewrites as prose, applied per cell —
+    /// after the split, since a path or a session id never contains a pipe.
+    /// Without this, the file named in a table cell would be dead text while
+    /// the same name in the sentence above it is a link.
+    private func linkified(_ table: MarkdownTable) -> MarkdownTable {
+        var out = table
+        out.headers = table.headers.map(linkified)
+        out.rows = table.rows.map { $0.map(linkified) }
+        return out
+    }
+
+    /// Session ids, file paths, scratch files and bare URLs become links here
+    /// rather than in the display pass: the entry's own text stays the raw
+    /// markdown, so copying a message still yields what the agent actually
+    /// wrote. Autolinking runs first so a session URL is already a link target
+    /// by the time `SessionLinks` looks for loose ids, and each rewrite after
+    /// it leaves the links already there alone. `AssetLinks` runs last, so a
+    /// name that is both a repo path and a scratch file keeps its diff.
+    private func linkified(_ value: String) -> String {
+        AssetLinks.linkify(
+            FileLinks.linkify(
+                SessionLinks.linkify(MarkdownAutolink.linkify(value)),
+                sessionId: openPanel.sessionId
+            ),
+            sessionId: openPanel.sessionId
+        )
     }
 
     /// The gap between a diagram and the prose around it, matching the block
@@ -210,7 +251,9 @@ private extension TextFonts {
 }
 #endif
 
-private extension MarkdownRenderConfig {
+// Not fileprivate: `MarkdownTableView` renders with the same configs when it
+// hands a table too wide to fit back to the library.
+extension MarkdownRenderConfig {
     /// `text` is the body colour: full strength for an answer, dimmed for the
     /// narration inside a work fold, which is context rather than conclusion.
     /// Bold runs and inline code follow it rather than being pinned to the

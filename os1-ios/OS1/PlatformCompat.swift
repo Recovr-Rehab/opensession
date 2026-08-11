@@ -7,6 +7,15 @@ import AppKit
 
 // Cross-platform shims so the views share one code path between iOS and macOS.
 
+/// The platform's font class, for the places that have to MEASURE text rather
+/// than hand it to SwiftUI — a markdown table sizes its columns from real
+/// glyph widths (`MarkdownTableView`).
+#if os(iOS)
+typealias PlatformFont = UIFont
+#else
+typealias PlatformFont = NSFont
+#endif
+
 extension ToolbarItemPlacement {
     /// `.topBarTrailing` / `.topBarLeading` don't exist on macOS; map them to
     /// the equivalent slots in a Mac toolbar.
