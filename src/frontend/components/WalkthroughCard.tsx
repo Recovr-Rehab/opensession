@@ -7,6 +7,7 @@ import { IconChevronDown, IconPlay, IconPlayRectangle } from "./icons";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { openLightbox, type LightboxItem } from "./MediaLightbox";
 import { Button } from "../ui/button";
+import { BrandMark } from "./BrandMark";
 
 /** Stream server-side media (staged under the uploads dir) through the
  *  existing scoped media route — same URL shape MessageBubble uses. */
@@ -94,7 +95,8 @@ export function WalkthroughCard({
 	const shareAction = slackShare ? (
 		<Button
 			size="xs"
-			className="ml-auto phone:min-h-11"
+			icon={<BrandMark name="slack" size={14} />}
+			className="ml-auto phone:min-h-11 [&>span:first-child]:opacity-100"
 			disabled={slackShare.status !== "idle"}
 			onClick={slackShare.onShare}
 		>

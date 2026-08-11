@@ -9,6 +9,7 @@ import { walkthroughInsertIndex } from "./walkthrough-placement";
 import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import { Button } from "../ui/button";
+import { BrandMark } from "./BrandMark";
 
 type RenderBlock =
 	| { kind: "entry"; entry: TranscriptEntry }
@@ -106,7 +107,13 @@ function ShippedChangeAction({
 				alt={`Screenshot of the shipped visual change: ${preview.title}`}
 			/>
 			<div className="flex justify-end px-3 py-2.5">
-				<Button size="sm" disabled={status !== "idle"} onClick={onShare}>
+				<Button
+					size="sm"
+					icon={<BrandMark name="slack" size={14} />}
+					className="[&>span:first-child]:opacity-100"
+					disabled={status !== "idle"}
+					onClick={onShare}
+				>
 					{status === "sharing"
 						? "Sharing…"
 						: status === "shared"

@@ -67,6 +67,7 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).toContain("Adopt the OpenSession toggle style");
 		expect(html).toContain("The longer toggle is easier to read.");
 		expect(html).toContain("%2Ftmp%2Ftoggle-after.png");
+		expect(html).toContain('data-brand="slack"');
 	});
 
 	test("does not show the action for a different merged PR", () => {
