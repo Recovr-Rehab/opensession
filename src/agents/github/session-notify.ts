@@ -145,11 +145,11 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
     !!pr.merge_commit_sha;
 
   const message =
-    `🔀 This session's PR #${prNumber} “${title}” (branch \`${headRef}\`) was just merged into ${base} by ${mergedBy}.` +
+    `PR #${prNumber} “${title}” was merged into ${base} by ${mergedBy}.` +
     (trackDeploy
-      ? " The Deploy workflow is running for this merge — you'll get another message here when it finishes."
+      ? " Deployment is in progress; another update will follow."
       : "") +
-    " This is an FYI event: acknowledge briefly; no action needed unless something depends on it.";
+    " No action needed.";
 
   const sessionIds = guardedSessionNotificationIds(
     sessions.map((s) => s.id),
@@ -191,8 +191,8 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
 
   const success = run.conclusion === "success";
   const message = success
-    ? `🚀 Deploy finished for PR #${entry.prNumber} “${entry.title}” — the merge is live in production. This is an FYI event: acknowledge briefly; no action needed.`
-    : `❌ Deploy ${run.conclusion || "failed"} for PR #${entry.prNumber} “${entry.title}” — worth a look: ${run.html_url}`;
+    ? `Deployment finished for PR #${entry.prNumber} “${entry.title}”. The merge is live. No action needed.`
+    : `Deployment ${run.conclusion || "failed"} for PR #${entry.prNumber} “${entry.title}”: ${run.html_url}`;
 
   const sessionIds = guardedSessionNotificationIds(entry.sessionIds, "deploy_completed", {
     pr_number: entry.prNumber,
