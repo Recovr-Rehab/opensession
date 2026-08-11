@@ -248,7 +248,11 @@ function TurnMessage({
 }) {
   return (
     <div
-      className="mx-auto my-2 w-full max-w-[var(--session-col)] px-1"
+      // 9px, not the row's 4px: the fold header and the tool rows both pad by
+      // 4 and then draw a glyph inset ~5px into its own box, so text padded to
+      // 4 starts left of every other line in the turn. This lands the prose on
+      // the chevron's ink instead.
+      className="mx-auto my-2 w-full max-w-[var(--session-col)] pr-1 pl-[9px]"
       data-eid={entry.id}
     >
       <ClampedBody
