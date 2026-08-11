@@ -364,22 +364,14 @@ function syncRenderedPrStates(): void {
     const number = anchor.dataset.prNumber;
     if (!repo || !number) continue;
     const state = knownPrStates.get(prStateKey(repo, number));
-    let label = anchor.querySelector<HTMLElement>(".pr-ref-state");
     if (!state) {
       delete anchor.dataset.prState;
       delete anchor.dataset.prTone;
-      label?.remove();
       anchor.title = prRefTitle(repo, number);
       continue;
     }
     anchor.dataset.prState = state.state;
     anchor.dataset.prTone = state.tone;
-    if (!label) {
-      label = document.createElement("span");
-      label.className = "pr-ref-state";
-      anchor.append(label);
-    }
-    label.textContent = state.label;
     anchor.title = prRefTitle(repo, number, state);
   }
 }
@@ -458,9 +450,7 @@ function prMentionLink(repo: string, number: string, label: string): string {
     `<circle cx="7" cy="6.5" r="1.75"/><circle cx="7" cy="17.5" r="1.75"/>` +
     `<circle cx="17" cy="17.5" r="1.75"/><path d="M7 8.25V15.75"/>` +
     `<path d="M12.25 6.5H15C16.1046 6.5 17 7.39543 17 8.5V15.75"/>` +
-    `</svg></span><span class="pr-ref-label">${attr(label)}</span>` +
-    (state ? `<span class="pr-ref-state">${state.label}</span>` : "") +
-    `</a>`
+    `</svg></span><span class="pr-ref-label">${attr(label)}</span></a>`
   );
 }
 

@@ -358,8 +358,8 @@ describe("renderMarkdown PR mentions", () => {
       ]);
       const html = renderMarkdown("Fixed in #5528.", fusion);
       expect(html).toContain(`data-pr-tone="${tone}"`);
-      expect(html).toContain(`<span class="pr-ref-state">${label}</span>`);
       expect(html).toContain(`· ${label}`);
+      expect(html).not.toContain("pr-ref-state");
     }
   });
 
@@ -375,7 +375,8 @@ describe("renderMarkdown PR mentions", () => {
       const html = renderMarkdown("Fixed in #5528.", fusion);
       expect(html).toContain(`data-pr-state="${state}"`);
       expect(html).toContain(`data-pr-tone="${tone}"`);
-      expect(html).toContain(`<span class="pr-ref-state">${label}</span>`);
+      expect(html).toContain(`· ${label}`);
+      expect(html).not.toContain("pr-ref-state");
     }
   });
 
@@ -383,10 +384,12 @@ describe("renderMarkdown PR mentions", () => {
     setKnownPrStates([
       { repo: "tella-fusion", number: 5528, state: "OPEN" },
     ]);
-    expect(renderMarkdown("Fixed in #5528.", fusion)).toContain(">Open</span>");
+    expect(renderMarkdown("Fixed in #5528.", fusion)).toContain(
+      'data-pr-state="open"',
+    );
     setKnownPrStates([]);
     expect(renderMarkdown("Fixed in #5528.", fusion)).not.toContain(
-      "pr-ref-state",
+      "data-pr-tone",
     );
   });
 
@@ -395,9 +398,9 @@ describe("renderMarkdown PR mentions", () => {
       { repo: "tella-fusion", number: 5528, state: "MERGED" },
       { repo: "tella-fusion", number: 5528, state: "OPEN" },
     ]);
-    expect(renderMarkdown("Fixed in #5528.", fusion)).toContain(
-      '<span class="pr-ref-state">Merged</span>',
-    );
+    const html = renderMarkdown("Fixed in #5528.", fusion);
+    expect(html).toContain('data-pr-state="merged"');
+    expect(html).toContain("· Merged");
   });
 
   it("leaves a mention plain when the caller renders without a repo", () => {
