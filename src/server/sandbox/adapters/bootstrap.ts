@@ -1734,7 +1734,7 @@ export interface RemoteSandboxParts {
   /** Override the public-ingress default for providers that can reach the
    *  server over a private/local route (notably local Firecracker). */
   callbackBaseUrl?: string;
-  ports(): Promise<PortMap>;
+  ports(requestedPorts?: number[]): Promise<PortMap>;
   status(): Promise<SandboxStatus>;
   /** Activity ping (state file + provider-native keepalive, e.g. E2B's
    *  countdown extension). Called at run start/end. */
@@ -1847,7 +1847,7 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       };
     },
 
-    ports: () => parts.ports(),
+    ports: (requestedPorts) => parts.ports(requestedPorts),
     status: () => parts.status(),
   };
   remoteParts.set(sandboxHandle, { driver: parts.driver, launcher });
