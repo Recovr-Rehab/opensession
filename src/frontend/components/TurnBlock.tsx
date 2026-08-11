@@ -36,8 +36,12 @@ interface Props {
  * Expanding shows the full flat run: intermediate assistant notes interleaved
  * with the tool calls, followed by failures and a compact change summary.
  *
- * The collapsed line stays short enough for a phone at every width: duration
- * and step count only. Tools, failures and code movement stay one click away.
+ * The collapsed line carries what a folded turn can't otherwise say: duration,
+ * step count, and — when the turn wrote files — the ±lines it moved, in the
+ * same green/red the diff surfaces use. Which files, and every failure, stay
+ * one click away. The counts sit after the meta run and never shrink; the
+ * duration/steps run truncates first, so a phone drops characters off the
+ * middle instead of the numbers.
  */
 // Memoized with a custom comparator: TranscriptBlocks rebuilds the `items`
 // arrays and the `toolResults` Map on every render, so plain shallow-prop memo
@@ -163,6 +167,9 @@ export const TurnBlock = React.memo(function TurnBlock({
             {metaLabel}
           </span>
         )}
+        {additions + deletions > 0 && (
+          <LineStats additions={additions} deletions={deletions} />
+        )}
         {live && !expanded && lastTool && (
           <span className="min-w-0 truncate text-label leading-4 text-faint">
             {toolDisplayName(lastTool.toolName)}:{" "}
@@ -220,15 +227,13 @@ export const TurnBlock = React.memo(function TurnBlock({
                 </span>
               )}
               {editedFiles.length > 0 && (
-                <>
-                  <span>
-                    {editedFiles.length}{" "}
-                    {editedFiles.length === 1 ? "file" : "files"} changed
-                  </span>
-                  {additions + deletions > 0 && (
-                    <LineStats additions={additions} deletions={deletions} />
-                  )}
-                </>
+                // Line counts live on the fold header, where they read folded
+                // and open alike; repeating them here would say the same
+                // number twice within one block.
+                <span>
+                  {editedFiles.length}{" "}
+                  {editedFiles.length === 1 ? "file" : "files"} changed
+                </span>
               )}
             </div>
           )}
