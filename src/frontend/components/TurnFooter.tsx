@@ -78,7 +78,9 @@ export const TurnFooter = React.memo(function TurnFooter({
   return (
     <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
       {duration && (
-        <span className={cn("mr-1.5 text-faint", FOOTER_TEXT)}>{duration}</span>
+        <span className="mr-1.5 text-meta font-medium leading-4 text-faint">
+          {duration}
+        </span>
       )}
       {assets.map((path) => (
         <AssetChip key={path} path={path} />
@@ -199,7 +201,7 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
 }
 
 const BTN =
-  "flex size-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
+  "flex size-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
 
 /** The whole row is always on the page, and muted rather than hidden: an
  * action you can see is one you know exists, and `text-faint` on a transparent
