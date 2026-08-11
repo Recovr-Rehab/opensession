@@ -174,8 +174,9 @@ export interface Sandbox {
    * provider's in-process launch has nothing to await.
    */
   launchRunEager?(spec: RunHostSpec, cb?: RunHandleCallbacks): Promise<RunHandle>;
-  /** Preview ports (sandbox port → host port). */
-  ports(): Promise<PortMap>;
+  /** Preview ports (sandbox port → host port). `requestedPorts` lets providers
+   *  with dynamic tunnels publish services a session added to .ports.conf. */
+  ports(requestedPorts?: number[]): Promise<PortMap>;
   status(): Promise<SandboxStatus>;
 }
 

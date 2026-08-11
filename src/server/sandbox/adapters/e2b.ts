@@ -225,9 +225,15 @@ export class E2bProvider implements SandboxProvider {
       sessionId,
       cwd,
       driver: e2bDriver(sbx),
-      async ports(): Promise<PortMap> {
+      async ports(requestedPorts = []): Promise<PortMap> {
         const map: PortMap = {};
-        for (const port of sandboxConfig().previewPorts || []) {
+        const ports = new Set([
+          ...(sandboxConfig().previewPorts || []),
+          ...requestedPorts.filter(
+            (port) => Number.isInteger(port) && port > 0 && port <= 65_535,
+          ),
+        ]);
+        for (const port of ports) {
           try {
             map[port] = { url: `https://${sbx.getHost(port)}` };
           } catch (e) {

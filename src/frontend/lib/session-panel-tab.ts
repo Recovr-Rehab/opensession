@@ -9,7 +9,7 @@ const KEY = "opensession-session-panel-tabs";
 // (restoring it would spawn a PTY on every load), evidence is transient (it
 // needs a tool call selected), and reports would immediately reset to Info
 // until the async report fetch lands.
-const RESTORABLE = ["info", "changes", "workflows"] as const;
+const RESTORABLE = ["info", "changes", "workflows", "portals"] as const;
 export type RestorablePanelTab = (typeof RESTORABLE)[number];
 
 // Sessions accumulate forever (unlike workspaces), so cap the map. Entries
