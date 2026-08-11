@@ -129,7 +129,7 @@ const REMOTE_OPENCODE_VERSION = "1.17.15";
  * prewarms and provider templates instead of calling them Ready. */
 const REMOTE_NODE_MAJOR = 24;
 const REMOTE_JUST_VERSION = "1.43.1";
-const REMOTE_RUNTIME_REVISION = "workspace-runtime-v2";
+const REMOTE_RUNTIME_REVISION = "workspace-runtime-v3";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
@@ -610,15 +610,17 @@ async function bootstrapRemoteBaseRuntime(
     log(`installing workspace tools (${tools.stdout.trim().replaceAll("\n", ", ")})…`);
     need(
       await driver.exec(
-        `SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"; ` +
+        `run_root() { if [ "$(id -u)" = 0 ]; then "$@"; ` +
+          `elif command -v sudo >/dev/null 2>&1; then sudo -n "$@"; ` +
+          `else echo "root privileges are required to install workspace tools" >&2; return 1; fi; }; ` +
           `if command -v apt-get >/dev/null 2>&1; then ` +
-          `$SUDO apt-get update -qq && $SUDO apt-get install -y -qq ca-certificates git curl unzip xz-utils ripgrep coreutils sed python3 build-essential direnv lsof; ` +
+          `run_root apt-get update -qq && run_root apt-get install -y -qq ca-certificates git curl unzip xz-utils ripgrep coreutils sed python3 build-essential direnv lsof; ` +
           `elif command -v apk >/dev/null 2>&1; then ` +
-          `$SUDO apk add --no-cache ca-certificates git curl unzip xz ripgrep coreutils sed python3 build-base direnv lsof; ` +
+          `run_root apk add --no-cache ca-certificates git curl unzip xz ripgrep coreutils sed python3 build-base direnv lsof; ` +
           `elif command -v dnf >/dev/null 2>&1; then ` +
-          `$SUDO dnf install -y ca-certificates git curl unzip xz ripgrep coreutils sed python3 gcc-c++ make direnv lsof; ` +
+          `run_root dnf install -y ca-certificates git curl unzip xz ripgrep coreutils sed python3 gcc-c++ make direnv lsof; ` +
           `elif command -v yum >/dev/null 2>&1; then ` +
-          `$SUDO yum install -y ca-certificates git curl unzip xz ripgrep coreutils sed python3 gcc-c++ make direnv lsof; ` +
+          `run_root yum install -y ca-certificates git curl unzip xz ripgrep coreutils sed python3 gcc-c++ make direnv lsof; ` +
           `else echo "no supported package manager" >&2; exit 1; fi`,
         { timeoutMs: 300_000 },
       ),
@@ -643,9 +645,11 @@ async function bootstrapRemoteBaseRuntime(
     need(
       await driver.exec(
         `command -v apt-get >/dev/null 2>&1 || { echo "Node ${REMOTE_NODE_MAJOR} bootstrap requires an apt-based provider image" >&2; exit 1; }; ` +
-          `SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"; ` +
-          `curl -fsSL https://deb.nodesource.com/setup_${REMOTE_NODE_MAJOR}.x | $SUDO bash - && ` +
-          `$SUDO apt-get install -y -qq nodejs`,
+          `if [ "$(id -u)" = 0 ]; then ` +
+          `curl -fsSL https://deb.nodesource.com/setup_${REMOTE_NODE_MAJOR}.x | bash - && apt-get install -y -qq nodejs; ` +
+          `elif command -v sudo >/dev/null 2>&1; then ` +
+          `curl -fsSL https://deb.nodesource.com/setup_${REMOTE_NODE_MAJOR}.x | sudo -n bash - && sudo -n apt-get install -y -qq nodejs; ` +
+          `else echo "root privileges are required to install Node ${REMOTE_NODE_MAJOR}" >&2; exit 1; fi`,
         { timeoutMs: 300_000 },
       ),
       `Node ${REMOTE_NODE_MAJOR} install`,
@@ -663,9 +667,11 @@ async function bootstrapRemoteBaseRuntime(
   need(
     await driver.exec(
       `test -x ${remoteJust} && test "$(${remoteJust} --version | awk '{print $2}')" = "${REMOTE_JUST_VERSION}" || ` +
-        `{ SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"; ` +
-        `curl -fsSL https://just.systems/install.sh | $SUDO bash -s -- ` +
-        `--tag ${REMOTE_JUST_VERSION} --to ${dirname(remoteJust)}; }`,
+        `{ if [ "$(id -u)" = 0 ]; then ` +
+        `curl -fsSL https://just.systems/install.sh | bash -s -- --tag ${REMOTE_JUST_VERSION} --to ${dirname(remoteJust)}; ` +
+        `elif command -v sudo >/dev/null 2>&1; then ` +
+        `curl -fsSL https://just.systems/install.sh | sudo -n bash -s -- --tag ${REMOTE_JUST_VERSION} --to ${dirname(remoteJust)}; ` +
+        `else echo "root privileges are required to install just ${REMOTE_JUST_VERSION}" >&2; exit 1; fi; }`,
       { timeoutMs: 120_000 },
     ),
     `just ${REMOTE_JUST_VERSION} install`,

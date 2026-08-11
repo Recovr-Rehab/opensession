@@ -46,7 +46,7 @@ describe("remote repo lifecycle", () => {
 	test("bootstrap identity includes the preview runtime contract", () => {
 		expect(bootstrapSignature()).toContain("node@24");
 		expect(bootstrapSignature()).toContain("just@1.43.1");
-		expect(bootstrapSignature()).toContain("workspace-runtime-v2");
+		expect(bootstrapSignature()).toContain("workspace-runtime-v3");
 	});
 
 	test("setup is skipped after its durable stamp", async () => {
