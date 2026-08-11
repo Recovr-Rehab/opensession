@@ -894,7 +894,7 @@ export function Composer({
               <Tooltip label="Attach files and session options">
                 <button
                   type="button"
-                  // The "+" is a 40px target around a 20px glyph, so aligning
+                  // The "+" is a 40px target around a 22px glyph, so aligning
                   // its BOX with the composer's padding parks the visible ink
                   // 10px further in than the text above it. Pull the button (not
                   // its wrapper, which the menu anchors to) back out so the glyph
@@ -903,6 +903,7 @@ export function Composer({
                   className={cn(
                     paletteIconBtn,
                     minimized && paletteIconBtnRound,
+                    !minimized && "phone:[&_svg]:size-[22px]",
                     minimized ? "ml-0" : "-ml-1.5",
                   )}
                   {...tapProps(() => setMenu(menu === "add" ? null : "add"))}
@@ -910,7 +911,7 @@ export function Composer({
                   aria-label="Attach files and session options"
                   aria-expanded={menu === "add"}
                 >
-                  <IconPlus size={20} />
+                  <IconPlus size={22} />
                 </button>
               </Tooltip>
               {menu === "add" && (
@@ -1103,7 +1104,11 @@ export function Composer({
                 round variant with the "+" — that pairing used to come from a
                 `.composer.composer-min .palette-icon-btn` descendant rule. */}
             <VoiceInput
-              className={cn(paletteIconBtn, minimized && paletteIconBtnRound)}
+              className={cn(
+                paletteIconBtn,
+                minimized && paletteIconBtnRound,
+                !minimized && "phone:[&_svg]:size-[22px]",
+              )}
               onText={insertDictation}
               disabled={disabled}
             />
