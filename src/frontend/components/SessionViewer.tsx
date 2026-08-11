@@ -178,7 +178,7 @@ import {
 	composerQueueList,
 	composerQueuePill,
 	composerQueuePillGithub,
-	composerQueuePillSending,
+	composerQueueSendingStatus,
 	composerQueueTitle,
 } from "../lib/composer-classes";
 import {
@@ -3418,8 +3418,9 @@ export function SessionViewer({
 						)}
 					>
 						<div className={composerQueueActions}>
-							<span className={cn(composerQueuePill, composerQueuePillSending)}>
-								{waitingForWorkspace ? "Queued" : "Queueing…"}
+							<span className={composerQueueSendingStatus} role="status">
+								{!waitingForWorkspace && <PixelSpinner className="shrink-0" />}
+								{waitingForWorkspace ? "Queued" : "Queueing"}
 							</span>
 						</div>
 						{renderQueueContent(p, classifyQueuedContent(p.content), {

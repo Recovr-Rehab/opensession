@@ -244,9 +244,10 @@ export const composerQueuePill =
 	"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent";
 /** GitHub FYI: not something you did, so it drops the accent. */
 export const composerQueuePillGithub = "border-line bg-raised text-dim";
-/** Optimistic busy send: in the flap since the send, awaiting the server
- *  echo. */
-export const composerQueuePillSending = "border-line bg-raised text-faint";
+/** Optimistic busy send: a transient readout, not a badge or control. Keeping
+ *  it borderless prevents the in-flight state from reading as a pill button. */
+export const composerQueueSendingStatus =
+	"inline-flex h-8 shrink-0 items-center gap-2 px-2 text-label font-medium text-faint";
 export const composerQueueContent = "flex min-w-0 flex-1 items-center gap-2";
 /** The thumbnail keeps its size — shrunk to the 19px line box it stops being a
  *  recognizable preview, and the `+N` badge below is nearly as tall as the
