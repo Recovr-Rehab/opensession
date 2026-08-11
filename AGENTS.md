@@ -62,6 +62,29 @@ bug report, "also fix X" means fix X in the native app). If it's genuinely
 unclear which app a request targets, ask first instead of guessing; a fix
 landed in the wrong app wastes a round-trip and can mask the real bug.
 
+Cross-client check — do this for every new feature or user-visible update, not
+only when the request names a client. Before calling the work done, ask what
+the change means for the **native app** (`os1-ios/`) in particular: it is the
+client most often left behind, because it re-implements what the web UI gets
+for free (transcript rendering, attribution, presence, prefs, image URL
+resolution) rather than sharing code. Concretely:
+
+- A **server/protocol change** (new WS message or field, new REST route or
+  query param, changed entry shape, a new notice kind) — the Swift `Codable`
+  models and socket handling are a hand-written copy of the wire shapes, so
+  they do not follow automatically. Same for `os1-tui/` and `os1-chrome/`.
+- A **new per-user pref, setting, or account-level toggle** — decide whether
+  the native app should read and write it too, or deliberately ignore it.
+- A **transcript or session-viewer change** — the native app renders its own
+  transcript; a web-only fix leaves iOS looking wrong.
+- A **web-only design token or color change** — do not copy the hex across:
+  the native canvas differs, so port the *step* against the iOS surface.
+
+If the native app needs a matching change, either make it in the same session
+or say explicitly, in your final report, what is still web-only and why. "The
+web works" is not done for a feature that spans clients. Server work that no
+client surfaces (internal refactors, automation plumbing) needs no such note.
+
 ## Server architecture map
 
 `opensession.ts` is a thin entry (~900 lines): env, `hotServe` (reuse the live
