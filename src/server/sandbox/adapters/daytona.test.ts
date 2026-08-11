@@ -1,5 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { parseDaytonaExecResult } from "./daytona";
+import { daytonaCreateSource, parseDaytonaExecResult } from "./daytona";
+
+describe("Daytona create source", () => {
+  test("uses an explicit image whenever custom resources are requested", () => {
+    expect(daytonaCreateSource(undefined, { cpu: 2, memory: 4, disk: 8 })).toEqual({
+      image: "ubuntu:22.04",
+      resources: { cpu: 2, memory: 4, disk: 8 },
+    });
+  });
+
+  test("never combines custom resources with a snapshot", () => {
+    expect(
+      daytonaCreateSource("opensession-tella-fusion", {
+        cpu: 2,
+        memory: 4,
+        disk: 8,
+      }),
+    ).toEqual({ snapshot: "opensession-tella-fusion" });
+  });
+});
 
 describe("Daytona exec transport", () => {
   test("recovers separate streams and a non-zero command exit code", () => {

@@ -77,6 +77,7 @@ import {
 
 const SESSION_LABEL = "opensession.session";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
+const DEFAULT_DAYTONA_IMAGE = "ubuntu:22.04";
 /** Delimits stdout from stderr inside the merged executeCommand output. */
 const ERR_DELIM = "__OS_STDERR_7f3a__";
 /** Delimits stderr from the encoded command exit code. */
@@ -135,6 +136,21 @@ function daytonaCreateResources(
   return cpu || memory || overrides?.diskGb
     ? { cpu: cpu || 2, memory: memory || 4, disk: overrides?.diskGb || 10 }
     : undefined;
+}
+
+/** Daytona's no-source create overload restores its default snapshot. Custom
+ * resources are only valid on the image overload, so make that distinction
+ * explicit instead of relying on the SDK to infer it from `resources`. */
+export function daytonaCreateSource(
+  snapshot?: string,
+  resources?: { cpu?: number; memory?: number; disk?: number },
+):
+  | { snapshot: string }
+  | { image: string; resources: { cpu?: number; memory?: number; disk?: number } }
+  | Record<string, never> {
+  if (snapshot) return { snapshot };
+  if (resources) return { image: DEFAULT_DAYTONA_IMAGE, resources };
+  return {};
 }
 
 async function daytonaClient(): Promise<Daytona> {
@@ -352,18 +368,17 @@ export class DaytonaProvider implements SandboxProvider {
       // too small for real repo workspaces: the runner payload alone is ~2GB
       // and a tella-fusion clone died on ENOSPC. See SandboxDaytonaConfig.
       const template = readRemoteRepoTemplate("daytona", repo.id);
-      const create = (snapshot?: string) =>
-        client.create(
+      const create = (snapshot?: string) => {
+        const resources = daytonaCreateResources(cfg);
+        return client.create(
           {
-            ...(snapshot ? { snapshot } : {}),
-            ...(!snapshot && daytonaCreateResources(cfg)
-              ? { resources: daytonaCreateResources(cfg) }
-              : {}),
+            ...daytonaCreateSource(snapshot, resources),
             labels: { [SESSION_LABEL]: spec.sessionId, "opensession.sandbox": "1" },
             autoStopInterval: cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES,
           } as any,
           { timeout: 300 },
         );
+      };
       try {
         sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
       } catch (error) {
@@ -485,19 +500,18 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     if (!repoId) throw new Error(`invalid Daytona prewarm key: ${key || "(missing)"}`);
     const client = await daytonaClient();
     const template = readRemoteRepoTemplate("daytona", repoId);
-    const create = (snapshot?: string) =>
-      client.create(
+    const create = (snapshot?: string) => {
+      const resources = daytonaCreateResources(cfg, opts.resources);
+      return client.create(
         {
-          ...(snapshot ? { snapshot } : {}),
-          ...(!snapshot && daytonaCreateResources(cfg, opts.resources)
-            ? { resources: daytonaCreateResources(cfg, opts.resources) }
-            : {}),
+          ...daytonaCreateSource(snapshot, resources),
           labels,
           autoStopInterval: opts.autoStopMinutes,
           autoDeleteInterval: opts.autoDeleteMinutes,
         } as any,
         { timeout: 300 },
       );
+    };
     let sbx: DaytonaSandbox;
     let restoredFromTemplate = Boolean(template);
     try {
@@ -590,12 +604,10 @@ export async function qualifyDaytonaConnection(): Promise<void> {
   let source: DaytonaSandbox | undefined;
   let restored: DaytonaSandbox | undefined;
   try {
+    const resources = daytonaCreateResources(cfg);
     source = await client.create(
       {
-        ...(cfg.daytona?.snapshot ? { snapshot: cfg.daytona.snapshot } : {}),
-        ...(!cfg.daytona?.snapshot && daytonaCreateResources(cfg)
-          ? { resources: daytonaCreateResources(cfg) }
-          : {}),
+        ...daytonaCreateSource(cfg.daytona?.snapshot, resources),
         labels: { "opensession.qualification": suffix },
         autoStopInterval: 10,
         autoDeleteInterval: 30,
