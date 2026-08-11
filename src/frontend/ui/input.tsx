@@ -80,3 +80,42 @@ type SelectProps = Omit<React.ComponentProps<"select">, "size"> & {
 export function Select({ className, size = "md", ...props }: SelectProps) {
 	return <select className={fieldClasses(size, cn("cursor-pointer", className))} {...props} />;
 }
+
+/**
+ * A labelled field: the label sitting 6px above its control, wrapped in a
+ * `<label>` so the text is part of the control's hit area and name.
+ *
+ * Four surfaces had each written this same recipe by hand (`SetupTeam`'s
+ * `dialogFieldLabelClass`, `SpinOffMenu`'s `fieldLabelCls`, `ProjectsSection`'s
+ * `labelCls`, settings' own `SettingsField`), which is how their labels drifted
+ * apart. Field vocabulary rather than dialog vocabulary — a settings form and a
+ * dialog form want the identical shape, so it lives here with the field itself.
+ */
+export function Field({
+	label,
+	className,
+	children,
+	...props
+}: Omit<React.ComponentPropsWithoutRef<"label">, "children"> & {
+	label: React.ReactNode;
+	children: React.ReactNode;
+}) {
+	return (
+		<label className={cn("flex min-w-0 flex-col gap-1.5", className)} {...props}>
+			<span className="text-label font-medium text-dim">{label}</span>
+			{children}
+		</label>
+	);
+}
+
+/** Two `Field`s side by side, stacking on a phone. Only for genuinely short
+ *  values (an id, a login) — a column is ~half a dialog wide, so anything the
+ *  length of an email address clips at every viewport. */
+export function FieldGrid({
+	className,
+	...props
+}: React.ComponentPropsWithoutRef<"div">) {
+	return (
+		<div className={cn("grid grid-cols-2 gap-3 phone:grid-cols-1", className)} {...props} />
+	);
+}

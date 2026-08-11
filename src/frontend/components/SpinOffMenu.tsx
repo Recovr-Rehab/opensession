@@ -6,7 +6,7 @@ import { Modal } from "../ui/modal";
 import { IconBranches, IconChevronRight } from "./icons";
 import type { UnifiedSession, TranscriptEntry } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
-import { fieldClasses } from "../ui/input";
+import { Field, fieldClasses } from "../ui/input";
 
 type Flavor = "build" | "learnings" | "analyze";
 
@@ -116,7 +116,6 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
   const itemCls =
     "flex-col items-start gap-0.5 rounded-none border-b border-line px-3.5 py-2.5 last:border-b-0";
 
-  const fieldLabelCls = "flex flex-col gap-1.5 text-sm font-medium text-fg";
   // The menu's own field look — the primitive's corner/fill/focus, plus the
   // accent halo this surface authored.
   const fieldCls = fieldClasses(
@@ -188,8 +187,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
           />
 
           {needsBranch && (
-            <label className={fieldLabelCls}>
-              Branch
+            <Field label="Branch">
               <input
                 ref={branchRef}
                 className={`${fieldCls} h-10`}
@@ -197,12 +195,11 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
                 onChange={(e) => setBranch(e.target.value)}
                 disabled={starting}
               />
-            </label>
+            </Field>
           )}
 
           {flavor !== "analyze" && (
-            <label className={fieldLabelCls}>
-              {flavor === "build" ? "Task" : "Extra guidance (optional)"}
+            <Field label={flavor === "build" ? "Task" : "Extra guidance (optional)"}>
               <textarea
                 className={`${fieldCls} resize-y py-2 leading-relaxed`}
                 value={task}
@@ -211,7 +208,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
                 disabled={starting}
                 placeholder={flavor === "learnings" ? "e.g. focus on the deploy gotchas we hit" : ""}
               />
-            </label>
+            </Field>
           )}
 
           <Modal.Footer>

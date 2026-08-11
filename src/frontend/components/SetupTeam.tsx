@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
+import { Field, FieldGrid, Input } from "../ui/input";
 import { Modal } from "../ui/modal";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import {
@@ -12,7 +12,6 @@ import {
 	SettingRowTitle,
 	SettingsGroupLabel,
 	SettingsHint,
-	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
 import { IconPencil, IconPlus, IconTrash } from "./icons";
@@ -219,8 +218,6 @@ function RemoveMemberButton({
 	);
 }
 
-const dialogFieldLabelClass = "flex flex-col gap-1.5 text-label font-medium text-dim";
-
 function MemberDialog({
 	open,
 	member,
@@ -316,75 +313,65 @@ function MemberDialog({
 			}}
 			disablePointerDismissal={saving}
 		>
-			<Modal.Content widthClassName="max-w-[26rem]" initialFocus={nameRef}>
+			<Modal.Content initialFocus={nameRef}>
 				<Modal.Header
-					icon={member ? <IconPencil size={22} /> : <IconPlus size={22} />}
 					title={member ? `Edit ${member.name}` : "Add member"}
 					description="Identity table entry — commits, sessions and access grants resolve through it."
 				/>
 				<form className="flex flex-col gap-3" onSubmit={submit}>
-					<label className={dialogFieldLabelClass}>
-						Full name
-						<input
+					<Field label="Full name">
+						<Input
 							ref={nameRef}
-							className={settingsInputClass}
 							value={name}
 							onChange={(e) => setName(e.target.value)}
 							placeholder="Ada Lovelace"
 							spellCheck={false}
 						/>
-					</label>
-					<div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-						<label className={dialogFieldLabelClass}>
-							Email
-							<input
-								className={settingsInputClass}
-								type="email"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								placeholder="ada@example.com"
-								spellCheck={false}
-							/>
-						</label>
-						<label className={dialogFieldLabelClass}>
-							GitHub login
-							<input
-								className={settingsInputClass}
+					</Field>
+					{/* Email and Alias run full width: an address clips in a
+					    half-dialog column, and an alias list grows. Only the two
+					    short identifiers share a row. */}
+					<Field label="Email">
+						<Input
+							type="email"
+							value={email}
+							onChange={(e) => setEmail(e.target.value)}
+							placeholder="ada@example.com"
+							spellCheck={false}
+						/>
+					</Field>
+					<FieldGrid>
+						<Field label="GitHub login">
+							<Input
 								value={github}
 								onChange={(e) => setGithub(e.target.value)}
 								placeholder="adalovelace"
 								autoCapitalize="none"
 								spellCheck={false}
 							/>
-						</label>
-					</div>
-					<div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-						<label className={dialogFieldLabelClass}>
-							Slack member id
-							<input
-								className={cn(settingsInputClass, "font-mono")}
+						</Field>
+						<Field label="Slack member id">
+							<Input
+								className="font-mono"
 								value={slackId}
 								onChange={(e) => setSlackId(e.target.value)}
 								placeholder="U01ABCDEF"
 								autoCapitalize="none"
 								spellCheck={false}
 							/>
-						</label>
-						<label className={dialogFieldLabelClass}>
-							Alias
-							<input
-								className={settingsInputClass}
-								value={alias}
-								onChange={(e) => setAlias(e.target.value)}
-								placeholder="ada"
-								autoCapitalize="none"
-								spellCheck={false}
-							/>
-						</label>
-					</div>
+						</Field>
+					</FieldGrid>
+					<Field label="Alias">
+						<Input
+							value={alias}
+							onChange={(e) => setAlias(e.target.value)}
+							placeholder="ada"
+							autoCapitalize="none"
+							spellCheck={false}
+						/>
+					</Field>
 					{error && <InlineAlert>{error}</InlineAlert>}
 					<Modal.Footer>
-						<div className="flex-1" />
 						<Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
 							Cancel
 						</Button>

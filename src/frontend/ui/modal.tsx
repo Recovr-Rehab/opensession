@@ -5,9 +5,9 @@ import { IconX } from "../components/icons";
 
 /**
  * Centered modal dialog on Base UI parts, styled with Tailwind tokens. The
- * shared standard for confirm/edit dialogs — mirrors tella-fusion's UI__Dialog2
- * (soft squircle shell, icon + title/description header, top-right close, a
- * body, and a right-aligned footer of actions).
+ * shared standard for confirm/edit dialogs: a soft squircle shell, a
+ * title/description header with a top-right close, a body, and a
+ * right-aligned footer of actions.
  *
  * Like ui/menu.tsx (and unlike ui/tooltip.tsx) this animates with CSS
  * transitions on Base UI's [data-starting-style]/[data-ending-style] lifecycle
@@ -20,7 +20,7 @@ import { IconX } from "../components/icons";
  *
  *   <Modal.Root open={open} onOpenChange={setOpen}>
  *     <Modal.Content>
- *       <Modal.Header icon={<IconCrosshair />} title="Session goal"
+ *       <Modal.Header title="Session goal"
  *         description="Rides along with every prompt." />
  *       <textarea … />
  *       <Modal.Footer>
@@ -173,51 +173,64 @@ export function useEnterOnMount(): boolean {
 	return open;
 }
 
-/** Icon badge + title + one-line description on the left, a close (✕) on the
- *  right — the standard dialog header. */
+/**
+ * Title with a close (✕) beside it, and the description on its own full-width
+ * line underneath — the standard dialog header.
+ *
+ * Two things it deliberately does NOT do. It carries no tinted icon badge: the
+ * glyph repeated what the title already said, and the 54px it indented the
+ * column with is what wrapped a one-sentence description onto three lines in a
+ * 28rem dialog. And the ✕ shares a row with the title only, not with the
+ * description, so a long title is the only thing it can ever shorten.
+ *
+ * The description is `text-supporting` at normal weight — the same treatment
+ * `SettingsHeader` gives its own, so a dialog and a settings page open on one
+ * rhythm. At the medium weight it used to carry it read at the same strength
+ * as the field labels below it, and the header and the form mushed together.
+ */
 function Header({
-	icon,
 	title,
 	description,
 	className,
 }: {
-	icon?: React.ReactNode;
 	title: React.ReactNode;
 	description?: React.ReactNode;
 	className?: string;
 }) {
 	return (
-		<div className={cn("flex items-start gap-3", className)}>
-			{icon && (
-				<span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
-					{icon}
-				</span>
-			)}
-			<div className="min-w-0 flex-1">
+		<div className={cn("flex flex-col", className)}>
+			<div className="flex items-start gap-3">
 				{/* Base UI renders Title as <h2> and Description as <p>; preflight
 				    isn't imported (base.css owns resets), so zero their UA margins
 				    or the <h2> top margin reads as phantom padding above the head. */}
-				<BaseDialog.Title className="m-0 text-balance text-section-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+				<BaseDialog.Title className="m-0 min-w-0 flex-1 text-balance text-section-title font-semibold leading-tight tracking-[-0.01em] text-fg">
 					{title}
 				</BaseDialog.Title>
-				{description && (
-					<BaseDialog.Description className="m-0 mt-2 text-pretty text-base font-medium leading-normal text-dim">
-						{description}
-					</BaseDialog.Description>
-				)}
+				<BaseDialog.Close
+					aria-label="Close"
+					className="focus-ring relative -mr-1.5 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-control p-0 text-faint transition-colors after:absolute after:-inset-1 after:content-[''] hover:bg-hover hover:text-fg"
+				>
+					<IconX size={20} />
+				</BaseDialog.Close>
 			</div>
-			<BaseDialog.Close
-				aria-label="Close"
-				className="relative -mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md p-0 text-faint outline-none transition-colors after:absolute after:-inset-1 after:content-[''] hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-			>
-				<IconX size={20} />
-			</BaseDialog.Close>
+			{/* `font-normal` is load-bearing, not decoration: base.css runs the app
+			    at weight 500, so a description that merely drops `font-medium`
+			    still renders at the field labels' exact size, weight and colour. */}
+			{description && (
+				<BaseDialog.Description className="m-0 mt-1.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
+					{description}
+				</BaseDialog.Description>
+			)}
 		</div>
 	);
 }
 
-/** Right-aligned action row (Cancel / confirm). Pass a leading element (e.g. a
- *  destructive "Clear") and it sits left of the spacer. */
+/** Right-aligned action row (Cancel / confirm). The extra `mt-2` on top of the
+ *  shell's `gap-4` is what separates the actions from the body — 24px reads as
+ *  its own zone, and the settings surfaces this borrows from deliberately have
+ *  no dividers. A leading element (a destructive "Clear") sits left of the
+ *  actions with `mr-auto`; the older `<div className="flex-1" />` spacer keeps
+ *  working under `justify-end`. */
 function Footer({
 	className,
 	children,
@@ -226,7 +239,12 @@ function Footer({
 	children: React.ReactNode;
 }) {
 	return (
-		<div className={cn("flex flex-wrap items-center gap-2.5", className)}>
+		<div
+			className={cn(
+				"mt-2 flex flex-wrap items-center justify-end gap-2.5",
+				className,
+			)}
+		>
 			{children}
 		</div>
 	);

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { registerRepoApi, type RepoInfo } from "../lib/api";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
-import { IconFolderPlus } from "./icons";
 import { fieldClasses } from "../ui/input";
 
 type AddMode = "clone" | "path";
@@ -61,7 +60,6 @@ export function AddRepoDialog({
 		>
 			<Modal.Content widthClassName="max-w-[28rem]" initialFocus={inputRef}>
 				<Modal.Header
-					icon={<IconFolderPlus size={22} />}
 					title="Add repository"
 					description="Clone a Git repository (GitHub or a code.storage remote), or register a checkout already on this Mac."
 				/>
