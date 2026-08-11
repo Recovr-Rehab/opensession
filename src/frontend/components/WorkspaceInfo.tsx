@@ -1746,16 +1746,14 @@ export function WorkspaceInfo({
 							<div className={INFO_LABEL_CLASS}>
 								{media.length} screenshot{media.length === 1 ? "" : "s"}
 							</div>
-							{/* Two complete frames per view, plus a sliver of the third:
-							    two-up exactly filling the panel reads as the whole set,
-							    so a third tile peeking past the edge is the only thing
-							    that says the strip scrolls. */}
+							{/* Not a card like the lists above it: the strip bleeds
+							    through the panel's own padding, so tiles run off the
+							    panel edge instead of ending inside a rounded box.
+							    Frames leaving the screen is what reads as "scrolls";
+							    the same frames tucked inside a container read as a
+							    complete set that happens to be clipped. */}
 							<div
-								// The same panel surface the neighbouring lists sit on
-								// (INFO_LIST_CLASS), but laid out as a scroller — spelled
-								// out rather than composed, so its overflow isn't fighting
-								// that constant's `overflow-hidden`.
-								className="flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-lg bg-panel p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								className="-mx-2 flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 [scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 							>
 								{media.map((m, i) => (
 									<button
@@ -1770,10 +1768,10 @@ export function WorkspaceInfo({
 												? "w-full"
 												: media.length === 2
 													? "w-[calc((100%-8px)/2)]"
-													: // Two full tiles + an 8px gap + a 22px sliver
-														// of the next one, which is what makes the
-														// strip legible as scrollable.
-														"w-[calc((100%-38px)/2)]",
+													: // Two full tiles + the 8px gap + a 22px sliver
+														// of the third, which then keeps going past
+														// the panel edge.
+														"w-[calc((100%-30px)/2)]",
 										)}
 										title={[m.sessionTitle, new Date(m.at).toLocaleString()]
 											.filter(Boolean)
