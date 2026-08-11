@@ -223,6 +223,33 @@ struct SettingsView: View {
         return "Signed in with a session token"
     }
 
+    /// The connection screen's header. It follows the field below it as it is
+    /// typed, so the name you are setting is visible as the thing it names.
+    private var connectionTitle: String {
+        let name = userName.trimmingCharacters(in: .whitespaces)
+        // The untouched default is a stand-in, and set at 20pt beside an
+        // avatar it reads as the person's name — so the verified login wins
+        // over it here, unlike everywhere the name is SENT.
+        if !name.isEmpty, name != ServerConfig.placeholderUserName { return name }
+        if let signedInLogin { return "@\(signedInLogin)" }
+        return name.isEmpty ? "Not signed in" : name
+    }
+
+    /// Same two identity modes as `accountSubtitle`, plus the state that card
+    /// never has to describe: a device that isn't connected to anything yet.
+    private var connectionSubtitle: String {
+        if let signedInLogin {
+            // No point printing the login twice when it IS the title.
+            return connectionTitle == "@\(signedInLogin)"
+                ? "Signed in with GitHub"
+                : "Signed in with GitHub · @\(signedInLogin)"
+        }
+        if !token.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Signed in with a session token"
+        }
+        return "Sign in below to connect this device"
+    }
+
     /// The host alone: the row is narrow, and the scheme is the least
     /// interesting part of "which server am I talking to".
     private var serverHost: String {
@@ -259,6 +286,30 @@ struct SettingsView: View {
 
     private var connectionForm: some View {
         Form {
+            // The identity the rest of the screen is about, stated once at the
+            // top. Without it this was five equal blocks of plumbing with
+            // nothing to anchor them; with it, every card below reads as a
+            // setting ON this account. Same avatar + name + subtitle as the
+            // Account row that leads here, so the tap lands somewhere
+            // recognisable.
+            Section {
+                HStack(spacing: 14) {
+                    UserAvatar(size: 44)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(connectionTitle)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.text)
+                        Text(connectionSubtitle)
+                            .font(.footnote)
+                            .foregroundStyle(Color.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 8)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(connectionTitle), \(connectionSubtitle)")
+            }
+
             Section("Server") {
                 TextField("https://sessions.example.com", text: $serverURL)
                     .urlFieldCompat()
@@ -268,16 +319,12 @@ struct SettingsView: View {
             Section {
                 if let flow = signIn.flow {
                     signInFlow(flow)
-                } else if let signedInLogin {
-                    HStack {
-                        Label("Signed in as @\(signedInLogin)", systemImage: "checkmark.seal")
-                        Spacer()
-                        Button("Sign out", role: .destructive) { signOut() }
-                    }
-                    // Signing in again replaces the token outright, so
-                    // switching accounts needs no sign-out first — and asking
-                    // for one is what made "change my account" feel like a
-                    // dead end.
+                } else if signedInLogin != nil {
+                    // Who you are is the header's job now, so this card is
+                    // only the two things you can do about it. Signing in
+                    // again replaces the token outright, so switching
+                    // accounts needs no sign-out first — asking for one is
+                    // what made "change my account" feel like a dead end.
                     Button {
                         startSignIn()
                     } label: {
@@ -287,6 +334,9 @@ struct SettingsView: View {
                         )
                     }
                     .disabled(signIn.starting)
+                    Button(role: .destructive) { signOut() } label: {
+                        Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
                 } else {
                     Button {
                         startSignIn()
@@ -303,13 +353,35 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.red)
                 }
-                SecureField("Bearer token (or paste one manually)", text: $token)
-                    .autocorrectionDisabled()
-                    .noAutocapitalizationCompat()
             } header: {
                 Text("Authentication")
             } footer: {
-                Text("Sign in with GitHub, or paste a session token. The token is stored in the keychain.")
+                Text("Signing in with GitHub is the usual way in. The token it returns is stored in the keychain.")
+            }
+
+            // Above the fallback and diagnostic cards, because this field is
+            // what the header says — the name on your prompts, next to the
+            // place it appears.
+            Section {
+                TextField("Name shown on your prompts", text: $userName)
+                    .autocorrectionDisabled()
+            } header: {
+                Text("Identity")
+            } footer: {
+                Text("What teammates see on the prompts you send from this device.")
+            }
+
+            // Its own card rather than a field under the sign-in buttons:
+            // pasting a token is the fallback path, and sharing a card with
+            // the primary one made both read as equal halves of one step.
+            Section {
+                SecureField("Paste a session token", text: $token)
+                    .autocorrectionDisabled()
+                    .noAutocapitalizationCompat()
+            } header: {
+                Text("Session token")
+            } footer: {
+                Text("For a server without GitHub sign-in, or to move a token you already have onto this device.")
             }
 
             if !signIn.diagnostics.isEmpty {
@@ -325,11 +397,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Identity") {
-                TextField("Name shown on your prompts", text: $userName)
-                    .autocorrectionDisabled()
-            }
-
             Section {
                 Button("Test connection") {
                     Task { await testConnection() }
@@ -341,10 +408,28 @@ struct SettingsView: View {
                 }
             }
         }
-        #if os(iOS)
-        .scrollContentBackground(.hidden)
-        .background(OS1VisualStyle.background)
-        #else
+        // These fields are copies, taken when the sheet was built. On a first
+        // run that is BEFORE the server has answered with the verified
+        // identity, so the name field sat on the "ios" placeholder while the
+        // header above it named the account — and saving wrote the
+        // placeholder back over the real name.
+        .onAppear {
+            serverURL = config.baseURLString
+            userName = config.userName
+            token = config.token
+        }
+        // …and the answer can land while the form is already open, so adopt
+        // it — but only into a field still holding what it was given, never
+        // over something being typed.
+        .onChange(of: config.userName) { previous, current in
+            if userName == previous { userName = current }
+        }
+        // The grouped backdrop is left ON here, unlike most screens in the
+        // app: it is what separates the cards from the page. Painted over
+        // with `background` — `.systemBackground` — every card became white
+        // on white in light appearance, and five sections collapsed into one
+        // undifferentiated wall held together by hairlines.
+        #if os(macOS)
         .formStyle(.grouped)
         #endif
     }
@@ -355,14 +440,24 @@ struct SettingsView: View {
             Text("Enter this code on GitHub:")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            // A well, not bare text on the card: the code is the one thing
+            // on this screen that has to be carried somewhere else, and a
+            // recessed surface is what makes it read as an artifact to copy
+            // rather than as a heading.
             Button {
                 copyToPasteboard(flow.userCode)
                 copiedCode = true
             } label: {
                 Text(flow.userCode)
                     .font(.system(.title, design: .monospaced).bold())
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .kerning(2)
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(OS1VisualStyle.markdownInlineCode)
+                    )
             }
             Text(copiedCode ? "Copied — paste it on GitHub." : "Tap the code to copy it.")
                 .font(.caption2)

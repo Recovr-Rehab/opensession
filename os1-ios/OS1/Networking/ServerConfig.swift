@@ -16,6 +16,11 @@ final class ServerConfig {
     private static let githubLoginDefaultsKey = "os1.githubLogin"
     private static let tokenKeychainKey = "os1.token"
 
+    /// What `userName` holds before anything has set it — a stand-in, not a
+    /// name, so surfaces that PRESENT the name (rather than send it) can tell
+    /// the two apart and fall back to the GitHub login.
+    static let placeholderUserName = "ios"
+
     var baseURLString: String {
         didSet { UserDefaults.standard.set(baseURLString, forKey: Self.urlDefaultsKey) }
     }
@@ -55,7 +60,8 @@ final class ServerConfig {
             ?? UserDefaults.standard.string(forKey: Self.urlDefaultsKey)
             ?? bundledDefault
             ?? "http://127.0.0.1:3850"
-        userName = UserDefaults.standard.string(forKey: Self.userNameDefaultsKey) ?? "ios"
+        userName = UserDefaults.standard.string(forKey: Self.userNameDefaultsKey)
+            ?? Self.placeholderUserName
         githubLogin = UserDefaults.standard.string(forKey: Self.githubLoginDefaultsKey) ?? ""
         token = env["OS1_TOKEN"] ?? Keychain.get(Self.tokenKeychainKey) ?? ""
     }
