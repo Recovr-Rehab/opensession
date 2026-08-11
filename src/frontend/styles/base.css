@@ -743,6 +743,12 @@ body {
 	-webkit-touch-callout: none;
 }
 
+/* Match copied-text highlights to the selected accent without replacing the
+   content's own foreground colour (important for code and diff syntax). */
+::selection {
+	background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
 
 /* Text the user may legitimately want to select and copy: message rows and
    their prose, names, system text, code, diffs, inputs. The row wrapper is
