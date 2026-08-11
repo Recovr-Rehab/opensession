@@ -130,7 +130,7 @@ const REMOTE_OPENCODE_VERSION = "1.17.15";
 const REMOTE_NODE_VERSION = "24.18.1";
 const REMOTE_NODE_MAJOR = Number(REMOTE_NODE_VERSION.split(".")[0]);
 const REMOTE_JUST_VERSION = "1.43.1";
-const REMOTE_RUNTIME_REVISION = "workspace-runtime-v4";
+const REMOTE_RUNTIME_REVISION = "workspace-runtime-v5";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
@@ -663,8 +663,10 @@ async function bootstrapRemoteBaseRuntime(
   }
   need(
     await driver.exec(
-      `test "$(/usr/local/bin/node -p 'process.versions.node')" = "${REMOTE_NODE_VERSION}" && ` +
-        `test "$(node -p 'process.versions.node')" = "${REMOTE_NODE_VERSION}"`,
+      `explicit=$(/usr/local/bin/node -p 'process.versions.node' 2>/dev/null || true); ` +
+        `resolved=$(env PATH=${shellQuoteWord(REMOTE_PATH)} node -p 'process.versions.node' 2>/dev/null || true); ` +
+        `[ "$explicit" = "${REMOTE_NODE_VERSION}" ] && [ "$resolved" = "${REMOTE_NODE_VERSION}" ] || ` +
+        `{ echo "explicit=$explicit resolved=$resolved expected=${REMOTE_NODE_VERSION}" >&2; exit 1; }`,
     ),
     `Node ${REMOTE_NODE_VERSION} check`,
   );
