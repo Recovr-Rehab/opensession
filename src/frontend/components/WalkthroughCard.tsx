@@ -123,8 +123,14 @@ export function WalkthroughCard({
 					onClick={() => setExpanded(!expanded)}
 					// Keep the fold's 14px title and 20px chevron. The play-in-screen
 					// glyph mirrors the native app without adding another icon tile.
-					// The 40px row remains a comfortable target in either state.
-					className="-m-1 flex min-h-10 w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+					// The row is the height of its own contents, like the turn fold
+					// it sits among — a 40px row spent 20 of them holding the title
+					// away from a card edge that already has padding of its own, so
+					// the header read as a band and the folded card as a panel.
+					// No wash: the row is the full width of an outlined card, and a
+					// lit slab that size is a bigger gesture than a disclosure needs.
+					// The chevron carries the hover instead, at its own scale.
+					className="group -m-1 flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 				>
 					{/* The walkthrough's own icon leads the line, so the row is
 					    named before it is operated; the chevron trails at the far
@@ -148,7 +154,7 @@ export function WalkthroughCard({
 					</span>
 					<span
 						className={cn(
-							"grid size-5 flex-shrink-0 place-items-center leading-none text-faint transition-transform duration-150",
+							"grid size-5 flex-shrink-0 place-items-center leading-none text-faint transition-[transform,color] duration-150 group-hover:text-dim",
 							!expanded && "-rotate-90",
 						)}
 					>
