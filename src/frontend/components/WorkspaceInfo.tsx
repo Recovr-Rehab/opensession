@@ -1754,7 +1754,11 @@ export function WorkspaceInfo({
 								// scroll *inside* the card, so the panel's padding is
 								// there on both sides at rest; a sliver of the next
 								// frame at the trailing edge is what says it scrolls.
-								className="flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-lg bg-panel p-1 [scroll-padding-left:4px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								// `p-2` rather than the lists' `p-1`: their rows carry
+								// their own inner padding, so their content still sits
+								// ~11px off the card edge. A frame is its own content,
+								// so the card has to hold that inset itself.
+								className="flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-lg bg-panel p-2 [scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 							>
 								{media.map((m, i) => (
 									<button
