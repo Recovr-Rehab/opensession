@@ -73,8 +73,13 @@ export interface WSClientData {
 	 */
 	away?: boolean;
 	/** Last frame from this connection, including protocol heartbeat. Presence
-	 * uses it only to clear half-open sockets; input activity is irrelevant. */
+	 * uses it only to clear half-open sockets. */
 	lastSeenAt?: number;
+	/** When this socket's owner last did something (see PRESENCE_IDLE_MS).
+	 * Focus alone can't answer "here now": a window that was frontmost when
+	 * its owner walked away — or when the screen locked — stays visible and
+	 * focused all night. */
+	activeAt?: number;
 	/** This viewer understands ordered session_feed envelopes. */
 	supportsFeed?: boolean;
 	sinceFeedSeq?: number;
@@ -104,6 +109,8 @@ export function joinSession(ws: any, sessionId: string) {
 	// stamp is how a two-tab user resolves to a single row.
 	ws.data.watchJoinedAt = Date.now();
 	ws.data.lastSeenAt = Date.now();
+	// Opening a session is itself proof you're here; the idle window runs from now.
+	ws.data.activeAt = Date.now();
 	ensurePresenceSweep();
 	broadcastPresence(sessionId);
 }
@@ -146,22 +153,45 @@ export function broadcastToSession(
 }
 
 /** A focused viewer must also have a live transport. All clients heartbeat far
- * inside this window, so reading without input stays present indefinitely while
- * a crashed, sleeping, or partitioned client clears promptly. */
+ * inside this window, so a crashed, sleeping, or partitioned client clears
+ * promptly even though it never said goodbye. */
 const PRESENCE_LIVENESS_MS = 75_000;
+
+/**
+ * How long a face outlives the last thing its owner actually did.
+ *
+ * Focus is the primary signal, but it cannot be the only one: a window that
+ * was frontmost when its owner walked away — or when the screen locked, which
+ * changes neither `visibilityState` nor `document.hasFocus()` — keeps
+ * reporting itself focused for as long as the machine stays awake. Without
+ * this ceiling a face sits on a session all night, which is the one thing a
+ * face here must never mean.
+ *
+ * Long enough to read, or to watch a run without touching anything, and it
+ * self-corrects: the face comes back on the next scroll or keypress. Clients
+ * re-assert attention on real input (throttled to about a minute), so the
+ * margin here is many missed refreshes wide.
+ */
+const PRESENCE_IDLE_MS = 10 * 60_000;
 const PRESENCE_SWEEP_MS = 15_000;
 
 function isPresent(ws: any, now = Date.now()): boolean {
-	if (!ws?.data || ws.data.away === true) return false;
-	return now - (ws.data.lastSeenAt || 0) < PRESENCE_LIVENESS_MS;
+	const data = ws?.data;
+	if (!data || data.away === true) return false;
+	if (now - (data.lastSeenAt || 0) >= PRESENCE_LIVENESS_MS) return false;
+	return now - (data.activeAt || 0) < PRESENCE_IDLE_MS;
 }
 
-/** Any client frame proves the transport is alive. Unlike the old activity
- * lease, heartbeats count, so a focused reader never expires for being still. */
-export function markClientSeen(ws: any) {
+/**
+ * A frame arrived on this socket. Every frame proves the transport is alive;
+ * `active` says it was a person doing something rather than a heartbeat, which
+ * is what keeps the face on (see PRESENCE_IDLE_MS).
+ */
+export function markClientSeen(ws: any, active = false) {
 	if (!ws?.data) return;
 	const was = isPresent(ws);
 	ws.data.lastSeenAt = Date.now();
+	if (active) ws.data.activeAt = Date.now();
 	if (was || ws.data.away === true) return;
 	const sessionId = ws.data.watchingSessionId;
 	if (sessionId) broadcastPresence(sessionId);
@@ -171,12 +201,15 @@ export function markClientSeen(ws: any) {
 /**
  * A viewer went hidden/unfocused (or came back). The socket keeps watching — only
  * its visibility to other people changes, so both presence frames go out again.
+ * `away: false` doubles as the attention refresh: clients re-send it while the
+ * person keeps using the app, which is what holds a face past PRESENCE_IDLE_MS.
  */
 export function setClientAway(ws: any, away: boolean) {
 	if (!ws?.data) return;
 	const was = isPresent(ws);
 	ws.data.away = away;
 	ws.data.lastSeenAt = Date.now();
+	if (!away) ws.data.activeAt = Date.now();
 	if (isPresent(ws) === was) return;
 	const sessionId = ws.data.watchingSessionId;
 	if (sessionId) broadcastPresence(sessionId);

@@ -12,6 +12,28 @@ const HEARTBEAT_MS = 20_000;
 // Tighter deadline for the visibility-resume probe: coming back to a
 // backgrounded PWA is exactly when the socket is most likely dead.
 const RESUME_PROBE_MS = 4_000;
+// How long a focused-but-untouched window still counts as "here". Focus alone
+// can't tell "reading this" from "walked away with this window frontmost" —
+// locking a Mac changes neither visibility nor focus — so presence needs a
+// ceiling. Long enough to read a transcript or watch a run without your face
+// blinking off, and it comes back on the next scroll. Kept inside the server's
+// own idle window (PRESENCE_IDLE_MS in ws-hub.ts) so the face comes off at a
+// predictable moment rather than on the next sweep.
+const IDLE_MS = 8 * 60_000;
+// While someone IS here, presence has to be re-earned: the server ages a quiet
+// socket out, so a person reading and scrolling re-sends "still here" at this
+// cadence — comfortably inside the server's window, rare enough to be free.
+const ACTIVE_REFRESH_MS = 60_000;
+// What proves a person is at the keyboard. Passive and cheap: the handler
+// throttles itself to one call a second.
+const ACTIVITY_EVENTS = [
+  "pointerdown",
+  "pointermove",
+  "keydown",
+  "wheel",
+  "touchstart",
+] as const;
+
 export function useWebSocket() {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -29,6 +51,9 @@ export function useWebSocket() {
   // streaming its session (unread counts, notifications) but must stop telling
   // teammates its owner is looking at that session.
   const awayRef = useRef(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   // Outbound messages issued while the socket wasn't OPEN (wifi switch, server
   // restart, PWA resume): held here and flushed in order on the next onopen, so
   // a transient drop doesn't silently swallow intent like create_session — the
@@ -202,24 +227,50 @@ export function useWebSocket() {
         }
       }, RESUME_PROBE_MS);
     };
-    // Presence follows attention, not input. A focused visible window keeps its
-    // face indefinitely while someone reads; switching tabs/windows removes it.
-    // The watch deliberately survives both states so streaming and unread
-    // notifications continue in the background.
-    const sendAway = (away: boolean) => {
-      if (awayRef.current === away) return;
+    // Presence follows attention: this window is visible AND focused AND its
+    // owner has touched it recently. The watch deliberately outlives all three
+    // — a backgrounded tab still streams — so presence needs its own signal,
+    // or a window left frontmost overnight keeps claiming someone is reading it.
+    let lastSentAway = 0;
+    const sendAway = (away: boolean, force = false) => {
+      if (awayRef.current === away && !force) return;
       awayRef.current = away;
       const ws = wsRef.current;
       // Never queued: a stale "I'm back" replayed after an outage would lie.
       // A reconnect starts present, and onopen re-sends away if we still are.
       if (ws?.readyState !== WebSocket.OPEN) return;
+      lastSentAway = Date.now();
       try {
         ws.send(JSON.stringify({ type: "away", away }));
       } catch {}
     };
+    const focused = () =>
+      document.visibilityState === "visible" && document.hasFocus();
     const syncPresence = () => {
-      sendAway(document.visibilityState !== "visible" || !document.hasFocus());
+      if (!focused()) {
+        clearTimeout(idleTimer.current);
+        sendAway(true);
+        return;
+      }
+      onActivity();
     };
+    let lastActivity = 0;
+    function onActivity() {
+      // A pointer moving across an unfocused window is not attention.
+      if (!focused()) return;
+      const now = Date.now();
+      // Pointer moves fire continuously: only the first per second does work.
+      // While away the point is to come back at once, so it skips the throttle.
+      if (!awayRef.current && now - lastActivity < 1000) return;
+      lastActivity = now;
+      // Re-send even when we were already here: the server ages presence out,
+      // so staying visible to teammates means saying so every so often. A
+      // reader who has stopped moving simply stops paying it, and their face
+      // comes off — which is the point.
+      sendAway(false, now - lastSentAway >= ACTIVE_REFRESH_MS);
+      clearTimeout(idleTimer.current);
+      idleTimer.current = setTimeout(() => sendAway(true), IDLE_MS);
+    }
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
         resync();
@@ -231,6 +282,8 @@ export function useWebSocket() {
       syncPresence();
     };
     syncPresence();
+    for (const type of ACTIVITY_EVENTS)
+      window.addEventListener(type, onActivity, { passive: true });
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onFocus);
     window.addEventListener("blur", syncPresence);
@@ -241,6 +294,9 @@ export function useWebSocket() {
       disposedRef.current = true;
       clearTimeout(reconnectTimer.current);
       clearInterval(heartbeat);
+      clearTimeout(idleTimer.current);
+      for (const type of ACTIVITY_EVENTS)
+        window.removeEventListener(type, onActivity);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("blur", syncPresence);

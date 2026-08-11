@@ -53,7 +53,8 @@ export interface SessionSocket {
 export type WsFactory = (url: string, protocols?: { headers: Record<string, string> }) => WebSocket;
 
 const PING_MS = 15_000;
-/** Compatibility cadence for older servers with an inactivity timeout. */
+/** How often real input re-asserts presence. The server ages a quiet socket
+ *  out (PRESENCE_IDLE_MS in ws-hub.ts) so a face can't outlive its owner. */
 const ACTIVE_REFRESH_MS = 45_000;
 const PONG_DEADLINE_MS = 45_000;
 const MAX_BACKOFF_MS = 30_000;
@@ -185,7 +186,9 @@ export class WsSessionSocket implements SessionSocket {
 		if (this.pending.length > 32) this.pending.shift();
 	}
 
-	/** Reassert presence for older servers; current servers hold it until away. */
+	/** Reassert presence: the server holds a face only while its owner keeps
+	 *  doing something, so quiet reading eventually drops off (and returns on
+	 *  the next keypress). */
 	markActive(): void {
 		if (this.away) return;
 		const now = Date.now();

@@ -481,7 +481,16 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			return;
 		}
 		if (routeCloudWebSocketMessage(ws, msg)) return;
-		markClientSeen(ws);
+		// Anything that isn't a heartbeat is a person doing something, so it
+		// refreshes this socket's attention (ws-hub's idle window — a face means
+		// "here now"). `away` carries its own stamp; Yjs awareness is excluded
+		// because it ticks on its own timer whether or not anyone is typing.
+		markClientSeen(
+			ws,
+			msg.type !== "ping" &&
+				msg.type !== "away" &&
+				msg.type !== "note_awareness",
+		);
 
 		switch (msg.type) {
 			case "ping": {

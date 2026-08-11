@@ -53,12 +53,21 @@ describe("revalidateLocalClients", () => {
 });
 
 describe("computeGlobalPresence", () => {
+	// Both stamps default to now: a face is earned by a live transport AND by
+	// recent attention, so a fixture that let either lapse reads as gone.
 	const viewer = (
 		user: string | null,
 		at: number,
 		away?: boolean,
+		activeAt = Date.now(),
 	) => ({
-		data: { user, watchJoinedAt: at, away, lastSeenAt: Date.now() },
+		data: {
+			user,
+			watchJoinedAt: at,
+			away,
+			activeAt,
+			lastSeenAt: Date.now(),
+		},
 	});
 	const watchers = (entries: Record<string, any[]>) =>
 		new Map(Object.entries(entries).map(([id, set]) => [id, new Set(set)]));
@@ -93,20 +102,25 @@ describe("computeGlobalPresence", () => {
 		expect(
 			computeGlobalPresence(
 				watchers({
-					// Input inactivity is irrelevant; only an explicit away signal
-					// removes a focused viewer.
-					reading: [{
-						data: {
-							user: "Ada",
-							watchJoinedAt: 1,
-							away: false,
-							activeAt: 0,
-							lastSeenAt: Date.now(),
-						},
-					}],
+					// Reading is quiet work: a scroll a couple of minutes ago is
+					// still "here now", and the client keeps saying so.
+					reading: [viewer("Ada", 1, false, Date.now() - 2 * 60_000)],
 				}),
 			),
 		).toEqual([{ user: "Ada", sessionId: "reading" }]);
+	});
+
+	test("a window left open stops claiming its owner once it goes quiet", () => {
+		expect(
+			computeGlobalPresence(
+				watchers({
+					// Frontmost and focused since this morning — a locked Mac still
+					// reports both — but nothing has touched it: the watch survives,
+					// the face does not.
+					parked: [viewer("Ada", 1, false, Date.now() - 30 * 60_000)],
+				}),
+			),
+		).toEqual([]);
 	});
 
 	test("a focused viewer disappears when its transport stops heartbeating", () => {
@@ -118,6 +132,7 @@ describe("computeGlobalPresence", () => {
 							user: "Ada",
 							watchJoinedAt: 1,
 							away: false,
+							activeAt: Date.now(),
 							lastSeenAt: Date.now() - 5 * 60_000,
 						},
 					}],
@@ -140,6 +155,7 @@ describe("computeGlobalPresence", () => {
 				watchingSessionId: "s",
 				user: "Ada",
 				watchJoinedAt: 1,
+				activeAt: Date.now(),
 				lastSeenAt: Date.now(),
 			},
 			send() {},
