@@ -1422,6 +1422,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const pinnedWsRows = useMemo(() => {
 		const pinSet = new Set(pins);
 		const pinIdx = new Map(pins.map((p, i) => [p, i] as const));
+		// Pinned is quick access, not a status: review rows stay visible here as
+		// well as in Needs/Awaiting review. Snooze is the deliberate exception —
+		// it temporarily removes a row from every active band.
 		// A row's slot in the band = its first matching key's position in the
 		// pins array (rows can be pinned via their workspace key or a legacy
 		// member-session pin) — pins order is user-controlled (drag-to-reorder), so
@@ -1435,12 +1438,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return wsRows
 			.filter(
 				(r) =>
-					!reviewBandKeys.has(r.key) &&
 					!activeSnoozeKeys.has(r.key) &&
 					(pinSet.has(r.key) || r.sessions.some((c) => pinSet.has(c.id))),
 			)
 			.sort((a, b) => rowIdx(a) - rowIdx(b));
-	}, [wsRows, pins, reviewBandKeys, activeSnoozeKeys]);
+	}, [wsRows, pins, activeSnoozeKeys]);
 	// Feed workspaces (repo-less, externalRefs — Tella videos, PostHog
 	// dashboards) are represented by their feed band's rows. They only join
 	// the status lanes when they demand attention (running / needs input) —
