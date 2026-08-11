@@ -127,10 +127,12 @@ export function WalkthroughCard({
 					// it sits among — a 40px row spent 20 of them holding the title
 					// away from a card edge that already has padding of its own, so
 					// the header read as a band and the folded card as a panel.
-					// No wash: the row is the full width of an outlined card, and a
-					// lit slab that size is a bigger gesture than a disclosure needs.
-					// The chevron carries the hover instead, at its own scale.
-					className="group -m-1 flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+					// The hover is the turn fold's: a half-strength wash, which on a
+					// row this wide is the difference between saying "this is live"
+					// and lighting a slab the size of the card. The chevron takes
+					// the rest of it, at its own scale — the whole row folds, but
+					// the chevron is what a reader is aiming at.
+					className="group -m-1 flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none transition-colors hover:bg-hover/40 focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 				>
 					{/* The walkthrough's own icon leads the line, so the row is
 					    named before it is operated; the chevron trails at the far
