@@ -325,7 +325,7 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent>
   );
   const runToken =
     opts.startToken ||
-    (osSessionId ? pendingStarts.get(osSessionId) : undefined) ||
+    (osSessionId ? pendingStarts.get(osSessionId)?.values().next().value : undefined) ||
     crypto.randomUUID();
   const effectiveOpts: RunAgentOpts = {
     ...opts,
@@ -718,7 +718,8 @@ async function askFallbackApproval(
 // both pass the busy check and the loser's message got dropped as a "Session
 // is busy" error. Marked synchronously before any await; parked on globalThis
 // so a hot reload keeps it.
-const pendingStarts: Map<string, string> = ((globalThis as any).__pendingSessionStarts ??=
+const runnerGlobal = globalThis as any;
+const pendingStarts: Map<string, Set<string>> = (runnerGlobal.__pendingSessionStartTokens ??=
   new Map());
 const cancelledRunTokens: Set<string> = ((globalThis as any)
   .__cancelledRunTokens ??= new Set());
@@ -732,6 +733,20 @@ const activeRecoveryRuns: Map<string, ActiveRunRecord> = ((globalThis as any)
   .__activeRecoveryRuns ??= new Map());
 const activeRecoveryWorkerRunKeys: Set<string> = ((globalThis as any)
   .__activeRecoveryWorkerRunKeys ??= new Set());
+
+// Hot reloads can leave the pre-token Set globals alive in old module
+// closures. Keep observing them until those preparations unwind; using a new
+// key for the token map avoids ever casting that Set to a Map and crashing.
+function legacyPendingStarts(): Set<string> | undefined {
+  const value = runnerGlobal.__pendingSessionStarts;
+  return value instanceof Set ? value : undefined;
+}
+
+function legacyCancelledSessions(): Set<string> {
+  const value = runnerGlobal.__cancelledSessionRuns;
+  if (value instanceof Set) return value;
+  return (runnerGlobal.__cancelledSessionRuns = new Set<string>());
+}
 
 function trackRecovery(run: ActiveRunRecord): void {
   for (const id of [run.osSessionId, run.claudeSessionId]) {
@@ -749,7 +764,9 @@ function untrackRecovery(run: ActiveRunRecord): void {
 /** Mark a session as starting a run (call synchronously, before any await). */
 export function markSessionStarting(id: string): string {
   const token = crypto.randomUUID();
-  pendingStarts.set(id, token);
+  let tokens = pendingStarts.get(id);
+  if (!tokens) pendingStarts.set(id, (tokens = new Set()));
+  tokens.add(token);
   const state = getRunState(id);
   if (
     !sessionRunOwners.has(id) ||
@@ -765,16 +782,21 @@ export function markSessionStarting(id: string): string {
 
 /** Clear a starting mark (call in a `finally` once the run has ended). */
 export function unmarkSessionStarting(id: string, token?: string): void {
-  const owned = token || pendingStarts.get(id);
-  if (!token || pendingStarts.get(id) === token) pendingStarts.delete(id);
+  const tokens = pendingStarts.get(id);
+  const owned = token || (tokens?.size === 1 ? tokens.values().next().value : undefined);
+  if (owned) tokens?.delete(owned);
+  if (!tokens?.size) pendingStarts.delete(id);
   if (owned && sessionRunOwners.get(id) === owned) sessionRunOwners.delete(id);
   if (owned) cancelledRunTokens.delete(owned);
 }
 
 /** Whether Stop has latched this admitted turn before its runner registered. */
 export function isAgentSessionCancelled(id: string, token?: string): boolean {
-  const owned = token || pendingStarts.get(id);
-  return !!owned && cancelledRunTokens.has(owned);
+  if (token) return cancelledRunTokens.has(token);
+  if (legacyCancelledSessions().has(id)) return true;
+  return [...(pendingStarts.get(id) || [])].some((owned) =>
+    cancelledRunTokens.has(owned),
+  );
 }
 
 /** Live engine/runner busy check, excluding restart-recovery FSM state. */
@@ -783,6 +805,7 @@ export function isAgentLiveEngineBusy(...ids: Array<string | null | undefined>):
     if (!id) continue;
     if (
       pendingStarts.has(id) ||
+      legacyPendingStarts()?.has(id) ||
       activeSessionRunTokens.has(id) ||
       isOpencodeSessionBusy(id) ||
       isPiSessionBusy(id) ||
@@ -899,11 +922,14 @@ export function cancelAgentRun(...ids: Array<string | null | undefined>): boolea
   }
   const wanted = new Set(ids.filter((id): id is string => !!id));
   for (const id of wanted) {
-    const pendingToken = pendingStarts.get(id);
-    if (pendingToken) cancelledRunTokens.add(pendingToken);
-    for (const token of activeSessionRunTokens.get(id) || [])
+    const pendingTokens = pendingStarts.get(id) || new Set<string>();
+    const activeTokens = activeSessionRunTokens.get(id) || new Set<string>();
+    for (const token of pendingTokens) cancelledRunTokens.add(token);
+    for (const token of activeTokens)
       cancelledRunTokens.add(token);
-    if (!pendingToken) continue;
+    const legacyPending = legacyPendingStarts()?.has(id) === true;
+    if (legacyPending) legacyCancelledSessions().add(id);
+    if (!pendingTokens.size && !activeTokens.size && !legacyPending) continue;
     if (isRunStateUnsettled(getRunState(id)))
       transitionRunState(id, "cancel", { source: "run_cancelled_preparation" });
     cancelled = true;

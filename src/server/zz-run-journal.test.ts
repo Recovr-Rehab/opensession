@@ -181,6 +181,52 @@ describe("run journal", () => {
 		}
 	});
 
+	it("latches Stop across concurrent prompt preparations", async () => {
+		const sessionId = `concurrent-preparing-${crypto.randomUUID()}`;
+		const fake = makeFakeEngine([{ kind: "clean" }]);
+		agent.__setEngineForTest(fake.engine);
+		const run = (startToken: string) => agent.runAgent({
+			prompt: "continue",
+			cwd: "/tmp",
+			mcpServers: [],
+			model: "claude-fable-5",
+			fallbackModel: "none",
+			journal: { osSessionId: sessionId, kind: "prompt" },
+			startToken,
+		});
+
+		const firstToken = agent.markSessionStarting(sessionId);
+		const secondToken = agent.markSessionStarting(sessionId);
+		try {
+			expect(agent.cancelAgentRun(sessionId)).toBe(true);
+			for await (const _event of run(firstToken)) {}
+			for await (const _event of run(secondToken)) {}
+			expect(fake.calls).toHaveLength(0);
+		} finally {
+			agent.unmarkSessionStarting(sessionId, firstToken);
+			agent.unmarkSessionStarting(sessionId, secondToken);
+			clearRunState(sessionId);
+		}
+	});
+
+	it("bridges pending preparations left by the pre-token hot-reload global", () => {
+		const sessionId = `legacy-preparing-${crypto.randomUUID()}`;
+		const g = globalThis as any;
+		const previousPending = g.__pendingSessionStarts;
+		const previousCancelled = g.__cancelledSessionRuns;
+		try {
+			g.__pendingSessionStarts = new Set([sessionId]);
+			g.__cancelledSessionRuns = new Set();
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+			expect(agent.cancelAgentRun(sessionId)).toBe(true);
+			expect(g.__cancelledSessionRuns.has(sessionId)).toBe(true);
+		} finally {
+			g.__pendingSessionStarts = previousPending;
+			g.__cancelledSessionRuns = previousCancelled;
+			clearRunState(sessionId);
+		}
+	});
+
 	it("does not clear a replacement journal that reuses a cancelled recovery run key", () => {
 		const sessionId = `replacement-${crypto.randomUUID()}`;
 		const runKey = `engine-${crypto.randomUUID()}`;
@@ -317,6 +363,7 @@ describe("run journal", () => {
 		try {
 			while (fake.calls.length < 1) await Bun.sleep(5);
 			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+			expect(agent.cancelAgentRun(sessionId)).toBe(true);
 		} finally {
 			release();
 			await running;
