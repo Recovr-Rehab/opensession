@@ -16,8 +16,9 @@ import {
   invalidatePrewarm,
   prewarmStatus,
   requestPrewarm,
+  type SandboxMachineSettings,
 } from "./prewarm";
-import { startSandboxOperation } from "./operations";
+import { listSandboxOperations, startSandboxOperation } from "./operations";
 
 const invalidationTimers: Map<string, ReturnType<typeof setTimeout>> =
   ((globalThis as any).__sandboxEnvironmentInvalidationTimers ??= new Map());
@@ -32,6 +33,7 @@ export interface SandboxEnvironment {
   failureCode?: string;
   failureSummary?: string;
   mode?: "template" | "per_session";
+  settings?: SandboxMachineSettings;
 }
 
 interface StoredEnvironments {
@@ -70,6 +72,61 @@ function storedEnvironment(
   );
 }
 
+export function sandboxEnvironmentSettings(
+  repo: string,
+  provider: string,
+): SandboxMachineSettings | undefined {
+  const settings = storedEnvironment(repo, provider as WorkspaceSandboxProvider)?.settings;
+  return settings ? { ...settings } : undefined;
+}
+
+function normalizeMachineSettings(
+  provider: WorkspaceSandboxProvider,
+  raw?: SandboxMachineSettings,
+): SandboxMachineSettings | undefined {
+  if (!raw || provider === "microvm") return undefined;
+  const settings: SandboxMachineSettings = {};
+  if (raw.cpu != null) {
+    if (!Number.isInteger(raw.cpu) || raw.cpu < 1 || raw.cpu > 64) {
+      throw Object.assign(new Error("CPU must be a whole number from 1 to 64"), { code: "MACHINE_SETTINGS_INVALID" });
+    }
+    settings.cpu = raw.cpu;
+  }
+  if (raw.memoryMb != null) {
+    if (!Number.isInteger(raw.memoryMb) || raw.memoryMb < 512 || raw.memoryMb > 262_144) {
+      throw Object.assign(new Error("Memory must be between 512 and 262144 MB"), { code: "MACHINE_SETTINGS_INVALID" });
+    }
+    settings.memoryMb = raw.memoryMb;
+  }
+  if (raw.diskGb != null && provider === "daytona") {
+    if (!Number.isInteger(raw.diskGb) || raw.diskGb < 3 || raw.diskGb > 1_000) {
+      throw Object.assign(new Error("Disk must be between 3 and 1000 GB"), { code: "MACHINE_SETTINGS_INVALID" });
+    }
+    settings.diskGb = raw.diskGb;
+  }
+  return Object.keys(settings).length ? settings : undefined;
+}
+
+function interruptedPreparation(
+  stored: SandboxEnvironment | undefined,
+): SandboxEnvironment | undefined {
+  if (!stored || stored.state !== "preparing") return stored;
+  const running = listSandboxOperations().some(
+    (operation) =>
+      operation.kind === "environment_rebuild" &&
+      operation.repo === stored.repo &&
+      operation.provider === stored.provider &&
+      operation.status === "running",
+  );
+  if (running) return stored;
+  return {
+    ...stored,
+    state: "failed",
+    failureCode: "SERVER_RESTARTED",
+    failureSummary: "Preparation was interrupted. Retry when ready.",
+  };
+}
+
 async function derivedEnvironment(
   repo: string,
   provider: WorkspaceSandboxProvider,
@@ -105,6 +162,7 @@ async function derivedEnvironment(
         updatedAt: template.createdAt,
         preparedAt: template.createdAt,
         expiresAt: template.expiresAt,
+        ...(stored?.settings ? { settings: stored.settings } : {}),
       };
     }
   } else if (provider === "microvm") {
@@ -122,6 +180,7 @@ async function derivedEnvironment(
           updatedAt: stat.mtime.toISOString(),
           preparedAt: stat.mtime.toISOString(),
           expiresAt: new Date(expires).toISOString(),
+          ...(stored?.settings ? { settings: stored.settings } : {}),
         };
       }
       return {
@@ -132,11 +191,12 @@ async function derivedEnvironment(
         updatedAt: stat.mtime.toISOString(),
         preparedAt: stat.mtime.toISOString(),
         expiresAt: new Date(expires).toISOString(),
+        ...(stored?.settings ? { settings: stored.settings } : {}),
       };
     }
   }
   return (
-    stored || {
+    interruptedPreparation(stored) || {
       repo,
       provider,
       state: "not_prepared",
@@ -187,6 +247,8 @@ async function removeTemplate(
 export async function invalidateSandboxEnvironmentsForRepo(repo: string): Promise<void> {
   if (!(repo in REPOS)) return;
   for (const provider of ["daytona", "modal", "microvm"] as const) {
+    const stored = storedEnvironment(repo, provider);
+    if (!stored) continue;
     await invalidatePrewarm(provider, repo).catch((error) => {
       console.warn(`[sandbox:${provider}] failed to release prewarm for ${repo}:`, error);
     });
@@ -200,6 +262,7 @@ export async function invalidateSandboxEnvironmentsForRepo(repo: string): Promis
       state: "stale",
       mode: "template",
       updatedAt: now,
+      ...(stored.settings ? { settings: stored.settings } : {}),
     });
   }
 }
@@ -221,7 +284,12 @@ export function scheduleSandboxEnvironmentInvalidation(repo: string): void {
 export async function prepareSandboxEnvironment(
   repo: string,
   provider: WorkspaceSandboxProvider,
-  options: { rebuild?: boolean; user?: string } = {},
+  options: {
+    rebuild?: boolean;
+    user?: string;
+    settings?: SandboxMachineSettings;
+    onProgress?: (stage: string, progress: number, detail?: string) => void;
+  } = {},
 ): Promise<void> {
   if (!(repo in REPOS)) throw Object.assign(new Error(`Unknown repository "${repo}"`), { code: "REPO_UNKNOWN" });
   if (!sandboxConnectionReady(provider)) {
@@ -238,22 +306,39 @@ export async function prepareSandboxEnvironment(
     });
     return;
   }
+  const previousSettings = storedEnvironment(repo, provider)?.settings;
+  const settings = normalizeMachineSettings(
+    provider,
+    options.settings === undefined ? previousSettings : options.settings,
+  );
   if (options.rebuild) {
     await invalidatePrewarm(provider, repo);
     await removeTemplate(repo, provider);
   }
   const now = new Date().toISOString();
-  writeEnvironment({ repo, provider, state: "preparing", updatedAt: now });
+  writeEnvironment({
+    repo,
+    provider,
+    state: "preparing",
+    updatedAt: now,
+    ...(settings ? { settings } : {}),
+  });
+  options.onProgress?.("Creating sandbox", 10);
   try {
     const deadline = Date.now() + 20 * 60_000;
     while (Date.now() < deadline) {
       const requested = await requestPrewarm(provider, repo, options.user || "workspace-setup");
       const entry = prewarmStatus(provider, repo);
+      if (entry?.stage) options.onProgress?.(entry.stage, entry.progress || 10);
+      else if (requested.state === "at-capacity") {
+        options.onProgress?.("Waiting for provider capacity", 5);
+      }
       if (requested.state === "ready" || entry?.state === "ready") {
         // Publishing is complete before the pool flips Ready. Release this
         // build sandbox so preparing many repos stays within the paid cap;
         // the retained provider artifact is what sessions restore.
         await invalidatePrewarm(provider, repo);
+        options.onProgress?.("Verifying template", 98);
         const derived = await derivedEnvironment(repo, provider);
         if (derived.state !== "ready") {
           throw Object.assign(new Error("Prepared template could not be verified"), {
@@ -264,7 +349,7 @@ export async function prepareSandboxEnvironment(
         return;
       }
       if (requested.state === "failed" || entry?.state === "failed") {
-        throw Object.assign(new Error("Repository setup failed in the sandbox provider"), {
+        throw Object.assign(new Error(entry?.error || "Repository setup failed in the sandbox provider"), {
           code: "ENVIRONMENT_SETUP_FAILED",
         });
       }
@@ -292,7 +377,10 @@ export async function prepareSandboxEnvironment(
       failureSummary:
         code === "ENVIRONMENT_TIMEOUT"
           ? "Project setup took too long. Try rebuilding it."
-          : "Project setup failed. Review the retained setup log and rebuild it.",
+          : error instanceof Error
+            ? error.message.slice(0, 500)
+            : "Project setup failed. Rebuild it to try again.",
+      ...(settings ? { settings } : {}),
     };
     writeEnvironment(failure);
     throw Object.assign(new Error(failure.failureSummary), { code });
@@ -304,13 +392,26 @@ const providerQueues: Map<string, Promise<void>> = ((globalThis as any).__sandbo
 export function scheduleSandboxEnvironment(
   repo: string,
   provider: WorkspaceSandboxProvider,
-  options: { rebuild?: boolean; user?: string } = {},
+  options: { rebuild?: boolean; user?: string; settings?: SandboxMachineSettings } = {},
 ) {
+  const existing = listSandboxOperations().find(
+    (operation) =>
+      operation.kind === "environment_rebuild" &&
+      operation.repo === repo &&
+      operation.provider === provider &&
+      operation.status === "running",
+  );
+  if (existing) return existing;
   const previous = providerQueues.get(provider) || Promise.resolve();
   const operation = startSandboxOperation(
     { kind: "environment_rebuild", provider, repo },
-    async () => {
-      const run = previous.catch(() => {}).then(() => prepareSandboxEnvironment(repo, provider, options));
+    async (update) => {
+      const run = previous.catch(() => {}).then(() =>
+        prepareSandboxEnvironment(repo, provider, {
+          ...options,
+          onProgress: (stage, progress, detail) => update({ stage, progress, detail }),
+        }),
+      );
       providerQueues.set(provider, run);
       try {
         await run;
@@ -320,8 +421,4 @@ export function scheduleSandboxEnvironment(
     },
   );
   return operation;
-}
-
-export function scheduleReadyConnectionEnvironments(provider: WorkspaceSandboxProvider): void {
-  for (const repo of Object.keys(REPOS)) scheduleSandboxEnvironment(repo, provider);
 }

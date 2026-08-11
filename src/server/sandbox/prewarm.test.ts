@@ -47,8 +47,10 @@ let scratch: string;
 let prevSessionsDir: string;
 let prevEnvConfig: string | undefined;
 let prevSecretsStore: string | undefined;
+let prevEnvironmentsStore: string | undefined;
 const cfgPath = () => join(scratch, "sandbox.json");
 const prewarmDir = () => join(scratch, "sessions", "sandbox-prewarm");
+const environmentsPath = () => join(scratch, "environments.json");
 
 // The kill-switch file lives under the LIVE sessions dir (module-load constant
 // in config.ts) — on a box with the switch on, requestPrewarm legitimately
@@ -61,8 +63,10 @@ beforeAll(() => {
   prevSessionsDir = __setSessionsDirForTest(join(scratch, "sessions"));
   prevEnvConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   prevSecretsStore = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
+  prevEnvironmentsStore = process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE;
   process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
+  process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE = environmentsPath();
 });
 
 afterAll(() => {
@@ -73,12 +77,15 @@ afterAll(() => {
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
   if (prevSecretsStore === undefined) delete process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   else process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = prevSecretsStore;
+  if (prevEnvironmentsStore === undefined) delete process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE;
+  else process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE = prevEnvironmentsStore;
   rmSync(scratch, { recursive: true, force: true });
 });
 
 beforeEach(() => {
   _resetPrewarmForTest();
   rmSync(prewarmDir(), { recursive: true, force: true });
+  rmSync(environmentsPath(), { force: true });
   writeConfig({});
 });
 
@@ -115,12 +122,14 @@ function writeConfig(overrides: Record<string, unknown>): void {
 function makeFakeAdapter(opts: { markerAnswer?: string; gate?: Promise<void> } = {}) {
   const created: string[] = [];
   const destroyed: string[] = [];
+  const resources: Array<{ cpu?: number; memoryMb?: number; diskGb?: number } | undefined> = [];
   let n = 0;
   const adapter: PrewarmAdapter = {
-    async create() {
+    async create(_labels, createOptions) {
       if (opts.gate) await opts.gate;
       const id = `pw-${++n}`;
       created.push(id);
+      resources.push(createOptions.resources);
       return {
         sandboxId: id,
         driver: {
@@ -144,7 +153,7 @@ function makeFakeAdapter(opts: { markerAnswer?: string; gate?: Promise<void> } =
     },
   };
   _setPrewarmAdapterForTest("daytona", adapter);
-  return { adapter, created, destroyed };
+  return { adapter, created, destroyed, resources };
 }
 
 async function until(cond: () => boolean, ms = 5_000): Promise<void> {
@@ -178,6 +187,28 @@ describe("requestPrewarm", () => {
     expect(done.sandboxId).toBe(fake.created[0]);
     // State file persisted for restart reaping.
     expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json"))).toBe(true);
+  });
+
+  test.skipIf(killSwitch)("passes the opted-in project's machine settings to the provider", async () => {
+    writeFileSync(
+      environmentsPath(),
+      JSON.stringify({
+        version: 1,
+        environments: [
+          {
+            repo: "tella-fusion",
+            provider: "daytona",
+            state: "preparing",
+            updatedAt: new Date().toISOString(),
+            settings: { cpu: 8, memoryMb: 16_384, diskGb: 80 },
+          },
+        ],
+      }),
+    );
+    const fake = makeFakeAdapter();
+    await requestPrewarm("daytona", "tella-fusion", "alex");
+    await until(() => fake.created.length === 1);
+    expect(fake.resources).toEqual([{ cpu: 8, memoryMb: 16_384, diskGb: 80 }]);
   });
 
   test.skipIf(killSwitch)("uses a provider-specific preparation hook", async () => {

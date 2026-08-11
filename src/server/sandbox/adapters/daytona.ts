@@ -124,10 +124,16 @@ function daytonaMemoryGiB(value: string | undefined): number | undefined {
   return Math.max(1, Math.ceil(amount / 1024 / 1024));
 }
 
-function daytonaCreateResources(cfg: ReturnType<typeof sandboxConfig>) {
-  const memory = daytonaMemoryGiB(cfg.memory);
-  return cfg.cpus || memory
-    ? { cpu: cfg.cpus || 2, memory: memory || 4, disk: 10 }
+function daytonaCreateResources(
+  cfg: ReturnType<typeof sandboxConfig>,
+  overrides?: { cpu?: number; memoryMb?: number; diskGb?: number },
+) {
+  const memory = overrides?.memoryMb
+    ? Math.max(1, Math.ceil(overrides.memoryMb / 1024))
+    : daytonaMemoryGiB(cfg.memory);
+  const cpu = overrides?.cpu || cfg.cpus;
+  return cpu || memory || overrides?.diskGb
+    ? { cpu: cpu || 2, memory: memory || 4, disk: overrides?.diskGb || 10 }
     : undefined;
 }
 
@@ -483,8 +489,8 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
       client.create(
         {
           ...(snapshot ? { snapshot } : {}),
-          ...(!snapshot && daytonaCreateResources(cfg)
-            ? { resources: daytonaCreateResources(cfg) }
+          ...(!snapshot && daytonaCreateResources(cfg, opts.resources)
+            ? { resources: daytonaCreateResources(cfg, opts.resources) }
             : {}),
           labels,
           autoStopInterval: opts.autoStopMinutes,

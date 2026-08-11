@@ -59,6 +59,13 @@ export interface SandboxEnvironmentInfo {
 	failureCode?: string;
 	failureSummary?: string;
 	mode?: "template" | "per_session";
+	settings?: SandboxMachineSettings;
+}
+
+export interface SandboxMachineSettings {
+	cpu?: number;
+	memoryMb?: number;
+	diskGb?: number;
 }
 
 export function fetchSandboxConnections(): Promise<SandboxConnectionsResponse> {
@@ -129,11 +136,13 @@ export function fetchSandboxEnvironments(): Promise<{
 export function rebuildSandboxEnvironment(
 	repo: string,
 	provider: SandboxConnectionInfo["provider"],
+	settings?: SandboxMachineSettings,
 ): Promise<{ operation: SandboxOperationInfo }> {
 	return request(
 		`/sandbox/environments/${encodeURIComponent(repo)}/${provider}/rebuild`,
 		{
 			method: "POST",
+			body: { settings },
 			label: `Failed to rebuild ${repo} for ${provider}`,
 		},
 	);

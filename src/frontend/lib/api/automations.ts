@@ -221,6 +221,8 @@ export interface SandboxOperationInfo {
 	repo?: string;
 	status: "running" | "succeeded" | "failed";
 	stage: string;
+	detail?: string;
+	progress?: number;
 	createdAt: string;
 	updatedAt: string;
 	failureCode?: string;

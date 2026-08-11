@@ -391,7 +391,7 @@ export class ModalProvider implements SandboxProvider {
 // ── Warm-on-typing + post-setup filesystem templates ────────────────────────
 
 export const modalPrewarmAdapter: PrewarmAdapter = {
-  async create(labels) {
+  async create(labels, opts) {
     const cfg = modalConfig();
     const key = labels[PREWARM_KEY_LABEL] || "";
     const repoId = key.startsWith("modal:") ? key.slice("modal:".length) : "";
@@ -413,10 +413,10 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
         // minutes later with no API to extend that create-time setting.
         idleTimeoutMs:
           (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000,
-        cpu: cfg.cpus,
-        cpuLimit: cfg.cpus,
-        memoryMiB: memoryMiB(cfg.memory),
-        memoryLimitMiB: memoryMiB(cfg.memory),
+        cpu: opts.resources?.cpu || cfg.cpus,
+        cpuLimit: opts.resources?.cpu || cfg.cpus,
+        memoryMiB: opts.resources?.memoryMb || memoryMiB(cfg.memory),
+        memoryLimitMiB: opts.resources?.memoryMb || memoryMiB(cfg.memory),
         regions: cfg.modal?.region ? [cfg.modal.region] : undefined,
         cloud: cfg.modal?.cloud,
         encryptedPorts: cfg.modal?.publicPreviews ? cfg.previewPorts : undefined,

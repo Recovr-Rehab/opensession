@@ -207,7 +207,7 @@ async function enableDocker(): Promise<number> {
   connectSandboxProvider("docker", { settings: { image, cpu: 4, memoryMb: 8192 } });
   heading("Qualification");
   try {
-    await qualifySandboxConnection("docker", { prepareEnvironments: false });
+    await qualifySandboxConnection("docker");
   } catch (error) {
     fail("Docker needs attention", error instanceof Error ? error.message : String(error));
     return 1;
@@ -429,7 +429,7 @@ async function enableMicrovm(): Promise<number> {
   connectSandboxProvider("microvm", {});
   heading("Qualification");
   try {
-    await qualifySandboxConnection("microvm", { prepareEnvironments: false });
+    await qualifySandboxConnection("microvm");
   } catch (error) {
     fail("Local MicroVM needs attention", error instanceof Error ? error.message : String(error));
     return 1;
@@ -562,7 +562,7 @@ export async function sandbox(args: string[]): Promise<number> {
       return qualifyRemoteThroughServer(provider);
     }
     try {
-      await qualifySandboxConnection(provider, { prepareEnvironments: false });
+      await qualifySandboxConnection(provider);
       ok(`${provider} is Ready`);
       return 0;
     } catch (error) {

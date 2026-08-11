@@ -83,6 +83,12 @@ export const PREWARM_KEY_LABEL = "opensession.prewarm.key";
 
 export type PrewarmEntryState = "bootstrapping" | "ready" | "claimed" | "failed";
 
+export interface SandboxMachineSettings {
+  cpu?: number;
+  memoryMb?: number;
+  diskGb?: number;
+}
+
 export interface PrewarmEntry {
   key: string; // `${provider}:${repoId}`
   provider: string;
@@ -94,6 +100,9 @@ export interface PrewarmEntry {
   signature: string;
   sandboxId?: string;
   user?: string;
+  resources?: SandboxMachineSettings;
+  stage?: string;
+  progress?: number;
   error?: string;
   createdAt: string;
   lastTouchedAt: string;
@@ -109,7 +118,11 @@ export interface PrewarmAdapter {
    *  autoStop/autoDelete backstops so a crashed opensession can't leak it. */
   create(
     labels: Record<string, string>,
-    opts: { autoStopMinutes: number; autoDeleteMinutes: number },
+    opts: {
+      autoStopMinutes: number;
+      autoDeleteMinutes: number;
+      resources?: SandboxMachineSettings;
+    },
   ): Promise<{
     sandboxId: string;
     driver: RemoteDriver;
@@ -199,7 +212,7 @@ function removeFile(entry: Pick<PrewarmEntry, "provider" | "repoId">): void {
  *  safe: the runner-payload pin (bootstrapSignature) PLUS the provider's
  *  create-shape — daytona's org snapshot decides the sandbox's cpu/mem/disk
  *  and e2b's template its image, neither changeable after create. */
-function prewarmSignature(provider: string): string {
+function prewarmSignature(provider: string, resources?: SandboxMachineSettings): string {
   const cfg = sandboxConfig();
   const shape =
     provider === "daytona"
@@ -207,7 +220,18 @@ function prewarmSignature(provider: string): string {
       : provider === "e2b"
         ? cfg.e2b?.template || "base"
         : "";
-  return `${bootstrapSignature()}|${shape}`;
+  return `${bootstrapSignature()}|${shape}|${JSON.stringify(resources || {})}`;
+}
+
+function setPrewarmStage(
+  entry: PrewarmEntry,
+  stage: string,
+  progress: number,
+): void {
+  entry.stage = stage;
+  entry.progress = progress;
+  entry.lastTouchedAt = new Date().toISOString();
+  persist(entry);
 }
 
 // ── Adapters (lazy; test-injectable) ────────────────────────────────────────
@@ -288,8 +312,14 @@ export async function requestPrewarm(
   ensurePrewarmSweep();
 
   const key = `${provider}:${repoId}`;
+  const { sandboxEnvironmentSettings } = await import("./environments");
+  const resources = sandboxEnvironmentSettings(repoId, provider);
   const p = pool();
-  const entry = p.get(key);
+  let entry = p.get(key);
+  if (entry && entry.signature !== prewarmSignature(provider, resources)) {
+    await invalidatePrewarm(provider, repoId);
+    entry = undefined;
+  }
   if (entry && (entry.state === "bootstrapping" || entry.state === "ready")) {
     touchPrewarm(provider, repoId);
     return { state: entry.state, sandboxId: entry.sandboxId };
@@ -318,8 +348,11 @@ export async function requestPrewarm(
     provider,
     repoId,
     state: "bootstrapping",
-    signature: prewarmSignature(provider),
+    signature: prewarmSignature(provider, resources),
     user,
+    ...(resources ? { resources } : {}),
+    stage: "Creating sandbox",
+    progress: 10,
     createdAt: now,
     lastTouchedAt: now,
   };
@@ -365,11 +398,13 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
   try {
     const ttl = sandboxPrewarmConfig().ttlMinutes;
     console.log(`[sandbox-prewarm] starting ${entry.key} prewarm (user ${entry.user || "?"})`);
+    setPrewarmStage(entry, "Creating sandbox", 10);
     const { sandboxId, driver, restoredFromTemplate } = await adapter.create(
       { [PREWARM_LABEL]: "1", [PREWARM_KEY_LABEL]: entry.key, "opensession.sandbox": "1" },
       {
         autoStopMinutes: ttl + BACKSTOP_STOP_EXTRA_MIN,
         autoDeleteMinutes: BACKSTOP_DELETE_MIN,
+        resources: entry.resources,
       },
     );
     entry.sandboxId = sandboxId;
@@ -382,6 +417,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
     const repo = REPOS[entry.repoId];
     if (!repo) throw new Error(`unknown prewarm repo ${entry.repoId}`);
     if (restoredFromTemplate && adapter.publishTemplate) {
+      setPrewarmStage(entry, "Validating existing template", 65);
       await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
       await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
       const { validateRemoteRepoTemplate } = await import("./remote-repo-template");
@@ -391,8 +427,10 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
         repo,
       );
     } else if (adapter.prepare) {
+      setPrewarmStage(entry, "Preparing project workspace", 40);
       await adapter.prepare(driver, repo, `${entry.provider}-prewarm`);
     } else {
+      setPrewarmStage(entry, "Installing runner tools", 25);
       await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
       await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
       if (!current()) {
@@ -406,6 +444,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
         const { warmTemplateConfig } = await import("../warm-template");
         const warm = warmTemplateConfig(entry.repoId).enabled;
         if (warm || adapter.publishTemplate) {
+          setPrewarmStage(entry, "Cloning project and running setup", 55);
           const { warmRemoteWorkspace } = await import("./adapters/bootstrap");
           const prepared = await warmRemoteWorkspace(driver, repo, `${entry.provider}-prewarm`, {
             installDeps: warm,
@@ -425,14 +464,20 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
       return;
     }
     if (adapter.publishTemplate && !restoredFromTemplate) {
+      setPrewarmStage(entry, "Sealing reusable template", 82);
       await adapter.publishTemplate(sandboxId, repo, `${entry.provider}-prewarm`);
     }
-    if (adapter.park) await adapter.park(sandboxId);
+    if (adapter.park) {
+      setPrewarmStage(entry, "Finalizing", 95);
+      await adapter.park(sandboxId);
+    }
     if (!current()) {
       destroyLater(entry.provider, sandboxId, "superseded mid-park");
       return;
     }
     entry.state = "ready";
+    entry.stage = "Ready";
+    entry.progress = 100;
     entry.lastTouchedAt = new Date().toISOString();
     persist(entry);
     console.log(`[sandbox-prewarm] ${entry.key} ready (${sandboxId})`);
@@ -442,6 +487,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
     if (current()) {
       entry.state = "failed";
       entry.error = String((e as any)?.message || e).slice(0, 300);
+      entry.stage = "Needs attention";
       entry.sandboxId = undefined;
       entry.lastTouchedAt = new Date().toISOString();
       persist(entry);
@@ -468,7 +514,7 @@ export function claimPrewarm(
   const p = pool();
   const entry = p.get(key);
   if (!entry || entry.state !== "ready" || !entry.sandboxId) return null;
-  if (entry.signature !== prewarmSignature(provider)) {
+  if (entry.signature !== prewarmSignature(provider, entry.resources)) {
     // Runner pin or provider create-shape changed since this was warmed —
     // never adopt (stale payload / wrong-sized sandbox).
     p.delete(key);

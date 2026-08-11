@@ -28,6 +28,7 @@ import {
 	listSandboxEnvironments,
 	scheduleSandboxEnvironment,
 } from "../sandbox/environments";
+import type { SandboxMachineSettings } from "../sandbox/prewarm";
 
 function errorResponse(error: unknown, status = 400): Response {
   return Response.json(
@@ -100,9 +101,13 @@ export async function handleSandboxesRoutes(
 		if (!isWorkspaceSandboxProvider(provider)) {
 			return errorResponse(`Unknown workspace sandbox provider "${provider}"`, 404);
 		}
+		const body = (await req.json().catch(() => ({}))) as {
+			settings?: SandboxMachineSettings;
+		};
 		const operation = scheduleSandboxEnvironment(repo, provider, {
 			rebuild: true,
 			user: requestUser(ctx) || "workspace-admin",
+			settings: body.settings,
 		});
 		return Response.json({ operation }, { status: 202 });
 	}

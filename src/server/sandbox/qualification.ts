@@ -168,7 +168,6 @@ function failureSummary(code: string): string {
 
 export async function qualifySandboxConnection(
   provider: WorkspaceSandboxProvider,
-  options: { prepareEnvironments?: boolean } = {},
 ): Promise<void> {
   setSandboxConnectionQualification(provider, { status: "checking" });
   try {
@@ -189,10 +188,6 @@ export async function qualifySandboxConnection(
       status: "ready",
       checkedAt: new Date().toISOString(),
     });
-    if (options.prepareEnvironments !== false) {
-      const { scheduleReadyConnectionEnvironments } = await import("./environments");
-      scheduleReadyConnectionEnvironments(provider);
-    }
     audit({ kind: "sandbox_connection_qualified", provider });
   } catch (error) {
     const code = failureCode(error);

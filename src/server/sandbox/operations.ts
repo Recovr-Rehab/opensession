@@ -16,6 +16,8 @@ export interface SandboxOperation {
   repo?: string;
   status: SandboxOperationStatus;
   stage: string;
+  detail?: string;
+  progress?: number;
   createdAt: string;
   updatedAt: string;
   failureCode?: string;
@@ -60,7 +62,12 @@ export function listSandboxOperations(): SandboxOperation[] {
 
 export function startSandboxOperation(
   input: Pick<SandboxOperation, "kind" | "provider" | "repo">,
-  run: () => Promise<void>,
+  run: (
+    update: (
+      patch: Pick<SandboxOperation, "stage"> &
+        Partial<Pick<SandboxOperation, "detail" | "progress">>,
+    ) => void,
+  ) => Promise<void>,
 ): SandboxOperation {
   const now = new Date().toISOString();
   const operation: SandboxOperation = {
@@ -69,17 +76,33 @@ export function startSandboxOperation(
     provider: input.provider,
     ...(input.repo ? { repo: input.repo } : {}),
     status: "running",
-    stage: input.kind === "qualification" ? "Checking connection" : "Preparing",
+    stage: input.kind === "qualification" ? "Checking connection" : "Queued",
+    progress: 0,
     createdAt: now,
     updatedAt: now,
   };
   persist(operation);
   liveOperations.add(operation.id);
-  void run().then(
+  const update = (
+    patch: Pick<SandboxOperation, "stage"> &
+      Partial<Pick<SandboxOperation, "detail" | "progress">>,
+  ) => {
+    if (operation.status !== "running") return;
+    const progress = patch.progress == null ? operation.progress : Math.max(0, Math.min(100, patch.progress));
+    if (operation.stage === patch.stage && operation.detail === patch.detail && operation.progress === progress) return;
+    operation.stage = patch.stage;
+    operation.detail = patch.detail;
+    operation.progress = progress;
+    operation.updatedAt = new Date().toISOString();
+    persist(operation);
+  };
+  void run(update).then(
     () => {
       liveOperations.delete(operation.id);
       operation.status = "succeeded";
       operation.stage = "Complete";
+      operation.detail = undefined;
+      operation.progress = 100;
       operation.updatedAt = new Date().toISOString();
       persist(operation);
     },
@@ -87,6 +110,7 @@ export function startSandboxOperation(
       liveOperations.delete(operation.id);
       operation.status = "failed";
       operation.stage = "Needs attention";
+      operation.detail = undefined;
       operation.updatedAt = new Date().toISOString();
       operation.failureCode =
         typeof error?.code === "string" ? error.code : "OPERATION_FAILED";

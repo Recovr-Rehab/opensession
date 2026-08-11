@@ -5,7 +5,10 @@ import type {
 	SandboxOperationInfo,
 } from "../../lib/api";
 import type { SandboxConnectionsResponse } from "../../lib/api/sandboxes";
-import type { SandboxEnvironmentInfo } from "../../lib/api/sandboxes";
+import type {
+	SandboxEnvironmentInfo,
+	SandboxMachineSettings,
+} from "../../lib/api/sandboxes";
 import {
 	connectSandbox,
 	disconnectSandbox,
@@ -17,7 +20,7 @@ import {
 } from "../../lib/api/sandboxes";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
-import { Input } from "../../ui/input";
+import { Input, Select } from "../../ui/input";
 import { Modal } from "../../ui/modal";
 import {
 	SettingCard,
@@ -28,7 +31,7 @@ import {
 } from "../../ui/settings";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
-import { IconCheck } from "../icons";
+import { IconCheck, IconPlus } from "../icons";
 import { WorkspaceSandboxDefaults } from "./SandboxDefaults";
 import { SandboxProviderLogo } from "./SandboxProviderLogo";
 
@@ -83,7 +86,26 @@ function latestOperation(
 	provider: SandboxConnectionInfo["provider"],
 	operations: SandboxOperationInfo[],
 ): SandboxOperationInfo | undefined {
-	return operations.find((operation) => operation.provider === provider);
+	return operations.find(
+		(operation) => operation.provider === provider && operation.kind === "qualification",
+	);
+}
+
+function providerLabel(provider: SandboxConnectionInfo["provider"]): string {
+	return PROVIDERS.find((candidate) => candidate.id === provider)?.label || provider;
+}
+
+function machineSummary(environment: SandboxEnvironmentInfo): string {
+	if (environment.provider === "microvm") return "4 vCPU · 12 GB memory (local host profile)";
+	const settings = environment.settings;
+	if (!settings || !Object.keys(settings).length) return "Provider defaults";
+	return [
+		settings.cpu ? `${settings.cpu} vCPU` : undefined,
+		settings.memoryMb ? `${settings.memoryMb >= 1024 ? `${settings.memoryMb / 1024} GB` : `${settings.memoryMb} MB`} memory` : undefined,
+		settings.diskGb ? `${settings.diskGb} GB disk` : undefined,
+	]
+		.filter(Boolean)
+		.join(" · ");
 }
 
 function ConnectDialog({
@@ -424,6 +446,202 @@ function ConnectionCard({
 	);
 }
 
+function ProjectEnvironmentDialog({
+	open,
+	onOpenChange,
+	target,
+	available,
+	connections,
+	onStarted,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	target?: SandboxEnvironmentInfo;
+	available: SandboxEnvironmentInfo[];
+	connections: SandboxConnectionInfo[];
+	onStarted: (
+		operation: SandboxOperationInfo,
+		environment: SandboxEnvironmentInfo,
+		settings?: SandboxMachineSettings,
+	) => void;
+}) {
+	const first = target || available[0];
+	const [provider, setProvider] = useState<SandboxConnectionInfo["provider"]>(
+		first?.provider || "microvm",
+	);
+	const [repo, setRepo] = useState(first?.repo || "");
+	const [cpu, setCpu] = useState("");
+	const [memoryMb, setMemoryMb] = useState("");
+	const [diskGb, setDiskGb] = useState("");
+	const [saving, setSaving] = useState(false);
+
+	useEffect(() => {
+		if (!open) return;
+		const selected = target || available[0];
+		if (!selected) return;
+		setProvider(selected.provider);
+		setRepo(selected.repo);
+		setCpu(selected.settings?.cpu ? String(selected.settings.cpu) : "");
+		setMemoryMb(selected.settings?.memoryMb ? String(selected.settings.memoryMb) : "");
+		setDiskGb(selected.settings?.diskGb ? String(selected.settings.diskGb) : "");
+	}, [open, target, available]);
+
+	const providerOptions = Array.from(new Set(available.map((environment) => environment.provider)));
+	const projectOptions = available.filter((environment) => environment.provider === provider);
+	const selected = target || projectOptions.find((environment) => environment.repo === repo);
+	const connection = connections.find((candidate) => candidate.provider === provider);
+
+	function chooseProvider(next: SandboxConnectionInfo["provider"]) {
+		setProvider(next);
+		const nextEnvironment = available.find((environment) => environment.provider === next);
+		if (nextEnvironment) setRepo(nextEnvironment.repo);
+		setCpu("");
+		setMemoryMb("");
+		setDiskGb("");
+	}
+
+	async function prepare() {
+		if (!selected) return;
+		const settings: SandboxMachineSettings | undefined =
+			provider === "microvm"
+				? undefined
+				: {
+						...(cpu ? { cpu: Number(cpu) } : {}),
+						...(memoryMb ? { memoryMb: Number(memoryMb) } : {}),
+						...(provider === "daytona" && diskGb ? { diskGb: Number(diskGb) } : {}),
+					};
+		setSaving(true);
+		try {
+			const response = await rebuildSandboxEnvironment(selected.repo, provider, settings);
+			onStarted(response.operation, selected, settings);
+			onOpenChange(false);
+			toast(`${providerLabel(provider)} preparation started for ${selected.repo}`, {
+				variant: "success",
+			});
+		} catch (error) {
+			toast(error instanceof Error ? error.message : "Failed to prepare project environment", {
+				variant: "error",
+			});
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	return (
+		<Modal.Root open={open} onOpenChange={onOpenChange}>
+			<Modal.Content widthClassName="max-w-[32rem]">
+				<Modal.Header
+					title={target ? `Configure ${target.repo}` : "Prepare a project"}
+					description="Open Session creates one reusable project template only when you opt in here. Credentials remain in this workspace."
+				/>
+				{!target ? (
+					<div className="grid gap-3 sm:grid-cols-2">
+						<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+							Provider
+							<Select
+								value={provider}
+								onChange={(event) =>
+									chooseProvider(event.target.value as SandboxConnectionInfo["provider"])
+								}
+							>
+								{providerOptions.map((candidate) => (
+									<option key={candidate} value={candidate}>
+										{providerLabel(candidate)}
+									</option>
+								))}
+							</Select>
+						</label>
+						<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+							Project
+							<Select value={repo} onChange={(event) => setRepo(event.target.value)}>
+								{projectOptions.map((environment) => (
+									<option key={environment.repo} value={environment.repo}>
+										{environment.repo}
+									</option>
+								))}
+							</Select>
+						</label>
+					</div>
+				) : (
+					<div className="flex items-center gap-3 rounded-lg bg-surface p-3">
+						<SandboxProviderLogo provider={target.provider} />
+						<div>
+							<div className="text-item-title font-medium text-fg">{target.repo}</div>
+							<div className="text-supporting text-dim">{providerLabel(target.provider)}</div>
+						</div>
+					</div>
+				)}
+
+				{provider === "microvm" ? (
+					<div className="rounded-lg bg-surface p-3">
+						<div className="text-label font-medium text-fg">Fixed local profile</div>
+						<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+							4 vCPU and 12 GB memory. Local MicroVM templates restore against the qualified
+							Firecracker snapshot, so their machine shape stays fixed.
+						</p>
+					</div>
+				) : (
+					<>
+						<div className="grid gap-3 sm:grid-cols-2">
+							<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+								CPU
+								<Input
+									type="number"
+									min="1"
+									max="64"
+									value={cpu}
+									onChange={(event) => setCpu(event.target.value)}
+									placeholder={String(connection?.settings.cpu || "Provider default")}
+								/>
+							</label>
+							<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
+								Memory (MB)
+								<Input
+									type="number"
+									min="512"
+									max="262144"
+									step="512"
+									value={memoryMb}
+									onChange={(event) => setMemoryMb(event.target.value)}
+									placeholder={String(connection?.settings.memoryMb || "Provider default")}
+								/>
+							</label>
+							{provider === "daytona" && (
+								<label className="flex flex-col gap-1.5 text-label font-medium text-dim sm:col-span-2">
+									Disk (GB)
+									<Input
+										type="number"
+										min="3"
+										max="1000"
+										value={diskGb}
+										onChange={(event) => setDiskGb(event.target.value)}
+										placeholder="Provider default"
+									/>
+								</label>
+							)}
+						</div>
+						<p className="m-0 text-meta leading-relaxed text-faint">
+							Leave a field blank to inherit the provider connection default. Changing the
+							machine rebuilds this project’s reusable template.
+						</p>
+					</>
+				)}
+
+				<Modal.Footer>
+					<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
+					<Button
+						variant="primary"
+						onClick={() => void prepare()}
+						disabled={saving || !selected}
+					>
+						{saving ? "Starting…" : target ? "Save and rebuild" : "Prepare project"}
+					</Button>
+				</Modal.Footer>
+			</Modal.Content>
+		</Modal.Root>
+	);
+}
+
 export function SandboxesPanel() {
 	const [connections, setConnections] = useState<SandboxConnectionInfo[]>([]);
 	const [operations, setOperations] = useState<SandboxOperationInfo[]>([]);
@@ -436,6 +654,8 @@ export function SandboxesPanel() {
 	const [environments, setEnvironments] = useState<SandboxEnvironmentInfo[]>([]);
 	const [canManage, setCanManage] = useState(false);
 	const [loading, setLoading] = useState(true);
+	const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
+	const [environmentTarget, setEnvironmentTarget] = useState<SandboxEnvironmentInfo>();
 
 	function apply(response: SandboxConnectionsResponse) {
 		setConnections(response.connections);
@@ -469,26 +689,40 @@ export function SandboxesPanel() {
 		};
 	}, [operations.some((operation) => operation.status === "running")]);
 
-	async function rebuild(environment: SandboxEnvironmentInfo) {
-		try {
-			const response = await rebuildSandboxEnvironment(
-				environment.repo,
-				environment.provider,
-			);
-			setOperations((current) => [response.operation, ...current]);
-			setEnvironments((current) =>
-				current.map((candidate) =>
-					candidate.repo === environment.repo && candidate.provider === environment.provider
-						? { ...candidate, state: "preparing", updatedAt: new Date().toISOString() }
-						: candidate,
-				),
-			);
-		} catch (error) {
-			toast(error instanceof Error ? error.message : "Failed to rebuild sandbox environment", {
-				variant: "error",
-			});
-		}
+	function environmentStarted(
+		operation: SandboxOperationInfo,
+		environment: SandboxEnvironmentInfo,
+		settings?: SandboxMachineSettings,
+	) {
+		setOperations((current) => [operation, ...current]);
+		setEnvironments((current) =>
+			current.map((candidate) =>
+				candidate.repo === environment.repo && candidate.provider === environment.provider
+					? {
+							...candidate,
+							state: "preparing",
+							updatedAt: new Date().toISOString(),
+							settings,
+						}
+					: candidate,
+			),
+		);
 	}
+
+	const reusableEnvironments = environments.filter(
+		(environment) =>
+			environment.provider !== "docker" &&
+			connections.some(
+				(connection) =>
+					connection.provider === environment.provider && connection.state === "ready",
+			),
+	);
+	const configuredEnvironments = reusableEnvironments.filter(
+		(environment) => environment.state !== "not_prepared",
+	);
+	const availableEnvironments = reusableEnvironments.filter(
+		(environment) => environment.state === "not_prepared",
+	);
 
 	return (
 		<SettingsPanel>
@@ -519,49 +753,128 @@ export function SandboxesPanel() {
 			<SettingsHint>
 				None remains available and is the default. Personal preferences and per-session choices can override the workspace default without changing these connections.
 			</SettingsHint>
-			{environments.some((environment) =>
-				connections.some(
-					(connection) =>
-						connection.provider === environment.provider && connection.state === "ready",
-				),
-			) && (
+			{reusableEnvironments.length > 0 && (
 				<>
-					<SettingsGroupLabel>Project environments</SettingsGroupLabel>
-					<div className="grid gap-3 px-4">
-						{environments
-							.filter((environment) =>
-								connections.some(
-									(connection) =>
-										connection.provider === environment.provider && connection.state === "ready",
-								),
+					<SettingsGroupLabel
+						actions={
+							availableEnvironments.length > 0 && (
+								<Button
+									size="sm"
+									icon={<IconPlus size={16} />}
+									disabled={!canManage}
+									onClick={() => {
+										setEnvironmentTarget(undefined);
+										setEnvironmentDialogOpen(true);
+									}}
+								>
+									Prepare project
+								</Button>
 							)
-							.map((environment) => {
+						}
+					>
+						Project environments
+					</SettingsGroupLabel>
+					<div className="grid gap-3 px-4">
+						{configuredEnvironments.length === 0 && (
+							<SettingCard>
+								<div className="px-4 py-5 text-center">
+									<div className="text-item-title font-medium text-fg">No projects prepared</div>
+									<p className="mx-auto mb-0 mt-1 max-w-[30rem] text-supporting leading-relaxed text-dim">
+										Choose only the projects that should get a reusable sandbox template. Nothing
+										is prepared automatically.
+									</p>
+								</div>
+							</SettingCard>
+						)}
+						{configuredEnvironments.map((environment) => {
 								const provider = PROVIDERS.find((candidate) => candidate.id === environment.provider)!;
-								const running = operations.some(
+								const operation = operations.find(
 									(operation) =>
+										operation.kind === "environment_rebuild" &&
 										operation.repo === environment.repo &&
-										operation.provider === environment.provider &&
-										operation.status === "running",
+										operation.provider === environment.provider,
 								);
+								const running = operation?.status === "running";
+								const status = running
+									? operation.stage
+									: environment.state === "ready"
+										? "Template ready"
+										: environment.state === "failed"
+											? environment.failureSummary || "Setup failed"
+											: "Template is stale";
 								return (
 									<SettingCard key={`${environment.repo}:${environment.provider}`}>
-										<div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
+										<div className="flex flex-wrap items-start gap-3 px-4 py-3.5">
+											<SandboxProviderLogo provider={environment.provider} />
 											<div className="min-w-0 flex-1">
 												<div className="text-item-title font-medium text-fg">{environment.repo}</div>
-												<div className="mt-0.5 text-supporting text-dim">
-													{provider.label} · {running ? "Preparing" : environment.state === "ready" ? environment.mode === "per_session" ? "Prepared per session" : "Template ready" : environment.state === "failed" ? environment.failureSummary || "Setup failed" : environment.state === "stale" ? "Template is stale" : "Not prepared"}
+												<div
+													className={cn(
+														"mt-0.5 text-supporting",
+														environment.state === "failed" && !running ? "text-red" : "text-dim",
+													)}
+												>
+													{provider.label} · {status}
 												</div>
+												<div className="mt-1 text-meta text-faint">{machineSummary(environment)}</div>
+												{running && (
+													<div className="mt-2 max-w-[24rem]">
+														<div className="h-1 overflow-hidden rounded-full bg-hover">
+															<div
+																className="h-full rounded-full bg-accent transition-[width] duration-[var(--dur)]"
+																style={{ width: `${operation.progress || 2}%` }}
+															/>
+														</div>
+														{operation.detail && (
+															<div className="mt-1 text-meta text-faint">{operation.detail}</div>
+														)}
+													</div>
+												)}
+												{(operation || environment.failureCode) && (
+													<details className="mt-2 text-meta text-faint">
+														<summary className="w-fit cursor-pointer select-none hover:text-fg">Details</summary>
+														<div className="mt-1 grid gap-0.5 pl-2">
+															{operation && <span>{operation.stage} · updated {new Date(operation.updatedAt).toLocaleString()}</span>}
+															{(environment.failureCode || operation?.failureCode) && <span>Code {environment.failureCode || operation?.failureCode}</span>}
+														</div>
+													</details>
+												)}
 											</div>
-											<Button size="sm" onClick={() => void rebuild(environment)} disabled={!canManage || running}>
-												{running ? "Preparing…" : "Rebuild"}
+											<Button
+												size="sm"
+												disabled={!canManage || running}
+												onClick={() => {
+													setEnvironmentTarget(environment);
+													setEnvironmentDialogOpen(true);
+												}}
+											>
+												{running
+													? "Preparing…"
+													: environment.state === "failed"
+														? "Retry"
+														: environment.state === "stale"
+															? "Refresh"
+															: "Configure"}
 											</Button>
 										</div>
 									</SettingCard>
 								);
 							})}
 					</div>
+					<SettingsHint>
+						Project templates expire after 24 hours and refresh only for projects you have
+						chosen here.
+					</SettingsHint>
 				</>
 			)}
+			<ProjectEnvironmentDialog
+				open={environmentDialogOpen}
+				onOpenChange={setEnvironmentDialogOpen}
+				target={environmentTarget}
+				available={environmentTarget ? [environmentTarget] : availableEnvironments}
+				connections={connections}
+				onStarted={environmentStarted}
+			/>
 		</SettingsPanel>
 	);
 }

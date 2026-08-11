@@ -69,6 +69,15 @@ describe("sandbox project environments", () => {
     ).rejects.toMatchObject({ code: "REPO_UNKNOWN" });
   });
 
+  test("rejects invalid project machine settings before allocating provider work", async () => {
+    const repo = Object.keys(REPOS)[0]!;
+    connectSandboxProvider("modal", { tokenId: "test-id", tokenSecret: "test-secret" });
+    setSandboxConnectionQualification("modal", { status: "ready" });
+    await expect(
+      prepareSandboxEnvironment(repo, "modal", { settings: { cpu: 0 } }),
+    ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
+  });
+
   test("marks every reusable provider template stale after a default-branch update", async () => {
     const repo = Object.keys(REPOS)[0]!;
     const path = process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE!;
