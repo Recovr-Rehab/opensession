@@ -206,6 +206,57 @@ describe("run journal", () => {
 		}
 	});
 
+	it("resets the consecutive recovery fuse after a live turn reattaches", () => {
+		const sessionId = `attached-${crypto.randomUUID()}`;
+		const runKey = `engine-${crypto.randomUUID()}`;
+		const startedAt = new Date().toISOString();
+		try {
+			mod.journalSet({ runKey, osSessionId: sessionId, cwd: "/tmp", startedAt });
+			const started = mod.journalStartRecovery(mod.activeRunRecords()[0]);
+			expect(started.resumeAttempts).toBe(1);
+			expect(started.lastResumeAt).toBeTruthy();
+
+			const attached = mod.journalMarkRecoveryAttached(started);
+			expect(attached?.resumeAttempts).toBe(0);
+			expect(attached?.lastResumeAt).toBeUndefined();
+			expect(mod.activeRunRecords()[0].resumeAttempts).toBe(0);
+
+			const nextBoot = mod.journalStartRecovery(attached!);
+			expect(nextBoot.resumeAttempts).toBe(1);
+		} finally {
+			mod.journalClear(runKey);
+			clearRunState(sessionId);
+		}
+	});
+
+	it("does not reset the recovery fuse on a replacement lineage", () => {
+		const sessionId = `attached-replacement-${crypto.randomUUID()}`;
+		const runKey = `engine-${crypto.randomUUID()}`;
+		try {
+			mod.journalSet({
+				runKey,
+				osSessionId: sessionId,
+				cwd: "/old",
+				startedAt: new Date(Date.now() - 1000).toISOString(),
+			});
+			const old = mod.journalStartRecovery(mod.activeRunRecords()[0]);
+			mod.journalClear(runKey);
+			mod.journalSet({
+				runKey,
+				osSessionId: sessionId,
+				cwd: "/replacement",
+				startedAt: new Date().toISOString(),
+				resumeAttempts: 2,
+			});
+
+			expect(mod.journalMarkRecoveryAttached(old)).toBeUndefined();
+			expect(mod.activeRunRecords()[0]).toMatchObject({ cwd: "/replacement", resumeAttempts: 2 });
+		} finally {
+			mod.journalClear(runKey);
+			clearRunState(sessionId);
+		}
+	});
+
 	it("copies account and reviewer policy into every journal shape", () => {
 		const record = mod.buildRunJournalRecord(
 			{

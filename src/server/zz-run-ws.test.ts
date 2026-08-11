@@ -213,6 +213,17 @@ describe("replayStartFor", () => {
   });
 });
 
+describe("timer poison starvation classification", () => {
+  test("defers when host load reaches runnable capacity", () => {
+    expect(runWs.shouldDeferTimerPoisonForStarvation(16, 16, 80_000)).toBe(true);
+  });
+
+  test("does not defer below capacity or beyond the starvation hold", () => {
+    expect(runWs.shouldDeferTimerPoisonForStarvation(15.9, 16, 80_000)).toBe(false);
+    expect(runWs.shouldDeferTimerPoisonForStarvation(40, 16, 300_000)).toBe(false);
+  });
+});
+
 // ── end-to-end: dial, consume, drop, redial, replay, dedupe ──────────────────
 
 describe("run-ws seq/ack replay", () => {

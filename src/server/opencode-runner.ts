@@ -3282,7 +3282,7 @@ async function* runOpencodeAttempt(
   // Session identity (sticky-account key, legacy per-session server key,
   // instructions-file name). The SHARED-server pool key is computed later,
   // once the bridge account is known.
-  const sessionKey = journal?.osSessionId || cwd;
+  const sessionKey = opts.accountAffinityKey || journal?.osSessionId || cwd;
   // Cerebras' self-serve tier allows only 30k input tokens/minute. A shared
   // interactive server carries the complete external + Open Session MCP catalog,
   // which exceeds that limit before generation starts. Keep Cerebras on a

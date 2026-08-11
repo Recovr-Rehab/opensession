@@ -27,7 +27,7 @@
 import { $ } from "bun";
 import { runAgent, type RunAgentOpts, type StreamEvent } from "./agent-runner";
 import { cancelOpencodeRun } from "./opencode-runner";
-import { getDefaultModel } from "./models";
+import { DEFAULT_FALLBACK_MODEL, getDefaultModel } from "./models";
 import { createWorktree, getRepo, removeWorktree } from "./worktree";
 import { gitIdentityEnv, gitIdentityFor } from "./shared/user-mappings";
 import {
@@ -476,6 +476,8 @@ export const workflowExecutor: WorkflowExecutor = {
 				cwd,
 				mode: write ? "code" : "ask",
 				model,
+				fallbackModel: DEFAULT_FALLBACK_MODEL,
+				accountAffinityKey: `workflow:${ctx.runId}:${req.seq}`,
 				user: ctx.user,
 				...(write ? { author: gitIdentityFor(ctx.user) } : {}),
 				journal: { kind: "workflow" },

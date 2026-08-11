@@ -18,6 +18,7 @@ import {
   journalClearIfLineage,
   hasActiveRunFor,
   journalQuarantine,
+  journalMarkRecoveryAttached,
   journalStartRecovery,
   activeRunRecords,
   takeInterruptedRuns,
@@ -203,6 +204,9 @@ export interface RunAgentOpts {
    * transcript handoff when one is available; cwd/worktree state carries over.
    */
   fallbackModel?: string;
+  /** Stable provider-account affinity for internal fan-out workers. Distinct
+   * workers should use distinct keys while retries of one worker reuse it. */
+  accountAffinityKey?: string;
   /**
    * Pinned account in the active model provider's Claude or Codex pool. The
    * provider runner prefers it and falls back to the pool on exhaustion.
@@ -1292,6 +1296,7 @@ export function resumeInterruptedRuns(
               { run_key: run.runKey },
             );
           if (reattached) {
+            Object.assign(run, journalMarkRecoveryAttached(run) || {});
             console.log(
               `[runner] Reattached ${run.kind || "run"} ${run.osSessionId || run.runKey} to its live engine turn (server ${run.serverKey})`
             );

@@ -286,6 +286,32 @@ export function journalStartRecovery(record: ActiveRunRecord): ActiveRunRecord {
   return returned;
 }
 
+/** A live detached turn was successfully reattached. Reboots while the turn
+ * keeps running should not exhaust the recovery-attempt fuse: that fuse is for
+ * consecutive failed recoveries, not successful adoptions of the same turn. */
+export function journalMarkRecoveryAttached(record: ActiveRunRecord): ActiveRunRecord | undefined {
+  const journal = readRunJournal();
+  const current = journal[record.runKey];
+  if (!current) return undefined;
+  const expectedLineage = record.firstJournaledAt || record.startedAt;
+  const currentLineage = current.firstJournaledAt || current.startedAt;
+  if (
+    expectedLineage !== currentLineage ||
+    current.osSessionId !== record.osSessionId
+  ) {
+    return undefined;
+  }
+  const attached: ActiveRunRecord = {
+    ...current,
+    resumeAttempts: 0,
+    lastResumeAt: undefined,
+  };
+  journal[record.runKey] = attached;
+  writeRunJournal(journal);
+  const { claimedAt: _claimed, ...returned } = attached;
+  return returned;
+}
+
 export function journalClear(runKey: string): void {
   const journal = readRunJournal();
   if (runKey in journal) {

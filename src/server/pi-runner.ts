@@ -1143,7 +1143,7 @@ export async function* runPi(
         picked = pickOpenaiAccount(
           parsed.modelID,
           readOpencodeBridgeConfig()?.openaiAccounts,
-          journal?.osSessionId || cwd,
+          opts.accountAffinityKey || journal?.osSessionId || cwd,
           pickOut,
           user,
           opts.accountId,

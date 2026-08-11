@@ -8,6 +8,7 @@ import {
 	validateJsonSchema,
 	workflowExecutor,
 } from "./workflow-execute";
+import { DEFAULT_FALLBACK_MODEL } from "./models";
 import { WORKFLOW_LIMITS, type WorkflowExecCtx } from "./workflow-types";
 
 afterEach(() => {
@@ -363,11 +364,21 @@ describe("workflowExecutor", () => {
 		expect(calls[0].cwd).toBe("/tmp/wf-test");
 		expect(calls[0].user).toBe("alex");
 		expect(calls[0].journal).toEqual({ kind: "workflow" });
+		expect(calls[0].fallbackModel).toBe(DEFAULT_FALLBACK_MODEL);
+		expect(calls[0].accountAffinityKey).toBe("workflow:wf-test:0");
 		// Workflow workers keep the full connector set, now spelled out rather
 		// than inherited from an omitted field (McpScope).
 		expect(calls[0].mcpServers).toBe("all");
 		expect(calls[0].inProcessMcp).toBeUndefined();
 		expect(calls[0].deniedTools).toBeUndefined();
+	});
+
+	test("parallel workers get distinct account affinity while one worker's retries stay sticky", async () => {
+		const calls = mockRunAgent([reply("first"), reply("second")]);
+		await workflowExecutor.execute({ prompt: "a", opts: {}, seq: 3 }, makeCtx({ runId: "wf-affinity" }));
+		await workflowExecutor.execute({ prompt: "b", opts: {}, seq: 4 }, makeCtx({ runId: "wf-affinity" }));
+		expect(calls[0].accountAffinityKey).toBe("workflow:wf-affinity:3");
+		expect(calls[1].accountAffinityKey).toBe("workflow:wf-affinity:4");
 	});
 
 	test("model precedence: opts.model > ctx.defaultModel", async () => {
@@ -456,6 +467,7 @@ describe("workflowExecutor", () => {
 		// First attempt starts fresh; the retry resumes the failed attempt's session.
 		expect(calls[0].sessionId).toBeUndefined();
 		expect(calls[1].sessionId).toBe("oc-1");
+		expect(calls[1].accountAffinityKey).toBe(calls[0].accountAffinityKey);
 		expect(calls[1].prompt).toContain("failed JSON Schema validation");
 		expect(calls[1].prompt).toContain("count: expected integer, got string");
 		// Retry prompts are self-contained (the session resume can be silently

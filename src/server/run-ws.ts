@@ -538,16 +538,27 @@ export function dropRunWsConnection(hostId: string): boolean {
 
 const POISON_STALE_MS = 20_000; // heartbeat stamps every 5s; 20s = 4 missed beats
 const POISON_CONFIRM_MS = 3_000; // suspicion age before a silent probe convicts
-// Host-wide starvation override: when the box itself is drowning (loadavg way
-// past core count — IO storms, swap thrash), the event loop stalls for 30s+
+// Host-wide starvation override: when the box is at runnable-task capacity
+// (or beyond it — IO storms, swap thrash), the event loop stalls for 30s+
 // with timers ALIVE, and the probe protocol above still convicts (2026-07-27:
 // six false-positive self-restarts in 100 minutes, each reboot's IO making the
 // next stall more likely). A restart cannot cure starvation, only worsen it —
-// so under extreme load we hold conviction until the heartbeat has been stale
+// so under sustained load we hold conviction until the heartbeat has been stale
 // for STARVATION_HOLD_MS (true poisoning survives that; a starved-but-alive
 // loop stamps the heartbeat long before it).
-const STARVATION_LOAD_PER_CORE = 2;
+const STARVATION_LOAD_PER_CORE = 1;
 const STARVATION_HOLD_MS = 300_000;
+
+export function shouldDeferTimerPoisonForStarvation(
+  load1: number,
+  cores: number,
+  staleMs: number,
+): boolean {
+  return (
+    load1 >= Math.max(1, cores) * STARVATION_LOAD_PER_CORE &&
+    staleMs < STARVATION_HOLD_MS
+  );
+}
 
 /**
  * Per-request timer-poisoning check (called from the Bun.serve fetch preamble
@@ -585,7 +596,7 @@ export function timerPoisonRequestCheck(): void {
 function escalateTimerPoison(staleMs: number): void {
   const load1 = loadavg()[0];
   const cores = cpus().length || 1;
-  if (load1 > cores * STARVATION_LOAD_PER_CORE && staleMs < STARVATION_HOLD_MS) {
+  if (shouldDeferTimerPoisonForStarvation(load1, cores, staleMs)) {
     const lastLog = (g.__timerPoisonStarvedLogAt as number | undefined) ?? 0;
     if (Date.now() - lastLog > 60_000) {
       g.__timerPoisonStarvedLogAt = Date.now();
@@ -622,7 +633,13 @@ function escalateTimerPoison(staleMs: number): void {
   if (exits.length >= 3) {
     if (!g.__timerPoisonHalted) {
       g.__timerPoisonHalted = true;
-      audit({ msg: "timer_poison_halted", staleSeconds: Math.round(staleMs / 1000), recentExits: exits });
+      audit({
+        msg: "timer_poison_halted",
+        staleSeconds: Math.round(staleMs / 1000),
+        recentExits: exits,
+        load1: Math.round(load1),
+        cores,
+      });
       console.error(
         "[run-ws] TIMERS ARE DEAD and 3 auto-restarts in 30m did not cure it. NOT exiting again; " +
           "inspect the preceding runtime errors, then systemctl restart opensession.",
@@ -635,7 +652,13 @@ function escalateTimerPoison(staleMs: number): void {
     writeFileSync(guardPath, JSON.stringify({ exits }));
   } catch {}
   g.__timerPoisonExiting = true;
-  audit({ msg: "timer_poison_restart", staleSeconds: Math.round(staleMs / 1000), autoExitsLast30m: exits.length });
+  audit({
+    msg: "timer_poison_restart",
+    staleSeconds: Math.round(staleMs / 1000),
+    autoExitsLast30m: exits.length,
+    load1: Math.round(load1),
+    cores,
+  });
   console.error(
     `[run-ws] TIMERS ARE DEAD — heartbeat stale ${Math.round(staleMs / 1000)}s and a probe timer never ` +
       "fired. Timer delivery is dead process-wide. Self-restarting: " +
