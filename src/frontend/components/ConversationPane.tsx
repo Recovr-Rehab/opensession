@@ -12,6 +12,7 @@ import {
 	plainThreadUrl,
 	STATUS_LABEL,
 } from "./PlainThreadPanel";
+import { cn } from "../ui/cn";
 
 interface Props {
 	/** The Plain thread id — the pane's key. */
@@ -102,123 +103,126 @@ export function ConversationPane({
 		thread?.customer?.name || thread?.customer?.email || "Unknown customer";
 
 	return (
-		<div className={`flex-1 min-h-0 overflow-y-auto ${className || ""}`}>
-			<div className="w-full max-w-[760px] mx-auto px-5 py-6">
-				{loading && !thread ? (
-					<LoadingState>Loading ticket…</LoadingState>
-				) : error && !thread ? (
-					<InlineAlert>Couldn't load this Plain thread: {error}</InlineAlert>
-				) : (
-					<>
-						<div className="flex items-center gap-2.5 min-w-0">
-							<span
-								className="truncate text-item-title font-semibold text-fg"
-								title={thread?.customer?.email || ""}
-							>
-								{customerLabel}
-							</span>
-							{thread?.customer?.name && thread?.customer?.email && (
-								<span className="text-faint text-label truncate">
-									{thread.customer.email}
-								</span>
-							)}
-							{status && (
+		<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+			<div className="min-h-0 flex-1 overflow-y-auto">
+				<div className="mx-auto w-full max-w-[760px] px-5 pt-6 pb-5">
+					{loading && !thread ? (
+						<LoadingState>Loading ticket…</LoadingState>
+					) : error && !thread ? (
+						<InlineAlert>Couldn't load this Plain thread: {error}</InlineAlert>
+					) : (
+						<>
+							<div className="flex items-center gap-2.5 min-w-0">
 								<span
-									className={plainStatusClass(status)}
+									className="truncate text-item-title font-semibold text-fg"
+									title={thread?.customer?.email || ""}
 								>
-									{STATUS_LABEL[status] || status}
+									{customerLabel}
 								</span>
-							)}
-							<a
-								className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline ml-auto"
-								href={plainThreadUrl(threadId)}
-								target="_blank"
-								rel="noreferrer"
-								title="Open this thread in Plain"
-							>
-								Open in Plain ↗
-							</a>
-						</div>
-						{thread?.title && (
-							<div className="mt-2 text-section-title font-semibold text-fg">
-								{thread.title}
-							</div>
-						)}
-
-						{/* Is anyone still owed an answer? Plain leads with this;
-						    so should we. */}
-						{thread && (
-							<PlainWaitingBanner thread={thread} className="mt-3" />
-						)}
-
-						{/* One-click ticket admin, straight from here: status,
-						    priority, spam — no need to jump into Plain. */}
-						{thread && (
-							<PlainThreadActions
-								threadId={threadId}
-								thread={thread}
-								onChanged={load}
-								className="mt-3"
-							/>
-						)}
-
-						{/* The "do you want to triage this?" affordance: one click runs
-						    the Plain triage automation and lands in its session. */}
-						{!hideTriage && (
-							<div className="flex items-center gap-3 flex-wrap mt-4 p-3 rounded-lg border border-line bg-panel">
-								<div className="min-w-0 flex-1">
-									<div className="text-body font-semibold text-fg">
-										Triage this ticket?
-									</div>
-									<div className="text-dim text-label mt-0.5">
-										Runs the Plain triage automation: investigates, posts an
-										internal note, and can open a PR for review.
-									</div>
-								</div>
-								<Button
-									variant="ink"
-									className="shrink-0 text-control-label"
-									onClick={handleTriage}
-									disabled={triaging}
+								{thread?.customer?.name && thread?.customer?.email && (
+									<span className="text-faint text-label truncate">
+										{thread.customer.email}
+									</span>
+								)}
+								{status && (
+									<span className={plainStatusClass(status)}>
+										{STATUS_LABEL[status] || status}
+									</span>
+								)}
+								<a
+									className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline ml-auto"
+									href={plainThreadUrl(threadId)}
+									target="_blank"
+									rel="noreferrer"
+									title="Open this thread in Plain"
 								>
-									{triaging ? "Starting triage… (~30s)" : "Triage this ticket"}
-								</Button>
-								{triageError && (
-									<div className="basis-full text-red text-label">
-										{triageError}
+									Open in Plain ↗
+								</a>
+							</div>
+							{thread?.title && (
+								<div className="mt-2 text-section-title font-semibold text-fg">
+									{thread.title}
+								</div>
+							)}
+
+							{/* Is anyone still owed an answer? Plain leads with this;
+						    so should we. */}
+							{thread && (
+								<PlainWaitingBanner thread={thread} className="mt-3" />
+							)}
+
+							{/* One-click ticket admin, straight from here: status,
+						    priority, spam — no need to jump into Plain. */}
+							{thread && (
+								<PlainThreadActions
+									threadId={threadId}
+									thread={thread}
+									onChanged={load}
+									className="mt-3"
+								/>
+							)}
+
+							{/* The "do you want to triage this?" affordance: one click runs
+						    the Plain triage automation and lands in its session. */}
+							{!hideTriage && (
+								<div className="flex items-center gap-3 flex-wrap mt-4 p-3 rounded-lg border border-line bg-panel">
+									<div className="min-w-0 flex-1">
+										<div className="text-body font-semibold text-fg">
+											Triage this ticket?
+										</div>
+										<div className="text-dim text-label mt-0.5">
+											Runs the Plain triage automation: investigates, posts an
+											internal note, and can open a PR for review.
+										</div>
 									</div>
+									<Button
+										variant="ink"
+										className="shrink-0 text-control-label"
+										onClick={handleTriage}
+										disabled={triaging}
+									>
+										{triaging
+											? "Starting triage… (~30s)"
+											: "Triage this ticket"}
+									</Button>
+									{triageError && (
+										<div className="basis-full text-red text-label">
+											{triageError}
+										</div>
+									)}
+								</div>
+							)}
+
+							<div className="flex flex-col gap-3 mt-5">
+								{thread && thread.entries.length === 0 ? (
+									<div className="mt-5 text-center text-label text-faint">
+										No messages in this thread yet.
+									</div>
+								) : (
+									thread?.entries.map((e) => (
+										<PlainEntryRow key={e.id} entry={e} threadId={threadId} />
+									))
 								)}
 							</div>
-						)}
-
-						<div className="flex flex-col gap-3 mt-5">
-							{thread && thread.entries.length === 0 ? (
-								<div className="mt-5 text-center text-label text-faint">
-									No messages in this thread yet.
-								</div>
-							) : (
-								thread?.entries.map((e) => (
-									<PlainEntryRow key={e.id} entry={e} threadId={threadId} />
-								))
-							)}
-						</div>
-
-						{/* Answer the customer (or leave a team note) right here —
-						    no Plain, no LLM. */}
-						{thread && (
-							<PlainReplyBox
-								key={threadId}
-								threadId={threadId}
-								customerName={
-									thread.customer?.name || thread.customer?.email || null
-								}
-								onSent={load}
-								className="mt-4 border border-line rounded-lg bg-panel"
-							/>
-						)}
-					</>
-				)}
+						</>
+					)}
+				</div>
 			</div>
+
+			{/* Keep the customer reply available while the ticket scrolls. */}
+			{thread && (
+				<div className="mx-auto w-full max-w-[760px] shrink-0 px-5 pb-5">
+					<PlainReplyBox
+						key={threadId}
+						threadId={threadId}
+						customerName={
+							thread.customer?.name || thread.customer?.email || null
+						}
+						onSent={load}
+						className="rounded-lg border border-line bg-panel"
+					/>
+				</div>
+			)}
 		</div>
 	);
 }
