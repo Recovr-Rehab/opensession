@@ -3686,7 +3686,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				style={{ order: 0 }}
 			>
 			{/* The "Tools" band header sits above the top-level nav as a collapse
-			    toggle. Its 6px inset plus the shared toggle's 14px padding matches
+			    toggle. Its 6px inset plus the toggle's 18px padding matches
 			    the band headings inside the workspace list. */}
 			{!isPhone && visibleTools.length > 0 && (
 				<div
@@ -3703,7 +3703,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<button
 							className={cn(
 								SIDEBAR_BAND_TOGGLE,
-								"w-auto flex-1 pr-2 pl-[14px]",
+								"w-auto flex-1 pr-2 pl-[18px]",
 								// The wrapper paints this row's wash, so the toggle
 								// inside it must not paint a second one.
 								"hover:bg-transparent",
@@ -3941,15 +3941,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						aria-expanded={workspacesOpen}
 						title={workspacesOpen ? "Collapse workspaces" : "Expand workspaces"}
 					>
-						{/* The heading takes the same 4px optical step every other
-						    glyphless label does, so it starts on the column its repo
-						    tiles and lane captions do rather than 4px left of them (see
+						{/* The heading takes the same 8px inset every other glyphless
+						    label does, so it starts on the column its repo tiles and
+						    lane captions do (see
 						    the band toggle). The sidebar header already reads as
 						    "Workspaces" on phones, so the in-header title is redundant
 						    there. */}
 						<span
 							className={cn(
-								"shrink-0 pl-1 text-label font-semibold tracking-[-0.01em] group-hover/wshead:text-dim",
+								"shrink-0 pl-2 text-label font-semibold tracking-[-0.01em] group-hover/wshead:text-dim",
 								// Full-strength ink when the lanes aren't yours: this is
 								// the one row that stays pinned while the list scrolls,
 								// so it's what stops a borrowed sidebar reading as your

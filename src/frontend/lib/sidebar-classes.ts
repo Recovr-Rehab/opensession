@@ -192,13 +192,12 @@ export const SIDEBAR_LANE_HEADER =
 export const SIDEBAR_GROUP_NAME = "min-w-0 truncate text-left";
 
 /**
- * A glyph's 22px slot carries ~4px of its own padding before the ink starts, so
- * a bare lane caption at the slot's box edge still sat 4px LEFT of every mark
- * around it — the repo tile above read as indented against its own lanes. The
- * pad goes on the label rather than the header, so it holds at both
- * breakpoints and the hover pill keeps running the sidebar's full width.
+ * A glyphless lane caption needs its own inset to sit comfortably beside the
+ * sidebar edge. The desktop rail adds 4px to the phone inset; the pad stays on
+ * the label rather than the header so the hover pill keeps running the
+ * sidebar's full width.
  */
-export const SIDEBAR_LANE_NAME = "pl-1";
+export const SIDEBAR_LANE_NAME = "pl-1 desktop:pl-2";
 
 /**
  * The collapse chevron. Revealed by the header's hover, and rotated to mark the
@@ -312,15 +311,12 @@ export const SIDEBAR_BAND_TOGGLE =
 	"group/band m-0 flex min-h-[30px] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1.5 text-left text-inherit [font:inherit] hover:bg-hover hover:text-dim";
 
 /**
- * The inset the Automations and People headings take. 14px on the left, not 8:
- * it lands the label's ink on the one column every leading mark below it
- * already uses, because a 22px glyph carries ~4px of its own padding before its
- * ink starts, so a text label at the same box edge reads 4px further left than
- * the icons and tiles it heads. The phone layout measures the same step from a
- * tighter base inset.
+ * The inset the Automations and People headings take. The desktop value lands
+ * the glyphless labels on the same 24px rail as Tools, Workspaces and lane
+ * captions. The phone layout keeps its tighter base inset.
  */
 export const SIDEBAR_BAND_TOGGLE_INSET =
-	"pr-1 pl-2 desktop:pr-2 desktop:pl-[14px]";
+	"pr-1 pl-2 desktop:pr-2 desktop:pl-[18px]";
 
 /**
  * The chevron reveals on hover but stays IN LAYOUT at all times (visibility,
