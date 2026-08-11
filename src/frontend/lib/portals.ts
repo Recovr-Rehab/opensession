@@ -22,4 +22,3 @@ export function portalTargetFor(
 		url: service.previewUrl,
 	};
 }
-

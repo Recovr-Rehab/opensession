@@ -99,11 +99,11 @@ export interface PreviewStatus {
    *  False = the Start button can't do anything; the UI shows what to add. */
   bootable: boolean;
   services: PreviewService[];
-  /** Declarative, skill-backed starters from .agents/preview.json. */
+  /** Declarative, skill-backed starters from .agents/portals.json. */
   portalRecipes: PreviewPortalRecipe[];
 }
 
-/** Parse the safe, declarative Portal subset of .agents/preview.json. */
+/** Parse the safe, declarative contents of .agents/portals.json. */
 export function parsePreviewPortalRecipes(raw: string | null): PreviewPortalRecipe[] {
   if (!raw) return [];
   try {
@@ -133,7 +133,7 @@ export function parsePreviewPortalRecipes(raw: string | null): PreviewPortalReci
 function hostPreviewPortalRecipes(worktreeDir: string): PreviewPortalRecipe[] {
   try {
     return parsePreviewPortalRecipes(
-      readFileSync(join(worktreeDir, LIFECYCLE_DIR, "preview.json"), "utf8"),
+      readFileSync(join(worktreeDir, LIFECYCLE_DIR, "portals.json"), "utf8"),
     );
   } catch {
     return [];
@@ -1103,9 +1103,9 @@ export async function getSandboxPreviewStatus(
   // way for volume-mode workspaces (no host copy).
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
-  const previewManifest = await sandbox.exec(["cat", `${LIFECYCLE_DIR}/preview.json`]);
+  const portalsManifest = await sandbox.exec(["cat", `${LIFECYCLE_DIR}/portals.json`]);
   const portalRecipes = parsePreviewPortalRecipes(
-    previewManifest.exitCode === 0 ? previewManifest.stdout : null,
+    portalsManifest.exitCode === 0 ? portalsManifest.stdout : null,
   );
   const services: PreviewService[] = [];
   // Remote providers can publish a port on demand. Docker/microVM providers

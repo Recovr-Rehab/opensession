@@ -27,7 +27,7 @@ export interface PreviewStatus {
 	 *  fallback). Absent on servers that predate the field — treat as true. */
 	bootable?: boolean;
 	services: PreviewService[];
-	/** Skill-backed starters declared by the repository. */
+	/** Skill-backed starters declared in .agents/portals.json. */
 	portalRecipes?: PreviewPortalRecipe[];
 	/** Whose preview this is — shown on the interstitial so a reused tab can
 	 *  never masquerade as another session's wait. */

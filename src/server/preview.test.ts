@@ -140,7 +140,7 @@ describe("repoLifecycle", () => {
 });
 
 describe("preview portal recipes", () => {
-  test("reads skill-backed starters from preview.json", () => {
+  test("reads skill-backed starters from portals.json", () => {
     expect(
       parsePreviewPortalRecipes(
         JSON.stringify({

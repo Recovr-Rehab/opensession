@@ -3,7 +3,7 @@
 Commit a `.agents/` directory to a repository and every agent host that
 follows this convention — Open Session, and anything else that adopts it —
 knows how to provision a workspace for that repo and boot its dev server.
-Five files, each optional:
+Six files, each optional:
 
 | File          | When it runs                              | Job                                       |
 | ------------- | ----------------------------------------- | ----------------------------------------- |
@@ -11,6 +11,7 @@ Five files, each optional:
 | `resume`      | after a paused/snapshotted workspace wakes | idempotent post-wake repair               |
 | `start.sh`    | when a preview starts                     | bring the dev server up in the foreground |
 | `preview.json`| warm-pool / warm-template refreshes       | declare which routes to pre-compile       |
+| `portals.json`| session Portals panel                     | declare skill-backed service starters     |
 | `environment.json` | when a private remote workspace is adopted | seed explicitly declared local env files |
 
 Why commit them rather than configure the host: the boot recipe travels with
@@ -122,7 +123,20 @@ boot, so the first human or agent visit is fast:
 
 ```json
 {
-  "warmRoutes": ["/", "/dashboard", "/api/session"],
+  "warmRoutes": ["/", "/dashboard", "/api/session"]
+}
+```
+
+Keep it to the handful of routes people actually open first from a preview.
+Precedence: explicit instance Settings → the repo's committed
+`.agents/preview.json` → built-in defaults.
+
+## portals.json — recommended service starters
+
+Repositories can add skill-backed starters to the session's Portals tab:
+
+```json
+{
   "portals": [
     {
       "name": "Local webapp",
@@ -134,12 +148,7 @@ boot, so the first human or agent visit is fast:
 }
 ```
 
-Keep it to the handful of routes people actually open first from a preview.
-Precedence: explicit instance Settings → the repo's committed
-`.agents/preview.json` → built-in defaults.
-
-`portals` is optional. It adds repository-recommended starters to the session's
-Portals tab. The UI never runs a repository-provided command: clicking **Ask
+The UI never runs a repository-provided command: clicking **Ask
 agent to start** sends a fixed prompt naming the validated user-invocable skill.
 `serviceKey` connects the recipe to a `*_PORT` entry in `.ports.conf`; once that
 service is listening, the same card opens its authenticated Portal. Repositories
