@@ -802,62 +802,44 @@ html.wco .app {
 		background: transparent;
 	}
 
-	/* A pinned sidebar heading has to hide the rows sliding under it, so its
-	   backing cannot be translucent — and one paint cannot both stop the rows
-	   and transmit the wallpaper the way the material around it does. Left
-	   opaque in place, it reads as a foreign plate: material above it and
-	   material below it, and 34% of the wallpaper missing in between, which is
-	   a lighter slab over a dark desktop picture and a darker one over a bright
-	   one. Stacking washes only trades that mismatch for ghost rows, and
-	   backdrop-filter cannot see the rows at all from inside the heading's own
-	   sticky layer, let alone the native vibrancy behind the window.
+	/* A pinned sidebar heading has to stop the rows sliding under it. The
+	   backing it paints elsewhere is the material over an opaque --bg-raised,
+	   and on this surface that composites to a fully opaque slab: material
+	   above it, material below it, and none of the wallpaper in between. It
+	   reads as a foreign plate — a dark band over a bright desktop picture, a
+	   light one over a dark picture — and no stack of washes fixes it, because
+	   the alpha that hides a row is the same alpha that stops the wallpaper.
 
-	   So the solid is anchored to the window's top edge instead of floating in
-	   the list: the chrome row and whatever is pinned under it are ONE run of
-	   opaque chrome, which is what a titlebar looks like anyway. That leaves a
-	   single boundary, at the bottom, and it is a wash rather than a cut.
-	   --bg-raised is exact here, not an approximation: --sidebar-material is
-	   --bg-raised's own colour, so the material composited over itself IS
-	   --bg-raised in both themes. */
-	html.material-backdrop {
-		--sidebar-chrome-wash: 22px;
-	}
+	   Frosting it is the way out, and it is what the surface is already about:
+	   blur only ever sees OUR paint (the native vibrancy is behind the window,
+	   not in the page), so the rows dissolve while the band keeps roughly the
+	   alpha its surroundings have and the wallpaper still comes through. Half a
+	   wash rides along to quiet what the blur leaves.
 
-	html.material-backdrop .sidebar-brand {
-		/* Positioned for the wash below it, which has to escape this row's box.
-		   That also lifts the row over the list's un-positioned rows, and it
-		   stays under the headings, which pin at z-15/z-20. */
-		position: relative;
-		background: var(--bg-raised);
-	}
+	   This is not the backdrop-filter the sidebar dropped: that one sat on the
+	   whole rail and re-rasterized it on any repaint behind it. This is a 44px
+	   strip that only exists while a heading is actually pinned.
 
-	html.material-backdrop .sidebar-brand::after,
+	   Blur is deliberately on the ::before rather than on the heading — the
+	   heading is the hover row, and filtering there would smear its own
+	   hover wash. Note a headless Chrome started with --disable-gpu drops
+	   backdrop blur silently (other backdrop filters keep working), so verify
+	   this with a GPU/SwiftShader browser or it looks like dead CSS. */
 	html.material-backdrop [data-sticky-head].is-stuck::before {
-		background: linear-gradient(
-			var(--bg-raised) calc(100% - var(--sidebar-chrome-wash)),
+		background: color-mix(in srgb, var(--sidebar-material) 50%, transparent);
+		backdrop-filter: blur(30px) saturate(1.7);
+		-webkit-backdrop-filter: blur(30px) saturate(1.7);
+		/* The bottom edge is where blurred rows meet sharp ones, so it
+		   dissolves over 14px instead of cutting. The overhang blurs the top of
+		   the row below, which is what makes the dissolve read as depth rather
+		   than as a fading rectangle. */
+		bottom: -14px;
+		-webkit-mask-image: linear-gradient(
+			to bottom,
+			#000 calc(100% - 14px),
 			transparent
 		);
-	}
-
-	/* The wash hangs BELOW the chrome row, over the list's first rows. A pinned
-	   heading's own backing paints in a higher sticky layer and covers it, so
-	   this is only ever visible where the solid run actually ends — which, when
-	   nothing is pinned, is right here. */
-	html.material-backdrop .sidebar-brand::after {
-		content: "";
-		position: absolute;
-		right: 0;
-		bottom: calc(-1 * var(--sidebar-chrome-wash));
-		left: 0;
-		height: var(--sidebar-chrome-wash);
-		pointer-events: none;
-	}
-
-	/* Same wash, one tier down: the lowest pinned heading ends the run. A
-	   heading above it fades onto the next heading's solid, which is opaque, so
-	   only the last one shows a gradient. */
-	html.material-backdrop [data-sticky-head].is-stuck::before {
-		bottom: calc(-1 * var(--sidebar-chrome-wash));
+		mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
 	}
 
 	/* --row-chip is deliberately NOT re-derived here, and the vibrancy sidebar
@@ -882,6 +864,18 @@ html.wco .app {
 	html.material-backdrop .app-body,
 	html.material-backdrop .sidebar-container {
 		background: var(--bg-raised);
+	}
+
+	/* No wallpaper to protect here, so the pinned backing goes back to the
+	   opaque slab the rest of the app uses — and the blur, which exists only to
+	   avoid painting one, comes off with it. */
+	html.material-backdrop [data-sticky-head].is-stuck::before {
+		background: var(--bg-raised);
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+		bottom: -1px;
+		-webkit-mask-image: none;
+		mask-image: none;
 	}
 }
 /* Sidebar top row clears the traffic lights. env(titlebar-area-x) is the
