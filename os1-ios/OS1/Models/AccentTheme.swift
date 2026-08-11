@@ -50,9 +50,10 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Both appearances use 92% of each hue's maximum sRGB chroma: OKLCH L 0.58
-    /// on light surfaces and L 0.64 on dark ones. `mono` is the app's original
-    /// monochrome accent, expressed as one more entry so nothing is lost.
+    /// Most appearances use 92% of each hue's maximum sRGB chroma. Orange is
+    /// deliberately brighter and more saturated, like a signal colour, while
+    /// still carrying the palette's white glyph at 3:1. `mono` preserves the
+    /// app's original monochrome accent.
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
         case .teal: (0x20_8A_94, 0x26_9D_A9)
@@ -61,7 +62,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         case .purple: (0xAD_26_E8, 0xBD_4B_F6)
         case .pink: (0xD1_23_8C, 0xEE_29_A1)
         case .coral: (0xDD_24_3B, 0xF7_36_48)
-        case .orange: (0xB8_5F_1B, 0xD2_6D_20)
+        case .orange: (0xE8_4F_00, 0xFF_5A_00)
         case .gold: (0x98_74_1C, 0xAE_85_21)
         case .green: (0x20_91_48, 0x26_A6_53)
         case .mono: (0x00_00_00, 0xFF_FF_FF)

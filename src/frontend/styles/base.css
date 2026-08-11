@@ -453,8 +453,8 @@ html[data-accent="coral"] {
 }
 
 html[data-accent="orange"] {
-	--accent-light: #b85f1b;
-	--accent-dark: #d26d20;
+	--accent-light: #e84f00;
+	--accent-dark: #ff5a00;
 }
 
 html[data-accent="gold"] {

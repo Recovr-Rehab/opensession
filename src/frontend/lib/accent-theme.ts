@@ -5,7 +5,7 @@ export const ACCENT_THEME_OPTIONS = [
 	{ value: "purple", label: "Violet", light: "#ad26e8", dark: "#bd4bf6" },
 	{ value: "pink", label: "Rose", light: "#d1238c", dark: "#ee29a1" },
 	{ value: "coral", label: "Coral", light: "#dd243b", dark: "#f73648" },
-	{ value: "orange", label: "Tangerine", light: "#b85f1b", dark: "#d26d20" },
+	{ value: "orange", label: "Tangerine", light: "#e84f00", dark: "#ff5a00" },
 	{ value: "gold", label: "Gold", light: "#98741c", dark: "#ae8521" },
 	{ value: "green", label: "Clover", light: "#209148", dark: "#26a653" },
 	{ value: "mono", label: "Mono", light: "#000000", dark: "#ffffff" },
