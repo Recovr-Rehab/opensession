@@ -60,13 +60,23 @@ export function checkClass(status: string, conclusion: string): PrCheckRank {
   }
 }
 
-// Vercel previews arrive as StatusContexts named "Preview – <project>" (no
-// workflow); everything with a workflow is CI.
+// Two shapes reach us, and "has a workflow" does NOT separate them. Vercel's
+// git integration posts StatusContexts named "Vercel – <project>" / the older
+// "vercel/<project>"; but a repo can also run its preview deploy as an ordinary
+// Actions job ("Deploy Vercel App / Build and deploy" under a workflow named
+// "Preview"), and GitHub Apps post check runs with an EMPTY workflowName
+// ("Vercel Agent Review", "Vercel Preview Comments") that merely mention Vercel
+// without deploying anything. So match the separator-suffixed status contexts,
+// and otherwise insist the job actually says it deploys — a name that only
+// contains "vercel" or "preview" is not evidence of a deploy.
+//
+// This decides more than a label: StagingLink treats a pending deployment as
+// "the preview is rebuilding" and ambers the globe. Missing the real deploy
+// leaves it green while the branch alias still serves the previous push.
 export function isDeployment(check: PrCheck): boolean {
-  return (
-    !check.workflowName &&
-    (/^preview\b/i.test(check.name) || /vercel|deploy/i.test(check.name))
-  );
+  if (!check.workflowName && /^(preview|vercel)\s*([–—-]|\/)/i.test(check.name))
+    return true;
+  return /^deploy\b/i.test(check.name);
 }
 
 export function formatCheckDuration(check: PrCheck): string | null {
