@@ -901,6 +901,7 @@ function MediaLightbox({
 	return (
 		<motion.div
 			ref={dialogRef}
+			data-media-lightbox=""
 			className="fixed inset-0 z-[11000] flex flex-col bg-black/85"
 			role="dialog"
 			aria-modal="true"

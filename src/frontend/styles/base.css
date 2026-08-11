@@ -1031,6 +1031,14 @@ html.wco:has(.app-menu-popup)
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
+/* The media lightbox floats over the draggable first row. Electron does not
+   reliably let an overlapping sibling carve clickable links out of that row,
+   so suspend the underlying drag region while the lightbox is mounted. */
+html.wco:has([data-media-lightbox])
+	:is(.sidebar-brand, .viewer-header, .detail-topbar-title, .pr-bar) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}
 /* The chrome row itself (collapse + avatar left, back/forward + search at the
    right edge) is shared by web and the desktop shell — only the traffic-light
    inset and drag regions above are shell-specific. */
