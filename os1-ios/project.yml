@@ -21,6 +21,13 @@ targets:
     platform: iOS
     sources:
       - OS1
+      # mermaid's browser bundle and the offscreen page that drives it. Listed
+      # as resources explicitly: XcodeGen would otherwise put a .js file in
+      # Compile Sources, where it does nothing.
+      - path: Resources/mermaid
+        buildPhase: resources
+        excludes:
+          - README.md
     dependencies:
       - package: SwiftStreamingMarkdown
         product: SwiftStreamingMarkdown
@@ -109,6 +116,11 @@ targets:
     platform: macOS
     sources:
       - OS1
+      # See the iOS target: the diagram renderer's page and mermaid itself.
+      - path: Resources/mermaid
+        buildPhase: resources
+        excludes:
+          - README.md
     dependencies:
       - package: SwiftStreamingMarkdown
         product: SwiftStreamingMarkdown

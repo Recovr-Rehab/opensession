@@ -87,6 +87,7 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   a loading screen. Fenced Markdown, expanded tool inputs and code assets use
   the PWA's GitHub light/dark syntax palette. Native-owned code surfaces show
   plain text immediately while highlighting finishes and keep large files plain.
+  ```mermaid fences render as diagrams (see "Mermaid diagrams" below).
 - **Workspace details** — tapping the session title opens a native worktree sheet
   with repository and branch metadata, local git status, changed files, pull
   request status, workspace context, model/reasoning controls, and live remote
@@ -193,6 +194,13 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   A second bundle id means a second App Store profile ("OS1 Widgets App
   Store"), which CI fetches from App Store Connect at build time
   (`ci/fetch-provisioning-profile.mjs`) rather than carrying as a secret.
+- **Live Activities** — an optional, device-local switch under Settings →
+  Notifications shows one aggregate of the signed-in person's running sessions
+  on the Lock Screen and Dynamic Island. It renders at most three privacy-
+  sensitive titles plus the total count, opens an individual session through
+  `OpenSessionIntent`, and ends when the last run finishes. Foreground state is
+  reconciled from the existing sessions poll; background starts and updates use
+  ActivityKit push tokens registered with `/api/live-activities/*`.
 - **Connection care** — client-initiated pings every 20s (the server never
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.
@@ -247,6 +255,35 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   Mute is local — capture and metering continue, frames stop leaving the
   device. The orb's level is sampled off the realtime audio threads at ~15Hz
   rather than pushed per buffer, and honors Reduce Motion.
+
+## Mermaid diagrams
+
+A ```mermaid fence in an assistant message renders as a drawn diagram, the same
+way the web client does it — and with the same fallback: source mermaid cannot
+parse keeps its code fence, which is also what an in-flight message looks like
+while it streams.
+
+There is no native mermaid. The layout engines (dagre for flowcharts, one per
+diagram type besides) are most of the library, so fidelity means running the
+same JavaScript the web runs: `MermaidRenderer` keeps ONE offscreen `WKWebView`,
+renders diagrams through it one at a time, and snapshots each result to a PNG
+that it caches by (source, theme). The transcript itself never holds a web
+view — a row shows a plain `Image`, so lazy scrolling stays SwiftUI-fast and a
+diagram seen once costs nothing to see again. On iOS the picture is tappable
+into the full-screen viewer and pinch-zooms in place, like any other image.
+
+mermaid ships in the app (`Resources/mermaid/`, ~3.5MB) rather than being
+fetched, so diagrams draw offline and against any server; refresh that copy
+when the repo's mermaid dependency moves (see the README next to it).
+
+Three things about the offscreen page are load-bearing, each learned by
+looking at a wrong picture: it must be hidden by being COVERED rather than
+faded (a snapshot captures the view's alpha, so a 1%-opacity page yields a
+1%-opacity diagram); the PNG must carry the scale it was captured at (PNG has
+no scale, so a 3x snapshot otherwise claims to be three times its true size and
+the row clips it); and the web view's scroll view needs
+`contentInsetAdjustmentBehavior = .never`, or the safe-area inset pushes the
+page down and the snapshot loses the bottom of the diagram.
 
 ## Signing in
 
@@ -324,6 +361,11 @@ OS1/
     AssetsView.swift         Assets list + one asset, per-kind preview
     WalkthroughCard.swift    Published walkthrough: demo video, writeup, stills
     MarkdownBody.swift       Streaming/durable markdown rendering
+  Mermaid/
+    MermaidSegmenter.swift   Splits ```mermaid fences out of message markdown
+    MermaidHostPage.swift    Locates the bundled renderer page
+    MermaidRenderer.swift    Offscreen WebKit render + snapshot + cache
+    MermaidDiagramView.swift The diagram row: code fence, then the picture
     AskQuestionCard.swift    Options + free text answer
     PrPanel.swift            Pull-request overview, actions, and review entry
     PrReviewCanvas.swift     Committed diff, inline pending comments, viewed files

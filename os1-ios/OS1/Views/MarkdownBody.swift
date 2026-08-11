@@ -28,6 +28,30 @@ struct MarkdownBody: View {
     }
 
     var body: some View {
+        // ```mermaid fences are lifted out before anything else touches the
+        // text: they render as drawn diagrams, and the link rewrites below
+        // would corrupt a URL or file path inside a diagram label into
+        // markdown link syntax that mermaid can no longer parse.
+        let segments = MermaidSegmenter.split(text)
+        if segments.count == 1, case .markdown(let only) = segments[0] {
+            // The overwhelmingly common shape — no extra stack around it.
+            markdown(only)
+        } else {
+            VStack(alignment: .leading, spacing: Self.segmentSpacing) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                    switch segment {
+                    case .markdown(let value):
+                        markdown(value)
+                    case .mermaid(let source):
+                        MermaidDiagramView(source: source)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func markdown(_ value: String) -> some View {
         SwiftStreamingMarkdown.MarkdownView(
             // Session ids, file paths, scratch files and bare URLs become
             // links here rather than in the display pass: the entry's own text
@@ -39,7 +63,7 @@ struct MarkdownBody: View {
             // repo path and a scratch file keeps its diff.
             text: AssetLinks.linkify(
                 FileLinks.linkify(
-                    SessionLinks.linkify(MarkdownAutolink.linkify(text)),
+                    SessionLinks.linkify(MarkdownAutolink.linkify(value)),
                     sessionId: openPanel.sessionId
                 ),
                 sessionId: openPanel.sessionId
@@ -47,6 +71,17 @@ struct MarkdownBody: View {
             config: dimmed ? .os1Dim : .os1Static
         )
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The gap between a diagram and the prose around it, matching the block
+    /// spacing the renderer uses inside each markdown segment — otherwise the
+    /// seam reads as a paragraph break of a different rhythm.
+    private static var segmentSpacing: CGFloat {
+        #if os(iOS)
+        8
+        #else
+        12
+        #endif
     }
 }
 
