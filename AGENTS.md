@@ -249,6 +249,11 @@ floor should be 0, and if it isn't you are measuring the app's live data rather
 than your change. A screenshot says a surface still looks right; this says
 nothing resolved differently, which is what a migration actually promises.
 
+These local browser tools authenticate as the dedicated `Automation` machine
+identity (`kind: "automation"` in the 0600 web-session store), never by taking
+a teammate's session token. Hosted loopback traffic rejects human sessions at
+the server boundary and never contributes presence.
+
 - **Tokens**: `src/frontend/styles/tailwind.css` maps the existing `base.css`
   variables (`--bg`, `--text-dim`, …) into Tailwind's namespace via
   `@theme inline` — use `bg-panel text-dim border-line text-fg bg-surface` etc.,

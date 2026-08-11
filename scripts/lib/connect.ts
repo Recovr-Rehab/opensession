@@ -22,6 +22,7 @@ import { arch, hostname, platform } from "os";
 import { join } from "path";
 import { OPENSESSION_HOME } from "./paths";
 import { bold, dim, fail, heading, info, ok, run, warn } from "./ui";
+import { localAutomationToken } from "./local-auth";
 
 const IDENTITY_PATH = join(OPENSESSION_HOME, "node.json");
 const HEARTBEAT_MS = 60_000;
@@ -290,18 +291,11 @@ async function localApi(): Promise<string> {
  * Absent (sign-in off) we send nothing and the request is allowed as before.
  */
 async function operatorToken(): Promise<string | undefined> {
-  const { HOME } = await import("./paths");
-  const path = join(HOME, ".opensession-web-sessions.json");
-  if (!existsSync(path)) return undefined;
   try {
-    const parsed = JSON.parse(await Bun.file(path).text());
-    const sessions = parsed?.sessions ?? parsed;
-    const list = Array.isArray(sessions) ? sessions : Object.values(sessions ?? {});
-    for (const entry of list as any[]) {
-      if (typeof entry?.token === "string" && entry.token) return entry.token;
-    }
+    return localAutomationToken() || undefined;
   } catch {
-    // A malformed store should not stop the command working without auth.
+    // The request below reports the ordinary signed-out error without leaking
+    // or borrowing a teammate's credential.
   }
   return undefined;
 }

@@ -52,6 +52,7 @@
  */
 import { readFileSync } from "node:fs";
 import { acquireCdpBrowser, closeCdpTarget, releaseCdpBrowser } from "./lib/cdp-browser";
+import { localAutomationToken } from "./lib/local-auth";
 
 const APP = process.env.OPENSESSION_URL ?? "http://127.0.0.1:3850";
 
@@ -123,11 +124,17 @@ const evaluate = async (expression: string) => {
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const token = JSON.parse(readFileSync(`${process.env.HOME}/.opensession-web-sessions.json`, "utf8")).sessions[0].token;
+const token = localAutomationToken();
 await send("Page.enable");
 await send("Runtime.enable");
 await send("Network.enable");
-await send("Network.setCookie", { name: "opensession_auth", value: token, url: APP, path: "/" });
+if (token)
+	await send("Network.setCookie", {
+		name: "opensession_auth",
+		value: token,
+		url: APP,
+		path: "/",
+	});
 await send("Page.addScriptToEvaluateOnNewDocument", {
 	source: `try { localStorage.setItem('opensession-theme', ${JSON.stringify(THEME)}); } catch (e) {}`,
 });

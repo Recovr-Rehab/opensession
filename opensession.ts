@@ -52,9 +52,11 @@ import { destroySessionSandbox } from "./src/server/session-sandbox";
 import { getAllSessions } from "./src/server/sessions";
 import {
 	crossSiteViolation,
+	ensureAutomationWebSession,
 	keypadBearerAuthorized,
 	migrateSessionsToGithubUser,
 	resolveWebAuth,
+	type WebIdentity,
 	webAuthRequired,
 } from "./src/server/web-auth";
 import { startWebhookServer } from "./src/server/webhook-server";
@@ -307,7 +309,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			// page/asset loads (the sign-in screen must render). The verified
 			// identity rides RouteContext and the WS upgrade data, where it
 			// overrides any client-claimed user name.
-			let authUser: { login: string; name: string } | null = null;
+			const hostedLoopback =
+				!isLocalProfile() && isLoopbackHostname(url.hostname);
+			let authUser: WebIdentity | null = null;
 			if (isLocalProfile()) {
 				const localAuthKind = localAuthRequestKind(path, req.method);
 				if (localAuthKind) {
@@ -326,6 +330,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			}
 			if (!isLocalProfile() && webAuthRequired()) {
 				authUser = resolveWebAuth(req);
+				// Server-local CDP/CLI traffic has its own machine principal. A
+				// teammate's cookie must never let automation act as that person.
+				if (hostedLoopback && authUser?.automation !== true) authUser = null;
 				// GET /api/health stays open: it's the liveness signal for
 				// deploy.sh's post-restart poll, monitors, and the client's
 				// bootId-change detection — all pre-auth by nature.
@@ -412,11 +419,19 @@ const server: import("bun").Server<WSClientData> = hotServe({
 						cloudProxy:
 							!isLocalProfile() &&
 							req.headers.get("x-opensession-cloud-proxy") === "1",
+						// Headful/headless CDP browsers used by agents open the hosted app
+						// through loopback and can leave inspection tabs alive for days. They
+						// may subscribe to transcripts, but are never a human looking at the
+						// session. Local-profile clients are deliberately exempt: loopback is
+						// their real user-facing transport.
+						away: hostedLoopback || authUser?.automation === true,
 						// Internal presence provenance only: when a face is reported on a
 						// session its owner never opened, the watch needs to be traceable to
 						// web / native / TUI / a local-profile proxy without logging tokens.
 						...({
 							presenceClient: req.headers.get("user-agent") || "unknown",
+							presenceSuppressed:
+								hostedLoopback || authUser?.automation === true,
 						} as Record<string, unknown>),
 					},
 				});
@@ -974,7 +989,10 @@ if (!g.__opensessionBooted) {
 	// instances skip it: a differently-configured dev boot must never
 	// re-decide the migration over its (or worse, shared) session files.
 	try {
-		if (!devInstance) migrateSessionsToGithubUser();
+		if (!devInstance) {
+			ensureAutomationWebSession();
+			migrateSessionsToGithubUser();
+		}
 	} catch (e) {
 		console.error("[web-auth] session migration failed:", e);
 	}

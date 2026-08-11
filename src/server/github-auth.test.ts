@@ -7,7 +7,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -21,6 +21,7 @@ import {
   validateGithubTokenLogin,
 } from "./github-auth";
 import {
+	ensureAutomationWebSession,
   keypadBearerAuthorized,
   resolveWebAuth,
   teamMemberForLogin,
@@ -230,6 +231,43 @@ describe("token lookups + runner env", () => {
 });
 
 describe("web sign-in resolution", () => {
+	test("local automation gets a distinct machine identity, ordered before humans", () => {
+		enableFeature();
+		const now = Date.now();
+		writeFileSync(
+			process.env.OPENSESSION_WEB_SESSIONS_STORE!,
+			JSON.stringify({
+				sessions: [
+					{
+						token: "human-token",
+						login: "alice",
+						name: "Alice Example",
+						createdAt: now,
+						lastSeenAt: now,
+					},
+				],
+			}),
+		);
+		const machine = ensureAutomationWebSession();
+		expect(machine?.token).toBeString();
+		expect(
+			resolveWebAuth(
+				new Request("http://x/", {
+					headers: { authorization: `Bearer ${machine!.token}` },
+				}),
+			),
+		).toEqual({
+			login: "opensession-automation",
+			name: "Automation",
+			automation: true,
+		});
+		const stored = JSON.parse(
+			readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
+		);
+		expect(stored.sessions[0].kind).toBe("automation");
+		expect(stored.sessions[1].login).toBe("alice");
+	});
+
   test("team gate: only configured github logins may sign in", () => {
     expect(teamMemberForLogin("alice")).toBeNull();
     enableFeature();

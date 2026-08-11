@@ -506,11 +506,13 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// back). The watch stays put — the transcript must keep streaming so
 				// unread counts and notifications still land — but an away socket
 				// stops showing its owner's face to everyone else.
-				setClientAway(ws, msg.away === true);
+				const presenceSuppressed =
+					(ws.data as any).presenceSuppressed === true;
+				setClientAway(ws, presenceSuppressed || msg.away === true);
 				// Coming back to a session whose turn finished while everyone was
 				// away → drop in an away-summary system chip (recap.ts).
 				const returnedTo = ws.data?.watchingSessionId;
-				if (msg.away !== true && returnedTo)
+				if (!presenceSuppressed && msg.away !== true && returnedTo)
 					maybeRecapOnReturn(returnedTo, ws.data?.user || undefined);
 				break;
 			}
@@ -546,7 +548,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// Opening a session whose last turn finished with nobody watching →
 				// drop in an away-summary system chip (recap.ts). Fire-and-forget;
 				// the recap arrives through the transcript bus like any append.
-				maybeRecapOnReturn(sessionId, data.user || undefined);
+				if ((data as any).presenceSuppressed !== true)
+					maybeRecapOnReturn(sessionId, data.user || undefined);
 
 				// Transcript v2 (flag + supportsSeq gated): eligible watches are
 				// served from the owned store + bus with seq cursors — no mirror

@@ -28,6 +28,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { acquireCdpBrowser, closeCdpTarget, releaseCdpBrowser } from "./lib/cdp-browser";
+import { localAutomationToken } from "./lib/local-auth";
 
 const ROOT = join(import.meta.dir, "..");
 const SHOTS = join(ROOT, ".css-shots");
@@ -115,9 +116,7 @@ const send = (method: string, params: any = {}) => {
 	return new Promise<any>((res) => pending.set(i, res));
 };
 
-const token = JSON.parse(
-	readFileSync(`${process.env.HOME}/.opensession-web-sessions.json`, "utf8"),
-).sessions[0].token;
+const token = localAutomationToken();
 
 await send("Page.enable");
 await send("Network.enable");
@@ -125,7 +124,13 @@ await send("Runtime.enable");
 await send("Emulation.setEmulatedMedia", {
 	features: [{ name: "prefers-reduced-motion", value: "reduce" }],
 });
-await send("Network.setCookie", { name: "opensession_auth", value: token, url: APP, path: "/" });
+if (token)
+	await send("Network.setCookie", {
+		name: "opensession_auth",
+		value: token,
+		url: APP,
+		path: "/",
+	});
 await send("Page.addScriptToEvaluateOnNewDocument", {
 	source: `
     try { localStorage.setItem('opensession-theme', window.__theme); } catch (e) {}

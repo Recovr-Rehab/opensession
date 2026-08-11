@@ -16,9 +16,9 @@
  * even if it completed the OAuth flow (its token is also discarded).
  *
  * Sessions: ~/.opensession-web-sessions.json (0600), sliding 90-day expiry,
- * loaded into a globalThis map so hot reloads keep everyone signed in.
- * Non-browser callers (CDP recipes, curl) authenticate with
- * `Authorization: Bearer <token>` using a token from that file.
+ * loaded into a globalThis map so hot reloads keep everyone signed in. The
+ * same store carries one explicitly-labelled Automation identity for local
+ * CDP/CLI work; machine callers must never borrow a teammate's session.
  *
  * No `Secure` cookie attribute: TLS terminates at Caddy (the app itself
  * serves plain HTTP on 127.0.0.1, which is also how headless-Chrome test
@@ -53,11 +53,14 @@ export interface WebSession {
   name: string;
   createdAt: number;
   lastSeenAt: number;
+  /** Omitted for human GitHub sessions; machine auth is explicit and auditable. */
+  kind?: "automation";
 }
 
 export interface WebIdentity {
   login: string;
   name: string;
+  automation?: boolean;
 }
 
 const g = globalThis as any;
@@ -82,7 +85,12 @@ function persist(): void {
   for (const [token, s] of map) {
     if (now - s.lastSeenAt > TTL_MS) map.delete(token);
   }
-  writeJsonAtomic(sessionsPath(), { sessions: [...map.values()] });
+  // Keep the machine identity first as a safety net for old local recipes that
+  // naively read sessions[0]. New code selects kind=automation explicitly.
+  const ordered = [...map.values()].sort(
+    (a, b) => Number(b.kind === "automation") - Number(a.kind === "automation"),
+  );
+  writeJsonAtomic(sessionsPath(), { sessions: ordered });
   try {
     chmodSync(sessionsPath(), 0o600);
   } catch {}
@@ -91,6 +99,41 @@ function persist(): void {
 /** Sign-in is required exactly when per-user GitHub auth is opted in. */
 export function webAuthRequired(): boolean {
   return !isLocalProfile() && githubUserAuthActive();
+}
+
+/**
+ * Ensure local tooling has a machine principal of its own.
+ *
+ * It deliberately lives in the existing 0600 session store so CDP scripts can
+ * read it without another secret-distribution mechanism. Unlike a human web
+ * session it has no team/GitHub identity, so per-user credentials fail closed
+ * and attribution says Automation. Hosted loopback requests enforce this kind
+ * in opensession.ts; possessing a human cookie is not enough there.
+ */
+export function ensureAutomationWebSession(): { token: string } | null {
+  if (!webAuthRequired()) return null;
+  const map = sessions();
+  const now = Date.now();
+  for (const [token, session] of map) {
+    if (session.kind !== "automation") continue;
+    if (now - session.lastSeenAt <= TTL_MS) {
+      session.lastSeenAt = now;
+      persist();
+      return { token };
+    }
+    map.delete(token);
+  }
+  const token = randomBytes(32).toString("hex");
+  map.set(token, {
+    token,
+    login: "opensession-automation",
+    name: "Automation",
+    createdAt: now,
+    lastSeenAt: now,
+    kind: "automation",
+  });
+  persist();
+  return { token };
 }
 
 /** Route-scoped machine auth for the headless macropad bridge. */
@@ -171,7 +214,11 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
     s.lastSeenAt = now;
     persist();
   }
-  return { login: s.login, name: s.name };
+  return {
+    login: s.login,
+    name: s.name,
+    ...(s.kind === "automation" ? { automation: true } : {}),
+  };
 }
 
 export function webAuthSetCookie(token: string): string {
