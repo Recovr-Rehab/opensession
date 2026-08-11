@@ -55,13 +55,19 @@ import { Tooltip } from "../ui/tooltip";
 import { ContextMenu } from "../ui/menu";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
-import { insideOpenFence, isSendCombo, sendKeyLabel } from "../lib/send-key";
+import {
+  insideOpenFence,
+  isSendCombo,
+  MOD_ENTER_GLYPH,
+  sendKeyLabel,
+} from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { VoiceInput } from "./VoiceInput";
 import {
   getBusySendPrefs,
   onBusySendChanged,
   setBusySendPref,
+  type BusySendPref,
 } from "../lib/busy-send-pref";
 import { getVimModePref, onVimModeChanged } from "../lib/vim-pref";
 import { useVimMode } from "../hooks/useVimMode";
@@ -465,6 +471,18 @@ export function Composer({
   const modifierPicks = sendKey === "enter";
   const steerSend =
     !!busy && (modifierPicks && sendModifierHeld ? modSteer : entSteer);
+  // Which keys land on each busy action right now, for the send button's menu:
+  // the send key runs the "enter" pref, and — when the modifier is free to pick
+  // (i.e. the send key is plain Enter) — ⌘/Ctrl+Enter runs the "mod" pref. Both
+  // land on one row when the two prefs agree.
+  const busySendKeys = (pref: BusySendPref) =>
+    [
+      busySendPrefs.enter === pref &&
+        (sendKey === "enter" ? "↩" : MOD_ENTER_GLYPH),
+      modifierPicks && busySendPrefs.mod === pref && MOD_ENTER_GLYPH,
+    ]
+      .filter(Boolean)
+      .join("  ");
 
   // Which toolbar popover is open ("add" menu or "goal" editor). Closed on an
   // outside click or after an action.
@@ -1208,6 +1226,11 @@ export function Composer({
                   >
                     <IconReturn size={20} />
                     <span className="grow">Queue after run finishes</span>
+                    {busySendKeys("queue") && (
+                      <ContextMenu.Shortcut>
+                        {busySendKeys("queue")}
+                      </ContextMenu.Shortcut>
+                    )}
                     {busySendPrefs.enter === "queue" && (
                       <IconCheck size={16} className="text-accent" />
                     )}
@@ -1217,6 +1240,11 @@ export function Composer({
                   >
                     <IconArrowUp size={20} />
                     <span className="grow">Steer into running turn</span>
+                    {busySendKeys("steer") && (
+                      <ContextMenu.Shortcut>
+                        {busySendKeys("steer")}
+                      </ContextMenu.Shortcut>
+                    )}
                     {busySendPrefs.enter === "steer" && (
                       <IconCheck size={16} className="text-accent" />
                     )}

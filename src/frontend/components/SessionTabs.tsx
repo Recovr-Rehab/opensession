@@ -149,11 +149,6 @@ type TabMember =
 	| { kind: "session"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
 
-/** Right-aligned keyboard-shortcut hint on a menu row. */
-function MenuHint({ label }: { label: string }) {
-	return <span className="shrink-0 pl-4 text-label text-faint">{label}</span>;
-}
-
 export function SessionTabs({
 	tabs,
 	archived,
@@ -657,7 +652,9 @@ export function SessionTabs({
 										<ContextMenu.Separator />
 										<ContextMenu.Item onClick={() => void copySessionTranscript(session, "concise", onToast)}>
 											<span className="grow">Copy concise transcript</span>
-											{key === activeId && <MenuHint label={isApple ? "⌘ ⌥ C" : "Ctrl+Alt+C"} />}
+											{key === activeId && (
+												<ContextMenu.Shortcut>{isApple ? "⌘ ⌥ C" : "Ctrl+Alt+C"}</ContextMenu.Shortcut>
+											)}
 										</ContextMenu.Item>
 										<ContextMenu.Item onClick={() => void copySessionTranscript(session, "full", onToast)}>
 											<span className="grow">Copy full transcript</span>
@@ -693,7 +690,9 @@ export function SessionTabs({
 										<ContextMenu.Separator />
 										<ContextMenu.Item onClick={() => onClose(session)}>
 											<span className="grow">Close tab</span>
-											{key === activeId && <MenuHint label={isApple ? "⌘ W" : "Ctrl+W"} />}
+											{key === activeId && (
+												<ContextMenu.Shortcut>{isApple ? "⌘ W" : "Ctrl+W"}</ContextMenu.Shortcut>
+											)}
 										</ContextMenu.Item>
 									</ContextMenu.Popup>
 								</ContextMenu.Root>

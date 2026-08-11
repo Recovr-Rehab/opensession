@@ -142,6 +142,22 @@ function CheckboxItem({
 	);
 }
 
+/** Right-aligned keyboard-shortcut hint on a menu row ("⌘ W"). Place it after
+ * the row's `grow` label so it pins to the trailing edge. */
+function Shortcut({
+	className,
+	children,
+}: {
+	className?: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<span className={cn("shrink-0 pl-4 text-label text-faint", className)}>
+			{children}
+		</span>
+	);
+}
+
 function Separator({ className }: { className?: string }) {
 	return <BaseMenu.Separator className={cn("-mx-1.5 my-1.5 h-px bg-line", className)} />;
 }
@@ -167,6 +183,7 @@ export const ContextMenu = {
 	Popup: ContextPopup,
 	Item,
 	Separator,
+	Shortcut,
 };
 
 export const Menu = {
@@ -175,6 +192,7 @@ export const Menu = {
 	Popup,
 	Item,
 	Separator,
+	Shortcut,
 	Group: BaseMenu.Group,
 	GroupLabel,
 	SubmenuRoot: BaseMenu.SubmenuRoot,
