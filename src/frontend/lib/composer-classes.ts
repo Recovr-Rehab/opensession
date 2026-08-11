@@ -24,7 +24,8 @@
    `body.kb-open .viewer-input:has(.composer:not(.composer-min))`). The
    declarations below are what that rule used to paint. */
 export const composerBox =
-	"relative border border-[color:var(--composer-border)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)] transition-[border-color,box-shadow]";
+	"relative border border-[color:var(--composer-border)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] " +
+	"desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft";
 
 /** Resting/expanded box. `--composer-inset-left` is read by the "+" menu to
  *  line its left edge up with the composer's outer edge rather than the
@@ -65,7 +66,7 @@ export const composerTextareaPaddingMinimized = "px-1 py-0";
 
 /* ── The toolbar row ──────────────────────────────────────────────
    The row under the draft: "+", the mode marker, a spacer, the model pill,
-   the usage meter, the mic and the send disc.
+   the mic and the send disc.
 
    The stylesheet pinned every DIRECT child at `flex-shrink: 0` from here, so
    that when the row ran out of room the model/effort pill gave way (its label
