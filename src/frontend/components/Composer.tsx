@@ -16,6 +16,7 @@ import {
   IconPaperclip,
   IconAtSign,
   IconCrosshair,
+  IconCheck,
   IconEye,
   IconStopSquare,
 } from "./icons";
@@ -49,12 +50,17 @@ import {
 } from "../lib/palette-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
+import { ContextMenu } from "../ui/menu";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import { insideOpenFence, isSendCombo, sendKeyLabel } from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { VoiceInput } from "./VoiceInput";
-import { getBusySendPrefs, onBusySendChanged } from "../lib/busy-send-pref";
+import {
+  getBusySendPrefs,
+  onBusySendChanged,
+  setBusySendPref,
+} from "../lib/busy-send-pref";
 import { getVimModePref, onVimModeChanged } from "../lib/vim-pref";
 import { useVimMode } from "../hooks/useVimMode";
 import { useIsPhone } from "../hooks/useIsPhone";
@@ -1128,47 +1134,76 @@ export function Composer({
                 minimized && "order-5",
               )}
             >
-              <Tooltip
-                label={
-                  steerSend
-                    ? "Steer message"
-                    : sendTitle ||
-                      (busy
-                        ? "Queue message"
-                        : `Send (${sendKeyLabel(sendKey)})`)
-                }
-              >
-                <button
-                  className={cn(
-                    composerSend,
+              <ContextMenu.Root>
+                <Tooltip
+                  label={
                     steerSend
-                      ? composerSendSteer
-                      : busy
-                        ? composerSendQueue
-                        : composerSendDefault,
-                    minimized && composerSendMinimizedFill,
-                  )}
-                  {...tapProps(() =>
-                    fireSend(onSend, steerSend ? { steer: true } : undefined),
-                  )}
-                  disabled={disabled || isSendDisabled}
-                  aria-label={
-                    steerSend
-                      ? "Steer into the running turn"
-                      : busy
-                        ? "Queue until the current turn finishes"
-                        : "Send message"
+                      ? "Steer message"
+                      : sendTitle ||
+                        (busy
+                          ? "Queue message"
+                          : `Send (${sendKeyLabel(sendKey)})`)
                   }
                 >
-                  {/* The arrow comes down with the disc in the resting pill — a
-                      24px glyph all but touches the smaller plate's edge. */}
-                  {busy && !steerSend ? (
-                    <IconReturn size={minimized ? 20 : 24} />
-                  ) : (
-                    <IconArrowUp size={minimized ? 20 : 24} />
-                  )}
-                </button>
-              </Tooltip>
+                  <ContextMenu.Trigger
+                    render={
+                      <button
+                        className={cn(
+                          composerSend,
+                          steerSend
+                            ? composerSendSteer
+                            : busy
+                              ? composerSendQueue
+                              : composerSendDefault,
+                          minimized && composerSendMinimizedFill,
+                        )}
+                        {...tapProps(() =>
+                          fireSend(
+                            onSend,
+                            steerSend ? { steer: true } : undefined,
+                          ),
+                        )}
+                        disabled={disabled || isSendDisabled}
+                        aria-label={
+                          steerSend
+                            ? "Steer into the running turn"
+                            : busy
+                              ? "Queue until the current turn finishes"
+                              : "Send message"
+                        }
+                      />
+                    }
+                  >
+                    {/* The arrow comes down with the disc in the resting pill — a
+                        24px glyph all but touches the smaller plate's edge. */}
+                    {busy && !steerSend ? (
+                      <IconReturn size={minimized ? 20 : 24} />
+                    ) : (
+                      <IconArrowUp size={minimized ? 20 : 24} />
+                    )}
+                  </ContextMenu.Trigger>
+                </Tooltip>
+                <ContextMenu.Popup className="min-w-[230px]">
+                  <ContextMenu.Item
+                    onClick={() => setBusySendPref("enter", "queue")}
+                  >
+                    <IconReturn size={20} />
+                    <span className="grow">Queue after run finishes</span>
+                    {busySendPrefs.enter === "queue" && (
+                      <IconCheck size={16} className="text-accent" />
+                    )}
+                  </ContextMenu.Item>
+                  <ContextMenu.Item
+                    onClick={() => setBusySendPref("enter", "steer")}
+                  >
+                    <IconArrowUp size={20} />
+                    <span className="grow">Steer into running turn</span>
+                    {busySendPrefs.enter === "steer" && (
+                      <IconCheck size={16} className="text-accent" />
+                    )}
+                  </ContextMenu.Item>
+                </ContextMenu.Popup>
+              </ContextMenu.Root>
             </motion.div>
           )}
         </div>
