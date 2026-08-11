@@ -30,6 +30,7 @@
 import { chmodSync, existsSync, readFileSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { listCodexAccounts } from "./codex-accounts";
+import { withCodexAuthLock } from "./codex-auth-lock";
 
 // The Codex CLI's public OAuth client id — the same family the CLI refreshes.
 const OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -142,7 +143,9 @@ export async function refreshIdleCodexTokens(): Promise<void> {
       await existing;
       continue;
     }
-    const p = doRefresh(path, a.name).finally(() => inFlight.delete(path));
+    const p = withCodexAuthLock(a.value, () => doRefresh(path, a.name)).finally(() =>
+      inFlight.delete(path)
+    );
     inFlight.set(path, p);
     await p;
   }

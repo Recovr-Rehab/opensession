@@ -21,6 +21,7 @@ import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
 import { makeAskHandler } from "./src/server/asks";
 import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
+import { startCodexUsagePoller } from "./src/server/codex-accounts";
 import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, frontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
@@ -622,6 +623,8 @@ if (!g.__opensessionBooted) {
 
 	// Poll per-account Claude usage (drives account picking + the Connections UI)
 	startUsagePoller();
+	// Poll supported ChatGPT/Codex rate-limit windows per registered CODEX_HOME.
+	startCodexUsagePoller();
 
 	// DM account owners when pool credentials expire or break (account-health.ts)
 	startAccountHealthMonitor();

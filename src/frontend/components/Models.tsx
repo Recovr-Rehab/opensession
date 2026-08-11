@@ -83,6 +83,19 @@ interface CodexAccountInfo {
 	createdAt: string;
 	exhaustedUntil: string | null;
 	usable: boolean;
+	usage: {
+		fetchedAt: string;
+		buckets: {
+			id: string;
+			label?: string;
+			plan?: string;
+			primary: (UsageWindow & { windowDurationMins: number | null }) | null;
+			secondary: (UsageWindow & { windowDurationMins: number | null }) | null;
+			rateLimitReachedType?: string;
+		}[];
+		resetCreditsAvailable: number | null;
+		error?: string;
+	} | null;
 }
 
 /** The subscription half of Settings → Models: the Anthropic/OpenAI accounts
@@ -954,16 +967,90 @@ function ClaudeAccountsSection() {
 
 // ── Codex accounts ─────────────────────────────────────────────────────────
 
+function CodexStatusPill({ account }: { account: CodexAccountInfo }) {
+	if (account.exhaustedUntil)
+		return (
+			<StatusPill tone="red" title={`Sidelined until ${account.exhaustedUntil}`}>
+				Limit hit
+			</StatusPill>
+		);
+	if (account.usage?.error)
+		return (
+			<StatusPill tone="yellow" title={account.usage.error}>
+				Usage unknown
+			</StatusPill>
+		);
+	return <StatusPill tone="green">In rotation</StatusPill>;
+}
+
+function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
+	if (account.kind === "api_key")
+		return (
+			<div className="mt-1.5 text-meta text-faint">
+				Platform usage is billed at the organization level, not per API key.
+			</div>
+		);
+	if (!account.usage)
+		return <div className="mt-1.5 text-meta text-faint">Checking usage…</div>;
+	if (account.usage.error)
+		return <div className="mt-1.5 text-meta text-red">{account.usage.error}</div>;
+
+	const windows = account.usage.buckets.flatMap((bucket) =>
+		[bucket.primary, bucket.secondary].flatMap((window) =>
+			window ? [{ bucket, window }] : [],
+		),
+	);
+	const windowLabel = (minutes: number | null) => {
+		if (!minutes) return "Usage";
+		if (minutes % 10_080 === 0) return `${minutes / 10_080}w`;
+		if (minutes % 1_440 === 0) return `${minutes / 1_440}d`;
+		if (minutes % 60 === 0) return `${minutes / 60}h`;
+		return `${minutes}m`;
+	};
+	const multipleBuckets = account.usage.buckets.length > 1;
+	return (
+		<>
+			{windows.length > 0 && (
+				<MeterGroup>
+					{windows.map(({ bucket, window }, index) => {
+						const duration = windowLabel(window.windowDurationMins);
+						const bucketLabel = bucket.label || (bucket.id === "codex" ? "Codex" : bucket.id);
+						return (
+							<UsageBar
+								key={`${bucket.id}-${window.windowDurationMins ?? index}`}
+								label={multipleBuckets ? `${bucketLabel} · ${duration}` : duration}
+								window={window}
+							/>
+						);
+					})}
+				</MeterGroup>
+			)}
+			{account.usage.resetCreditsAvailable !== null &&
+				account.usage.resetCreditsAvailable > 0 && (
+					<div className="mt-1.5 text-meta text-faint">
+						{account.usage.resetCreditsAvailable} rate-limit reset
+						{account.usage.resetCreditsAvailable === 1 ? "" : "s"} available
+					</div>
+				)}
+		</>
+	);
+}
+
 function CodexAccountsSection() {
 	const [accounts, setAccounts] = useState<CodexAccountInfo[] | null>(null);
 	const [showAdd, setShowAdd] = useState(false);
+	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const load = useCallback(async () => {
+	const load = useCallback(async (forceUsage = false) => {
+		if (forceUsage) setRefreshing(true);
 		try {
-			const res = await fetch(`${BASE_PATH}/api/codex-accounts`);
+			const res = forceUsage
+				? await fetch(`${BASE_PATH}/api/codex-accounts/refresh`, { method: "POST" })
+				: await fetch(`${BASE_PATH}/api/codex-accounts`);
 			if (res.ok) setAccounts((await res.json()).accounts);
 		} catch {}
+		setRefreshing(false);
 	}, []);
 
 	useEffect(() => {
@@ -1006,9 +1093,19 @@ function CodexAccountsSection() {
 		<>
 			<SettingsGroupLabel
 				actions={
-					<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>
-						Add account
-					</Button>
+					<>
+						<Button
+							size="sm"
+							icon={<IconHistory size={16} className={refreshing ? "animate-spin" : ""} />}
+							onClick={() => load(true)}
+							disabled={refreshing}
+						>
+							{refreshing ? "Checking…" : "Refresh usage"}
+						</Button>
+						<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>
+							Add account
+						</Button>
+					</>
 				}
 			>
 				Codex accounts
@@ -1046,19 +1143,17 @@ function CodexAccountsSection() {
 							<SettingRowText>
 								<div className="flex items-center gap-2 min-w-0">
 									<SettingRowTitle className="truncate">{a.name}</SettingRowTitle>
-									{a.exhaustedUntil ? (
-										<StatusPill tone="red" title={`Sidelined until ${a.exhaustedUntil}`}>
-											Limit hit
-										</StatusPill>
-									) : (
-										<StatusPill tone="green">In rotation</StatusPill>
-									)}
+									<CodexStatusPill account={a} />
 								</div>
 								<SettingRowDescription className="truncate">
 									{a.kind === "api_key" ? "API key" : "ChatGPT login"}
+									{a.usage?.buckets.find((bucket) => bucket.plan)?.plan
+										? ` · ${a.usage.buckets.find((bucket) => bucket.plan)!.plan}`
+										: ""}
 									{" · "}
 									{a.valueMasked}
 								</SettingRowDescription>
+								<CodexUsageMeters account={a} />
 							</SettingRowText>
 							<SettingRowControl className="flex items-center gap-1.5">
 								<select
@@ -1108,7 +1203,8 @@ function CodexAccountsSection() {
 			<SettingsHint>
 				The pool for GPT/Codex session runs — runs rotate to the next account when one hits its
 				usage limit. A personal account is used first by its owner's runs and never by anyone
-				else's; automations only use the shared pool.
+				else's; automations only use the shared pool. ChatGPT-plan usage comes from Codex's
+				account rate-limit view; API-key spend remains organization-level.
 			</SettingsHint>
 		</>
 	);

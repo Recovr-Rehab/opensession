@@ -11,9 +11,9 @@
  *    ~/.codex stays untouched unless no accounts are configured, in which
  *    case runs fall back to it.
  *
- * There's no public usage endpoint for Codex plans, so unlike the Claude pool
- * there's no utilization polling — rotation is least-recently-picked, with
- * accounts sidelined for a cool-off when a run hits a rate/usage limit.
+ * ChatGPT-plan accounts expose supported rate-limit data through Codex's
+ * app-server account surface. codex-usage.ts polls that per CODEX_HOME for the
+ * settings UI; rotation still uses observed run failures as its hard gate.
  */
 
 import { homeDir } from "./paths";
@@ -21,6 +21,13 @@ import { chmodSync, existsSync, readFileSync, readdirSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 import { userMatchesAny } from "./shared/user-mappings";
+import {
+  clearCodexUsage,
+  codexUsageFor,
+  refreshCodexUsage,
+  startCodexUsagePolling,
+  type CodexAccountUsage,
+} from "./codex-usage";
 
 let HOME = homeDir();
 let STORE_PATH = stateDir("codex-accounts.json");
@@ -67,6 +74,8 @@ export interface CodexAccountPublic {
   createdAt: string;
   exhaustedUntil: string | null;
   usable: boolean;
+  /** ChatGPT-plan rate-limit windows. API-key accounts have no per-key view. */
+  usage: CodexAccountUsage | null;
 }
 
 const exhaustedUntil = new Map<string, number>();
@@ -183,6 +192,7 @@ function toPublic(a: CodexAccount): CodexAccountPublic {
     createdAt: a.createdAt,
     exhaustedUntil: until !== undefined && until > Date.now() ? new Date(until).toISOString() : null,
     usable: !isExhausted(a.id),
+    usage: a.kind === "home" ? codexUsageFor(a.id) : null,
   };
 }
 
@@ -258,6 +268,7 @@ export function removeCodexAccount(id: string): boolean {
   writeStore(next);
   exhaustedUntil.delete(id);
   lastPickedAt.delete(id);
+  clearCodexUsage(id);
   return true;
 }
 
@@ -322,6 +333,16 @@ export function pickCodexAccount(
 /** All configured accounts (with secrets — server-side use only). */
 export function listCodexAccounts(): CodexAccount[] {
   return readStore();
+}
+
+/** Refresh every ChatGPT-plan account's supported app-server rate-limit view. */
+export async function refreshAllCodexUsage(): Promise<void> {
+  await refreshCodexUsage(readStore());
+}
+
+/** Start the hourly usage snapshot poller (boot-wired beside Claude usage). */
+export function startCodexUsagePoller(): void {
+  startCodexUsagePolling(readStore);
 }
 
 /**

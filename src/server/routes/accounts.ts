@@ -8,7 +8,13 @@
 
 import type { RouteContext } from "./context";
 import { addAccount, listAccountsPublic, refreshAllUsage, removeAccount, setAccountOwner } from "../claude-accounts";
-import { addCodexAccount, listCodexAccountsPublic, removeCodexAccount, setCodexAccountOwner } from "../codex-accounts";
+import {
+	addCodexAccount,
+	listCodexAccountsPublic,
+	refreshAllCodexUsage,
+	removeCodexAccount,
+	setCodexAccountOwner,
+} from "../codex-accounts";
 import { cancelDeviceLogin, getDeviceLogin, startDeviceLogin } from "../codex-device-login";
 import {
 	cancelCodexOauthLogin,
@@ -114,6 +120,14 @@ export async function handleAccountsRoutes(
 
 	// ── Codex (OpenAI) account pool ──
 	if (path === "/api/codex-accounts" && req.method === "GET") {
+		return Response.json({ accounts: listCodexAccountsPublic() });
+	}
+
+	if (
+		path === "/api/codex-accounts/refresh" &&
+		req.method === "POST"
+	) {
+		await refreshAllCodexUsage();
 		return Response.json({ accounts: listCodexAccountsPublic() });
 	}
 
