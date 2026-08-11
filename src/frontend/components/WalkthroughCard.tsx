@@ -89,6 +89,19 @@ export function WalkthroughCard({
 	const open = (key: string, target: HTMLElement) =>
 		openLightbox(gallery.items, gallery.at.get(key) ?? 0, target);
 
+	// How big a folded tile gets, set by how many there are. A thumbnail of a UI
+	// is a picture of small things, so a tile only answers "what changed" once
+	// it is big enough to read — and a card with one or two pieces of media has
+	// the whole card to give them. There it stops being a strip at all: the
+	// tiles divide the card's width, which is both the largest they can be and
+	// the only size that never cuts the second one off. Past that the card has
+	// more than it can show at once, so the tiles go back to a scrolling strip
+	// at a fixed size, stepping down as the count goes up but staying wider than
+	// the 160/208 they used to be. The phone keeps the small tile throughout —
+	// the card is narrow enough there that a wide one shows a picture and a half.
+	const fill = gallery.items.length <= 2;
+	const tile = gallery.items.length <= 4 ? "w-40 desktop:w-64" : "w-40 desktop:w-56";
+
 	return (
 		<div
 			className={cn(
@@ -171,18 +184,25 @@ export function WalkthroughCard({
 			)}
 
 			{!expanded && gallery.items.length > 0 && (
-				// The folded card's media: one fixed tile size for the demo and every
-				// still. Flexing each comparison group independently made an unpaired
-				// image twice as wide as either side of a pair. Tight within a pair and
+				// The folded card's media. One or two pieces of it share the card's
+				// width and there is nothing to scroll; more than that keeps the
+				// scrolling strip, where the demo and every still are one size —
+				// flexing each comparison group independently made an unpaired image
+				// twice as wide as either side of a pair. Tight within a pair and
 				// loose between them keeps the relationship without changing scale.
-				// The strip runs to the
-				// card's edges rather than stopping at its padding — a tile cut off
-				// by the padding looks like a rendering bug, one that runs under the
-				// edge reads as "there is more this way".
-				<div className="-mx-4 mt-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-					<div className="flex w-max items-start gap-4">
+				// The strip runs to the card's edges rather than stopping at its
+				// padding — a tile cut off by the padding looks like a rendering bug,
+				// one that runs under the edge reads as "there is more this way".
+				<div
+					className={cn(
+						"mt-2",
+						!fill &&
+							"-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+					)}
+				>
+					<div className={cn("flex items-start gap-4", !fill && "w-max")}>
 						{walkthrough.video && (
-							<figure className="m-0 w-40 shrink-0 desktop:w-52">
+							<figure className={cn("m-0", fill ? "min-w-0 flex-1" : cn("shrink-0", tile))}>
 								<figcaption className="mb-1 inline-flex rounded-full bg-blue-soft px-2 py-0.5 text-[11px] font-semibold leading-4 text-blue">
 									Demo
 								</figcaption>
@@ -207,7 +227,7 @@ export function WalkthroughCard({
 						)}
 						{(walkthrough.shots || []).map((shot, i) => (
 							<div
-								className="flex shrink-0 gap-1"
+								className={cn("flex gap-1", fill ? "min-w-0 flex-1" : "shrink-0")}
 								key={i}
 							>
 								{(["before", "after"] as const).map(
@@ -220,9 +240,11 @@ export function WalkthroughCard({
 												// 160px tiles of the same screen are hard to
 												// tell apart — which makes the folded strip
 												// decorative rather than the answer to "what
-												// changed". The phone keeps the smaller tile, so
-												// two of them still fit across the card.
-												className="m-0 w-40 shrink-0 desktop:w-52"
+												// changed". How wide is `fill`/`tile`, above.
+												className={cn(
+													"m-0",
+													fill ? "min-w-0 flex-1" : cn("shrink-0", tile),
+												)}
 												key={side}
 											>
 												<figcaption
@@ -237,7 +259,10 @@ export function WalkthroughCard({
 												</figcaption>
 												<button
 													type="button"
-													className="block aspect-[16/10] max-h-[132px] w-full cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+													// No height cap: the tile's width is what
+													// varies, and a ceiling on top of the ratio
+													// would silently letterbox the wide sizes.
+													className="block aspect-[16/10] w-full cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 													onClick={(e) =>
 														open(`${i}:${side}`, e.currentTarget)
 													}
