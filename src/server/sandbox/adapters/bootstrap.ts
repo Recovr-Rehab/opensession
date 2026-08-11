@@ -1192,16 +1192,31 @@ export async function runRemoteLifecycleHook(
   const key = remoteLifecycleKey(scopeKey || cwd) || "workspace";
   const log = `${REMOTE_LIFECYCLE_DIR}/${key}-${hook}.log`;
   const stamp = `${REMOTE_LIFECYCLE_DIR}/${key}-setup.done`;
-  const probe = await driver.exec(
-    hook === "setup"
-      ? `if [ -f ${shellQuoteWord(stamp)} ]; then echo stamped; elif [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`
-      : `if [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`,
-  );
+  const inspectCommand = hook === "setup"
+    ? `if [ -f ${shellQuoteWord(stamp)} ]; then echo stamped; elif [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`
+    : `if [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`;
+  const readProbe = async (command: string) => {
+    let result = await driver.exec(command);
+    const detail = `${result.stderr} ${result.stdout}`;
+    if (
+      result.exitCode !== 0 &&
+      /(?:operation )?timed? ?out|timeout|temporar|connection|socket|transport/i.test(detail)
+    ) {
+      // Provider command transports can transiently stall immediately after a
+      // snapshot wake. These probes are read-only and therefore safe to retry;
+      // the lifecycle hook itself is deliberately never retried here.
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      await driver.ensureStarted();
+      result = await driver.exec(command);
+    }
+    return result;
+  };
+  const probe = await readProbe(inspectCommand);
   if (probe.exitCode !== 0)
     throw new Error(`could not inspect .agents/${hook}: ${probe.stderr.trim()}`);
   const state = probe.stdout.trim();
   if (state === "stamped" || state === "absent") return { ran: false, log };
-  const executable = await driver.exec(`test -x ${shellQuoteWord(script)}`);
+  const executable = await readProbe(`test -x ${shellQuoteWord(script)}`);
   if (executable.exitCode !== 0)
     throw new Error(`.agents/${hook} exists but is not executable`);
   const command =

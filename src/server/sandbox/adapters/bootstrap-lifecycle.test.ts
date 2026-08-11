@@ -57,6 +57,18 @@ describe("remote repo lifecycle", () => {
 		expect(d.commands).toHaveLength(1);
 	});
 
+	test("retries a transient read-only lifecycle probe", async () => {
+		const d = driver([
+			{ exitCode: 1, stderr: "The operation timed out." },
+			{ exitCode: 0, stdout: "stamped\n" },
+		]);
+		expect(
+			await runRemoteLifecycleHook(d.value, "/work/repo", "setup", "fresh"),
+		).toMatchObject({ ran: false });
+		expect(d.commands).toHaveLength(2);
+		expect(d.commands[1]!.command).toBe(d.commands[0]!.command);
+	});
+
 	test("runs executable setup once with a bounded log outside the repo", async () => {
 		const d = driver([
 			{ exitCode: 0, stdout: "present\n" },

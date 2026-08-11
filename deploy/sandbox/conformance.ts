@@ -1142,13 +1142,18 @@ async function auditBoxLeftovers(): Promise<void> {
       );
     let leftovers = listActive(((await res.json()) as any).boxes);
     if (leftovers.length) {
-      // Archival is asynchronous — give in-flight stops a moment.
-      await new Promise((r) => setTimeout(r, 15_000));
-      const again = await fetch(`${boxApiUrl}/boxes?limit=100`, {
-        headers: { Authorization: `Bearer ${boxKey}` },
-        signal: AbortSignal.timeout(30_000),
-      });
-      leftovers = again.ok ? listActive(((await again.json()) as any).boxes) : leftovers;
+      // Archival is asynchronous and routinely takes 30-90s for a prepared
+      // repo disk. Poll the provider state instead of misreporting a leak
+      // while destroy()'s stop is still completing.
+      const deadline = Date.now() + 90_000;
+      while (leftovers.length && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 5_000));
+        const again = await fetch(`${boxApiUrl}/boxes?limit=100`, {
+          headers: { Authorization: `Bearer ${boxKey}` },
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (again.ok) leftovers = listActive(((await again.json()) as any).boxes);
+      }
     }
     ok(
       "no active conformance boxes left behind",
