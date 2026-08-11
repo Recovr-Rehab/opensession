@@ -464,19 +464,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// this listener never has to know which family it belongs to (band,
 		// lane, repo, status) — or survive the class names being restyled.
 		const selector = "[data-sticky-head]";
-		// How far down the pinned stack currently reaches — 0, one band row, or
-		// a band plus one or two nested lanes. The vibrancy chrome dissolves
-		// rows over exactly this depth so a pinned heading has nothing left to
-		// hide (see base.css); its floor is that stylesheet's
-		// `--sidebar-edge-fade`, which keeps a soft top edge when nothing is
-		// pinned at all.
-		const EDGE_FADE = 16;
-		let published = -1;
 
 		const update = () => {
 			frame = 0;
 			const rootTop = root.getBoundingClientRect().top;
-			let depth = 0;
 			root.querySelectorAll<HTMLElement>(selector).forEach((header) => {
 				const style = getComputedStyle(header);
 				const parent = header.parentElement;
@@ -499,16 +490,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					rect.top - parent.getBoundingClientRect().top > 1.5;
 				const stuck = pinned && displaced;
 				header.classList.toggle("is-stuck", stuck);
-				if (stuck) depth = Math.max(depth, rect.bottom - rootTop);
 			});
-			// Only on change: every row's dissolve timeline reads this, so
-			// writing it each frame would restyle the whole list on every
-			// scroll frame to say the same thing.
-			const next = Math.max(Math.round(depth), EDGE_FADE);
-			if (next !== published) {
-				published = next;
-				root.style.setProperty("--pin-depth", `${next}px`);
-			}
 		};
 		const schedule = () => {
 			if (!frame) frame = requestAnimationFrame(update);
@@ -3638,11 +3620,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	return (
 		<div
 			className={cn(
-				// `sidebar-scroll` stays on the markup as a hook: base.css's
-				// vibrancy chrome (html.material-backdrop) dissolves this box's
-				// top edge into the chrome row above it, which it can only do
-				// with a mask on the scrollport itself.
-				"sidebar-scroll flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+				"flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
 				// The whole sidebar scrolls as one on phones, so the tool cards (and
 				// the Workspaces header) scroll away with the list instead of staying
 				// pinned above a separately-scrolling list. The top bar floats over

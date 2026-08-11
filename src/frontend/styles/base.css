@@ -482,18 +482,6 @@ html[data-theme="light"] {
 		animation-duration: 1.6s !important;
 		animation-iteration-count: infinite !important;
 	}
-
-	/* The vibrancy sidebar's row dissolve is not motion: it is scroll-linked
-	   opacity, and it advances only as far as the reader scrolls. It has to be
-	   exempted rather than left to the blanket, which does not merely still it
-	   — a scroll-driven animation given a 0.01ms duration finishes instantly
-	   and parks every row at the `to` step, i.e. invisible. `auto` is the
-	   value that hands the range back to the timeline. */
-	html.material-backdrop
-		.sidebar-scroll
-		:is(a, button):not([data-sticky-head] *):not(:is(a, button) *) {
-		animation-duration: auto !important;
-	}
 	.msg-streaming .msg-body-assistant::after {
 		animation-duration: 1s !important;
 		animation-iteration-count: infinite !important;
@@ -859,58 +847,14 @@ html.wco .app {
 	}
 }
 
-/* A pinned sidebar heading has rows sliding under it, so something has to hide
-   them — and on the vibrancy surface no full-width backing can. Opaque, it is a
-   plate: material above it, material below it, and none of the wallpaper in
-   between, which reads as a dark slab over a bright desktop picture and a light
-   one over a dark picture. Translucent, the rows read straight through it.
-   There is no third alpha, because the alpha that hides a row is the alpha that
-   stops the wallpaper — and no filter escapes that either. Blur leaves the band
-   BRIGHTER than its surroundings (it spreads the rows' bright ink across the
-   whole strip), and `backdrop-filter: opacity(0)` is a no-op in Chromium:
-   erasing the backdrop and painting nothing back still leaves the rows at full
-   strength, measured.
-
-   So the rows get out of the way instead of being covered. Each one dissolves
-   as it slides under the pinned stack, which leaves the heading nothing to hide
-   and no reason to paint anything — the material runs through the band
-   unbroken. It doubles as the soft top edge, so the list dissolves into the
-   chrome row rather than being cut off by it.
-
-   `--pin-depth` is how far the pinned stack currently reaches (a band row, plus
-   a lane and a nested lane as they stack). Sidebar.tsx publishes it from the
-   same pass that toggles `is-stuck`, and only when it changes, because every
-   row's timeline reads it. A fixed depth cannot stand in for it: too shallow
-   and rows survive under the deeper tiers, too deep and a lone band heading
-   floats above a hole where the list should resume.
-
-   Scoped away from reduced transparency, where the surfaces are opaque anyway
-   and a heading's ordinary backing gives nothing away. */
-@media (min-width: 721px) and (prefers-reduced-transparency: no-preference) {
+/* Pinned headings need an opaque backing so rows cannot show through them.
+   Keep this material opaque rather than animating row opacity: `view()`
+   timelines can resolve against nested overflow containers and hide rows. */
+@media (min-width: 721px) {
 	html.material-backdrop {
-		--sidebar-edge-fade: 16px;
+		--sidebar-material: var(--bg-raised);
+		--sidebar-material-sheen: transparent;
 	}
-
-	/* Without scroll-driven animations there is nothing to clear the band, so
-	   fall back to not pinning at all and cut the top edge with a mask. */
-	html.material-backdrop [data-sticky-head] {
-		position: static;
-	}
-
-	html.material-backdrop .sidebar-scroll {
-		padding-top: var(--sidebar-edge-fade);
-		-webkit-mask-image: linear-gradient(
-			to bottom,
-			transparent 0,
-			#000 var(--sidebar-edge-fade)
-		);
-		mask-image: linear-gradient(
-			to bottom,
-			transparent 0,
-			#000 var(--sidebar-edge-fade)
-		);
-	}
-
 }
 /* Sidebar top row clears the traffic lights. env(titlebar-area-x) is the
    controls' right edge on macOS; it drops to 0 in fullscreen (lights hidden)
@@ -1693,18 +1637,6 @@ a.pr-ref:hover {
 	from {
 		opacity: 0;
 		transform: translateY(2px);
-	}
-}
-
-/* Drives a sidebar row out of the way as it slides under the pinned headings on
-   the vibrancy surface (see the material-backdrop chrome above, its only user).
-   Scroll-linked rather than timed: it advances only as far as the scroll does. */
-@keyframes sidebar-row-dissolve {
-	from {
-		opacity: 1;
-	}
-	to {
-		opacity: 0;
 	}
 }
 
