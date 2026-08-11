@@ -47,6 +47,7 @@ import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { suppressLayoutAnimations } from "./ui/motion";
 import { SessionViewer } from "./components/SessionViewer";
+import type { PortalTarget } from "./lib/portals";
 import { NewSession } from "./components/NewSession";
 import type { NewSessionPrefill } from "./lib/new-session-link";
 import { shouldOpenCreatedSession } from "./lib/new-session-navigation";
@@ -1063,6 +1064,7 @@ export function App(
 	const stagingActive = activeViewTab === "staging";
 	const assetsActive = activeViewTab === "assets";
 	const previewLiveActive = activeViewTab === "preview";
+	const portalActive = activeViewTab === "portal";
 	const subagentSelected = activeViewTab === "subagent";
 	// Workspaces whose Review / Conversation / Preview environment view-tab is
 	// present in the strip; empty by default (a tab is added when its pane is
@@ -1093,6 +1095,11 @@ export function App(
 	const [previewTabOpen, setPreviewTabOpen] = useState<Set<string>>(
 		() => new Set(getActiveViewTabKeys("preview")),
 	);
+	// One transient browser target per workspace. Selecting another service
+	// reuses the same center pane instead of filling the tab strip with ports.
+	const [portalTargets, setPortalTargets] = useState<
+		Record<string, PortalTarget>
+	>({});
 	const [assetsOpen, setAssetsOpen] = useState<Set<string>>(
 		() => new Set(getActiveViewTabKeys("assets")),
 	);
@@ -1810,6 +1817,19 @@ export function App(
 					},
 				]
 			: [];
+	const currentPortalTarget = wsKey ? portalTargets[wsKey] ?? null : null;
+	const portalViewTabs: ViewTab[] =
+		currentSession && wsKey && currentPortalTarget
+			? [
+					{
+						id: `portal:${wsKey}`,
+						label: currentPortalTarget.name,
+						active: portalActive,
+						dotClass: "bg-green",
+						icon: <IconGlobe size={16} />,
+					},
+				]
+			: [];
 	// The sub-agent view-tab: a Task drill-in from the open session's transcript.
 	// Bound to that session rather than the workspace, so switching to a sibling
 	// session hides it — and switching back brings its breadcrumb along. Only the
@@ -1830,14 +1850,15 @@ export function App(
 					},
 				]
 			: [];
-	// Review leftmost, then Conversation, Preview environment, Preview, Assets,
-	// and the sub-agent drill-in last (it comes and goes with the session).
+	// Review leftmost, then Conversation, Preview environment, Preview, Portal,
+	// Assets, and the sub-agent drill-in last (it comes and goes with the session).
 	const viewTabs: ViewTab[] = [
 		...reviewViewTabs,
 		...conversationViewTabs,
 		...videoViewTabs,
 		...stagingViewTabs,
 		...previewViewTabs,
+		...portalViewTabs,
 		...assetsViewTabs,
 		...subagentViewTabs,
 	];
@@ -1846,6 +1867,7 @@ export function App(
 		if (id.startsWith("staging:")) return "staging";
 		if (id.startsWith("assets:")) return "assets";
 		if (id.startsWith("preview:")) return "preview";
+		if (id.startsWith("portal:")) return "portal";
 		if (id.startsWith("conversation:")) return "conversation";
 		if (id.startsWith("video:")) return "video";
 		if (id.startsWith("review:")) return "review";
@@ -1966,6 +1988,22 @@ export function App(
 			});
 		}
 		if (previewLiveActive) setActiveViewTab(null);
+	}
+	function openPortal(target: PortalTarget) {
+		if (!wsKey) return;
+		setPortalTargets((prev) => ({ ...prev, [wsKey]: target }));
+		setActiveViewTab("portal");
+	}
+	function closePortalTab() {
+		if (wsKey) {
+			setPortalTargets((prev) => {
+				if (!prev[wsKey]) return prev;
+				const next = { ...prev };
+				delete next[wsKey];
+				return next;
+			});
+		}
+		if (portalActive) setActiveViewTab(null);
 	}
 	function closeStagingTab() {
 		if (wsKey) {
@@ -2426,6 +2464,7 @@ export function App(
 					else if (id.startsWith("staging:")) closeStagingTab();
 					else if (id.startsWith("assets:")) closeAssetsTab();
 					else if (id.startsWith("preview:")) closePreviewTab();
+					else if (id.startsWith("portal:")) closePortalTab();
 					else {
 						const closingTab = id.startsWith("conversation:")
 							? ("conversation" as const)
@@ -3248,6 +3287,10 @@ export function App(
 						? viewTabKind(surfaceId) === "preview"
 						: focused && previewLiveActive
 				}
+				showPortal={
+					splitMode ? viewTabKind(surfaceId) === "portal" : focused && portalActive
+				}
+				portalTarget={currentPortalTarget}
 				// The sub-agent drill-in, opened from this pane's own transcript.
 				showSubagent={
 					splitMode
@@ -3263,6 +3306,7 @@ export function App(
 				onCloseStaging={closeStagingTab}
 				onOpenPreviewTab={openPreviewTab}
 				onClosePreviewTab={closePreviewTab}
+				onOpenPortal={openPortal}
 				onOpenAssets={openAssets}
 				onCloseAssets={closeAssetsTab}
 				onOpenWorkspace={() => setActiveViewTab(null)}
