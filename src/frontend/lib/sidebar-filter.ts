@@ -148,11 +148,16 @@ export function onFilterChanged(handler: () => void): () => void {
 }
 
 // Another tab's write: drop the cache so subscribers re-read from storage.
-window.addEventListener("storage", (event) => {
-	if (event.key !== FILTER_KEY) return;
-	current = null;
-	window.dispatchEvent(new Event(CHANGE_EVENT));
-});
+// Guarded because this module is reached from plain `bun test` runs (Home's
+// row-merging test imports the component), where there is no window to listen
+// on and a module-scope call throws before the first test runs.
+if (typeof window !== "undefined") {
+	window.addEventListener("storage", (event) => {
+		if (event.key !== FILTER_KEY) return;
+		current = null;
+		window.dispatchEvent(new Event(CHANGE_EVENT));
+	});
+}
 
 export function useSidebarFilter(): FilterState {
 	const [state, setState] = React.useState(getFilter);

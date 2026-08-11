@@ -17,6 +17,15 @@ import {
 } from "../lib/sidebar-filter";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
+import { Input } from "../ui/input";
+import { PageHeader, PageTitle } from "../ui/page-header";
+import { EmptyState } from "../ui/state";
+import {
+  HOME_GROUP_LABEL,
+  HOME_LIST,
+  HOME_ROW,
+  HOME_SECTION_LABEL,
+} from "../lib/home-classes";
 import {
   IconArchive,
   IconCheck,
@@ -26,7 +35,6 @@ import {
   IconGitMerge,
   IconPullRequest,
   IconRepo,
-  IconSearch,
 } from "./icons";
 
 interface Props {
@@ -224,7 +232,7 @@ function StatCell({
 }) {
   return (
     <div
-      className="relative min-w-0 px-5 py-3 transition-colors group-hover:bg-panel phone:px-4 phone:py-2.5"
+      className="relative min-w-0 px-5 py-3 phone:px-4 phone:py-2.5"
       title={title}
     >
       <span
@@ -286,7 +294,10 @@ function OverviewStrip({
       onClick={onOpenAnalytics}
       title={stats ? "Open Analytics" : "Analytics are loading"}
       aria-busy={!stats}
-      className="group mt-6 grid w-full cursor-pointer grid-cols-5 overflow-hidden rounded-control bg-raised p-0 text-left outline-none transition-[background,box-shadow] hover:bg-panel focus-visible:shadow-[0_0_0_3px_var(--accent-soft)] max-[860px]:grid-cols-3 max-[560px]:grid-cols-2"
+      // One slab, one wash: the hover lights the whole strip rather than each
+      // cell, so the empty grid cells left by the wrapped layouts don't read as
+      // a hole punched in it.
+      className="focus-ring grid w-full cursor-pointer grid-cols-5 overflow-hidden rounded-lg bg-raised p-0 text-left transition-colors hover:bg-hover max-[860px]:grid-cols-3 max-[560px]:grid-cols-2"
     >
       <StatCell
         value={fmtCompact(running)}
@@ -532,11 +543,13 @@ export function Home({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface">
-      <div className="mx-auto w-full max-w-[1040px] px-5 pb-16 pt-10 phone:px-4 phone:pt-5">
-        <div className="flex items-center justify-between gap-4 px-2">
-          <h1 className="m-0 text-page-title font-semibold tracking-[-0.025em] text-fg">Home</h1>
-          <div className="flex min-w-0 items-center gap-3">
+    // The page frame every other list page in the app uses: one centred
+    // column at the shared width and padding, a PageHeader on top.
+    <div className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
+      <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
+        <PageHeader className="items-center max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5">
+          <PageTitle>Home</PageTitle>
+          <div className="flex min-w-0 items-center gap-3 max-[560px]:w-full max-[560px]:justify-between">
             {/* The team, as the app's person lens. Every face stays visually
                 neutral in the header, and the whole pile is one trigger: whose
                 work this page and the sidebar behind it show is a name you pick
@@ -553,178 +566,216 @@ export function Home({
               />
             )}
             <Button
-              variant="ink"
+              variant="primary"
               size="lg"
-              className="text-control-label"
+              className="px-[18px] text-control-label font-medium"
               onClick={onNewSession}
             >
               Create workspace
             </Button>
           </div>
-        </div>
-
+        </PageHeader>
         <OverviewStrip running={running} stats={stats} onOpenAnalytics={onOpenAnalytics} />
 
-        <div
-          className={`mt-7 grid ${repoOptions.length > 1 ? "grid-cols-[minmax(180px,1fr)_auto_auto_auto]" : "grid-cols-[minmax(180px,1fr)_auto_auto]"} items-center gap-5 border-b border-line px-2 pb-4 max-[860px]:grid-cols-2 phone:grid-cols-1 phone:gap-2.5`}
-        >
-          <label className="flex min-w-0 items-center gap-2 text-faint focus-within:text-dim">
-            <IconSearch size={20} />
-            <input
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-body text-fg outline-none placeholder:text-faint"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search"
-              spellCheck={false}
-            />
-          </label>
+        {/* Search and the two scopes, in the app's field-and-button vocabulary:
+            a filter here is the same control it is on the archived page, not a
+            line of bare text that only looks like one. */}
+        <div className="mb-4 mt-[18px] flex flex-wrap items-center gap-2">
+          <Input
+            className="w-[260px] phone:min-w-0 phone:flex-1"
+            type="search"
+            aria-label="Search pull requests"
+            placeholder="Search pull requests…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            spellCheck={false}
+          />
 
-          <label className="relative flex items-center gap-2 text-control-label text-dim hover:text-fg">
-            <IconFolder size={20} />
-            <select
-              className="max-w-[190px] cursor-pointer appearance-none border-0 bg-transparent py-1 pl-0 pr-6 text-inherit outline-none"
-              value={workspaceId}
-              onChange={(event) => setWorkspaceId(event.target.value)}
-            >
-              <option value="all">In all workspaces</option>
-              {workspaceOptions.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  In {workspace.name}
-                </option>
-              ))}
-              <option value="standalone">Standalone</option>
-            </select>
-            <IconChevronDown className="pointer-events-none absolute right-0" size={20} />
-          </label>
-
-          {repoOptions.length > 1 && (
+          <div className="ml-auto flex items-center gap-2">
             <Menu.Root>
-              <Menu.Trigger className="flex items-center gap-2 rounded-md border-0 bg-transparent p-1 text-control-label text-dim hover:text-fg data-[popup-open]:text-fg">
-                <IconRepo size={20} />
-                <span className="max-w-[190px] truncate">
-                  {repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
-                </span>
-                <IconChevronDown size={20} />
-              </Menu.Trigger>
-              <Menu.Popup align="start">
-                <Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
+              <Menu.Trigger
+                render={
+                  <Button icon={<IconFolder size={18} />}>
+                    <span className="max-w-[150px] truncate">
+                      {workspaceId === "all"
+                        ? "In all workspaces"
+                        : workspaceId === "standalone"
+                          ? "Standalone"
+                          : `In ${workspaceOptions.find((w) => w.id === workspaceId)?.name ?? "workspace"}`}
+                    </span>
+                    <IconChevronDown className="opacity-60" size={18} />
+                  </Button>
+                }
+              />
+              <Menu.Popup align="end" className="min-w-[200px]">
+                <Menu.RadioGroup
+                  value={workspaceId}
+                  onValueChange={(value) => setWorkspaceId(String(value))}
+                >
                   <Menu.RadioItem value="all" closeOnClick>
-                    {/* Sized to the tiles below so every label shares one edge. */}
-                    <span className="size-[18px] shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">All repos</span>
-                    {repo === "all" && <IconCheck className="shrink-0 text-accent" size={17} />}
+                    <span className="min-w-0 flex-1 truncate">All workspaces</span>
+                    {workspaceId === "all" && <IconCheck className="shrink-0 text-accent" size={17} />}
                   </Menu.RadioItem>
-                  {repoOptions.map((name) => (
-                    <Menu.RadioItem key={name} value={name} closeOnClick>
-                      <RepoTile name={name} size={18} />
-                      <span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
-                      {repo === name && <IconCheck className="shrink-0 text-accent" size={17} />}
+                  {workspaceOptions.map((workspace) => (
+                    <Menu.RadioItem key={workspace.id} value={workspace.id} closeOnClick>
+                      <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+                      {workspaceId === workspace.id && (
+                        <IconCheck className="shrink-0 text-accent" size={17} />
+                      )}
                     </Menu.RadioItem>
                   ))}
+                  <Menu.RadioItem value="standalone" closeOnClick>
+                    <span className="min-w-0 flex-1 truncate">Standalone</span>
+                    {workspaceId === "standalone" && (
+                      <IconCheck className="shrink-0 text-accent" size={17} />
+                    )}
+                  </Menu.RadioItem>
                 </Menu.RadioGroup>
               </Menu.Popup>
             </Menu.Root>
-          )}
 
-          {/* Archived is a rarely-flipped switch, so it lives behind the
-              overflow menu rather than spending a slot in the bar. It keeps
-              its own colour when on, so the bar still says it's narrowed. */}
-          <Menu.Root>
-            <Tooltip label="More filters">
-              <Menu.Trigger
-                aria-label="More filters"
-                className={`flex items-center justify-self-end rounded-md border-0 bg-transparent p-1 hover:text-fg data-[popup-open]:text-fg ${showArchived ? "text-fg" : "text-dim"}`}
-              >
-                <IconDotsHorizontal size={20} />
-              </Menu.Trigger>
-            </Tooltip>
-            <Menu.Popup align="end">
-              <Menu.CheckboxItem
-                checked={showArchived}
-                onCheckedChange={(next) => {
-                  setShowArchived(next);
-                  if (next) onShowArchived();
-                }}
-                closeOnClick
-              >
-                <IconArchive size={18} />
-                <span className="min-w-0 flex-1 truncate">Show archived</span>
-                {showArchived && <IconCheck className="shrink-0 text-accent" size={17} />}
-              </Menu.CheckboxItem>
-            </Menu.Popup>
-          </Menu.Root>
+            {repoOptions.length > 1 && (
+              <Menu.Root>
+                <Menu.Trigger
+                  render={
+                    <Button icon={<IconRepo size={18} />}>
+                      <span className="max-w-[150px] truncate">
+                        {repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
+                      </span>
+                      <IconChevronDown className="opacity-60" size={18} />
+                    </Button>
+                  }
+                />
+                <Menu.Popup align="end" className="min-w-[200px]">
+                  <Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
+                    <Menu.RadioItem value="all" closeOnClick>
+                      {/* Sized to the tiles below so every label shares one edge. */}
+                      <span className="size-[18px] shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">All repos</span>
+                      {repo === "all" && <IconCheck className="shrink-0 text-accent" size={17} />}
+                    </Menu.RadioItem>
+                    {repoOptions.map((name) => (
+                      <Menu.RadioItem key={name} value={name} closeOnClick>
+                        <RepoTile name={name} size={18} />
+                        <span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+                        {repo === name && <IconCheck className="shrink-0 text-accent" size={17} />}
+                      </Menu.RadioItem>
+                    ))}
+                  </Menu.RadioGroup>
+                </Menu.Popup>
+              </Menu.Root>
+            )}
+
+            {/* Archived is a rarely-flipped switch, so it lives behind the
+                overflow menu rather than spending a slot in the bar. It keeps
+                its own colour when on, so the bar still says it's narrowed. */}
+            <Menu.Root>
+              <Tooltip label="More filters">
+                <Menu.Trigger
+                  render={
+                    <Button
+                      aria-label="More filters"
+                      icon={<IconDotsHorizontal size={18} />}
+                      className={showArchived ? "text-fg" : undefined}
+                    />
+                  }
+                />
+              </Tooltip>
+              <Menu.Popup align="end">
+                <Menu.CheckboxItem
+                  checked={showArchived}
+                  onCheckedChange={(next) => {
+                    setShowArchived(next);
+                    if (next) onShowArchived();
+                  }}
+                  closeOnClick
+                >
+                  <IconArchive size={18} />
+                  <span className="min-w-0 flex-1 truncate">Show archived</span>
+                  {showArchived && <IconCheck className="shrink-0 text-accent" size={17} />}
+                </Menu.CheckboxItem>
+              </Menu.Popup>
+            </Menu.Root>
+          </div>
         </div>
 
         {sections.length === 0 ? (
-          <div className="px-2 py-16 text-center">
-            <div className="text-sm font-medium text-fg">
-              {query
-                ? "No matching worktrees"
+          <EmptyState
+            title={
+              query
+                ? "No matching pull requests"
                 : person === "all"
-                  ? "No pull request worktrees yet"
-                  : `Nothing open for ${personLabel(person)}`}
-            </div>
-            <div className="mt-1 text-body text-faint">
-              {query
-                ? "Try another search or workspace."
-                : person === "all"
-                  ? "Workspaces with pull requests will appear here."
-                  : "Pick another face, or clear the filter to go back to yours."}
-            </div>
-          </div>
+                  ? "No pull requests yet"
+                  : `Nothing open for ${personLabel(person)}`
+            }
+          >
+            {query
+              ? "Try another search or workspace."
+              : person === "all"
+                ? "Workspaces with pull requests appear here."
+                : "Pick another face, or clear the filter to go back to yours."}
+          </EmptyState>
         ) : (
-          <div className="pt-7">
+          <div className={HOME_LIST}>
             {sections.map((section) => (
-              <section key={section.state} className="mb-10">
-                <div className="mb-4 flex items-baseline gap-2 px-2 text-item-title font-semibold text-fg">
-                  <span>{section.label}</span>
-                  <span className="text-label font-medium text-faint">{section.rows.length}</span>
-                </div>
+              <section key={section.state} className="mb-7">
+                <h2 className={HOME_SECTION_LABEL}>
+                  {section.label}
+                  <span className="text-meta font-medium text-faint">{section.rows.length}</span>
+                </h2>
                 {section.groups.map(([label, rows]) => (
-                  <div key={label} className="mb-5">
-                    <div className="mb-1.5 flex items-baseline gap-2 px-2 text-label font-medium text-dim">
-                      <span>{label}</span>
-                      <span className="text-faint">{rows.length}</span>
-                    </div>
+                  <div key={label} className="mb-4">
+                    <h3 className={HOME_GROUP_LABEL}>
+                      {label}
+                      <span className="font-medium">{rows.length}</span>
+                    </h3>
                     <div>
                       {rows.map((row) => {
                         const status = prStatusMark(row);
                         return (
-                        <button
-                          key={row.key}
-                          className="group grid w-full grid-cols-[22px_24px_minmax(0,1fr)_130px_44px] items-center gap-2 rounded-control border-0 bg-transparent px-2 py-2.5 text-left text-dim hover:bg-hover hover:text-fg phone:grid-cols-[22px_24px_minmax(0,1fr)_40px]"
-                          onClick={() =>
-                            row.session ? onSelect(row.session) : row.url && window.open(row.url, "_blank", "noopener")
-                          }
-                          title={`${repoLabel(row.repo)} · ${row.branch}`}
-                        >
-                          <span className={`${status.className} flex items-center`} title={status.label}>
-                            <StateIcon state={row.state} />
-                          </span>
-                          {person === "all" && row.person ? (
-                            <UserAvatar name={personLabel(row.person)} size={20} title={personLabel(row.person)} />
-                          ) : (
-                            <RepoTile name={row.repo} size={20} />
-                          )}
-                          <span className="min-w-0">
-                            <span className="flex min-w-0 items-baseline gap-2">
-                              <span className="truncate text-body text-dim group-hover:text-fg">{row.title}</span>
-                              {row.number && <span className="shrink-0 text-meta text-faint">#{row.number}</span>}
+                          <button
+                            key={row.key}
+                            className={HOME_ROW}
+                            onClick={() =>
+                              row.session ? onSelect(row.session) : row.url && window.open(row.url, "_blank", "noopener")
+                            }
+                            title={`${repoLabel(row.repo)} · ${row.branch}`}
+                          >
+                            <span className={`${status.className} flex items-center`} title={status.label}>
+                              <StateIcon state={row.state} />
                             </span>
-                            <span className="flex min-w-0 items-center gap-1.5 text-meta text-faint">
-                              <span className="truncate">{row.branch}</span>
+                            {person === "all" && row.person ? (
+                              <UserAvatar name={personLabel(row.person)} size={20} title={personLabel(row.person)} />
+                            ) : (
+                              <RepoTile name={row.repo} size={20} />
+                            )}
+                            <span className="min-w-0">
+                              <span className="flex min-w-0 items-baseline gap-2">
+                                <span className="truncate text-body font-medium leading-[1.3] text-fg">
+                                  {row.title}
+                                </span>
+                                {row.number && (
+                                  <span className="shrink-0 text-meta tabular-nums text-faint">
+                                    #{row.number}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-meta text-faint">
+                                <span className="truncate">{row.branch}</span>
+                              </span>
                             </span>
-                          </span>
-                          <span className="justify-self-end text-label phone:hidden">
-                            {row.additions !== undefined && (
-                              <span className="text-green">+{compactDiff(row.additions)}</span>
-                            )}
-                            {row.deletions !== undefined && (
-                              <span className="ml-2 text-red">-{compactDiff(row.deletions)}</span>
-                            )}
-                          </span>
-                          <span className="justify-self-end text-label text-faint">{compactAge(row.updatedAt)}</span>
-                        </button>
+                            <span className="justify-self-end text-meta tabular-nums phone:hidden">
+                              {row.additions !== undefined && (
+                                <span className="text-green">+{compactDiff(row.additions)}</span>
+                              )}
+                              {row.deletions !== undefined && (
+                                <span className="ml-2 text-red">−{compactDiff(row.deletions)}</span>
+                              )}
+                            </span>
+                            <span className="justify-self-end text-meta tabular-nums text-faint">
+                              {compactAge(row.updatedAt)}
+                            </span>
+                          </button>
                         );
                       })}
                     </div>
