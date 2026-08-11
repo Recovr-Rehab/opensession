@@ -891,37 +891,6 @@ html.wco .app {
 		);
 	}
 
-	@supports (animation-timeline: view()) {
-		html.material-backdrop [data-sticky-head] {
-			position: sticky;
-		}
-
-		/* The mask would eat the pinned headings too — they scroll inside this
-		   box — and the dissolve has made it redundant. */
-		html.material-backdrop .sidebar-scroll {
-			padding-top: 0;
-			-webkit-mask-image: none;
-			mask-image: none;
-		}
-
-		/* Nothing left under a pinned heading, so it paints nothing. */
-		html.material-backdrop [data-sticky-head].is-stuck::before {
-			background: none;
-		}
-
-		/* Rows only. A heading is what the dissolve clears the space FOR, and
-		   a control nested inside a row already fades with the row, so neither
-		   needs a timeline of its own. */
-		html.material-backdrop
-			.sidebar-scroll
-			:is(a, button):not([data-sticky-head] *):not(:is(a, button) *) {
-			animation: sidebar-row-dissolve linear both;
-			/* The inset moves the timeline's start edge down to the pin line,
-			   so a row is fully gone by the moment its bottom crosses it. */
-			animation-timeline: view(block var(--pin-depth, 16px) 0px);
-			animation-range: exit 0% exit 100%;
-		}
-	}
 }
 /* Sidebar top row clears the traffic lights. env(titlebar-area-x) is the
    controls' right edge on macOS; it drops to 0 in fullscreen (lights hidden)
