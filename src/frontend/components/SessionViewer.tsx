@@ -77,6 +77,7 @@ import {
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
+import { shareShippedChange } from "../lib/api/shipped-changes";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { dedupeViewers, otherViewers } from "../lib/presence";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
@@ -762,6 +763,51 @@ export function SessionViewer({
 	const prPresentation = useMemo(
 		() => sessionPrPresentation(session.prs),
 		[session.prs],
+	);
+	const mergedWalkthroughPr =
+		prPresentation.primary?.state === "MERGED" &&
+		session.walkthrough?.shots?.some((shot) => shot.after)
+			? prPresentation.primary
+			: undefined;
+	const [walkthroughSlackShareStatus, setWalkthroughSlackShareStatus] = useState<
+		"idle" | "sharing" | "shared"
+	>("idle");
+	useEffect(
+		() => setWalkthroughSlackShareStatus("idle"),
+		[session.id, session.walkthrough?.publishedAt, mergedWalkthroughPr?.number],
+	);
+	const shareWalkthroughToSlack = useCallback(async () => {
+		if (!mergedWalkthroughPr) return;
+		setWalkthroughSlackShareStatus("sharing");
+		try {
+			const result = await shareShippedChange(session.id, {
+				repo: mergedWalkthroughPr.repo,
+				branch: mergedWalkthroughPr.branch,
+			});
+			setWalkthroughSlackShareStatus("shared");
+			toast(
+				result.status === "already_shared"
+					? "This change was already shared"
+					: "Shared to Slack",
+			);
+		} catch (error: any) {
+			setWalkthroughSlackShareStatus("idle");
+			toast(error?.message || "Couldn't share the visual change");
+		}
+	}, [mergedWalkthroughPr, session.id]);
+	const walkthroughSlackShare = useMemo(
+		() =>
+			mergedWalkthroughPr
+				? {
+						status: walkthroughSlackShareStatus,
+						onShare: shareWalkthroughToSlack,
+					}
+				: undefined,
+		[
+			mergedWalkthroughPr,
+			shareWalkthroughToSlack,
+			walkthroughSlackShareStatus,
+		],
 	);
 	const promotedPr =
 		prPresentation.primary?.source !== "primary"
@@ -5195,6 +5241,7 @@ export function SessionViewer({
 															live={isBusy}
 															sessionId={session.id}
 															walkthrough={sessionWalkthrough}
+															slackShare={walkthroughSlackShare}
 															onFork={canForkSession ? handleFork : undefined}
 															onOpenSubagent={openSubagent}
 															// For automation-owned sessions (e.g. a GitHub PR run), the

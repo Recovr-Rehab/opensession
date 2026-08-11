@@ -91,6 +91,20 @@ export function WalkthroughCard({
 	]
 		.filter(Boolean)
 		.join(" · ") || (walkthrough.summary ? "Writeup" : "");
+	const shareAction = slackShare ? (
+		<Button
+			size="xs"
+			className="ml-auto phone:min-h-11"
+			disabled={slackShare.status !== "idle"}
+			onClick={slackShare.onShare}
+		>
+			{slackShare.status === "sharing"
+				? "Sharing…"
+				: slackShare.status === "shared"
+					? "Shared"
+					: "Share to Slack"}
+		</Button>
+	) : null;
 
 	const open = (key: string, target: HTMLElement) =>
 		openLightbox(gallery.items, gallery.at.get(key) ?? 0, target);
@@ -136,10 +150,11 @@ export function WalkthroughCard({
 			)}
 		>
 			{session ? (
-				<button
-					type="button"
-					aria-expanded={expanded}
-					onClick={() => setExpanded(!expanded)}
+				<div className="flex items-center gap-2">
+					<button
+						type="button"
+						aria-expanded={expanded}
+						onClick={() => setExpanded(!expanded)}
 					// Keep the fold's 14px title and 20px chevron. The play-in-screen
 					// glyph mirrors the native app without adding another icon tile.
 					// The row is the height of its own contents, like the turn fold
@@ -151,8 +166,8 @@ export function WalkthroughCard({
 					// and lighting a slab the size of the card. The chevron takes
 					// the rest of it, at its own scale — the whole row folds, but
 					// the chevron is what a reader is aiming at.
-					className="group -m-1 flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none transition-colors hover:bg-hover/40 focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-				>
+						className="group -m-1 flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none transition-colors hover:bg-hover/40 focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+					>
 					{/* The walkthrough's own icon leads the line, so the row is
 					    named before it is operated; the chevron trails at the far
 					    edge, where it reads as this card's disclosure rather than
@@ -181,25 +196,14 @@ export function WalkthroughCard({
 					>
 						<IconChevronDown size={20} className="block" />
 					</span>
-				</button>
+					</button>
+					{shareAction}
+				</div>
 			) : (
 				<div className="mb-2 flex items-center gap-1.5">
 					<IconPlayRectangle size={20} className="text-faint" />
 					<span className="text-xs font-semibold text-dim">Walkthrough</span>
-					{slackShare && (
-						<Button
-							size="xs"
-							className="ml-auto phone:min-h-11"
-							disabled={slackShare.status !== "idle"}
-							onClick={slackShare.onShare}
-						>
-							{slackShare.status === "sharing"
-								? "Sharing…"
-								: slackShare.status === "shared"
-									? "Shared"
-									: "Share to Slack"}
-						</Button>
-					)}
+					{shareAction}
 				</div>
 			)}
 

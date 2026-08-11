@@ -36,6 +36,10 @@ interface Props {
 	/** Agent-published walkthrough — rendered inline where it was published.
 	 *  Pass a referentially stable object (see SessionViewer) so the memo holds. */
 	walkthrough?: SessionWalkthrough;
+	slackShare?: {
+		status: "idle" | "sharing" | "shared";
+		onShare: () => void;
+	};
 }
 
 /**
@@ -60,6 +64,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	owner,
 	sessionId,
 	walkthrough,
+	slackShare,
 }: Props) {
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
 	// Build tool_use → tool_result map
@@ -155,7 +160,11 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						sessionId={sessionId}
 					/>
 				) : block.kind === "walkthrough" ? (
-					<WalkthroughCard walkthrough={block.walkthrough} variant="session" />
+					<WalkthroughCard
+						walkthrough={block.walkthrough}
+						variant="session"
+						slackShare={slackShare}
+					/>
 				) : block.kind === "footer" ? (
 					<TurnFooter
 						entry={block.entry}

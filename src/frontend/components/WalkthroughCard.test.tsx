@@ -39,4 +39,16 @@ describe("WalkthroughCard Slack action", () => {
 		expect(html).toContain("disabled");
 		expect(html).toContain(">Shared<");
 	});
+
+	test("shows the action beside the inline session disclosure", () => {
+		const html = renderToStaticMarkup(
+			<WalkthroughCard
+				walkthrough={walkthrough}
+				variant="session"
+				slackShare={{ status: "idle", onShare: () => {} }}
+			/>,
+		);
+		expect(html).toContain("Share to Slack");
+		expect(html).toContain('aria-expanded="false"');
+	});
 });
