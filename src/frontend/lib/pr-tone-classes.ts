@@ -99,6 +99,17 @@ export const PR_BAR =
 	"phone:[.session-info-status_&]:min-h-[46px] phone:[.session-info-status_&]:px-2.5 " +
 	"phone:[.session-info-status_&]:last:border-b-0";
 
+/** The same status row after it moves into the Info panel. Its section owns
+ * the label and spacing; this row only supplies the tinted content. */
+export const PR_SECTION_ROW =
+	"pr-bar flex min-h-[52px] items-center gap-2.5 px-3 py-2 " +
+	"[&>.staging-icon]:-ml-0.5 [&>.staging-icon]:shrink-0";
+
+/** A single rounded block whether the session has one PR or several. Each
+ * child paints its own state wash; the wrapper only clips the shared corners. */
+export const PR_SECTION_STACK =
+	"flex min-w-0 flex-col overflow-hidden rounded-lg";
+
 /** Inside the info card the strip (or the stack of strips) is the card's
  *  content, so it takes the card's corner and clips to it. */
 export const PR_BAR_IN_CARD =
@@ -258,11 +269,17 @@ export const PR_SIB_DOT_BG: Record<PrTone, string> = {
 	muted: "bg-dim",
 };
 
-/** A series row: repo · number · title · state. No surface of its own — it
- *  carries the strip's divider so primary + series read as one block. */
+/** A series row: repo · number · title · state. It repeats the primary row one
+ * weight down and paints the whole row in its own state colour. */
 export const PR_ROW =
-	"flex min-h-[32px] items-center gap-0.5 border-b border-[var(--top-divider)] pr-2 hover:bg-hover " +
-	"phone:[.session-info-status_&]:last:border-b-0";
+	"flex min-h-[38px] items-center gap-0.5 border-t border-[var(--top-divider)] pr-2 hover:brightness-[1.08]";
+export const PR_ROW_BG: Record<PrTone, string> = {
+	green: "bg-green-soft",
+	purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
+	red: "bg-red-soft",
+	yellow: "bg-[color-mix(in_srgb,var(--yellow)_9%,transparent)]",
+	muted: "bg-panel",
+};
 export const PR_ROW_MAIN =
 	"flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-1 text-left text-label";
 /** The title takes what's left and gives it up first — the state on the right

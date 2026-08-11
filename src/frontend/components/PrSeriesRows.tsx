@@ -11,6 +11,7 @@ import {
 import {
 	prChipClass,
 	PR_ROW,
+	PR_ROW_BG,
 	PR_ROW_MAIN,
 	PR_ROW_OUT,
 	PR_ROW_STATE,
@@ -50,7 +51,7 @@ export function PrSeriesRow({
 	const tone = refTone(prRef);
 	const provider = providerFromUrl(prRef.url || "");
 	return (
-		<div className={PR_ROW} data-tone={tone}>
+		<div className={`${PR_ROW} ${PR_ROW_BG[tone]}`} data-tone={tone}>
 			<button
 				type="button"
 				className={PR_ROW_MAIN}

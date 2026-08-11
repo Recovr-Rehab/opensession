@@ -17,7 +17,7 @@ import {
 	mergePrApi,
 	mergePrStackApi,
 } from "../lib/api";
-import { stackMergePlan } from "../lib/pr-stack";
+import { stackLayersTopFirst, stackMergePlan } from "../lib/pr-stack";
 import {
 	pollWhileVisible,
 	PR_WEBHOOK_FALLBACK_POLL_MS,
@@ -43,6 +43,8 @@ import {
 	PR_HEAD_PROMPTED,
 	PR_SIB_DOT,
 	PR_SIB_DOT_BG,
+	PR_SECTION_ROW,
+	PR_SECTION_STACK,
 	PR_STATE_TEXT,
 } from "../lib/pr-tone-classes";
 import { Tooltip } from "../ui/tooltip";
@@ -212,9 +214,9 @@ interface Props {
 	onOpenChecksTab?: () => void;
 	/** Archive via the owning viewer so it can select the neighboring sidebar row. */
 	onArchive?: () => void;
-	/** "header" renders just the PR chip + primary action for the session header
-	    (shown while the Workspace panel is closed); default is the full strip. */
-	variant?: "bar" | "header";
+	/** "header" renders just the PR chip + primary action while the panel is
+	 * closed. "section" renders the same status inside the Info panel. */
+	variant?: "bar" | "header" | "section";
 	/** Optional element rendered inside the strip, left of the PR chip (bar
 	    variant only) so it shares the strip's tone background — e.g. the globe
 	    staging-deploy icon in the Workspace panel. */
@@ -227,7 +229,14 @@ interface Props {
 }
 
 interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-	tone: "green" | "purple" | "red" | "secondary" | "solid";
+	tone:
+		| "green"
+		| "purple"
+		| "red"
+		| "status-red"
+		| "status-yellow"
+		| "secondary"
+		| "solid";
 	icon?: React.ReactNode;
 	confirm?: boolean;
 }
@@ -242,10 +251,14 @@ function PrBarButton({
 }: PrBarButtonProps) {
 	const tones = {
 		green:
-			"bg-[var(--green)] border-[color-mix(in_srgb,var(--green)_78%,black)]",
+			"bg-[var(--green)] border-[color-mix(in_srgb,var(--green)_78%,black)] text-white",
 		purple:
-			"bg-[var(--purple)] border-[color-mix(in_srgb,var(--purple)_78%,black)]",
-		red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)]",
+			"bg-[var(--purple)] border-[color-mix(in_srgb,var(--purple)_78%,black)] text-white",
+		red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white",
+		"status-red":
+			"border-[color-mix(in_srgb,var(--red)_45%,transparent)] bg-[color-mix(in_srgb,var(--red)_12%,var(--control-surface))] text-red hover:bg-red-soft hover:brightness-100",
+		"status-yellow":
+			"border-[color-mix(in_srgb,var(--yellow)_35%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_16%,var(--control-surface))] hover:brightness-100",
 		solid:
 			"bg-[var(--text)] text-[var(--bg)] border-[color-mix(in_srgb,var(--text)_84%,transparent)]",
 		secondary: "bg-raised text-fg border-line-strong hover:bg-hover hover:brightness-100",
@@ -254,7 +267,7 @@ function PrBarButton({
 		<button
 			type="button"
 			className={cn(
-				"inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-control border px-2.5 py-[5px] text-[13px] leading-none font-semibold whitespace-nowrap text-white shadow-control transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
+				"inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-control border px-2.5 py-[5px] text-[13px] leading-none font-semibold whitespace-nowrap shadow-control transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
 				tones[tone],
 				confirm && "outline-2 outline-[color-mix(in_srgb,var(--green)_45%,transparent)] outline-offset-1",
 				className,
@@ -537,17 +550,48 @@ export function PrStatusBar({
 	// attached repos, manual links, and PRs discovered through their body
 	// footer. Numberless refs are branches with no PR yet — nothing to chip.
 	const siblings = presentation.additional;
+	// A real GitHub stack is returned with the primary PR detail rather than in
+	// session.prs. Expand its other layers into the same compact rows used by a
+	// multi-repo series, preferring enriched session refs when both sources know
+	// the layer (those refs include check counts and review state).
+	const stackRows: SessionPrRef[] =
+		pr?.stack && targetRepo
+			? stackLayersTopFirst(pr.stack)
+					.filter((layer) => !layer.current)
+					.map(
+						(layer) =>
+							siblings.find(
+								(ref) => ref.repo === targetRepo && ref.number === layer.number,
+							) || {
+								repo: targetRepo,
+								branch: layer.headRefName,
+								source: "discovered" as const,
+								number: layer.number,
+								url: layer.url,
+								title: layer.title,
+								state: layer.state,
+								isDraft: layer.isDraft,
+							},
+					)
+			: [];
+	const stackNumbers = new Set(stackRows.map((ref) => ref.number));
+	const statusRows = [
+		...stackRows,
+		...siblings.filter(
+			(ref) => ref.repo !== targetRepo || !stackNumbers.has(ref.number),
+		),
+	];
 	// Slack/Linear sessions carry no explicit `repo` — fall back to the primary
 	// ref's, so cross-repo chips still get their repo hint.
 	const primaryRepoId =
 		targetRepo || (prs || []).find((r) => r.source === "primary")?.repo;
-	const openSiblings = siblings.filter(
+	const openSiblings = statusRows.filter(
 		(r) => r.state !== "MERGED" && r.state !== "CLOSED",
 	).length;
 	// A feature shipped as N PRs is only done when they've all landed — so the
 	// merged headline counts the series, and Archive waits for the last one.
 	const seriesAllMerged =
-		siblings.length > 0 && siblings.every((r) => r.state === "MERGED");
+		statusRows.length > 0 && statusRows.every((r) => r.state === "MERGED");
 	// Nothing on this session's own branch, but it owns PRs elsewhere: "No PR
 	// open" would be a lie with three rows sitting under it, and a bare count in
 	// the neutral tone hides a failing PR one row down — so the strip borrows the
@@ -555,10 +599,10 @@ export function PrStatusBar({
 	const series = !pr ? summarizePrSeries(siblings) : null;
 	const headlineTone = series ? series.tone : headline.tone;
 	const headlineLabel =
-		headline.key === "merged" && siblings.length > 0
+		headline.key === "merged" && statusRows.length > 0
 			? seriesAllMerged
-				? `All ${siblings.length + 1} merged`
-				: `Merged · ${openSiblings} of ${siblings.length + 1} open`
+				? `All ${statusRows.length + 1} merged`
+				: `Merged · ${openSiblings} of ${statusRows.length + 1} open`
 			: series
 				? series.label
 				: headline.label;
@@ -618,11 +662,24 @@ export function PrStatusBar({
 	// in seconds late (the PR fetch can take a GitHub round-trip); a clean
 	// session reads "Up to date" rather than vanishing.
 	if (!loaded && variant !== "header") {
-		return (
-			<div className={`pr-bar ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}>
+		const checking = (
+			<div
+				className={
+					variant === "section"
+						? `${PR_SECTION_ROW} ${PR_BAR_BG.muted}`
+						: `pr-bar ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`
+				}
+			>
 				{leading}
 				<span className={`pr-bar-checking ${PR_BAR_CHECKING}`}>Checking status…</span>
 			</div>
+		);
+		return (
+			variant === "section" ? (
+				<div className={PR_SECTION_STACK}>{checking}</div>
+			) : (
+				checking
+			)
 		);
 	}
 	if (
@@ -719,6 +776,54 @@ export function PrStatusBar({
 						Resolve
 					</PrBarButton>
 				) : null;
+			case "running":
+				return onOpenChecksTab ? (
+					<PrBarButton
+						className={actionBtn}
+						tone="status-yellow"
+						onClick={onOpenChecksTab}
+					>
+						View checks
+					</PrBarButton>
+				) : null;
+			case "failing":
+				return send ? (
+					<PrBarButton
+						className={actionBtn}
+						tone="status-red"
+						onClick={() =>
+							promptSession(
+								"Fixing checks…",
+								`Investigate the failing checks on PR #${pr?.number}, fix the failures, run the relevant tests, commit the changes, and push them.`,
+							)
+						}
+					>
+						Fix checks
+					</PrBarButton>
+				) : onOpenChecksTab ? (
+					<PrBarButton
+						className={actionBtn}
+						tone="status-red"
+						onClick={onOpenChecksTab}
+					>
+						View checks
+					</PrBarButton>
+				) : null;
+			case "changes-requested":
+				return send ? (
+					<PrBarButton
+						className={actionBtn}
+						tone="status-red"
+						onClick={() =>
+							promptSession(
+								"Addressing feedback…",
+								`Address the requested changes on PR #${pr?.number}, run the relevant tests, commit the changes, and push them.`,
+							)
+						}
+					>
+						Address feedback
+					</PrBarButton>
+				) : null;
 			case "no-pr":
 				return send ? (
 					<PrBarButton
@@ -736,9 +841,6 @@ export function PrStatusBar({
 					</PrBarButton>
 				) : null;
 			case "ready":
-			case "failing":
-			case "running":
-			case "changes-requested":
 				return (
 					<PrBarButton
 						className={actionBtn}
@@ -834,7 +936,13 @@ export function PrStatusBar({
 	// The primary row is the session's own branch — the one this worktree can
 	// push, pull and merge. Its other PRs stack underneath, one row each.
 	const primaryRow = (
-		<div className={`pr-bar ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}>
+		<div
+			className={
+				variant === "section"
+					? `${PR_SECTION_ROW} ${PR_BAR_BG[headlineTone]}`
+					: `pr-bar ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`
+			}
+		>
 			{leading}
 			{pr && (
 				<PrStackChip
@@ -882,6 +990,18 @@ export function PrStatusBar({
 			{renderAction()}
 		</div>
 	);
+	if (variant === "section") {
+		return (
+			<div className={PR_SECTION_STACK}>
+				{primaryRow}
+				<PrSeriesRows
+					refs={statusRows}
+					primaryRepo={primaryRepoId}
+					onOpen={onOpenPrTab}
+				/>
+			</div>
+		);
+	}
 	if (siblings.length === 0) return primaryRow;
 	return (
 		<div className={PR_BAR_STACK}>

@@ -106,13 +106,13 @@ test("each row is toned by its own state, not the series'", () => {
 	expect(html).toContain("text-red");
 });
 
-test("rows carry no surface of their own — the strip's treatment continues", () => {
+test("rows carry their state wash across the full surface", () => {
 	const html = renderToStaticMarkup(
 		<PrSeriesRows refs={[ref({ title: "Fix the uploader" })]} />,
 	);
 
-	// The chip keeps the toned ink of the strip's chip but drops its fill, so
-	// the series reads as more status rather than a row of badges.
+	expect(html).toContain("bg-green-soft");
+	// The compact number chip remains one weight down from the primary row.
 	expect(html).toContain("bg-control");
 	// A PR with no URL still gets its row, minus the outbound link.
 	const noUrl = renderToStaticMarkup(

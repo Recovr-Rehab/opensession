@@ -1,7 +1,7 @@
 import { AGENT_NAME, GITHUB_BOT_NAME } from "../lib/brand";
 import { BASE_PATH } from "../lib/base";
 import { commitPrompt } from "../lib/commit-prompt";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
@@ -12,7 +12,6 @@ import {
 	fetchGitStatus,
 	gitPushApi,
 	gitPullApi,
-	mergePrApi,
 	setSessionReviewerApi,
 	acceptReviewApi,
 	triggerPrActionApi,
@@ -52,12 +51,6 @@ import {
 	overviewCache,
 	type OverviewSessionRef,
 } from "../lib/workspace-overview";
-import { summarizeChecks } from "./PrStatusBar";
-import {
-	type CheckVisual,
-	checkStatusMeta,
-	checkToneClass,
-} from "../lib/pr-checks";
 import {
 	GIT_ACTION,
 	GIT_DOT,
@@ -66,7 +59,6 @@ import {
 	GIT_NOTE,
 	GIT_ROW,
 } from "../lib/pr-tone-classes";
-import { CheckStatusIcon } from "./CheckStatusIcon";
 import { openLightbox } from "./MediaLightbox";
 import { repoLabel } from "./RepoTile";
 import { SandboxBadge } from "./SandboxBadge";
@@ -74,13 +66,11 @@ import {
 	IconBell,
 	IconCheck,
 	IconChevronDown,
-	IconClock,
 	IconFile,
 	IconPlay,
 	IconPullRequest,
 	IconSparkle,
 	IconStack,
-	IconX,
 } from "./icons";
 
 /**
@@ -115,6 +105,8 @@ interface Props {
 	sessions: Array<OverviewSessionRef & { startedBy?: string | null }>;
 	/** Primary repo the workspace's sessions work in. */
 	repo?: string;
+	/** The shared PR status component, moved into Info as its first section. */
+	prStatus?: ReactNode;
 	/** PR lane state, when the session has a PR — gates the PR fetch. */
 	prState?: string | null;
 	/** Bumped when a GitHub webhook reports activity for this workspace's PR. */
@@ -139,8 +131,6 @@ interface Props {
 	onReviewChange?: (sessionId: string, req: ReviewRequestInfo | null) => void;
 	/** Jump to a sibling tab when a status chip / reply row is clicked. */
 	onOpenTab?: (tab: PanelTab) => void;
-	/** Open the current PR directly on its Checks tab. */
-	onOpenChecks?: () => void;
 	/** The session's scratch assets — listed in the Info panel; clicking one
 	    opens the full-width Assets view-tab focused on that file. */
 	assets?: SessionAssetFile[];
@@ -503,128 +493,6 @@ function FileRow({
 	);
 }
 
-/** Keep the aggregate state visible in Info while the hover card preserves the
- * useful detail that the one-line PR strip cannot show. */
-function ChecksChip({
-	pr,
-	onOpenChecks,
-}: {
-	pr: PrDetails;
-	onOpenChecks?: () => void;
-}) {
-	const order: Record<CheckVisual, number> = {
-		failure: 0,
-		pending: 1,
-		success: 2,
-		skipped: 3,
-		neutral: 3,
-	};
-	const checks = [...(pr.checks || [])].sort(
-		(a, b) => order[checkStatusMeta(a).kind] - order[checkStatusMeta(b).kind],
-	);
-	const sum = summarizeChecks(pr);
-	if (checks.length === 0) return null;
-
-	const aggregate =
-		sum.failed > 0
-			? {
-					label: `${sum.failed} check${sum.failed === 1 ? "" : "s"} failing`,
-					icon: <IconX size={18} />,
-					className: "border-transparent bg-red-soft text-red",
-				}
-			: sum.pending > 0
-				? {
-						label: `${sum.pending} check${sum.pending === 1 ? "" : "s"} pending`,
-						icon: <IconClock size={18} />,
-						className:
-							"border-transparent bg-[rgba(210,153,34,0.14)] text-yellow",
-					}
-				: {
-						label: "Checks passing",
-						icon: <IconCheck size={18} />,
-						className: "border-transparent bg-green-soft text-green",
-					};
-
-	return (
-		<Popover.Root>
-			<Popover.Trigger
-				openOnHover
-				delay={200}
-				closeDelay={120}
-				type="button"
-				className={cn(
-					"mt-1.5 inline-flex w-fit cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-control border px-2.5 py-1 text-label font-semibold leading-[1.35] transition-colors hover:brightness-110",
-					aggregate.className,
-				)}
-				onClick={onOpenChecks}
-			>
-				<span className="inline-flex items-center opacity-70">{aggregate.icon}</span>
-				{aggregate.label}
-			</Popover.Trigger>
-			<Popover.Popup
-				side="left"
-				align="start"
-				sideOffset={10}
-				className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden p-0"
-			>
-				<div className="flex items-baseline justify-between gap-2.5 border-b border-line bg-surface px-3 py-[9px]">
-					<span className="text-label font-semibold text-fg">
-						{checks.length} check{checks.length === 1 ? "" : "s"}
-					</span>
-					<span className="inline-flex gap-2 text-meta font-semibold">
-						{sum.passed > 0 && <span className="text-green">{sum.passed} passed</span>}
-						{sum.failed > 0 && <span className="text-red">{sum.failed} failed</span>}
-						{sum.pending > 0 && (
-							<span className="text-yellow">{sum.pending} running</span>
-						)}
-					</span>
-				</div>
-				<div className="overflow-y-auto p-1">
-					{checks.map((check, i) => {
-						const status = checkStatusMeta(check);
-						const content = (
-							<>
-								<span
-									className={cn(
-										"inline-flex size-4 shrink-0",
-										checkToneClass(status.kind),
-									)}
-								>
-									<CheckStatusIcon kind={status.kind} />
-								</span>
-								<span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">
-									{check.name}
-								</span>
-								<span className="shrink-0 text-label font-medium text-dim">
-									{status.label}
-								</span>
-							</>
-						);
-						return check.url ? (
-							<a
-								key={`${check.name}:${i}`}
-								className="flex items-center gap-[9px] rounded-md px-2 py-1.5 text-fg no-underline hover:bg-surface"
-								href={check.url}
-								target="_blank"
-								rel="noopener"
-							>
-								{content}
-							</a>
-						) : (
-							<div
-								key={`${check.name}:${i}`}
-								className="flex items-center gap-[9px] rounded-md px-2 py-1.5 text-fg"
-							>
-								{content}
-							</div>
-						);
-					})}
-				</div>
-			</Popover.Popup>
-		</Popover.Root>
-	);
-}
-
 /** The GitHub PR agent behaviors behind the score card. Each maps to an os-*
 		PR label, but runs directly from the panel without a GitHub round trip. */
 const PR_AGENT_ACTIONS: Array<{
@@ -779,7 +647,7 @@ function AgentReviewCard({
 
 	return (
 		<div data-agent-score className={INFO_SECTION_CLASS}>
-			<div className="flex items-center gap-2 px-1">
+			<div className="flex items-center gap-2">
 				<div className={INFO_LABEL_CLASS}>{AGENT_NAME} score</div>
 				<div className="ml-auto flex items-center gap-2">
 					{active ? (
@@ -1180,15 +1048,13 @@ function ReviewerChip({
 }
 
 /**
- * The Git status section of the info panel: PR state first, then one row per
- * outstanding local git fact. Direct git actions stay local; judgment calls
- * prompt the session so commits and conflict resolutions remain agent-authored.
+ * The Git status section of the info panel: one row per outstanding local git
+ * fact. PR state lives in the Pull requests section directly above it.
 */
 function GitStatusRows({
 	sessionId,
 	repo,
 	git,
-	pr,
 	prState,
 	send,
 	onReload,
@@ -1196,13 +1062,11 @@ function GitStatusRows({
 	sessionId: string;
 	repo?: string;
 	git: GitStatusInfo | null;
-	pr: PrDetails | null;
 	prState?: string | null;
 	send?: (msg: any) => void;
 	onReload: () => void;
 }) {
 	const [busy, setBusy] = useState<string | null>(null);
-	const [confirmMerge, setConfirmMerge] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [prompted, setPrompted] = useState<string | null>(null);
 
@@ -1220,7 +1084,7 @@ function GitStatusRows({
 		prState === "MERGED" ? 0 : behind > 0 ? behind : behindBase;
 	const behindWhat = behind > 0 ? "remote" : git?.baseBranch || "main";
 
-	const hasRows = !!pr || ahead > 0 || behindCount > 0 || dirty > 0;
+	const hasRows = ahead > 0 || behindCount > 0 || dirty > 0;
 	if (!hasRows) return null;
 
 	async function run(name: string, fn: () => Promise<unknown>) {
@@ -1249,92 +1113,10 @@ function GitStatusRows({
 		setTimeout(() => setPrompted(null), 6000);
 	}
 
-	async function merge() {
-		if (busy) return;
-		if (!confirmMerge) {
-			setConfirmMerge(true);
-			setError(null);
-			setTimeout(() => setConfirmMerge(false), 4000);
-			return;
-		}
-		setConfirmMerge(false);
-		await run("merge", () => mergePrApi(sessionId, "squash", repo));
-	}
-
-	function resolveConflicts() {
-		if (!send) return;
-		send({
-			type: "prompt",
-			sessionId,
-			user: getCurrentUser(),
-			content: `The PR has merge conflicts with ${pr?.baseRefName || git?.baseBranch || "main"}. Rebase this branch on the latest origin/${pr?.baseRefName || git?.baseBranch || "main"}, resolve the conflicts, and push.`,
-		});
-		setPrompted("resolve the conflicts");
-		setTimeout(() => setPrompted(null), 6000);
-	}
-
-	const checks = summarizeChecks(pr);
-	const prStatus = !pr
-		? null
-		: pr.state === "MERGED"
-			? "Merged"
-			: pr.state === "CLOSED"
-				? "Closed"
-				: pr.isDraft
-					? "Draft"
-					: pr.mergeable === "CONFLICTING"
-						? "Merge conflicts"
-						: checks.failed > 0
-							? "Checks failed"
-							: checks.pending > 0
-								? "Checks running"
-								: pr.reviewDecision === "CHANGES_REQUESTED"
-									? "Changes requested"
-									: pr.reviewDecision === "REVIEW_REQUIRED"
-										? "Review required"
-										: "Ready to merge";
-
-	// The dot carries the state, so it has to agree with the headline above.
-	const prTone =
-		prStatus === "Ready to merge"
-			? "green"
-			: prStatus === "Merged"
-				? "purple"
-				: prStatus === "Checks running" || prStatus === "Review required"
-					? "yellow"
-					: prStatus === "Closed" || prStatus === "Draft"
-						? "muted"
-						: "red";
-
 	return (
 		<div className={INFO_SECTION_CLASS}>
 			<div className={INFO_LABEL_CLASS}>Git status</div>
 			<div className={INFO_LIST_CLASS}>
-				{prStatus && (
-					<div className={`${GIT_ROW} py-2`}>
-						<span className={`${GIT_DOT} ${GIT_DOT_BG[prTone]}`} aria-hidden />
-						<span className={GIT_LABEL}>{prStatus}</span>
-						{pr?.mergeable === "CONFLICTING" && send ? (
-							<button type="button" className={GIT_ACTION} onClick={resolveConflicts}>
-								Resolve
-							</button>
-						) : pr?.state === "OPEN" && !pr.isDraft ? (
-							<button
-								type="button"
-								className={GIT_ACTION}
-								disabled={!!busy}
-								onClick={() => void merge()}
-								title="Squash and merge this pull request"
-							>
-								{busy === "merge"
-									? "Merging…"
-									: confirmMerge
-										? "Confirm merge"
-										: "Merge"}
-							</button>
-						) : null}
-					</div>
-				)}
 				{ahead > 0 && (
 					<div className={`${GIT_ROW} py-2`}>
 						<span className={`${GIT_DOT} ${GIT_DOT_BG.blue}`} aria-hidden />
@@ -1406,6 +1188,7 @@ export function WorkspaceInfo({
 	workspaceName,
 	sessions,
 	repo,
+	prStatus,
 	prState,
 	refreshTick,
 	sandbox,
@@ -1414,7 +1197,6 @@ export function WorkspaceInfo({
 	reviewAcceptedFromPr,
 	onReviewChange,
 	onOpenTab,
-	onOpenChecks,
 	onAddToInput,
 	onOpenSession,
 	send,
@@ -1598,14 +1380,12 @@ export function WorkspaceInfo({
 			) === i,
 	);
 
-	// PR status belongs in the Info sidebar even when the local tree is clean;
-	// local deltas add rows beneath it.
+	// PR status has its own section; this block only appears for local git facts.
 	const showGit = Boolean(
-		pr ||
-			(git &&
-				(git.ahead > 0 ||
-					(prState !== "MERGED" && (git.behind > 0 || git.behindBase > 0)) ||
-					git.uncommittedFiles > 0)),
+		git &&
+			(git.ahead > 0 ||
+				(prState !== "MERGED" && (git.behind > 0 || git.behindBase > 0)) ||
+				git.uncommittedFiles > 0),
 	);
 	const hasBody = Boolean(
 		comments.length > 0 ||
@@ -1638,8 +1418,13 @@ export function WorkspaceInfo({
 						<SandboxBadge sessionId={sessionId} sandbox={sandbox} />
 					</div>
 				)}
-				{pr && <ChecksChip pr={pr} onOpenChecks={onOpenChecks} />}
 			</div>
+			{prStatus && (
+				<div className={INFO_SECTION_CLASS}>
+					<div className={INFO_LABEL_CLASS}>Pull requests</div>
+					{prStatus}
+				</div>
+			)}
 			{pr?.number && (
 				<AgentReviewCard
 					sessionId={sessionId}
@@ -1653,7 +1438,6 @@ export function WorkspaceInfo({
 					sessionId={sessionId}
 					repo={repo}
 					git={git}
-					pr={pr}
 					prState={prState}
 					send={send}
 					onReload={reloadStatus}
