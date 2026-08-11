@@ -181,6 +181,13 @@ export const VIEWER_REVIEW_MAIN =
  * animating over time it stays active under reduced motion — nothing moves that
  * wouldn't move anyway. Phones fade the transcript under their floating pills
  * with a mask instead (see VIEWER_MESSAGES).
+ *
+ * It is the header's stand-in, so it drops when the header isn't the thing
+ * above the transcript: with a tab strip in the pane the strip's own bottom
+ * hairline already divides chrome from content, and a wash under a drawn line
+ * only dims the first rows for nothing. The pseudo-element isn't generated at
+ * all in that case rather than merely hidden, so the scroll timeline has
+ * nothing to drive.
  */
 export const VIEWER_MESSAGES_REGION =
 	"relative flex min-h-0 flex-1 flex-col " +
@@ -203,7 +210,13 @@ export const VIEWER_MESSAGES_REGION =
 	// fully legible without reserving any blank space below the header. The short
 	// 24px ramp still softens content once it begins passing underneath.
 	"desktop:supports-[animation-timeline:scroll()]:before:[animation-range:0_24px] " +
-	"desktop:supports-[animation-timeline:scroll()]:before:content-['']";
+	"desktop:supports-[animation-timeline:scroll()]:before:content-[''] " +
+	// A tab strip anywhere in the pane (a split gives every column one) puts a
+	// real divider above the transcript, so the wash goes. Written as an
+	// ancestor variant because the strip is neither this element's parent nor
+	// its sibling; it outranks the `content-['']` above on specificity, so the
+	// order the two are written in doesn't decide it.
+	"desktop:supports-[animation-timeline:scroll()]:[.detail-pane:has(.session-tabs)_&]:before:content-none";
 
 /**
  * The scroll container.
