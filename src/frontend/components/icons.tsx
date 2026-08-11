@@ -339,6 +339,20 @@ export function IconCrosshair(p: IconProps) {
   );
 }
 
+export function IconCursor(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M8.25 7L17.75 11.75L13.5 13.25L11.75 17.5L8.25 7Z"
+      />
+      <path {...stroke} d="M5.25 8.5H3.75" />
+      <path {...stroke} d="M6.25 6.25L5.25 5.25" />
+      <path {...stroke} d="M8.5 5.25V3.75" />
+    </Svg>
+  );
+}
+
 export function IconMap(p: IconProps) {
   return (
     <Svg {...p}>

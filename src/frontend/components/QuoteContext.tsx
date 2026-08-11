@@ -2,7 +2,7 @@ import React from "react";
 import { motion } from "motion/react";
 import type { Quote } from "../lib/quotes";
 import { duration, ease } from "../ui/motion";
-import { IconCrosshair, IconX } from "./icons";
+import { IconCursor, IconX } from "./icons";
 
 interface Props {
 	quote: Quote;
@@ -28,7 +28,7 @@ export function QuoteContext({ quote, onRemove, disabled }: Props) {
 				title={quote.text}
 				className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-meta font-medium text-fg"
 			>
-				<IconCrosshair size={15} className="shrink-0 text-faint" />
+				<IconCursor size={15} className="shrink-0 text-faint" />
 				<span className="truncate">Selected text</span>
 				<button
 					type="button"
