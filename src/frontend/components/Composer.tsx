@@ -791,11 +791,16 @@ export function Composer({
                 : "V-LINE"}
           </div>
         )}
-        <QuoteContext
-          quote={quote ?? null}
-          onRemove={() => onQuoteClear?.()}
-          disabled={disabled}
-        />
+        <AnimatePresence initial={false}>
+          {quote && (
+            <QuoteContext
+              key={quote.id}
+              quote={quote}
+              onRemove={() => onQuoteClear?.()}
+              disabled={disabled}
+            />
+          )}
+        </AnimatePresence>
         <ImageThumbs images={imgs} onRemove={removeImage} disabled={disabled} />
         <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
         <motion.div
