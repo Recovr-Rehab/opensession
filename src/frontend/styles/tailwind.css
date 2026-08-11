@@ -57,8 +57,12 @@
 	--color-raised: var(--bg-raised);
 	--color-panel: var(--bg-panel);
 	/* Floating popups (hover cards, menus). Its own surface rather than
-	   bg-panel: in light a popup is paper on the page, not a panel in it. */
+	   bg-panel: in light a popup is paper on the page, not a panel in it.
+	   `popup-glass` is that same paper held up to the light — pair it with
+	   `[backdrop-filter:var(--popup-blur)]`, and it falls back to the opaque
+	   `popup` on its own where the blur can't run (see base.css). */
 	--color-popup: var(--popup-surface);
+	--color-popup-glass: var(--popup-glass);
 	/* bg-hover is the interaction *wash* (translucent ink, so it reads the same
 	   strength over any surface) — that's what `hover:bg-hover` wants at all of
 	   its call sites. bg-active stays an opaque surface: it's used as one (switch
@@ -160,6 +164,12 @@
 	   stacked against. There is no 12px step in the scale below, which is
 	   precisely why those rows had drifted. */
 	--radius-row: calc(12px * var(--rf));
+	/* The corner of a floating popup — hover card, menu, filter panel. Rounder
+	   than the controls inside it, on purpose: those are pressed, this is a
+	   whole surface that arrived over the page, and at 300px a control's
+	   corner reads as a square box. It sits below the composer's 28px, which
+	   stays the roundest thing on a session page. */
+	--radius-popup: calc(16px * var(--rf));
 
 	/* base.css sets html { font-size: 14px }, which silently shrinks every
 	   rem-based utility to 87.5% of its px design value (p-3 → 10.5px). Anchor

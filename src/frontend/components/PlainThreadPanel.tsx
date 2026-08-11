@@ -36,9 +36,7 @@ import {
 	composerTextareaPadding,
 	composerToolbar,
 } from "../lib/composer-classes";
-import { paletteIconBtn, paletteIconBtnOn } from "../lib/palette-classes";
-import { Tooltip } from "../ui/tooltip";
-import { IconArrowUp, IconPencil } from "./icons";
+import { IconArrowUp } from "./icons";
 
 interface Props {
 	sessionId: string;
@@ -626,27 +624,24 @@ export function PlainReplyBox({
 				</div>
 			)}
 			<div className={composerToolbar}>
-				<Tooltip
-					label={
-						kind === "note" ? "Switch to customer reply" : "Write an internal note"
-					}
-				>
-					<button
-						type="button"
-						aria-label={
-							kind === "note" ? "Switch to customer reply" : "Write an internal note"
-						}
-						aria-pressed={kind === "note"}
-						className={cn(
-							paletteIconBtn,
-							kind === "note" && paletteIconBtnOn,
-							"-ml-1.5",
-						)}
-						onClick={() => setKind((current) => (current === "note" ? "reply" : "note"))}
-					>
-						<IconPencil size={20} />
-					</button>
-				</Tooltip>
+				<div className="flex shrink-0 items-center gap-1 rounded-[999px] bg-[var(--bg-hover)] p-0.5">
+					{(["reply", "note"] as const).map((k) => (
+						<button
+							key={k}
+							type="button"
+							aria-pressed={kind === k}
+							className={cn(
+								"cursor-pointer rounded-[999px] px-2.5 py-1 text-meta font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
+								kind === k
+									? "bg-active text-fg"
+									: "text-faint hover:text-dim",
+							)}
+							onClick={() => setKind(k)}
+						>
+							{k === "reply" ? "Reply" : "Internal note"}
+						</button>
+					))}
+				</div>
 				<span className="min-w-0 truncate text-meta text-faint phone:hidden">
 					{kind === "note"
 						? `Posted as ${currentUser} (via ${PRODUCT_NAME})`

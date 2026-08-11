@@ -116,7 +116,8 @@ function Popup({
 					className={cn(
 						// The ring override rides on the popup so the arrow, which
 						// continues that hairline, inherits the same value.
-						"rounded-control [corner-shape:squircle] bg-popup [--smooth-ring-color:var(--popup-ring)] outline-none",
+						"rounded-popup [corner-shape:squircle] outline-none",
+						"bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)]",
 						elevation === "lg"
 							? "smooth-shadow-ring-lg"
 							: "smooth-shadow-ring-md",
@@ -129,15 +130,31 @@ function Popup({
 					{arrow && (
 						// A square rotated onto its point, half of it hanging off the
 						// popup edge: the outward two borders continue the popup's
-						// hairline, while the fill covers the segment behind it. Base UI sets
-						// the cross-axis offset inline; the main-axis one is ours.
+						// hairline. Base UI sets the cross-axis offset inline; the
+						// main-axis one is ours.
+						//
+						// The clip is what lets the arrow be glass. Unclipped, its
+						// inner half lies ON the popup, and two thinned fills stacked
+						// composite brighter than one — the whole diamond shows
+						// through the card as a wedge, which is exactly the seam a
+						// pointer is meant not to have. Clipped to the half that
+						// hangs off, arrow and popup tile edge to edge and read as
+						// one sheet of glass. Each polygon is that half plus a ~1px
+						// sliver past the diagonal, so the arrow's own fill covers
+						// the popup's hairline where it would otherwise draw a line
+						// across the arrow's base.
 						<BasePopover.Arrow
 							className={cn(
-								"size-[10px] rotate-45 [border-color:var(--smooth-ring-color)] bg-popup",
+								"size-[10px] rotate-45 [border-color:var(--smooth-ring-color)]",
+								"bg-popup-glass [backdrop-filter:var(--popup-blur)]",
 								"data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l",
+								"data-[side=right]:[clip-path:polygon(14%_0,0_0,0_100%,100%_100%,100%_86%)]",
 								"data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r",
+								"data-[side=left]:[clip-path:polygon(0_0,100%_0,100%_100%,86%_100%,0_14%)]",
 								"data-[side=top]:bottom-[-6px] data-[side=top]:border-r data-[side=top]:border-b",
+								"data-[side=top]:[clip-path:polygon(100%_0,100%_100%,0_100%,0_86%,86%_0)]",
 								"data-[side=bottom]:top-[-6px] data-[side=bottom]:border-t data-[side=bottom]:border-l",
+								"data-[side=bottom]:[clip-path:polygon(0_0,100%_0,100%_14%,14%_100%,0_100%)]",
 							)}
 						/>
 					)}

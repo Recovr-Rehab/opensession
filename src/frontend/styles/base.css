@@ -68,6 +68,15 @@
 	   below — see the light block. */
 	--popup-surface: var(--control-surface);
 	--popup-ring: var(--smooth-ring-color);
+	/* Glass. The same fill, thinned so the page shows through, over a blur
+	   heavy enough that what shows through is colour and shape rather than
+	   somebody else's sentence — a popup you can read a row title through is
+	   not translucent, it is broken. Written once here rather than per theme:
+	   --popup-surface re-resolves under html[data-theme], so the mix follows.
+	   Both are overridden back to opaque at the bottom of this block's file
+	   for browsers without backdrop-filter and for reduced transparency. */
+	--popup-glass: color-mix(in srgb, var(--popup-surface) 72%, transparent);
+	--popup-blur: blur(20px) saturate(1.8);
 	/* The composer's own fill + edge. In dark it IS --control-surface: lighter
 	   than the page, so the box already reads as lifted. Light needs its own
 	   pair — see the light block. */
@@ -368,6 +377,24 @@ html[data-theme="light"] {
 	--chip-linear-fg: #4650c0;
 	--chip-ask-bg: rgba(210, 153, 34, 0.16);
 	--chip-ask-fg: #9a6700;
+}
+
+/* Glass is an enhancement, never the thing holding the text up: without a
+   working backdrop-filter a thinned fill is just a see-through card, and
+   somebody who has asked the OS for less transparency has asked for exactly
+   this. Both fall back to the opaque surface, which is the same colour the
+   glass is mixed from, so nothing else about the popup changes. Declared
+   after both theme blocks so they win over the :root definition. */
+@supports not (backdrop-filter: blur(1px)) {
+	:root {
+		--popup-glass: var(--popup-surface);
+	}
+}
+
+@media (prefers-reduced-transparency: reduce) {
+	:root {
+		--popup-glass: var(--popup-surface);
+	}
 }
 
 /* ── Accent themes ────────────────────────────────────────────
