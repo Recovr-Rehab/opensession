@@ -943,15 +943,21 @@ export function IconDotsHorizontal(p: IconProps) {
   );
 }
 
-// The Desk: a screen on a desk (hand-drawn on the same 24 grid).
+// The Desk: a desk lamp — the same object the native app puts on this surface
+// (SF Symbols `lamp.desk`), so the two clients name the Desk with one mark.
+// Traced from that symbol onto the 24 grid: shade up and to the right, its
+// mouth open down-right; the arm folds back down-left over an elbow to a base
+// bar. The elbow is what separates a desk lamp from a funnel at 24px — a
+// straight arm reads as a watering can. The shade's two sides bow outward for
+// the same reason: drawn as a flat triangle it reads as a pennant on a pole,
+// and the mouth has to run ~1.6× the cone's length (the symbol's own ratio) or
+// the lamp looks folded shut.
 export function IconDesk(p: IconProps) {
   return (
     <Svg {...p}>
-      <rect {...stroke} x="8.25" y="4.75" width="7.5" height="4.5" rx="1" />
-      <path {...stroke} d="M12 9.25V11.25" />
-      <path {...stroke} d="M3.75 11.25H20.25" />
-      <path {...stroke} d="M5.75 11.25V19.25" />
-      <path {...stroke} d="M18.25 11.25V19.25" />
+      <path {...stroke} d="M10.9 4.4Q15.9 4.15 19.4 5.05L11.8 11.9Q9.75 8.1 10.9 4.4Z" />
+      <path {...stroke} d="M10.9 4.4L5.2 11.9L8.35 15.4L8.9 19.25" />
+      <path {...stroke} d="M4.75 19.25H14.1" />
     </Svg>
   );
 }

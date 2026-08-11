@@ -50,10 +50,17 @@ export const MOBILE_FAB =
  * On phones it keeps its border, so it needs less shadow than the + to sit off
  * the page — a matched pair of deep shadows made the two read as one heavy
  * slab. This is the desktop shadow's weight, spread for the bigger circle.
+ *
+ * It takes the composer's surface pair rather than --bg-panel for the same
+ * reason the composer does: the ramp steps AWAY from the page, so a panel fill
+ * put a grey disc on a white page — a hole rather than a lifted control. White
+ * with a firmer edge (--composer-border, not --border) is how a raised surface
+ * behaves in light; in dark the pair resolves to --control-surface, which is
+ * lighter than the page and lifts on its own.
  */
 export const DESK_FAB =
 	"fixed right-[18px] bottom-[18px] z-500 flex size-11 items-center justify-center " +
-	"rounded-full border border-line bg-panel text-dim " +
+	"rounded-full border border-[color:var(--composer-border)] bg-[var(--composer-surface)] text-dim " +
 	"shadow-[0_1px_2px_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.08)] " +
 	"transition-[color,translate,scale] hover:-translate-y-px hover:text-fg " +
 	"phone:right-[calc(12px+58px+12px)] phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
