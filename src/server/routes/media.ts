@@ -62,11 +62,17 @@ export async function handleMediaRoutes(
 		const type = mediaTypes[ext] || "application/octet-stream";
 		const size = file.size;
 		const range = req.headers.get("range");
+		// ?download=1 saves the file instead of playing it inline, the same way
+		// the session-assets route spells it. The lightbox's Download links
+		// straight here, so the browser saves the file under its own name — a
+		// plain <a download> is honoured by Safari, the iOS PWA and the desktop
+		// shell alike, none of which reliably save a blob: URL built in JS.
+		const asAttachment = isUploadDownload || !!url.searchParams.get("download");
 		const baseHeaders: Record<string, string> = {
 			"Content-Type": type,
 			"Accept-Ranges": "bytes",
 			"Cache-Control": "private, max-age=60",
-			...(isUploadDownload
+			...(asAttachment
 				? {
 						"Content-Disposition": `attachment; filename="${mediaPath
 							.split("/")

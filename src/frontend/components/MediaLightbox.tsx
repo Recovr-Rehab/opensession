@@ -2,13 +2,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type WorkspaceMediaItem } from "../lib/api";
+import { copyToClipboard } from "../lib/share-link";
 import { fullTime } from "../lib/time";
 import { cn } from "../ui/cn";
 import {
 	IconArrowDown,
 	IconArrowUpRight,
+	IconCheck,
 	IconChevronLeft,
 	IconChevronRight,
+	IconLink,
 	IconX,
 } from "./icons";
 
@@ -382,46 +385,50 @@ function extFromMime(mime: string): string {
 	return special[sub] || sub || "bin";
 }
 
-function suggestedName(item: LightboxItem, mime: string): string {
-	// Prefer the URL's own basename when it carries an extension.
+function suggestedName(item: LightboxItem): string {
 	if (!item.src.startsWith("data:") && !item.src.startsWith("blob:")) {
 		try {
-			const base = decodeURIComponent(
-				new URL(item.src, location.href).pathname.split("/").pop() || "",
-			);
+			const url = new URL(item.src, location.href);
+			// The media route carries the real file in `?path=`, so its basename
+			// is the name the file actually has — the route's own basename is
+			// just "media".
+			const from = url.searchParams.get("path") || url.pathname;
+			const base = decodeURIComponent(from.split("/").pop() || "");
 			if (/\.[a-z0-9]{2,5}$/i.test(base)) return base;
 		} catch {}
 	}
 	const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-	const ext = mime
-		? extFromMime(mime)
-		: item.kind === "video"
-			? "mp4"
-			: "png";
+	const mime = /^data:([^;,]+)/.exec(item.src)?.[1];
+	const ext = mime ? extFromMime(mime) : item.kind === "video" ? "mp4" : "png";
 	return `${item.kind}-${stamp}.${ext}`;
 }
 
 /**
- * Save the current item to the device. fetch→blob→ObjectURL so it works for
- * data:/blob:/same-origin URLs alike (a plain <a download> on a cross-origin
- * URL is silently ignored); a cross-origin file without CORS falls back to
- * opening it in a new tab, where the browser's own save UI takes over.
+ * Where Download points. It is a real link, not a fetch→blob→ObjectURL dance:
+ * the blob route buffered whole videos in memory, lost the file's own name,
+ * and on any failure fell back to window.open(), which a popup blocker eats
+ * silently — leaving a Download button that does nothing. `?download=1` asks
+ * our own routes for an attachment disposition, so the file saves instead of
+ * opening in a tab even where the `download` attribute is ignored.
  */
-async function downloadItem(item: LightboxItem) {
+function downloadHref(item: LightboxItem): string {
+	if (item.src.startsWith("data:") || item.src.startsWith("blob:"))
+		return item.src;
 	try {
-		const res = await fetch(item.src);
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		const blob = await res.blob();
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = suggestedName(item, blob.type);
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		setTimeout(() => URL.revokeObjectURL(url), 60_000);
+		const url = new URL(item.src, location.href);
+		if (url.origin === location.origin) url.searchParams.set("download", "1");
+		return url.href;
 	} catch {
-		window.open(item.src, "_blank", "noopener");
+		return item.src;
+	}
+}
+
+/** The item's own URL, absolute, for pasting somewhere outside the app. */
+function shareableSrc(item: LightboxItem): string {
+	try {
+		return new URL(item.src, location.href).href;
+	} catch {
+		return item.src;
 	}
 }
 
@@ -784,6 +791,10 @@ function MediaLightbox({
 		(_, offset) => dotStart + offset,
 	);
 	const [imageZoomed, setImageZoomed] = useState(false);
+	// Which file the copy receipt belongs to, so a page turn shows the fresh
+	// "Copy link" for the item now on screen rather than a stale "Copied".
+	const [copiedSrc, setCopiedSrc] = useState<string | null>(null);
+	const copied = !!item && copiedSrc === item.src;
 	// Which way the last page turn went, so the arriving item slides in from
 	// the side it came from — set by the arrows and the keyboard too, not just
 	// by the drag, so every route through the gallery reads the same.
@@ -808,6 +819,12 @@ function MediaLightbox({
 		onIndex(i);
 	};
 	const requestClose = () => onClose(!imageZoomed);
+
+	useEffect(() => {
+		if (!copiedSrc) return;
+		const t = setTimeout(() => setCopiedSrc(null), 1600);
+		return () => clearTimeout(t);
+	}, [copiedSrc]);
 
 	useEffect(() => {
 		const previousFocus = document.activeElement as HTMLElement | null;
@@ -897,24 +914,40 @@ function MediaLightbox({
 			}}
 		>
 			<div className="absolute right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center gap-1">
-				<button
-					type="button"
-					onClick={() => void downloadItem(item)}
+				<a
+					href={downloadHref(item)}
+					download={suggestedName(item)}
 					className={lightboxAction}
 				>
 					<IconArrowDown size={14} />
 					Download
-				</button>
+				</a>
 				{!item.src.startsWith("data:") && (
-					<a
-						href={item.src}
-						target="_blank"
-						rel="noopener noreferrer"
-						className={lightboxAction}
-					>
-						<IconArrowUpRight size={14} />
-						Open
-					</a>
+					<>
+						{/* The file's own URL — what you paste into a Tella upload, a
+						    ticket, or a message to someone else on the tailnet. */}
+						<button
+							type="button"
+							onClick={() =>
+								copyToClipboard(shareableSrc(item), () =>
+									setCopiedSrc(item.src),
+								)
+							}
+							className={lightboxAction}
+						>
+							{copied ? <IconCheck size={14} /> : <IconLink size={14} />}
+							{copied ? "Copied" : "Copy link"}
+						</button>
+						<a
+							href={item.src}
+							target="_blank"
+							rel="noopener noreferrer"
+							className={lightboxAction}
+						>
+							<IconArrowUpRight size={14} />
+							Open
+						</a>
+					</>
 				)}
 				<button
 					ref={closeRef}
