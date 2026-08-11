@@ -63,8 +63,6 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
 import { composerMorph, composerChipMotion } from "../ui/motion";
 import { ModelEffortSelect, shortModelLabel } from "./ModelEffortSelect";
-import { UsageMeter } from "./UsageMeter";
-import type { SessionUsage } from "../lib/types";
 
 interface Props {
   /**
@@ -125,12 +123,6 @@ interface Props {
    */
   goal?: string | null;
   onSetGoal?: (goal: string | null) => void;
-  /**
-   * Live per-conversation usage (cost + context fill). When present, a compact
-   * cost/ring meter rides the toolbar just right of the model pill on desktop;
-   * on phones it's surfaced in the top-bar session bar instead (won't fit here).
-   */
-  usage?: SessionUsage;
   /** Extra row for the "+" menu, below the built-in ones. Same shape as
    *  `sendMenu`: render a `composerMenuItem` button and call `close()`
    *  when it's picked. */
@@ -339,7 +331,6 @@ export function Composer({
   onAccountChange,
   goal,
   onSetGoal,
-  usage,
   menuExtra,
   attached,
   prefill,
@@ -1094,21 +1085,6 @@ export function Composer({
                   disabled={disabled}
                   onOpenChange={setModelMenuOpen}
                 />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Live cost + context ring, right of the model pill. Phones surface it
-              in the top-bar session bar instead (the toolbar is too cramped). */}
-          <AnimatePresence initial={false}>
-            {!minimized && !isPhone && usage && (
-              <motion.div
-                key="usage"
-                layout="position"
-                {...composerChipMotion}
-                className="composer-pop-wrap relative inline-flex shrink-0"
-              >
-                <UsageMeter usage={usage} />
               </motion.div>
             )}
           </AnimatePresence>

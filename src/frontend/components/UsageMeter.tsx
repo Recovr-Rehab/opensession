@@ -4,12 +4,11 @@ import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 
 /**
- * Compact live cost + context readout that rides inside the composer toolbar
- * (right of the model pill on desktop, in the mobile session bar otherwise). Shows
- * the running API-equivalent USD spend for the conversation and a ring gauge of
- * how full the model's context window is; hover (or tap on touch) for a
- * per-token breakdown. Cost comes directly from the engine's completed
- * provider messages. Hidden until the first run reports usage.
+ * Compact live cost + context readout for the mobile session bar. Shows the
+ * running API-equivalent USD spend for the conversation and a ring gauge of
+ * how full the model's context window is; tap for a per-token breakdown. Cost
+ * comes directly from the engine's completed provider messages. Hidden until
+ * the first run reports usage.
  */
 
 function fmtUsd(n: number): string {
@@ -124,9 +123,8 @@ export function UsageMeter({
 				delay={200}
 				closeDelay={100}
 				className={cn(
-					// A pill, like the model readout it sits beside: both are text you
-				// can open, not plates you press, and the toolbar reads better for
-				// having one quiet shape rather than another small box.
+					// A quiet pill in the session subtitle: this is a readout you can
+					// open, not a plate you press.
 				"group flex min-h-8 items-center gap-1.5 rounded-full px-1.5 py-1 text-xs font-medium",
 					"text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
 					"cursor-pointer select-none outline-none transition-colors",

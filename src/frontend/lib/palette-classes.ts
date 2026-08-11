@@ -74,8 +74,7 @@ export const paletteIconBtnOn =
 /* ── The model/effort pill ────────────────────────────────────────
    ModelEffortSelect's trigger, in the composer toolbar and in the new-session
    palette footer. It stays a pill: it is a text readout you can change, not a
-   plate you press, and it sits beside the cost readout, which is the same
-   kind of thing and the same shape.
+   plate you press.
 
    `rounded-full`, not `rounded-[999px]`: this control has never been a
    squircle — the stylesheet said a bare `border-radius: 999px` with no

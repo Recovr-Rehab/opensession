@@ -1482,7 +1482,7 @@ export function SessionViewer({
 	const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
 	const [accountId, setAccountId] = useState(session.accountId || "");
 	// Live token/cost accounting — seeded from the session, updated per run via
-	// the `usage_update` broadcast. Powers the composer cost/context pill.
+	// the `usage_update` broadcast. Powers the phone header's cost/context pill.
 	const [usage, setUsage] = useState(session.usage);
 	// Reasoning effort — a composer control mirroring the new-session palette.
 	// Persisted on the session server-side and enforced per run (Claude effort /
@@ -4851,9 +4851,9 @@ export function SessionViewer({
 								)}
 							</span>
 						)}
-						{/* The composer's cost/context meter can't fit in the toolbar on
-						    phones, so it rides here after the model, restyled to the
-						    subtitle's size and colour. The cache rate stays off: the line
+						{/* Cost/context stays in the phone session bar, after the model and
+						    restyled to the subtitle's size and colour. The cache rate stays
+						    off: the line
 						    is a pill capped by the screen, and "92% cached" was winning
 						    that fight against the model name — the thing you actually
 						    read to know what you are talking to. The full breakdown is
@@ -5509,7 +5509,6 @@ export function SessionViewer({
 									onSetGoal={
 										session.source === "opensession" ? handleSetGoal : undefined
 									}
-									usage={usage}
 									mentionFetch={async (q) => [
 										...peopleMentionMatches(q),
 										...(await fetchFileMentions(q, session.id)),
