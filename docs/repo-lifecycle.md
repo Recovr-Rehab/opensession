@@ -107,10 +107,11 @@ session's preview card. Sandboxed previews additionally write
 `<worktree>/.tunnels.env` with `PREVIEW_URL` / `PREVIEW_URL_<port>` entries
 (see [deploy/sandbox/README.md](../deploy/sandbox/README.md)).
 
-Host previews also inject the instance's short-lived cloud credentials (the
-same ones agent runs get) into the boot, so a `start.sh` that needs, say, S3
-access for a prebuilt-artifact fetch works without its own credential
-plumbing.
+Previews inject the instance's short-lived cloud credentials (the same ones
+interactive agent runs get) into the boot, including inside user-selected
+sandboxes. A `start.sh` that needs, say, S3 access for a prebuilt-artifact
+fetch works without persisting credentials in the workspace or reusable
+snapshot.
 
 ## preview.json — warm routes
 

@@ -1167,13 +1167,18 @@ export async function startSandboxPreview(
 
   starting.set(worktreeDir, Date.now());
   const bootMode = sandbox.bootMode || "fresh";
+  // Sandbox previews are an interactive execution path, like agent runs.
+  // Pass the host's short-lived AWS scope as process env so repo setup/start
+  // scripts can fetch private build artifacts. It is never written to the
+  // workspace or reusable provider snapshot.
+  const awsEnv = await getAgentAwsEnv();
   const r = await sandbox.exec([
     "sh", "-c",
     `mkdir -p .ports && nohup setsid env HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PREVIEW_PATH)} ` +
       `WEBAPP_PORT=${port} PREVIEW_URL=${shellQuoteWord(previewUrl)} ` +
       `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ` +
       `bash -c 'echo $$ > .ports/dev-pgid; exec ${cmd}' >> /tmp/backstage-preview.log 2>&1 &`,
-  ]);
+  ], { env: awsEnv });
   if (r.exitCode !== 0) starting.delete(worktreeDir);
   return { ...status, starting: r.exitCode === 0 };
 }

@@ -117,6 +117,7 @@ import type {
  *  layout so the runner's hardcoded paths resolve (do not "tidy" these). */
 export const REMOTE_HOME = "/home/ubuntu";
 const REMOTE_BUN = `${REMOTE_HOME}/.bun/bin/bun`;
+const REMOTE_BUNX = `${REMOTE_HOME}/.bun/bin/bunx`;
 const REMOTE_CLAUDE = `${REMOTE_HOME}/.local/bin/claude`;
 const REMOTE_OPENCODE = `${REMOTE_HOME}/.bun/bin/opencode`;
 const REMOTE_MCP_CONFIG = `${REMOTE_HOME}/.opensession-mcp-config.json`;
@@ -130,7 +131,7 @@ const REMOTE_OPENCODE_VERSION = "1.17.15";
 const REMOTE_NODE_VERSION = "24.18.1";
 const REMOTE_NODE_MAJOR = Number(REMOTE_NODE_VERSION.split(".")[0]);
 const REMOTE_JUST_VERSION = "1.43.1";
-const REMOTE_RUNTIME_REVISION = "workspace-runtime-v5";
+const REMOTE_RUNTIME_REVISION = "workspace-runtime-v6";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
@@ -699,6 +700,15 @@ async function bootstrapRemoteBaseRuntime(
       { timeoutMs: 300_000 },
     ),
     "bun install",
+  );
+  // Some provider images prebake only the `bun` binary. Bun's standard
+  // installer also exposes `bunx` as a same-binary shim, and repo tooling
+  // commonly invokes that name directly (tella-fusion's ReScript watcher).
+  need(
+    await driver.exec(
+      `test -x ${REMOTE_BUNX} || ln -sf ${REMOTE_BUN} ${REMOTE_BUNX}`,
+    ),
+    "bunx shim",
   );
   log("ready");
 }
