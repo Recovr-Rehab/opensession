@@ -128,7 +128,7 @@ function daytonaMemoryGiB(value: string | undefined): number | undefined {
   return Math.max(1, Math.ceil(amount / 1024 / 1024));
 }
 
-function daytonaCreateResources(
+export function daytonaCreateResources(
   cfg: ReturnType<typeof sandboxConfig>,
   overrides?: { cpu?: number; memoryMb?: number; diskGb?: number },
 ) {
@@ -404,8 +404,14 @@ export class DaytonaProvider implements SandboxProvider {
       // too small for real repo workspaces: the runner payload alone is ~2GB
       // and a tella-fusion clone died on ENOSPC. See SandboxDaytonaConfig.
       const template = await recoverDaytonaRepoTemplate(client, repo.id);
+      // A prepared repo template already carries its machine shape. When the
+      // template is absent/stale (first launch after a merge), the cold
+      // fallback must use the same per-project profile; Daytona's default
+      // 3 GiB disk cannot even install the OpenSession runner for real repos.
+      const { sandboxEnvironmentSettings } = await import("../environments");
+      const projectResources = sandboxEnvironmentSettings(repo.id, "daytona");
       const create = (snapshot?: string) => {
-        const resources = daytonaCreateResources(cfg);
+        const resources = daytonaCreateResources(cfg, projectResources);
         return client.create(
           {
             ...daytonaCreateSource(snapshot, resources),

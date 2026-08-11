@@ -1,11 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import {
+  daytonaCreateResources,
   daytonaCreateSource,
   daytonaSnapshotIsRecoverable,
   parseDaytonaExecResult,
 } from "./daytona";
 
 describe("Daytona create source", () => {
+  test("uses the per-project machine profile for cold session fallbacks", () => {
+    expect(
+      daytonaCreateResources({} as any, {
+        cpu: 2,
+        memoryMb: 4096,
+        diskGb: 8,
+      }),
+    ).toEqual({ cpu: 2, memory: 4, disk: 8 });
+  });
+
   test("uses an explicit image whenever custom resources are requested", () => {
     expect(daytonaCreateSource(undefined, { cpu: 2, memory: 4, disk: 8 })).toEqual({
       image: "daytonaio/sandbox:0.8.0",
