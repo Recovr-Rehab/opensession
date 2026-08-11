@@ -65,6 +65,7 @@ export interface FakeCall {
   model: string;
   sessionId?: string;
   journalKind?: string;
+  firstJournaledAt?: string;
   seedEntries?: number;
 }
 
@@ -95,7 +96,8 @@ export function makeFakeEngine(turns: FakeTurn[]): FakeEngine {
       prompt: opts.prompt,
       model,
       sessionId: opts.sessionId,
-      journalKind: opts.journal?.kind,
+    journalKind: opts.journal?.kind,
+    firstJournaledAt: opts.journal?.firstJournaledAt,
       seedEntries: opts.seedTranscriptEntries?.length,
     });
     const turn = turns[callIndex];

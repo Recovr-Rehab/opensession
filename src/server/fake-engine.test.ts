@@ -135,6 +135,8 @@ describe("fake engine through runAgent", () => {
 		expect(fake.calls[1].sessionId).toBeUndefined();
 		expect(fake.calls[1].prompt).toContain("previous attempt");
 		expect(fake.calls[1].journalKind).toBe("prompt-fallback");
+		expect(fake.calls[0].firstJournaledAt).toBeTruthy();
+		expect(fake.calls[1].firstJournaledAt).toBe(fake.calls[0].firstJournaledAt);
 	});
 
 	test("known-dry Claude pool skips the doomed engine attempt and enters fallback directly", async () => {

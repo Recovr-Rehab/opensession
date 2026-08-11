@@ -848,12 +848,13 @@ export function pickMeridianAccount(
   stickyId?: string,
   out?: { reason?: string },
   recordPick = true,
+  allowExtraUsage?: boolean,
 ): ClaudeAccount | { error: string } {
   if (isLocalProfile()) return localClaudeAccount();
   const allowedOwner = (a: ClaudeAccount) => !a.owner || (!!user && userMatchesAny(user, [a.owner]));
   const designated = (id: string) => !ids?.length || ids.includes(id);
   if (pinnedId) {
-    const pinned = getUsableAccountById(pinnedId, model);
+    const pinned = getUsableAccountById(pinnedId, model, allowExtraUsage);
     if (pinned && allowedOwner(pinned) && designated(pinnedId)) {
       if (out) out.reason = "pinned";
       return pinned;
@@ -864,7 +865,7 @@ export function pickMeridianAccount(
     }
   }
   if (stickyId && designated(stickyId)) {
-    const sticky = getUsableAccountById(stickyId, model);
+    const sticky = getUsableAccountById(stickyId, model, allowExtraUsage);
     if (sticky && allowedOwner(sticky)) {
       if (out) out.reason = "sticky";
       return sticky;
@@ -872,7 +873,7 @@ export function pickMeridianAccount(
   }
   if (ids?.length) {
     for (const id of ids) {
-      const a = getUsableAccountById(id, model);
+      const a = getUsableAccountById(id, model, allowExtraUsage);
       if (a && allowedOwner(a)) {
         if (out) out.reason = "designated";
         return a;
@@ -882,8 +883,8 @@ export function pickMeridianAccount(
     return { error: `no designated meridian bridge account is currently usable (tried: ${known})` };
   }
   const picked = recordPick
-    ? pickAccount(undefined, user, model)
-    : peekAccount(undefined, user, model);
+    ? pickAccount(undefined, user, model, allowExtraUsage)
+    : peekAccount(undefined, user, model, allowExtraUsage);
   if (picked) {
     if (out) out.reason = picked.owner ? "personal-first" : "pool";
     return picked;
@@ -897,7 +898,10 @@ export function pickMeridianAccount(
  * Returns null for non-Anthropic models and bridge modes whose availability is
  * not represented by the Meridian subscription pool. */
 export function claudePoolDryReason(
-  opts: Pick<RunAgentOpts, "user" | "accountId" | "accountStrict" | "journal">,
+  opts: Pick<
+    RunAgentOpts,
+    "user" | "accountId" | "accountStrict" | "usageCredits" | "journal"
+  >,
   model: string,
 ): string | null {
   if (isLocalProfile()) return null;
@@ -917,6 +921,7 @@ export function claudePoolDryReason(
     undefined,
     undefined,
     false,
+    opts.usageCredits,
   );
   return "error" in picked ? picked.error : null;
 }
@@ -3094,10 +3099,26 @@ export async function* runOpencode(
     wedgeRetries: 0,
     emptyCompletionRepairs: 0,
   };
+  // One controller owns the WHOLE logical turn, including account rotations.
+  // A per-attempt controller let Stop abort attempt N while N+1 immediately
+  // registered a fresh controller and resurrected the cancelled turn.
+  const abortController = new AbortController();
   for (let attempt = 0; attempt < MAX_ACCOUNT_ATTEMPTS; attempt++) {
+    if (abortController.signal.aborted || opts.shouldCancel?.()) return;
     const rotation: AccountRotation = { rotate: false, note: "" };
-    yield* runOpencodeAttempt(opts, model, rotation, attempt, turn);
-    if (!rotation.rotate) return;
+    yield* runOpencodeAttempt(
+      opts,
+      model,
+      rotation,
+      attempt,
+      turn,
+      abortController,
+    );
+    if (
+      abortController.signal.aborted ||
+      opts.shouldCancel?.() ||
+      !rotation.rotate
+    ) return;
     // Surface the rotation as a structured notice, not assistant text: a
     // text_chunk polluted the streaming bubble and vanished on reload (it was
     // never persisted). The next attempt writes it into the transcript as a
@@ -3109,6 +3130,12 @@ export async function* runOpencode(
   console.warn(
     `[opencode-runner] account-rotation backstop (${MAX_ACCOUNT_ATTEMPTS}) hit for ${model} — giving up`
   );
+  const message =
+    `Account-rotation safety limit (${MAX_ACCOUNT_ATTEMPTS} attempts) reached for ${model}; ` +
+    "the turn was stopped to avoid an infinite retry loop.";
+  if (opts.journal?.osSessionId)
+    journalClear(opts.sessionId || opts.journal.osSessionId);
+  yield { type: "error", content: message, provider: PROVIDER, model };
 }
 
 async function* runOpencodeAttempt(
@@ -3121,7 +3148,8 @@ async function* runOpencodeAttempt(
     notes: [],
     wedgeRetries: 0,
     emptyCompletionRepairs: 0,
-  }
+  },
+  abortController = new AbortController(),
 ): AsyncGenerator<StreamEvent> {
   const { prompt, cwd, mode, mcpServers, confirmTools, journal, user, author } = opts;
   const isAsk = mode === "ask";
@@ -3198,9 +3226,9 @@ async function* runOpencodeAttempt(
     yield { type: "error", content: "Session is busy" };
     return;
   }
-  const abortController = new AbortController();
   const registeredKeys = new Set<string>([runKey]);
   if (journal?.osSessionId) registeredKeys.add(journal.osSessionId);
+  if (opts.transcriptSessionId) registeredKeys.add(opts.transcriptSessionId);
   for (const key of registeredKeys) activeOpencodeRuns.set(key, abortController);
 
   // Durability BEFORE the engine exists (2026-07-24, bks-019f93ea: a restart
@@ -3370,7 +3398,9 @@ async function* runOpencodeAttempt(
             opts.accountId,
             opts.accountStrict,
             stickySeed(),
-            meridianPickOut
+            meridianPickOut,
+            true,
+            opts.usageCredits,
           );
           return "error" in p ? null : p;
         };
@@ -3382,7 +3412,9 @@ async function* runOpencodeAttempt(
           opts.accountId,
           opts.accountStrict,
           stickySeed(),
-          meridianPickOut
+          meridianPickOut,
+          true,
+          opts.usageCredits,
         );
         if ("error" in picked) {
           // Dry pool at pick time: unattended runs queue for an account to
@@ -3398,6 +3430,10 @@ async function* runOpencodeAttempt(
               user,
               model: meridianModels,
               maxWaitMs: waitMs,
+              signal: abortController.signal,
+              accountId: opts.accountStrict ? opts.accountId : undefined,
+              allowExtraUsage: opts.usageCredits,
+              allowedAccountIds: cfg!.bridgeAccountIds,
               onWaitStart: (earliestReset) => {
                 audit({
                   msg: "account_pool_wait",
@@ -3446,7 +3482,13 @@ async function* runOpencodeAttempt(
         // cached usage is already near the cap, spend one targeted poll
         // (tier/cooldown-bounded in claude-accounts) and re-pick on fresh
         // data — the same account comes back unless it's genuinely at cap.
-        if (await refreshUsageIfNearLimit(picked.id, meridianModels)) {
+        if (
+          await refreshUsageIfNearLimit(
+            picked.id,
+            meridianModels,
+            abortController.signal,
+          )
+        ) {
           const fresh = repick();
           if (fresh && fresh.id !== picked.id) {
             audit({
@@ -3463,6 +3505,7 @@ async function* runOpencodeAttempt(
             picked = fresh;
           }
         }
+        if (abortController.signal.aborted || opts.shouldCancel?.()) return;
         stickyMeridianAccounts.set(sessionKey, picked.id);
         bridgeTag = `anthropic-${picked.id}`;
         // Stable per-server proxy key so the config hash — and the server —
@@ -4948,6 +4991,12 @@ async function* runOpencodeAttempt(
                 user,
                 meridianModels,
                 readOpencodeBridgeConfig()?.bridgeAccountIds,
+                opts.accountId,
+                opts.accountStrict,
+                undefined,
+                undefined,
+                true,
+                opts.usageCredits,
               );
               return "error" in p ? null : p;
             };
@@ -4963,6 +5012,10 @@ async function* runOpencodeAttempt(
                   user,
                   model: meridianModels,
                   maxWaitMs: waitMs,
+                  signal: abortController.signal,
+                  accountId: opts.accountStrict ? opts.accountId : undefined,
+                  allowExtraUsage: opts.usageCredits,
+                  allowedAccountIds: readOpencodeBridgeConfig()?.bridgeAccountIds,
                   onWaitStart: (earliestReset) => {
                     audit({
                       msg: "account_pool_wait",
@@ -4981,7 +5034,8 @@ async function* runOpencodeAttempt(
                 });
               }
             }
-            if (next) {
+            if (abortController.signal.aborted || opts.shouldCancel?.()) return;
+            if (next && !abortController.signal.aborted && !opts.shouldCancel?.()) {
               turnEvent({ direction: "out", kind: "account_switch", account: next.name });
               bridgeRunEnd("error", runFailure);
               rotation.rotate = true;
@@ -5067,6 +5121,10 @@ async function* runOpencodeAttempt(
             readOpencodeBridgeConfig()?.bridgeAccountIds,
             opts.accountId,
             opts.accountStrict,
+            undefined,
+            undefined,
+            true,
+            opts.usageCredits,
           );
           if ("error" in next || next.id === pickedMeridian.id) {
             if (marked) clearWedge(pickedMeridian.id);

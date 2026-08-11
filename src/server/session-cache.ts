@@ -364,7 +364,11 @@ export function recordRunOutcome(
 ): void {
 	const session = findSession(sessionId);
 	const id = session?.id || sessionId;
-	transitionRunState(id, errorMessage ? "run_failed" : "turn_end");
+	// runAgent settles every journal-owned run on its terminal event. Keep this
+	// persistence choke point compatible with non-runner callers without
+	// emitting a false double-teardown rejection for the normal path.
+	if (isRunStateUnsettled(getRunState(id)))
+		transitionRunState(id, errorMessage ? "run_failed" : "turn_end");
 	if (errorMessage) {
 		const entry = {
 			message: errorMessage.slice(0, 500),

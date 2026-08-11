@@ -134,14 +134,21 @@ const DEFAULT_RATE_LIMIT_WAIT_MS = 10 * 60 * 1000;
 const FAILED_REFRESH_WAIT_MS = 60 * 60 * 1000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-function fetchWithTimeout(url: string, token: string, timeoutMs = 10_000): Promise<Response> {
+function fetchWithTimeout(
+  url: string,
+  token: string,
+  timeoutMs = 10_000,
+  signal?: AbortSignal,
+): Promise<Response> {
   return fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       "anthropic-beta": "oauth-2025-04-20",
       "Content-Type": "application/json",
     },
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+      : AbortSignal.timeout(timeoutMs),
   });
 }
 
@@ -166,7 +173,11 @@ export function maskToken(token: string): string {
   return `${token.slice(0, 12)}…${token.slice(-4)}`;
 }
 
-async function fetchUsage(token: string, rateLimitKey: string): Promise<AccountUsage> {
+async function fetchUsage(
+  token: string,
+  rateLimitKey: string,
+  signal?: AbortSignal,
+): Promise<AccountUsage> {
   const rateLimitedUntil = usageRateLimitedUntil.get(rateLimitKey) ?? 0;
   if (Date.now() < rateLimitedUntil) {
     return {
@@ -178,7 +189,7 @@ async function fetchUsage(token: string, rateLimitKey: string): Promise<AccountU
     };
   }
   try {
-    const res = await fetchWithTimeout(USAGE_URL, token);
+    const res = await fetchWithTimeout(USAGE_URL, token, 10_000, signal);
     if (!res.ok) {
       if (res.status === 429) {
         const retryAfter = Number(res.headers.get("retry-after"));
@@ -225,6 +236,7 @@ async function fetchUsage(token: string, rateLimitKey: string): Promise<AccountU
         : null,
     };
   } catch (e: any) {
+    if (signal?.aborted) throw e;
     return {
       fetchedAt: new Date().toISOString(),
       fiveHour: null,
@@ -265,13 +277,18 @@ function meridianBucketWindow(b: any): UsageWindow {
   };
 }
 
-async function fetchMeridianUsage(accountId: string): Promise<AccountUsage | null> {
+async function fetchMeridianUsage(
+  accountId: string,
+  signal?: AbortSignal,
+): Promise<AccountUsage | null> {
   const endpoints = (meridianQuotaProvider?.() ?? []).filter((e) => e.accountId === accountId);
   for (const ep of endpoints.slice(0, 2)) {
     try {
       const res = await fetch(`${ep.url}/v1/usage/quota`, {
         headers: { "x-api-key": ep.key },
-        signal: AbortSignal.timeout(5_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(5_000)])
+          : AbortSignal.timeout(5_000),
       });
       if (!res.ok) continue;
       const body: any = await res.json();
@@ -303,6 +320,7 @@ async function fetchMeridianUsage(accountId: string): Promise<AccountUsage | nul
         source: "meridian",
       };
     } catch {
+      if (signal?.aborted) return null;
       // Server died between listing and fetch, or timed out — try the next.
     }
   }
@@ -313,8 +331,11 @@ async function fetchMeridianUsage(accountId: string): Promise<AccountUsage | nul
  *  own token can't read the OAuth usage endpoint. Mirrors refreshAccountUsage's
  *  exhausted-clear so a sidelined blind account comes back once observed
  *  utilization drops. */
-async function refreshMeridianUsage(account: ClaudeAccount): Promise<void> {
-  const usage = await fetchMeridianUsage(account.id);
+async function refreshMeridianUsage(
+  account: ClaudeAccount,
+  signal?: AbortSignal,
+): Promise<void> {
+  const usage = await fetchMeridianUsage(account.id, signal);
   if (!usage) return;
   usageCache.set(account.id, usage);
   const until = exhaustedUntil.get(account.id);
@@ -439,7 +460,8 @@ async function doRefreshCredsFile(path: string, staleCreds: OauthCreds): Promise
  * setup-token unless that's already known to lack the usage scope.
  */
 async function usageToken(
-  account: ClaudeAccount
+  account: ClaudeAccount,
+  signal?: AbortSignal,
 ): Promise<{ token: string; source: "credentials" | "setup-token" } | { error: string } | null> {
   if (account.credentialsPath) {
     const creds = readCredsFile(account.credentialsPath);
@@ -447,7 +469,19 @@ async function usageToken(
       if (creds.expiresAt > Date.now() + TOKEN_REFRESH_SLACK_MS) {
         return { token: creds.accessToken, source: "credentials" };
       }
-      const fresh = await refreshCredsFile(account.credentialsPath, creds);
+      if (signal?.aborted) return null;
+      const refresh = refreshCredsFile(account.credentialsPath, creds);
+      const fresh = signal
+        ? await new Promise<OauthCreds | null>((resolve) => {
+            const aborted = () => resolve(null);
+            signal.addEventListener("abort", aborted, { once: true });
+            void refresh.then((value) => {
+              signal.removeEventListener("abort", aborted);
+              resolve(value);
+            });
+          })
+        : await refresh;
+      if (signal?.aborted) return null;
       if (fresh) return { token: fresh.accessToken, source: "credentials" };
       // Refresh failed but the stored token may still have a few minutes left.
       if (creds.expiresAt > Date.now()) {
@@ -481,15 +515,18 @@ function markUsageScopeMissing(id: string): void {
 }
 
 /** Refresh cached usage for one account; clears exhausted state once reset has passed. */
-async function refreshAccountUsage(account: ClaudeAccount): Promise<AccountUsage | null> {
-  const tok = await usageToken(account);
+async function refreshAccountUsage(
+  account: ClaudeAccount,
+  signal?: AbortSignal,
+): Promise<AccountUsage | null> {
+  const tok = await usageToken(account, signal);
   if (!tok) return null;
   if ("error" in tok) {
     // Broken usage credentials: keep the actionable error (the account-health
     // monitor's owner DMs key off it) but fill the windows from a live
     // Meridian proxy when one is running, so the picker and UI still see
     // real utilization instead of nothing.
-    const observed = await fetchMeridianUsage(account.id);
+    const observed = await fetchMeridianUsage(account.id, signal);
     const usage = {
       ...(observed ?? { fetchedAt: new Date().toISOString(), fiveHour: null, sevenDay: null }),
       error: tok.error,
@@ -499,7 +536,7 @@ async function refreshAccountUsage(account: ClaudeAccount): Promise<AccountUsage
   }
   const cached = usageCache.get(account.id);
 
-  const usage = await fetchUsage(tok.token, account.id);
+  const usage = await fetchUsage(tok.token, account.id, signal);
   if (usage.errorStatus === 403) {
     // Only a setup-token 403 means the scope is permanently missing; a 403
     // on login credentials would be an anomaly worth surfacing, not latching.
@@ -989,7 +1026,10 @@ const NEAR_LIMIT_TIERS: { utilization: number; maxCacheAgeMs: number }[] = [
 ];
 const NEAR_LIMIT_REFRESH_COOLDOWN_MS = 20 * 60 * 1000;
 const nearLimitRefreshAt = new Map<string, number>();
-type UsageRefresher = (a: ClaudeAccount) => Promise<AccountUsage | null>;
+type UsageRefresher = (
+  a: ClaudeAccount,
+  signal?: AbortSignal,
+) => Promise<AccountUsage | null>;
 let nearLimitRefresher: UsageRefresher = refreshAccountUsage;
 
 /**
@@ -1002,7 +1042,8 @@ let nearLimitRefresher: UsageRefresher = refreshAccountUsage;
  */
 export async function refreshUsageIfNearLimit(
   id: string,
-  model?: ClaudeModelRequirement
+  model?: ClaudeModelRequirement,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   const account = readStore().find((x) => x.id === id);
   if (!account) return false;
@@ -1018,10 +1059,21 @@ export async function refreshUsageIfNearLimit(
   if (!tier || !(age > tier.maxCacheAgeMs)) return false;
   const last = nearLimitRefreshAt.get(id) ?? 0;
   if (Date.now() - last < NEAR_LIMIT_REFRESH_COOLDOWN_MS) return false;
-  nearLimitRefreshAt.set(id, Date.now());
-  if (blind) await refreshMeridianUsage(account);
-  else await nearLimitRefresher(account);
-  return true;
+  if (signal?.aborted) return false;
+  const refreshStartedAt = Date.now();
+  nearLimitRefreshAt.set(id, refreshStartedAt);
+  try {
+    if (blind) await refreshMeridianUsage(account, signal);
+    else await nearLimitRefresher(account, signal);
+    return !signal?.aborted;
+  } finally {
+    if (
+      signal?.aborted &&
+      nearLimitRefreshAt.get(id) === refreshStartedAt
+    ) {
+      nearLimitRefreshAt.delete(id);
+    }
+  }
 }
 
 /** Test seam: replace the network refresh (null restores the real one). */
@@ -1099,11 +1151,17 @@ export function clearWedge(id: string): void {
  */
 export function earliestPoolReset(
   user?: string,
-  model?: ClaudeModelRequirement
+  model?: ClaudeModelRequirement,
+  accountId?: string,
+  allowExtraUsage?: boolean,
+  allowedAccountIds?: string[],
 ): number | null {
   const now = Date.now();
   const candidates = readStore().filter(
-    (a) => !a.owner || (!!user && userMatchesAny(user, [a.owner]))
+    (a) =>
+      (!accountId || a.id === accountId) &&
+      (!allowedAccountIds?.length || allowedAccountIds.includes(a.id)) &&
+      (!a.owner || (!!user && userMatchesAny(user, [a.owner]))),
   );
   if (candidates.length === 0) return null;
   let min: number | null = null;
@@ -1113,7 +1171,7 @@ export function earliestPoolReset(
     }
   };
   for (const a of candidates) {
-    if (isAccountUsableFor(a, model)) return now;
+    if (isAccountUsableFor(a, model, allowExtraUsage)) return now;
     consider(exhaustedUntil.get(a.id));
     for (const required of requiredModels(model)) {
       if (required) {
@@ -1138,16 +1196,26 @@ const DRY_POOL_REFRESH_MS = 5 * 60 * 1000;
 
 async function refreshSidelinedAccounts(
   user?: string,
-  model?: ClaudeModelRequirement
+  model?: ClaudeModelRequirement,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (Date.now() - lastDryPoolRefreshAt < DRY_POOL_REFRESH_MS) return;
-  lastDryPoolRefreshAt = Date.now();
-  for (const a of readStore()) {
-    if (a.owner && !(user && userMatchesAny(user, [a.owner]))) continue;
-    if (a.usageScope === "missing" && !a.credentialsPath) continue;
-    if (isAccountUsableFor(a, model)) continue;
-    // Sequential on purpose — see refreshAllUsage.
-    await refreshAccountUsage(a);
+  const refreshStartedAt = Date.now();
+  lastDryPoolRefreshAt = refreshStartedAt;
+  try {
+    for (const a of readStore()) {
+      if (signal?.aborted) return;
+      if (a.owner && !(user && userMatchesAny(user, [a.owner]))) continue;
+      if (a.usageScope === "missing" && !a.credentialsPath) continue;
+      if (isAccountUsableFor(a, model)) continue;
+      // Sequential on purpose — see refreshAllUsage.
+      await refreshAccountUsage(a, signal);
+    }
+  } finally {
+    // A cancelled waiter did not complete the shared refresh; let another
+    // waiter try immediately instead of suppressing everyone for five minutes.
+    if (signal?.aborted && lastDryPoolRefreshAt === refreshStartedAt)
+      lastDryPoolRefreshAt = 0;
   }
 }
 
@@ -1168,11 +1236,21 @@ export async function waitForUsableAccount(opts: {
   model?: ClaudeModelRequirement;
   maxWaitMs: number;
   pollMs?: number;
+  signal?: AbortSignal;
+  accountId?: string;
+  allowExtraUsage?: boolean;
+  allowedAccountIds?: string[];
   onWaitStart?: (earliestReset: number) => void;
 }): Promise<ClaudeAccount | null> {
   const { pick, user, model, maxWaitMs } = opts;
   if (maxWaitMs <= 0) return null;
-  const reset = earliestPoolReset(user, model);
+  const reset = earliestPoolReset(
+    user,
+    model,
+    opts.accountId,
+    opts.allowExtraUsage,
+    opts.allowedAccountIds,
+  );
   if (reset === null) return null;
   const deadline = Date.now() + maxWaitMs;
   if (reset > deadline) return null;
@@ -1181,12 +1259,22 @@ export async function waitForUsableAccount(opts: {
   // freed account) in lockstep the moment a reset lands.
   const pollMs = opts.pollMs ?? 15_000 + Math.floor(Math.random() * 10_000);
   while (Date.now() < deadline) {
-    await refreshSidelinedAccounts(user, model).catch(() => {});
+    if (opts.signal?.aborted) return null;
+    await refreshSidelinedAccounts(user, model, opts.signal).catch(() => {});
+    if (opts.signal?.aborted) return null;
     const picked = pick();
     if (picked) return picked;
     const remaining = deadline - Date.now();
     if (remaining <= 1000) break;
-    await new Promise((r) => setTimeout(r, Math.min(pollMs, remaining)));
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        opts.signal?.removeEventListener("abort", done);
+        resolve();
+      };
+      const timer = setTimeout(done, Math.min(pollMs, remaining));
+      opts.signal?.addEventListener("abort", done, { once: true });
+    });
   }
   return null;
 }

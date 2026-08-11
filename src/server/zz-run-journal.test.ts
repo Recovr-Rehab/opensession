@@ -153,27 +153,165 @@ describe("run journal", () => {
 		const sessionId = `preparing-${crypto.randomUUID()}`;
 		const fake = makeFakeEngine([{ kind: "clean" }]);
 		agent.__setEngineForTest(fake.engine);
-		const run = () => agent.runAgent({
+		const run = (startToken: string) => agent.runAgent({
 			prompt: "continue",
 			cwd: "/tmp",
 			mcpServers: [],
 			model: "claude-fable-5",
 			fallbackModel: "none",
 			journal: { osSessionId: sessionId, kind: "prompt" },
+			startToken,
 		});
 
 		try {
-			agent.markSessionStarting(sessionId);
+			const stoppedToken = agent.markSessionStarting(sessionId);
 			expect(agent.cancelAgentRun(sessionId)).toBe(true);
-			for await (const _event of run()) {}
+			const replacementToken = agent.markSessionStarting(sessionId);
+			for await (const _event of run(stoppedToken)) {}
 			expect(fake.calls).toHaveLength(0);
-			agent.unmarkSessionStarting(sessionId);
+			agent.unmarkSessionStarting(sessionId, stoppedToken);
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
 
-			agent.markSessionStarting(sessionId);
-			for await (const _event of run()) {}
+			for await (const _event of run(replacementToken)) {}
 			expect(fake.calls).toHaveLength(1);
-			agent.unmarkSessionStarting(sessionId);
+			agent.unmarkSessionStarting(sessionId, replacementToken);
 		} finally {
+			agent.unmarkSessionStarting(sessionId);
+			clearRunState(sessionId);
+		}
+	});
+
+	it("does not clear a replacement journal that reuses a cancelled recovery run key", () => {
+		const sessionId = `replacement-${crypto.randomUUID()}`;
+		const runKey = `engine-${crypto.randomUUID()}`;
+		const oldStartedAt = new Date(Date.now() - 1000).toISOString();
+		try {
+			mod.journalSet({ runKey, osSessionId: sessionId, cwd: "/old", startedAt: oldStartedAt });
+			const old = mod.activeRunRecords().find((run) => run.runKey === runKey)!;
+			mod.journalClear(runKey);
+			mod.journalSet({
+				runKey,
+				osSessionId: sessionId,
+				cwd: "/replacement",
+				startedAt: new Date().toISOString(),
+			});
+
+			expect(mod.journalClearIfLineage(old)).toBe(false);
+			expect(mod.activeRunRecords()).toContainEqual(
+				expect.objectContaining({ runKey, osSessionId: sessionId, cwd: "/replacement" }),
+			);
+		} finally {
+			mod.journalClear(runKey);
+			clearRunState(sessionId);
+		}
+	});
+
+	it("copies account and reviewer policy into every journal shape", () => {
+		const record = mod.buildRunJournalRecord(
+			{
+				accountId: "account-1",
+				accountStrict: true,
+				usageCredits: false,
+				prReviewer: "tellahq/platform",
+			},
+			{
+				runKey: "policy",
+				cwd: "/tmp",
+				claudeSessionId: "engine-policy",
+			},
+		);
+		expect(record).toMatchObject({
+			accountId: "account-1",
+			accountStrict: true,
+			usageCredits: false,
+			prReviewer: "tellahq/platform",
+		});
+	});
+
+	it("settles headless journal-owned runs on their terminal event", async () => {
+		const sessionId = `headless-${crypto.randomUUID()}`;
+		const fake = makeFakeEngine([{ kind: "clean" }]);
+		agent.__setEngineForTest(fake.engine);
+		for await (const _event of agent.runAgent({
+			prompt: "wake",
+			cwd: "/tmp",
+			mcpServers: [],
+			model: "claude-fable-5",
+			fallbackModel: "none",
+			journal: { osSessionId: sessionId, kind: "goal" },
+		})) {}
+		expect(getRunState(sessionId)).toBe("idle");
+		expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
+	});
+
+	it("keeps a kind-only run busy for its full outer fallback lifetime", async () => {
+		const sessionId = `linear-${crypto.randomUUID()}`;
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const fake = makeFakeEngine([{ kind: "clean", gate }]);
+		agent.__setEngineForTest(fake.engine);
+		const running = (async () => {
+			for await (const _event of agent.runAgent({
+				prompt: "triage",
+				cwd: "/tmp",
+				mcpServers: [],
+				model: "claude-fable-5",
+				fallbackModel: "none",
+				journal: { kind: "linear" },
+				transcriptSessionId: sessionId,
+			})) {}
+		})();
+		try {
+			while (fake.calls.length < 1) await Bun.sleep(5);
+			expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+		} finally {
+			release();
+			await running;
+		}
+		expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
+	});
+
+	it("does not let a busy loser settle the winning turn", async () => {
+		const sessionId = `busy-loser-${crypto.randomUUID()}`;
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const fake = makeFakeEngine([
+			{ kind: "clean", gate },
+			{ kind: "events", events: [{ type: "error", content: "Session is busy" }] },
+		]);
+		agent.__setEngineForTest(fake.engine);
+		const run = (startToken: string) => agent.runAgent({
+			prompt: "run",
+			cwd: "/tmp",
+			mcpServers: [],
+			model: "claude-fable-5",
+			fallbackModel: "none",
+			journal: { osSessionId: sessionId, kind: "prompt" },
+			startToken,
+		});
+
+		const winnerToken = agent.markSessionStarting(sessionId);
+		const winner = (async () => {
+			for await (const _event of run(winnerToken)) {}
+			agent.unmarkSessionStarting(sessionId, winnerToken);
+		})();
+		try {
+			while (fake.calls.length < 1) await Bun.sleep(5);
+			const loserToken = agent.markSessionStarting(sessionId);
+			for await (const _event of run(loserToken)) {}
+			agent.unmarkSessionStarting(sessionId, loserToken);
+			expect(getRunState(sessionId)).toBe("running");
+
+			release();
+			await winner;
+			expect(getRunState(sessionId)).toBe("idle");
+		} finally {
+			release();
+			await winner;
 			agent.unmarkSessionStarting(sessionId);
 			clearRunState(sessionId);
 		}

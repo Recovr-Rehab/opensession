@@ -1031,6 +1031,7 @@ export async function* runPi(
   const handle: PiRunHandle = { abort };
   const registeredKeys = new Set<string>([runKey]);
   if (journal?.osSessionId) registeredKeys.add(journal.osSessionId);
+  if (opts.transcriptSessionId) registeredKeys.add(opts.transcriptSessionId);
   for (const key of registeredKeys) activeRuns.set(key, handle);
 
   // The unified session id every transcript row keys on; kind-only loop runs

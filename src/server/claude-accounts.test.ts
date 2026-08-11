@@ -196,6 +196,13 @@ describe("dry-pool backpressure", () => {
     expect((earliest as number) - Date.now()).toBeLessThan(1000);
   });
 
+  test("earliestPoolReset excludes accounts outside the designated bridge set", () => {
+    accounts.__setUsageCacheForTest("fresh", usage(10));
+    expect(
+      accounts.earliestPoolReset(undefined, undefined, "fresh", false, ["maxed"]),
+    ).toBeNull();
+  });
+
   test("waitForUsableAccount returns immediately once pick succeeds", async () => {
     accounts.__setUsageCacheForTest("fresh", usage(10));
     const picked = await accounts.waitForUsableAccount({
@@ -230,6 +237,23 @@ describe("dry-pool backpressure", () => {
       pollMs: 50,
     });
     expect(picked).not.toBeNull();
+  });
+
+  test("waitForUsableAccount stops promptly when its run is cancelled", async () => {
+    const soon = new Date(Date.now() + 2_000).toISOString();
+    accounts.__setUsageCacheForTest("fresh", maxedWindow(soon));
+    accounts.__setUsageCacheForTest("maxed", maxedWindow(soon));
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 10);
+    const t0 = Date.now();
+    const picked = await accounts.waitForUsableAccount({
+      pick: () => accounts.pickAccount() ?? null,
+      maxWaitMs: 5_000,
+      pollMs: 1_000,
+      signal: controller.signal,
+    });
+    expect(picked).toBeNull();
+    expect(Date.now() - t0).toBeLessThan(500);
   });
 });
 

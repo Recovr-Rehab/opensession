@@ -1050,6 +1050,7 @@ export async function maybeLaunchSandboxedRun(
 		images?: ImageInput[];
 		mcpServers?: McpScope;
 		isAutomationSession: boolean;
+		startToken?: string;
 	},
 ): Promise<(
 	AsyncGenerator<StreamEvent> & {
@@ -1081,7 +1082,7 @@ export async function maybeLaunchSandboxedRun(
 	let rpcToken: string | undefined;
 	const sandboxStartedAt = Date.now();
 	try {
-		if (isAgentSessionCancelled(session.id)) return cancelledRun();
+		if (isAgentSessionCancelled(session.id, opts.startToken)) return cancelledRun();
 		const provider = getSandboxProvider(sbProvider);
 		const sandbox = await ensureSandboxWithTransientRetry(provider, {
 			sessionId: session.id,
@@ -1107,7 +1108,7 @@ export async function maybeLaunchSandboxedRun(
 				});
 			},
 		});
-		if (isAgentSessionCancelled(session.id)) return cancelledRun(sandbox);
+		if (isAgentSessionCancelled(session.id, opts.startToken)) return cancelledRun(sandbox);
 		// Remote engine databases live inside the sandbox. A replacement VM cannot
 		// resume the old engine id, even when its git workspace was safely pushed.
 		const remoteSandboxReplaced =
@@ -1174,7 +1175,7 @@ export async function maybeLaunchSandboxedRun(
 			accountId: session.accountId,
 			journalKind: "prompt",
 		};
-		if (isAgentSessionCancelled(session.id)) {
+		if (isAgentSessionCancelled(session.id, opts.startToken)) {
 			unregisterRunToken(rpcToken);
 			return cancelledRun(sandbox);
 		}
@@ -1192,7 +1193,7 @@ export async function maybeLaunchSandboxedRun(
 		const handle = sandbox.launchRunEager
 			? await sandbox.launchRunEager(spec, runCallbacks)
 			: sandbox.launchRun(spec, runCallbacks);
-		if (isAgentSessionCancelled(session.id)) {
+		if (isAgentSessionCancelled(session.id, opts.startToken)) {
 			handle.cancel();
 			unregisterRunToken(rpcToken);
 			return cancelledRun(sandbox);
@@ -1434,9 +1435,18 @@ export async function runSessionPrompt(
 	// title gen, upload staging) register the run with the runner — otherwise two
 	// racing prompts both pass isAgentSessionBusy and the loser's message is
 	// dropped as a "Session is busy" error toast.
-	markSessionStarting(sessionId);
+	const startToken = markSessionStarting(sessionId);
 	try {
-		await runSessionPromptInner(sessionId, content, user, images, rawFiles, contextSessions, slackReplyTo);
+		await runSessionPromptInner(
+			sessionId,
+			content,
+			user,
+			images,
+			rawFiles,
+			contextSessions,
+			slackReplyTo,
+			startToken,
+		);
 	} catch (e) {
 		// A throw before the run registered (workspace revive, session-note
 		// build, …) would strand the FSM in "starting" forever — the wedge the
@@ -1449,7 +1459,7 @@ export async function runSessionPrompt(
 			});
 		throw e;
 	} finally {
-		unmarkSessionStarting(sessionId);
+		unmarkSessionStarting(sessionId, startToken);
 	}
 }
 
@@ -1461,6 +1471,7 @@ async function runSessionPromptInner(
 	rawFiles?: unknown,
 	contextSessions?: string[],
 	slackReplyTo?: { channel: string; threadTs: string },
+	startToken?: string,
 ): Promise<void> {
 	const session = findSession(sessionId);
 	if (!session) return;
@@ -1879,6 +1890,7 @@ async function runSessionPromptInner(
 		images,
 		mcpServers: mcpServers ?? "all",
 		isAutomationSession,
+		startToken,
 	});
 
 	// Defensive guard: a session with an explicit runnable provider must never
@@ -1983,6 +1995,7 @@ async function runSessionPromptInner(
 		// sessions pass no user, so they never see a user-restricted server.
 		user: isAutomationSession ? undefined : user,
 		journal: { osSessionId: session.id, kind: "prompt" },
+		startToken,
 		onAskUser: makeAskHandler(sessionId),
 	})) {
 		firstEventMs ??= Date.now() - turnMetricStartedAt;

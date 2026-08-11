@@ -17,6 +17,19 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 let ACTIVE_RUNS_PATH =
   process.env.OPENSESSION_RUN_JOURNAL ||
   `${OPENSESSION_SESSIONS_DIR}/active-runs.json`;
+let activeRunAliases = new Set<string>();
+let activeRunAliasesInitialized = false;
+
+function syncActiveRunAliases(journal: Record<string, ActiveRunRecord>): void {
+  activeRunAliases = new Set(
+    Object.values(journal).flatMap((run) =>
+      [run.runKey, run.osSessionId, run.claudeSessionId].filter(
+        (id): id is string => !!id,
+      ),
+    ),
+  );
+  activeRunAliasesInitialized = true;
+}
 
 /**
  * Test seam (bun tests only): repoint the journal file AFTER this module has
@@ -29,6 +42,8 @@ let ACTIVE_RUNS_PATH =
 export function __setActiveRunsPathForTest(path: string): string {
   const prev = ACTIVE_RUNS_PATH;
   ACTIVE_RUNS_PATH = path;
+  activeRunAliases.clear();
+  activeRunAliasesInitialized = false;
   return prev;
 }
 
@@ -91,10 +106,13 @@ export interface ActiveRunRecord {
 
 function readRunJournal(): Record<string, ActiveRunRecord> {
   try {
-    return existsSync(ACTIVE_RUNS_PATH)
+    const journal = existsSync(ACTIVE_RUNS_PATH)
       ? JSON.parse(readFileSync(ACTIVE_RUNS_PATH, "utf-8"))
       : {};
+    syncActiveRunAliases(journal);
+    return journal;
   } catch {
+    syncActiveRunAliases({});
     return {};
   }
 }
@@ -102,6 +120,7 @@ function readRunJournal(): Record<string, ActiveRunRecord> {
 function writeRunJournal(journal: Record<string, ActiveRunRecord>): void {
   try {
     writeJsonAtomic(ACTIVE_RUNS_PATH, journal);
+    syncActiveRunAliases(journal);
   } catch (e) {
     console.error("[runner] Failed to write run journal:", e);
   }
@@ -112,9 +131,10 @@ function writeRunJournal(journal: Record<string, ActiveRunRecord>): void {
  * the pre-engine early write and the engine-id upgrade write. The fields every
  * site copies identically out of the runner's opts (RunAgentOpts) come from
  * `opts`; everything else — including the fields the sites deliberately
- * DIFFER on (fastMode, account pinning, prReviewer, serverKey) — stays a
- * per-site decision in `site`, so each caller states exactly what it
- * journals. Stamps startedAt.
+ * DIFFER on (fastMode and serverKey) stays a per-site decision in `site`.
+ * Account ownership and reviewer policy are copied centrally because losing
+ * any of them at the engine-id upgrade changes what a restarted run may do.
+ * Stamps startedAt.
  */
 export function buildRunJournalRecord(
   opts: {
@@ -125,6 +145,10 @@ export function buildRunJournalRecord(
     selectedModel?: string;
     transientFallback?: boolean;
     fallbackModel?: string;
+    accountId?: string;
+    accountStrict?: boolean;
+    usageCredits?: boolean;
+    prReviewer?: string;
     journal?: {
       firstJournaledAt?: string;
       resumeAttempts?: number;
@@ -150,6 +174,10 @@ export function buildRunJournalRecord(
   const startedAt = new Date().toISOString();
   return {
     ...site,
+    accountId: site.accountId ?? opts.accountId,
+    accountStrict: site.accountStrict ?? opts.accountStrict,
+    usageCredits: site.usageCredits ?? opts.usageCredits,
+    prReviewer: site.prReviewer ?? opts.prReviewer,
     deniedTools: opts.deniedTools,
     aws: !!opts.aws,
     claudeCliEnv: opts.claudeCliEnv || undefined,
@@ -266,9 +294,38 @@ export function journalClear(runKey: string): void {
   }
 }
 
+/** Clear only the journal entry that still belongs to this recovery lineage.
+ * A replacement human turn may reuse the engine session id as its runKey; an
+ * old queued recovery must never delete that newer record when it wakes. */
+export function journalClearIfLineage(record: ActiveRunRecord): boolean {
+  const journal = readRunJournal();
+  const current = journal[record.runKey];
+  if (!current) return false;
+  const expectedLineage = record.firstJournaledAt || record.startedAt;
+  const currentLineage = current.firstJournaledAt || current.startedAt;
+  if (
+    expectedLineage !== currentLineage ||
+    current.osSessionId !== record.osSessionId
+  ) {
+    return false;
+  }
+  delete journal[record.runKey];
+  writeRunJournal(journal);
+  return true;
+}
+
 /** Snapshot of the runs currently journaled as in-flight (does not clear). */
 export function activeRunRecords(): ActiveRunRecord[] {
   return Object.values(readRunJournal());
+}
+
+/** Hot-path journal ownership check. Writes and normal journal snapshots keep
+ * this alias set current; the first call after process start hydrates it once. */
+export function hasActiveRunFor(
+  ...ids: Array<string | null | undefined>
+): boolean {
+  if (!activeRunAliasesInitialized) readRunJournal();
+  return ids.some((id) => !!id && activeRunAliases.has(id));
 }
 
 // Engines register a probe so takeInterruptedRuns can tell "journaled but

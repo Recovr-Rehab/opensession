@@ -399,7 +399,7 @@ export async function openCreatedSession(
 		// engine is up. The starting mark keeps a prompt typed in that
 		// window from double-starting a run (same race as
 		// runSessionPrompt).
-		markSessionStarting(bksId);
+		const startToken = markSessionStarting(bksId);
 		const preparingEnvironment = spec.needsWorktree || Boolean(spec.sandboxProvider);
 		if (preparingEnvironment) preparingWorkspaces.add(bksId);
 		try {
@@ -453,6 +453,7 @@ export async function openCreatedSession(
 							images: spec.images,
 							mcpServers: spec.runMcpServers ?? [],
 							isAutomationSession: false,
+							startToken,
 						})
 					: null;
 				if (!sandboxOpeningRun) {
@@ -507,6 +508,7 @@ export async function openCreatedSession(
 				aws: true, // interactive sessions keep AWS read access (via injected creds)
 				user: spec.user, // gate per-user MCP servers (allowedUsers) to the creator
 				journal: { osSessionId: bksId, kind: "create" },
+				startToken,
 				onAskUser: makeAskHandler(bksId),
 			})) {
 				if (event.type === "init") {
@@ -678,7 +680,7 @@ export async function openCreatedSession(
 				noticePersisted: failureNoticePersisted,
 			});
 		} finally {
-			unmarkSessionStarting(bksId);
+			unmarkSessionStarting(bksId, startToken);
 			// Safety net for throws before the worktree block's own finally
 			// (persist/announce failures) — must never leak a session stuck
 			// in "Waiting for workspace".

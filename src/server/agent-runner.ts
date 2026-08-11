@@ -15,6 +15,8 @@
 
 import {
   journalClear,
+  journalClearIfLineage,
+  hasActiveRunFor,
   journalQuarantine,
   journalStartRecovery,
   activeRunRecords,
@@ -226,6 +228,11 @@ export interface RunAgentOpts {
     resumeAttempts?: number;
     lastResumeAt?: string;
   };
+  /** Exact admission reservation for a UI-created turn. Internal only: Stop
+   * latches this token, so a replacement prompt cannot revive the old turn. */
+  startToken?: string;
+  /** Run-lifetime cancellation predicate threaded through engine retries. */
+  shouldCancel?: () => boolean;
   /**
    * Unified session id (e.g. `linear-<branch>`) for the transcript-v2 oc→
    * unified map ONLY (opencode-transcript.ts recordBksSessionFor) — lets loop
@@ -306,36 +313,99 @@ function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncIterabl
  * carry a ledger; for everything else this is two branch predictions per run.
  */
 export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
+  const osSessionId = opts.journal?.osSessionId;
+  const runAliases = new Set(
+    [osSessionId, opts.transcriptSessionId, opts.sessionId].filter(
+      (id): id is string => !!id,
+    ),
+  );
+  const runToken =
+    opts.startToken ||
+    (osSessionId ? pendingStarts.get(osSessionId) : undefined) ||
+    crypto.randomUUID();
+  const effectiveOpts: RunAgentOpts = {
+    ...opts,
+    journal: opts.journal
+      ? {
+          ...opts.journal,
+          firstJournaledAt:
+            opts.journal.firstJournaledAt || new Date().toISOString(),
+        }
+      : undefined,
+    startToken: runToken,
+    shouldCancel: () =>
+      cancelledRunTokens.has(runToken) || opts.shouldCancel?.() === true,
+  };
+  for (const alias of runAliases) {
+    let tokens = activeSessionRunTokens.get(alias);
+    if (!tokens) activeSessionRunTokens.set(alias, (tokens = new Set()));
+    tokens.add(runToken);
+  }
+  if (osSessionId) {
+    if (!sessionRunOwners.has(osSessionId))
+      sessionRunOwners.set(osSessionId, runToken);
+  }
+  let terminalEvent: StreamEvent | undefined;
+  const observe = (event: StreamEvent) => {
+    if (event.type === "done" || event.type === "error") terminalEvent = event;
+    return event;
+  };
   const key = isCheckedKind(opts.journal?.kind)
     ? turnKeyFor({ osSessionId: opts.journal?.osSessionId })
     : undefined;
-  if (!key) {
-    yield* runAgentInner(opts);
-    return;
-  }
-  beginTurn({
-    key,
-    kind: opts.journal?.kind || "unknown",
-    sessionId: opts.journal?.osSessionId,
-  });
   try {
-    for await (const event of runAgentInner(opts)) {
-      if (event.type === "tool_use" && isReachTool(event.toolName)) {
-        recordEffect(key, event.toolName!);
+    if (!key) {
+      for await (const event of runAgentInner(effectiveOpts)) yield observe(event);
+      return;
+    }
+    beginTurn({
+      key,
+      kind: opts.journal?.kind || "unknown",
+      sessionId: opts.journal?.osSessionId,
+    });
+    try {
+      for await (const event of runAgentInner(effectiveOpts)) {
+        observe(event);
+        if (event.type === "tool_use" && isReachTool(event.toolName)) {
+          recordEffect(key, event.toolName!);
+        }
+        yield event;
       }
-      yield event;
+    } finally {
+      // `finally`, not after the loop: a consumer that breaks out early (a
+      // cancel, a steer) still closes the ledger, so a later run reusing the
+      // same session id starts clean instead of inheriting stale effects.
+      endTurn(key, { model: opts.model, by: opts.user });
     }
   } finally {
-    // `finally`, not after the loop: a consumer that breaks out early (a
-    // cancel, a steer) still closes the ledger, so a later run reusing the
-    // same session id starts clean instead of inheriting stale effects.
-    endTurn(key, { model: opts.model, by: opts.user });
+    if (
+      osSessionId &&
+      terminalEvent &&
+      sessionRunOwners.get(osSessionId) === runToken &&
+      !(terminalEvent.type === "error" && terminalEvent.content === "Session is busy") &&
+      isRunStateUnsettled(getRunState(osSessionId))
+    ) {
+      const failed =
+        terminalEvent.type === "error" || !!terminalEvent.usageLimitExhausted;
+      transitionRunState(osSessionId, failed ? "run_failed" : "turn_end", {
+        source: "runner_terminal",
+      });
+    }
+    cancelledRunTokens.delete(runToken);
+    for (const alias of runAliases) {
+      const tokens = activeSessionRunTokens.get(alias);
+      tokens?.delete(runToken);
+      if (!tokens?.size) activeSessionRunTokens.delete(alias);
+    }
+    if (osSessionId) {
+      if (sessionRunOwners.get(osSessionId) === runToken)
+        sessionRunOwners.delete(osSessionId);
+    }
   }
 }
 
 async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
-  const wasCancelled = () =>
-    !!opts.journal?.osSessionId && cancelledSessionRuns.has(opts.journal.osSessionId);
+  const wasCancelled = () => opts.shouldCancel?.() === true;
   if (wasCancelled()) return;
   const requestedModel = resolveModel(opts.model || getDefaultModel());
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
@@ -644,12 +714,16 @@ async function askFallbackApproval(
 // both pass the busy check and the loser's message got dropped as a "Session
 // is busy" error. Marked synchronously before any await; parked on globalThis
 // so a hot reload keeps it.
-const pendingStarts: Set<string> = ((globalThis as any).__pendingSessionStarts ??=
-  new Set());
-const cancelledRecoveryRunKeys: Map<string, number> = ((globalThis as any)
-  .__cancelledRecoveryRunKeys ??= new Map());
-const cancelledSessionRuns: Set<string> = ((globalThis as any)
-  .__cancelledSessionRuns ??= new Set());
+const pendingStarts: Map<string, string> = ((globalThis as any).__pendingSessionStarts ??=
+  new Map());
+const cancelledRunTokens: Set<string> = ((globalThis as any)
+  .__cancelledRunTokens ??= new Set());
+const activeSessionRunTokens: Map<string, Set<string>> = ((globalThis as any)
+  .__activeSessionRunTokens ??= new Map());
+const sessionRunOwners: Map<string, string> = ((globalThis as any)
+  .__sessionRunOwners ??= new Map());
+const cancelledRecoveries: Set<ActiveRunRecord> = ((globalThis as any)
+  .__cancelledRecoveries ??= new Set());
 const activeRecoveryRuns: Map<string, ActiveRunRecord> = ((globalThis as any)
   .__activeRecoveryRuns ??= new Map());
 const activeRecoveryWorkerRunKeys: Set<string> = ((globalThis as any)
@@ -669,21 +743,34 @@ function untrackRecovery(run: ActiveRunRecord): void {
 }
 
 /** Mark a session as starting a run (call synchronously, before any await). */
-export function markSessionStarting(id: string): void {
-  // An explicit new prompt is the only action that releases a prior Stop.
-  cancelledSessionRuns.delete(id);
-  pendingStarts.add(id);
+export function markSessionStarting(id: string): string {
+  const token = crypto.randomUUID();
+  pendingStarts.set(id, token);
+  const state = getRunState(id);
+  if (
+    !sessionRunOwners.has(id) ||
+    state === "idle" ||
+    state === "stopped" ||
+    state === "failed"
+  ) {
+    sessionRunOwners.set(id, token);
+  }
   transitionRunState(id, "prompt");
+  return token;
 }
 
 /** Clear a starting mark (call in a `finally` once the run has ended). */
-export function unmarkSessionStarting(id: string): void {
-  pendingStarts.delete(id);
+export function unmarkSessionStarting(id: string, token?: string): void {
+  const owned = token || pendingStarts.get(id);
+  if (!token || pendingStarts.get(id) === token) pendingStarts.delete(id);
+  if (owned && sessionRunOwners.get(id) === owned) sessionRunOwners.delete(id);
+  if (owned) cancelledRunTokens.delete(owned);
 }
 
 /** Whether Stop has latched this admitted turn before its runner registered. */
-export function isAgentSessionCancelled(id: string): boolean {
-  return cancelledSessionRuns.has(id);
+export function isAgentSessionCancelled(id: string, token?: string): boolean {
+  const owned = token || pendingStarts.get(id);
+  return !!owned && cancelledRunTokens.has(owned);
 }
 
 /** Live engine/runner busy check, excluding restart-recovery FSM state. */
@@ -692,6 +779,7 @@ export function isAgentLiveEngineBusy(...ids: Array<string | null | undefined>):
     if (!id) continue;
     if (
       pendingStarts.has(id) ||
+      activeSessionRunTokens.has(id) ||
       isOpencodeSessionBusy(id) ||
       isPiSessionBusy(id) ||
       hostRunBusy(id)
@@ -709,20 +797,12 @@ export function isAgentEngineBusy(...ids: Array<string | null | undefined>): boo
 
 /** Busy check (pass any engine/backstage session id). */
 export function isAgentSessionBusy(...ids: Array<string | null | undefined>): boolean {
-  const wanted = new Set(ids.filter((id): id is string => !!id));
-  if (
-    activeRunRecords().some(
-      (run) =>
-        (!!run.osSessionId && wanted.has(run.osSessionId)) ||
-        (!!run.claudeSessionId && wanted.has(run.claudeSessionId)),
-    )
-  )
-    return true;
-  for (const id of ids) {
-    if (!id) continue;
-    if (isRunStateUnsettled(getRunState(id)) || isAgentEngineBusy(id)) return true;
-  }
-  return false;
+  if (hasActiveRunFor(...ids) || isAgentEngineBusy(...ids)) return true;
+  return ids.some((id) => {
+    if (!id) return false;
+    const state = getRunState(id);
+    return state === "interrupted" || state === "reattaching";
+  });
 }
 
 /**
@@ -815,8 +895,11 @@ export function cancelAgentRun(...ids: Array<string | null | undefined>): boolea
   }
   const wanted = new Set(ids.filter((id): id is string => !!id));
   for (const id of wanted) {
-    if (!pendingStarts.has(id)) continue;
-    cancelledSessionRuns.add(id);
+    const pendingToken = pendingStarts.get(id);
+    if (pendingToken) cancelledRunTokens.add(pendingToken);
+    for (const token of activeSessionRunTokens.get(id) || [])
+      cancelledRunTokens.add(token);
+    if (!pendingToken) continue;
     if (isRunStateUnsettled(getRunState(id)))
       transitionRunState(id, "cancel", { source: "run_cancelled_preparation" });
     cancelled = true;
@@ -838,9 +921,8 @@ export function cancelAgentRun(...ids: Array<string | null | undefined>): boolea
     }
   }
   for (const run of records.values()) {
-    if (run.osSessionId) cancelledSessionRuns.add(run.osSessionId);
     if (recoveryRunKeys.has(run.runKey))
-      cancelledRecoveryRunKeys.set(run.runKey, Date.now());
+      cancelledRecoveries.add(run);
     journalClear(run.runKey);
     // A queued recovery has not crossed an async boundary yet, so its marker
     // is enough to make it exit when scheduled. An active worker keeps its
@@ -929,13 +1011,13 @@ export function resumeInterruptedRuns(
     });
   };
   const abandonStoppedRecovery = (run: ActiveRunRecord): boolean => {
-    const cancelled = cancelledRecoveryRunKeys.delete(run.runKey);
+    const cancelled = cancelledRecoveries.delete(run);
     if (
       !cancelled &&
       (!run.osSessionId || getRunState(run.osSessionId) !== "stopped")
     )
       return false;
-    journalClear(run.runKey);
+    journalClearIfLineage(run);
     return true;
   };
   const recoveryTask = (
@@ -974,7 +1056,7 @@ export function resumeInterruptedRuns(
     if (run.kind?.startsWith("github-")) {
       rememberHandledSession(run);
       journalClear(run.runKey);
-      if (run.osSessionId) transitionRunState(run.osSessionId, "cancel");
+      if (run.osSessionId) transitionRunState(run.osSessionId, "turn_end");
       continue;
     }
     // Slack runs journal (their bks session id feeds the in-process MCP proxy
@@ -983,7 +1065,7 @@ export function resumeInterruptedRuns(
     if (run.kind?.startsWith("slack")) {
       rememberHandledSession(run);
       journalClear(run.runKey);
-      if (run.osSessionId) transitionRunState(run.osSessionId, "cancel");
+      if (run.osSessionId) transitionRunState(run.osSessionId, "turn_end");
       continue;
     }
     // Workflow fan-out agents ("workflow", plus -resume/-rerun suffixes): the
@@ -993,7 +1075,7 @@ export function resumeInterruptedRuns(
     if (run.kind?.startsWith("workflow")) {
       rememberHandledSession(run);
       journalClear(run.runKey);
-      if (run.osSessionId) transitionRunState(run.osSessionId, "cancel");
+      if (run.osSessionId) transitionRunState(run.osSessionId, "turn_end");
       continue;
     }
     // Sandboxed runs (docs/self-hosting-sandboxes.md): the sandbox — and
