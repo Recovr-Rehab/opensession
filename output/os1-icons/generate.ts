@@ -155,6 +155,22 @@ function iconJsonFor(v: Variant): string {
         {
           layers: [
             {
+              hidden: false,
+              "image-name": v.svg,
+              name: "Shadow silhouette",
+              opacity: 1,
+              position: { scale: 1, "translation-in-points": [0, 0] },
+            },
+          ],
+          name: "Shadow underlay",
+          mode: "combined",
+          specular: false,
+          shadow: { kind: "neutral", opacity: 0.14 },
+          translucency: { enabled: false, value: 0 },
+        },
+        {
+          layers: [
+            {
               "blend-mode-specializations": [
                 { value: "normal" },
                 { appearance: "dark", value: "normal" },
@@ -170,7 +186,6 @@ function iconJsonFor(v: Variant): string {
           name: "Unified Aqua glass",
           mode: "combined",
           specular: true,
-          shadow: { kind: "neutral", opacity: 0.14 },
           translucency: { enabled: true, value: 0.3 },
         },
       ],

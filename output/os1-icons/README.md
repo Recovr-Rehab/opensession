@@ -23,9 +23,10 @@ Only the sources are tracked (`generate.ts`, `pad.swift`,
 `previews/`, the `.icns`, `icon-512-padded.png`, the iconset — are gitignored
 and rebuilt with the commands below.
 
-The `.icon` package holds `icon.json` + one SVG layer in a single
-`mode: "combined"` glass group (`specular: true`, translucency 0.3) — one
-unified glass object, no per-lobe inflation.
+The `.icon` package holds `icon.json` + one SVG asset. A neutral shadow-only
+underlay sits behind a single `mode: "combined"` glass group (`specular: true`,
+translucency 0.3), so the shadow cannot wash over the glass rim. The visible
+art remains one unified glass object with no per-lobe inflation.
 
 ## Geometry / how to tweak
 
@@ -62,4 +63,5 @@ Gotchas learned along the way (kept for future edits):
 - `feGaussianBlur` filters and `clipPath` **are** supported in layer SVGs —
   use them instead of multi-stroke fake blurs (those band visibly).
 - Separate glass groups per color half make the top half look like a raised
-  inflatable slab — keep everything in one combined group.
+  inflatable slab — keep the visible artwork in one combined group. The
+  non-glass shadow silhouette is only an underlay and is fully covered by it.
