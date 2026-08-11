@@ -145,10 +145,9 @@ export const composerSendDefault =
  *  read like a selected toggle, then hovered to dark-on-dark because its ink
  *  did not invert with the fill. */
 export const composerSendQueue = composerSendDefault;
-/** Busy + steer: folds into the running turn, so it warns rather than commits.
- *  Saturated red brightens fine, which is why it keeps the filter hover. */
-export const composerSendSteer =
-	"border border-red bg-red-soft text-red enabled:hover:brightness-[1.12]";
+/** Busy + steer keeps the full accent plate too; its up-arrow glyph separates
+ *  it from queue's return arrow without making the action look secondary. */
+export const composerSendSteer = composerSendDefault;
 /** Stop: the only full-strength red plate. */
 export const composerSendStop =
 	"bg-red text-white enabled:hover:brightness-[1.12]";
