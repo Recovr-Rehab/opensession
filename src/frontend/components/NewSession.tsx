@@ -699,22 +699,19 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   ];
 
   // The prompt grows naturally; once the palette reaches its viewport cap the
-  // BODY becomes the single scroller, carrying attachments with the text. Fade
-  // only an edge that has more content beyond it so short prompts stay crisp.
+  // BODY becomes the single scroller, carrying attachments with the text. The
+  // header/footer dividers are enough of a cutoff for text. Only an image moving
+  // through the bottom edge gets softened, so its crop does not look accidental.
   const PROMPT_FADE_PX = 28;
   function updatePromptFade(el: HTMLDivElement) {
-    const top = el.scrollTop > 1;
-    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
-    const mask =
-      top || bottom
-        ? `linear-gradient(to bottom, ${
-            top ? `transparent 0, #000 ${PROMPT_FADE_PX}px` : "#000 0"
-          }, ${
-            bottom
-              ? `#000 calc(100% - ${PROMPT_FADE_PX}px), transparent 100%`
-              : "#000 100%"
-          })`
-        : "";
+    const edge = el.getBoundingClientRect().bottom;
+    const imageAtEdge = Array.from(el.querySelectorAll("img")).some((image) => {
+      const rect = image.getBoundingClientRect();
+      return rect.top < edge && rect.bottom > edge - PROMPT_FADE_PX;
+    });
+    const mask = imageAtEdge
+      ? `linear-gradient(to bottom, #000 0, #000 calc(100% - ${PROMPT_FADE_PX}px), transparent 100%)`
+      : "";
     el.style.setProperty("-webkit-mask-image", mask);
     el.style.setProperty("mask-image", mask);
   }
