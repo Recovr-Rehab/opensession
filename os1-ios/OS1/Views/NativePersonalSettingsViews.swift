@@ -54,10 +54,7 @@ struct NotificationsSettingsView: View {
 /// are the offline cache, not a user-facing label.
 ///
 /// Nearly all of it is server-side per-user prefs, so it matches the web
-/// (Settings → Preferences). Haptics is the exception and says so in its own
-/// footer: it belongs with how sending FEELS rather than with what the app
-/// looks like, but a Taptic Engine is this phone's — there is no web control
-/// to keep in step with, and the Mac in the same account has nothing to play.
+/// (Settings → Preferences). Haptics is the device-local exception.
 struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.defaultModel") private var nativeDefaultModel = ""
     @AppStorage("os1.composer.sendKey") private var nativeSendKey = "enter"
@@ -190,11 +187,9 @@ struct PreferencesSettingsView: View {
             Section {
                 Toggle("Haptic feedback", isOn: $haptics)
             } header: {
-                Text("Feel")
+                Text("Haptics")
             } footer: {
-                Text(
-                    "A tap when a message sends, a question is answered or a run is stopped. Unlike the rest of this screen it stays on this device — silent mode doesn't affect it, and the system's own Vibration setting turns it off everywhere."
-                )
+                Text("Play haptics when you send a message, answer a question, or stop a run.")
             }
             #endif
 
