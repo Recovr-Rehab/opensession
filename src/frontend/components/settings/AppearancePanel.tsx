@@ -1,6 +1,15 @@
 import { Reorder } from "motion/react";
 import React, { useEffect, useState } from "react";
+import { IconCheck } from "../icons";
 import { fetchFeeds } from "../../lib/api";
+import {
+	ACCENT_THEME_OPTIONS,
+	getAccentTheme,
+	getAccentThemeOption,
+	onAccentThemeChanged,
+	setAccentTheme,
+	type AccentTheme,
+} from "../../lib/accent-theme";
 import {
 	onSidebarFeedsChanged,
 	readHiddenSidebarFeeds,
@@ -22,6 +31,7 @@ import {
 } from "../../lib/sidebar-tools";
 import {
 	getThemePref,
+	effectiveTheme,
 	onThemeChanged,
 	setThemePref,
 	type ThemePref,
@@ -137,6 +147,47 @@ function ThemeCard({
 	);
 }
 
+function AccentSwatch({
+	theme,
+	active,
+	tone,
+	onClick,
+}: {
+	theme: AccentTheme;
+	active: boolean;
+	tone: "light" | "dark";
+	onClick: () => void;
+}) {
+	const option = getAccentThemeOption(theme);
+	const swatch = option[tone];
+	const ink = theme === "mono" && tone === "dark" ? "#000000" : "#ffffff";
+	const style = {
+		"--swatch": swatch,
+		"--swatch-ink": ink,
+	} as React.CSSProperties;
+
+	return (
+		<label
+			className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md p-1"
+			title={option.label}
+			style={style}
+		>
+			<input
+				type="radio"
+				name="accent-theme"
+				value={theme}
+				checked={active}
+				onChange={onClick}
+				aria-label={option.label}
+				className="peer sr-only"
+			/>
+			<span className="flex size-8 items-center justify-center rounded-full border border-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--swatch)_97%,white),color-mix(in_srgb,var(--swatch)_94%,black))] text-(--swatch-ink) outline-offset-4 transition-[scale,box-shadow] duration-150 active:scale-[0.96] peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent">
+				{active && <IconCheck size={16} strokeWidth={2.4} />}
+			</span>
+		</label>
+	);
+}
+
 // ── Workspace · General ─────────────────────────────────────────────────────
 
 /** Text field that commits on blur/Enter (Esc reverts), for the identity
@@ -150,7 +201,20 @@ function ThemeCard({
  */
 export function AppearancePanel() {
 	const [pref, setPref] = useState<ThemePref>(getThemePref);
-	useEffect(() => onThemeChanged(() => setPref(getThemePref())), []);
+	const [tone, setTone] = useState(effectiveTheme);
+	useEffect(
+		() =>
+			onThemeChanged(() => {
+				setPref(getThemePref());
+				setTone(effectiveTheme());
+			}),
+		[],
+	);
+	const [accent, setAccent] = useState<AccentTheme>(getAccentTheme);
+	useEffect(
+		() => onAccentThemeChanged(() => setAccent(getAccentTheme())),
+		[],
+	);
 	const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
 	useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
 	const [hiddenSidebarTools, setHiddenSidebarTools] = useState(
@@ -201,7 +265,7 @@ export function AppearancePanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Appearance"
-				description="How this app looks, and what the sidebar shows. Theme and the tool toggles are per browser; sidebar order and feeds follow your account everywhere."
+				description="How this app looks, and what the sidebar shows. Theme, accent, and tool toggles are per browser; sidebar order and feeds follow your account everywhere."
 			/>
 			<SettingsGroupLabel>Theme</SettingsGroupLabel>
 			<SettingsSection>
@@ -226,6 +290,31 @@ export function AppearancePanel() {
 					{pref === "system"
 						? "Matches your operating system."
 						: `Always ${pref} mode.`}
+				</div>
+			</SettingsSection>
+
+			<SettingsGroupLabel>Accent</SettingsGroupLabel>
+			<SettingsSection>
+				<div
+					className="grid grid-cols-5 gap-2 desktop:grid-cols-10"
+					role="radiogroup"
+					aria-label="Accent colour"
+				>
+					{ACCENT_THEME_OPTIONS.map((option) => (
+						<AccentSwatch
+							key={option.value}
+							theme={option.value}
+							active={accent === option.value}
+							tone={tone}
+							onClick={() => {
+								setAccentTheme(option.value);
+								setAccent(option.value);
+							}}
+						/>
+					))}
+				</div>
+				<div className="mt-3 text-meta text-faint">
+					{getAccentThemeOption(accent).label}, on this browser.
 				</div>
 			</SettingsSection>
 
