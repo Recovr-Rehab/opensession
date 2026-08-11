@@ -1297,11 +1297,6 @@ function makeRemoteLauncher(
           throw new Error("the pinned automation account is not an eligible Claude account");
         }
       }
-      await driver.writeFile(
-        `${REMOTE_HOME}/.opensession-claude-accounts.json`,
-        JSON.stringify({ accounts }, null, 2) + "\n",
-      );
-      await driver.exec(`chmod 600 ${REMOTE_HOME}/.opensession-claude-accounts.json`);
       // Resolve the run's MCP allowlist and dynamic credentials on the trusted
       // host, then project only those entries. Remote guests never receive the
       // instance-wide mcp-config.json. Automation specs are required to carry
@@ -1314,11 +1309,20 @@ function makeRemoteLauncher(
         spec.user,
         [spec.mcpGrantUser, spec.user],
       );
-      await driver.writeFile(
-        REMOTE_MCP_CONFIG,
-        JSON.stringify({ mcpServers: projectedMcp }, null, 2) + "\n",
+      const claudeAccountsPath = `${REMOTE_HOME}/.opensession-claude-accounts.json`;
+      await Promise.all([
+        driver.writeFile(
+          claudeAccountsPath,
+          JSON.stringify({ accounts }, null, 2) + "\n",
+        ),
+        driver.writeFile(
+          REMOTE_MCP_CONFIG,
+          JSON.stringify({ mcpServers: projectedMcp }, null, 2) + "\n",
+        ),
+      ]);
+      await driver.exec(
+        `chmod 600 ${shellQuoteWord(claudeAccountsPath)} ${shellQuoteWord(REMOTE_MCP_CONFIG)}`,
       );
-      await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_MCP_CONFIG)}`);
       // OpenCode policy + provider config, projected at the sandbox boundary.
       // The source CAN contain third-party API keys under providers.*.apiKey;
       // never copy it wholesale. Anthropic/OpenAI/Pi launches receive only the
@@ -1423,23 +1427,29 @@ function makeRemoteLauncher(
       // Instead: (a) a scoped codex-accounts store so pickOpenaiAccount
       // in-sandbox applies the same pool/openaiAccounts rules, and (b) the
       // rotation-proof SEEDED artifact per home account (access-token-only +
-      // invalid placeholder refresh — buildOpenaiRemoteSeedUpload). Uploaded
-      // whenever ANY account is eligible — mirroring the Claude slice above —
-      // so a mid-session switch to an openai model needs no relaunch.
+      // invalid placeholder refresh — buildOpenaiRemoteSeedUpload). Upload it
+      // only for an OpenAI run: every turn gets a fresh host launch with its
+      // selected model, and projecting unrelated account families adds both
+      // authority and remote startup latency for no benefit.
       // Rewritten (or removed) per launch so restriction changes apply and a
       // previously-uploaded wider set never lingers. Destination filenames
       // stay the legacy .opensession-* names the (dual-reading) in-sandbox
       // build resolves — same convention as the bridge config above.
-      const openaiUpload = buildOpenaiRemoteSeedUpload(
-        listCodexAccounts(),
-        automationProfile && spec.accountId
-          ? [spec.accountId]
-          : readOpencodeBridgeConfig()?.openaiAccounts,
-        spec.user,
+      const usesOpenai = /^(?:opencode\/openai\/|pi\/openai\/)/.test(
+        String(spec.model || ""),
       );
+      const openaiUpload: ReturnType<typeof buildOpenaiRemoteSeedUpload> = usesOpenai
+        ? buildOpenaiRemoteSeedUpload(
+            listCodexAccounts(),
+            automationProfile && spec.accountId
+              ? [spec.accountId]
+              : readOpencodeBridgeConfig()?.openaiAccounts,
+            spec.user,
+          )
+        : { accounts: [], seeds: [], skipped: [] };
       if (
         automationProfile &&
-        /^(?:opencode\/openai\/|pi\/openai\/)/.test(String(spec.model || "")) &&
+        usesOpenai &&
         !openaiUpload.accounts.some((account) => account.id === spec.accountId)
       ) {
         throw new Error("the pinned automation account is not an eligible OpenAI account");
