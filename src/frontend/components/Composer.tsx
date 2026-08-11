@@ -471,10 +471,20 @@ export function Composer({
   const modifierPicks = sendKey === "enter";
   const steerSend =
     !!busy && (modifierPicks && sendModifierHeld ? modSteer : entSteer);
-  // Which keys land on each busy action right now, for the send button's menu:
-  // the send key runs the "enter" pref, and — when the modifier is free to pick
-  // (i.e. the send key is plain Enter) — ⌘/Ctrl+Enter runs the "mod" pref. Both
-  // land on one row when the two prefs agree.
+  // Picking a busy action from the send button's menu hands the OTHER one to
+  // ⌘/Ctrl+Enter, so both actions always keep a key and each row shows exactly
+  // one — with both prefs on the same action there is no way to reach the other
+  // from the keyboard at all. Settings → Preferences still sets the two
+  // gestures independently for anyone who wants them to agree.
+  const pickBusySend = (pref: BusySendPref) => {
+    setBusySendPref("enter", pref);
+    if (modifierPicks)
+      setBusySendPref("mod", pref === "queue" ? "steer" : "queue");
+  };
+  // Which keys land on each busy action right now, for that menu: the send key
+  // runs the "enter" pref, and — when the modifier is free to pick (i.e. the
+  // send key is plain Enter) — ⌘/Ctrl+Enter runs the "mod" pref. Both land on
+  // one row when the two prefs agree.
   const busySendKeys = (pref: BusySendPref) =>
     [
       busySendPrefs.enter === pref &&
@@ -1227,7 +1237,7 @@ export function Composer({
                 </Tooltip>
                 <ContextMenu.Popup className="min-w-[230px]">
                   <ContextMenu.Item
-                    onClick={() => setBusySendPref("enter", "queue")}
+                    onClick={() => pickBusySend("queue")}
                   >
                     <IconReturn size={20} />
                     <span className="grow">Queue after run finishes</span>
@@ -1241,7 +1251,7 @@ export function Composer({
                     )}
                   </ContextMenu.Item>
                   <ContextMenu.Item
-                    onClick={() => setBusySendPref("enter", "steer")}
+                    onClick={() => pickBusySend("steer")}
                   >
                     <IconArrowUp size={20} />
                     <span className="grow">Steer into running turn</span>
