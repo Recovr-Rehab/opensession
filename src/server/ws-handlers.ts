@@ -539,6 +539,9 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					typeof msg.feedEpoch === "string" ? msg.feedEpoch : undefined;
 				if (msg.user) data.user = msg.user;
 				joinSession(ws, sessionId);
+				console.log(
+					`[presence] watch user=${JSON.stringify(data.user || "Anonymous")} login=${JSON.stringify(data.authLogin || null)} session=${JSON.stringify(sessionId)} client=${JSON.stringify((data as any).presenceClient || (data.cloudProxy ? "cloud-proxy" : "unknown"))}`,
+				);
 
 				// Opening a session whose last turn finished with nobody watching →
 				// drop in an away-summary system chip (recap.ts). Fire-and-forget;

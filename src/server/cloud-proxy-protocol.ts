@@ -74,6 +74,9 @@ export async function handleCloudProxyProtocolMessage(
 				);
 			},
 		};
+		(lane.data as any).presenceClient = `cloud-proxy lane via ${
+			(ws.data as any).presenceClient || "unknown"
+		}`;
 		lanesFor(ws).set(laneId, lane);
 	}
 	await dispatchMessage(lane, JSON.stringify(message.message));

@@ -412,6 +412,12 @@ const server: import("bun").Server<WSClientData> = hotServe({
 						cloudProxy:
 							!isLocalProfile() &&
 							req.headers.get("x-opensession-cloud-proxy") === "1",
+						// Internal presence provenance only: when a face is reported on a
+						// session its owner never opened, the watch needs to be traceable to
+						// web / native / TUI / a local-profile proxy without logging tokens.
+						...({
+							presenceClient: req.headers.get("user-agent") || "unknown",
+						} as Record<string, unknown>),
 					},
 				});
 				if (!upgraded) {
