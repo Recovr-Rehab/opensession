@@ -5193,7 +5193,10 @@ export function SessionViewer({
 										<div className="flex justify-center [overflow-anchor:none] px-0 pt-3 pb-3.5">
 											{loadingHistory ? (
 												<div className="inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--bg))] px-3 py-1 text-label font-semibold text-fg shadow-accent [--smooth-ring-color:color-mix(in_srgb,var(--accent)_24%,var(--bg))] smooth-shadow-ring-sm">
-													<PixelSpinner className="text-accent" />
+													<span
+														className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
+														aria-hidden
+													/>
 													<span>
 														{loadingAllHistory
 															? "Loading all messages…"
