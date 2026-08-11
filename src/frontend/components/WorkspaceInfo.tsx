@@ -1746,14 +1746,17 @@ export function WorkspaceInfo({
 							<div className={INFO_LABEL_CLASS}>
 								{media.length} screenshot{media.length === 1 ? "" : "s"}
 							</div>
-							{/* Not a card like the lists above it: the strip bleeds
-							    through the panel's own padding, so tiles run off the
-							    panel edge instead of ending inside a rounded box.
+							{/* Not a card like the lists above it: the strip runs the
+							    full width of the panel, so tiles leave the screen at
+							    its edge instead of ending inside a rounded box.
 							    Frames leaving the screen is what reads as "scrolls";
 							    the same frames tucked inside a container read as a
-							    complete set that happens to be clipped. */}
+							    complete set that happens to be clipped.
+							    The negative margins cancel the panel's own `px-2`,
+							    plus (on desktop) the `px-1` wrapper the session
+							    viewer puts around this panel — hence the extra 4px. */}
 							<div
-								className="-mx-2 flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 [scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								className="-mx-2 flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden desktop:-mx-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 							>
 								{media.map((m, i) => (
 									<button
