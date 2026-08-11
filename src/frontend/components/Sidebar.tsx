@@ -227,6 +227,7 @@ import {
 	WsStatusMark,
 } from "./sidebar/HoverCards";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
+import { InlineAlert, ListSkeleton } from "../ui/state";
 import {
 	SIDEBAR_ROW,
 	SIDEBAR_ROW_TITLE,
@@ -242,6 +243,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	sessions,
 	localMode,
 	cloudUnreachable,
+	sessionsError,
+	sessionsLoading,
+	onRetrySessions,
 	workspaceDataReady,
 	workspaces,
 	notes,
@@ -4320,7 +4324,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				})()}
 			{workspacesOpen && (
 				<div className={SIDEBAR_LIST} data-sidebar-list>
-				{workspaceListEmpty && (
+				{sessionsLoading && sessions.length === 0 && (
+					<ListSkeleton
+						variant="bare"
+						rows={8}
+						label="Loading sessions"
+						className="py-2"
+						rowClassName="px-2.5 py-[9px] phone:px-2 phone:py-[13px]"
+					/>
+				)}
+				{sessionsError && sessions.length === 0 && !sessionsLoading && (
+					<InlineAlert onRetry={onRetrySessions} className="mx-3 my-3">
+						Couldn't load sessions.
+					</InlineAlert>
+				)}
+				{workspaceListEmpty && !sessionsLoading && !sessionsError && (
 					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
 						{hasWorkspaceFilter
 							? "No matching workspaces"

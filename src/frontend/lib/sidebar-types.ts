@@ -17,6 +17,11 @@ export interface Props {
 	localMode: boolean;
 	/** The configured cloud upstream did not answer the latest merged-list poll. */
 	cloudUnreachable: boolean;
+	/** The initial/live session list request failed entirely. */
+	sessionsError: string | null;
+	/** True until the first session-list request settles. */
+	sessionsLoading: boolean;
+	onRetrySessions: () => void;
 	/** Initial sessions + project metadata have loaded, so dependent queues can render. */
 	workspaceDataReady: boolean;
 	/** Workspace folders that group sessions. */

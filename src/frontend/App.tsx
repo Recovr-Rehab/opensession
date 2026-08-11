@@ -579,6 +579,7 @@ export function App(
 	const {
 		sessions,
 		loading,
+		error: sessionsError,
 		archivedLoaded,
 		refreshArchived,
 		cloudUnreachable,
@@ -3613,6 +3614,9 @@ export function App(
 							sessions={sessions}
 							localMode={localMode}
 							cloudUnreachable={cloudUnreachable}
+							sessionsError={sessionsError}
+							sessionsLoading={loading}
+							onRetrySessions={() => void refresh()}
 							workspaceDataReady={!loading && workspacesLoaded}
 							workspaces={workspaces}
 							notes={notes.map((n) => ({ id: n.id, title: n.title }))}

@@ -143,16 +143,17 @@ export function ListSkeleton({
 	rows?: number;
 	/**
 	 * Which list this stands in for. `cards` is a column of separate panels;
-	 * `rows` is the divided list inside one `CardList`, so the caller supplies
-	 * the card and this fills it. Standing in for the wrong one is its own
-	 * kind of lie — the placeholder should be the shape that replaces it.
+	 * `rows` is the divided list inside one `CardList`; `bare` is a quiet,
+	 * borderless navigation list. Standing in for the wrong one is its own kind
+	 * of lie — the placeholder should be the shape that replaces it.
 	 */
-	variant?: "cards" | "rows";
+	variant?: "cards" | "rows" | "bare";
 	/** Match the geometry of the row this stands in for. */
 	rowClassName?: string;
 	label?: string;
 }) {
 	const cards = variant === "cards";
+	const divided = variant === "rows";
 	return (
 		<div
 			role="status"
@@ -160,7 +161,11 @@ export function ListSkeleton({
 			aria-label={label}
 			className={cn(
 				"flex animate-pulse flex-col",
-				cards ? "gap-1.5" : "[&>*+*]:border-t [&>*+*]:border-line",
+				cards
+					? "gap-1.5"
+					: divided
+						? "[&>*+*]:border-t [&>*+*]:border-line"
+						: "gap-0.5",
 				className,
 			)}
 			{...props}
