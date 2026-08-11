@@ -224,6 +224,9 @@ import {
 	SESSION_LINK,
 	SESSION_LINK_LINEAR,
 	SESSION_LINK_PLAIN,
+	TRANSCRIPT_PILL_BUTTON,
+	TRANSCRIPT_PILL_LOADING,
+	TRANSCRIPT_PILL_SPINNER,
 	VIEWER_BRANCH,
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
@@ -5273,9 +5276,9 @@ export function SessionViewer({
 							{historyTruncated && (
 								<div className="pointer-events-none absolute top-3 left-1/2 z-[5] -translate-x-1/2">
 									{loadingHistory ? (
-										<div className="inline-flex min-h-9 items-center gap-1 rounded-[999px] bg-popup-glass px-3.5 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm">
+										<div className={TRANSCRIPT_PILL_LOADING}>
 											<span
-												className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim"
+												className={TRANSCRIPT_PILL_SPINNER}
 												aria-hidden
 											/>
 											<span>
@@ -5288,7 +5291,10 @@ export function SessionViewer({
 										<button
 											type="button"
 											onClick={loadAllHistory}
-											className="group pointer-events-auto relative inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-[999px] bg-popup-glass px-3.5 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-transparent before:transition-colors before:content-[''] after:absolute after:-inset-1 after:content-[''] hover:before:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
+											className={cn(
+												TRANSCRIPT_PILL_BUTTON,
+												"pointer-events-auto",
+											)}
 										>
 											<IconArrowUp
 												size={13}
@@ -5303,7 +5309,10 @@ export function SessionViewer({
 
 							{showScrollToBottom && entries.length > 0 && (
 									<button
-										className="group absolute left-1/2 bottom-6 z-[5] inline-flex min-h-9 -translate-x-1/2 cursor-pointer items-center gap-1 rounded-[999px] bg-popup-glass px-3.5 text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm transition-[scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:bg-transparent before:transition-colors before:content-[''] after:absolute after:-inset-1 after:content-[''] hover:before:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]"
+										className={cn(
+											TRANSCRIPT_PILL_BUTTON,
+											"absolute bottom-6 left-1/2 z-[5] -translate-x-1/2",
+										)}
 										onClick={() => scrollToLatest("smooth")}
 										title="Scroll to the bottom"
 									>

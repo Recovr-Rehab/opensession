@@ -297,6 +297,58 @@ export const SESSION_BANNER =
  *  looking frozen. */
 export const SESSION_DELETE_LABEL = "text-label text-dim";
 
+/* ── Floating transcript pills ──────────────────────────────────────────────
+ *
+ * "Load all" at the top of the transcript, "Scroll to bottom" at its foot, and
+ * the loading state each of them swaps to. They float over live content, so
+ * they are glass rather than a panel, and they stay small: this is chrome the
+ * eye should pass over, not a primary action.
+ *
+ * The padding is asymmetric on purpose. Every one of these carries a leading
+ * icon, and an icon brings its own whitespace to the edge, so matching the
+ * label's padding on that side reads as a gap. Trimming the leading side by
+ * 4px puts the two ends back in optical balance — the same trim Tella makes on
+ * its icon+label buttons.
+ */
+
+/** Everything but the gap, which is the one value the two states disagree on.
+ *  Written this way rather than as an override on top: two `gap-*` utilities on
+ *  one element resolve by Tailwind's output order, not by the order they are
+ *  written in. */
+const PILL_BASE =
+	"inline-flex min-h-8 items-center rounded-[999px] bg-popup-glass pr-3.5 pl-2.5 " +
+	"text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] " +
+	"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm";
+
+export const TRANSCRIPT_PILL = `${PILL_BASE} gap-1.5`;
+
+/**
+ * The button form. The hover wash paints on a pseudo-element so it layers over
+ * the glass instead of replacing it — which means the pseudo needs the pill's
+ * corner treatment too: base.css grants `corner-shape: squircle` by matching
+ * `rounded-*` on the ELEMENT, and a pseudo-element matches no selector, so
+ * `rounded-[inherit]` alone left a round wash sitting inside a squircle pill
+ * with a pale sliver showing at each corner. `corner-shape: inherit` follows
+ * whatever the pill resolved to, including the PWA's round-cornered phone case.
+ *
+ * `after` is the hit target, held a few pixels out past the visible edge so a
+ * small pill is still easy to hit; it must not paint anything, or it would
+ * square off the corners it extends past.
+ */
+export const TRANSCRIPT_PILL_BUTTON =
+	`group relative cursor-pointer ${TRANSCRIPT_PILL} transition-[scale] ` +
+	"before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +
+	"before:[corner-shape:inherit] before:bg-transparent before:transition-colors before:content-[''] " +
+	"after:absolute after:-inset-1 after:content-[''] hover:before:bg-hover " +
+	"focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]";
+
+/** The loading state's leading spinner, and the wider gap it asks for: an arrow
+ *  glyph carries side bearing of its own, a bare 12px ring carries none, so at
+ *  the label's own spacing the two sit on top of each other. */
+export const TRANSCRIPT_PILL_LOADING = `${PILL_BASE} gap-2`;
+export const TRANSCRIPT_PILL_SPINNER =
+	"size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim";
+
 /* ── Session info page (phone) ──────────────────────────────────────────────
  *
  * Tapping the top-bar title opens this as a deeper page, WhatsApp-style: a
