@@ -29,6 +29,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { acquireCdpBrowser, closeCdpTarget, releaseCdpBrowser } from "./lib/cdp-browser";
 import { localAutomationToken } from "./lib/local-auth";
+import { captureInitScript, captureViewport } from "./lib/visual-capture";
 
 const ROOT = join(import.meta.dir, "..");
 const SHOTS = join(ROOT, ".css-shots");
@@ -131,18 +132,6 @@ if (token)
 		url: APP,
 		path: "/",
 	});
-await send("Page.addScriptToEvaluateOnNewDocument", {
-	source: `
-    try { localStorage.setItem('opensession-theme', window.__theme); } catch (e) {}
-    document.addEventListener('DOMContentLoaded', () => {
-      document.documentElement.setAttribute('data-theme', window.__theme);
-      const s = document.createElement('style');
-      s.textContent = ${JSON.stringify(FREEZE)};
-      document.head.appendChild(s);
-    });
-  `,
-});
-
 /** Screenshot repeatedly until two consecutive frames match, or we give up. */
 async function settledShot(maxMs = 20000): Promise<string> {
 	const t0 = Date.now();
@@ -159,23 +148,25 @@ async function settledShot(maxMs = 20000): Promise<string> {
 
 for (const [rname, path] of ROUTES) {
 	for (const [vname, w, h] of VIEWPORTS) {
-		await send("Emulation.setDeviceMetricsOverride", {
-			width: w,
-			height: h,
-			deviceScaleFactor: 2,
-			mobile: vname === "mobile",
-			screenWidth: w,
-			screenHeight: h,
-		});
+		await send("Emulation.setDeviceMetricsOverride", captureViewport(w, h, vname === "mobile"));
 		for (const theme of THEMES) {
-			await send("Page.addScriptToEvaluateOnNewDocument", {
-				source: `window.__theme = ${JSON.stringify(theme)};`,
+			const initScript = await send("Page.addScriptToEvaluateOnNewDocument", {
+				source: captureInitScript({
+					theme: theme as "light" | "dark",
+					electronMaterial: vname === "desktop",
+					freezeCss: FREEZE,
+				}),
 			});
 			await send("Page.navigate", { url: "about:blank" });
 			await new Promise((r) => setTimeout(r, 200));
 			await send("Page.navigate", { url: APP + path });
 			await new Promise((r) => setTimeout(r, 2500));
 			const data = await settledShot();
+			if (initScript?.identifier) {
+				await send("Page.removeScriptToEvaluateOnNewDocument", {
+					identifier: initScript.identifier,
+				});
+			}
 			const file = join(OUT, `${rname}__${vname}__${theme}.png`);
 			if (!data) {
 				console.log(`  FAILED ${rname}/${vname}/${theme}`);

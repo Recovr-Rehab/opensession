@@ -220,7 +220,12 @@ Tooling: `bun scripts/css-audit.ts` is now a guard rather than a worklist — it
 reports `classes defined: 0` against legacy.css, so treat a non-zero count as
 someone having put component styling back in a stylesheet, not as a backlog.
 `bun scripts/css-shots.ts <name>` captures the routes × viewport × theme
-screenshot gate; `--diff` compares two runs. The CSS measurement tools start
+screenshot gate; `--diff` compares two runs. For a finished one-off visual,
+use `bun scripts/capture-ui.ts /tmp/name.png --route /path`: desktop captures
+keep a 1440x900 CSS viewport but rasterize at Retina DPR 2 and emulate the Mac
+Electron material/titlebar; phone captures use DPR 3 without desktop chrome.
+Do not hand-roll a DPR 1 CDP screenshot for visual review — it makes borders,
+shadows, and type look harsher than the shipped app. The CSS measurement tools start
 and clean up their own private, resource-bounded headful Chrome+Xvfb service;
 never launch or share a raw Chrome CDP service for them. Set `CDP_PORT` only
 when deliberately using an externally managed browser.

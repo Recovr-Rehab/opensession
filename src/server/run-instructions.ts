@@ -174,7 +174,11 @@ export function buildRunInstructions(input: {
     "## Browser processes must be bounded\nNever launch Chrome/Chromium or Xvfb directly " +
       "with `systemd-run`, `setsid`, `nohup`, or a trailing `&`. Those processes outlive " +
       "the turn, escape the session resource limits, and have previously consumed tens of " +
-      "gigabytes. For this repository's visual checks, run `bun scripts/css-shots.ts`, " +
+      "gigabytes. For this repository's finished screenshots, use " +
+      "`bun scripts/capture-ui.ts /tmp/name.png --route /path`; it preserves the CSS " +
+      "viewport while rasterizing at Retina density and emulating the Electron material " +
+      "shell. Do not hand-roll a DPR 1 screenshot for visual review. For CSS checks, run " +
+      "`bun scripts/css-shots.ts`, " +
       "`bun scripts/css-ab.ts`, or `bun scripts/css-rulekill.ts`; they acquire a private " +
       "headful browser with memory/task/CPU/idle/lifetime limits and clean it up. For other " +
       "CDP work use `bun scripts/cdp-browser.ts start` and stop the returned systemd unit " +
