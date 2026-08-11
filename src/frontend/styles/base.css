@@ -315,7 +315,7 @@ html[data-theme="light"] {
 	   line to hold its shape, while --border-strong (#d0d0d0) draws a box
 	   around the composer instead of an edge under it.
 	   This also fixes the stack behind it — the queue/agents flaps tuck under
-	   the composer at ~#eeeeee, which was LIGHTER than the #ebebeb box in
+	   the composer at ~#f3f3f3, which is lighter than the old #ebebeb box in
 	   front of them, so the thing on top looked like the thing behind. */
 	--composer-surface: #ffffff;
 	--composer-border: #dcdcdc;

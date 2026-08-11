@@ -193,7 +193,7 @@ export const fileChipSub = "text-meta text-faint";
    to be `border-bottom-style: none`, not a zero-width solid, because the
    composer's own hairline continues it. `border-b-0` leaves the style behind. */
 export const composerQueue =
-	"relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t border-[color:var(--composer-border)] bg-[color-mix(in_srgb,var(--bg-panel)_70%,var(--control-surface))] px-3.5 pt-2.5 pb-[26px]";
+	"relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t border-[color:var(--composer-border)] bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[26px]";
 export const composerQueueTitle = "text-[12px] font-semibold text-faint";
 export const composerQueueList = "flex flex-col gap-2";
 /** One queued/steered row. The floor is one line of body text, so a row whose
