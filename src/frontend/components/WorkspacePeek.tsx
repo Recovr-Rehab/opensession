@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	fetchGitStatus,
 	fetchPr,
@@ -23,7 +23,6 @@ import {
 	PEEK_LABEL,
 	PEEK_ROW,
 	PEEK_SECTION,
-	PEEK_SKELETON,
 	PEEK_STATE,
 	PEEK_THUMB,
 } from "../lib/workspace-peek-classes";
@@ -104,6 +103,10 @@ type PeekData = {
  *  Module-level: survives the popup unmounting, dies with the page. */
 const lastKnown = new Map<string, PeekData>();
 
+function emptyData(): PeekData {
+	return { pr: null, git: null, assets: [], diff: null };
+}
+
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
 
 /** The PR glyph's colour: where the pull request itself stands. */
@@ -143,14 +146,12 @@ export function WorkspacePeek({
 }: Props) {
 	const [open, setOpen] = useState(false);
 	useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
+	function changeOpen(nextOpen: boolean) {
+		setOpen(nextOpen);
+		onOpenChange?.(nextOpen);
+	}
 	return (
-		<Popover.Root
-			open={open}
-			onOpenChange={(nextOpen) => {
-				setOpen(nextOpen);
-				onOpenChange?.(nextOpen);
-			}}
-		>
+		<Popover.Root open={open} onOpenChange={changeOpen}>
 			<Tooltip label="Workspace summary">
 				<Popover.Trigger
 					className={cn(
@@ -183,7 +184,7 @@ export function WorkspacePeek({
 					onOpenAssets={onOpenAssets}
 					send={send}
 					refreshTick={refreshTick}
-					close={() => setOpen(false)}
+					close={() => changeOpen(false)}
 				/>
 			</Popover.Popup>
 		</Popover.Root>
@@ -200,56 +201,63 @@ function PeekBody({
 	refreshTick,
 	close,
 }: Props & { close: () => void }) {
-	const seed = lastKnown.get(session.id);
-	const [data, setData] = useState<PeekData | null>(seed ?? null);
+	const activeSessionId = useRef(session.id);
+	activeSessionId.current = session.id;
+	const [data, setData] = useState<PeekData>(
+		() => lastKnown.get(session.id) ?? emptyData(),
+	);
 	const [prompted, setPrompted] = useState(false);
+	const updateData = useCallback(
+		(patch: Partial<PeekData>) => {
+			if (activeSessionId.current !== session.id) return;
+			setData((current) => {
+				const next = { ...current, ...patch };
+				lastKnown.set(session.id, next);
+				return next;
+			});
+		},
+		[session.id],
+	);
 
 	const load = useCallback(async () => {
-		const [pr, git, assets] = await Promise.all([
-			fetchPr(session.id, session.repo || undefined).catch(() => null),
-			fetchGitStatus(session.id, session.repo || undefined).catch(() => null),
-			fetchSessionAssets(session.id)
-				.then((r) => r.files)
-				.catch(() => [] as SessionAssetFile[]),
-		]);
-		// Only pay for the worktree patch when the PR can't answer the same
-		// question (see the note in the module doc).
-		let diff: PeekData["diff"] = null;
-		if (!pr) {
-			const patch = await fetchDiff(session.id).catch(() => null);
-			if (patch?.repos)
-				diff = patch.repos.reduce(
-					(sum, repo) => ({
-						additions: sum.additions + (repo.diff.totalAdditions || 0),
-						deletions: sum.deletions + (repo.diff.totalDeletions || 0),
-						files: sum.files + (repo.diff.files?.length || 0),
-					}),
-					{ additions: 0, deletions: 0, files: 0 },
-				);
-		}
-		const next: PeekData = { pr, git, assets, diff };
-		lastKnown.set(session.id, next);
-		setData(next);
-	}, [session.id, session.repo]);
+		const pr = fetchPr(session.id, session.repo || undefined)
+			.catch(() => null)
+			.then(async (nextPr) => {
+				updateData({ pr: nextPr, ...(nextPr ? { diff: null } : {}) });
+				// Only pay for the worktree patch when the PR can't answer the same
+				// question (see the note in the module doc).
+				if (nextPr) return;
+				const patch = await fetchDiff(session.id).catch(() => null);
+				const diff = patch?.repos
+					? patch.repos.reduce(
+							(sum, repo) => ({
+								additions: sum.additions + (repo.diff.totalAdditions || 0),
+								deletions: sum.deletions + (repo.diff.totalDeletions || 0),
+								files: sum.files + (repo.diff.files?.length || 0),
+							}),
+							{ additions: 0, deletions: 0, files: 0 },
+						)
+					: null;
+				updateData({ diff });
+			});
+		const git = fetchGitStatus(session.id, session.repo || undefined)
+			.catch(() => null)
+			.then((nextGit) => updateData({ git: nextGit }));
+		const assets = fetchSessionAssets(session.id)
+			.then((response) => response.files)
+			.catch(() => [] as SessionAssetFile[])
+			.then((nextAssets) => updateData({ assets: nextAssets }));
+		await Promise.all([pr, git, assets]);
+	}, [session.id, session.repo, updateData]);
 
 	useEffect(() => {
-		setData(lastKnown.get(session.id) ?? null);
+		setData(lastKnown.get(session.id) ?? emptyData());
 		load();
 		return pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
 	}, [load, session.id]);
 	useEffect(() => {
 		if (refreshTick) load();
 	}, [refreshTick, load]);
-
-	if (!data)
-		return (
-			<div className="contents" aria-busy="true">
-				<div className={PEEK_SECTION}>Workspace</div>
-				<div className={cn(PEEK_SKELETON, "w-[60%]")} />
-				<div className={cn(PEEK_SKELETON, "w-[75%]")} />
-				<div className={cn(PEEK_SKELETON, "w-[45%]")} />
-			</div>
-		);
 
 	const { pr, git, assets, diff } = data;
 	const additions = pr ? pr.additions : (diff?.additions ?? 0);
