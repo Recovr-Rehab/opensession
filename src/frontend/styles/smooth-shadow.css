@@ -9,7 +9,9 @@
  * `sm` is for compact floating controls, `md` for menus and popovers, and `lg`
  * for palettes, dialogs, and large preview cards. The 1px hairline is the final
  * shadow layer, so do not add a border, ring, or native `shadow-*` utility to
- * the same element.
+ * the same element. The ring fades with elevation: compact controls retain a
+ * little definition, while menus, dialogs, and large cards increasingly let
+ * the cast shadow define their edge.
  *
  * MIT License
  *
@@ -60,7 +62,8 @@ html[data-theme="light"] {
 		color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
 		0 0.5px 1px 0
 		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
+		0 0 0 var(--smooth-ring-width, 1px)
+		color-mix(in srgb, var(--smooth-ring-color) 80%, transparent);
 }
 
 @utility smooth-shadow-ring-md {
@@ -76,7 +79,8 @@ html[data-theme="light"] {
 		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
 		0 0.375px 1px 0
 		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
+		0 0 0 var(--smooth-ring-width, 1px)
+		color-mix(in srgb, var(--smooth-ring-color) 65%, transparent);
 }
 
 @utility smooth-shadow-ring-lg {
@@ -92,7 +96,8 @@ html[data-theme="light"] {
 		color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
 		0 0.6px 1.6px 0
 		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
+		0 0 0 var(--smooth-ring-width, 1px)
+		color-mix(in srgb, var(--smooth-ring-color) 50%, transparent);
 }
 
 /*
@@ -116,7 +121,7 @@ html[data-theme="light"] {
 		0 1.5px 4px 0
 		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
 		0 0 0 var(--smooth-ring-width, 1px)
-		color-mix(in srgb, var(--smooth-ring-color) 55%, transparent);
+		color-mix(in srgb, var(--smooth-ring-color) 35%, transparent);
 }
 
 /* Forced colors removes box-shadows, so restore the floating surface's edge. */
