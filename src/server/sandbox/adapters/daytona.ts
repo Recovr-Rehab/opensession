@@ -77,7 +77,10 @@ import {
 
 const SESSION_LABEL = "opensession.session";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
-const DEFAULT_DAYTONA_IMAGE = "ubuntu:22.04";
+// Daytona's image keeps the process user + passwordless-sudo contract that
+// bootstrapRemoteSandbox needs. A plain Ubuntu image launches correctly but
+// cannot create the stable /home/ubuntu layout.
+const DEFAULT_DAYTONA_IMAGE = "daytonaio/sandbox:0.8.0";
 /** Delimits stdout from stderr inside the merged executeCommand output. */
 const ERR_DELIM = "__OS_STDERR_7f3a__";
 /** Delimits stderr from the encoded command exit code. */

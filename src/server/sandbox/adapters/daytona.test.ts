@@ -4,7 +4,7 @@ import { daytonaCreateSource, parseDaytonaExecResult } from "./daytona";
 describe("Daytona create source", () => {
   test("uses an explicit image whenever custom resources are requested", () => {
     expect(daytonaCreateSource(undefined, { cpu: 2, memory: 4, disk: 8 })).toEqual({
-      image: "ubuntu:22.04",
+      image: "daytonaio/sandbox:0.8.0",
       resources: { cpu: 2, memory: 4, disk: 8 },
     });
   });
