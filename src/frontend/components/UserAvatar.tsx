@@ -51,10 +51,18 @@ export function UserAvatar({
 	const login = loginProp?.trim() || githubLoginFor(name);
 	const [failed, setFailed] = useState(false);
 	useEffect(() => setFailed(false), [login]);
+	const picture = !!login && !failed;
 	return (
 		<span
 			className={cn(
-				"[--avatar-edge:inset_0_0_0_1px_color-mix(in_srgb,var(--text)_14%,transparent)] relative inline-flex shrink-0 items-center justify-center",
+				// The hairline separates a photo from the surface behind it. The
+				// initial fallback is already its own flat tile, so it takes no
+				// edge — the variable stays defined (transparent) because callers
+				// compose it into a larger box-shadow (TeamPresence's pile ring).
+				picture
+					? "[--avatar-edge:inset_0_0_0_1px_color-mix(in_srgb,var(--text)_14%,transparent)]"
+					: "[--avatar-edge:0_0_0_0_transparent]",
+				"relative inline-flex shrink-0 items-center justify-center",
 				"rounded-[32%] bg-active font-bold text-dim shadow-[var(--avatar-edge)] select-none",
 				className,
 			)}
@@ -66,7 +74,7 @@ export function UserAvatar({
 			}}
 			title={title}
 		>
-			{login && !failed ? (
+			{picture ? (
 				<img
 					src={`https://github.com/${login}.png?size=${size * 2}`}
 					alt={name}
