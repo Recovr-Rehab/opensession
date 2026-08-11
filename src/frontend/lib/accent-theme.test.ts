@@ -3,6 +3,7 @@ import {
 	ACCENT_THEME_OPTIONS,
 	DEFAULT_ACCENT_THEME,
 	getAccentTheme,
+	getAccentThemeInk,
 	getAccentThemeOption,
 	handleAccentStorageChange,
 	isAccentTheme,
@@ -84,16 +85,31 @@ describe("accent theme", () => {
 		expect(JSON.parse(serializedValues ?? "[]")).toEqual(
 			ACCENT_THEME_OPTIONS.map((option) => option.value),
 		);
+		expect(css).toContain("--on-accent-light: #000000");
+		expect(css).toContain("--on-accent-dark: #000000");
+		expect(html).toContain('if (accent === "gold")');
+		expect(html).toContain('accent = "lime"');
 	});
 
-	test("every chromatic fill carries a legible white glyph", () => {
+	test("every fill carries a legible glyph", () => {
 		for (const option of ACCENT_THEME_OPTIONS) {
-			if (option.value === "mono") continue;
-			for (const fill of [option.light, option.dark]) {
-				const contrast = 1.05 / (luminance(fill) + 0.05);
+			for (const tone of ["light", "dark"] as const) {
+				const fill = option[tone];
+				const ink = getAccentThemeInk(option.value, tone);
+				const fillLuminance = luminance(fill);
+				const inkLuminance = luminance(ink);
+				const contrast =
+					(Math.max(fillLuminance, inkLuminance) + 0.05) /
+					(Math.min(fillLuminance, inkLuminance) + 0.05);
 				expect(contrast).toBeGreaterThan(3);
 			}
 		}
+	});
+
+	test("migrates the removed Gold accent to Lime", () => {
+		storage.setItem("opensession-accent", "gold");
+		expect(getAccentTheme()).toBe("lime");
+		expect(storage.getItem("opensession-accent")).toBe("lime");
 	});
 
 	test("defaults to teal for missing or unknown values", () => {
@@ -115,7 +131,8 @@ describe("accent theme", () => {
 	});
 
 	test("rejects values outside the palette", () => {
-		expect(isAccentTheme("gold")).toBe(true);
+		expect(isAccentTheme("lime")).toBe(true);
+		expect(isAccentTheme("gold")).toBe(false);
 		expect(isAccentTheme("chartreuse")).toBe(false);
 		expect(getAccentThemeOption("mono").dark).toBe("#ffffff");
 	});

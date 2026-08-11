@@ -5,6 +5,7 @@ import { fetchFeeds } from "../../lib/api";
 import {
 	ACCENT_THEME_OPTIONS,
 	getAccentTheme,
+	getAccentThemeInk,
 	getAccentThemeOption,
 	onAccentThemeChanged,
 	setAccentTheme,
@@ -160,7 +161,7 @@ function AccentSwatch({
 }) {
 	const option = getAccentThemeOption(theme);
 	const swatch = option[tone];
-	const ink = theme === "mono" && tone === "dark" ? "#000000" : "#ffffff";
+	const ink = getAccentThemeInk(theme, tone);
 	const style = {
 		"--swatch": swatch,
 		"--swatch-ink": ink,

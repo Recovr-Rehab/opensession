@@ -25,11 +25,12 @@ final class AccentThemeTests: XCTestCase {
         }
     }
 
-    /// The pair's identity: jewel tones with white ink in both appearances.
-    func testChromaticFillsCarryWhiteGlyphsInBothAppearances() {
+    /// Most jewel tones carry white; bright lime deliberately carries black.
+    func testChromaticFillsUseTheirExpectedGlyphInk() {
         for theme in AccentTheme.allCases where theme != .mono {
-            XCTAssertTrue(theme.glyphIsWhite(dark: false), "\(theme.rawValue) light fill")
-            XCTAssertTrue(theme.glyphIsWhite(dark: true), "\(theme.rawValue) dark fill")
+            let expectsWhite = theme != .lime
+            XCTAssertEqual(theme.glyphIsWhite(dark: false), expectsWhite, "\(theme.rawValue) light fill")
+            XCTAssertEqual(theme.glyphIsWhite(dark: true), expectsWhite, "\(theme.rawValue) dark fill")
         }
     }
 
@@ -60,6 +61,13 @@ final class AccentThemeTests: XCTestCase {
         defaults.set("blue", forKey: AccentStore.defaultsKey)
         XCTAssertEqual(AccentStore(defaults: defaults).theme, .sky)
         XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "sky")
+    }
+
+    func testRemovedGoldSelectionMigratesToLime() {
+        let defaults = scratchDefaults()
+        defaults.set("gold", forKey: AccentStore.defaultsKey)
+        XCTAssertEqual(AccentStore(defaults: defaults).theme, .lime)
+        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "lime")
     }
 
     func testSelectionPersists() {

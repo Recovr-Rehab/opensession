@@ -455,9 +455,11 @@ html[data-accent="orange"] {
 	--accent-dark: #ff5a00;
 }
 
-html[data-accent="gold"] {
-	--accent-light: #98741c;
-	--accent-dark: #ae8521;
+html[data-accent="lime"] {
+	--accent-light: #789000;
+	--accent-dark: #e4f222;
+	--on-accent-light: #000000;
+	--on-accent-dark: #000000;
 }
 
 html[data-accent="green"] {

@@ -15,10 +15,10 @@ import UIKit
 /// ADDING a colour is one line in `fills`: a name, and the two hexes it wears
 /// in light and dark.
 ///
-/// What sits ON the accent is deliberately NOT part of that table. Every
-/// chromatic accent takes white ink; `mono` alone inverts with its fill. The
-/// contrast test guards that rule, so replacing either hex remains a one-line
-/// change without allowing an illegible glyph to ship.
+/// What sits ON the accent is deliberately NOT part of that table. Jewel tones
+/// take white ink, bright lime takes black, and `mono` inverts with its fill.
+/// The contrast test guards that rule, so replacing either hex cannot ship an
+/// illegible glyph.
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case teal
     case sky
@@ -27,7 +27,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case pink
     case coral
     case orange
-    case gold
+    case lime
     case green
     case mono
 
@@ -44,7 +44,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         case .pink: "Rose"
         case .coral: "Coral"
         case .orange: "Tangerine"
-        case .gold: "Gold"
+        case .lime: "Lime"
         case .green: "Clover"
         case .mono: "Mono"
         }
@@ -63,7 +63,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         case .pink: (0xD1_23_8C, 0xEE_29_A1)
         case .coral: (0xDD_24_3B, 0xF7_36_48)
         case .orange: (0xE8_4F_00, 0xFF_5A_00)
-        case .gold: (0x98_74_1C, 0xAE_85_21)
+        case .lime: (0x78_90_00, 0xE4_F2_22)
         case .green: (0x20_91_48, 0x26_A6_53)
         case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
@@ -105,9 +105,10 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// What sits on top of the fill — the glyph in the send disc and every
-    /// other prominent accent control. Chromatic accents always use white;
-    /// monochrome keeps the app's original black/white inversion.
+    /// other prominent accent control. Jewel tones use white, bright lime uses
+    /// black, and monochrome keeps the app's original black/white inversion.
     var onAccent: Color {
+        if self == .lime { return .black }
         guard self == .mono else { return .white }
         return Color(platformColor: AccentTheme.dynamic(
             light: .white,
@@ -123,9 +124,13 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
 
     /// Whether this accent's fixed glyph is white. Together with
     /// `glyphContrast` this lets the test suite reject replacement colours too
-    /// pale to carry the palette's white-ink rule.
+    /// pale to carry the palette's chosen ink.
     func glyphIsWhite(dark: Bool) -> Bool {
-        self != .mono || !dark
+        switch self {
+        case .lime: false
+        case .mono: !dark
+        default: true
+        }
     }
 
     /// How much contrast the derived glyph gets on this fill.
@@ -222,9 +227,13 @@ final class AccentStore {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let stored = defaults.string(forKey: Self.defaultsKey) ?? ""
-        // Cobalt briefly shipped as `blue`; Sky is its nearest successor in
-        // the evenly spaced palette, so preserve the choice across the rename.
-        let normalized = stored == "blue" ? AccentTheme.sky.rawValue : stored
+        // Preserve selections across palette replacements rather than silently
+        // resetting someone to the default accent.
+        let normalized = switch stored {
+        case "blue": AccentTheme.sky.rawValue
+        case "gold": AccentTheme.lime.rawValue
+        default: stored
+        }
         theme = AccentTheme(rawValue: normalized) ?? .default
         if normalized != stored {
             defaults.set(normalized, forKey: Self.defaultsKey)
