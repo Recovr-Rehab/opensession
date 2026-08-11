@@ -243,3 +243,38 @@ set those — an unsigned webhook endpoint is an open door into your automations
 
 If you do not use inbound webhooks, leave 3848 on `127.0.0.1` and forget it
 exists.
+
+### Remote-sandbox ingress
+
+Daytona and Modal also need three public, token-gated routes on the webhook
+hostname. They terminate on the isolated listener at `127.0.0.1:3860`; they
+must never expose the main UI on 3850:
+
+```caddy
+ingress.example.com {
+    handle /run-ws/* {
+        reverse_proxy 127.0.0.1:3860
+    }
+    handle /rpc-ws {
+        reverse_proxy 127.0.0.1:3860
+    }
+    handle /ingress-health {
+        reverse_proxy 127.0.0.1:3860
+    }
+    handle {
+        reverse_proxy 127.0.0.1:3848
+    }
+}
+```
+
+Workspace → Sandboxes generates this block for the selected origin. The
+repository CLI finds the matching host in `/etc/caddy/Caddyfile`, owns a marked
+route section inside it (or creates the host), backs up the file, validates,
+reloads and publicly verifies it:
+
+```sh
+opensession sandbox ingress install https://ingress.example.com
+```
+
+On any failure it restores and reloads the complete prior Caddyfile. The same
+maintained example lives at `deploy/caddy/sandbox-ingress.caddy.example`.

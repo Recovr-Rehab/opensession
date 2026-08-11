@@ -17,11 +17,9 @@ import {
   updateSandboxConnection,
 } from "../../src/server/sandbox/connections";
 import { qualifySandboxConnection } from "../../src/server/sandbox/qualification";
-import {
-  caddyfileImportsManagedFragment,
-  caddyIngressSnippet,
-} from "../../src/server/sandbox/caddy-ingress";
+import { upsertCaddyIngress } from "../../src/server/sandbox/caddy-ingress";
 import { setSandboxPublicIngressUrl } from "../../src/server/sandbox/config";
+import { configuredServer } from "../../src/server/config";
 import { stateDir } from "../../src/server/paths";
 import { writeJsonAtomic } from "../../src/server/shared/atomic-write";
 import { REPO_ROOT } from "./paths";
@@ -39,6 +37,78 @@ function updateSandboxConfig(patch: Record<string, unknown>): void {
   } catch {}
   writeJsonAtomic(sandboxConfigPath(), { ...raw, ...patch });
   chmodSync(sandboxConfigPath(), 0o600);
+}
+
+async function qualifyRemoteThroughServer(provider: "daytona" | "modal"): Promise<number> {
+  let sessions: Array<{ token?: string }> = [];
+  try {
+    const parsed = JSON.parse(readFileSync(stateDir("web-sessions.json"), "utf-8"));
+    if (Array.isArray(parsed?.sessions)) sessions = parsed.sessions;
+  } catch {}
+  const token = sessions.find((session) => typeof session.token === "string")?.token;
+  if (!token) {
+    fail(
+      "no local Open Session web session is available",
+      "open the app once, then rerun this command; remote qualification must run inside the server process",
+    );
+    return 1;
+  }
+  const base = `http://127.0.0.1:${configuredServer().port}`;
+  const headers = {
+    Cookie: `opensession_auth=${token}`,
+    "Content-Type": "application/json",
+  };
+  let start: Response;
+  try {
+    start = await fetch(`${base}/api/sandbox/connections/${provider}/test`, {
+      method: "POST",
+      headers,
+      body: "{}",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    fail(
+      "Open Session is not reachable on its local port",
+      "start the service before testing Daytona or Modal",
+    );
+    return 1;
+  }
+  const started = (await start.json().catch(() => ({}))) as {
+    error?: string;
+    operation?: { id?: string };
+  };
+  if (!start.ok || !started.operation?.id) {
+    fail("remote qualification could not start", started.error || `HTTP ${start.status}`);
+    return 1;
+  }
+  const operationId = started.operation.id;
+  for (let attempt = 0; attempt < 600; attempt++) {
+    await Bun.sleep(1_000);
+    const status = await fetch(`${base}/api/sandbox/status`, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => undefined);
+    const body = status?.ok
+      ? ((await status.json().catch(() => ({}))) as {
+          operations?: Array<{
+            id: string;
+            status: "running" | "succeeded" | "failed";
+            stage?: string;
+            failureSummary?: string;
+          }>;
+        })
+      : undefined;
+    const operation = body?.operations?.find((candidate) => candidate.id === operationId);
+    if (!operation || operation.status === "running") continue;
+    if (operation.status === "succeeded") {
+      ok(`${provider} is Ready`);
+      return 0;
+    }
+    fail(`${provider} needs attention`, operation.failureSummary || "qualification failed");
+    return 1;
+  }
+  fail(`${provider} qualification timed out`, "check Workspace → Sandboxes for the operation state");
+  return 1;
 }
 
 async function requireCommand(name: string, hint: string): Promise<boolean> {
@@ -219,7 +289,72 @@ async function downloadPublishedGolden(storeDir: string): Promise<"installed" | 
   }
 }
 
-async function microvmPrerequisites(): Promise<boolean> {
+function microvmStoreCandidates(): string[] {
+  const explicit = process.env.OPENSESSION_MICROVM_STORE_DIR?.trim();
+  if (explicit) return [explicit];
+  return [
+    "/opt/firecracker/sandbox-store",
+    "/opt/firecracker/store/opensession-sandboxes",
+  ];
+}
+
+async function reflinkCapableStore(storeDir: string): Promise<boolean> {
+  if (!storeDir.startsWith("/opt/firecracker/")) return false;
+  const created = await run(["sudo", "-n", "install", "-d", "-m", "0755", storeDir]);
+  if (created.code !== 0) return false;
+  const localScratch = mkdtempSync(join(tmpdir(), "opensession-cow-source-"));
+  const source = join(localScratch, "source");
+  let hostScratch = "";
+  try {
+    await Bun.write(source, "opensession-cow-check");
+    const made = await run([
+      "sudo",
+      "-n",
+      "mktemp",
+      "-d",
+      `${storeDir}/.opensession-cow-check.XXXXXX`,
+    ]);
+    hostScratch = made.stdout.trim();
+    if (made.code !== 0 || !hostScratch.startsWith(`${storeDir}/.opensession-cow-check.`)) {
+      return false;
+    }
+    const installed = await run([
+      "sudo",
+      "-n",
+      "install",
+      "-m",
+      "0600",
+      source,
+      `${hostScratch}/source`,
+    ]);
+    if (installed.code !== 0) return false;
+    return (
+      await run([
+        "sudo",
+        "-n",
+        "cp",
+        "--reflink=always",
+        `${hostScratch}/source`,
+        `${hostScratch}/clone`,
+      ])
+    ).code === 0;
+  } finally {
+    if (hostScratch.startsWith(`${storeDir}/.opensession-cow-check.`)) {
+      await run([
+        "sudo",
+        "-n",
+        "rm",
+        "-f",
+        `${hostScratch}/source`,
+        `${hostScratch}/clone`,
+      ]).catch(() => undefined);
+      await run(["sudo", "-n", "rmdir", hostScratch]).catch(() => undefined);
+    }
+    rmSync(localScratch, { recursive: true, force: true });
+  }
+}
+
+async function microvmPrerequisites(): Promise<string | undefined> {
   let valid = true;
   if (process.platform !== "linux") {
     fail("Local MicroVM requires Linux");
@@ -255,77 +390,29 @@ async function microvmPrerequisites(): Promise<boolean> {
     fail("less than 30 GB of free disk is available", `${freeGb.toFixed(1)} GB free`);
     valid = false;
   } else ok("disk capacity", `${freeGb.toFixed(0)} GB free`);
-  if (existsSync("/opt/firecracker")) {
-    const localScratch = mkdtempSync(join(tmpdir(), "opensession-cow-source-"));
-    const source = join(localScratch, "source");
-    let hostScratch = "";
-    try {
-      await Bun.write(source, "opensession-cow-check");
-      const made = await run([
-        "sudo",
-        "-n",
-        "mktemp",
-        "-d",
-        "/opt/firecracker/.opensession-cow-check.XXXXXX",
-      ]);
-      hostScratch = made.stdout.trim();
-      if (
-        made.code !== 0 ||
-        !hostScratch.startsWith("/opt/firecracker/.opensession-cow-check.")
-      ) {
-        fail("could not create a filesystem capability probe in /opt/firecracker");
-        valid = false;
-      } else {
-        const installed = await run([
-          "sudo",
-          "-n",
-          "install",
-          "-m",
-          "0600",
-          source,
-          `${hostScratch}/source`,
-        ]);
-        const cloned =
-          installed.code === 0
-            ? await run([
-                "sudo",
-                "-n",
-                "cp",
-                "--reflink=always",
-                `${hostScratch}/source`,
-                `${hostScratch}/clone`,
-              ])
-            : { code: 1, stdout: "", stderr: installed.stderr };
-        if (cloned.code !== 0) {
-          fail(
-            "the MicroVM store filesystem does not support copy-on-write clones",
-            "place /opt/firecracker on XFS with reflink=1 or Btrfs",
-          );
-          valid = false;
-        } else ok("copy-on-write MicroVM store");
+  let storeDir: string | undefined;
+  if (valid) {
+    for (const candidate of microvmStoreCandidates()) {
+      if (await reflinkCapableStore(candidate)) {
+        storeDir = candidate;
+        break;
       }
-    } finally {
-      if (hostScratch.startsWith("/opt/firecracker/.opensession-cow-check.")) {
-        await run([
-          "sudo",
-          "-n",
-          "rm",
-          "-f",
-          `${hostScratch}/source`,
-          `${hostScratch}/clone`,
-        ]).catch(() => undefined);
-        await run(["sudo", "-n", "rmdir", hostScratch]).catch(() => undefined);
-      }
-      rmSync(localScratch, { recursive: true, force: true });
     }
+    if (!storeDir) {
+      fail(
+        "no MicroVM store supports copy-on-write clones",
+        "mount XFS with reflink=1 or Btrfs under /opt/firecracker, or set OPENSESSION_MICROVM_STORE_DIR",
+      );
+      valid = false;
+    } else ok("copy-on-write MicroVM store", storeDir);
   }
-  return valid;
+  return valid ? storeDir : undefined;
 }
 
 async function enableMicrovm(): Promise<number> {
   heading("Local MicroVM sandbox");
-  if (!(await microvmPrerequisites())) return 1;
-  const storeDir = "/opt/firecracker/sandbox-store";
+  const storeDir = await microvmPrerequisites();
+  if (!storeDir) return 1;
   updateSandboxConfig({
     firecrackerMicrovm: { enabled: true, storeDir, indexStart: 64, indexEnd: 127 },
   });
@@ -374,9 +461,6 @@ async function installCaddyIngress(originValue: string | undefined): Promise<num
   if (!(await requireCommand("sudo", "grant this operator Caddy configuration access"))) return 1;
 
   const caddyfile = process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
-  const fragment =
-    process.env.OPENSESSION_CADDY_INGRESS_FRAGMENT ||
-    "/etc/caddy/opensession.d/sandbox-ingress.caddy";
   let main = "";
   try {
     main = readFileSync(caddyfile, "utf-8");
@@ -384,51 +468,40 @@ async function installCaddyIngress(originValue: string | undefined): Promise<num
     fail(`could not read ${caddyfile}`);
     return 1;
   }
-  const importAccepted = caddyfileImportsManagedFragment(main, fragment);
-  if (!importAccepted) {
-    fail(
-      "this Caddyfile is user-managed, so Open Session did not change it",
-      "copy the generated Caddy routes from Workspace → Sandboxes, or add `import /etc/caddy/opensession.d/*.caddy` and rerun",
-    );
-    return 1;
-  }
-
   const scratch = mkdtempSync(join(tmpdir(), "opensession-caddy-ingress-"));
-  const staged = join(scratch, "sandbox-ingress.caddy");
-  const backup = `${fragment}.backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-  const hadFragment = existsSync(fragment);
+  const staged = join(scratch, "Caddyfile");
+  const backup = `${caddyfile}.backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   const sudo = ["sudo", "-n"];
   const rollback = async () => {
-    if (hadFragment) await run([...sudo, "cp", "-p", backup, fragment]);
-    else await run([...sudo, "rm", "-f", fragment]);
+    await run([...sudo, "cp", "-p", backup, caddyfile]);
     await run([...sudo, "systemctl", "reload", "caddy"]);
   };
   try {
-    await Bun.write(staged, `${caddyIngressSnippet(origin)}\n`);
-    const directory = fragment.slice(0, fragment.lastIndexOf("/"));
-    if ((await run([...sudo, "install", "-d", "-m", "0755", directory])).code !== 0) {
-      fail("could not create the Open Session Caddy fragment directory");
+    try {
+      await Bun.write(staged, upsertCaddyIngress(main, origin));
+    } catch (error) {
+      fail("Open Session could not safely update this Caddyfile", String(error));
       return 1;
     }
-    if (hadFragment && (await run([...sudo, "cp", "-p", fragment, backup])).code !== 0) {
-      fail("could not back up the existing Open Session Caddy fragment");
+    if ((await run([...sudo, "cp", "-p", caddyfile, backup])).code !== 0) {
+      fail("could not back up the Caddyfile");
       return 1;
     }
-    if ((await run([...sudo, "install", "-m", "0644", staged, fragment])).code !== 0) {
+    if ((await run([...sudo, "install", "-m", "0644", staged, caddyfile])).code !== 0) {
       await rollback();
-      fail("could not install the Open Session Caddy fragment; the prior fragment was restored");
+      fail("could not install the managed Caddy routes; the prior Caddyfile was restored");
       return 1;
     }
     const validate = await run([...sudo, "caddy", "validate", "--config", caddyfile, "--adapter", "caddyfile"]);
     if (validate.code !== 0) {
       await rollback();
-      fail("Caddy rejected the generated configuration; the prior fragment was restored", validate.stderr);
+      fail("Caddy rejected the generated configuration; the prior Caddyfile was restored", validate.stderr);
       return 1;
     }
     const reload = await run([...sudo, "systemctl", "reload", "caddy"]);
     if (reload.code !== 0) {
       await rollback();
-      fail("Caddy reload failed; the prior fragment was restored", reload.stderr);
+      fail("Caddy reload failed; the prior Caddyfile was restored", reload.stderr);
       return 1;
     }
     let healthy = false;
@@ -444,7 +517,7 @@ async function installCaddyIngress(originValue: string | undefined): Promise<num
     }
     if (!healthy) {
       await rollback();
-      fail("the public ingress check failed; the prior fragment was restored");
+      fail("the public ingress check failed; the prior Caddyfile was restored");
       return 1;
     }
     setSandboxPublicIngressUrl(origin);
@@ -489,6 +562,9 @@ export async function sandbox(args: string[]): Promise<number> {
       return 1;
     }
     heading(`${provider} qualification`);
+    if (provider === "daytona" || provider === "modal") {
+      return qualifyRemoteThroughServer(provider);
+    }
     try {
       await qualifySandboxConnection(provider, { prepareEnvironments: false });
       ok(`${provider} is Ready`);

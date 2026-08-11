@@ -73,8 +73,7 @@ export interface RunHostSpec {
   rpcToken?: string;
   /**
    * Per-run bearer for the WS transport (Phase 3). Present = this run's host
-   * dials the server's run-ws WS route (/opensession/run-ws/<hostId>; the
-   * /backstage/* form is the legacy alias) instead of serving a
+   * dials the server's run-ws WS route (/run-ws/<hostId>) instead of serving a
    * unix socket in its run dir; the launcher passes it to the host process as
    * OPENSESSION_RUN_WS_TOKEN and registers it (keyed by hostId) so the route can
    * validate the dial-back. Persisted in spec.json so a restarted server

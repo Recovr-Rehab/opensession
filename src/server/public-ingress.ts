@@ -8,8 +8,7 @@
  * Bun.serve binds the tailnet and carries the whole app, so instead of
  * exposing IT, this module runs a SECOND Bun.serve that serves ONLY:
  *
- *   - /run-ws/<hostId>  (WS upgrade — run host event stream; historical
- *                        /opensession + /backstage prefixed forms accepted)
+ *   - /run-ws/<hostId>  (WS upgrade — run host event stream)
  *   - /rpc-ws           (WS upgrade — opensession-* MCP proxy channel; same
  *                        historical prefixes accepted)
  *   - /ingress-health              (bare 200 "ok" for monitors/probes)
@@ -142,15 +141,6 @@ function ingressFetch(req: Request, server: IngressServer): Response | undefined
   }
   if (path === "/ingress-health") {
     return new Response("ok");
-  }
-  // Canonical dial-back paths are bare (/run-ws, /rpc-ws). Old baked URLs in
-  // live sandboxes/prewarms carry a historical prefix (/opensession, or the
-  // pre-rename /backstage) — strip it so they keep working.
-  for (const prefix of ["/opensession", "/backstage"]) {
-    if (path === `${prefix}/rpc-ws` || path.startsWith(`${prefix}/run-ws/`)) {
-      path = path.slice(prefix.length);
-      break;
-    }
   }
   if (path.startsWith("/run-ws/") || path === "/rpc-ws") {
     if (rateLimited(clientIp(req, server))) {

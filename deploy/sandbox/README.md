@@ -258,10 +258,10 @@ needed after changing it.
 
 - **WS transport** (`~/.opensession-sandbox.json` → `"transport": "ws"` +
   `"callbackBaseUrl": "ws://<reachable-host>:3850"`): the in-sandbox run host
-  DIALS OUT to the server's `/opensession/run-ws/<hostId>` route (token-authed,
+  DIALS OUT to the server's `/run-ws/<hostId>` route (token-authed,
   same NDJSON protocol, one JSON message per WS text frame) instead of
   serving a unix socket, and the opensession-* MCP proxies dial
-  `/opensession/rpc-ws`. Docker containers created in ws mode don't mount the
+  `/rpc-ws`. Docker containers created in ws mode don't mount the
   rpc socket. `callbackBaseUrl` must be reachable FROM the sandbox (Tailscale
   URL for self-hosters; 127.0.0.1 never works). For remote providers that
   means the PUBLIC internet: enable the isolated `publicIngress` listener

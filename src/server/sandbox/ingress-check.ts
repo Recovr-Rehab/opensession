@@ -44,7 +44,9 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
 }
 
 /** Proves both Caddy routing and run-ws authentication through the public URL.
- * The disposable token is registered only for the duration of this probe. */
+ * The disposable token is registered only for the duration of this probe.
+ * A WebSocket `open` is the proof: run-ws validates the token before calling
+ * Bun's upgrade API, so an invalid or misrouted request can never open. */
 export async function verifyPublicSandboxIngress(): Promise<void> {
   const base = publicBaseUrl();
   const health = await withTimeout(fetch(`${base}/ingress-health`), 10_000, "Ingress health check");
@@ -65,23 +67,24 @@ export async function verifyPublicSandboxIngress(): Promise<void> {
     await withTimeout(
       new Promise<void>((resolve, reject) => {
         const socket = new WebSocket(wsUrl);
-        socket.onmessage = (event) => {
-          try {
-            const message = JSON.parse(String(event.data));
-            if (message?.t === "ack") {
-              socket.close();
-              resolve();
-            }
-          } catch {}
+        let opened = false;
+        socket.onopen = () => {
+          opened = true;
+          socket.close();
+          resolve();
         };
-        socket.onerror = () => reject(
-          Object.assign(new Error("Authenticated sandbox WebSocket probe failed"), {
-            code: "INGRESS_WEBSOCKET_FAILED",
-          }),
-        );
+        socket.onerror = () => {
+          if (opened) return;
+          reject(
+            Object.assign(new Error("Authenticated sandbox WebSocket probe failed"), {
+              code: "INGRESS_WEBSOCKET_FAILED",
+            }),
+          );
+        };
         socket.onclose = () => {
-          // A successful ack closes the socket after resolving; Promise ignores
-          // this rejection. A pre-ack close is an actionable routing/auth fail.
+          // A successful open closes the socket after resolving; Promise ignores
+          // this rejection. A pre-open close is an actionable routing/auth fail.
+          if (opened) return;
           reject(
             Object.assign(new Error("Sandbox WebSocket closed before authentication completed"), {
               code: "INGRESS_WEBSOCKET_FAILED",

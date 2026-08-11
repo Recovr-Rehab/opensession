@@ -36,11 +36,12 @@ an existing webhook Caddy origin and provides the exact route snippet plus:
 opensession sandbox ingress install https://ingress.example.com
 ```
 
-The installer changes only an explicitly imported Open Session fragment,
-validates and reloads Caddy, verifies the public route, and restores its prior
-fragment on failure. For a user-managed Caddyfile without that import it
-refuses to mutate the file and Settings remains the copy/paste path. Connecting
-a provider or changing its callback origin does not restart Open Session.
+The installer owns a clearly marked route section inside the matching public
+host block, or creates that host block when it does not exist. It backs up the
+Caddyfile, validates and reloads Caddy, verifies the public route, and restores
+the complete prior Caddyfile on failure. Re-running it updates the same marked
+section. Connecting a provider or changing its callback origin does not restart
+Open Session.
 
 None remains a first-class personal and per-session choice. If a chosen
 provider later becomes unavailable, creation or the next turn fails clearly;
@@ -258,8 +259,8 @@ to `provider: "local"` (today's host behavior). Env override for the path:
 
   // ── Transport (how the in-sandbox run host talks to opensession) ─────
   //  "socket" (default): unix socket in a bind-mounted run dir. Docker only.
-  //  "ws": the sandbox DIALS OUT to opensession's /opensession/run-ws +
-  //        /opensession/rpc-ws routes (token-authed, seq/ack replay on
+  //  "ws": the sandbox DIALS OUT to opensession's /run-ws +
+  //        /rpc-ws routes (token-authed, seq/ack replay on
   //        reconnect). Required for remote providers (they force it
   //        regardless of this value); docker can dogfood it.
   "transport": "socket",
@@ -424,7 +425,7 @@ any future default flip.
 ## Public dial-back ingress (remote providers)
 
 Remote sandboxes (Daytona/E2B/Box/Modal/Lambda MicroVMs) run on remote compute and must dial back
-to opensession's `/opensession/run-ws/<hostId>` and `/opensession/rpc-ws`
+to opensession's `/run-ws/<hostId>` and `/rpc-ws`
 WebSocket routes from the **public internet**. The main server binds the
 tailnet and carries the whole app — never expose it. Instead,
 `src/server/public-ingress.ts` runs a **second, isolated Bun.serve** when
@@ -434,8 +435,8 @@ tailnet and carries the whole app — never expose it. Instead,
 
 | Path | What |
 | --- | --- |
-| `/opensession/run-ws/<hostId>` | WS upgrade — the run host's event stream |
-| `/opensession/rpc-ws?host=…` | WS upgrade — the opensession-* MCP proxy channel |
+| `/run-ws/<hostId>` | WS upgrade — the run host's event stream |
+| `/rpc-ws?host=…` | WS upgrade — the opensession-* MCP proxy channel |
 | `/ingress-health` | bare `200 ok` (monitors/probes) |
 
 Every other path is a **bodyless 404** — no app routes, no API, no frontend,
@@ -456,10 +457,10 @@ TLS in front of it and forward ONLY those paths. Two permanent options:
 
    ```caddyfile
    your.domain {
-       handle /opensession/run-ws/* {
+       handle /run-ws/* {
            reverse_proxy localhost:3860
        }
-       handle /opensession/rpc-ws {
+       handle /rpc-ws {
            reverse_proxy localhost:3860
        }
        handle /ingress-health {

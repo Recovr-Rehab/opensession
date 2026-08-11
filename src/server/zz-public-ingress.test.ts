@@ -60,6 +60,9 @@ describe("public ingress surface", () => {
     for (const path of [
       "/",
       "/backstage/",
+      "/backstage/run-ws/old",
+      "/opensession/run-ws/old",
+      "/opensession/rpc-ws",
       "/api/sessions",
       "/api/health",
       "/ws",

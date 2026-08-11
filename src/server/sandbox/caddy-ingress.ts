@@ -52,24 +52,113 @@ export function webhookHostsFromCaddy(config: unknown): string[] {
   return [...found];
 }
 
-export function caddyfileImportsManagedFragment(
-  caddyfile: string,
-  fragment = "/etc/caddy/opensession.d/sandbox-ingress.caddy",
-): boolean {
-  return caddyfile
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .some(
-      (line) =>
-        line === `import ${fragment}` ||
-        (fragment.startsWith("/etc/caddy/opensession.d/") &&
-          line === "import /etc/caddy/opensession.d/*.caddy"),
+const MANAGED_START = "# BEGIN OPENSESSION SANDBOX INGRESS";
+const MANAGED_END = "# END OPENSESSION SANDBOX INGRESS";
+
+function managedRoutes(indent = "    "): string {
+  return `${indent}${MANAGED_START}
+${indent}handle /run-ws/* {
+${indent}    reverse_proxy 127.0.0.1:3860
+${indent}}
+${indent}handle /rpc-ws {
+${indent}    reverse_proxy 127.0.0.1:3860
+${indent}}
+${indent}handle /ingress-health {
+${indent}    reverse_proxy 127.0.0.1:3860
+${indent}}
+${indent}${MANAGED_END}`;
+}
+
+function closingBrace(source: string, opening: number): number | undefined {
+  let depth = 0;
+  let quoted = false;
+  let comment = false;
+  for (let index = opening; index < source.length; index++) {
+    const char = source[index];
+    if (comment) {
+      if (char === "\n") comment = false;
+      continue;
+    }
+    if (!quoted && char === "#") {
+      comment = true;
+      continue;
+    }
+    if (char === '"' && source[index - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if (char === "{") depth += 1;
+    else if (char === "}" && --depth === 0) return index;
+  }
+  return undefined;
+}
+
+function hostLabelMatches(label: string, host: string): boolean {
+  return label
+    .trim()
+    .split(/[\s,]+/)
+    .map((part) => part.replace(/^https?:\/\//, "").replace(/:443$/, ""))
+    .includes(host);
+}
+
+function siteRanges(source: string, host: string): Array<{ opening: number; closing: number }> {
+  const ranges: Array<{ opening: number; closing: number }> = [];
+  const headers = /^([^\n#{}]+)\{/gm;
+  for (const match of source.matchAll(headers)) {
+    if (!hostLabelMatches(match[1] || "", host)) continue;
+    const opening = (match.index || 0) + match[0].lastIndexOf("{");
+    const closing = closingBrace(source, opening);
+    if (closing !== undefined) ranges.push({ opening, closing });
+  }
+  return ranges;
+}
+
+function stripKnownSandboxRoutes(site: string): string {
+  const paths = [
+    "/run-ws/\\*",
+    "/rpc-ws",
+    "/ingress-health",
+    "/opensession/run-ws/\\*",
+    "/opensession/rpc-ws",
+    "/backstage/run-ws/\\*",
+    "/backstage/rpc-ws",
+  ];
+  for (const path of paths) {
+    site = site.replace(
+      new RegExp(
+        `^[ \\t]*handle ${path} \\{\\s*reverse_proxy (?:localhost|127\\.0\\.0\\.1):3860\\s*\\}\\s*`,
+        "gm",
+      ),
+      "",
     );
+  }
+  return site;
+}
+
+/**
+ * Own the sandbox route section in an existing webhook host, or create a new
+ * public webhook host when it is absent. The markers make reruns idempotent.
+ */
+export function upsertCaddyIngress(caddyfile: string, origin: string): string {
+  const host = new URL(origin).host;
+  const managed = new RegExp(
+    `^[ \\t]*${MANAGED_START}[\\s\\S]*?^[ \\t]*${MANAGED_END}[ \\t]*(?:\\r?\\n)?`,
+    "gm",
+  );
+  let next = caddyfile.replace(managed, "");
+  const matches = siteRanges(next, host);
+  if (matches.length > 1) {
+    throw new Error(`Caddyfile defines ${host} more than once; consolidate it before setup`);
+  }
+  if (!matches.length) {
+    return `${next.trimEnd()}\n\n${caddyIngressSnippet(origin)}\n`;
+  }
+  const range = matches[0]!;
+  const site = stripKnownSandboxRoutes(next.slice(range.opening + 1, range.closing));
+  return `${next.slice(0, range.opening + 1)}\n${managedRoutes()}\n${site.replace(/^\s*\n/, "")}${next.slice(range.closing)}`;
 }
 
 export function caddyIngressSnippet(origin: string): string {
   const host = new URL(origin).host;
-  return `${host} {\n    handle /run-ws/* {\n        reverse_proxy 127.0.0.1:3860\n    }\n    handle /rpc-ws {\n        reverse_proxy 127.0.0.1:3860\n    }\n    handle /ingress-health {\n        reverse_proxy 127.0.0.1:3860\n    }\n    handle {\n        reverse_proxy 127.0.0.1:3848\n    }\n}`;
+  return `${host} {\n${managedRoutes()}\n    handle {\n        reverse_proxy 127.0.0.1:3848\n    }\n}`;
 }
 
 async function health(origin: string | undefined): Promise<"ready" | "unreachable" | "not_configured"> {

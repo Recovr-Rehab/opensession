@@ -393,10 +393,10 @@ bottom. Plan: [self-hosting-sandboxes.md](self-hosting-sandboxes.md). Phase 1 de
   fail closed. Opening and later sandbox turns never silently fall back to the
   host or another provider.
 - The isolated loopback listener is always available on 3860. Existing webhook
-  Caddy origins are discovered, an owned-fragment installer validates/reloads/
-  verifies/rolls back safely, and user-managed Caddyfiles get an exact generated
-  snippet. Qualification proves a real authenticated run-ws upgrade before paid
-  remote compute.
+  Caddy origins are discovered, and the installer owns a marked route section
+  in the matching public host (or creates it), with full-file backup, validate,
+  reload, public verification and rollback. Qualification proves a real
+  authenticated run-ws upgrade before paid remote compute.
 - Disposable qualification now covers native create/exec/upload/preview or
   tunnel/lifecycle/snapshot-distinct-restore/cleanup for Daytona and Modal,
   Docker snapshot restore, and Local MicroVM boot/exec/pause/wake/teardown.
@@ -407,8 +407,8 @@ bottom. Plan: [self-hosting-sandboxes.md](self-hosting-sandboxes.md). Phase 1 de
 - Per-repo/provider environment readiness and rebuild operations persist across
   reloads, reuse the sealed provider-native template path, and hold the opening
   prompt visibly behind preparation.
-- Caddy installation restores the previous managed fragment after any install,
-  validation, reload or public-health failure. Clearly transient sandbox
+- Caddy installation restores the complete previous Caddyfile after any
+  install, validation, reload or public-health failure. Clearly transient sandbox
   creation failures retry once, and default-branch updates invalidate reusable
   repository templates.
 - Verification: `bun run typecheck`; **1,940 pass, 4 skip, 0 fail** across 202
