@@ -89,8 +89,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   plain text immediately while highlighting finishes and keep large files plain.
 - **Workspace details** — tapping the session title opens a native worktree sheet
   with repository and branch metadata, local git status, changed files, pull
-  request status, workspace context, and model/reasoning controls, matching
-  mobile web's info page without embedding the web client.
+  request status, workspace context, model/reasoning controls, and live remote
+  sandbox status. Sandboxed workspaces expose explicit pause, wake, and
+  confirmed recreate controls without embedding the web client.
 - **Session panels** — details of a session (its assets, one of those files,
   its pull request) open ONE LEVEL DEEPER on the stack that is already there,
   not as tabs and not as sheets: the chevron and the edge swipe are the way
@@ -321,7 +322,8 @@ OS1/
     WalkthroughCard.swift    Published walkthrough: demo video, writeup, stills
     MarkdownBody.swift       Streaming/durable markdown rendering
     AskQuestionCard.swift    Options + free text answer
-    PrPanel.swift            Read-only pull-request panel
+    PrPanel.swift            Pull-request overview, actions, and review entry
+    PrReviewCanvas.swift     Committed diff, inline pending comments, viewed files
     WorktreeInfoView.swift   Workspace details sheet
     DeskSheet.swift          Desk sheet: header + voice controls over SessionView
     DeskVoiceCallView.swift  Full-screen voice call: orb, captions, call controls

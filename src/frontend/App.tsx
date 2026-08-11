@@ -49,6 +49,7 @@ import { suppressLayoutAnimations } from "./ui/motion";
 import { SessionViewer } from "./components/SessionViewer";
 import { NewSession } from "./components/NewSession";
 import type { NewSessionPrefill } from "./lib/new-session-link";
+import { shouldOpenCreatedSession } from "./lib/new-session-navigation";
 import {
 	SessionSearch,
 	type CommandPaletteAction,
@@ -604,6 +605,7 @@ export function App(
 		images?: string[];
 		startedAt: string;
 		user: string;
+		originPath: string;
 	};
 	const pendingCreateDraftRef = useRef<PendingCreateDraft | null>(null);
 	const [pendingInitialPrompts, setPendingInitialPrompts] = useState<
@@ -1344,6 +1346,11 @@ export function App(
 			if (msg.type === "session_created") {
 				const draft = pendingCreateDraftRef.current;
 				pendingCreateDraftRef.current = null;
+				const stillOwnsForeground = shouldOpenCreatedSession(
+					draft,
+					routePath(routeRef.current),
+					paletteOpenRef.current,
+				);
 				// Pin the just-created session for its creator (this WS reply is
 				// creator-only, so it never pins a teammate's new session onto my bar).
 				// Per-browser prefs in Settings: new sessions/sessions pin on by
@@ -1420,7 +1427,7 @@ export function App(
 				}, 30000);
 				refresh();
 				refreshWorkspaces();
-				navigate({ view: "session", id: msg.id });
+				if (stillOwnsForeground) navigate({ view: "session", id: msg.id });
 			}
 		});
 	}, [addHandler, refresh, refreshWorkspaces, unstick]);
@@ -4076,6 +4083,20 @@ export function App(
 								<div className="flex flex-1 items-center justify-center">
 									{(() => {
 										const isLoading = loading || route.id === pendingSessionId;
+										if (sessionsError && !isLoading) {
+											return (
+												<EmptyState
+													title="Couldn't load this session"
+													action={
+														<Button size="sm" onClick={() => void refresh()}>
+															Try again
+														</Button>
+													}
+												>
+													Check the connection to this server.
+												</EmptyState>
+											);
+										}
 										const title = !isLoading
 											? "Session not found"
 											: route.id === pendingSessionId
@@ -4093,6 +4114,17 @@ export function App(
 									})()}
 								</div>
 							)
+						) : sessionsError && sessions.length === 0 && !loading ? (
+							<EmptyState
+								title="Couldn't load sessions"
+								action={
+									<Button size="sm" onClick={() => void refresh()}>
+										Try again
+									</Button>
+								}
+							>
+								Check the connection to this server.
+							</EmptyState>
 						) : (
 							<Home
 								sessions={sessions}
@@ -4192,6 +4224,7 @@ export function App(
 								...draft,
 								startedAt: new Date().toISOString(),
 								user: getCurrentUser(),
+								originPath: routePath(routeRef.current),
 							};
 						}}
 					/>

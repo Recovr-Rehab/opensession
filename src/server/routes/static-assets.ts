@@ -19,6 +19,31 @@ import { resolveRepoIcon } from "../repo-appearance";
 // that hasn't changed since the last request.
 const trimmedIcons = new Map<string, { mtimeMs: number; bytes: Uint8Array }>();
 
+// Per-prefix PWA identity keeps legacy /backstage installs distinct, while the
+// shortcut still opens the new-agent flow in that same deployed shell.
+export function pwaManifest(publicPrefix: string) {
+	return {
+		name: productName(),
+		short_name: productName(),
+		start_url: `${publicPrefix}/`,
+		display: "standalone",
+		display_override: ["window-controls-overlay"],
+		background_color: "#0b0809",
+		theme_color: "#0b0809",
+		icons: [
+			{ src: `${publicPrefix}/icon-192.png?v=4`, sizes: "192x192", type: "image/png", purpose: "any" },
+			{ src: `${publicPrefix}/icon.png?v=4`, sizes: "512x512", type: "image/png", purpose: "any" },
+		],
+		shortcuts: [
+			{
+				name: "Start an agent",
+				url: `${publicPrefix}/new`,
+				icons: [{ src: `${publicPrefix}/icon-192.png?v=4`, sizes: "192x192", type: "image/png" }],
+			},
+		],
+	};
+}
+
 /**
  * A tile icon that lives on disk, or undefined when the file isn't there.
  *
@@ -221,38 +246,7 @@ export async function handleStaticAssetsRoutes(
 	}
 	if (path === "/manifest.webmanifest") {
 		return Response.json(
-			{
-				name: productName(),
-				short_name: productName(),
-				// Per-prefix PWA identity: installs from the legacy /backstage
-				// pages keep their identity; /opensession installs get the new
-				// start_url. One re-install event max, never a broken one.
-				start_url: `${publicPrefix}/`,
-				display: "standalone",
-				// On desktop, take over the OS titlebar: the window controls
-				// overlay our own chrome instead of a separate OS bar with a
-				// centered title. Falls back to plain standalone where WCO
-				// isn't supported (iOS, older browsers). CSS handles the
-				// controls inset + drag region under (display-mode:
-				// window-controls-overlay).
-				display_override: ["window-controls-overlay"],
-				background_color: "#0b0809",
-				theme_color: "#0b0809",
-				icons: [
-					{
-						src: `${publicPrefix}/icon-192.png?v=4`,
-						sizes: "192x192",
-						type: "image/png",
-						purpose: "any",
-					},
-					{
-						src: `${publicPrefix}/icon.png?v=4`,
-						sizes: "512x512",
-						type: "image/png",
-						purpose: "any",
-					},
-				],
-			},
+			pwaManifest(publicPrefix),
 			{ headers: { "Content-Type": "application/manifest+json" } },
 		);
 	}

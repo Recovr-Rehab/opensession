@@ -114,6 +114,15 @@ struct PrPanelView: View {
         if let pr = viewModel.prDetails {
             List {
                 overviewSection(pr)
+                if pr.isOpen {
+                    Section {
+                        NavigationLink {
+                            PrReviewCanvas(viewModel: viewModel)
+                        } label: {
+                            Label("Files changed", systemImage: "doc.text.magnifyingglass")
+                        }
+                    }
+                }
                 actionsSection(pr)
                 checksSection(pr)
                 reviewersSection(pr)

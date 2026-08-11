@@ -160,8 +160,12 @@ export interface SessionControl {
       slackReplyTo?: { channel: string; threadTs: string };
       /** Decoded images for the run/steer path. */
       images?: ImageInput[];
-      /** The same images as `data:` URLs, for the queue's stored copy. */
-      imageUrls?: string[];
+		/** The same images as `data:` URLs, for the queue's stored copy. */
+		imageUrls?: string[];
+		/** Raw composer file references. Files must wait for a real turn. */
+		files?: unknown;
+		/** Sibling-session transcripts attached to this prompt. */
+		contextSessions?: string[];
       /**
        * Hold a queued message until the agent FULLY completes (child workers
        * included) instead of delivering at the next drain point — the web and

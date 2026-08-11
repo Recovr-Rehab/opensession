@@ -370,8 +370,8 @@ export async function handleSessionsRoutes(
 	}
 
 	// Deliver a follow-up prompt to an existing session. REST shape for the
-	// native/extension clients (os1-ios, os1-chrome) — the web UI keeps its
-	// richer WS "prompt" message (staged file attachments, context sessions).
+	// native/extension clients (os1-ios, os1-chrome) and the web durable outbox.
+	// It accepts the same attachments and sibling-session context as WS.
 	// Same semantics as the opensession-sessions MCP send_to_session: steers a
 	// busy run by default, `busy: "queue"` waits behind it, idle starts a fresh
 	// turn.
@@ -393,6 +393,9 @@ export async function handleSessionsRoutes(
 				images?: unknown;
 				effort?: unknown;
 				fastMode?: unknown;
+				busyMode?: unknown;
+				files?: unknown;
+				contextSessions?: unknown;
 				clientId?: unknown;
 			} | null;
 			const raw =
@@ -405,7 +408,8 @@ export async function handleSessionsRoutes(
 			const images = parseImageDataUrls(body?.images);
 			const imageUrls = asDataUrlList(body?.images);
 			// An image-only send is a real message — only reject an empty one.
-			if (!content && !images?.length) {
+			const files = Array.isArray(body?.files) ? body.files : undefined;
+			if (!content && !images?.length && !files?.length) {
 				return Response.json({ error: "content required" }, { status: 400 });
 			}
 			const clientId =
@@ -438,17 +442,28 @@ export async function handleSessionsRoutes(
 				);
 			}
 			const user = requestUser(ctx, body?.user);
+			const busyMode =
+				body?.busyMode === "queue" || body?.busy === "queue"
+					? "queue"
+					: body?.busyMode === "steer"
+						? "steer"
+						: undefined;
+			const contextSessions = Array.isArray(body?.contextSessions)
+				? body.contextSessions.filter((id): id is string => typeof id === "string")
+				: undefined;
 			const res = await getSessionControl().deliverToSession(
 				sessionId,
 				content,
 				user,
 				{
-					busy: body?.busy === "queue" ? "queue" : undefined,
+					busy: busyMode,
 					// Queue-by-choice holds until the agent fully completes,
 					// matching what the composers mean by "queue".
-					hold: body?.busy === "queue",
+					hold: busyMode === "queue",
 					images,
 					imageUrls,
+					files,
+					contextSessions,
 				},
 			);
 			if (res.status === "error") {

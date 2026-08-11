@@ -10,6 +10,7 @@ final class SessionViewModel {
         case connecting
         case connected
         case reconnecting(String?)
+        case failed(String)
     }
 
     private(set) var session: Session
@@ -59,6 +60,9 @@ final class SessionViewModel {
     private(set) var pendingQuestion: AskQuestion?
     private(set) var connectionState: ConnectionState = .connecting
     private(set) var isLoadingConversation = true
+    /// A watch that never receives transcript_init is not a loading state
+    /// forever. The reader gets an explicit retry while reconnects continue.
+    private(set) var conversationLoadError: String?
     private(set) var notice: String?
     var draft = ""
     /// Images staged in the composer, sent (as data URLs) with the next prompt.
@@ -136,6 +140,8 @@ final class SessionViewModel {
     /// acknowledges them, so nothing is lost to a dead socket or no signal.
     let outbox: Outbox
     private var reconnectTask: Task<Void, Never>?
+    private var conversationLoadTask: Task<Void, Never>?
+    private let conversationLoadTimeout: TimeInterval
     /// Multiple views can briefly overlap during a reversed tab transition.
     /// The connection stays alive until the last mounted view releases it.
     private var viewOwners: Set<UUID> = []
@@ -308,11 +314,13 @@ final class SessionViewModel {
         seed: OptimisticSeed? = nil,
         composerDraft: ComposerDraft? = nil,
         socketFactory: @escaping @MainActor () -> any SessionSocket = { OS1Socket() },
-        outbox: Outbox = .shared
+        outbox: Outbox = .shared,
+        conversationLoadTimeout: TimeInterval = 15
     ) {
         self.session = session
         self.socketFactory = socketFactory
         self.outbox = outbox
+        self.conversationLoadTimeout = conversationLoadTimeout
         self.isRunning = session.isRunning ?? false
         self.queuedCount = session.queuedCount ?? 0
         self.model = session.model ?? ""
@@ -398,6 +406,7 @@ final class SessionViewModel {
             self?.acceptDelivery(item, delivery)
         }
         outbox.poke()
+        armConversationLoadDeadline()
         connect()
         loadPr()
     }
@@ -416,6 +425,7 @@ final class SessionViewModel {
         stopped = true
         outbox.stopObserving(sessionId: session.id)
         reconnectTask?.cancel()
+        conversationLoadTask?.cancel()
         resyncProbeTask?.cancel()
         creationRetryTask?.cancel()
         deliveringPruneTask?.cancel()
@@ -455,11 +465,16 @@ final class SessionViewModel {
     // propagate — the panel shows the server's own sentence.
 
     /// Submit a review (APPROVE / REQUEST_CHANGES / COMMENT) on this session's PR.
-    func submitPrReview(event: String, summary: String) async throws {
+    func submitPrReview(
+        event: String,
+        summary: String,
+        comments: [PrInlineComment] = []
+    ) async throws {
         try await OS1API.submitPrReview(
             sessionId: session.id,
             event: event,
-            summary: summary
+            summary: summary,
+            comments: comments
         )
         await refreshPr()
     }
@@ -938,8 +953,10 @@ final class SessionViewModel {
     // MARK: - Socket lifecycle
 
     private func connect() {
-        connectionState =
-            (entries.isEmpty || awaitingCreation) ? .connecting : .reconnecting(nil)
+        if conversationLoadError == nil {
+            connectionState =
+                (entries.isEmpty || awaitingCreation) ? .connecting : .reconnecting(nil)
+        }
         let socket = socketFactory()
         socket.onEvent = { [weak self] event in self?.handle(event) }
         socket.onClose = { [weak self] reason in self?.scheduleReconnect(reason) }
@@ -949,7 +966,7 @@ final class SessionViewModel {
 
     private func scheduleReconnect(_ reason: String?) {
         guard !stopped else { return }
-        connectionState = .reconnecting(reason)
+        if conversationLoadError == nil { connectionState = .reconnecting(reason) }
         // A history page died with the socket; the watch's fresh
         // transcript_init is what unblocks paging again, so don't leave the
         // control spinning on a request nobody will answer.
@@ -963,6 +980,29 @@ final class SessionViewModel {
             try? await Task.sleep(for: .seconds(2))
             guard let self, !self.stopped, !Task.isCancelled else { return }
             self.connect()
+        }
+    }
+
+    func retryConversationLoad() {
+        guard !stopped else { return }
+        conversationLoadError = nil
+        isLoadingConversation = true
+        reconnectTask?.cancel()
+        socket?.disconnect()
+        socket = nil
+        armConversationLoadDeadline()
+        connect()
+    }
+
+    private func armConversationLoadDeadline() {
+        conversationLoadTask?.cancel()
+        guard isLoadingConversation else { return }
+        conversationLoadTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(self?.conversationLoadTimeout ?? 15))
+            guard let self, !Task.isCancelled, !self.stopped, self.isLoadingConversation else { return }
+            self.conversationLoadError = "The conversation did not load. Check the connection and try again."
+            self.connectionState = .failed("Couldn't load conversation")
+            self.isLoadingConversation = false
         }
     }
 
@@ -989,6 +1029,8 @@ final class SessionViewModel {
 
         case .transcriptInit(let id, let newEntries, let cursor) where id == session.id:
             creationRetryTask?.cancel()
+            conversationLoadTask?.cancel()
+            conversationLoadError = nil
             // A fresh session's first init can arrive before the engine wrote
             // anything — keep the optimistic prompt bubble rather than blanking
             // the conversation; the real entries land via transcript_append.

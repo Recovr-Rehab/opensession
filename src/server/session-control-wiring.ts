@@ -131,6 +131,9 @@ registerSessionControl({
 		}
 
 		const attributed = user ? `[${user}] ${content}` : content;
+		// Disk-staged files can only be supplied to a fresh turn. Never fold them
+		// into a steer request, where the runner has no file staging channel.
+		const hasFiles = Array.isArray(opts?.files) && opts.files.length > 0;
 
 		if (
 			isAgentSessionBusy(
@@ -148,6 +151,7 @@ registerSessionControl({
 			if (
 				opts?.busy !== "queue" &&
 				!opts?.slackReplyTo &&
+				!hasFiles &&
 				steerAgentRun(
 					[session.claudeSessionId, session.codexThreadId, session.id],
 					attributed,
@@ -166,6 +170,8 @@ registerSessionControl({
 				content,
 				user,
 				images: opts?.imageUrls,
+				files: opts?.files,
+				contextSessions: opts?.contextSessions,
 				slackReplyTo: opts?.slackReplyTo,
 				...(opts?.hold ? { hold: true } : {}),
 			});
@@ -197,8 +203,8 @@ registerSessionControl({
 			content,
 			user,
 			opts?.images,
-			undefined,
-			undefined,
+			opts?.files,
+			opts?.contextSessions,
 			opts?.slackReplyTo,
 		).catch((e) => console.error(`[sessions-mcp] deliver to ${id} failed:`, e));
 		return {

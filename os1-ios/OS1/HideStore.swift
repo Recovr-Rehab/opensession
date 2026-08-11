@@ -25,25 +25,56 @@ final class HideStore {
     /// Sidebar row key → ISO timestamp of when this user hid it.
     private(set) var hides: [String: String] = [:]
 
-    /// Bumped by every local write and by every hydrate. An in-flight GET that
-    /// finishes after a local hide is discarded rather than resurrecting the
-    /// row it just removed.
-    private var generation = 0
+    private enum Change {
+        case set(String)
+        case remove
+    }
 
-    private init() {}
+    /// Local intent survives the first remote response. Without tombstones, a
+    /// pre-hydration restore could be undone by an older server hide.
+    private var pendingChanges: [String: Change] = [:]
+    private var mutationRevision = 0
+    private var hydratedContext: NativePreferences.Context?
+    private(set) var hasHydrated = false
+
+    init() {}
 
     /// Load this user's map from the server. Guarded like
     /// `NativePreferences.hydrate`: a stale response (server/user switched, or
     /// a hide landed meanwhile) is dropped.
     func hydrate() async {
         let requestContext = NativePreferences.context()
-        generation += 1
-        let requestGeneration = generation
+        resetForNewContext(requestContext)
         guard let loaded = try? await SettingsAPI.hides(user: requestContext.user) else { return }
-        guard requestGeneration == generation,
-              NativePreferences.context() == requestContext
-        else { return }
-        if loaded != hides { hides = loaded }
+        guard NativePreferences.context() == requestContext else { return }
+        applyHydrated(loaded)
+    }
+
+    private func resetForNewContext(_ context: NativePreferences.Context) {
+        guard let hydratedContext else {
+            self.hydratedContext = context
+            return
+        }
+        guard hydratedContext != context else { return }
+        self.hydratedContext = context
+        hides = [:]
+        pendingChanges.removeAll()
+        hasHydrated = false
+        mutationRevision += 1
+    }
+
+    /// Kept internal so the local-before-remote merge can be covered in tests.
+    func applyHydrated(_ loaded: [String: String], persist: Bool = true) {
+        var merged = loaded
+        for (key, change) in pendingChanges {
+            switch change {
+            case .set(let timestamp): merged[key] = timestamp
+            case .remove: merged.removeValue(forKey: key)
+            }
+        }
+        hasHydrated = true
+        if merged != hides { hides = merged }
+        if persist, !pendingChanges.isEmpty { save() }
     }
 
     func isHidden(_ workspace: SidebarWorkspace) -> Bool {
@@ -53,7 +84,9 @@ final class HideStore {
     func hide(_ workspace: SidebarWorkspace) {
         let key = SidebarRowKeys.rowKey(for: workspace)
         guard SidebarRowKeys.isPersistable(key), hides[key] == nil else { return }
-        hides[key] = Self.timestamp.string(from: .now)
+        let timestamp = Self.timestamp.string(from: .now)
+        hides[key] = timestamp
+        record(.set(timestamp), for: key)
         save()
     }
 
@@ -62,7 +95,10 @@ final class HideStore {
     func clear(_ keys: [String]) {
         let doomed = keys.filter { hides[$0] != nil }
         guard !doomed.isEmpty else { return }
-        for key in doomed { hides.removeValue(forKey: key) }
+        for key in doomed {
+            hides.removeValue(forKey: key)
+            record(.remove, for: key)
+        }
         save()
     }
 
@@ -74,13 +110,25 @@ final class HideStore {
         clear(SidebarRowKeys.candidateKeys(for: session))
     }
 
+    private func record(_ change: Change, for key: String) {
+        pendingChanges[key] = change
+        mutationRevision += 1
+    }
+
     private func save() {
-        generation += 1
+        guard hasHydrated else { return }
         let user = ServerConfig.shared.userName
         let snapshot = hides
+        let revision = mutationRevision
         // Fire-and-forget, like the web: the map is local truth and a failed
         // PUT costs nothing worth an error banner.
-        Task { _ = try? await SettingsAPI.saveHides(user: user, hides: snapshot) }
+        Task { [weak self] in
+            guard (try? await SettingsAPI.saveHides(user: user, hides: snapshot)) != nil,
+                  let self,
+                  self.mutationRevision == revision
+            else { return }
+            self.pendingChanges.removeAll()
+        }
     }
 
     private static let timestamp: ISO8601DateFormatter = {

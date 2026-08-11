@@ -65,6 +65,36 @@ export async function fetchSession(
 	return (await res.json()) as UnifiedSession;
 }
 
+export interface PromptDelivery {
+	status: "steered" | "queued" | "started" | "handled";
+	message: string;
+	deliveryId?: string;
+	clientId?: string;
+	duplicate?: boolean;
+}
+
+/** REST transport for the durable web outbox. `clientId` makes retries idempotent. */
+export async function deliverSessionPrompt(
+	sessionId: string,
+	body: {
+		content: string;
+		images?: string[];
+		files?: unknown[];
+		effort?: string;
+		fastMode?: boolean;
+		busyMode?: "queue" | "steer";
+		contextSessions?: string[];
+		user?: string;
+		clientId: string;
+	},
+): Promise<PromptDelivery> {
+	return request<PromptDelivery>(`/sessions/${encodeURIComponent(sessionId)}/prompt`, {
+		method: "POST",
+		body,
+		label: "Failed to deliver prompt",
+	});
+}
+
 // ── Session assets (scratch folder previewed in the Assets tab) ─────────────
 
 export interface SessionAssetFile {

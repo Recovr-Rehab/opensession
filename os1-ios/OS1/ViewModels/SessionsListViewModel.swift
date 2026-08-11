@@ -23,6 +23,10 @@ final class SessionsListViewModel {
     /// would say "Nothing archived" for the seconds before the answer lands,
     /// which is a statement about a list still in flight.
     private(set) var archivedHasLoaded = false
+    /// Unlike an empty archive, a failed index has something actionable to say.
+    /// Kept separate from the live-list failure, whose banner describes a
+    /// different request.
+    private(set) var archivedLoadFailure: String?
 
     private var pollTask: Task<Void, Never>?
 
@@ -477,10 +481,14 @@ final class SessionsListViewModel {
     /// include for a poll or two — suppressed until it catches up, with a
     /// safety expiry so a failed archive doesn't hide the row forever.
     private var locallyArchived: [String: (session: Session, added: Date)] = [:]
+    /// Retained after a failed archive so the row can offer the action again
+    /// instead of leaving an optimistic removal to read as an empty inbox.
+    private(set) var archiveFailure: Session?
 
     /// Swipe-to-archive: drop the row immediately, tell the server in the
     /// background, and roll back (surfacing the error) if that fails.
     func archive(_ session: Session) {
+        archiveFailure = nil
         setSessions(
             sessions.filter { $0.id != session.id },
             rows: sidebarRowsCache.flatMap { rowsRemoving(sessionId: session.id, from: $0) }
@@ -500,10 +508,21 @@ final class SessionsListViewModel {
             } catch {
                 locallyArchived.removeValue(forKey: session.id)
                 publishArchived()
+                if !sessions.contains(where: { $0.id == session.id }) {
+                    setSessions(
+                        [session] + sessions,
+                        rows: sidebarRowsCache.flatMap { rowsInserting(session, into: $0) }
+                    )
+                }
+                archiveFailure = session
                 self.error = "Couldn't archive: \(error.localizedDescription)"
-                await refresh()
             }
         }
+    }
+
+    func retryArchive() {
+        guard let archiveFailure else { return }
+        archive(archiveFailure)
     }
 
     /// Restore from the archived list immediately, then reconcile with the
@@ -723,12 +742,14 @@ final class SessionsListViewModel {
                 Self.byRecency(index)
             }.value
             setServerArchived(sorted, presorted: true)
+            archivedLoadFailure = nil
         } catch {
-            // Keep the last good index. `refresh` owns the error banner —
-            // reporting a failure here too would say the same thing twice.
+            // Keep the last good index. An empty one must not masquerade as a
+            // successful response, though: the Archived sheet offers retry.
+            archivedLoadFailure = "Couldn't load archived sessions: \(error.localizedDescription)"
         }
-        // Loaded either way: a screen that spins forever after a failed
-        // request says less than an empty one next to the error banner.
+        // The request answered either way. The view distinguishes failure from
+        // a true empty archive with `archivedLoadFailure`.
         archivedHasLoaded = true
     }
 

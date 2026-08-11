@@ -28,6 +28,8 @@ export type QueueItem = {
 	user?: string;
 	images?: string[];
 	files?: unknown;
+	/** Sibling-session transcript ids attached when this message starts a turn. */
+	contextSessions?: string[];
 	/** Slack thread this message came from — the turn's reply is mirrored back
 	 *  there (rides the queue + persistence so a busy run can't drop it). */
 	slackReplyTo?: { channel: string; threadTs: string };
@@ -299,6 +301,13 @@ export function updateQueuedPrompt(
 	if (images) {
 		if (images.length > 0) item.images = images;
 		else delete item.images;
+	}
+	if (
+		!item.content.trim() &&
+		!item.images?.length &&
+		!(Array.isArray(item.files) && item.files.length > 0)
+	) {
+		queue.splice(index, 1);
 	}
 	persistQueues();
 	broadcastQueue(sessionId);

@@ -24,6 +24,14 @@ export async function savePinsApi(
 
 // ── Reads (per-user unread marks; server mirror of localStorage) ──
 
+export async function fetchReads(user: string): Promise<Record<string, string>> {
+	const body = await request<{ reads?: Record<string, string> }>(
+		`/reads?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch reads" },
+	);
+	return body?.reads && typeof body.reads === "object" ? body.reads : {};
+}
+
 export async function saveReadsApi(
 	user: string,
 	reads: Record<string, string>,

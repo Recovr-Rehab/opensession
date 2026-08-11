@@ -1067,13 +1067,9 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				const nextImages = Array.isArray(msg.images)
 					? (asDataUrlList(msg.images) ?? [])
 					: undefined;
-				if (!next && !nextImages?.length) {
-					// Nothing left to send: an edit that empties a message is
-					// how the queue is cleared from a text field.
-					deleteQueuedPrompt(sessionId, queueId, queueIndex);
-				} else {
-					updateQueuedPrompt(sessionId, queueId, queueIndex, next, nextImages);
-				}
+				// updateQueuedPrompt preserves staged files and removes the item only
+				// when text, images, and files are all empty after the edit.
+				updateQueuedPrompt(sessionId, queueId, queueIndex, next, nextImages);
 				break;
 			}
 

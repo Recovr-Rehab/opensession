@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import {
 	fetchRepos,
+	fetchReads,
 	fetchSessionsSnapshot,
 	SessionUpgradeError,
 	upgradeSessionApi,
@@ -27,6 +28,19 @@ test("session upgrade accepts a cloud destination when local archival failed", a
 		id: "bks-cloud",
 		url: "https://cloud.example/session/bks-cloud",
 	});
+});
+
+test("read marks load from the current user's API namespace", async () => {
+	let url = "";
+	globalThis.fetch = (async (input: string | URL | Request) => {
+		url = String(input);
+		return Response.json({ reads: { "bks-1": "2026-08-11T10:00:00.000Z" } });
+	}) as unknown as typeof fetch;
+
+	await expect(fetchReads("Ada Lovelace")).resolves.toEqual({
+		"bks-1": "2026-08-11T10:00:00.000Z",
+	});
+	expect(url).toBe("/api/reads?user=Ada%20Lovelace");
 });
 
 test("session upgrade keeps structured dirty-worktree failures", async () => {

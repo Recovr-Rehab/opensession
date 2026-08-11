@@ -26,24 +26,58 @@ final class PinStore {
     /// dictionary lookup per session rather than a scan of the whole list.
     private var slots: [String: Int] = [:]
 
-    /// Bumped by every local write and by every hydrate. An in-flight GET that
-    /// finishes after a local pin is discarded rather than undoing it.
-    private var generation = 0
+    private enum Change {
+        case pin(String)
+        case unpin(Set<String>)
+    }
 
-    private init() {}
+    /// Operations made before hydration. Replaying them over the fetched list
+    /// preserves both local intent and pins created in another client.
+    private var pendingChanges: [Change] = []
+    private var mutationRevision = 0
+    private var hydratedContext: NativePreferences.Context?
+    private(set) var hasHydrated = false
+
+    init() {}
 
     /// Load this user's list from the server, guarded like `HideStore.hydrate`:
     /// a stale response (server/user switched, or a pin landed meanwhile) is
     /// dropped.
     func hydrate() async {
         let requestContext = NativePreferences.context()
-        generation += 1
-        let requestGeneration = generation
+        resetForNewContext(requestContext)
         guard let loaded = try? await SettingsAPI.pins(user: requestContext.user) else { return }
-        guard requestGeneration == generation,
-              NativePreferences.context() == requestContext
-        else { return }
-        if loaded != pins { apply(loaded) }
+        guard NativePreferences.context() == requestContext else { return }
+        applyHydrated(loaded)
+    }
+
+    private func resetForNewContext(_ context: NativePreferences.Context) {
+        guard let hydratedContext else {
+            self.hydratedContext = context
+            return
+        }
+        guard hydratedContext != context else { return }
+        self.hydratedContext = context
+        apply([])
+        pendingChanges.removeAll()
+        hasHydrated = false
+        mutationRevision += 1
+    }
+
+    /// Kept internal so the pre-hydration replay semantics are unit-testable.
+    func applyHydrated(_ loaded: [String], persist: Bool = true) {
+        var merged = loaded
+        for change in pendingChanges {
+            switch change {
+            case .pin(let key):
+                merged = [key] + merged.filter { $0 != key }
+            case .unpin(let keys):
+                merged.removeAll { keys.contains($0) }
+            }
+        }
+        hasHydrated = true
+        if merged != pins { apply(merged) }
+        if persist, !pendingChanges.isEmpty { save() }
     }
 
     func isPinned(_ workspace: SidebarWorkspace) -> Bool {
@@ -65,6 +99,7 @@ final class PinStore {
             let key = SidebarRowKeys.rowKey(for: workspace)
             guard SidebarRowKeys.isPersistable(key) else { return }
             apply([key] + pins.filter { $0 != key })
+            record(.pin(key))
             save()
         }
     }
@@ -77,6 +112,7 @@ final class PinStore {
         let doomed = Set(matchingKeys(of: workspace))
         guard !doomed.isEmpty else { return }
         apply(pins.filter { !doomed.contains($0) })
+        record(.unpin(doomed))
         save()
     }
 
@@ -93,12 +129,24 @@ final class PinStore {
         slots = Dictionary(next.enumerated().map { ($0.element, $0.offset) }) { first, _ in first }
     }
 
+    private func record(_ change: Change) {
+        pendingChanges.append(change)
+        mutationRevision += 1
+    }
+
     private func save() {
-        generation += 1
+        guard hasHydrated else { return }
         let user = ServerConfig.shared.userName
         let snapshot = pins
+        let revision = mutationRevision
         // Fire-and-forget, like the web and like HideStore: the list is local
         // truth and a failed PUT costs nothing worth an error banner.
-        Task { _ = try? await SettingsAPI.savePins(user: user, pins: snapshot) }
+        Task { [weak self] in
+            guard (try? await SettingsAPI.savePins(user: user, pins: snapshot)) != nil,
+                  let self,
+                  self.mutationRevision == revision
+            else { return }
+            self.pendingChanges.removeAll()
+        }
     }
 }

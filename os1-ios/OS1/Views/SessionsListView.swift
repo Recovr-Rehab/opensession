@@ -185,6 +185,9 @@ struct SessionsListView: View {
 
     #if os(macOS)
     @State private var selectedSessionID: String?
+    /// Archived rows stay out of the live sidebar, but their hydrated copy can
+    /// still own the detail column.
+    @State private var openedArchivedSession: Session?
     #endif
 
     var body: some View {
@@ -298,6 +301,13 @@ struct SessionsListView: View {
                 SupportQueueView(model: supportQueue) { row in
                     openTicket = row
                 }
+            } else if let archivedSession = openedArchivedSession {
+                SessionView(session: archivedSession, workspaceNames: viewModel.workspaceNames)
+                    .id(archivedSession.id)
+                    .onChange(of: archivedSession, initial: true) { _, open in
+                        ReadsStore.shared.open(open)
+                    }
+                    .onDisappear { ReadsStore.shared.close(archivedSession.id) }
             } else if let selectedSessionID,
                let session = viewModel.sessions.first(where: { $0.id == selectedSessionID }) {
                 SessionView(
@@ -328,6 +338,7 @@ struct SessionsListView: View {
             if id != nil {
                 openTicket = nil
                 showSupport = false
+                openedArchivedSession = nil
             }
         }
         .sheet(item: $newSessionRequest) { request in
@@ -342,16 +353,23 @@ struct SessionsListView: View {
             }
         }
         .sheet(isPresented: $showArchived) {
-            ArchivedSessionsView(
-                sessions: viewModel.archivedSessions,
-                loaded: viewModel.archivedHasLoaded,
-                onOpen: { session in
-                    pendingArchivedOpen = session
-                    showArchived = false
-                },
-                onRestore: viewModel.unarchive
-            )
+					ArchivedSessionsView(
+						sessions: viewModel.archivedSessions,
+						loaded: viewModel.archivedHasLoaded,
+						onOpen: { session in
+							pendingArchivedOpen = session
+							showArchived = false
+						},
+						onRestore: viewModel.unarchive,
+						loadFailure: viewModel.archivedLoadFailure,
+						onRetry: { Task { await viewModel.refreshArchived(force: true) } }
+					)
             .task { await viewModel.refreshArchived() }
+        }
+        .onChange(of: showArchived) { _, shown in
+            guard !shown, let session = pendingArchivedOpen else { return }
+            pendingArchivedOpen = nil
+            Task { openedArchivedSession = await viewModel.hydrated(session) }
         }
         .sheet(isPresented: $showDesk) {
             DeskSheet()
@@ -602,11 +620,13 @@ struct SessionsListView: View {
                     ArchivedSessionsView(
                         sessions: viewModel.archivedSessions,
                         loaded: viewModel.archivedHasLoaded,
-                        onOpen: { session in
-                            pendingArchivedOpen = session
-                            showArchived = false
-                        },
-                        onRestore: viewModel.unarchive
+                onOpen: { session in
+                    pendingArchivedOpen = session
+                    showArchived = false
+                },
+                onRestore: viewModel.unarchive,
+                loadFailure: viewModel.archivedLoadFailure,
+                onRetry: { Task { await viewModel.refreshArchived(force: true) } }
                     )
                     .task { await viewModel.refreshArchived() }
                 }
@@ -710,14 +730,19 @@ struct SessionsListView: View {
     @ViewBuilder
     private var errorBanner: some View {
         if let error = viewModel.error, !showsFailureScreen {
-            Text(error)
-                .font(.footnote)
-                .foregroundStyle(.red)
-                .lineLimit(2)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .glassSurface(in: Capsule())
-                .padding(.bottom, 8)
+            HStack(spacing: 10) {
+                Text(error).lineLimit(2)
+                if viewModel.archiveFailure != nil {
+                    Button("Retry archive") { viewModel.retryArchive() }
+                        .buttonStyle(.borderless)
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.red)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .glassSurface(in: Capsule())
+            .padding(.bottom, 8)
         }
     }
 
@@ -729,7 +754,13 @@ struct SessionsListView: View {
         if let session = viewModel.sessions.first(where: { $0.id == id })
             ?? viewModel.archivedSessions.first(where: { $0.id == id }) {
             #if os(macOS)
-            selectedSessionID = session.id
+            if session.slim == true {
+                Task { openedArchivedSession = await viewModel.hydrated(session) }
+            } else if session.archived == true {
+                openedArchivedSession = session
+            } else {
+                selectedSessionID = session.id
+            }
             #else
             if session.slim == true {
                 // A row from the archived index carries what a list renders
@@ -1107,6 +1138,7 @@ struct SessionsListView: View {
 
     private var filterMenuContent: some View {
         Group {
+            Button("Archived") { showArchived = true }
             Picker("Show", selection: $peopleFilter) {
                 Text("My sessions").tag("mine")
                 Text("Everyone").tag("all")
@@ -1605,7 +1637,9 @@ struct SessionsListView: View {
             mobilePlainRow
             #endif
 
-            if !visibleArchivedSessions.isEmpty {
+            // The archived entry is a destination, not a proof that its index
+            // has loaded. Keep it reachable even for an empty or failed fetch.
+            if viewModel.hasLoaded {
                 Section {
                     Button {
                         showArchived = true
@@ -1637,7 +1671,7 @@ struct SessionsListView: View {
                                 #endif
                                 .foregroundStyle(OS1VisualStyle.textDim)
                             Spacer()
-                            Text("\(visibleArchivedSessions.count)")
+                            Text("\(viewModel.archivedSessions.count)")
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(OS1VisualStyle.textFaint)
                                 // Same trailing column as a row's run clock:
@@ -1670,7 +1704,7 @@ struct SessionsListView: View {
 
     @ViewBuilder
     private var emptyFilterOverlay: some View {
-        if !hasVisibleWorkspaces && visibleArchivedSessions.isEmpty {
+        if !hasVisibleWorkspaces && viewModel.archivedSessions.isEmpty {
             if !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else if peopleFilter == "mine" {
@@ -1745,6 +1779,7 @@ struct SessionsListView: View {
     /// everything that could have read it.
     private var catchUpCount: Int {
         let reads = ReadsStore.shared
+        guard reads.hasHydrated else { return 0 }
         let config = ServerConfig.shared
         return CatchUpQueue.unreadRowCount(
             in: viewModel.sidebarWorkspaces,
@@ -1922,6 +1957,8 @@ struct SessionsListView: View {
             // pointing at chrome that never left the screen.
             Button("New session") { newSessionRequest = NewSessionRequest() }
                 .buttonStyle(PlaceholderActionStyle())
+            Button("Archived") { showArchived = true }
+                .buttonStyle(PlaceholderActionStyle(prominent: false))
         }
     }
 
@@ -1961,6 +1998,8 @@ struct SessionsListView: View {
             case .settings:
                 settingsButton
             }
+            Button("Archived") { showArchived = true }
+                .buttonStyle(PlaceholderActionStyle(prominent: false))
         }
     }
 
@@ -2008,6 +2047,8 @@ private struct ArchivedSessionsView: View {
     let loaded: Bool
     let onOpen: (Session) -> Void
     let onRestore: (Session) -> Void
+    let loadFailure: String?
+    let onRetry: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @State private var owner = "mine"
@@ -2070,7 +2111,16 @@ private struct ArchivedSessionsView: View {
     var body: some View {
         NavigationStack {
             List {
-                if sessions.isEmpty, !loaded {
+                if let loadFailure {
+                    ContentUnavailableView {
+                        Label("Couldn't load archived sessions", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(loadFailure)
+                    } actions: {
+                        Button("Try again", action: onRetry)
+                    }
+                    .listRowSeparator(.hidden)
+                } else if sessions.isEmpty, !loaded {
                     HStack(spacing: 8) {
                         ProgressView()
                         Text("Loading archived sessions…")

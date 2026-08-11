@@ -29,4 +29,26 @@ describe("updateQueuedPrompt", () => {
 		updateQueuedPrompt(SESSION, "q1", undefined, "words only", []);
 		expect(promptQueues.get(SESSION)?.[0]).not.toHaveProperty("images");
 	});
+
+	test("an empty text and image edit preserves staged files", () => {
+		promptQueues.set(SESSION, [
+			{
+				id: "q1",
+				content: "instructions",
+				user: "Kent",
+				images: [PNG],
+				files: [{ name: "brief.pdf", path: "/tmp/brief.pdf" }],
+			},
+		]);
+		updateQueuedPrompt(SESSION, "q1", undefined, "", []);
+		expect(promptQueues.get(SESSION)?.[0]).toMatchObject({
+			content: "",
+			files: [{ name: "brief.pdf", path: "/tmp/brief.pdf" }],
+		});
+	});
+
+	test("removes an item only when text, images, and files are empty", () => {
+		updateQueuedPrompt(SESSION, "q1", undefined, "", []);
+		expect(promptQueues.get(SESSION)).toEqual([]);
+	});
 });

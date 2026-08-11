@@ -85,9 +85,13 @@ import { Composer } from "./Composer";
 import { ComposerAgents } from "./ComposerAgents";
 import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
-import type { FileAttachment } from "../lib/images";
+import { readFileAsDataUrl, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { unhideForSession } from "../lib/hides";
+import {
+	promptOutbox,
+	type PromptOutboxItem,
+} from "../lib/prompt-outbox";
 import { withPreviewPath } from "../lib/preview-url";
 import { DiffPanel, useSessionDiff } from "./DiffPanel";
 import { RepoBar } from "./RepoBar";
@@ -1084,6 +1088,13 @@ export function SessionViewer({
 		seq: number;
 		text: string;
 	} | null>(null);
+	const [editingQueue, setEditingQueue] = useState<{
+		key: string;
+		queueId?: string;
+		queueIndex: number;
+		content: string;
+		images: string[];
+	} | null>(null);
 	// Optimistic just-sent messages, shown instantly and reconciled once the real
 	// turn lands (transcript) or the server confirms it as queued (busy path).
 	// `busyMode` marks a send made while the run was busy: it renders inside the
@@ -1102,6 +1113,19 @@ export function SessionViewer({
 			? [{ id: `pending-initial-${session.id}`, ...initialPending }]
 			: [],
 	);
+	const [outboxItems, setOutboxItems] = useState<PromptOutboxItem[]>(() =>
+		promptOutbox.list(session.id),
+	);
+	useEffect(() => {
+		const sync = () => setOutboxItems(promptOutbox.list(session.id));
+		sync();
+		const unsubscribe = promptOutbox.subscribe(sync);
+		void promptOutbox.flush();
+		return unsubscribe;
+	}, [session.id]);
+	useEffect(() => {
+		if (connected) void promptOutbox.flush();
+	}, [connected]);
 	useEffect(() => {
 		if (!initialPending) return;
 		const content = initialPending.content.trim();
@@ -3013,8 +3037,6 @@ export function SessionViewer({
 		const imgs = images;
 		const fls = files;
 		if (!typed && imgs.length === 0 && fls.length === 0) return false;
-		if (!connected) return false;
-
 		const user = getCurrentUser();
 		// Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
 		const filePayload = fls.map((f) =>
@@ -3051,45 +3073,23 @@ export function SessionViewer({
 		// Attachments ride along on every path — images fold into the run as
 		// content blocks; files route to the queue server-side.
 		const steerNow = isBusy && !!opts?.steer;
-		send(
-			isBusy
-				? steerNow
-					? {
-							type: "prompt" as const,
-							sessionId: session.id,
-							content: text,
-							user,
-							effort,
-							fastMode,
-							busyMode: "steer" as const,
-							...(imgs.length ? { images: imgs } : {}),
-							...(fls.length ? { files: filePayload } : {}),
-						}
-					: {
-							type: "prompt" as const,
-							sessionId: session.id,
-							content: text,
-							user,
-							effort,
-							fastMode,
-							busyMode: "queue" as const,
-							...(imgs.length ? { images: imgs } : {}),
-							...(fls.length ? { files: filePayload } : {}),
-						}
-				: {
-						type: "prompt" as const,
-						sessionId: session.id,
-						content: text,
-						user,
-						effort,
-						fastMode,
-						...(imgs.length ? { images: imgs } : {}),
-						...(fls.length ? { files: filePayload } : {}),
-						// Attached sibling-session transcripts (fresh sessions are idle, so the
-						// chips' selection always leaves through this branch).
-						...(contextSessions.length ? { contextSessions } : {}),
-					},
-		);
+		let outboxItem: PromptOutboxItem;
+		try {
+			outboxItem = promptOutbox.enqueue({
+				sessionId: session.id,
+				content: text,
+				user,
+				effort,
+				fastMode,
+				busyMode: isBusy ? (steerNow ? "steer" : "queue") : undefined,
+				...(imgs.length ? { images: imgs } : {}),
+				...(fls.length ? { files: filePayload } : {}),
+				...(contextSessions.length ? { contextSessions } : {}),
+			});
+		} catch (error) {
+			toast(error instanceof Error ? error.message : "Couldn't save this message for delivery.");
+			return false;
+		}
 		// Prompting in a session you'd hidden from your sidebar brings its row back
 		// — you're working in it again (see lib/hides.ts).
 		unhideForSession(session);
@@ -3101,7 +3101,7 @@ export function SessionViewer({
 			setPending((p) => [
 				...p,
 				{
-					id: `pending-${crypto.randomUUID()}`,
+					id: `outbox-${outboxItem.clientId}`,
 					content: text,
 					user,
 					sentAt: Date.now(),
@@ -3118,7 +3118,7 @@ export function SessionViewer({
 			setPending((p) => [
 				...p,
 				{
-					id: `pending-${crypto.randomUUID()}`,
+					id: `outbox-${outboxItem.clientId}`,
 					content: text,
 					user,
 					sentAt: Date.now(),
@@ -3143,6 +3143,26 @@ export function SessionViewer({
 
 	function queueHasFiles(item: QueueReceipt): boolean {
 		return Array.isArray(item.files) && item.files.length > 0;
+	}
+
+	function editOutboxInComposer(item: PromptOutboxItem) {
+		setImages(item.images ?? []);
+		setFiles((item.files ?? []) as FileAttachment[]);
+		setContextSessions(item.contextSessions ?? []);
+		if (item.effort) setEffort(item.effort);
+		if (typeof item.fastMode === "boolean") setFastMode(item.fastMode);
+		setComposerPrefill((current) => ({
+			seq: (current?.seq ?? 0) + 1,
+			text: item.content,
+		}));
+		discardOutbox(item);
+	}
+
+	function discardOutbox(item: PromptOutboxItem) {
+		setPending((current) =>
+			current.filter((entry) => entry.id !== `outbox-${item.clientId}`),
+		);
+		promptOutbox.discard(item.clientId);
 	}
 
 	function renderQueueContent(
@@ -3184,25 +3204,27 @@ export function SessionViewer({
 		);
 	}
 
-	// "Edit" pulls the message back into the composer: drop it from the queue
-	// and hand its parts (text, images, files) to the draft — sending simply
-	// re-queues the edited version.
-	function editQueuedInComposer(q: QueueReceipt, index: number) {
-		send({
-			type: "delete_queued_prompt",
-			sessionId: session.id,
+	function openQueueEditor(q: QueueReceipt, index: number) {
+		setEditingQueue({
+			key: q.id || `queued-${index}`,
 			queueId: q.id,
 			queueIndex: index,
+			content: q.content,
+			images: q.images?.slice() ?? [],
 		});
-		if (q.images?.length) {
-			const imgs = q.images;
-			setImages((prev) => [...prev, ...imgs]);
-		}
-		if (Array.isArray(q.files) && q.files.length > 0) {
-			const fls = q.files as FileAttachment[];
-			setFiles((prev) => [...prev, ...fls]);
-		}
-		setComposerPrefill((p) => ({ seq: (p?.seq ?? 0) + 1, text: q.content }));
+	}
+
+	function saveQueueEditor() {
+		if (!editingQueue) return;
+		send({
+			type: "update_queued_prompt",
+			sessionId: session.id,
+			queueId: editingQueue.queueId,
+			queueIndex: editingQueue.queueIndex,
+			content: editingQueue.content,
+			images: editingQueue.images,
+		});
+		setEditingQueue(null);
 	}
 
 	function handleQueueReorder(next: QueueReceipt[]) {
@@ -3227,18 +3249,30 @@ export function SessionViewer({
 	// optimistic transcript bubbles. Both reconcile through the same effect.
 	// While the worktree is still being prepared, everything holds in the flap —
 	// including the create's own first message — until the workspace is ready.
-	const pendingQueue = pending.filter((p) => p.busyMode || waitingForWorkspace);
-	const pendingBubbles = pending.filter(
+	const failedOutboxIds = new Set(
+		outboxItems
+			.filter((item) => item.state === "failed")
+			.map((item) => `outbox-${item.clientId}`),
+	);
+	const visiblePending = pending.filter((item) => !failedOutboxIds.has(item.id));
+	const pendingQueue = visiblePending.filter((p) => p.busyMode || waitingForWorkspace);
+	const pendingBubbles = visiblePending.filter(
 		(p) => !p.busyMode && !waitingForWorkspace,
+	);
+	const durableOutbox = outboxItems.filter(
+		(item) =>
+			item.state === "failed" ||
+			!pending.some((entry) => entry.id === `outbox-${item.clientId}`),
 	);
 	const hasLiveConversation =
 		pendingBubbles.length > 0 || liveTurnStore.hasText() || isBusy || !!ask;
 
-	const queueCount = queued.length + visibleSteered.length + pendingQueue.length;
+	const queueCount =
+		queued.length + visibleSteered.length + pendingQueue.length + durableOutbox.length;
 	// Steered receipts are NOT queued — they're already delivered into the
 	// running turn and only shown here until it ends. Calling them "queued"
 	// read as "my message didn't go through" (three times, 2026-07-19).
-	const queuedOnlyCount = queued.length + pendingQueue.length;
+	const queuedOnlyCount = queued.length + pendingQueue.length + durableOutbox.length;
 	const queueTitle = waitingForWorkspace
 		? `Setting up your workspace · ${queueCount} queued`
 		: queuedOnlyCount === 0
@@ -3346,11 +3380,11 @@ export function SessionViewer({
 									</span>
 								) : (
 									<>
-										<Tooltip label="Edit — puts the message back into the composer">
+										<Tooltip label="Edit queued message in place">
 											<button
 												type="button"
 												className={composerQueueAction}
-												onClick={() => editQueuedInComposer(q, i)}
+												onClick={() => openQueueEditor(q, i)}
 											>
 												<IconPencil size={20} />
 											</button>
@@ -3406,12 +3440,87 @@ export function SessionViewer({
 									</Tooltip>
 								)}
 							</div>
-							{renderQueueContent(q, c, {
-								github: isGitHub,
-								// github outranks human: both were equally specific in the
-								// stylesheet and github came last.
-								tone: isGitHub ? "github" : c.senderVia ? "human" : "default",
-							})}
+							{editingQueue?.key === key ? (
+								<div className="flex flex-col gap-2 px-3 pb-3">
+									<textarea
+										className="min-h-24 w-full resize-y rounded-md border border-line bg-control px-3 py-2 text-body text-fg outline-none focus:border-line-strong"
+										aria-label="Queued message"
+										value={editingQueue.content}
+										onChange={(event) =>
+											setEditingQueue((current) =>
+												current ? { ...current, content: event.target.value } : current,
+											)
+										}
+									/>
+									{editingQueue.images.length > 0 && (
+										<div className="flex flex-wrap gap-2">
+											{editingQueue.images.map((src, imageIndex) => (
+												<div key={`${src.slice(0, 40)}-${imageIndex}`} className="relative">
+													<img src={src} alt="" className="size-14 rounded-md object-cover" />
+													<button
+														type="button"
+														aria-label={`Remove image ${imageIndex + 1}`}
+														className="focus-ring absolute -top-2 -right-2 flex size-7 items-center justify-center rounded-full bg-fg text-bg"
+														onClick={() =>
+															setEditingQueue((current) =>
+																current
+																	? {
+																			...current,
+																			images: current.images.filter((_, index) => index !== imageIndex),
+																		}
+																	: current,
+															)
+														}
+													>
+														×
+													</button>
+												</div>
+											))}
+										</div>
+									)}
+									<div className="flex flex-wrap items-center gap-2">
+										<label className="focus-ring inline-flex min-h-10 cursor-pointer items-center rounded-md px-3 text-label font-medium text-dim hover:bg-hover hover:text-fg">
+											Add images
+											<input
+												type="file"
+												accept="image/*"
+												multiple
+												className="sr-only"
+												onChange={(event) => {
+													const picked = Array.from(event.target.files ?? []);
+													void Promise.all(picked.map(readFileAsDataUrl)).then((next) =>
+														setEditingQueue((current) =>
+															current ? { ...current, images: [...current.images, ...next] } : current,
+														),
+													);
+													event.target.value = "";
+												}}
+											/>
+										</label>
+										{queueHasFiles(q) && (
+											<span className="text-meta text-faint">Attached files stay with this message.</span>
+										)}
+										<span className="ml-auto flex gap-2">
+											<Button size="sm" onClick={() => setEditingQueue(null)}>Cancel</Button>
+											<Button
+												variant="primary"
+												size="sm"
+												onClick={saveQueueEditor}
+												disabled={!editingQueue.content.trim() && editingQueue.images.length === 0 && !queueHasFiles(q)}
+											>
+												Save
+											</Button>
+										</span>
+									</div>
+								</div>
+							) : (
+								renderQueueContent(q, c, {
+									github: isGitHub,
+									// github outranks human: both were equally specific in the
+									// stylesheet and github came last.
+									tone: isGitHub ? "github" : c.senderVia ? "human" : "default",
+								})
+							)}
 						</Reorder.Item>
 					);
 				})}
@@ -3436,6 +3545,56 @@ export function SessionViewer({
 						{renderQueueContent(p, classifyQueuedContent(p.content), {
 							tone: "sending",
 						})}
+					</div>
+				))}
+				{durableOutbox.map((item, i) => (
+					<div
+						key={item.clientId}
+						className={cn(
+							composerQueueItem,
+							item.state === "failed" && "flex-col items-stretch gap-1.5",
+							(i > 0 || pendingQueue.length > 0) && composerQueueItemSeparated,
+						)}
+					>
+						{item.state !== "failed" && (
+							<div className={composerQueueActions}>
+								<span className={composerQueueSendingStatus} role="status">
+									<PixelSpinner className="shrink-0" />
+									{item.state === "sending" ? "Sending" : "Waiting to send"}
+								</span>
+							</div>
+						)}
+						{renderQueueContent(
+							{
+								id: item.clientId,
+								content: item.content,
+								user: item.user,
+								images: item.images,
+								files: item.files,
+							},
+							classifyQueuedContent(item.content),
+							{ tone: "sending" },
+						)}
+						{item.state === "failed" && (
+							<div className="flex flex-wrap items-center gap-2">
+								<span className="min-w-0 flex-1 text-meta text-red" role="alert">
+									{item.error || "This message could not be delivered."}
+								</span>
+								<Button size="sm" onClick={() => promptOutbox.retry(item.clientId)}>
+									Retry
+								</Button>
+								<Button size="sm" onClick={() => editOutboxInComposer(item)}>
+									Edit
+								</Button>
+								<Button
+									variant="danger"
+									size="sm"
+									onClick={() => discardOutbox(item)}
+								>
+									Discard
+								</Button>
+							</div>
+						)}
 					</div>
 				))}
 			</div>
@@ -5416,7 +5575,7 @@ export function SessionViewer({
 									onQuoteClear={clearQuote}
 									placeholder={
 										!connected
-											? "Not connected"
+											? "Send when reconnected…"
 											: forkFrom
 												? "New direction…"
 												: isBusy
@@ -5425,7 +5584,7 @@ export function SessionViewer({
 															? `Ask ${AGENT_NAME} — read-only…`
 															: `Ask ${AGENT_NAME}…`
 									}
-									disabled={!connected}
+									disabled={!connected && !!forkFrom}
 									sendDisabled={(text) =>
 										!text.trim() &&
 										images.length === 0 &&

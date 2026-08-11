@@ -17,6 +17,11 @@ struct WorktreeInfoView: View {
     @State private var diff: OS1API.SessionDiff?
     @State private var assets: [OS1API.SessionAsset] = []
     @State private var overview: OS1API.WorkspaceOverview?
+    @State private var sandboxStatus: SessionSandboxStatus?
+    @State private var sandboxLoading = false
+    @State private var sandboxAction: SessionSandboxAction?
+    @State private var sandboxError: String?
+    @State private var confirmingSandboxRecreate = false
     @State private var loading = true
     @State private var loadFailed = false
 
@@ -35,6 +40,7 @@ struct WorktreeInfoView: View {
                     workSection
                     assetsSection
                     worktreeSection
+                    sandboxSection
                     runSettingsSection
                 }
                 .padding(.horizontal, 16)
@@ -57,6 +63,29 @@ struct WorktreeInfoView: View {
             }
             .navigationDestination(item: $panel) { panel in
                 SessionPanelView(panel: panel, viewModel: viewModel)
+            }
+            .confirmationDialog(
+                "Recreate this sandbox?",
+                isPresented: $confirmingSandboxRecreate,
+                titleVisibility: .visible
+            ) {
+                Button("Recreate sandbox", role: .destructive) {
+                    Task { await performSandboxAction(.recreate) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Unpushed files that exist only inside this sandbox will be deleted.")
+            }
+            .alert(
+                "Couldn't update sandbox",
+                isPresented: Binding(
+                    get: { sandboxError != nil },
+                    set: { if !$0 { sandboxError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(sandboxError ?? "Please try again.")
             }
         }
     }
@@ -154,6 +183,83 @@ struct WorktreeInfoView: View {
                     value: "\(RepoTile.label(for: repo.repo)) · \(repo.branch)",
                     icon: "link"
                 )
+            }
+        }
+    }
+
+    /// Remote sandboxes are separate compute workspaces; local sandboxes are
+    /// the host worktree and add no useful lifecycle control here.
+    @ViewBuilder
+    private var sandboxSection: some View {
+        if let sandbox = remoteSandbox {
+            InfoSection(title: "Sandbox") {
+                if sandboxLoading && sandboxStatus == nil {
+                    HStack(spacing: 9) {
+                        ProgressView().controlSize(.small)
+                        Text("Checking sandbox…")
+                            .font(.subheadline)
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                } else {
+                    InfoRow(
+                        label: "Status",
+                        value: sandboxState.capitalized,
+                        icon: sandboxStateIcon
+                    )
+                    Divider()
+                    InfoRow(label: "Provider", value: sandboxStatus?.provider ?? sandbox.provider, icon: "shippingbox")
+                    if let workspace = sandboxStatus?.workspace ?? sandbox.workspace,
+                       !workspace.isEmpty {
+                        Divider()
+                        InfoRow(label: "Workspace", value: workspace.capitalized, icon: "externaldrive")
+                    }
+                    if let cwd = sandboxStatus?.cwd, !cwd.isEmpty {
+                        Divider()
+                        InfoRow(label: "Path", value: cwd, icon: "folder", monospaced: true)
+                    }
+                    if sandboxState == "running", sandboxStatus?.canPause == true {
+                        Divider()
+                        sandboxActionButton(.pause, title: "Pause compute", icon: "pause.circle")
+                    }
+                    if sandboxState == "stopped", sandboxStatus?.canResume == true {
+                        Divider()
+                        sandboxActionButton(.resume, title: "Wake sandbox", icon: "play.circle")
+                    }
+                    if canRecreateSandbox {
+                        Divider()
+                        Button {
+                            confirmingSandboxRecreate = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                if sandboxAction == .recreate {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                Text(sandboxAction == .recreate ? "Recreating sandbox…" : "Recreate from clean image")
+                                Spacer()
+                            }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.red)
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 48)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(sandboxAction != nil || sandboxStatus?.busy == true)
+                    }
+                    if sandboxError != nil {
+                        Divider()
+                        Button("Retry") { Task { await reloadSandbox() } }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.link)
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 44)
+                            .disabled(sandboxLoading || sandboxAction != nil)
+                    }
+                }
             }
         }
     }
@@ -493,6 +599,60 @@ struct WorktreeInfoView: View {
         viewModel.model.isEmpty ? (catalog?.defaultModel ?? "") : viewModel.model
     }
 
+    private var remoteSandbox: (provider: String, sandboxId: String?, workspace: String?)? {
+        guard let sandbox = currentSession.sandbox,
+              let provider = sandbox.provider,
+              !provider.isEmpty,
+              provider != "local"
+        else { return nil }
+        return (provider, sandbox.sandboxId, sandbox.workspace)
+    }
+
+    private var sandboxState: String {
+        sandboxStatus?.status ?? (remoteSandbox?.sandboxId == nil ? "gone" : "running")
+    }
+
+    private var sandboxStateIcon: String {
+        switch sandboxState {
+        case "running": "checkmark.circle"
+        case "stopped": "pause.circle"
+        case "gone": "exclamationmark.triangle"
+        default: "questionmark.circle"
+        }
+    }
+
+    private var canRecreateSandbox: Bool {
+        let id = sandboxStatus?.sandboxId ?? remoteSandbox?.sandboxId
+        return id?.isEmpty == false
+    }
+
+    private func sandboxActionButton(
+        _ action: SessionSandboxAction,
+        title: String,
+        icon: String
+    ) -> some View {
+        Button {
+            Task { await performSandboxAction(action) }
+        } label: {
+            HStack(spacing: 10) {
+                if sandboxAction == action {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: icon)
+                }
+                Text(sandboxAction == action ? "\(title)…" : title)
+                Spacer()
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(OS1VisualStyle.link)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(sandboxAction != nil || sandboxStatus?.busy == true)
+    }
+
     private var oldestSession: Session? {
         sessions.min { ($0.createdAt ?? "") < ($1.createdAt ?? "") }
     }
@@ -527,6 +687,7 @@ struct WorktreeInfoView: View {
     private func load() async {
         loading = true
         loadFailed = false
+        sandboxLoading = remoteSandbox != nil
         async let gitResult = try? OS1API.gitStatus(
             sessionId: currentSession.id,
             repo: currentSession.effectiveRepo
@@ -534,11 +695,13 @@ struct WorktreeInfoView: View {
         async let diffResult = try? OS1API.sessionDiff(sessionId: currentSession.id)
         async let assetsResult = try? OS1API.assets(sessionId: currentSession.id)
         async let overviewResult = loadOverview()
-        let (nextGit, nextDiffResponse, nextAssets, nextOverview) = await (
+        async let sandboxResult = loadSandboxResult()
+        let (nextGit, nextDiffResponse, nextAssets, nextOverview, nextSandbox) = await (
             gitResult,
             diffResult,
             assetsResult,
-            overviewResult
+            overviewResult,
+            sandboxResult
         )
         guard !Task.isCancelled else { return }
         if let nextGit { gitStatus = nextGit }
@@ -548,8 +711,51 @@ struct WorktreeInfoView: View {
         // Newest first, like the tab lists them.
         assets = (nextAssets ?? []).sorted { $0.mtime > $1.mtime }
         if let nextOverview { overview = nextOverview }
+        applySandboxResult(nextSandbox)
+        sandboxLoading = false
         loadFailed = gitStatus == nil && diff == nil && overview == nil
         loading = false
+    }
+
+    private func loadSandboxResult() async -> Result<SessionSandboxStatus?, Error> {
+        guard remoteSandbox != nil else { return .success(nil) }
+        do {
+            return .success(try await OS1API.sandbox(sessionId: currentSession.id))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private func applySandboxResult(_ result: Result<SessionSandboxStatus?, Error>) {
+        switch result {
+        case .success(let status):
+            sandboxStatus = status
+            sandboxError = nil
+        case .failure(let error):
+            sandboxError = error.localizedDescription
+        }
+    }
+
+    private func reloadSandbox() async {
+        guard remoteSandbox != nil, !sandboxLoading else { return }
+        sandboxLoading = true
+        defer { sandboxLoading = false }
+        applySandboxResult(await loadSandboxResult())
+    }
+
+    private func performSandboxAction(_ action: SessionSandboxAction) async {
+        guard sandboxAction == nil else { return }
+        sandboxAction = action
+        sandboxError = nil
+        defer { sandboxAction = nil }
+        do {
+            sandboxStatus = try await OS1API.sandboxAction(
+                sessionId: currentSession.id,
+                action: action
+            )
+        } catch {
+            sandboxError = error.localizedDescription
+        }
     }
 
     private func loadOverview() async -> OS1API.WorkspaceOverview? {

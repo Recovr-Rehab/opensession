@@ -303,6 +303,33 @@ enum OS1API {
         return try await decodeDetached(PrDetails.self, from: data)
     }
 
+    /// The committed PR patch used by the native review canvas. The server
+    /// returns `null` for a session target with no pull request.
+    static func prDiff(sessionId: String) async throws -> PrDiff? {
+        let data = try await getData("/api/sessions/\(sessionId)/pr-diff")
+        let body = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.isEmpty || body == "null" { return nil }
+        return try await decodeDetached(PrDiff.self, from: data)
+    }
+
+    static func prViewedFiles(repo: String?, number: Int) async throws -> PrViewedFiles {
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "number", value: String(number))]
+        if let repo, !repo.isEmpty {
+            components.queryItems?.append(URLQueryItem(name: "repo", value: repo))
+        }
+        return try await get("/api/pr-viewed-files?\(components.percentEncodedQuery ?? "")")
+    }
+
+    static func setPrFileViewed(prId: String, path: String, viewed: Bool) async throws {
+        struct Response: Decodable, Sendable { let ok: Bool? }
+        var body: [String: Any] = ["prId": prId, "path": path, "viewed": viewed]
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["user"] = user }
+        let _: Response = try await post("/api/pr-viewed-files", body: body)
+    }
+
     // MARK: - Pull request actions
     //
     // The three mutations the web PR panel offers, on the same routes. Each
@@ -317,12 +344,18 @@ enum OS1API {
     static func submitPrReview(
         sessionId: String,
         event: String,
-        summary: String
+        summary: String,
+        comments: [PrInlineComment] = []
     ) async throws {
         struct ReviewResponse: Decodable { let ok: Bool? }
         var body: [String: Any] = ["event": event]
         let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { body["summary"] = trimmed }
+        if !comments.isEmpty {
+            body["comments"] = comments.map {
+                ["path": $0.path, "line": $0.line, "side": "RIGHT", "text": $0.text]
+            }
+        }
         let user = ServerConfig.shared.userName
         if !user.isEmpty { body["user"] = user }
         let _: ReviewResponse = try await post(
@@ -425,6 +458,28 @@ enum OS1API {
 
     static func workspaceOverview(workspaceId: String) async throws -> WorkspaceOverview {
         try await get("/api/workspaces/\(workspaceId)/overview")
+    }
+
+    /// Live per-session sandbox state. It is fetched only from Workspace
+    /// details because asking every row can execute provider status checks.
+    static func sandbox(sessionId: String) async throws -> SessionSandboxStatus {
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        return try await get("/api/sessions/\(encoded)/sandbox")
+    }
+
+    /// Explicit sandbox lifecycle control. Recreate is destructive for files
+    /// that only exist in the sandbox volume, so the server requires confirm.
+    static func sandboxAction(
+        sessionId: String,
+        action: SessionSandboxAction
+    ) async throws -> SessionSandboxStatus {
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        let body: [String: Any] = action == .recreate ? ["confirm": true] : [:]
+        return try await post("/api/sessions/\(encoded)/sandbox/\(action.rawValue)", body: body)
     }
 
     /// Archive (or unarchive) a session. Archiving an in-flight session also

@@ -310,6 +310,33 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertTrue(makeViewModel().isLoadingConversation)
     }
 
+    func testConversationLoadTimeoutShowsRetryableFailure() async {
+        let socket = MockSocket()
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("os1-loader-tests-\(UUID().uuidString)", isDirectory: true)
+        let outbox = Outbox(directory: directory, monitorNetwork: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"),
+            socketFactory: { socket },
+            outbox: outbox,
+            conversationLoadTimeout: 0.01
+        )
+
+        viewModel.start()
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertFalse(viewModel.isLoadingConversation)
+        XCTAssertNotNil(viewModel.conversationLoadError)
+        XCTAssertEqual(viewModel.connectionState, .failed("Couldn't load conversation"))
+
+        viewModel.retryConversationLoad()
+        XCTAssertTrue(viewModel.isLoadingConversation)
+        XCTAssertNil(viewModel.conversationLoadError)
+        XCTAssertEqual(socket.connectCount, 2)
+        viewModel.stop()
+    }
+
     func testEventsForOtherSessionsAreIgnored() {
         let viewModel = makeViewModel()
         viewModel.handle(.transcriptInit(sessionId: "bks-other", entries: [entry("x", "user")], cursor: .empty))

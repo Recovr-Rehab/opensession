@@ -221,6 +221,8 @@ struct SessionView: View {
             Group {
                 if viewModel.isLoadingConversation {
                     conversationLoader
+                } else if let error = viewModel.conversationLoadError {
+                    conversationLoadFailure(error)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 10) {
@@ -746,6 +748,17 @@ struct SessionView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func conversationLoadFailure(_ error: String) -> some View {
+        ContentUnavailableView {
+            Label("Couldn't load conversation", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(error)
+        } actions: {
+            Button("Try again") { viewModel.retryConversationLoad() }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     /// Sits above the oldest rendered entry; scrolling it into view pages in
     /// the previous window of history (with a button as the manual fallback).
     private var historyLoader: some View {
@@ -811,6 +824,8 @@ struct SessionView: View {
             bannerText("Connecting…", color: .secondary)
         case .reconnecting(let reason):
             bannerText(reason.map { "\($0) — reconnecting…" } ?? "Reconnecting…", color: .orange)
+        case .failed(let reason):
+            bannerText(reason, color: .red)
         }
     }
 

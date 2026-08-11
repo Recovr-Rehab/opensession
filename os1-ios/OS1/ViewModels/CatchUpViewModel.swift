@@ -86,20 +86,13 @@ final class CatchUpViewModel {
     /// request, so opening the deck from a launch (or the `OS1_OPEN_CATCHUP`
     /// hook) beats both. Retrying until either the queue has cards or both
     /// inputs have answered is what turns a permanent "All caught up" into a
-    /// brief wait.
-    ///
-    /// The two flags are the real gate; the deadline is only the backstop for
-    /// a server that never answers at all. It has to be generous: the first
-    /// `/api/sessions` is multi-megabyte and takes the better part of a minute
-    /// on a cold debug launch, and a short deadline just reintroduces the
-    /// false "All caught up" it exists to prevent.
+    /// brief wait. There is deliberately no deadline: an unread count before
+    /// the reads hydrate is not an estimate, it is an unsupported claim.
     func settle(from list: SessionsListViewModel) async {
-        let deadline = Date().addingTimeInterval(45)
         while !Task.isCancelled {
             rebuild(from: list)
             if !cards.isEmpty { break }
             if list.hasLoaded, ReadsStore.shared.hasHydrated { break }
-            if Date() >= deadline { break }
             try? await Task.sleep(for: .milliseconds(250))
         }
         isSettling = false

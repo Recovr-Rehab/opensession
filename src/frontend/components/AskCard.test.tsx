@@ -68,3 +68,22 @@ test("with several questions each section keeps its own header", () => {
   // Neither is pulled up into the status row when there is more than one.
   expect(html).not.toMatch(/needs input<\/span>[^<]*<span[^>]*>·/);
 });
+
+test("a single-select option has an immediate answer handler", () => {
+	const source = AskCard.toString();
+	expect(source).toContain("questions.length === 1 && !q.multiSelect");
+	expect(source).toContain("onAnswer({ [q.question]: label })");
+});
+
+test("multi-select and free-text answers retain the explicit Answer action", () => {
+	const html = renderToStaticMarkup(
+		<AskCard
+			questions={[
+				{ question: "Pick all", multiSelect: true, options: [{ label: "One" }] },
+			]}
+			onAnswer={() => {}}
+		/>,
+	);
+	expect(html).toContain(">Answer</button>");
+	expect(html).toContain("Select all that apply");
+});

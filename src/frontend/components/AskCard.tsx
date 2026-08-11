@@ -49,6 +49,16 @@ export function AskCard({ questions, onAnswer }: Props) {
     });
   }
 
+  function chooseOption(q: AskQuestion, label: string) {
+    if (questions.length === 1 && !q.multiSelect) {
+      if (submitted) return;
+      setSubmitted(true);
+      onAnswer({ [q.question]: label });
+      return;
+    }
+    toggle(q, label);
+  }
+
   function answerFor(q: AskQuestion): string | null {
     const custom = (other[q.question] || "").trim();
     const picks = selected[q.question] || [];
@@ -135,7 +145,7 @@ export function AskCard({ questions, onAnswer }: Props) {
                     // option look dimmed, not chosen, and collided with the
                     // hover wash on its neighbours.
                     className="focus-ring group flex min-h-11 w-full items-start gap-3 rounded-[calc(12px*var(--rf))] bg-control px-3 py-2.5 text-left transition-[background-color] hover:bg-hover [corner-shape:var(--cs)] disabled:opacity-60"
-                    onClick={() => toggle(q, opt.label)}
+                    onClick={() => chooseOption(q, opt.label)}
                     disabled={submitted}
                   >
                     <span className="min-w-0 flex-1">

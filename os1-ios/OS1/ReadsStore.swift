@@ -18,15 +18,23 @@ final class ReadsStore {
     /// Session id → ISO `lastActivity` at the moment it was last read.
     private(set) var reads: [String: String] = [:]
 
+    private enum Change {
+        case set(String)
+        case remove
+    }
+
+    /// Changes made before (or while) a hydrate is in flight. A settings PUT
+    /// replaces the whole map, so these must be replayed over the server copy
+    /// before the first save rather than treating the initial empty map as truth.
+    private var pendingChanges: [String: Change] = [:]
+    private var mutationRevision = 0
+    private var hydratedContext: NativePreferences.Context?
+
     /// The session on screen right now. Its row is never unread: the web sidebar
     /// skips the selected session the same way, so activity arriving while
     /// you watch it can't bold the row behind the conversation for the few
     /// seconds before the next poll re-marks it.
     private(set) var openSessionId: String?
-
-    /// Bumped by every local write and by every hydrate. An in-flight GET that
-    /// finishes after a mark landed is discarded rather than undoing it.
-    private var generation = 0
 
     /// Nothing is pushed before the first hydrate succeeds. A PUT replaces the
     /// whole map, so saving a map that is empty-but-for-this-launch's reads
@@ -50,31 +58,44 @@ final class ReadsStore {
     /// one map and have to agree about what an unread mark looks like.
     private static let epoch = "1970-01-01T00:00:00.000Z"
 
-    private init() {}
+    init() {}
 
     /// Load this user's marks from the server. Guarded like
     /// `HideStore.hydrate`: a stale response (server/user switched, or a mark
     /// landed meanwhile) is dropped.
     func hydrate() async {
         let requestContext = NativePreferences.context()
-        generation += 1
-        let requestGeneration = generation
+        resetForNewContext(requestContext)
         guard let loaded = try? await SettingsAPI.reads(user: requestContext.user) else { return }
-        guard requestGeneration == generation,
-              NativePreferences.context() == requestContext
-        else { return }
-        // Merge, don't replace: a session read before this landed keeps its mark,
-        // and the server's other marks (the browser's, another device's) are
-        // adopted rather than overwritten on the next save.
+        guard NativePreferences.context() == requestContext else { return }
+        applyHydrated(loaded)
+    }
+
+    private func resetForNewContext(_ context: NativePreferences.Context) {
+        guard let hydratedContext else {
+            self.hydratedContext = context
+            return
+        }
+        guard hydratedContext != context else { return }
+        self.hydratedContext = context
+        reads = [:]
+        pendingChanges.removeAll()
+        hasHydrated = false
+        mutationRevision += 1
+    }
+
+    /// Kept internal so the merge contract can be tested without a server.
+    func applyHydrated(_ loaded: [String: String], persist: Bool = true) {
         var merged = loaded
-        var carried = false
-        for (id, mark) in reads where Self.isNewer(mark, than: merged[id]) {
-            merged[id] = mark
-            carried = true
+        for (id, change) in pendingChanges {
+            switch change {
+            case .set(let mark): merged[id] = mark
+            case .remove: merged.removeValue(forKey: id)
+            }
         }
         hasHydrated = true
         if merged != reads { reads = merged }
-        if carried { save() }
+        if persist, !pendingChanges.isEmpty { save() }
     }
 
     private static func isNewer(_ mark: String, than other: String?) -> Bool {
@@ -106,6 +127,7 @@ final class ReadsStore {
         guard let activity = session.lastActivity, !activity.isEmpty else { return }
         guard reads[session.id] != activity else { return }
         reads[session.id] = activity
+        record(.set(activity), for: session.id)
         enforceCap()
         save()
     }
@@ -117,13 +139,14 @@ final class ReadsStore {
     func markUnread(_ session: Session) {
         guard reads[session.id] != Self.epoch else { return }
         reads[session.id] = Self.epoch
+        record(.set(Self.epoch), for: session.id)
         enforceCap()
         save()
     }
 
     /// True when the session has activity past your read mark.
     func isUnread(_ session: Session) -> Bool {
-        guard session.id != openSessionId, let mark = reads[session.id] else { return false }
+        guard hasHydrated, session.id != openSessionId, let mark = reads[session.id] else { return false }
         guard let activity = session.lastActivity, activity != mark else { return false }
         guard let read = Session.parseISO(mark),
               let last = Session.parseISO(activity)
@@ -147,16 +170,30 @@ final class ReadsStore {
             .map { (id: $0.key, date: Session.parseISO($0.value) ?? .distantPast) }
             .sorted { $0.date < $1.date }
             .prefix(reads.count - Self.cap)
-        for entry in doomed { reads.removeValue(forKey: entry.id) }
+        for entry in doomed {
+            reads.removeValue(forKey: entry.id)
+            record(.remove, for: entry.id)
+        }
+    }
+
+    private func record(_ change: Change, for id: String) {
+        pendingChanges[id] = change
+        mutationRevision += 1
     }
 
     private func save() {
         guard hasHydrated else { return }
-        generation += 1
         let user = ServerConfig.shared.userName
         let snapshot = reads
+        let revision = mutationRevision
         // Fire-and-forget, like the web's mirror: the map is local truth and a
         // failed PUT costs nothing worth an error banner.
-        Task { _ = try? await SettingsAPI.saveReads(user: user, reads: snapshot) }
+        Task { [weak self] in
+            guard (try? await SettingsAPI.saveReads(user: user, reads: snapshot)) != nil,
+                  let self,
+                  self.mutationRevision == revision
+            else { return }
+            self.pendingChanges.removeAll()
+        }
     }
 }

@@ -44,6 +44,9 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var startedBy: String?
     var automation: AutomationFlag?
     var attachedRepos: [AttachedRepo]?
+    /// The requested sandbox provider and materialized sandbox id. This is a
+    /// reference only; Workspace details resolves its live state on demand.
+    var sandbox: SessionSandbox?
     /// The agent-published demo of a user-visible change, rendered inline in
     /// the transcript where it was published.
     var walkthrough: SessionWalkthrough?
