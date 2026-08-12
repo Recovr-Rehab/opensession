@@ -110,9 +110,15 @@ const TRIGGER_STRONG =
 const CHEVRON = "-ml-0.5 shrink-0 text-faint";
 
 /** One scroll surface for the prompt and its attachments. Keeping the image in
- *  this flow means it travels with the text instead of pinning over it. */
+ *  this flow means it travels with the text instead of pinning over it.
+ *
+ *  `pt-1` rather than `pt-3`: the header already carries 11px below its row, so
+ *  a 12px reserve here put 28px between the repo picker and the placeholder
+ *  while the prompt sat flush against the footer. Now that the hairline only
+ *  appears once the prompt scrolls, the header and the prompt read as one
+ *  block, and that gap read as a hole in it. */
 const BODY =
-	"relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+	"relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 const TEXTAREA =
 	"block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-[15px] leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
 const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red";
