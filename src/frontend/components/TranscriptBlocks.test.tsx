@@ -121,36 +121,33 @@ describe("TranscriptBlocks review loops", () => {
 					{ id: "fix", type: "assistant", content: "Fixed the review finding.", timestamp: "2026-08-12T12:01:00Z" },
 					{ id: "human", type: "user", content: "Please also update the empty state.", timestamp: "2026-08-12T12:02:00Z" },
 				]}
-				reviewOutcome={{ prNumber: 42, title: "Improve the empty state", confidence: 5, checksPassed: 8 }}
+				reviewResult={{ status: "passed", confidence: 5, checksPassed: 8 }}
 			/>,
 		);
-		expect(html).toContain("Review loop · PR #42");
+		expect(html).toContain("Review loop");
+		expect(html).toContain("PR #42");
 		expect(html).not.toContain("Fixed the review finding.");
 		expect(html).toContain("Please also update the empty state.");
 		expect(html).not.toContain("Review outcome");
 		expect(html).not.toContain("Ready to merge");
 	});
 
-	test("shows the review outcome inside the final settled review loop", () => {
+	test("shows a passed state on the final settled review loop", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				entries={[
 					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.", timestamp: "2026-08-12T12:00:00Z" },
 					{ id: "fix", type: "assistant", content: "Fixed the review finding.", timestamp: "2026-08-12T12:01:00Z" },
 				]}
-				reviewOutcome={{ prNumber: 42, title: "Improve the empty state", confidence: 5, checksPassed: 8 }}
+				reviewResult={{ status: "passed", confidence: 5, checksPassed: 8 }}
 			/>,
 		);
-		expect(html).toContain("Review outcome");
-		expect(html).toContain("Ready to merge");
-		expect(html).toContain("Review 5/5 · 8 checks passed");
-		// The verdict belongs to the loop it settled, so it renders inside that
-		// section rather than trailing the transcript.
-		const loop = html.slice(html.indexOf("Review loop · PR #42"));
-		expect(loop.slice(0, loop.indexOf("</section>"))).toContain("Ready to merge");
+		expect(html).toContain('aria-label="Review passed"');
+		expect(html).toContain("Passed · 1 round · 5/5 · 8 checks passed");
+		expect(html).not.toContain("border-l");
 	});
 
-	test("keeps the outcome off a loop that is still fixing feedback", () => {
+	test("shows progress while a loop is still fixing feedback", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				live
@@ -158,10 +155,25 @@ describe("TranscriptBlocks review loops", () => {
 					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.", timestamp: "2026-08-12T12:00:00Z" },
 					{ id: "fix", type: "assistant", content: "Fixing the review finding.", timestamp: "2026-08-12T12:01:00Z" },
 				]}
-				reviewOutcome={{ prNumber: 42, title: "Improve the empty state", confidence: 5, checksPassed: 8 }}
+				reviewResult={{ status: "passed", confidence: 5, checksPassed: 8 }}
 			/>,
 		);
-		expect(html).toContain("Fixing review feedback");
-		expect(html).not.toContain("Ready to merge");
+		expect(html).toContain("Reviewing changes");
+		expect(html).toContain('aria-label="Review in progress"');
+		expect(html).not.toContain('aria-label="Review passed"');
+	});
+
+	test("shows a failed state when review findings remain", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\nReview PR #42", timestamp: "2026-08-12T12:00:00Z" },
+					{ id: "fix", type: "assistant", content: "Could not resolve the finding.", timestamp: "2026-08-12T12:01:00Z" },
+				]}
+				reviewResult={{ status: "failed", confidence: 2, blocking: 1, checksFailed: 1 }}
+			/>,
+		);
+		expect(html).toContain('aria-label="Review failed"');
+		expect(html).toContain("Failed · 1 round · 2/5 · 1 blocking · 1 check failed");
 	});
 });

@@ -81,6 +81,7 @@ import {
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
+import { reviewLoopResult } from "../lib/review-loop";
 import {
 	reconnectSlack,
 	shareShippedChange,
@@ -5600,24 +5601,7 @@ export function SessionViewer({
 																	entries={entries}
 																	live={isBusy}
 																	sessionId={session.id}
-																	reviewOutcome={
-																		session.prNumber &&
-																		session.prState === "OPEN" &&
-																		session.prOsReview &&
-																		!session.prOsReview.stale &&
-																		session.prOsReview.blocking === 0 &&
-																		(session.prOsReview.confidence ?? 0) >= 4 &&
-																		session.prReviewDecision !== "CHANGES_REQUESTED" &&
-																		(session.prChecks?.failed || 0) === 0 &&
-																		(session.prChecks?.pending || 0) === 0
-																			? {
-																				prNumber: session.prNumber,
-																				title: session.title,
-																				confidence: session.prOsReview.confidence,
-																				checksPassed: session.prChecks?.passed,
-																			}
-																			: undefined
-																	}
+																		reviewResult={reviewLoopResult(session)}
 																	walkthrough={sessionWalkthrough}
 															notes={notes}
 															slackShare={shippedChangeShare}

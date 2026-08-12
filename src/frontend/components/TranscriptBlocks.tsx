@@ -10,7 +10,8 @@ import { walkthroughInsertIndex } from "./walkthrough-placement";
 import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
-import { ReviewLoopBlock, type ReviewLoopOutcome } from "./ReviewLoopBlock";
+import { ReviewLoopBlock } from "./ReviewLoopBlock";
+import type { ReviewLoopResult } from "../lib/review-loop";
 import {
 	ShippedChangeComposer,
 	type ShippedChangeComposerProps,
@@ -51,9 +52,8 @@ interface Props {
 	slackShare?: ShippedChangeComposerProps & {
 		prNumber: number;
 	};
-	/** A fresh, green PR result. Rendered as the final review loop's own
-	 * outcome, never as a replacement for the most recent fix turn. */
-	reviewOutcome?: ReviewLoopOutcome;
+	/** The current PR verdict, rendered on the final review loop's own row. */
+	reviewResult?: ReviewLoopResult;
 }
 
 function reviewHandoff(block: RenderBlock): number | null | undefined {
@@ -131,7 +131,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	walkthrough,
 	notes,
 	slackShare,
-	reviewOutcome,
+	reviewResult,
 }: Props) {
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
 	const shareAfterEntryIds = new Set<string>();
@@ -238,9 +238,9 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	);
 	// A later human turn makes the old verdict stale in spirit even before GitHub
 	// has observed a new push. Operational notices and recaps do not: they are
-	// allowed to follow the outcome without hiding it.
-	const showReviewOutcome =
-		!!reviewOutcome &&
+	// allowed to follow the result without hiding it.
+	const showReviewResult =
+		!!reviewResult &&
 		lastReviewLoop >= 0 &&
 		!groupedBlocks.slice(lastReviewLoop + 1).some(
 			(block) => block.kind === "entry" && block.entry.type === "user",
@@ -258,11 +258,11 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 								prNumber={block.prNumber}
 								rounds={block.rounds}
 								live={isLive}
-								// A loop still fixing feedback has not settled on anything
-								// yet, whatever GitHub last reported about the PR.
-								outcome={
-									showReviewOutcome && i === lastReviewLoop && !isLive
-										? reviewOutcome
+								// A live loop is always pending, whatever GitHub last
+								// reported about the PR.
+								result={
+									showReviewResult && i === lastReviewLoop && !isLive
+										? reviewResult
 										: undefined
 								}
 							>
